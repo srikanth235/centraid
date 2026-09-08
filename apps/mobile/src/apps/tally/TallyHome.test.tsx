@@ -19,6 +19,8 @@ import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { EMPTY_BAG, money, valuate } from "@centraid/core/money";
+
 import TallyHome from "./TallyHome";
 
 const vaultState = vi.hoisted(() => ({ current: null as unknown }));
@@ -75,7 +77,7 @@ function friend(id: string, name: string, netMinor: number) {
     color: "rose",
     initials: name.slice(0, 2).toUpperCase(),
     name,
-    net_minor: netMinor,
+    balances: netMinor === 0 ? [] : [money(netMinor, "USD")],
     party_id: id,
   };
 }
@@ -92,8 +94,8 @@ function vault(options: {
       friends: options.friends ?? [],
       groups: [],
       me: null,
-      owe_total_minor: 0,
-      owed_total_minor: 0,
+      owe: valuate(EMPTY_BAG, "USD"),
+      owed: valuate(EMPTY_BAG, "USD"),
       recurring: [],
       trash: [],
     },

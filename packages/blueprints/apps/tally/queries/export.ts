@@ -6,7 +6,13 @@
  * partial export is never read as a whole one.
  */
 
-import { deniedPayload, loadTally } from "./dashboard.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+import {
+  deniedPayload,
+  expenseCurrency,
+  groupCurrency,
+  loadTally,
+} from "./dashboard.ts";
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
@@ -68,26 +74,33 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
     const nameOf = (partyId: string): string =>
       data.people.get(partyId)?.name ?? "Someone";
 
-    // THE WINDOW ASKS FOR THE ROWS IT WANTS (#928). This used to read the
-    // newest `MAX_LIMIT` revisions of everything and keep the ones it had
-    // exported — correct only while the declared row filter narrowed the read
-    // to this app's own entity type BEFORE the window was applied. The clamp
-    // still refuses everything else, but a window is not a filter: name the
-    // exported expenses in SQL, so the page cannot fill with rows this export
-    // is about to discard.
+    // THE WINDOW ASKS FOR THE ROWS IT WANTS (#928, re-cut by #996 wave 4).
+    // This used to read the newest 2,000 revisions of everything and keep the
+    // ones it had exported — correct only while the declared row filter
+    // narrowed the read to this app's own entity type BEFORE the window was
+    // applied. Now the entity type and the exported ids are both in the
+    // statement, so the walk cannot fill with rows this export is about to
+    // discard, and it ends where the set does rather than at a number.
     const exported = expenses.map((e) => e.expense_id);
-    const revisionsRes =
-      exported.length === 0
-        ? { rows: [] }
-        : await ctx.vault.read({
-            entity: "core.entity_revision",
-            where: [{ column: "entity_id", op: "in", value: exported }],
-            orderBy: { column: "recorded_at", dir: "desc" },
-            limit: MAX_LIMIT,
-          });
-    const revisions = (
-      (revisionsRes.rows ?? []) as unknown as RevisionRow[]
-    ).map((row) => ({
+    const exportedIn =
+      exported.length === 0 ? undefined : inList("entity_id", exported);
+    const revisionRows: RevisionRow[] = exportedIn
+      ? await readPages<RevisionRow>(ctx, {
+          name: "tally.export.revisions",
+          select:
+            "revision_id, entity_type, entity_id, operation, recorded_at, " +
+            "undone_at",
+          from: "core_entity_revision",
+          where: `entity_type = ? AND ${exportedIn.sql}`,
+          bind: ["tally.expense", ...exportedIn.bind],
+          order: {
+            sortColumn: "recorded_at",
+            pkColumn: "revision_id",
+            descending: true,
+          },
+        })
+      : [];
+    const revisions = revisionRows.map((row) => ({
       revision_id: row.revision_id,
       expense_id: row.entity_id,
       operation: row.operation,
@@ -107,14 +120,19 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
           name: nameOf(partyId),
         })),
       },
-      currency: data.currency,
+      // AN EXPORT IS IN THE GROUP'S MONEY (#996, ruling R22; drift ONT-23).
+      // This shipped the vault's BASE currency on a group's own ledger, so a
+      // EUR group exported as if its rows were in the base — the same
+      // mislabelling `pairwise` was doing, on a file that outlives the app.
+      // The currency comes from the same helpers every balance uses.
+      currency: groupCurrency(data, groupId),
       expenses: expenses.map((e) => ({
         expense_id: e.expense_id,
         description: e.description,
         amount_minor: e.amount_minor,
         original_amount_minor: e.original_amount_minor ?? e.amount_minor,
-        original_currency: e.original_currency ?? data.currency,
-        settlement_currency: e.settlement_currency ?? data.currency,
+        original_currency: e.original_currency ?? expenseCurrency(data, e),
+        settlement_currency: expenseCurrency(data, e),
         rate_scaled: e.rate_scaled ?? null,
         rate_scale: e.rate_scale ?? null,
         rate_source: e.rate_source ?? null,
@@ -154,6 +172,9 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
         to_party: s.to_party,
         to_name: nameOf(s.to_party),
         amount_minor: s.amount_minor,
+        // What was PAID, in the money it was paid in — a settlement's own
+        // currency, never the reader's base (#996, R22).
+        currency: s.currency ?? groupCurrency(data, groupId),
         paid_on: s.paid_on,
       })),
       revisions,

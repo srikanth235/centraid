@@ -1,0 +1,273 @@
+# governance: allow-toolchain-config issue #996 — a new dispatchable macOS lane.
+# `pod install` runs nowhere else, so this is the only place the iOS lock can be
+# repaired at all.
+name: mobile-ios-lock
+
+# THE ONE COMMITTED FILE NO LINUX AGENT CAN WRITE (#996 wave 3).
+#
+# `apps/mobile/ios/Podfile.lock` is generated from the Podfile plus Expo
+# autolinking by `pod install`, and CocoaPods only runs on macOS. So a
+# dependency swap done on Linux — wave 3 replacing op-sqlite with expo-sqlite —
+# rewrites package.json, node_modules and the JavaScript, and leaves the lock
+# pinning a pod nothing installs and missing the pod the app now needs. An iOS
+# build against that lock does not link. Hand-editing is worse than leaving it
+# stale: a pod's SPEC CHECKSUM is the one field the lock exists to hold, and an
+# invented one is a fabricated attestation.
+#
+# `ci:native-state` L1 now reds exactly that drift (validateLockedNodeModulePods
+# in apps/mobile/scripts/verify-native-state-lib.mjs), which turns a silent
+# link failure into a gate — and a gate a Linux runner cannot clear is only
+# useful with a macOS runner that can. This lane is that runner. It is
+# dispatch-only because nothing about a normal push needs it: the lock changes
+# when the native dependency set changes, which is a deliberate act, and the
+# person doing it dispatches this at the end of it.
+#
+# It also BUILDS `vec.xcframework` first. expo-sqlite 57.0.2 pre-bundles
+# sqlite-vec for Android only, so `withSQLiteVecExtension` on iOS needs a
+# framework the tarball does not contain; apps/mobile/scripts/build-sqlite-vec-ios.sh
+# builds it from the pinned upstream tag, and it must exist before `pod install`
+# or the podspec vendors a path that is not there. The binary is never
+# committed — it is reproduced here and on EAS iOS workers by the
+# `eas-build-post-install` hook — but it IS uploaded, so a human can inspect the
+# exact artifact a lock was resolved against.
+#
+# It commits THE LOCK ALONE. It still runs `ci:native-state --write`, which is
+# the fail-closed L1–L3 gate over what `pod install` just produced, but the
+# refreshed `native-fingerprints.json` stays on the runner: the ios hash is
+# platform-dependent and this runner has files no Linux checker will ever see
+# (the vec.xcframework it built, the sqlite sources the podspec copies), so a
+# value written here is one CI must reject. See the commit step for the run that
+# proved it.
+#
+# TWO TRIGGERS, AND THE SECOND IS NOT CONVENIENCE. `workflow_dispatch` cannot
+# reach a workflow that does not exist on the DEFAULT branch — GitHub answers
+# 404 — so the lane that exists to unblock this branch could not be run from
+# this branch, which is every branch that ever needs it: the one that changed
+# the native dependency set. The `push` trigger is how the job runs before the
+# workflow has ever been on `main`. It is deliberately NOT `pull_request` —
+# ci.yml is the one workflow allowed to listen on open-PR events (#557,
+# enforced by lint:workflow-pins rule 5) — and `branches-ignore: [main]` keeps
+# it off the default branch, where a lock is repaired by merging a branch that
+# already carries the fix.
+#
+# The paths are the inputs a lock is a function of: the iOS project itself, the
+# dependency set (`apps/mobile/package.json`, `bun.lock`), the plugin config
+# that decides what the podspec vendors, the script that builds the framework it
+# vendors, and this file. Anything else cannot change what `pod install` writes.
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - apps/mobile/ios/**
+      - apps/mobile/package.json
+      - apps/mobile/app.config.ts
+      - apps/mobile/scripts/build-sqlite-vec-ios.sh
+      - bun.lock
+      - .github/workflows/mobile-ios-lock.yml
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: >-
+          Branch to regenerate the lock on and push the commit to. Leave empty for the ref this run was dispatched on (a `workflow_dispatch` input default must be a literal, so the fallback is resolved in the first step).
+        required: false
+        default: ""
+
+concurrency:
+  # Per branch. `cancel-in-progress` is now TRUE, because a push trigger means
+  # several runs can queue on one branch and only the newest tree is the one a
+  # lock should be resolved against. The commit-back is safe to interrupt: the
+  # push is the last thing the job does, and a cancelled run leaves the branch
+  # exactly as it found it (the artifact upload is `if: always()`, so a
+  # cancelled-before-push run still hands back what it built).
+  group: mobile-ios-lock-${{ inputs.branch || github.ref }}
+  cancel-in-progress: true
+
+# The point of the lane: it writes the file back to the branch it read.
+permissions:
+  contents: write
+
+jobs:
+  podfile-lock:
+    # THE LOOP GUARD. This job pushes a commit that touches
+    # `apps/mobile/ios/Podfile.lock`, which is inside the `paths` filter above,
+    # so its own commit-back would retrigger it. The second run would find the
+    # lock already current and skip the commit — the `git diff --cached --quiet`
+    # branch below — so it would terminate, but it would still spend a macOS
+    # hour proving a fixed point. Refusing the bot's own pushes says that
+    # outright instead of relying on the idempotence downstream.
+    if: github.actor != 'github-actions[bot]'
+    # Same label as candidate.yml's `mobile-ios-smoke`, for the same reason it
+    # pins one: the lock records what CocoaPods resolved against a toolchain,
+    # and resolving it on a different image than the lane that builds with it
+    # makes a lock that is green here and red there.
+    runs-on: macos-26
+    # `pod install --repo-update` fetches the CDN trunk index cold, the
+    # centraid-tunnel podspec's prepare_command downloads Iroh.xcframework, and
+    # the simulator build below compiles the whole pod graph from scratch;
+    # nothing here is cached, so this is generous on purpose.
+    timeout-minutes: 90
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - name: Resolve the target branch
+        id: target
+        env:
+          REQUESTED: ${{ inputs.branch }}
+          DISPATCHED_ON: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          branch="${REQUESTED:-$DISPATCHED_ON}"
+          test -n "$branch" || { echo "::error::no branch to regenerate on"; exit 1; }
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "regenerating apps/mobile/ios/Podfile.lock on $branch"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.target.outputs.branch }}
+          fetch-depth: 1
+      # Bun from packageManager, Node from .node-version (24.4.1), and the
+      # install — autolinking reads node_modules, so `pod install` is only
+      # meaningful after it.
+      - uses: ./.github/actions/setup
+      - name: Select Xcode 26.4 or newer
+        # Copied from candidate.yml's `mobile-ios-smoke`: the Podfile evaluates
+        # React Native's helpers.rb, which reads the selected Xcode, and
+        # `ci:xcode` below asserts the same floor the build lane asserts.
+        run: |
+          set -euo pipefail
+          selected=""
+          for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
+            version="${app#/Applications/Xcode_}"
+            version="${version%.app}"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            if [ "$major" -gt 26 ] || { [ "$major" -eq 26 ] && [ "$minor" -ge 4 ]; }; then
+              selected="$app"
+              break
+            fi
+          done
+          test -n "$selected" || {
+            echo "::error::no Xcode >=26.4 under /Applications (ExpoModulesJSI floor)"
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          }
+          echo "selecting $selected"
+          sudo xcode-select -s "$selected"
+          xcodebuild -version
+      - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
+        working-directory: apps/mobile
+        run: bun run ci:xcode
+      # CocoaPods comes with the macOS runner image, as it does for the lanes in
+      # candidate.yml and e2e.yml that run `pod install` through Expo CLI —
+      # nothing here installs a gem. Asserted rather than assumed, because a
+      # missing `pod` would otherwise surface as a confusing 127 mid-script.
+      - name: Assert CocoaPods is on the runner
+        run: |
+          set -euo pipefail
+          command -v pod >/dev/null || {
+            echo "::error::no CocoaPods on this runner image"
+            exit 1
+          }
+          pod --version
+      # sqlite-vec for iOS, from the same upstream tag Expo built the Android
+      # `vec.so` from (scripts/sqlite-vec-version.test.mjs holds the two
+      # together). BEFORE `pod install`: the podspec vendors `vec.xcframework`
+      # when `expo.sqlite.withSQLiteVecExtension` is true, and a vendored path
+      # that does not exist is a lock resolved against a fiction.
+      - name: Build vec.xcframework
+        run: bash apps/mobile/scripts/build-sqlite-vec-ios.sh
+      # `apps/mobile/ios` is COMMITTED (28 tracked files, including the Podfile
+      # and the ShareExtension target), so this is not a prebuild lane:
+      # `expo prebuild` would regenerate the project this repo maintains by
+      # hand. `pod install` alone is what turns the current node_modules into a
+      # lock. `--repo-update` because the runner's spec repo is whatever the
+      # image baked, and a stale index resolves to yesterday's versions.
+      - name: pod install
+        working-directory: apps/mobile/ios
+        run: |
+          set -euo pipefail
+          pod install --repo-update
+      # THE LOCK IS A CLAIM UNTIL SOMETHING LINKS AGAINST IT. A regenerated
+      # Podfile.lock that names ExpoSQLite and vec.xcframework proves only that
+      # CocoaPods resolved; whether the vendored framework's slices match the
+      # simulator, and whether `-DWITH_SQLITE_VEC` compiles, is a build
+      # question. Debug + simulator + no signing is the cheapest build that
+      # answers it — a Release device build would add signing and Hermes to a
+      # lane that is not asking about either.
+      - name: Prove the pods link (simulator, unsigned)
+        working-directory: apps/mobile/ios
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -workspace Centraid.xcworkspace \
+            -scheme Centraid \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+      # The gate this lane exists to clear, run against what it just produced:
+      # L1 recipe completeness (including the node_modules drift #996 added),
+      # L2 pod versions, L3 path hygiene — then, only if those are green, the
+      # L4 fingerprint refresh `pod install` made necessary.
+      - name: Verify the recipe and refresh the identity ratchet
+        working-directory: apps/mobile
+        run: bun run ci:native-state --write
+      - name: Commit the regenerated lock
+        id: commit
+        env:
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # THE LOCK ONLY. `native-fingerprints.json` was in this list and CI
+          # rejected what the bot wrote: mobile-smoke on bcf17bd3f reported
+          # `committed be5176356574…, current 4cdab9719d…`. The ios hash is
+          # platform-dependent — creating
+          # `node_modules/expo-sqlite/ios/vec.xcframework` and recomputing moves
+          # it — and this runner necessarily has that directory (it builds it)
+          # plus the `sqlite3.c`/`sqlite3.h` the podspec copies into the same
+          # module during `pod install`. So a fingerprint written here can never
+          # equal the one the ubuntu checker reproduces. The `--write` above
+          # stays, because it is the fail-closed L1–L3 gate over what
+          # `pod install` just produced; its output simply stays on this
+          # runner's disk. Whoever changes native inputs refreshes the ratchet
+          # on Linux. Explicit paths rather than `commit -a` for the same reason
+          # they always were: `bun install` and `pod install` touch other
+          # tracked files on some trees.
+          git add apps/mobile/ios/Podfile.lock
+          if git diff --cached --quiet; then
+            echo "the lock is already what pod install produces — nothing to commit"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The body's waiver is REQUIRED, not decoration: governance's
+          # `commit-issue-receipt-match` fails any commit that touches no
+          # `receipts/issue-*.md`, and it failed bcf17bd3f (run 34103181691)
+          # for exactly that. The directive names this line as the way out, and
+          # it is the right way out here — a bot appending prose to an
+          # append-only audit artifact would be worse than a declared
+          # exception. `commit-message-format` is satisfied by the subject's
+          # conventional prefix and `(#996)` suffix.
+          git commit \
+            -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)" \
+            -m "governance: allow-commit-issue-receipt-match bot-regenerated lockfile; the receipt row for this lock lives in the commit that changed the native inputs, and this job must not write to an append-only audit artifact."
+          git push origin "HEAD:${BRANCH}"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      # Uploaded even when the push was skipped or a later step failed: the lock
+      # is the product of this runner's toolchain either way, and a run that
+      # could not push should still hand back the file a human can commit.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mobile-ios-podfile-lock
+          path: |
+            apps/mobile/ios/Podfile.lock
+            apps/mobile/native-fingerprints.json
+            node_modules/expo-sqlite/ios/vec.xcframework
+          retention-days: 30
+          if-no-files-found: error

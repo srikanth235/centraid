@@ -10,32 +10,12 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
-import type { PendingChangeStatus } from "../../lib/replica/multi-vault-session";
+import { toPendingChanges } from "./pending-change-rows";
+import type { PendingChange, PendingChangeSource } from "./pending-change-rows";
 
-export interface PendingChange {
-  id: string;
-  vaultId: string;
-  vaultLabel: string;
-  status: PendingChangeStatus;
-  /** `${appId}: ${action}`; seats parse it, the sheet presents `action`. */
-  label: string;
-  appId?: string;
-  action?: string;
-  reason?: string;
-  /** Transport attempts so far, and the first admission (ISO-8601): together
-   *  they separate a slow row from a stuck one. */
-  attempts?: number;
-  enqueuedAt?: string;
-  /** Conflict only, and both or neither: the versions the overlay copy prints. */
-  expectedVersion?: number;
-  actualVersion?: number;
-  kind: "replica" | "placement";
-}
-
-/** The one method the ticker needs; the mounted session satisfies it. */
-export interface PendingChangeSource {
-  pendingChanges: () => Promise<PendingChange[]>;
-}
+// The pure half is re-exported here because the sheet's vocabulary is imported
+// from this module across the app and the split is an internal one.
+export * from "./pending-change-rows";
 
 const PENDING_CHANGES_POLL_MS = 5_000;
 
@@ -71,10 +51,11 @@ class PendingChangesTicker {
     const source = this.#source;
     if (!source || this.#inFlight) return;
     this.#inFlight = true;
-    const pending = await source.pendingChanges().finally(() => {
+    const rows = await source.pendingChanges().finally(() => {
       this.#inFlight = false;
     });
-    if (source === this.#source) this.#publish(pending);
+    if (source === this.#source)
+      this.#publish(toPendingChanges(rows, source.scope()?.label ?? "Vault"));
   };
 
   #attach(): void {

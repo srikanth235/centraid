@@ -16,6 +16,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 
 interface PartyHit {
@@ -44,6 +45,7 @@ interface RawParty {
 }
 
 interface RawTag {
+  tag_id: string;
   concept_id: string;
   target_id: string;
 }
@@ -104,36 +106,52 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
 
     if (order.length === 0) return { people: [] };
 
-    const [profiles, parties, tags, concepts, schemes] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "people.profile",
-        where: [
-          { column: "party_id", op: "in", value: order },
-          { column: "deleted_at", op: "is-null" },
-        ],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.party",
-        where: [{ column: "party_id", op: "in", value: order }],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq", value: "core.party" },
-          { column: "target_id", op: "in", value: order },
-        ],
-      }),
-      ...conceptTaxonomyReads(ctx.vault),
-    ]);
-
-    const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
-    const partyRows = (parties.rows ?? []) as unknown as RawParty[];
-    const tagRows = (tags.rows ?? []) as unknown as RawTag[];
-    const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
+    // Every join is `in`-bounded by the ranked hits (#996 wave 4, R8).
+    const partyIn = inList("party_id", order);
+    const targetIn = inList("target_id", order);
+    const [profileRows, partyRows, tagRows, concepts, schemes] =
+      await Promise.all([
+        readPages<RawProfile>(ctx, {
+          name: "people.search.profiles",
+          select:
+            "party_id, created_at, cadence_days, role, avatar_color, last_contacted_at, deleted_at",
+          from: "people_profile",
+          where: `${partyIn.sql} AND deleted_at IS NULL`,
+          bind: partyIn.bind,
+          order: {
+            sortColumn: "party_id",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        }),
+        readPages<RawParty>(ctx, {
+          name: "people.search.parties",
+          select: "party_id, display_name",
+          from: "core_party",
+          where: partyIn.sql,
+          bind: partyIn.bind,
+          order: {
+            sortColumn: "party_id",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        }),
+        readPages<RawTag>(ctx, {
+          name: "people.search.tags",
+          select: "tag_id, target_type, target_id, concept_id",
+          from: "core_tag",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["core.party", ...targetIn.bind],
+          order: {
+            sortColumn: "tag_id",
+            pkColumn: "tag_id",
+            descending: false,
+          },
+        }),
+        ...conceptTaxonomyReads(ctx),
+      ]);
+    const conceptRows = concepts as unknown as RawConcept[];
+    const schemeRows = schemes as unknown as RawScheme[];
 
     const profileByParty = new Map<string, RawProfile>(
       profileRows.map((p) => [p.party_id, p] as const)

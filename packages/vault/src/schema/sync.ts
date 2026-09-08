@@ -11,7 +11,11 @@
 //     acts on deliberately;
 //   - ingestion is one-way: nothing here models write-back.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const SYNC_DDL = `
 CREATE TABLE sync_connection (
@@ -85,6 +89,7 @@ CREATE TABLE sync_connection_cursor (
   key           TEXT NOT NULL,
   value_json    TEXT NOT NULL CHECK (json_valid(value_json)),
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (connection_id, key)
 ) STRICT;
 
@@ -139,13 +144,15 @@ CREATE TABLE sync_connection_credential (
   -- The exchange-minted HMAC capability an Assist refresh token is redeemable
   -- at the OAuth Worker with (#865). Sealed, re-persisted on every rotation.
   refresh_capability TEXT,
-  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 
 CREATE TABLE sync_connection_health (
   connection_id TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   auth_note     TEXT,
-  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 ${touchUpdatedAt("sync_connection_credential", "connection_id")}
 ${touchUpdatedAt("sync_connection_health", "connection_id")}

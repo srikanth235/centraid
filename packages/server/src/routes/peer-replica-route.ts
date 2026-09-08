@@ -25,26 +25,29 @@ import {
 } from "@centraid/core/protocol";
 import {
   channelForParty,
-  composeShareShape,
-  ingestShareShape,
+  composeShareTail,
+  ingestShareTail,
   purgeShareShape,
+  readShareClosure,
   readShareGrant,
+  readSubscription,
+  recordSubscription,
   resolveGrantAudienceParties,
 } from "@centraid/vault";
 import type {
   Credential,
   Gateway as VaultGateway,
-  ShareShapeFrame,
+  ShareTailFrame,
   VaultDb,
 } from "@centraid/vault";
 
 import type { PeerIdentity } from "./peer-plane.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
-export const PEER_REPLICA_BOOTSTRAP_PATH = "/centraid/_peer/replica/bootstrap";
 export const PEER_REPLICA_CHANGES_PATH = "/centraid/_peer/replica/changes";
 export const PEER_REPLICA_BLOB_PATH = "/centraid/_peer/replica/blob";
 export const PEER_REPLICA_INTENTS_PATH = "/centraid/_peer/replica/intents";
+export const PEER_REPLICA_TAIL_PATH = "/centraid/_peer/replica/tail";
 
 /** One chunk per request. The manifest names the total, so the puller loops. */
 export const PEER_REPLICA_BLOB_CHUNK_BYTES = 1024 * 1024;
@@ -67,9 +70,12 @@ export interface PeerReplicaDeps {
 
 export type PeerReplicaPullOutcome =
   | {
-      state: "ingested";
-      apply: "bootstrap" | "reproject" | "fields";
-      fieldUpdates: number;
+      /** The predicate transport (#996, R10): what the three outputs did. */
+      state: "applied";
+      entered: number;
+      updated: number;
+      left: number;
+      retained: number;
       cursor: { epoch: string; seq: number };
     }
   | { state: "unreachable"; detail: string };
@@ -121,23 +127,26 @@ export function admitAtOrigin(
   return { origin, originVaultId, audienceVaultId, shapeId, grantId };
 }
 
-function frameFor(admission: Admission): ShareShapeFrame {
-  const grant = readShareGrant(admission.origin.vault, admission.grantId);
-  if (!grant) throw new Error(`share grant ${admission.grantId} vanished`);
-  return composeShareShape({
-    origin: admission.origin,
-    originVaultId: admission.originVaultId,
-    audienceVaultId: admission.audienceVaultId,
-    shapeId: admission.shapeId,
-    grantId: admission.grantId,
-    subjectType: grant.subjectType,
-    subjectId: grant.subjectId,
-    maxSizeBytes: grant.maxSizeBytes,
-  });
-}
-
-/** ORIGIN door: the whole grant-keyed shape, composed on demand. */
-export function handlePeerReplicaBootstrap(
+/**
+ * ORIGIN door: THE THREE OUTPUTS since the audience's cursor (#996, R10).
+ *
+ * TWO THINGS THE ORIGIN CHECKS BEFORE IT TRUSTS A CURSOR. It is the audience's
+ * claim about what it holds, and a claim is not an acknowledgement — so the
+ * origin compares it against `share_subscription.cursor_seq`, ITS OWN record of
+ * what it last served this audience. A cursor that does not match means the
+ * previous pass was never applied (the audience crashed, the connection died),
+ * and the answer is a RESEND of every member rather than a diff against a
+ * membership the audience never received. That is the one thing a per-grant
+ * member set cannot infer on its own, and `entered_seq` is what makes the
+ * resend an upsert rather than a scrub.
+ *
+ * A grant this door cannot serve — today only a Locker item, whose sealed
+ * columns must be re-sealed under the audience DEK inside one process —
+ * answers `unsupported` and names the reason. It is never answered wrongly,
+ * and it was never deliverable over a subscription: the old ingest had no
+ * keys to re-seal with and threw. There is no second door to fall back to.
+ */
+export function handlePeerReplicaTail(
   res: ServerResponse,
   peer: PeerIdentity,
   params: URLSearchParams,
@@ -145,7 +154,49 @@ export function handlePeerReplicaBootstrap(
 ): true {
   const admission = admitAtOrigin(peer, params, deps);
   if (!admission) return notFound(res);
-  return sendJson(res, 200, { state: "shape", frame: frameFor(admission) });
+  const grant = readShareGrant(admission.origin.vault, admission.grantId);
+  if (!grant) return notFound(res);
+  const claimed = Number(params.get("seq") ?? "-1");
+  const epoch = params.get("epoch") ?? "";
+  const served = readSubscription(
+    admission.origin.vault,
+    admission.grantId,
+    admission.audienceVaultId
+  );
+  const acknowledged =
+    served !== undefined &&
+    served.cursor.epoch === epoch &&
+    served.cursor.seq === claimed &&
+    Number.isSafeInteger(claimed) &&
+    claimed >= 0;
+  const pass = composeShareTail({
+    origin: admission.origin.vault,
+    originVaultId: admission.originVaultId,
+    audienceVaultId: admission.audienceVaultId,
+    authorityId: admission.grantId,
+    subjectType: grant.subjectType,
+    subjectId: grant.subjectId,
+    maxSizeBytes: grant.maxSizeBytes,
+    ...(acknowledged ? { since: { epoch, seq: claimed } } : {}),
+  });
+  if (!pass)
+    return sendJson(res, 200, {
+      state: "unsupported",
+      detail: "this grant's closure cannot be served as rows",
+    });
+  // Served, so recorded: the origin now believes this audience holds these
+  // rows, and the next request's cursor is what confirms or refutes it.
+  pass.settle();
+  recordSubscription(admission.origin.vault, {
+    authorityId: admission.grantId,
+    audienceVaultId: admission.audienceVaultId,
+    originVaultId: admission.originVaultId,
+    subjectType: grant.subjectType,
+    cursor: pass.frame.outputs.cursor,
+    state: "subscribed",
+    now: nowOf(deps),
+  });
+  return sendJson(res, 200, { state: "tail", frame: pass.frame });
 }
 
 /**
@@ -165,9 +216,18 @@ export function handlePeerReplicaBlob(
   const offset = Number(params.get("offset") ?? "0");
   if (!sha256 || !Number.isSafeInteger(offset) || offset < 0)
     return sendJson(res, 400, { state: "bad_request" });
-  const frame = frameFor(admission);
-  const entry = frame.closure.blobs.find((blob) => blob.sha256 === sha256);
-  if (!entry) return notFound(res);
+  // MEMBERSHIP OF THE MANIFEST IS THE AUTHORIZATION, and the manifest is the
+  // grant's own closure: a linked peer cannot name an arbitrary content
+  // address and read the owner's library through the share.
+  const grant = readShareGrant(admission.origin.vault, admission.grantId);
+  if (!grant) return notFound(res);
+  const claimed = readShareClosure(admission.origin.vault, {
+    originVaultId: admission.originVaultId,
+    itemType: grant.subjectType,
+    itemIds: [grant.subjectId],
+    crossOwner: true,
+  }).blobs.some((blob) => blob.sha256 === sha256);
+  if (!claimed) return notFound(res);
   const bytes = admission.origin.blobs.local.getSync(sha256);
   if (!bytes) return notFound(res);
   const chunk = bytes.subarray(offset, offset + PEER_REPLICA_BLOB_CHUNK_BYTES);
@@ -233,8 +293,10 @@ export async function handlePeerReplicaChanges(
   const seat = deps.vaultFor(notice.audienceVaultId);
   if (!seat) return notFound(res);
   if (notice.revoked) {
+    const grantId = shareShapeGrantId(notice.shapeId);
+    if (!grantId) return notFound(res);
     const purged = purgeShareShape(seat.vault, {
-      shapeId: notice.shapeId,
+      authorityId: grantId,
       audienceVaultId: notice.audienceVaultId,
       now: nowOf(deps),
     });
@@ -251,24 +313,28 @@ export async function handlePeerReplicaChanges(
     shapeId: notice.shapeId,
     seat,
   });
-  return sendJson(res, outcome.state === "ingested" ? 200 : 503, outcome);
+  // Either transport is a delivery: `ingested` is the frame path's word and
+  // `applied` is the predicate transport's (#996, R10). Only `unreachable` is
+  // a failure, and only it answers 503.
+  return sendJson(res, outcome.state === "unreachable" ? 503 : 200, outcome);
 }
 
-/** Apply a frame the seat pulled. Kept here so the pull half and the loopback
- *  half agree about what "ingest" means on this seat. */
-export function ingestPulledShape(
+/** Apply a TAIL the seat pulled — the three outputs, as rows (#996, R10). */
+export function ingestPulledTail(
   seat: VaultDb,
-  frame: ShareShapeFrame,
+  frame: ShareTailFrame,
   input: { audienceVaultId: string; now: string }
 ): PeerReplicaPullOutcome {
-  const result = ingestShareShape(seat.vault, frame, {
+  const applied = ingestShareTail(seat.vault, frame, {
     audienceVaultId: input.audienceVaultId,
     now: input.now,
   });
   return {
-    state: "ingested",
-    apply: result.apply,
-    fieldUpdates: result.fieldUpdates,
-    cursor: result.cursor,
+    state: "applied",
+    entered: applied.entered,
+    updated: applied.updated,
+    left: applied.left,
+    retained: applied.retained,
+    cursor: applied.cursor,
   };
 }

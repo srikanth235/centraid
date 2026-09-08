@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { PageQuery, PageRequest } from "@centraid/core/page";
+
 import { loadHomeTileContent } from "./homeTileContent.js";
 import type { HomeTileReader } from "./homeTileContent.js";
 
@@ -15,22 +17,37 @@ vi.mock(import("../../blueprints/blob-auth.js"), () => ({
   SCOPE_ATTR: "data-scope" as const,
 }));
 
+/** Keyed by PHYSICAL TABLE, because that is what a statement names now. */
 type Rows = Record<string, Record<string, unknown>[]>;
 
 function readerOf(rows: Rows): HomeTileReader {
   return {
-    read: vi.fn<HomeTileReader["read"]>(async (_appId, request) => {
-      const found = rows[request.entity];
-      if (!found) throw new Error(`no shape for ${request.entity}`);
-      // The excerpt reads address ONE content item by id; the stub applies the
-      // eq clauses the way the coordinator would.
-      const matched = found.filter((values) =>
-        (request.where ?? []).every(
-          (clause) => values[clause.column] === clause.value
-        )
-      );
-      return { rows: matched.map((values) => ({ values })) };
-    }),
+    page: vi.fn<
+      (
+        query: PageQuery,
+        request: PageRequest
+      ) => Promise<{ rows: Record<string, unknown>[] }>
+    >((query, request) => {
+      const found = rows[query.from];
+      if (!found) throw new Error(`no table ${query.from} on this seat`);
+      // The excerpt read addresses ONE content item by its id. The stub honours
+      // the statement's single bind the way SQLite would, so a statement that
+      // stopped binding it would return the wrong row here too.
+      const bind = query.bind ?? [];
+      const matched =
+        query.where === "content_id = ?"
+          ? found.filter((values) => values.content_id === bind[0])
+          : found;
+      const { sortColumn, descending } = query.order;
+      const ordered = [...matched].sort((left, right) => {
+        const a = String(left[sortColumn] ?? "");
+        const b = String(right[sortColumn] ?? "");
+        return descending ? b.localeCompare(a) : a.localeCompare(b);
+      });
+      return Promise.resolve({ rows: ordered.slice(0, request.limit) });
+    }) as unknown as HomeTileReader["page"] & {
+      mock: { calls: [PageQuery, PageRequest][] };
+    },
   };
 }
 
@@ -49,7 +66,7 @@ describe("shell/routes/homeTileContent", () => {
   it("takes agenda and the tally figure from the brief the shell already has", async () => {
     const content = await loadHomeTileContent({
       brief: BRIEF,
-      reader: readerOf({ "tally.expense": [{ id: "x1" }] }),
+      reader: readerOf({ tally_expense: [{ id: "x1" }] }),
     });
     expect(content.agenda).toStrictEqual({ events: BRIEF.events, total: 1 });
     expect(content.tally).toStrictEqual({
@@ -67,7 +84,7 @@ describe("shell/routes/homeTileContent", () => {
     // settled.
     const content = await loadHomeTileContent({
       brief: { ...BRIEF, balanceMinor: 0 },
-      reader: readerOf({ "tally.expense": [] }),
+      reader: readerOf({ tally_expense: [] }),
     });
     expect(content.tally).toBeUndefined();
   });
@@ -82,7 +99,7 @@ describe("shell/routes/homeTileContent", () => {
   it("does not let one app's refused read blank the others", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "locker.item": [{ compromised: 1, item_id: "i1" }],
+        locker_item: [{ compromised: 1, item_id: "i1" }],
       }),
     });
     expect(content.locker).toStrictEqual({ compromised: 1, total: 1 });
@@ -92,7 +109,7 @@ describe("shell/routes/homeTileContent", () => {
   it("drops trashed and archived rows", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.party": [
+        core_party: [
           { display_name: "Ada", kind: "person", party_id: "p1" },
           {
             deleted_at: "2026-08-01",
@@ -112,7 +129,7 @@ describe("shell/routes/homeTileContent", () => {
   it("counts only people, not orgs and groups, on the people tile", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.party": [
+        core_party: [
           { display_name: "Ada", kind: "person", party_id: "p1" },
           { display_name: "Acme", kind: "org", party_id: "p2" },
         ],
@@ -127,7 +144,7 @@ describe("shell/routes/homeTileContent", () => {
   it("counts OPEN tasks but carries the most recent completed one too", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "schedule.task": [
+        schedule_task: [
           { status: "needs-action", task_id: "t1", title: "Renew passport" },
           { status: "in-process", task_id: "t2", title: "Pack" },
           {
@@ -165,7 +182,7 @@ describe("shell/routes/homeTileContent", () => {
       .slice(0, 10);
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "schedule.task": [
+        schedule_task: [
           {
             due_at: today,
             status: "needs-action",
@@ -195,11 +212,11 @@ describe("shell/routes/homeTileContent", () => {
   it("takes the newest note and document by their own update stamps", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.document": [
+        core_document: [
           { document_id: "d1", title: "Old lease", updated_at: "2026-01-01" },
           { document_id: "d2", title: "New lease", updated_at: "2026-07-01" },
         ],
-        "knowledge.note": [
+        knowledge_note: [
           { note_id: "n1", title: "Older", updated_at: "2026-02-01" },
           { note_id: "n2", title: "Reading list", updated_at: "2026-08-01" },
         ],
@@ -216,11 +233,11 @@ describe("shell/routes/homeTileContent", () => {
   it("builds thumbnails only for assets whose bytes are actually in the vault", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.content_item": [
+        core_content_item: [
           { content_id: "c1", content_uri: "blob:sha256-a" },
           { content_id: "c2", content_uri: "https://example.test/remote.jpg" },
         ],
-        "media.asset": [
+        media_asset: [
           { asset_id: "a1", captured_at: "2026-08-01", content_id: "c1" },
           { asset_id: "a2", captured_at: "2026-08-02", content_id: "c2" },
         ],
@@ -240,15 +257,23 @@ describe("shell/routes/homeTileContent", () => {
     expect(content.photos).toStrictEqual({ thumbs: [], total: 3 });
   });
 
-  it("names only the app and the entity on a replica read — one app, one shape", async () => {
-    // ONE APP, ONE SHAPE (#928 A1): a shape is composed from the app's own
-    // declared manifest, so a read names the app and the entity and there is
-    // nothing left for a caller-supplied selector to get wrong.
-    const reader = readerOf({ "knowledge.note": [{ title: "n" }] });
+  it("every tile read is a bounded, ordered statement over a named table", async () => {
+    // THE WINDOW IS THE REQUEST (#996, R8). The declarative read this replaces
+    // could ask for an entity and take whatever the store's order was; a
+    // statement names its table, its ORDER BY and its window, and there is no
+    // unbounded variant of it to reach for.
+    const reader = readerOf({ knowledge_note: [{ title: "n" }] });
     await loadHomeTileContent({ reader });
-    expect(vi.mocked(reader.read).mock.calls.length).toBeGreaterThan(0);
-    for (const [, request] of vi.mocked(reader.read).mock.calls)
-      expect(Object.keys(request).sort()).not.toContain("purpose");
+    const calls = (
+      reader.page as unknown as { mock: { calls: [PageQuery, PageRequest][] } }
+    ).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [query, request] of calls) {
+      expect(query.from).toMatch(/^[a-z_]+$/u);
+      expect(query.order.sortColumn).not.toBe("");
+      expect(query.order.pkColumn).not.toBe("");
+      expect(request.limit).toBeGreaterThan(0);
+    }
   });
 
   it("paints the ORIGINAL when a photo has no thumb derivative yet", async () => {
@@ -262,8 +287,8 @@ describe("shell/routes/homeTileContent", () => {
     );
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.content_item": [{ content_id: "c1", content_uri: "blob:sha" }],
-        "media.asset": [
+        core_content_item: [{ content_id: "c1", content_uri: "blob:sha" }],
+        media_asset: [
           { asset_id: "a1", captured_at: "2026-08-01", content_id: "c1" },
         ],
       }),
@@ -286,14 +311,14 @@ describe("shell/routes/homeTileContent", () => {
       "the hallway before the first of the month arrives.\n\n- deposit\n- keys\n";
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.content_item": [
+        core_content_item: [
           {
             content_id: "c-doc",
             content_uri: `data:text/markdown;charset=utf-8,${encodeURIComponent(body)}`,
             media_type: "text/markdown",
           },
         ],
-        "core.document": [
+        core_document: [
           {
             current_content_id: "c-doc",
             document_id: "d1",
@@ -334,14 +359,14 @@ describe("shell/routes/homeTileContent", () => {
     try {
       const content = await loadHomeTileContent({
         reader: readerOf({
-          "core.content_item": [
+          core_content_item: [
             {
               content_id: "c-doc",
               content_uri: "blob:sha256-abc",
               media_type: "text/plain",
             },
           ],
-          "core.document": [
+          core_document: [
             {
               current_content_id: "c-doc",
               document_id: "d1",
@@ -369,14 +394,14 @@ describe("shell/routes/homeTileContent", () => {
     const { authorizeBlobUrl } = await import("../../blueprints/blob-auth.js");
     vi.mocked(authorizeBlobUrl).mockResolvedValue(null);
     const rowsFor = (mediaType: string): Rows => ({
-      "core.content_item": [
+      core_content_item: [
         {
           content_id: "c-doc",
           content_uri: "blob:sha256-abc",
           media_type: mediaType,
         },
       ],
-      "core.document": [
+      core_document: [
         {
           current_content_id: "c-doc",
           document_id: "d1",
@@ -403,14 +428,14 @@ describe("shell/routes/homeTileContent", () => {
     // so its text IS the first line.
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.content_item": [
+        core_content_item: [
           {
             content_id: "c-note",
             content_uri: `data:text/markdown;charset=utf-8,${encodeURIComponent("# Groceries for the week\n\n- milk\n- eggs\n")}`,
             media_type: "text/markdown",
           },
         ],
-        "knowledge.note": [
+        knowledge_note: [
           {
             body_content_id: "c-note",
             note_id: "n1",
@@ -430,14 +455,14 @@ describe("shell/routes/homeTileContent", () => {
   it("falls back to the note's title when its body is unreadable", async () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
-        "core.content_item": [
+        core_content_item: [
           {
             content_id: "c-note",
             content_uri: "blob:sha256-abc",
             media_type: "image/png",
           },
         ],
-        "knowledge.note": [
+        knowledge_note: [
           {
             body_content_id: "c-note",
             note_id: "n1",

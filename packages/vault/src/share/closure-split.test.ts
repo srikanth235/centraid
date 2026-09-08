@@ -79,11 +79,9 @@ describe("closure split", () => {
       second,
     ]);
     expect(closure.rows.contentItems).toHaveLength(1);
-    expect(closure.rows.derivatives).toHaveLength(1);
-    expect(closure.blobs.map((blob) => blob.rung).toSorted()).toStrictEqual([
-      "original",
-      "thumb",
-    ]);
+    // No derived row and no derived byte: the thumb is the audience's own
+    // work (#996, R10).
+    expect(closure.blobs.map((blob) => blob.rung)).toStrictEqual(["original"]);
 
     const shared = shareItemsToVault({
       origin,
@@ -134,7 +132,9 @@ describe("closure split", () => {
     expect(shared.items.map((item) => item.itemId)).toStrictEqual(
       photos.map((photo) => photo.assetId)
     );
-    expect(shared.blobs).toHaveLength(6);
+    // Three photographs, three originals — never six: the thumbs are derived
+    // and the audience makes its own (#996, R10).
+    expect(shared.blobs).toHaveLength(3);
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM media_asset")
     ).toStrictEqual([{ n: 3 }]);
@@ -217,17 +217,20 @@ describe("closure split", () => {
                 capability, requested_at, drained_at
            FROM enrich_request`
       )
-    ).toStrictEqual([
-      {
+    ).toStrictEqual(
+      // Three: what the photograph looks like small, what it looks like to a
+      // search, and what it hashes to — the work the origin's derivatives used
+      // to carry across the boundary, now the recipient's own (#996, R10/R18).
+      ["thumb", "embedding", "phash"].map((variant) => ({
         target_id: shared.items[0]!.itemId,
         reason: "projected",
-        contribution_variant: "embedding",
+        contribution_variant: variant,
         required_capability: null,
         capability: null,
         requested_at: "2026-08-08T00:00:00.000Z",
         drained_at: null,
-      },
-    ]);
+      }))
+    );
 
     // The owner's curation of their own library stayed there.
     expect(
@@ -244,9 +247,11 @@ describe("closure split", () => {
       sharedBy: "member-sid",
       authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
+    // Still three, not six: a deduped row is already registered, so the
+    // second placement re-queues nothing.
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM enrich_request")
-    ).toStrictEqual([{ n: 1 }]);
+    ).toStrictEqual([{ n: 3 }]);
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM core_place")
     ).toStrictEqual([{ n: 1 }]);
@@ -305,16 +310,16 @@ describe("closure split", () => {
     // oxlint-disable-next-line vitest/prefer-strict-equal -- see comment above: toStrictEqual fails on prototype provenance, not on data
     expect(wire).toEqual(closure);
 
-    const shape = {
-      shapeId: "shape-priya",
+    const grant = {
+      authorityId: "grant-priya",
       rowVersions: new Map<string, number>(),
     };
     const inProcess = projectShareClosure(audience.vault, closure, {
-      shape,
+      grant,
       now: at,
     });
     const overWire = projectShareClosure(other.vault, wire, {
-      shape,
+      grant,
       now: at,
     });
 
@@ -325,10 +330,12 @@ describe("closure split", () => {
     // and that difference is the column doing its job — the claim under test
     // is that the wire path projects the same CONTENT as the in-process one.
     for (const sql of [
-      "SELECT content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
-      "SELECT derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at FROM core_content_derivative",
-      "SELECT asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, source_asset_id, archived_at, deleted_at, purge_at FROM media_asset",
-      `SELECT shape_id, target_type, target_id, origin_item_id, origin_row_version
+      "SELECT content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
+      // The reading of the bytes travels as a WIRE FIELD and lands as the
+      // audience's OWN representation (#996, ruling R20(b)).
+      "SELECT content_id, owner_type, owner_id, media_type, charset, interpretation FROM core_content_representation ORDER BY owner_type, owner_id",
+      "SELECT asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, source_asset_id, archived_at, deleted_at, purge_at FROM media_asset",
+      `SELECT authority_id, target_type, target_id, origin_item_id, origin_row_version
          FROM share_subscription_lineage ORDER BY target_type, target_id`,
       `SELECT target_type, target_id, reason, contribution_variant, requested_at
          FROM enrich_request`,
@@ -350,7 +357,7 @@ describe("closure split", () => {
       projectShareClosure(
         audience.vault,
         { ...closure, formatVersion: 3 as unknown as 2 },
-        { shape: { shapeId: "shape-priya", rowVersions: new Map() } }
+        { grant: { authorityId: "grant-priya", rowVersions: new Map() } }
       )
     ).toThrow(/unsupported share closure format/u);
     expect(

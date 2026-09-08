@@ -207,8 +207,8 @@ describe("vault-plane-blob-sweep", () => {
       const { sha256: sha, byteSize } = plane1.db.blobs.ingestSync(bytes);
       plane1.db.vault
         .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'application/octet-stream', ?, ?, ?, datetime('now'))`
+          `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, ?, ?, ?, datetime('now'))`
         )
         .run(uuidv7(), blobUriFor(sha), sha, byteSize);
       plane1.stop();

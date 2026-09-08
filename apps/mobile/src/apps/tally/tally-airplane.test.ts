@@ -1,3 +1,7 @@
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
 /**
  * TALLY IN AIRPLANE MODE (#922 E7).
  *
@@ -11,22 +15,20 @@
  * on this seat goes through — is replaced by one that THROWS from every door,
  * so a read that reached for the network would fail loudly rather than quietly
  * succeeding against a test double. The read plane is a real replica database
- * seeded with the ledger fixture, opened through the same mounted reader the
+ * seeded with the ledger fixture, opened through the same read seam the
  * provider builds on a device.
  */
-import path from "node:path";
-
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-
+import type { Valuation } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
-import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
+import {
+  SeatPageFixture,
+  seatOnlyReadPlane,
+} from "../../lib/replica/seat-fixture.test-fixtures";
 import {
   FRIENDS,
   OWNER,
-  VAULT_ID,
-  seedScope,
+  seedSeatScope,
 } from "../../lib/replica/tally-ledger.test-fixtures";
 import { attachTallyReadPlane } from "./tally-reads";
 import {
@@ -47,27 +49,32 @@ vi.mock(import("../../lib/gateway"), () => {
   return new Proxy({} as never, { get: () => refuse });
 });
 
-let reader: MultiVaultReplicaReader | undefined;
+let seat: SeatPageFixture | undefined;
+
+/** The absolute size of a valuation, for "is there anything here" assertions —
+ *  never a figure a surface would render (#996, ruling R22). */
+function valuationTotalMinor(valuation: Valuation): number {
+  return valuation.state === "valued"
+    ? Math.abs(valuation.total.amount_minor)
+    : valuation.components.reduce(
+        (total, amount) => total + Math.abs(amount.amount_minor),
+        0
+      );
+}
 
 describe("Tally on a plane", () => {
   beforeEach(() => {
     const root = tempDirSync("centraid-tally-airplane-");
     const databaseName = path.join(root, "personal.db");
-    seedScope(databaseName);
-    reader = new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, "mounted.db")),
-      [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
-    );
-    attachTallyReadPlane({
-      read: reader.read.bind(reader),
-      search: reader.search.bind(reader),
-    });
+    seedSeatScope(databaseName);
+    seat = new SeatPageFixture(databaseName);
+    attachTallyReadPlane(seatOnlyReadPlane(seat.page));
   });
 
   afterEach(() => {
     attachTallyReadPlane(undefined);
-    reader?.close();
-    reader = undefined;
+    seat?.close();
+    seat = undefined;
     resetTallyVault();
   });
 
@@ -86,10 +93,13 @@ describe("Tally on a plane", () => {
       state.dashboard.friends.map((friend) => friend.party_id).sort()
     ).toStrictEqual([...FRIENDS].sort());
     expect(
-      state.dashboard.friends.every((friend) => friend.net_minor !== 0)
+      state.dashboard.friends.every((friend) => friend.balances.length > 0)
     ).toBe(true);
+    // Two positions, each valued on its own — never one number over both
+    // (#996, ruling R22).
     expect(
-      state.dashboard.owe_total_minor + state.dashboard.owed_total_minor
+      valuationTotalMinor(state.dashboard.owe) +
+        valuationTotalMinor(state.dashboard.owed)
     ).toBeGreaterThan(0);
     expect(state.dashboard.groups).toHaveLength(1);
     expect(state.dashboard.recurring).toHaveLength(1);
@@ -109,7 +119,9 @@ describe("Tally on a plane", () => {
         parked: false,
         pending: 0,
         rows: state.dashboard.friends.length,
-        nets: state.dashboard.friends.map((friend) => friend.net_minor),
+        nets: state.dashboard.friends.flatMap((friend) =>
+          friend.balances.map((amount) => amount.amount_minor)
+        ),
       })
     ).toBe("ready");
   });

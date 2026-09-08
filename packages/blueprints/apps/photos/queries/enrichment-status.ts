@@ -1,3 +1,5 @@
+import { readById } from "../../_shared/paged-reads.ts";
+
 /**
  * Whether face enrichment is enabled for this vault (#352
  * phase 3/4): a straight read of `enrich.policy` for the photos domain — an
@@ -16,12 +18,17 @@ interface RawPolicy {
 
 export default async function enrichmentStatus({ ctx }: HandlerArgs) {
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "enrich.policy",
-      where: [{ column: "domain", op: "eq", value: "photos" }],
-    });
-    const row = ((result.rows ?? []) as unknown as RawPolicy[])[0];
+    // One row, asked for as one row: `enrich_policy` is keyed on the domain.
+    const row = await readById<RawPolicy>(
+      ctx,
+      {
+        name: "photos.enrichment.policy",
+        select: "domain, tier, updated_at",
+        from: "enrich_policy",
+        idColumn: "domain",
+      },
+      "photos"
+    );
     return { tier: row?.tier ?? "off" };
   } catch (error) {
     const e = error as { code?: string; message?: string };

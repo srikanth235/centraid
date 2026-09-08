@@ -6,61 +6,13 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  DOCUMENT_TARGET_TYPE,
-  FOLDER_SCHEME_URI,
-} from "../commands/documents.js";
-import { sha256Hex, uuidv7 } from "../ids.js";
+import { uuidv7 } from "../ids.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";
+import { captionTarget } from "./caption-target.js";
+import { conceptKey, ensureConcept, ensureScheme } from "./concept-writes.js";
+import { contentItemPublisher } from "./content-item-publisher.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
-
-function ensureScheme(vault: DatabaseSync, uri: string, title: string): string {
-  const existing = vault
-    .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
-    .get(uri) as { scheme_id: string } | undefined;
-  if (existing) return existing.scheme_id;
-  const schemeId = uuidv7();
-  vault
-    .prepare(
-      `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
-       VALUES (?, ?, ?, 'centraid', '1')`
-    )
-    .run(schemeId, uri, title);
-  return schemeId;
-}
-
-function ensureConcept(
-  vault: DatabaseSync,
-  schemeId: string,
-  notation: string,
-  label: string
-): string {
-  const existing = vault
-    .prepare(
-      "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?"
-    )
-    .get(schemeId, notation) as { concept_id: string } | undefined;
-  if (existing) return existing.concept_id;
-  const conceptId = uuidv7();
-  vault
-    .prepare(
-      `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
-       VALUES (?, ?, ?, ?, NULL, NULL, NULL)`
-    )
-    .run(conceptId, schemeId, notation, label);
-  return conceptId;
-}
-
-export function tagNotation(label: string): string {
-  return (
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gu, "-")
-      .replace(/^-+|-+$/gu, "")
-      .slice(0, 64) || "untitled"
-  );
-}
 
 // ── knowledge.annotation (captions, summaries) ──────────────────────────
 
@@ -78,13 +30,14 @@ const annotationPublisher: Publisher = {
     // Read-only lookup — schema gate covers writes (#374); probe is a key lookup.
     const p = payload as unknown as AnnotationPayload;
     if (!p.author_party_id) return null;
+    const target = captionTarget(vault, p.target_type, p.target_id);
     // One caption per (author, target) — replaceMemo.
     const existing = vault
       .prepare(
         `SELECT annotation_id FROM knowledge_annotation
           WHERE target_type = ? AND target_id = ? AND author_party_id = ?`
       )
-      .get(p.target_type, p.target_id, p.author_party_id) as
+      .get(target.targetType, target.targetId, p.author_party_id) as
       | { annotation_id: string }
       | undefined;
     return existing
@@ -106,6 +59,7 @@ const annotationPublisher: Publisher = {
       );
     }
     const annotationId = uuidv7();
+    const target = captionTarget(vault, p.target_type, p.target_id);
     vault
       .prepare(
         `INSERT INTO knowledge_annotation (annotation_id, author_party_id, target_type, target_id, selector_json, body_text, created_at)
@@ -114,8 +68,8 @@ const annotationPublisher: Publisher = {
       .run(
         annotationId,
         p.author_party_id,
-        p.target_type,
-        p.target_id,
+        target.targetType,
+        target.targetId,
         p.body,
         now
       );
@@ -141,6 +95,15 @@ export interface TagPayload {
   scheme_uri?: string;
   label: string;
   confidence: number;
+  /**
+   * THE EVIDENCE THIS CLAIM RESTS ON (#996, ruling R22). The
+   * `enrich_derivation` row that produced it — which carries the profile, the
+   * model and the payload — and the revision of the target it was made about.
+   * Absent for a claim written before the enrichment run stamped one, which
+   * reads as an unattributed machine tag, because that is what it is.
+   */
+  derivation_id?: string | null;
+  input_revision_id?: string | null;
 }
 
 const tagPublisher: Publisher = {
@@ -153,13 +116,24 @@ const tagPublisher: Publisher = {
         `SELECT t.tag_id, t.tagged_by_party_id FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ? AND c.notation = ?`
+          WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ?
+            AND c.normalized_key = ?
+            AND (t.tagged_by_party_id IS NOT NULL
+                 OR COALESCE(t.derivation_id, '') = COALESCE(?, ''))
+        ORDER BY CASE WHEN t.tagged_by_party_id IS NOT NULL THEN 0 ELSE 1 END
+        LIMIT 1`
       )
       .get(
         p.target_type,
         p.target_id,
         p.scheme_uri ?? VISION_SCHEME_URI,
-        tagNotation(p.label)
+        conceptKey(p.label),
+        // COMPETING CONFIDENCES ARE ROWS (#996, R22): this profile's own claim
+        // is what a re-run refreshes. Another profile's claim about the same
+        // concept is a different row, and finding it here would have made the
+        // second engine overwrite the first — the collapse the table's old
+        // `UNIQUE (target, concept)` enforced.
+        p.derivation_id ?? null
       ) as { tag_id: string; tagged_by_party_id: string | null } | undefined;
     if (!row) return null;
     // Owner-asserted tag (has a party) is terminal; machine tag refreshes confidence.
@@ -179,29 +153,45 @@ const tagPublisher: Publisher = {
     const p = assertPayload<TagPayload>("TagPayload", payload);
     const uri = p.scheme_uri ?? VISION_SCHEME_URI;
     const schemeId = ensureScheme(vault, uri, "Machine tags");
-    const conceptId = ensureConcept(
-      vault,
-      schemeId,
-      tagNotation(p.label),
-      p.label
-    );
+    const conceptId = ensureConcept(vault, schemeId, p.label);
     const tagId = uuidv7();
     vault
       .prepare(
-        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?)`
+        `INSERT INTO core_tag
+           (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+            confidence, derivation_id, input_revision_id, tagged_at)
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)`
       )
-      .run(tagId, p.target_type, p.target_id, conceptId, p.confidence, now);
+      .run(
+        tagId,
+        p.target_type,
+        p.target_id,
+        conceptId,
+        p.confidence,
+        p.derivation_id ?? null,
+        p.input_revision_id ?? null,
+        now
+      );
     return { entityId: tagId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
     const p = assertPayload<TagPayload>("TagPayload", payload);
     vault
       .prepare(
-        `UPDATE core_tag SET confidence = ?, tagged_at = ?
+        `UPDATE core_tag
+            SET confidence = ?,
+                derivation_id = COALESCE(?, derivation_id),
+                input_revision_id = COALESCE(?, input_revision_id),
+                tagged_at = ?
           WHERE tag_id = ? AND tagged_by_party_id IS NULL`
       )
-      .run(p.confidence, now, entityId);
+      .run(
+        p.confidence,
+        p.derivation_id ?? null,
+        p.input_revision_id ?? null,
+        now,
+        entityId
+      );
     return { wrote: [] };
   },
 };
@@ -340,163 +330,6 @@ function addEntries(
   }
   return wrote;
 }
-
-// ── core.content_item (filing / rename proposals) ───────────────────────
-
-export interface FilingPayload {
-  content_id: string;
-  title?: string;
-  folder?: string;
-}
-
-export interface RemoteContentPayload {
-  sourceId: string;
-  title: string;
-  mediaType: string;
-  sourceUrl: string;
-  modifiedAt: string | null;
-  owner: string | null;
-  body?: string;
-}
-
-function isFilingPayload(
-  payload: Record<string, unknown>
-): payload is FilingPayload & Record<string, unknown> {
-  return typeof payload.content_id === "string";
-}
-
-function remoteContentSha(sourceId: string): string {
-  // Remote connectors do not download bytes; source id is the identity.
-  return sha256Hex(`remote-content\n${sourceId}`);
-}
-
-const contentItemPublisher: Publisher = {
-  entityType: "core.content_item",
-  probe(vault, payload) {
-    if (!isFilingPayload(payload)) {
-      const p = payload as unknown as RemoteContentPayload;
-      if (!p.sourceId) return null;
-      const existing = vault
-        .prepare(
-          "SELECT content_id FROM core_content_item WHERE sha256 = ? AND deleted_at IS NULL"
-        )
-        .get(remoteContentSha(p.sourceId)) as
-        | { content_id: string }
-        | undefined;
-      return existing
-        ? {
-            entityId: existing.content_id,
-            disposition: "update",
-            note: "remote content item",
-          }
-        : null;
-    }
-    const p = payload;
-    const existing = vault
-      .prepare(
-        "SELECT content_id FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL"
-      )
-      .get(p.content_id ?? "") as { content_id: string } | undefined;
-    if (!existing) return null;
-    return {
-      entityId: existing.content_id,
-      disposition: "update",
-      note: "filing proposal",
-    };
-  },
-  create(vault, _owner, payload, now) {
-    if (isFilingPayload(payload)) {
-      // Filing never mints documents — missing content item fails per-row.
-      throw new Error(
-        "a filing proposal for a missing core.content_item cannot create it"
-      );
-    }
-    const p = assertPayload<RemoteContentPayload>(
-      "RemoteContentPayload",
-      payload
-    );
-    const contentId = uuidv7();
-    vault
-      .prepare(
-        `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language,
-            creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, ?, ?, ?, 0, ?, NULL, NULL, NULL, NULL, NULL, ?)`
-      )
-      .run(
-        contentId,
-        p.mediaType,
-        p.sourceUrl,
-        remoteContentSha(p.sourceId),
-        p.title,
-        now
-      );
-    return { entityId: contentId, wrote: [] };
-  },
-  update(vault, entityId, payload, now) {
-    if (!isFilingPayload(payload)) {
-      const p = assertPayload<RemoteContentPayload>(
-        "RemoteContentPayload",
-        payload
-      );
-      vault
-        .prepare(
-          `UPDATE core_content_item
-              SET media_type = ?, content_uri = ?, title = ?
-            WHERE content_id = ?`
-        )
-        .run(p.mediaType, p.sourceUrl, p.title, entityId);
-      return { wrote: [] };
-    }
-    const p = assertPayload<FilingPayload>("FilingPayload", payload);
-    const wrote: PublishedWrite[] = [];
-    // Title/folder live on core_document (#352); content item is HEAD, not
-    // identity. Only the current head resolves; else tag/rename the item.
-    const doc = vault
-      .prepare(
-        "SELECT document_id FROM core_document WHERE current_content_id = ?"
-      )
-      .get(entityId) as { document_id: string } | undefined;
-    const targetType = doc ? DOCUMENT_TARGET_TYPE : "core.content_item";
-    const targetId = doc ? doc.document_id : entityId;
-    if (p.title) {
-      vault
-        .prepare(
-          doc
-            ? "UPDATE core_document SET title = ? WHERE document_id = ?"
-            : "UPDATE core_content_item SET title = ? WHERE content_id = ?"
-        )
-        .run(p.title, targetId);
-    }
-    if (p.folder) {
-      const schemeId = ensureScheme(vault, FOLDER_SCHEME_URI, "Folders");
-      const byLabel = vault
-        .prepare(
-          `SELECT concept_id FROM core_concept WHERE scheme_id = ? AND lower(pref_label) = lower(?)`
-        )
-        .get(schemeId, p.folder) as { concept_id: string } | undefined;
-      const conceptId =
-        byLabel?.concept_id ??
-        ensureConcept(vault, schemeId, tagNotation(p.folder), p.folder);
-      vault
-        .prepare(
-          `DELETE FROM core_tag
-            WHERE target_type = ? AND target_id = ?
-              AND concept_id IN (SELECT c.concept_id FROM core_concept c WHERE c.scheme_id = ?)`
-        )
-        .run(targetType, targetId, schemeId);
-      const tagId = uuidv7();
-      vault
-        .prepare(
-          `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-           VALUES (?, ?, ?, ?, NULL, NULL, ?)`
-        )
-        .run(tagId, targetType, targetId, conceptId, now);
-      wrote.push({ type: "core.tag", id: tagId });
-    }
-    return { wrote };
-  },
-};
 
 export const ENRICH_PUBLISHERS: readonly Publisher[] = [
   annotationPublisher,

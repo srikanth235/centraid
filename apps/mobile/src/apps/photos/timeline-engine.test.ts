@@ -1,20 +1,23 @@
 // Bootstrap × timeline read amplification (#880).
 //
-// The engine subscribes to "photos" invalidations. `MultiVaultReplicaSession`
-// fans one invalidation out per mounted scope, and the bootstrap coordinator
-// emits one per committed page, so a 50,000-row cold start delivers this
-// listener hundreds of signals. Each pass is four full-projection reads
-// holding SHARED locks on the very databases the bootstrap is writing, so an
-// unguarded listener stacked dozens of them concurrently.
+// The engine subscribes to "photos" invalidations. The bootstrap emits one per
+// committed page, so a 50,000-row cold start delivers this listener hundreds of
+// signals. Each pass walks the whole library over the seat's file — the file
+// the bootstrap is writing — so an unguarded listener stacked dozens of them
+// concurrently.
 //
 // What these tests pin: a burst costs one pass, and a signal that lands
-// mid-pass costs exactly one follow-up — never a pass per signal.
+// mid-pass costs exactly one follow-up — never a pass per signal. Since #996
+// W5-D1 a pass is ONE joined statement over the seat rather than seven
+// whole-table reads through the declarative plane, and the coalescing claim is
+// unchanged by that — which is what makes it worth keeping pinned here.
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 
-import type { ReplicaReadWireResult } from "@centraid/client/replica/native";
+import type { Page, PageQuery } from "@centraid/core/page";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
+import type { NativeSeatPagePort } from "../../lib/replica/seat-port";
 // Registers the frame's no-upload-queue stand-in; the subject is imported
 // dynamically below so this runs first.
 import "../../test/upload-queue-absent";
@@ -65,16 +68,10 @@ const { photoTimelineEngine } = await import("./timeline-engine");
 /** The engine's own invalidation window; the test fails if it is retuned. */
 const REPLICA_WINDOW_MS = 120;
 
-const EMPTY_RESULT: ReplicaReadWireResult = {
-  rows: [],
-  cursor: { epoch: "mounted", seq: 1 },
-  dependency: { shapeId: "photos-default", entity: "media.asset" },
-  coverage: "complete",
-};
-
 interface Harness {
   session: MobileReplicaSession;
-  /** One pass is four entity reads; this counts passes, not reads. */
+  seat: NativeSeatPagePort;
+  /** A pass is one library walk; this counts passes, not pages. */
   passes: () => number;
   invalidate: () => void;
   settle: () => Promise<void>;
@@ -89,17 +86,26 @@ function harness(): Harness {
   let invalidate = (): void => undefined;
   let waiting: Array<() => void> = [];
   const session = {
-    read: (_appId: string, request: { entity: string }) => {
-      if (request.entity === "media.asset") passes += 1;
-      return new Promise<ReplicaReadWireResult>((resolve) => {
-        waiting.push(() => resolve(EMPTY_RESULT));
-      });
-    },
     subscribe: (_appId: string, listener: () => void) => {
       invalidate = listener;
       return () => undefined;
     },
+    scope: () => undefined,
   } as unknown as MobileReplicaSession;
+  const seat: NativeSeatPagePort = {
+    page: (<Row extends object>(request: { query: PageQuery<Row> }) => {
+      // A PASS IS COUNTED WHERE IT BEGINS. The walk's first statement is the
+      // starred-concept lookup, and it is asked synchronously inside the pass —
+      // so counting it is counting passes, which is what these tests are about.
+      // Counting the library pages instead would count PAGES, and a library
+      // that grew a page would look like a coalescing regression.
+      if (request.query.name === "photos.library.starred-concept") passes += 1;
+      return new Promise<Page<Row>>((resolve) => {
+        waiting.push(() => resolve({ rows: [] }));
+      });
+    }) as NativeSeatPagePort["page"],
+    search: () => Promise.reject(new Error("not this test's question")),
+  };
   const drain = async (rounds: number): Promise<void> => {
     if (rounds === 0) return;
     const pending = waiting;
@@ -112,6 +118,7 @@ function harness(): Harness {
   onTestFinished(photoTimelineEngine.acquire());
   return {
     session,
+    seat,
     passes: () => passes,
     invalidate: () => invalidate(),
     // Answer whatever is outstanding, then let a follow-up pass start and
@@ -125,8 +132,8 @@ describe("photo timeline engine replica reads", () => {
     // The clock is installed here, before `acquire`'s release is registered,
     // so engine teardown runs while fake timers are still in place.
     const clock = useFakeClock();
-    const { session, passes, invalidate, settle } = harness();
-    photoTimelineEngine.setSession(session, undefined);
+    const { session, seat, passes, invalidate, settle } = harness();
+    photoTimelineEngine.setSession(session, undefined, seat);
     expect(passes()).toBe(1);
 
     // A 50k bootstrap: ~40 pages × 4 mounted scopes.
@@ -144,8 +151,8 @@ describe("photo timeline engine replica reads", () => {
     // The clock is installed here, before `acquire`'s release is registered,
     // so engine teardown runs while fake timers are still in place.
     const clock = useFakeClock();
-    const { session, passes, invalidate, settle } = harness();
-    photoTimelineEngine.setSession(session, undefined);
+    const { session, seat, passes, invalidate, settle } = harness();
+    photoTimelineEngine.setSession(session, undefined, seat);
 
     invalidate();
     await clock.advance(REPLICA_WINDOW_MS);
@@ -162,8 +169,8 @@ describe("photo timeline engine replica reads", () => {
     // The clock is installed here, before `acquire`'s release is registered,
     // so engine teardown runs while fake timers are still in place.
     const clock = useFakeClock();
-    const { session, passes, invalidate, settle } = harness();
-    photoTimelineEngine.setSession(session, undefined);
+    const { session, seat, passes, invalidate, settle } = harness();
+    photoTimelineEngine.setSession(session, undefined, seat);
     await settle();
     expect(passes()).toBe(1);
 

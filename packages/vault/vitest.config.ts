@@ -4,6 +4,6 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 export default nodeProject({
   test: {
     name: "@centraid/vault",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
   },
 });

@@ -132,7 +132,7 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     const db = await createTestVault();
     seedSmallYear3(db);
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device_secret LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const gateway = createGateway(db);
     const statements = countStatements(db.vault);

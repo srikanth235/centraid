@@ -14,19 +14,11 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { schemaFixture } from "@centraid/test-kit/manifest-fixture-input";
+import type { JsonSchema } from "@centraid/test-kit/manifest-fixture-input";
+
 const here = import.meta.dirname;
 const appsRoot = path.resolve(here, "../apps");
-
-interface JsonSchema {
-  type?: string | string[];
-  enum?: unknown[];
-  properties?: Record<string, JsonSchema>;
-  items?: JsonSchema;
-  required?: string[];
-  minimum?: number;
-  minLength?: number;
-  pattern?: string;
-}
 
 interface ManifestHandler {
   name: string;
@@ -88,57 +80,6 @@ function handlerPath(
     }
   }
   return null;
-}
-
-function stringFixture(name: string, schema: JsonSchema): string {
-  if (schema.enum?.length) return String(schema.enum[0]);
-  if (name === "data_uri") return "data:text/plain;base64,c2VlZC1maXh0dXJl";
-  if (name === "staged_sha") return "a".repeat(64);
-  if (name === "phash") return "0f0f";
-  if (name === "thumbhash") return "AAAAAA";
-  if (name.includes("origin")) return "https://example.test";
-  if (name.includes("uri") || name === "url")
-    return "https://example.test/seed";
-  if (name === "rrule") return "FREQ=DAILY;COUNT=2";
-  if (
-    name.includes("_at") ||
-    name === "from" ||
-    name === "to" ||
-    name.includes("date")
-  )
-    return "2026-07-29T09:00:00.000Z";
-  if (name === "spent_on") return "2026-07-29";
-  return `seed-${name}`.padEnd(schema.minLength ?? 1, "x");
-}
-
-function schemaFixture(schema: JsonSchema = {}, name = "value"): unknown {
-  if (schema.enum?.length) return schema.enum[0];
-  const type = Array.isArray(schema.type)
-    ? (schema.type.find((candidate) => candidate !== "null") ?? "null")
-    : schema.type;
-  switch (type) {
-    case undefined:
-      return stringFixture(name, schema);
-    case "array":
-      return [schemaFixture(schema.items, `${name}_item`)];
-    case "boolean":
-      return true;
-    case "integer":
-      return Math.max(1, schema.minimum ?? 1);
-    case "number":
-      return Math.max(1, schema.minimum ?? 1);
-    case "object":
-      return Object.fromEntries(
-        Object.entries(schema.properties ?? {}).map(([key, property]) => [
-          key,
-          schemaFixture(property, key),
-        ])
-      );
-    case "null":
-      return null;
-    default:
-      return stringFixture(name, schema);
-  }
 }
 
 function schemaMismatch(
@@ -215,6 +156,13 @@ function declaredCommands(source: string): string[] {
   return [...found];
 }
 
+/** The one universal seeded record, served identically by both read doors. */
+const SEEDED_VAULT = {
+  vault_id: "seed-vault",
+  self_party_id: "seed-owner",
+  base_currency: "USD",
+};
+
 function scopedSeededCtx(manifest: AppJson) {
   const calls: VaultCall[] = [];
   const violations: string[] = [];
@@ -257,23 +205,41 @@ function scopedSeededCtx(manifest: AppJson) {
             output: { id: `seed-${input.command.replaceAll(".", "-")}` },
           };
         },
+        // THE PAGED READ PATH (#996 wave 4, R8). A page is a read, so it is
+        // attributed to a scope exactly like one; the statement names PHYSICAL
+        // tables, because the same statement runs on a seat's own file and on
+        // the gateway's paged door (W4-D2), so the entity is recovered from the
+        // `<schema>_<table>` name every vault table is built from.
+        page: async (input: { query: { from: string; purpose?: string } }) => {
+          checkPurpose(input.query);
+          for (const table of input.query.from.split(
+            /\s+(?:left\s+|inner\s+|cross\s+)?join\s+|\s+on\s+.*/iu
+          )) {
+            const name = table.trim().split(/\s+/u)[0];
+            if (!name || !/^[a-z][a-z0-9_]*_[a-z]/u.test(name)) continue;
+            const cut = name.indexOf("_");
+            check(
+              "read",
+              `${name.slice(0, cut)}.${name.slice(cut + 1)}`,
+              "read"
+            );
+          }
+          // The ONE seeded record, on this door too: `core.vault` is what every
+          // "who am I" projection resolves the owner through, and a page that
+          // answered empty where the declarative read answered the row would
+          // make a converted handler look like a regression.
+          return {
+            rows: input.query.from.trim().startsWith("core_vault")
+              ? [SEEDED_VAULT]
+              : [],
+          };
+        },
         read: async (input: { entity: string; purpose?: string }) => {
           checkPurpose(input);
           check("read", input.entity, "read");
           // core.vault is the one universal seeded record. Other projections
           // intentionally exercise their honest empty-state branch.
-          return {
-            rows:
-              input.entity === "core.vault"
-                ? [
-                    {
-                      vault_id: "seed-vault",
-                      self_party_id: "seed-owner",
-                      base_currency: "USD",
-                    },
-                  ]
-                : [],
-          };
+          return { rows: input.entity === "core.vault" ? [SEEDED_VAULT] : [] };
         },
         search: async (input: {
           entities?: string[];

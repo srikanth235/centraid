@@ -4,6 +4,7 @@
 
 // The Tasks app's OWN predicates (#834): no second answer to "Today".
 import { dueLabel, landsToday } from "@centraid/blueprints/apps/tasks/when";
+import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
 
 import type { DailyBrief } from "../../../gateway-client.js";
 import { authorizeBlobUrl, BLOB_PREFIX } from "../../blueprints/blob-auth.js";
@@ -14,16 +15,92 @@ import type {
   HomeTileTaskRow,
 } from "./homeTiles.js";
 
+/**
+ * The tiles' one read: a page of a statement over this seat's own file (#996,
+ * R8). It was a declarative `(entity, limit, where)` request against the shaped
+ * store; the statement is now written here, where a reviewer can see which
+ * table it walks and in what order.
+ */
 export interface HomeTileReader {
-  read: (
-    appId: string,
-    request: {
-      entity: string;
-      limit?: number;
-      where?: { column: string; op: "eq"; value: string }[];
-    }
-  ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
+  page: <Row extends object>(
+    query: PageQuery<Row>,
+    request: PageRequest
+  ) => Promise<Page<Row>>;
 }
+
+/**
+ * What each tile reads, as SQL rather than as a shape.
+ *
+ * THE WINDOW IS NOW TAKEN IN RECENCY ORDER, which the declarative read could
+ * not express: it asked for `limit` rows in whatever order the store held them
+ * and every tile then sorted the window in JS. On a vault with more rows than
+ * the window that was the WRONG rows sorted correctly — a newest-note tile
+ * showing the newest of an arbitrary two dozen. The order is in the statement
+ * now, and the JS sorts that follow are left alone: they are cheap over a
+ * window and they keep each tile's own tiebreak visible.
+ *
+ * `live` is the soft-delete guard, per table and by its real columns. The
+ * declarative path filtered `deleted_at`/`archived_at` off every row in JS
+ * whether or not the table had them; a statement cannot name a column that is
+ * not there, so each entry names its own.
+ */
+interface TileSource {
+  readonly table: string;
+  readonly pk: string;
+  readonly order: string;
+  readonly live: readonly string[];
+}
+
+const TILE_SOURCES: Readonly<Record<string, TileSource>> = {
+  "media.asset": {
+    table: "media_asset",
+    pk: "asset_id",
+    order: "captured_at",
+    live: ["deleted_at", "archived_at"],
+  },
+  "core.content_item": {
+    table: "core_content_item",
+    pk: "content_id",
+    order: "created_at",
+    live: ["deleted_at"],
+  },
+  "core.party": {
+    table: "core_party",
+    pk: "party_id",
+    order: "updated_at",
+    live: ["deleted_at"],
+  },
+  "schedule.task": {
+    table: "schedule_task",
+    pk: "task_id",
+    order: "updated_at",
+    live: ["deleted_at"],
+  },
+  "locker.item": {
+    table: "locker_item",
+    pk: "item_id",
+    order: "updated_at",
+    live: ["deleted_at", "archived_at"],
+  },
+  "tally.expense": {
+    table: "tally_expense",
+    pk: "expense_id",
+    order: "updated_at",
+    live: ["deleted_at"],
+  },
+  "core.document": {
+    table: "core_document",
+    pk: "document_id",
+    order: "updated_at",
+    live: ["deleted_at"],
+  },
+  "knowledge.note": {
+    table: "knowledge_note",
+    pk: "note_id",
+    order: "updated_at",
+    live: ["deleted_at"],
+  },
+};
 
 const WINDOW = { faces: 24, mosaic: 24, recent: 8, tasks: 24 } as const;
 
@@ -43,14 +120,37 @@ function byRecency(field: string) {
     text(right.values[field]).localeCompare(text(left.values[field]));
 }
 
+function tileQuery(entity: string): PageQuery<Record<string, unknown>> {
+  const source = TILE_SOURCES[entity];
+  if (!source) throw new Error(`no home-tile source for ${entity}`);
+  return {
+    name: `home.tile.${entity}`,
+    // `*` because a tile reads a different handful of columns per entity and
+    // the row shapes are the vault's own; the window is two dozen rows.
+    select: "*",
+    from: source.table,
+    ...(source.live.length > 0
+      ? {
+          where: source.live
+            .map((column) => `"${column}" IS NULL`)
+            .join(" AND "),
+        }
+      : {}),
+    order: { sortColumn: source.order, pkColumn: source.pk, descending: true },
+  };
+}
+
 async function rowsOf(
   reader: HomeTileReader,
-  appId: string,
   entity: string,
   limit: number
 ): Promise<readonly { values: Record<string, unknown> }[]> {
-  const result = await reader.read(appId, { entity, limit });
-  return result.rows.filter((row) => isLive(row.values));
+  const page = await reader.page(tileQuery(entity), { limit });
+  // `isLive` stays as a belt on the statement's brace: the predicate is the
+  // authority, and this costs one comparison over a window of two dozen.
+  return page.rows
+    .filter((values) => isLive(values))
+    .map((values) => ({ values }));
 }
 
 // A `blob:` handle pins its Blob until revoked, so each load revokes the
@@ -80,13 +180,8 @@ export function releaseHomeTileBlobs(): void {
 async function photoThumbs(
   reader: HomeTileReader
 ): Promise<{ total: number; thumbs: string[] }> {
-  const assets = await rowsOf(reader, "photos", "media.asset", WINDOW.mosaic);
-  const contents = await rowsOf(
-    reader,
-    "photos",
-    "core.content_item",
-    WINDOW.mosaic
-  );
+  const assets = await rowsOf(reader, "media.asset", WINDOW.mosaic);
+  const contents = await rowsOf(reader, "core.content_item", WINDOW.mosaic);
   const uriById = new Map(
     contents.map((row) => [
       text(row.values.content_id),
@@ -116,7 +211,7 @@ async function photoThumbs(
 async function peopleFaces(
   reader: HomeTileReader
 ): Promise<{ total: number; directory: HomeTilePerson[] }> {
-  const rows = await rowsOf(reader, "people", "core.party", WINDOW.faces);
+  const rows = await rowsOf(reader, "core.party", WINDOW.faces);
   const directory = rows
     .filter((row) => text(row.values.kind) === "person")
     .map((row) => ({
@@ -135,7 +230,7 @@ async function taskBoard(reader: HomeTileReader): Promise<{
   rows: HomeTileTaskRow[];
   glance: HomeTileTaskGlance;
 }> {
-  const rows = await rowsOf(reader, "tasks", "schedule.task", WINDOW.tasks);
+  const rows = await rowsOf(reader, "schedule.task", WINDOW.tasks);
   const open = rows.filter((row) => {
     const status = text(row.values.status);
     return status === "needs-action" || status === "in-process";
@@ -187,7 +282,7 @@ function taskGlance(
 async function lockerState(
   reader: HomeTileReader
 ): Promise<{ total: number; compromised: number }> {
-  const rows = await rowsOf(reader, "locker", "locker.item", WINDOW.faces);
+  const rows = await rowsOf(reader, "locker.item", WINDOW.faces);
   return {
     compromised: rows.filter((row) => row.values.compromised === 1).length,
     total: rows.length,
@@ -197,7 +292,7 @@ async function lockerState(
 /** A zero balance cannot be told from a ledger never used; only the count
  *  says one exists. */
 async function tallyCount(reader: HomeTileReader): Promise<number> {
-  return (await rowsOf(reader, "tally", "tally.expense", WINDOW.faces)).length;
+  return (await rowsOf(reader, "tally.expense", WINDOW.faces)).length;
 }
 
 const EXCERPT_MAX = 160;
@@ -276,17 +371,29 @@ function clipToExcerpt(prose: string): string {
 /** [] when any link is missing — the designed title-only fallback. */
 async function contentProse(
   reader: HomeTileReader,
-  appId: string,
   contentId: string,
   options: { dropHeadings: boolean }
 ): Promise<string[]> {
   if (contentId === "") return [];
-  const result = await reader.read(appId, {
-    entity: "core.content_item",
-    limit: 1,
-    where: [{ column: "content_id", op: "eq", value: contentId }],
-  });
-  const values = result.rows[0]?.values;
+  // ONE row by its primary key. The keyset's tiebreak is the same column the
+  // predicate pins, so the order is a formality — but it is the order the
+  // cursor is read off, so it is stated rather than left to the table's.
+  const page = await reader.page<Record<string, unknown>>(
+    {
+      name: "home.tile.content-item",
+      select: "content_id, media_type, content_uri",
+      from: "core_content_item",
+      where: "content_id = ?",
+      bind: [contentId],
+      order: {
+        sortColumn: "content_id",
+        pkColumn: "content_id",
+        descending: false,
+      },
+    },
+    { limit: 1 }
+  );
+  const values = page.rows[0];
   if (!values || !isProse(text(values.media_type))) return [];
   const uri = typeof values.content_uri === "string" ? values.content_uri : "";
   const raw = uri.startsWith("data:")
@@ -300,17 +407,14 @@ async function contentProse(
 async function newestDoc(
   reader: HomeTileReader
 ): Promise<{ total: number; title?: string; excerpt?: string }> {
-  const rows = await rowsOf(reader, "docs", "core.document", WINDOW.recent);
+  const rows = await rowsOf(reader, "core.document", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
   if (!newest) return { total: rows.length };
   const excerpt = clipToExcerpt(
     (
-      await contentProse(
-        reader,
-        "docs",
-        text(newest.values.current_content_id),
-        { dropHeadings: true }
-      ).catch(() => [])
+      await contentProse(reader, text(newest.values.current_content_id), {
+        dropHeadings: true,
+      }).catch(() => [])
     ).join(" ")
   );
   return {
@@ -323,13 +427,12 @@ async function newestDoc(
 async function newestNote(
   reader: HomeTileReader
 ): Promise<{ total: number; line?: string; at?: string }> {
-  const rows = await rowsOf(reader, "notes", "knowledge.note", WINDOW.recent);
+  const rows = await rowsOf(reader, "knowledge.note", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
   if (!newest) return { total: rows.length };
   // Headings KEPT, unlike Docs: a note's opening heading appears nowhere else.
   const [first] = await contentProse(
     reader,
-    "notes",
     text(newest.values.body_content_id),
     { dropHeadings: false }
   ).catch(() => []);
@@ -385,6 +488,6 @@ export async function loadHomeTileContent(input: {
 
 export async function homeTileReader(): Promise<HomeTileReader> {
   const { getReplicaShellSession } =
-    await import("../../../replica/shell-session.js");
+    await import("../../../replica/shell-session-scopes.js");
   return getReplicaShellSession();
 }

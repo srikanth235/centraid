@@ -20,6 +20,7 @@ import type {
   GroupData,
   SearchData,
 } from "@centraid/blueprints/apps/tally/types";
+import { money, moneyBag, valuate } from "@centraid/core/money";
 
 type Answer = () => Promise<unknown>;
 
@@ -66,8 +67,8 @@ const DASHBOARD: DashboardData = {
   friends: [],
   groups: [],
   me: "owner",
-  owe_total_minor: 10_960,
-  owed_total_minor: 8100,
+  owe: valuate(moneyBag(money(10_960, "GBP")), "GBP"),
+  owed: valuate(moneyBag(money(8100, "GBP")), "GBP"),
   recurring: [],
   trash: [],
 };
@@ -119,7 +120,9 @@ describe("the Tally read plane", () => {
       await openTally();
       const state = readTallyVault();
       expect(state.loaded).toBe(true);
-      expect(state.dashboard.owed_total_minor).toBe(8100);
+      expect(state.dashboard.owed).toStrictEqual(
+        valuate(moneyBag(money(8100, "GBP")), "GBP")
+      );
     });
 
     it("turns a refusal into data rather than an error", async () => {

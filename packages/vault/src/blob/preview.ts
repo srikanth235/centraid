@@ -8,6 +8,7 @@ import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
 
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
+import { contentMediaTypeSql } from "../schema/representation.js";
 import { stageBlobBytes } from "./staging.js";
 import { shaOfBlobUri } from "./store.js";
 
@@ -216,10 +217,11 @@ export async function backfillPreviews(
   // filter keeps video out — a video backstop is a non-goal (#405).
   const items = db.vault
     .prepare(
-      `SELECT i.content_id, i.content_uri, i.media_type
+      `SELECT i.content_id, i.content_uri,
+              ${contentMediaTypeSql("i.content_id")} AS media_type
          FROM core_content_item i
         WHERE i.content_uri LIKE 'blob:%'
-          AND i.media_type LIKE 'image/%'
+          AND ${contentMediaTypeSql("i.content_id")} LIKE 'image/%'
           AND i.deleted_at IS NULL
           AND (
             (NOT EXISTS (SELECT 1 FROM core_content_derivative d

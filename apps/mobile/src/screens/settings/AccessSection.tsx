@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import {
+  ACCESS_ANSWERS,
   ACCESS_ENTITY,
   ACCESS_REQUEST_ENTITY,
+  ACCESS_REQUESTS,
   ACCESS_SCOPE,
   ACCESS_USE_ENTITY,
+  ACCESS_USES,
   groupAnswers,
   parseAccessAnswers,
   parseAccessRequests,
@@ -19,7 +22,7 @@ import type {
 } from "@centraid/client/access-lens";
 
 import { Text } from "../../kit/components/NativeText";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { nativeGrantWire } from "../../kit/share/grant-seat";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
@@ -37,20 +40,23 @@ import SettingsSection from "./SettingsSection";
 export default function AccessSection(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const answers = useReplicaQuery(
-    ACCESS_SCOPE,
-    useMemo(() => ({ entity: ACCESS_ENTITY, limit: 2_000 }), [])
-  );
+  // THE SAME THREE STATEMENTS THE SHELL WALKS (#996 wave 5, R8). A standing
+  // answer this dashboard did not draw is an answer the member believes they
+  // never gave, so all three are walks and none is a window.
+  const answers = useSeatPages(ACCESS_SCOPE, ACCESS_ANSWERS, {
+    entity: ACCESS_ENTITY,
+    rowIdColumn: "authority_id",
+  });
   // Beside the answers, never instead of them: an unread use or ask table
   // leaves "never used" and no pending question rather than blanking the list.
-  const uses = useReplicaQuery(
-    ACCESS_SCOPE,
-    useMemo(() => ({ entity: ACCESS_USE_ENTITY, limit: 2_000 }), [])
-  );
-  const asks = useReplicaQuery(
-    ACCESS_SCOPE,
-    useMemo(() => ({ entity: ACCESS_REQUEST_ENTITY, limit: 2_000 }), [])
-  );
+  const uses = useSeatPages(ACCESS_SCOPE, ACCESS_USES, {
+    entity: ACCESS_USE_ENTITY,
+    rowIdColumn: "authority_id",
+  });
+  const asks = useSeatPages(ACCESS_SCOPE, ACCESS_REQUESTS, {
+    entity: ACCESS_REQUEST_ENTITY,
+    rowIdColumn: "request_id",
+  });
   const replica = useReplica();
   const base = replica.gatewayBase ?? "";
   const [loci, setLoci] = useState<AccessLocusCopy>({});

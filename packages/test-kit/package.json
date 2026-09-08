@@ -16,9 +16,15 @@
     "./temp-dir": "./src/temp-dir.ts",
     "./vault": "./src/vault.ts",
     "./volume-fixture": "./src/volume-fixture.ts",
+    "./seat-snapshot-transport": "./src/seat-snapshot-transport.ts",
     "./year3-vault": "./src/year3-vault.ts",
     "./year3-replica": "./src/year3-replica.ts",
-    "./fast-check": "./src/fast-check.ts"
+    "./fast-check": "./src/fast-check.ts",
+    "./fixture-sha": "./src/fixture-sha.ts",
+    "./manifest-fixture-input": "./src/manifest-fixture-input.ts",
+    "./year3-shape": "./src/year3-shape.ts",
+    "./year3-distributions": "./src/year3-distributions.ts",
+    "./year3-fixture-cache": "./src/year3-fixture-cache.ts"
   },
   "scripts": {
     "test": "node ../../node_modules/vitest/vitest.mjs run",

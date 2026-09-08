@@ -1,3 +1,8 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 /**
  * Sidecar reads for the item pane (#872) — a helper, not a query.
  *
@@ -54,24 +59,38 @@ interface AttachmentRow {
 
 interface ContentRow {
   content_id: string;
-  title?: string | null;
-  media_type?: string | null;
   byte_size?: number | null;
 }
 
-async function rowsOf<T>(
+/**
+ * ONE SIDECAR TABLE FOR ONE ITEM (#996 wave 4, R8).
+ *
+ * Every sidecar is the same shape of read — one item's rows out of a table
+ * keyed on the item — so it is one walk, given the table, its projection and
+ * its own primary key. A vault's largest custom-field set is still a set one
+ * member typed, so the walk's stated ceiling is far above it and throwing
+ * there is the right answer: a pane silently missing half a card's fields is
+ * worse than one that says it could not be drawn.
+ */
+async function rowsOf<T extends object>(
   ctx: HandlerCtx,
-  entity: string,
+  spec: { name: string; select: string; from: string; pkColumn: string },
   itemId: string,
   column = "item_id"
 ): Promise<T[]> {
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity,
-      where: [{ column, op: "eq", value: itemId }],
+    return await readPages<T>(ctx, {
+      name: spec.name,
+      select: spec.select,
+      from: spec.from,
+      where: `${column} = ?`,
+      bind: [itemId],
+      order: {
+        sortColumn: spec.pkColumn,
+        pkColumn: spec.pkColumn,
+        descending: false,
+      },
     });
-    return (result.rows ?? []) as unknown as T[];
   } catch {
     // A sidecar the grant does not cover leaves its section empty; it never
     // takes the pane down with it.
@@ -85,7 +104,12 @@ export async function readAlias(
 ): Promise<string | null> {
   const rows = await rowsOf<{ alias: string }>(
     ctx,
-    "locker.item_alias",
+    {
+      name: "locker.sidecars.alias",
+      select: "alias, item_id",
+      from: "locker_item_alias",
+      pkColumn: "alias",
+    },
     itemId
   );
   return rows[0]?.alias ?? null;
@@ -104,7 +128,19 @@ export async function readFields(
     sealed: boolean;
   }[]
 > {
-  const rows = await rowsOf<FieldRow>(ctx, "locker.item_field", itemId);
+  const rows = await rowsOf<FieldRow>(
+    ctx,
+    {
+      name: "locker.sidecars.fields",
+      // `value_sealed` is projected because its PRESENCE is what the pane
+      // draws; the column holds ciphertext at rest, never plaintext.
+      select:
+        "field_id, item_id, section, label, kind, value_text, value_sealed, position",
+      from: "locker_item_field",
+      pkColumn: "field_id",
+    },
+    itemId
+  );
   return rows
     .toSorted(
       (a, b) =>
@@ -131,7 +167,16 @@ export async function readAddresses(
   ctx: HandlerCtx,
   itemId: string
 ): Promise<{ address_id: string; url: string; match_policy: string }[]> {
-  const rows = await rowsOf<AddressRow>(ctx, "locker.item_address", itemId);
+  const rows = await rowsOf<AddressRow>(
+    ctx,
+    {
+      name: "locker.sidecars.addresses",
+      select: "address_id, item_id, url, match_policy, position",
+      from: "locker_item_address",
+      pkColumn: "address_id",
+    },
+    itemId
+  );
   return rows
     .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map((row) => ({
@@ -145,7 +190,17 @@ export async function readPasskey(
   ctx: HandlerCtx,
   itemId: string
 ): Promise<Record<string, unknown> | null> {
-  const rows = await rowsOf<PasskeyRow>(ctx, "locker.item_passkey", itemId);
+  const rows = await rowsOf<PasskeyRow>(
+    ctx,
+    {
+      name: "locker.sidecars.passkey",
+      select:
+        "item_id, rp_id, user_handle, display_name, credential_id, algorithm, private_key, created_at",
+      from: "locker_item_passkey",
+      pkColumn: "item_id",
+    },
+    itemId
+  );
   const row = rows[0];
   if (!row) return null;
   return {
@@ -235,17 +290,23 @@ export async function readHistory(
 ): Promise<Record<string, unknown>[]> {
   let rows: RevisionRow[] = [];
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.entity_revision",
-      where: [
-        { column: "entity_type", op: "eq", value: "locker.item" },
-        { column: "entity_id", op: "eq", value: itemId },
-      ],
-      orderBy: { column: "recorded_at", dir: "desc" },
+    const result = await ctx.vault.page<RevisionRow>({
+      query: {
+        name: "locker.sidecars.revisions",
+        select:
+          "revision_id, entity_type, entity_id, operation, snapshot_json, recorded_at",
+        from: "core_entity_revision",
+        where: "entity_type = ? AND entity_id = ?",
+        bind: ["locker.item", itemId],
+        order: {
+          sortColumn: "recorded_at",
+          pkColumn: "revision_id",
+          descending: true,
+        },
+      },
       limit,
     });
-    rows = (result.rows ?? []) as unknown as RevisionRow[];
+    rows = result.rows;
   } catch {
     // A read the grant does not cover leaves the section empty; it never takes
     // the pane down with it.
@@ -281,36 +342,49 @@ export async function readAttachments(
 ): Promise<Record<string, unknown>[]> {
   let edges: AttachmentRow[] = [];
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.attachment",
-      where: [
-        { column: "target_type", op: "eq", value: "locker.item" },
-        { column: "target_id", op: "eq", value: itemId },
-      ],
+    edges = await readPages<AttachmentRow>(ctx, {
+      name: "locker.sidecars.attachments",
+      select: "attachment_id, target_type, target_id, content_id, role",
+      from: "core_attachment",
+      where: "target_type = ? AND target_id = ?",
+      bind: ["locker.item", itemId],
+      order: {
+        sortColumn: "attachment_id",
+        pkColumn: "attachment_id",
+        descending: false,
+      },
     });
-    edges = (result.rows ?? []) as unknown as AttachmentRow[];
   } catch {
     return [];
   }
   if (edges.length === 0) return [];
   let contents: ContentRow[] = [];
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.content_item",
-      where: [
-        {
-          column: "content_id",
-          op: "in",
-          value: edges.map((edge) => edge.content_id),
-        },
-      ],
+    const contentIn = inList(
+      "content_id",
+      edges.map((edge) => edge.content_id)
+    );
+    contents = await readPages<ContentRow>(ctx, {
+      name: "locker.sidecars.contents",
+      select: "content_id, byte_size",
+      from: "core_content_item",
+      where: contentIn.sql,
+      bind: contentIn.bind,
+      order: {
+        sortColumn: "content_id",
+        pkColumn: "content_id",
+        descending: false,
+      },
     });
-    contents = (result.rows ?? []) as unknown as ContentRow[];
   } catch {
     contents = [];
   }
+  // Bytes carry no media type since #996 (R20(b)); the attachment's own
+  // representation says what it reads them as, and bytes have no title.
+  const representations = await readRepresentations({
+    ctx,
+    contentIds: edges.map((edge) => edge.content_id),
+  });
   const byId = new Map(contents.map((row) => [row.content_id, row]));
   return edges.map((edge) => {
     const content = byId.get(edge.content_id);
@@ -318,8 +392,12 @@ export async function readAttachments(
       attachment_id: edge.attachment_id,
       content_id: edge.content_id,
       role: edge.role,
-      title: content?.title ?? null,
-      media_type: content?.media_type ?? null,
+      media_type:
+        representations.byOwner.get(
+          ownerKey("core.attachment", edge.attachment_id)
+        ) ??
+        representations.byContent.get(edge.content_id) ??
+        null,
       byte_size: content?.byte_size ?? null,
     };
   });

@@ -81,7 +81,7 @@ export async function syncHomeSampleReplica(): Promise<void> {
   try {
     // Lazy: the shell session drags the authed transport into the chunk.
     const { getReplicaShellSession } =
-      await import("../../../replica/shell-session.js");
+      await import("../../../replica/shell-session-scopes.js");
     await (await getReplicaShellSession()).sync();
   } catch {
     // Swallowed by contract, above.

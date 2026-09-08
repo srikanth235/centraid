@@ -5,6 +5,8 @@
  */
 
 export type VaultOp =
+  /** One page of one handler's statement-as-data (#996 W4-D2). */
+  | "page"
   | "read"
   | "search"
   | "invoke"
@@ -13,7 +15,6 @@ export type VaultOp =
   | "changes"
   | "resolve"
   | "reveal"
-  | "authenticate"
   | "content";
 
 export interface VaultCall {

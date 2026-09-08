@@ -1,3 +1,7 @@
+/** One photo shows this many faces; the picker offers this many names. */
+const FACES_PER_PHOTO = 50;
+const NAME_PICKER_ROWS = 200;
+
 /**
  * Face proposals for one asset (#299): the enricher's
  * media.face_region rows — unanswered proposals with confidence, plus
@@ -37,27 +41,44 @@ export default async function faces({ input, ctx }: HandlerArgs) {
   if (!assetId) return { status: 400, body: { error: "asset_id required" } };
   try {
     const [regions, people] = await Promise.all([
-      ctx.vault.read({
-        entity: "media.face_region",
-        where: [{ column: "asset_id", op: "eq", value: assetId }],
-        limit: 50,
+      ctx.vault.page<RawRegion>({
+        query: {
+          name: "photos.faces.regions",
+          select:
+            "region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id, review_state",
+          from: "media_face_region",
+          where: "asset_id = ?",
+          bind: [assetId],
+          order: {
+            sortColumn: "region_id",
+            pkColumn: "region_id",
+            descending: false,
+          },
+        },
+        limit: FACES_PER_PHOTO,
       }),
-      ctx.vault.read({
-        entity: "core.party",
-        orderBy: { column: "display_name", dir: "asc" },
-        limit: 200,
+      ctx.vault.page<RawParty>({
+        query: {
+          name: "photos.faces.parties",
+          select: "party_id, display_name, kind",
+          from: "core_party",
+          order: {
+            sortColumn: "display_name",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        },
+        limit: NAME_PICKER_ROWS,
       }),
     ]);
-    const persons = ((people.rows ?? []) as unknown as RawParty[]).filter(
-      (p) => p.kind === "person"
-    );
+    const persons = people.rows.filter((p) => p.kind === "person");
     const nameOf = new Map(
       persons.map((p) => [p.party_id, p.display_name] as const)
     );
     return {
       status: 200,
       body: {
-        regions: ((regions.rows ?? []) as unknown as RawRegion[])
+        regions: regions.rows
           .filter(
             (r) =>
               r.review_state === "proposed" || r.review_state === "confirmed"

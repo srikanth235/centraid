@@ -1,3 +1,5 @@
+import { readPages } from "../../_shared/paged-reads.ts";
+
 /**
  * @type {import('@centraid/server/engine').QueryHandler}
  */
@@ -46,11 +48,14 @@ function knownBucket(value: unknown): StorageBucket | null {
 
 export default async function storageHandler({ ctx }: HandlerArgs) {
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "blob.custody_rollup",
+    // Four buckets, keyed by name: a walk with a stated ceiling, and the
+    // ceiling is nowhere near it (#996 wave 4, R8).
+    const rows = await readPages<RawRollupRow>(ctx, {
+      name: "photos.storage.rollup",
+      select: "bucket, item_count, byte_size, computed_at",
+      from: "blob_custody_rollup",
+      order: { sortColumn: "bucket", pkColumn: "bucket", descending: false },
     });
-    const rows = (result.rows ?? []) as unknown as RawRollupRow[];
     const buckets = zeroBuckets();
     let computedAt: string | null = null;
     for (const row of rows) {

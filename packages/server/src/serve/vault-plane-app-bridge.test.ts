@@ -16,7 +16,17 @@ import { seedCalendar, usePlaneFixture } from "./vault-plane.test-fixtures.js";
 describe("vault-plane app bridge", () => {
   const fixture = usePlaneFixture();
 
-  test("Locker app reveals require an expiring one-time user-presence permit", async () => {
+  test("a Locker reveal through the app bridge is refused, whatever it carries", async () => {
+    // #996, rulings R13 and W6-D2. Three tests used to live here: a UI reveal
+    // needed a one-time permit, an `authenticate` answer had to be a settled
+    // value rather than a promise, and `authenticate` was Locker-only. All
+    // three were rules about a plane that no longer exists — the gateway does
+    // not unseal a Locker row for any client, so there is no permit to expire
+    // and no authentication call to keep on the async lane.
+    //
+    // What replaces them is one property with no arguments to get wrong: the
+    // bridge refuses the schema, and the ONLY caller that could have asked
+    // (Locker, holding the reveal scope) is refused like everyone else.
     const plane = fixture.openPlane(await tempDir("locker-auth-plane-"));
     plane.installApp("locker", "Locker");
     plane.recordAppInstall("locker", {
@@ -33,118 +43,37 @@ describe("vault-plane app bridge", () => {
     });
     expect(added.status).toBe("executed");
     const itemId = (added as { output: { item_id: string } }).output.item_id;
-    const bridge = plane.bridgeFor("locker");
-    const reveal = (authentication?: {
-      sessionToken?: string;
-      itemToken?: string;
-    }) =>
-      bridge({
-        op: "reveal",
-        payload: {
-          entity: "locker.item",
-          entityId: itemId,
-          columns: ["password"],
-          authentication,
-        },
-      });
 
-    // Presence is opt-in until a credential is configured; after that, every
-    // UI reveal needs a one-time item permit (fill only needs an unlock session).
-    const configured = await bridge({
-      op: "authenticate",
+    const refused = await plane.bridgeFor("locker")({
+      op: "reveal",
       payload: {
-        operation: "configure",
-        secret: "correct horse battery staple",
+        entity: "locker.item",
+        entityId: itemId,
+        columns: ["password"],
       },
     });
-    expect(configured.ok).toBe(true);
-    const sessionToken = (configured.result as { sessionToken: string })
-      .sessionToken;
-    await expect(reveal()).resolves.toMatchObject({
+    expect(refused).toMatchObject({
       ok: false,
-      error: expect.stringMatching(/locked/u),
+      error: expect.stringMatching(/does not unseal locker rows/u),
     });
-    const authorized = await bridge({
-      op: "authenticate",
-      payload: {
-        operation: "authorize-item",
-        sessionToken,
-        secret: "correct horse battery staple",
-        itemId,
-      },
-    });
-    const itemToken = (authorized.result as { itemToken: string }).itemToken;
-    await expect(reveal({ sessionToken, itemToken })).resolves.toMatchObject({
-      ok: true,
-      result: {
-        values: { password: "permit-protected-secret" },
-      },
-    });
-    await expect(reveal({ sessionToken, itemToken })).resolves.toMatchObject({
-      ok: false,
-      error: expect.stringMatching(/authorization expired/u),
-    });
+    // And the plaintext never travelled, not even inside the refusal.
+    expect(JSON.stringify(refused)).not.toContain("permit-protected-secret");
   });
 
-  // The locker KDF runs on the threadpool (#659), so
-  // `authenticateLocker` returns a promise. `asVaultCallResult` takes a
-  // `() => unknown`, so leaving `authenticate` in the synchronous switch
-  // typechecks and wraps the PROMISE as the result — which reaches the app as
-  // `{}` over the worker boundary. This asserts the settled value directly,
-  // because a compiler cannot.
-  test("an authenticate result is a settled value, never a promise (#659 G11)", async () => {
-    const plane = fixture.openPlane(await tempDir("locker-async-plane-"));
-    plane.installApp("locker", "Locker");
-    const bridge = plane.bridgeFor("locker");
-
-    const status = await bridge({
-      op: "authenticate",
-      payload: { operation: "status" },
-    });
-    expect(status.ok).toBe(true);
-    // The precise failure mode: a thenable where a record belongs.
-    expect(status.result).not.toBeInstanceOf(Promise);
-    expect(
-      (status.result as { then?: unknown } | undefined)?.then
-    ).toBeUndefined();
-    // …and it survives the JSON hop to the app, which is where a promise
-    // would have flattened to an empty object.
-    //
-    // The JSON round-trip is the ASSERTION, not a convenient deep clone, so
-    // `structuredClone` is not a substitute: it THROWS DataCloneError on a
-    // promise, while JSON.stringify silently yields `{}`. Silently-empty is the
-    // exact product symptom this test exists to reproduce — swapping in
-    // structuredClone would test a different failure than the one that shipped.
-    // oxlint-disable-next-line unicorn/prefer-structured-clone -- see above
-    expect(JSON.parse(JSON.stringify(status.result))).toMatchObject({
-      configured: false,
-      authenticated: false,
-    });
-
-    const configured = await bridge({
-      op: "authenticate",
-      payload: {
-        operation: "configure",
-        secret: "correct horse battery staple",
-      },
-    });
-    expect(configured.ok).toBe(true);
-    expect(
-      (configured.result as { sessionToken?: unknown }).sessionToken
-    ).toBeTypeOf("string");
-  });
-
-  test("authenticate stays Locker-only on the async lane (#659 G11)", async () => {
+  test("the app bridge has no authenticate op left to call", async () => {
+    // The op is gone from the bridge's union, so an app that still names it
+    // gets the unsupported-op answer rather than a Locker auth plane. Asserted
+    // through the bridge rather than by reading the type, because a runtime
+    // arm left behind after the type was narrowed is exactly the shape a
+    // deletion misses.
     const plane = fixture.openPlane(await tempDir("locker-scope-plane-"));
-    plane.enrollApp("planner");
-    const denied = await plane.bridgeFor("planner")({
-      op: "authenticate",
+    plane.installApp("locker", "Locker");
+    const answer = await plane.bridgeFor("locker")({
+      op: "authenticate" as never,
       payload: { operation: "status" },
     });
-    expect(denied).toMatchObject({
-      ok: false,
-      error: expect.stringMatching(/only to Locker/u),
-    });
+    expect(answer.ok).toBe(false);
+    expect(String(answer.error)).not.toMatch(/only to Locker/u);
   });
 
   test("a granted app invoke executes without parking; the risk marker rides the receipt (issue #306)", async () => {

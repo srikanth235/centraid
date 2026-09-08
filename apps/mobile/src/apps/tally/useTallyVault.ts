@@ -16,6 +16,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { coalesceWork } from "../../lib/coalesce";
+import { seatReadPlane } from "../../lib/replica/inline-query-ctx.native";
 import { attachTallyReadPlane } from "./tally-reads";
 import {
   openTally,
@@ -52,9 +53,11 @@ export function useTallyVault(): TallyVaultState {
  * `useReplicaQuery` collapses it.
  */
 export function useTallySpine(): void {
-  const { session } = useReplica();
+  const { session, seat } = useReplica();
   useEffect(() => {
-    attachTallyReadPlane(session);
+    // The seat's paged read composed over the session's rows: one plane, two
+    // files, until W5 leaves only the seat's (#996 wave 4b).
+    attachTallyReadPlane(session ? seatReadPlane(session, seat) : undefined);
     if (!session) return;
     void openTally();
     const coalesced = coalesceWork(refreshTally, INVALIDATION_WINDOW_MS);
@@ -64,5 +67,5 @@ export function useTallySpine(): void {
       unsubscribe();
       attachTallyReadPlane(undefined);
     };
-  }, [session]);
+  }, [session, seat]);
 }

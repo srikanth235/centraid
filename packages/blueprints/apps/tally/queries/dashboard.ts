@@ -12,6 +12,14 @@
  */
 
 import {
+  addToBag,
+  EMPTY_BAG,
+  money,
+  negateMoney,
+  valuate,
+} from "@centraid/core/money";
+import type { Money, MoneyBag } from "@centraid/core/money";
+import {
   BRAND,
   identityInitials,
   partyHueKey,
@@ -24,12 +32,36 @@ import {
   tallyGroupNet,
 } from "../../../src/tally-balance.ts";
 import { DAY_MS } from "../../_shared/format-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   PENDING_OVERLAY_FIELDS,
   pendingOverlayCopy,
   pendingSidecarOf,
   readPendingOverlay,
 } from "../../_shared/pending-overlay.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
+
+/**
+ * THE LEDGER'S WINDOWS, NAMED (#996 wave 4, R8).
+ *
+ * These numbers were already in this file; they were inline arguments to reads
+ * that could be short without saying so. A balance derived from a silently
+ * short ledger is a WRONG NUMBER — not a slow screen — so each is a stated
+ * window or a stated fan-out, and the walks throw at their ceiling.
+ */
+const LEDGER_ROWS = 2000;
+const TRASH_ROWS = 100;
+const RECURRING_ROWS = 500;
+const EXCEPTION_ROWS = 2000;
+
+/** A split, payer or line row exists per (expense, person): 8,000 of them. */
+const LEDGER_FAN_OUT = { pageSize: 1000, fanOutPages: 8 };
+
+/** An allocation exists per (line, person), so its ceiling is four times that. */
+const ALLOCATION_FAN_OUT = { pageSize: 1000, fanOutPages: 32 };
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -51,6 +83,9 @@ interface GroupRow {
   color?: string;
   simplify_opt_in?: number;
   archived_at?: string | null;
+  /** THE GROUP'S CURRENCY (#916, R1) — a group is one ledger, in one money,
+   *  and every expense and settlement in it agrees. Read since #996 R22. */
+  currency?: string;
   [k: string]: unknown;
 }
 type DecoratedGroup = GroupRow & { name: string };
@@ -87,7 +122,7 @@ interface RecurringRow {
   rate_date?: string | null;
   rrule: string;
   anchor_start: string;
-  time_zone: string;
+  tz: string;
   status: "active" | "paused" | "ended";
 }
 type ExpenseFact = ExpenseRowRaw & {
@@ -117,6 +152,8 @@ interface SettlementRow {
   from_party: string;
   to_party: string;
   amount_minor: number;
+  /** What was PAID, in the money it was paid in (#916, R1). */
+  currency?: string;
   group_id?: string;
   [k: string]: unknown;
 }
@@ -173,122 +210,237 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     receiptAllocationsRes,
     nudgesRes,
   ] = await Promise.all([
-    ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
-    ctx.vault.read({ acceptTruncation: true, entity: "tally.friend" }),
-    ctx.vault.read({ acceptTruncation: true, entity: "tally.group" }),
-    ctx.vault.read({
-      acceptTruncation: true,
-      entity: "social.circle",
+    // THE LEDGER'S OWN WINDOWS (#996 wave 4, R8). Every one of these numbers
+    // was already here; what they lacked was a name and a cursor. A balance
+    // computed from a silently short ledger is a WRONG NUMBER, not a slow one,
+    // which is why these throw at their ceiling rather than shortening.
+    readPages<Record<string, unknown>>(ctx, {
+      name: "tally.dashboard.vault",
+      select: "vault_id, self_party_id, base_currency",
+      from: "core_vault",
+      order: {
+        sortColumn: "vault_id",
+        pkColumn: "vault_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      acceptTruncation: true,
-      entity: "social.circle_member",
+    readPages<FriendRow>(ctx, {
+      name: "tally.dashboard.friends",
+      select: "friend_id, party_id, created_at",
+      from: "tally_friend",
+      order: {
+        sortColumn: "friend_id",
+        pkColumn: "friend_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      entity: "tally.expense",
-      // Trashed expenses (#441) drop out of every balance and ledger —
-      // their splits are read below but never consumed once the expense is gone.
-      where: [{ column: "deleted_at", op: "is-null" }],
-      orderBy: { column: "spent_on", dir: "desc" },
-      limit: 2000,
+    readPages<GroupRow>(ctx, {
+      name: "tally.dashboard.groups",
+      select:
+        "group_id, circle_id, icon, color, simplify_opt_in, archived_at, currency",
+      from: "tally_group",
+      order: {
+        sortColumn: "group_id",
+        pkColumn: "group_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({ entity: "tally.expense_split", limit: 8000 }),
-    ctx.vault.read({ entity: "tally.expense_payer", limit: 8000 }),
-    ctx.vault.read({
-      entity: "tally.settlement",
-      where: [{ column: "deleted_at", op: "is-null" }],
-      limit: 2000,
+    readPages<Record<string, unknown>>(ctx, {
+      name: "tally.dashboard.circles",
+      select: "circle_id, owner_party_id, name, kind",
+      from: "social_circle",
+      order: {
+        sortColumn: "circle_id",
+        pkColumn: "circle_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      entity: "tally.obligation",
-      where: [
-        { column: "settled_at", op: "is-null" },
-        { column: "deleted_at", op: "is-null" },
-      ],
-      limit: 2000,
+    readPages<{ party_id: string }>(ctx, {
+      name: "tally.dashboard.circleMembers",
+      select: "member_id, circle_id, party_id",
+      from: "social_circle_member",
+      order: {
+        sortColumn: "member_id",
+        pkColumn: "member_id",
+        descending: false,
+      },
+    }),
+    // Trashed expenses (#441) drop out of every balance and ledger —
+    // their splits are read below but never consumed once the expense is gone.
+    ctx.vault.page<ExpenseRowRaw>({
+      query: {
+        name: "tally.dashboard.expenses",
+        select:
+          "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, split_params_json, spent_on, category, txn_id, created_at, updated_at",
+        from: "tally_expense",
+        where: "deleted_at IS NULL",
+        order: {
+          sortColumn: "spent_on",
+          pkColumn: "expense_id",
+          descending: true,
+        },
+      },
+      limit: LEDGER_ROWS,
+    }),
+    // THE KEYSET IS THE TABLE'S OWN PAIR. A split is keyed on
+    // (expense_id, party_id) — one expense splits across several people — so a
+    // cursor on `expense_id` alone stops at the first sharer.
+    readPages<{ expense_id: string; party_id: string; share_minor: number }>(
+      ctx,
+      {
+        name: "tally.dashboard.splits",
+        select: "expense_id, party_id, share_minor",
+        from: "tally_expense_split",
+        order: {
+          sortColumn: "expense_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      },
+      LEDGER_FAN_OUT
+    ),
+    readPages<{ expense_id: string; party_id: string; paid_minor: number }>(
+      ctx,
+      {
+        name: "tally.dashboard.payers",
+        select: "expense_id, party_id, paid_minor",
+        from: "tally_expense_payer",
+        order: {
+          sortColumn: "expense_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      },
+      LEDGER_FAN_OUT
+    ),
+    readPages<SettlementRow>(ctx, {
+      name: "tally.dashboard.settlements",
+      select:
+        "settlement_id, group_id, from_party, to_party, amount_minor, currency, paid_on, txn_id, created_at",
+      from: "tally_settlement",
+      where: "deleted_at IS NULL",
+      order: {
+        sortColumn: "settlement_id",
+        pkColumn: "settlement_id",
+        descending: false,
+      },
+    }),
+    readPages<ObligationRow>(ctx, {
+      name: "tally.dashboard.obligations",
+      select:
+        "obligation_id, from_party, to_party, amount_minor, currency, reason, incurred_on, settled_at",
+      from: "tally_obligation",
+      where: "settled_at IS NULL AND deleted_at IS NULL",
+      order: {
+        sortColumn: "obligation_id",
+        pkColumn: "obligation_id",
+        descending: false,
+      },
     }),
     // A receipt IS the `role='receipt'` attachment on the expense (#883,
     // ruling O-attach).
-    ctx.vault.read({
-      entity: "core.attachment",
-      where: [
-        { column: "target_type", op: "eq", value: "tally.expense" },
-        { column: "role", op: "eq", value: "receipt" },
-      ],
-      limit: 2_000,
+    readPages<Record<string, unknown>>(ctx, {
+      name: "tally.dashboard.receipts",
+      select:
+        "attachment_id, target_type, target_id, content_id, role, is_primary",
+      from: "core_attachment",
+      where: "target_type = ? AND role = ?",
+      bind: ["tally.expense", "receipt"],
+      order: {
+        sortColumn: "attachment_id",
+        pkColumn: "attachment_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      entity: "tally.expense_line_item",
-      limit: 8_000,
-    }),
-    ctx.vault.read({
-      entity: "tally.expense_line_allocation",
-      limit: 32_000,
-    }),
-    ctx.vault.read({
-      entity: "tally.nudge",
-      orderBy: { column: "prepared_at", dir: "desc" },
-      limit: 500,
+    readPages<Record<string, unknown>>(
+      ctx,
+      {
+        name: "tally.dashboard.receiptLines",
+        select:
+          "line_item_id, expense_id, receipt_id, kind, description, amount_minor, sort_order",
+        from: "tally_expense_line_item",
+        order: {
+          sortColumn: "line_item_id",
+          pkColumn: "line_item_id",
+          descending: false,
+        },
+      },
+      LEDGER_FAN_OUT
+    ),
+    readPages<Record<string, unknown>>(
+      ctx,
+      {
+        name: "tally.dashboard.receiptAllocations",
+        select: "line_item_id, party_id, share_minor",
+        from: "tally_expense_line_allocation",
+        order: {
+          sortColumn: "line_item_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      },
+      ALLOCATION_FAN_OUT
+    ),
+    readPages<NudgeRow>(ctx, {
+      name: "tally.dashboard.nudges",
+      select:
+        "nudge_id, party_id, group_id, as_of_minor, note, prepared_at, created_at",
+      from: "tally_nudge",
+      order: {
+        sortColumn: "prepared_at",
+        pkColumn: "nudge_id",
+        descending: true,
+      },
     }),
   ]);
 
-  const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
+  const vaultRow = vaultRes[0] ?? {};
   const me = (vaultRow.self_party_id as string | undefined) ?? null;
   const currency = (vaultRow.base_currency as string | undefined) ?? "USD";
 
-  const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];
+  const friends = friendsRes;
   const friendPartyIds = friends.map((f) => f.party_id);
   // Circle membership is current state, the ledger durable history: a member
   // who left must stay nameable wherever an expense or settlement still refers
   // to them, so query every ledger party rather than today's roster.
+  const expenseRowsRaw = expensesRes.rows;
   const activeExpenseIds = new Set(
-    ((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
-      (expense) => expense.expense_id
-    )
+    expenseRowsRaw.map((expense) => expense.expense_id)
   );
   const ledgerPartyIds = [
-    ...((membersRes.rows ?? []) as unknown as Array<{ party_id: string }>).map(
-      (member) => member.party_id
-    ),
-    ...((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
-      (expense) => expense.paid_by
-    ),
+    ...membersRes.map((member) => member.party_id),
+    ...expenseRowsRaw.map((expense) => expense.paid_by),
     // A co-payer who is no longer a member still has to be nameable.
-    ...(
-      (payersRes.rows ?? []) as unknown as Array<{
-        expense_id: string;
-        party_id: string;
-      }>
-    )
+    ...payersRes
       .filter((payer) => activeExpenseIds.has(payer.expense_id))
       .map((payer) => payer.party_id),
-    ...(
-      (splitsRes.rows ?? []) as unknown as Array<{
-        expense_id: string;
-        party_id: string;
-      }>
-    )
+    ...splitsRes
       .filter((split) => activeExpenseIds.has(split.expense_id))
       .map((split) => split.party_id),
-    ...((settlesRes.rows ?? []) as unknown as SettlementRow[]).flatMap(
-      (settlement) => [settlement.from_party, settlement.to_party]
-    ),
+    ...settlesRes.flatMap((settlement) => [
+      settlement.from_party,
+      settlement.to_party,
+    ]),
   ];
   const partyIds = [
     ...new Set([me, ...friendPartyIds, ...ledgerPartyIds].filter(Boolean)),
   ] as string[];
-  const partiesRes =
-    partyIds.length > 0
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.party",
-          where: [{ column: "party_id", op: "in", value: partyIds }],
-        })
-      : { rows: [] as Record<string, unknown>[] };
-  const partyRows = (partiesRes.rows ?? []) as unknown as Array<{
-    party_id: string;
-    display_name?: string;
-  }>;
+  const ledgerPartyIn =
+    partyIds.length > 0 ? inList("party_id", partyIds) : null;
+  const partyRows = ledgerPartyIn
+    ? await readPages<{ party_id: string; display_name?: string }>(ctx, {
+        name: "tally.dashboard.parties",
+        select: "party_id, display_name",
+        from: "core_party",
+        where: ledgerPartyIn.sql,
+        bind: ledgerPartyIn.bind,
+        order: {
+          sortColumn: "party_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      })
+    : [];
   const nameById = new Map(partyRows.map((p) => [p.party_id, p.display_name]));
   // THE PARTY HUE, not `identityColor` (#883, ruling O-identity): the person
   // wheel has eight places, and the vault wheel's ninth is the ink brand —
@@ -329,20 +481,18 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     });
   }
 
-  const circleRows = (circlesRes.rows ?? []) as unknown as Array<{
+  const circleRows = circlesRes as unknown as Array<{
     circle_id: string;
     name: string;
   }>;
   const circleName = new Map(circleRows.map((c) => [c.circle_id, c.name]));
-  const groups: DecoratedGroup[] = (
-    (groupsRes.rows ?? []) as unknown as GroupRow[]
-  ).map((g) => ({
+  const groups: DecoratedGroup[] = groupsRes.map((g) => ({
     ...g,
     name: circleName.get(g.circle_id) ?? "Group",
   }));
 
   const membersByCircle = new Map<string, string[]>();
-  for (const m of (membersRes.rows ?? []) as unknown as Array<{
+  for (const m of membersRes as unknown as Array<{
     circle_id: string;
     party_id: string;
   }>) {
@@ -354,7 +504,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     membersByGroup.set(g.group_id, membersByCircle.get(g.circle_id) ?? []);
 
   const splitsByExpense = new Map<string, Record<string, number>>();
-  for (const s of (splitsRes.rows ?? []) as unknown as Array<{
+  for (const s of splitsRes as unknown as Array<{
     expense_id: string;
     party_id: string;
     share_minor: number;
@@ -364,7 +514,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     splitsByExpense.get(s.expense_id)![s.party_id] = s.share_minor;
   }
   const receiptRows = (
-    (receiptsRes.rows ?? []) as unknown as Array<{
+    receiptsRes as unknown as Array<{
       attachment_id: string;
       target_id: string;
       content_id: string;
@@ -377,26 +527,40 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   const receiptContentIds = [
     ...new Set(receiptRows.map((row) => row.content_id)),
   ];
-  const receiptContents =
+  const receiptContentIn =
     receiptContentIds.length > 0
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.content_item",
-          where: [{ column: "content_id", op: "in", value: receiptContentIds }],
-        })
-      : { rows: [] as Record<string, unknown>[] };
+      ? inList("content_id", receiptContentIds)
+      : null;
+  const receiptContents = receiptContentIn
+    ? await readPages<Record<string, unknown>>(ctx, {
+        name: "tally.dashboard.receiptContents",
+        select: "content_id, content_uri, byte_size",
+        from: "core_content_item",
+        where: receiptContentIn.sql,
+        bind: receiptContentIn.bind,
+        order: {
+          sortColumn: "content_id",
+          pkColumn: "content_id",
+          descending: false,
+        },
+      })
+    : [];
+  // Bytes carry no media type since #996 (R20(b)) — the receipt attachment's
+  // own representation says what it reads them as.
+  const receiptRepresentations = await readRepresentations({
+    ctx,
+    contentIds: receiptContentIds,
+  });
   const contentsById = new Map(
     (
-      (receiptContents.rows ?? []) as unknown as Array<{
+      receiptContents as unknown as Array<{
         content_id: string;
         content_uri?: string;
-        media_type?: string;
       }>
     ).map((row) => [row.content_id, row] as const)
   );
   const allocationsByLine = new Map<string, Record<string, number>>();
-  for (const allocation of (receiptAllocationsRes.rows ??
-    []) as unknown as Array<{
+  for (const allocation of receiptAllocationsRes as unknown as Array<{
     line_item_id: string;
     party_id: string;
     share_minor: number;
@@ -409,7 +573,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   // Lines hang off the EXPENSE, the receipt an optional decoration, so the
   // "By line" division has typed lines and no photo.
   const linesByExpense = new Map<string, ReceiptLineFact[]>();
-  for (const line of (receiptLinesRes.rows ?? []) as unknown as Array<{
+  for (const line of receiptLinesRes as unknown as Array<{
     line_item_id: string;
     expense_id: string;
     receipt_id: string | null;
@@ -431,6 +595,11 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   }
   for (const lines of linesByExpense.values())
     lines.sort((a, b) => a.sort_order - b.sort_order);
+  // The RECEIPT ATTACHMENT's own reading of the bytes (#996, R20(b)).
+  const mediaTypeOf = (receiptId: string, contentId: string) =>
+    receiptRepresentations.byOwner.get(
+      ownerKey("core.attachment", receiptId)
+    ) ?? receiptRepresentations.byContent.get(contentId);
   const receiptByExpense = new Map<string, ReceiptFact>();
   for (const receipt of receiptRows) {
     const content = contentsById.get(receipt.content_id);
@@ -444,12 +613,14 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
               : content.content_uri,
           }
         : {}),
-      ...(content?.media_type ? { media_type: content.media_type } : {}),
+      ...(mediaTypeOf(receipt.receipt_id, receipt.content_id)
+        ? { media_type: mediaTypeOf(receipt.receipt_id, receipt.content_id)! }
+        : {}),
       lines: linesByExpense.get(receipt.expense_id) ?? [],
     });
   }
   const payersByExpense = new Map<string, Record<string, number>>();
-  for (const payer of (payersRes.rows ?? []) as unknown as Array<{
+  for (const payer of payersRes as unknown as Array<{
     expense_id: string;
     party_id: string;
     paid_minor: number;
@@ -478,9 +649,9 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     groups,
     membersByGroup,
     expenses,
-    settlements: (settlesRes.rows ?? []) as unknown as SettlementRow[],
-    obligations: (obligationsRes.rows ?? []) as unknown as ObligationRow[],
-    nudges: (nudgesRes.rows ?? []) as unknown as NudgeRow[],
+    settlements: settlesRes,
+    obligations: obligationsRes,
+    nudges: nudgesRes,
   };
 }
 
@@ -515,40 +686,69 @@ export function personOf(data: TallyData, pid: string): ServerPerson {
   );
 }
 
-/** Net per friend vs the owner, in minor units. Positive = they owe me. */
-export function pairwise(data: TallyData): Map<string, number> {
+/** A group's own money, or the vault's base when the row is group-less. */
+export function groupCurrency(
+  data: TallyData,
+  groupId?: string | null
+): string {
+  if (groupId == null) return data.currency;
+  const group = data.groups.find((candidate) => candidate.group_id === groupId);
+  return group?.currency ?? data.currency;
+}
+
+/** The money an expense settles in: its own, else its group's, else the base. */
+export function expenseCurrency(
+  data: TallyData,
+  expense: { group_id: string | null; settlement_currency?: string | null }
+): string {
+  return expense.settlement_currency ?? groupCurrency(data, expense.group_id);
+}
+
+/**
+ * BALANCES ARE KEYED `(party, currency)` (#996, ruling R22; drift ONT-23).
+ *
+ * This folded minor units into a map keyed by PARTY ALONE and the dashboard
+ * labelled the sum with the vault's base currency — so a friend you owe EUR
+ * 100 and USD 100 read as one 200, a figure that is not true in either money.
+ * A friend's position is now a `MoneyBag`: one amount per currency, and no
+ * addition across two of them is even expressible.
+ *
+ * Positive = they owe me, per currency.
+ */
+export function pairwise(data: TallyData): Map<string, MoneyBag> {
   const me = data.me;
-  const b = new Map<string, number>();
-  for (const f of data.friends) b.set(f.party_id, 0);
+  const b = new Map<string, MoneyBag>();
+  for (const f of data.friends) b.set(f.party_id, EMPTY_BAG);
+  const add = (partyId: string, amount: Money): void => {
+    b.set(partyId, addToBag(b.get(partyId) ?? EMPTY_BAG, amount));
+  };
   for (const e of data.expenses) {
+    const currency = expenseCurrency(data, e);
     // With several payers a share is owed to each of them for the part they
     // actually put down, so the owner's position is their own slice of it —
     // never the whole share to whoever happened to be named `paid_by`.
     for (const { from, to, amount_minor } of attributeExpense(e)) {
       if (from === to) continue;
-      if (to === me && from !== me)
-        b.set(from, (b.get(from) || 0) + amount_minor);
+      if (to === me && from !== me) add(from, money(amount_minor, currency));
       else if (from === me && to !== me)
-        b.set(to, (b.get(to) || 0) - amount_minor);
+        add(to, money(-amount_minor, currency));
     }
   }
   for (const s of data.settlements) {
+    const currency = s.currency ?? groupCurrency(data, s.group_id ?? null);
     if (s.from_party === me && s.to_party !== me)
-      b.set(s.to_party, (b.get(s.to_party) || 0) + s.amount_minor);
+      add(s.to_party, money(s.amount_minor, currency));
     else if (s.to_party === me && s.from_party !== me)
-      b.set(s.from_party, (b.get(s.from_party) || 0) - s.amount_minor);
+      add(s.from_party, money(-s.amount_minor, currency));
   }
   for (const obligation of data.obligations) {
+    // An obligation carries its own currency in the vault; it is not scoped to
+    // a group, so there is nothing else it could inherit.
+    const currency = obligation.currency;
     if (obligation.from_party === me && obligation.to_party !== me) {
-      b.set(
-        obligation.to_party,
-        (b.get(obligation.to_party) || 0) - obligation.amount_minor
-      );
+      add(obligation.to_party, money(-obligation.amount_minor, currency));
     } else if (obligation.to_party === me && obligation.from_party !== me) {
-      b.set(
-        obligation.from_party,
-        (b.get(obligation.from_party) || 0) + obligation.amount_minor
-      );
+      add(obligation.from_party, money(obligation.amount_minor, currency));
     }
   }
   return b;
@@ -721,7 +921,8 @@ export function rateSuggestions(data: TallyData): RateSuggestion[] {
   );
 }
 
-/** A group row for the lists, archived or not. */
+/** A group row for the lists, archived or not. The owner's position is in the
+ *  GROUP's money (#996, R22) — a group is one ledger, in one currency. */
 function groupCard(data: TallyData, g: TallyData["groups"][number]) {
   const net = groupNet(data, g.group_id);
   return {
@@ -730,7 +931,10 @@ function groupCard(data: TallyData, g: TallyData["groups"][number]) {
     icon: g.icon,
     color: g.color,
     member_count: (data.membersByGroup.get(g.group_id) ?? []).length,
-    owner_net_minor: net.get(data.me as string) || 0,
+    owner_net: money(
+      net.get(data.me as string) || 0,
+      groupCurrency(data, g.group_id)
+    ),
     simplify_opt_in: g.simplify_opt_in === 1,
     archived_at: g.archived_at ?? null,
   };
@@ -740,27 +944,50 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
   try {
     const data = await loadTally(ctx);
     const [trashRes, recurringRes, exceptionRes] = await Promise.all([
-      ctx.vault.read({
-        entity: "tally.expense",
-        where: [{ column: "deleted_at", op: "not-null" }],
-        orderBy: { column: "deleted_at", dir: "desc" },
-        limit: 100,
-      }),
-      ctx.vault.read({
-        entity: "tally.recurring_expense",
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: 500,
-      }),
-      ctx.vault.read({
-        entity: "schedule.recurrence_exception",
-        where: [
-          {
-            column: "target_type",
-            op: "eq",
-            value: "tally.recurring_expense",
+      ctx.vault.page<Record<string, unknown>>({
+        query: {
+          name: "tally.dashboard.trash",
+          select:
+            "expense_id, group_id, description, amount_minor, currency, paid_by, spent_on, category, deleted_at, purge_at",
+          from: "tally_expense",
+          where: "deleted_at IS NOT NULL",
+          order: {
+            sortColumn: "deleted_at",
+            pkColumn: "expense_id",
+            descending: true,
           },
-        ],
-        limit: 2000,
+        },
+        limit: TRASH_ROWS,
+      }),
+      ctx.vault.page<RecurringRow>({
+        query: {
+          name: "tally.dashboard.recurring",
+          select:
+            "template_id, group_id, description, original_amount_minor, original_currency, settlement_currency, paid_by, category, rrule, anchor_start, tz, rate_scaled, rate_scale, rate_source, rate_date, status, last_materialized_start",
+          from: "tally_recurring_expense",
+          order: {
+            sortColumn: "updated_at",
+            pkColumn: "template_id",
+            descending: true,
+          },
+        },
+        limit: RECURRING_ROWS,
+      }),
+      ctx.vault.page<Record<string, unknown>>({
+        query: {
+          name: "tally.dashboard.recurringExceptions",
+          select:
+            "exception_id, target_type, target_id, original_start_local, recurrence_semantics, scope, action, override_json",
+          from: "schedule_recurrence_exception",
+          where: "target_type = ?",
+          bind: ["tally.recurring_expense"],
+          order: {
+            sortColumn: "exception_id",
+            pkColumn: "exception_id",
+            descending: false,
+          },
+        },
+        limit: EXCEPTION_ROWS,
       }),
     ]);
     const bal = pairwise(data);
@@ -771,15 +998,24 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
         name: p.name,
         color: p.color,
         initials: p.initials,
-        net_minor: bal.get(f.party_id) || 0,
+        balances: [...(bal.get(f.party_id) ?? EMPTY_BAG)],
       };
     });
-    let owe = 0;
-    let owed = 0;
-    for (const v of bal.values()) {
-      if (v > 0) owed += v;
-      else if (v < 0) owe += -v;
+    // THE TWO HERO FIGURES ARE VALUATIONS (#996, ruling R22). Each side is a
+    // position per currency; turning it into ONE number is a claim that a rate
+    // exists, and the vault has no rate plane, so `valuate` answers
+    // `unavailable` with the components rather than adding EUR to USD.
+    let oweBag: MoneyBag = EMPTY_BAG;
+    let owedBag: MoneyBag = EMPTY_BAG;
+    for (const position of bal.values()) {
+      for (const amount of position) {
+        if (amount.amount_minor > 0) owedBag = addToBag(owedBag, amount);
+        else if (amount.amount_minor < 0)
+          oweBag = addToBag(oweBag, negateMoney(amount));
+      }
     }
+    const owe = valuate(oweBag, data.currency);
+    const owed = valuate(owedBag, data.currency);
     // Archived groups leave the default lists and keep everything, so they
     // travel in their own array rather than being filtered into silence.
     const groups = data.groups
@@ -811,28 +1047,24 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
         start: template.anchor_start,
         rangeFrom,
         rangeTo,
-        timeZone: template.time_zone,
+        timeZone: template.tz,
         maxInstances: 8,
       });
-      const exceptions = exceptionRows
-        .filter((row) => row.target_id === template.template_id)
-        .map((row) => ({
-          originalStart: String(row.original_start),
-          action: String(row.action) as "skip" | "override",
-          scope: String(row.scope) as "occurrence" | "future",
-          ...(row.override_json
-            ? {
-                start: String(
-                  (
-                    JSON.parse(String(row.override_json)) as {
-                      start?: string;
-                    }
-                  ).start ?? ""
-                ),
-              }
-            : {}),
-        }));
-      const next = ctx.time.applyRecurrenceExceptions(instances, exceptions)[0];
+      // THROUGH THE ONE ADAPTER (#996, ruling R21; drift ONT-25). This block
+      // read `row.original_start` and the zone above read `template.time_zone`
+      // — neither is a column of the tables they came from, so every skip on a
+      // template was silently ignored and every expansion ran in UTC.
+      const exceptions = ctx.time.occurrenceExceptionsOf<{ start?: string }>(
+        exceptionRows as unknown as Record<string, unknown>[],
+        {
+          seriesType: "tally.recurring_expense",
+          seriesId: template.template_id,
+        }
+      );
+      const next = ctx.time.applyRecurrenceExceptions(
+        instances,
+        ctx.time.recurrenceExceptionsOf(exceptions)
+      )[0];
       return {
         ...template,
         // A rule the summariser cannot phrase drops its preview entirely.
@@ -850,8 +1082,8 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       archived_groups: archivedGroups,
       trash,
       recurring,
-      owe_total_minor: owe,
-      owed_total_minor: owed,
+      owe,
+      owed,
       // The two counts the Balances hero states its arithmetic from
       // ("derived from 194 expenses and 22 settlements"), over the same
       // bounded window every figure on this screen came from.
@@ -877,8 +1109,8 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       archived_groups: [],
       trash: [],
       recurring: [],
-      owe_total_minor: 0,
-      owed_total_minor: 0,
+      owe: valuate(EMPTY_BAG, "USD"),
+      owed: valuate(EMPTY_BAG, "USD"),
       expense_count: 0,
       settlement_count: 0,
       rate_suggestions: [],

@@ -17,11 +17,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  gatedShelf,
-  SETUP,
-  suppressesNavigation,
-} from "@centraid/blueprints/apps/locker/shelves";
+import { suppressesNavigation } from "@centraid/blueprints/apps/locker/shelves";
 import {
   ROUTE_STATUS,
   ROUTE_TITLE,
@@ -39,9 +35,8 @@ import type { LockerBandDestinationKey, LockerMoreRowKey } from "./locker-band";
 import { MASKED_LABEL } from "./locker-seat-copy";
 import {
   noteLockerActivity,
-  revokeLockerDevice,
+  forgetLockerVaultKey,
   unlockLocker,
-  unlockLockerWithDevice,
 } from "./locker-store";
 import LockerBand from "./LockerBand";
 import LockerMoreSheet from "./LockerMoreSheet";
@@ -90,7 +85,6 @@ export default function LockerScreen({
   const vault = useLockerVault();
 
   const gate = {
-    setup: vault.session.phase === "setup",
     locked:
       vault.session.phase === "locked" || vault.session.phase === "unknown",
     denied: vault.denied !== null,
@@ -100,18 +94,11 @@ export default function LockerScreen({
     refused: false,
   };
   const walled = suppressesNavigation(gate);
-  const shelf = gatedShelf(gate, null);
-  const wallMode = gate.denied
-    ? ("denied" as const)
-    : shelf === SETUP
-      ? ("setup" as const)
-      : ("lock" as const);
+  const wallMode = gate.denied ? ("denied" as const) : ("lock" as const);
   const headRoute: LockerRouteKey = walled
     ? gate.denied
       ? route
-      : shelf === SETUP
-        ? "setup"
-        : "lock"
+      : "lock"
     : route;
 
   const onDestination = (key: LockerBandDestinationKey): void => {
@@ -178,10 +165,8 @@ export default function LockerScreen({
             mode={wallMode}
             busy={vault.busy}
             error={vault.session.error}
-            deviceEnrolled={vault.credentialId !== null}
-            onSubmit={(secret) => void unlockLocker(secret)}
-            onDeviceUnlock={() => void unlockLockerWithDevice()}
-            onRevokeDevice={() => void revokeLockerDevice()}
+            onUnlock={() => void unlockLocker()}
+            onForgetKey={() => void forgetLockerVaultKey()}
           />
         ) : (
           children

@@ -32,15 +32,25 @@ export function custodyCounts(
 }
 
 /**
- * Omit the record count rather than guess when census has not answered.
- * One failed read must not invent a number or silence the two the roster has.
+ * THE RECORD COUNT IS GONE; THE WATERMARK TAKES ITS PLACE (#996, R8).
+ *
+ * The line used to open with "41,208 records", derived from a census probe
+ * over a shape. Two things were wrong with it. It dies with census in wave 5,
+ * and — the reason it is not simply being re-sourced — it answered a question
+ * nobody was asking. Under R1 every enrolled seat holds the whole vault, so
+ * "how many records" is the same number everywhere and carries no information
+ * about THIS machine. What a member wants to know about a copy is whether it
+ * is current, which is the seat watermark.
+ *
+ * `undefined` still omits the clause rather than guessing: a seat that has not
+ * reported must not cost the page the two numbers the roster does know.
  */
 export function custodyLine(
   counts: CustodyCounts,
-  records: number | null
+  watermark: string | undefined
 ): string {
   return [
-    ...(records === null ? [] : [`${records.toLocaleString()} records`]),
+    ...(watermark === undefined ? [] : [watermark]),
     `${counts.replicas.toLocaleString()} ${counts.replicas === 1 ? "machine holds" : "machines hold"} a full copy`,
     `${counts.devices.toLocaleString()} device${counts.devices === 1 ? "" : "s"} enrolled`,
   ].join(" · ");

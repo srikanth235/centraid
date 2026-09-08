@@ -85,11 +85,11 @@ export function originsByDocument(
     })
   );
   const nameByParty = nameByPartyOf(rows.parties);
-  const subscriptionByShape = new Map(
+  const subscriptionByGrant = new Map(
     rows.subscriptions.flatMap((subscription) => {
-      const shapeId = str(subscription, "shape_id");
-      return shapeId && str(subscription, "state") === "subscribed"
-        ? [[shapeId, subscription] as const]
+      const authorityId = str(subscription, "authority_id");
+      return authorityId && str(subscription, "state") === "subscribed"
+        ? [[authorityId, subscription] as const]
         : [];
     })
   );
@@ -97,8 +97,10 @@ export function originsByDocument(
     rows.lineage.flatMap((claim) => {
       if (str(claim, "target_type") !== DOCUMENT_TARGET_TYPE) return [];
       const itemId = str(claim, "target_id");
-      const shapeId = str(claim, "shape_id");
-      const subscription = shapeId ? subscriptionByShape.get(shapeId) : null;
+      const authorityId = str(claim, "authority_id");
+      const subscription = authorityId
+        ? subscriptionByGrant.get(authorityId)
+        : null;
       if (!itemId || !subscription) return [];
       const vaultId = str(subscription, "origin_vault_id");
       if (!vaultId) return [];

@@ -19,8 +19,8 @@ import type {
 import { toBlueprintCss } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
-import { acquireReplicaShellSession } from "../../../replica/shell-session.js";
-import type { ReplicaScopeLease } from "../../../replica/shell-session.js";
+import { acquireReplicaShellSession } from "../../../replica/shell-session-scopes.js";
+import type { ReplicaScopeLease } from "../../../replica/shell-session-scopes.js";
 import {
   addInlineScope,
   installInlineCentraid,

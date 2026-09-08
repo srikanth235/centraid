@@ -12,6 +12,7 @@ import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
+import { stampReplicaOutcomeCommitInTransaction } from "../replica/intent-chain.js";
 import {
   finalizeReplicaInvocationCommit,
   finalizeOrdinaryInvocationCommit,
@@ -47,6 +48,7 @@ import {
   writeAuthorityReceipt,
 } from "./evidence.js";
 import { validateJson } from "./json-schema.js";
+import { stampLockerKeyOnWrite } from "./locker-key-plane.js";
 import {
   closeRevisionCapture,
   drainRevisionCapture,
@@ -55,7 +57,6 @@ import {
 import type {
   Citation,
   CommandDefinition,
-  ConditionSpec,
   HandlerCtx,
   HandlerReceipt,
   Identity,
@@ -67,6 +68,10 @@ import { GatewayError } from "./types.js";
 /** `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal` (#293). */
 export interface RegisteredCommand {
   handler: CommandDefinition["handler"];
+  /** The live pre/postconditions, including the domain-operation ones whose
+   *  predicates cannot be serialised into the registry row (#996, R21). */
+  preconditions: CommandDefinition["preconditions"];
+  postconditions: CommandDefinition["postconditions"];
   sealedInput: readonly string[];
   unseals: readonly string[];
   transcriptSensitive: boolean;
@@ -162,9 +167,16 @@ export function sealWrites(
 ): void {
   let sealedAny = false;
   for (const write of writes) {
+    const locker = resolveEntity(write.entityType, db.vault);
+    // THE LOCKER KEY, ON EVERY WRITE (#996, R13). Before the seal sweep, and
+    // for every Locker row whether or not it has a sealed column left: the
+    // question here is not "is this ciphertext at rest" but "which key is it
+    // under", and a row that answers wrongly must not commit.
+    if (locker)
+      stampLockerKeyOnWrite(db.vault, locker.physical, write.entityId);
     const cols = sealedColumnsOf(write.entityType, db.vault);
     if (cols.length === 0) continue;
-    const ref = resolveEntity(write.entityType, db.vault);
+    const ref = locker;
     if (!ref) continue;
     const pk = pkColumn(db.vault, ref.physical);
     const select = cols.map((c) => `"${c}"`).join(", ");
@@ -476,8 +488,18 @@ export function runContractAndExecute(
       errors: schemaErrors,
     });
   }
-  const preSpecs = JSON.parse(command.preconditions_json) as ConditionSpec[];
-  const preResults = evaluateConditions(db.vault, preSpecs, request.input);
+  // THE LIVE DECLARATION, NOT THE RECORD (#996, ruling R21). A domain-operation
+  // condition carries a predicate, and a predicate does not survive
+  // `JSON.stringify` — `preconditions_json` is the registry's record of WHICH
+  // conditions a command declares, and the registered definition is what runs
+  // them. A command with no live registration is refused below either way.
+  const declared = commands.get(command.name);
+  if (!declared) return denyContract("handler missing", { stage: "execution" });
+  const preResults = evaluateConditions(
+    db.vault,
+    declared.preconditions,
+    request.input
+  );
   for (const result of preResults) {
     writeCheck(
       db.audit,
@@ -503,9 +525,7 @@ export function runContractAndExecute(
   const citations: Citation[] = [];
   // Queued, flushed after the canonical COMMIT.
   const handlerReceipts: HandlerReceipt[] = [];
-  const registered = commands.get(command.name);
-  if (!registered)
-    return denyContract("handler missing", { stage: "execution" });
+  const registered = declared;
   const handler = registered.handler;
   // Receipted as column names, never values.
   const unsealed = new Set<string>();
@@ -578,7 +598,7 @@ export function runContractAndExecute(
             }
           : null;
       },
-      claimStaged: (sha256, optionsLocal) =>
+      claimStaged: (sha256) =>
         promoteStagedBlob(
           {
             vault: db.vault,
@@ -588,8 +608,7 @@ export function runContractAndExecute(
               writes.push({ entityType, entityId }),
             creatorPartyId: identity.partyId,
           },
-          sha256,
-          optionsLocal
+          sha256
         ),
       spill: (bytes) => db.blobs.ingestSync(bytes).sha256,
       has: (sha256) => db.blobs.hasSync(sha256),
@@ -620,10 +639,7 @@ export function runContractAndExecute(
     closeRevisionCapture(db.vault);
     // Same transaction, so no committed row ever holds a clear secret (#293).
     sealWrites(db, writes);
-    const postSpecs = JSON.parse(
-      command.postconditions_json
-    ) as ConditionSpec[];
-    postResults = evaluateConditions(db.vault, postSpecs, {
+    postResults = evaluateConditions(db.vault, registered.postconditions, {
       ...request.input,
       ...output,
     });
@@ -741,7 +757,22 @@ export function runContractAndExecute(
       audit,
       committedAt: ctx.now,
     });
-    endReplicaCommit(db.vault, replicaCommit);
+    const captured = endReplicaCommit(db.vault, replicaCommit);
+    // THE OUTCOME LEARNS WHERE IT LANDED (#996, R24), here and only here.
+    // This is the one place both intent paths pass through — the device door
+    // (`replica-intent-route.ts`) and the member door
+    // (`peer-replica-intent-route.ts`) both arrive as `invoke({ intentId })`
+    // — so an outcome that carries the position on one path and not the other
+    // cannot happen. And it is INSIDE the transaction on purpose: the
+    // position and the produced rows are read from the capture that just ran,
+    // so the stamp can never name a commit that rolled back, and never the
+    // wrong one because a later write moved the watermark in between.
+    if (request.intentId && captured)
+      stampReplicaOutcomeCommitInTransaction(
+        db.vault,
+        request.intentId,
+        captured
+      );
     commitInvocationTransaction(db.vault, vaultTransaction);
     closeRevisionCapture(db.vault);
     if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);

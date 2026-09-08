@@ -15,6 +15,17 @@ export async function intentPayloadHash(
     action: string;
     input: ReplicaValue;
     baseVersions?: ReplicaBaseVersion[];
+    /**
+     * THE CHAIN IS PART OF THE PAYLOAD (#996, R23). `dependsOn` decides WHEN
+     * an intent runs and which rows its `$intent` placeholders resolve to, so
+     * an intent whose predecessors were rewritten in flight is a DIFFERENT
+     * intent and must not be answered from the first one's outcome. Omitted
+     * when empty, exactly as `baseVersions` is, so an intent that names no
+     * chain hashes as it always did — and matches
+     * `expectedPayloadHash` in `packages/server/src/routes/replica-intent-shape.ts`
+     * byte for byte, which is what the gateway verifies the id against.
+     */
+    dependsOn?: readonly string[];
   },
   digest: ReplicaDigest = webCryptoDigest
 ): Promise<string> {
@@ -25,6 +36,9 @@ export async function intentPayloadHash(
       input: input.input,
       ...(input.baseVersions && input.baseVersions.length > 0
         ? { baseVersions: normalizeBaseVersions(input.baseVersions) }
+        : {}),
+      ...(input.dependsOn && input.dependsOn.length > 0
+        ? { dependsOn: [...input.dependsOn] }
         : {}),
     } as unknown as ReplicaValue)
   );

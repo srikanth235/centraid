@@ -2,6 +2,7 @@
 // so it tests under node; the platform listeners are next door (#883).
 
 import type { MobileReplicaSession } from "../replica/native-session";
+import type { NativeSeatPagePort } from "../replica/seat-port";
 
 export type CameraRollSweepReason =
   | "app-start"
@@ -48,6 +49,15 @@ export interface CameraRollScope {
   session: MobileReplicaSession;
   gatewayBase: string;
   vaultId?: string;
+  /**
+   * The phone's copy, when it has arrived (#996, W5-D1). A sweep dedupes the
+   * camera roll against what the VAULT already holds — by sha256, then by
+   * perceptual hash — and that half of the timeline is read from the seat. A
+   * sweep without one sees no remote twins and would re-upload photos the
+   * vault already has, so it is threaded here rather than left to the engine's
+   * last caller to have set.
+   */
+  seat?: NativeSeatPagePort;
 }
 
 export type CameraRollSweep = (scope: CameraRollScope) => Promise<void>;

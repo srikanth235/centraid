@@ -22,7 +22,7 @@ import { LockerList } from "./components/List.tsx";
 import { Rail } from "./components/Rail.tsx";
 import { Notices } from "./components/States.tsx";
 import { OPEN_ITEM, rowsFor, typeCounts, windowEndCopy } from "./format.ts";
-import { PERMIT_LIFE_MS } from "./permits.ts";
+import { REVEAL_LIFE_MS } from "./reveal.ts";
 import type { LockerRow } from "./types.ts";
 import {
   ALL_TYPES,
@@ -37,7 +37,7 @@ import {
   OFFLINE_NOTICE,
   REAUTH_NOTICE,
   SEALED_NOTE,
-  SETUP_BODY,
+  LOCK_UNAVAILABLE_BODY,
   SHOW_MORE,
   VIEWER_REFUSED,
   WINDOW_RULE,
@@ -76,13 +76,25 @@ describe("the room is shut until it is opened", () => {
     (window as unknown as { centraid?: unknown }).centraid = undefined;
   });
 
-  async function mount(auth: Record<string, unknown>): Promise<HTMLElement> {
+  /** Mount over a shell whose Locker door reports `lock`, or offers none. */
+  async function mount(
+    lock: "locked" | "unlocked" | null
+  ): Promise<HTMLElement> {
     (window as unknown as { centraid: unknown }).centraid = {
-      read: ({ query }: { query: string }) =>
-        query === "auth"
-          ? Promise.resolve(auth)
-          : Promise.resolve({ items: [ROW] }),
+      read: () => Promise.resolve({ items: [ROW] }),
       write: () => Promise.resolve({}),
+      ...(lock
+        ? {
+            locker: {
+              reveal: () => Promise.resolve({ ok: false, reason: "locked" }),
+              state: () => ({ status: lock, remainingMs: 0 }),
+              subscribeLock: (listener: (state: unknown) => void) => {
+                listener({ status: lock, remainingMs: 0 });
+                return NOOP;
+              },
+            },
+          }
+        : {}),
     };
     const container = document.createElement("div");
     document.body.append(container);
@@ -95,12 +107,8 @@ describe("the room is shut until it is opened", () => {
     return container;
   }
 
-  test("LOCKED: a configured vault opens on the lock screen, with no list", async () => {
-    const container = await mount({
-      ok: true,
-      configured: true,
-      authenticated: false,
-    });
+  test("LOCKED: a locked shell opens on the lock screen, with no list", async () => {
+    const container = await mount("locked");
     expect(container.textContent).toContain(LOCK_BODY);
     // The band, the rail and every list are WITHDRAWN, not dimmed.
     expect(container.querySelector("nav")).toBeNull();
@@ -108,35 +116,41 @@ describe("the room is shut until it is opened", () => {
     expect(container.textContent).not.toContain(ROW.title);
   });
 
-  test("FIRST RUN: an unconfigured vault states the rule before the field", async () => {
-    const container = await mount({ ok: true, configured: false });
-    expect(container.textContent).toContain(SETUP_BODY);
-    expect(container.querySelector("[data-item-id]")).toBeNull();
-    // Twelve characters is enforced in front of the member, not by a refusal.
-    const commit = container.querySelector("button[type='submit']");
-    expect((commit as HTMLButtonElement | null)?.disabled).toBe(true);
+  test("the lock screen asks for nothing — the passphrase is the shell's", async () => {
+    // #996, W6-D2. An app that drew a passphrase box would be an app
+    // collecting a credential it must never hold, with nothing on this side to
+    // check it against, so the box could only ever forward what it took.
+    const container = await mount("locked");
+    expect(container.querySelector("input[type='password']")).toBeNull();
+    expect(container.querySelector("button[type='submit']")).toBeNull();
+    expect(container.querySelector("form")).toBeNull();
   });
 
-  test("a host that never answers stays shut rather than guessing", async () => {
-    const container = await mount({});
+  test("NO DOOR: a host that cannot unseal says so, and does not offer an unlock", async () => {
+    // "Locked" and "this device holds no key" are different facts and only one
+    // of them is fixed by unlocking.
+    const container = await mount(null);
+    expect(container.textContent).toContain(LOCK_UNAVAILABLE_BODY);
+    expect(container.textContent).not.toContain(LOCK_BODY);
     expect(container.querySelector("[data-item-id]")).toBeNull();
   });
 
   test("DENIED: a revoked grant shows the receipt and that nothing was deleted", async () => {
     (window as unknown as { centraid: unknown }).centraid = {
-      read: ({ query }: { query: string }) =>
-        query === "auth"
-          ? Promise.resolve({
-              ok: true,
-              configured: true,
-              authenticated: true,
-              sessionToken: "s1",
-            })
-          : Promise.resolve({
-              items: [],
-              vaultDenied: { message: "The grant was revoked." },
-            }),
+      read: () =>
+        Promise.resolve({
+          items: [],
+          vaultDenied: { message: "The grant was revoked." },
+        }),
       write: () => Promise.resolve({}),
+      locker: {
+        reveal: () => Promise.resolve({ ok: false, reason: "locked" }),
+        state: () => ({ status: "unlocked", remainingMs: 300_000 }),
+        subscribeLock: (listener: (state: unknown) => void) => {
+          listener({ status: "unlocked", remainingMs: 300_000 });
+          return NOOP;
+        },
+      },
     };
     const container = document.createElement("div");
     document.body.append(container);
@@ -347,7 +361,7 @@ describe("SEALED and REVEALED are two states of one row", () => {
     const markup = field({
       revealed: "x",
       revealedAt: at,
-      now: at + PERMIT_LIFE_MS + 9_000,
+      now: at + REVEAL_LIFE_MS + 9_000,
     });
     expect(markup).toContain(revealedNote(39, 0));
   });

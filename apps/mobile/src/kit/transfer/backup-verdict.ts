@@ -1,12 +1,36 @@
-// Verdict comes from the device's durable queue, never the custody rollup
-// (#712). `readable: false` means UNKNOWN: never fold it into `complete`.
+// WHAT "BACKED UP" MEANS, AND WHOSE ANSWER IT IS.
+//
+// Every verdict short of `complete` comes from the device's durable queue and
+// nothing else (#712): a rollup cannot say a transfer was refused on this
+// phone, and `readable: false` means UNKNOWN — never folded into `complete`.
+//
+// `complete` IS DIFFERENT, and #996 R7 is why. An empty queue says this phone
+// has nothing left to send; it does not say the gateway HAS the bytes. Those
+// are two claims, and the phone can only make the first. So `complete` now
+// needs both: an empty, readable queue AND the gateway's own verified custody
+// saying nothing is missing. A seat's presence claim is never by itself the
+// durability answer.
+//
+// AN UNREAD ROLLUP IS NOT A REFUSAL. Offline, or a gateway that would not
+// answer, leaves custody `undefined`/`null` — and the verdict is `unverified`,
+// which says the queue is empty and this phone cannot yet prove the other
+// half. Reading it as `complete` would put "Backup is complete" on screen on
+// the strength of a claim nobody checked; reading it as `failing` would call a
+// tunnel outage an integrity gap.
 
 import { formatBytes } from "@centraid/design";
 
 import { memberFacingError } from "../member-error";
+import type { CustodyStatus } from "../storage/custody-durability";
+import { custodyDurability } from "../storage/custody-durability";
 import type { TransferQueueCounts } from "./transfer-queue";
 
-export type BackupVerdict = "complete" | "pending" | "failing" | "unreadable";
+export type BackupVerdict =
+  | "complete"
+  | "unverified"
+  | "pending"
+  | "failing"
+  | "unreadable";
 
 export interface BackupVerdictCopy {
   verdict: BackupVerdict;
@@ -17,18 +41,28 @@ export interface BackupVerdictCopy {
   icon: string;
 }
 
-export function backupVerdict(queue: TransferQueueCounts): BackupVerdict {
+export function backupVerdict(
+  queue: TransferQueueCounts,
+  /** `undefined` not read yet, `null` the read failed — both are UNVERIFIED. */
+  custody?: CustodyStatus | null
+): BackupVerdict {
   if (!queue.readable) return "unreadable";
   if (queue.failures.length > 0) return "failing";
-  return queue.pending > 0 ? "pending" : "complete";
+  if (queue.pending > 0) return "pending";
+  // The queue is empty. The other half of the claim is the gateway's.
+  if (!custody || custody.computedAt === null) return "unverified";
+  return custodyDurability(custody).notBackedUp.count > 0
+    ? "failing"
+    : "complete";
 }
 
 // `onOneDeviceCount`: photographs held only here — the actionable fact.
 export function backupVerdictCopy(
   queue: TransferQueueCounts,
-  onOneDeviceCount = queue.pending
+  onOneDeviceCount = queue.pending,
+  custody?: CustodyStatus | null
 ): BackupVerdictCopy {
-  const verdict = backupVerdict(queue);
+  const verdict = backupVerdict(queue, custody);
   if (verdict === "unreadable") {
     return {
       verdict,
@@ -36,6 +70,30 @@ export function backupVerdictCopy(
       detail: "Free up phone storage, then reopen this screen.",
       net: false,
       icon: "alert-circle",
+    };
+  }
+  if (verdict === "unverified") {
+    return {
+      verdict,
+      title: "Nothing left to send from this phone",
+      detail:
+        "Your vault has not confirmed it holds these yet — reconnect to check.",
+      net: false,
+      icon: "cloud",
+    };
+  }
+  if (verdict === "failing" && queue.failures.length === 0) {
+    // An empty queue and a gap at the gateway: the phone did its part and the
+    // bytes are in neither tier, which is the one case a member must act on
+    // somewhere other than this screen.
+    const missing = custody ? custodyDurability(custody).notBackedUp.count : 0;
+    return {
+      verdict,
+      title: `${missing} file${missing === 1 ? "" : "s"} missing at your vault`,
+      detail:
+        "This phone sent everything it had; the bytes are in neither tier.",
+      net: true,
+      icon: "cloud-off",
     };
   }
   if (verdict === "failing") {
@@ -66,7 +124,7 @@ export function backupVerdictCopy(
   return {
     verdict,
     title: "Backup is complete",
-    detail: "The durable queue is empty.",
+    detail: "Your vault holds every one of these, verified.",
     net: false,
     // Registry name, not `check-circle`: the resolver throws on unknown keys.
     icon: "CheckCircle",

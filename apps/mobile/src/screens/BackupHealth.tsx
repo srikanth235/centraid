@@ -100,7 +100,12 @@ export default function BackupHealth({
   const [backingUp, setBackingUp] = useState(false);
   const consented = automaticTransferAllowed(consent);
   const panel = useMemo(() => backupConsentPanel(policy), [policy]);
-  const verdict = useMemo(() => backupVerdictCopy(queue), [queue]);
+  // The rollup is the other half of `complete` (#996 R7): an empty queue is
+  // this phone's claim, and the gateway's verified custody is the answer.
+  const verdict = useMemo(
+    () => backupVerdictCopy(queue, undefined, custody),
+    [queue, custody]
+  );
   const offer = useMemo(
     () =>
       custody

@@ -13,7 +13,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { encodeVector, nowIso, uuidv7 } from "@centraid/vault";
 
-import { companionRequestAllowed } from "../serve/companion-access.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import {
@@ -205,15 +204,5 @@ describe("enrich-search-routes", () => {
     const res = await search(url, { query: "a dog on a beach" });
     expect(res.status).toBe(500);
     await expect(res.text()).resolves.toContain("the model crashed");
-  });
-
-  test("a constrained companion device cannot reach semantic search", () => {
-    expect(
-      companionRequestAllowed(
-        { method: "POST", url: SEMANTIC_SEARCH_PATH },
-        ["photos", "docs"],
-        "enrollment-1"
-      )
-    ).toBe(false);
   });
 });

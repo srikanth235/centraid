@@ -32,13 +32,6 @@ export interface DeviceEnrollment {
   /** Device-level tombstone ("this phone was stolen") — never a role. */
   revoked: boolean;
   rememberDevice: boolean;
-  /**
-   * Confined to a subset of the owner's surfaces (#928 A6). WHICH surfaces is
-   * not stored here: the answer is `share_authority` rows in the vault, and
-   * `projectedSurfaces` returns the gateway-side projection of them. An
-   * attenuated device with no projection is refused, never widened.
-   */
-  attenuated: boolean;
   compute?: DeviceComputeProfile;
   checkpoint?: ReplicaCheckpoint;
   addedAt: string;
@@ -73,8 +66,6 @@ export interface EnrollInput {
   label: string;
   platform?: string;
   rememberDevice?: boolean;
-  /** Companion enrollment: confine this device to a set of surfaces. */
-  surfaces?: readonly string[];
   /** Bind to this existing owner. */
   ownerId?: string;
   /** …or create an owner with this label first. */
@@ -92,7 +83,6 @@ interface EnrollmentRow {
   label: string;
   platform: string | null;
   remember_device: number;
-  attenuated: number;
   compute_json: string | null;
   checkpoint_json: string | null;
   revoked: number;
@@ -102,7 +92,7 @@ interface EnrollmentRow {
 const ENROLLMENT_VIEW_SQL = `
   SELECT d.enrollment_id, d.endpoint_id, d.owner_id, o.label AS owner_label,
          v.vault_id, d.label, d.platform, d.remember_device,
-         d.attenuated, d.compute_json, c.checkpoint_json, d.revoked, d.added_at
+         d.compute_json, c.checkpoint_json, d.revoked, d.added_at
     FROM devices d
     JOIN owners o ON o.owner_id = d.owner_id
     JOIN vault_owners v ON v.owner_id = d.owner_id
@@ -137,7 +127,6 @@ function toEnrollment(row: EnrollmentRow): DeviceEnrollment {
     ...(row.platform === null ? {} : { platform: row.platform }),
     revoked: row.revoked === 1,
     rememberDevice: row.remember_device === 1,
-    attenuated: row.attenuated === 1,
     ...(compute ? { compute } : {}),
     ...(checkpoint ? { checkpoint } : {}),
     addedAt: row.added_at,
@@ -231,31 +220,22 @@ export class EnrollmentStore {
     }
     const existing = this.gatewayDatabase.db
       .prepare(
-        "SELECT enrollment_id, platform, attenuated FROM devices WHERE endpoint_id = ?"
+        "SELECT enrollment_id, platform FROM devices WHERE endpoint_id = ?"
       )
       .get(input.endpointId) as
       | {
           enrollment_id: string;
           platform: string | null;
-          attenuated: number;
         }
       | undefined;
     if (existing) {
       const platform =
         input.platform === undefined ? existing.platform : input.platform;
-      // Re-enrolling a device on a NON-companion platform drops the
-      // confinement; omitting the set on the same platform keeps it.
-      const attenuated =
-        input.surfaces === undefined
-          ? input.platform !== undefined && input.platform !== "extension"
-            ? 0
-            : existing.attenuated
-          : 1;
       this.gatewayDatabase.db
         .prepare(
           `UPDATE devices
               SET owner_id = ?, label = ?, platform = ?, remember_device = ?,
-                  attenuated = ?, revoked = 0
+                  revoked = 0
             WHERE endpoint_id = ?`
         )
         .run(
@@ -263,17 +243,15 @@ export class EnrollmentStore {
           label,
           platform,
           input.rememberDevice === true ? 1 : 0,
-          attenuated,
           input.endpointId
         );
-      if (attenuated === 0) this.clearProjection(input.endpointId);
     } else {
       this.gatewayDatabase.db
         .prepare(
           `INSERT INTO devices (
             enrollment_id, endpoint_id, owner_id, label, platform,
-            remember_device, attenuated, revoked, added_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
+            remember_device, revoked, added_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
         )
         .run(
           crypto.randomUUID(),
@@ -282,7 +260,6 @@ export class EnrollmentStore {
           label,
           input.platform ?? null,
           input.rememberDevice === true ? 1 : 0,
-          input.surfaces === undefined ? 0 : 1,
           new Date().toISOString()
         );
     }
@@ -334,66 +311,6 @@ export class EnrollmentStore {
       )
       .get(endpointId, vaultId) as EnrollmentRow | undefined;
     return row ? toEnrollment(row) : undefined;
-  }
-
-  /**
-   * The surfaces this device may reach in this vault, as last projected from
-   * the vault's authority rows. `undefined` = nothing projected, which the
-   * request path reads as a refusal rather than as full reach (#928 A6).
-   */
-  projectedSurfaces(endpointId: string, vaultId: string): string[] | undefined {
-    const row = this.gatewayDatabase.db
-      .prepare(
-        `SELECT surfaces_json FROM device_surface_projection
-          WHERE endpoint_id = ? AND vault_id = ?`
-      )
-      .get(endpointId, vaultId) as { surfaces_json: string } | undefined;
-    if (!row) return undefined;
-    const surfaces = parseJson<string[]>(row.surfaces_json);
-    return Array.isArray(surfaces) ? surfaces : undefined;
-  }
-
-  /** Replace one device's projection for one vault. */
-  projectSurfaces(
-    endpointId: string,
-    vaultId: string,
-    surfaces: readonly string[]
-  ): void {
-    this.gatewayDatabase.db
-      .prepare(
-        `INSERT INTO device_surface_projection
-           (endpoint_id, vault_id, surfaces_json, projected_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(endpoint_id, vault_id) DO UPDATE SET
-           surfaces_json = excluded.surfaces_json,
-           projected_at = excluded.projected_at`
-      )
-      .run(
-        endpointId,
-        vaultId,
-        JSON.stringify([...surfaces]),
-        new Date().toISOString()
-      );
-  }
-
-  /** Every attenuated device this vault must project an answer for. */
-  attenuatedEndpointsFor(vaultId: string): string[] {
-    return (
-      this.gatewayDatabase.db
-        .prepare(
-          `SELECT d.endpoint_id FROM devices d
-             JOIN vault_owners v ON v.owner_id = d.owner_id
-            WHERE v.vault_id = ? AND d.attenuated = 1 AND d.revoked = 0
-            ORDER BY d.endpoint_id`
-        )
-        .all(vaultId) as Array<{ endpoint_id: string }>
-    ).map((row) => row.endpoint_id);
-  }
-
-  private clearProjection(endpointId: string): void {
-    this.gatewayDatabase.db
-      .prepare("DELETE FROM device_surface_projection WHERE endpoint_id = ?")
-      .run(endpointId);
   }
 
   /** Durable proof that this device previously mounted the scope. */
@@ -510,9 +427,6 @@ export class EnrollmentStore {
       this.gatewayDatabase.db
         .prepare("DELETE FROM device_checkpoints WHERE vault_id = ?")
         .run(vaultId);
-      this.gatewayDatabase.db
-        .prepare("DELETE FROM device_surface_projection WHERE vault_id = ?")
-        .run(vaultId);
       this.owners.removeVault(vaultId);
       return removed;
     });
@@ -525,7 +439,6 @@ export class EnrollmentStore {
     this.gatewayDatabase.db
       .prepare("DELETE FROM device_checkpoints WHERE endpoint_id = ?")
       .run(endpointId);
-    this.clearProjection(endpointId);
     // The tombstone survives, so the DELETE-time web_sessions FK cascade
     // never runs; kill durable browser sessions here or a revoked laptop
     // keeps its cookie alive.

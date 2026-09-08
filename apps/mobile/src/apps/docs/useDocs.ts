@@ -5,12 +5,11 @@
 import { useCallback, useMemo } from "react";
 
 import type { ReplicaValue } from "@centraid/client/replica/native";
+import type { PageQuery } from "@centraid/core/page";
 
-import {
-  combineReplicaQueryStates,
-  useReplicaQuery,
-} from "../../kit/hooks/useReplicaQuery";
-import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import { combineReplicaQueryStates } from "../../kit/hooks/replica-query-state";
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -20,14 +19,38 @@ import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { DocsShellNavigation } from "../../navigation";
 import { projectDrive } from "./docs-projection";
 import type { DriveProjection, MobileDriveDoc } from "./docs-projection";
+import {
+  DOCS_AUTHORITIES,
+  DOCS_BINDINGS,
+  DOCS_CIRCLES,
+  DOCS_CIRCLE_MEMBERS,
+  DOCS_CONCEPTS,
+  DOCS_CONTENTS,
+  DOCS_CUSTODY,
+  DOCS_DOCUMENTS,
+  DOCS_FULFILLMENTS,
+  DOCS_LINEAGE,
+  DOCS_PARTIES,
+  DOCS_REPRESENTATIONS,
+  DOCS_SCHEMES,
+  DOCS_SUBSCRIPTIONS,
+  DOCS_TAGS,
+} from "./docs-queries";
 
 const APP_ID = "docs";
 
-function useDocsEntity(entity: string): ReplicaQueryState {
-  return useReplicaQuery(
-    APP_ID,
-    useMemo(() => ({ acceptTruncation: true, entity }), [entity])
-  );
+/**
+ * One of the drive's fifteen reads, walked to the end of its set (#996 wave
+ * 4b). Every one of them declared `acceptTruncation` before: the whole table,
+ * cut off at whatever window the reader had. `docs-queries.ts` states which
+ * rows and which columns instead, and the walk states where it stops.
+ */
+function useDocsRead(
+  query: PageQuery,
+  entity: string,
+  rowIdColumn: string
+): ReplicaQueryState {
+  return useSeatPages(APP_ID, query, { entity, rowIdColumn });
 }
 
 export interface UseDocsResult extends DriveProjection {
@@ -40,28 +63,62 @@ export interface UseDocsResult extends DriveProjection {
 }
 
 export function useDocs(): UseDocsResult {
-  const documents = useDocsEntity("core.document");
-  const contents = useDocsEntity("core.content_item");
-  const tags = useDocsEntity("core.tag");
-  const concepts = useDocsEntity("core.concept");
-  const schemes = useDocsEntity("core.concept_scheme");
+  const documents = useDocsRead(DOCS_DOCUMENTS, "core.document", "document_id");
+  const contents = useDocsRead(
+    DOCS_CONTENTS,
+    "core.content_item",
+    "content_id"
+  );
+  const representations = useDocsRead(
+    DOCS_REPRESENTATIONS,
+    "core.content_representation",
+    "representation_id"
+  );
+  const tags = useDocsRead(DOCS_TAGS, "core.tag", "tag_id");
+  const concepts = useDocsRead(DOCS_CONCEPTS, "core.concept", "concept_id");
+  const schemes = useDocsRead(DOCS_SCHEMES, "core.concept_scheme", "scheme_id");
   // Decoration reads — never fail the drive; see header.
-  const custody = useDocsEntity("blob.custody_state");
-  const answers = useDocsEntity("share.authority");
-  const circles = useDocsEntity("social.circle");
-  const members = useDocsEntity("social.circle_member");
-  const fulfillments = useDocsEntity("share.fulfillment");
-  const parties = useDocsEntity("core.party");
+  const custody = useDocsRead(DOCS_CUSTODY, "blob.custody_state", "content_id");
+  const answers = useDocsRead(
+    DOCS_AUTHORITIES,
+    "share.authority",
+    "authority_id"
+  );
+  const circles = useDocsRead(DOCS_CIRCLES, "social.circle", "circle_id");
+  const members = useDocsRead(
+    DOCS_CIRCLE_MEMBERS,
+    "social.circle_member",
+    "member_id"
+  );
+  const fulfillments = useDocsRead(
+    DOCS_FULFILLMENTS,
+    "share.fulfillment",
+    "grant_id"
+  );
+  const parties = useDocsRead(DOCS_PARTIES, "core.party", "party_id");
   // Which shapes this vault subscribes to, and which rows each one placed.
   // Decoration on every other shelf; on Shared it IS the shelf, which is why
   // its read has to answer separately from the outbound share join above.
-  const subscriptions = useDocsEntity("share.subscription");
-  const lineage = useDocsEntity("share.subscription_lineage");
-  const bindings = useDocsEntity("share.party_vault_binding");
+  const subscriptions = useDocsRead(
+    DOCS_SUBSCRIPTIONS,
+    "share.subscription",
+    "authority_id"
+  );
+  const lineage = useDocsRead(
+    DOCS_LINEAGE,
+    "share.subscription_lineage",
+    "authority_id"
+  );
+  const bindings = useDocsRead(
+    DOCS_BINDINGS,
+    "share.party_vault_binding",
+    "binding_id"
+  );
 
   const queryState = combineReplicaQueryStates([
     documents,
     contents,
+    representations,
     tags,
     concepts,
     schemes,
@@ -91,6 +148,7 @@ export function useDocs(): UseDocsResult {
       projectDrive({
         documents: documents.rows,
         contents: contents.rows,
+        representations: representations.rows,
         tags: tags.rows,
         concepts: concepts.rows,
         schemes: schemes.rows,
@@ -119,6 +177,7 @@ export function useDocs(): UseDocsResult {
     [
       documents.rows,
       contents.rows,
+      representations.rows,
       tags.rows,
       concepts.rows,
       schemes.rows,

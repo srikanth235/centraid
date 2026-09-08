@@ -20,6 +20,16 @@
       },
       {
         "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attachment",
         "verbs": "read"
       },
@@ -213,7 +223,13 @@
           }
         }
       },
-      "writes": ["core.collection_entry", "core.content_item", "knowledge.note"]
+      "writes": [
+        "core.collection_entry",
+        "core.content_item",
+        "core.content_representation",
+        "core.content_text",
+        "knowledge.note"
+      ]
     },
     {
       "name": "edit-note",
@@ -265,6 +281,8 @@
         "core.concept",
         "core.concept_scheme",
         "core.content_item",
+        "core.content_representation",
+        "core.content_text",
         "core.link",
         "knowledge.note"
       ]
@@ -618,7 +636,12 @@
           }
         }
       },
-      "writes": ["core.attachment", "core.content_item"]
+      "writes": [
+        "core.attachment",
+        "core.content_item",
+        "core.content_representation",
+        "core.content_text"
+      ]
     },
     {
       "name": "detach",

@@ -13,6 +13,7 @@ import {
   revokeGatewayDevice,
   setGatewayDeviceCompute,
 } from "../../../gateway-client.js";
+import type { SeatWatermark } from "../../../replica/seat/watermark.js";
 import HouseholdScreen from "../../screens/HouseholdScreen.js";
 import type { HouseholdReport } from "../../screens/HouseholdScreen.js";
 import { useShellActions } from "../actions.js";
@@ -42,7 +43,7 @@ export interface HouseholdRouteProps {
   onToggle?: () => void;
   onReport?: (report: HouseholdReport) => void;
   /** Embedded only — the census's record count, for the custody line. */
-  records?: number | null;
+  seatWatermark?: SeatWatermark | undefined;
 }
 
 export default function HouseholdRoute({
@@ -50,7 +51,7 @@ export default function HouseholdRoute({
   collapsed,
   onToggle,
   onReport,
-  records,
+  seatWatermark,
 }: HouseholdRouteProps = {}): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const scopes = useOwnerScopes();
@@ -100,7 +101,7 @@ export default function HouseholdRoute({
         {...(collapsed === undefined ? {} : { collapsed })}
         {...(onToggle ? { onToggle } : {})}
         {...(onReport ? { onReport } : {})}
-        {...(records === undefined ? {} : { records })}
+        {...(seatWatermark === undefined ? {} : { seatWatermark })}
         vaults={scopes.scopes}
         defaultScopeId={scopes.defaultScopeId}
         vaultsLoading={scopes.loading}
@@ -113,7 +114,7 @@ export default function HouseholdRoute({
         onRevokeDevice={revokeGatewayDevice}
         onRenameDevice={renameGatewayDevice}
         onCurrentDeviceRevoked={() =>
-          import("../../../replica/shell-session.js").then((replica) =>
+          import("../../../replica/shell-session-scopes.js").then((replica) =>
             replica.purgeCurrentReplicaDevice()
           )
         }

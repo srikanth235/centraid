@@ -59,6 +59,10 @@ export type MobileDriveDoc = DriveDoc & {
 export interface DriveEntityRows {
   documents: readonly EntityRow[];
   contents: readonly EntityRow[];
+  /** The OWNER's reading of the bytes (#996, ruling R20(b)): the byte row
+   *  carries no media type, so the seat joins the representation the same way
+   *  the web query does. */
+  representations: readonly EntityRow[];
   tags: readonly EntityRow[];
   concepts: readonly EntityRow[];
   schemes: readonly EntityRow[];
@@ -210,6 +214,15 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
   const originByDoc =
     rows.origins === null ? null : originsByDocument(rows.origins);
 
+  // `${owner_type} ${owner_id}` → media type, the one join for "what is it?".
+  const mediaTypeByDocument = new Map<string, string>();
+  for (const representation of rows.representations) {
+    if (str(representation, "owner_type") !== "core.document") continue;
+    const ownerId = str(representation, "owner_id");
+    const mediaType = str(representation, "media_type");
+    if (ownerId && mediaType) mediaTypeByDocument.set(ownerId, mediaType);
+  }
+
   const documents: MobileDriveDoc[] = rows.documents
     .flatMap((doc) => {
       const id = str(doc, "document_id");
@@ -223,7 +236,7 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
           document_id: id,
           content_id: contentId,
           title: str(doc, "title") ?? "Untitled document",
-          media_type: content ? str(content, "media_type") : null,
+          media_type: mediaTypeByDocument.get(id) ?? null,
           byte_size: content ? num(content, "byte_size") : null,
           ...(contentUri ? { content_uri: contentUri } : {}),
           poster_uri: null,

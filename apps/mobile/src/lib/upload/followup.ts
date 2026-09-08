@@ -62,10 +62,8 @@ export async function replaySettledUploadFollowups(
         input: followup.input as ReplicaValue,
         intentId: followup.intentId,
       };
-      const outcome =
-        followup.targetVaultId && session.writeTo
-          ? await session.writeTo(followup.targetVaultId, followup.shape, write)
-          : await session.write(followup.shape, write);
+      // One open vault, so one write target (#996 wave 3).
+      const outcome = await session.write(followup.shape, write);
       if (outcome.status === "denied" || outcome.status === "failed") {
         throw new Error(
           outcome.reason ??

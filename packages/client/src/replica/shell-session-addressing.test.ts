@@ -1,7 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type * as TypeImport_1nb0oqa from "../gateway-client-vault.js";
-import type * as TypeImport_1vwuba6 from "./shell-session.js";
+import type * as TypeImport_identity from "./replica-identity.js";
+import type * as TypeImport_scopes from "./shell-session-scopes.js";
 
 // The client may leave the vault unaddressed ("let the gateway pick", #289).
 // HTTP tolerates that; the replica cannot — it keys its local store by
@@ -19,8 +20,8 @@ const status = (vaultId: string): TypeImport_1nb0oqa.VaultStatus => ({
   fresh: false,
 });
 
-let addressedGatewayAuth: typeof TypeImport_1vwuba6.addressedGatewayAuth;
-let replicaIdentityForGatewayAuth: typeof TypeImport_1vwuba6.replicaIdentityForGatewayAuth;
+let addressedGatewayAuth: typeof TypeImport_scopes.addressedGatewayAuth;
+let replicaIdentityForGatewayAuth: typeof TypeImport_identity.replicaIdentityForGatewayAuth;
 let gatewayAuth: Record<string, unknown>;
 
 describe("shell-session-addressing", () => {
@@ -32,8 +33,8 @@ describe("shell-session-addressing", () => {
         onVaultChanged: () => () => undefined,
       },
     });
-    ({ addressedGatewayAuth, replicaIdentityForGatewayAuth } =
-      await import("./shell-session.js"));
+    ({ addressedGatewayAuth } = await import("./shell-session-scopes.js"));
+    ({ replicaIdentityForGatewayAuth } = await import("./replica-identity.js"));
   });
 
   // The resolve is cached per gateway for the life of the module, so each test

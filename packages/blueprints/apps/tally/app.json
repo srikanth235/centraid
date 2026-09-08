@@ -26,6 +26,11 @@
       },
       {
         "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attachment",
         "verbs": "read"
       },
@@ -225,6 +230,26 @@
           "undo_until",
           "undone_at"
         ]
+      },
+      {
+        "schema": "core",
+        "table": "transaction",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "account",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link_entities",
+        "verbs": "act"
       }
     ]
   },
@@ -382,6 +407,8 @@
         "core.attachment",
         "core.content_derivative",
         "core.content_item",
+        "core.content_representation",
+        "core.content_text",
         "tally.expense",
         "tally.expense_line_allocation",
         "tally.expense_line_item",
@@ -639,7 +666,7 @@
             "type": "string",
             "minLength": 1
           },
-          "time_zone": {
+          "tz": {
             "type": "string",
             "minLength": 1
           },
@@ -676,7 +703,7 @@
           "splits",
           "rrule",
           "anchor_start",
-          "time_zone"
+          "tz"
         ],
         "additionalProperties": false
       },
@@ -707,12 +734,12 @@
             "type": "string",
             "minLength": 1
           },
-          "original_start": {
+          "original_start_local": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["template_id", "original_start"],
+        "required": ["template_id", "original_start_local"],
         "additionalProperties": false
       },
       "output": {
@@ -747,7 +774,7 @@
             "type": "string",
             "minLength": 1
           },
-          "original_start": {
+          "original_start_local": {
             "type": "string",
             "minLength": 1
           },
@@ -763,7 +790,7 @@
             "type": "object"
           }
         },
-        "required": ["template_id", "original_start", "scope", "action"],
+        "required": ["template_id", "original_start_local", "scope", "action"],
         "additionalProperties": false
       },
       "output": {
@@ -1589,12 +1616,82 @@
         }
       },
       "writes": ["tally.nudge"]
+    },
+    {
+      "name": "accept-match",
+      "description": "Record the owner's judgment that two imported transactions are one movement, as a temporal core.link same-as edge. Nothing is merged or deleted: both statement lines stay exactly as they were imported.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "left_txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["left_txn_id", "right_txn_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
+    },
+    {
+      "name": "reject-match",
+      "description": "Record the owner's judgment that two imported transactions of the same amount are two movements, as a temporal core.link distinct-from edge, so the proposal is not offered again.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "left_txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["left_txn_id", "right_txn_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
     }
   ],
   "queries": [
     {
       "name": "dashboard",
-      "description": "The home view: the owner party id (`me`), the base currency, per-friend net balances (positive = they owe you), the you-owe / you-are-owed totals, each live group's net for the owner with its simplification opt-in, archived groups in their own list, the expense and settlement counts the hero states its arithmetic from, rate suggestions quoted from this vault's own earlier expenses, and the reminders you prepared (none of which was sent). All balances are derived from expenses, payers and settlements — never stored.",
+      "description": "The home view: the owner party id (`me`), the base currency, per-friend balances keyed `(party, currency)` (positive = they owe you), the you-owe / you-are-owed positions as explicit valuations (a single figure only where one currency, or a rate, makes one true — otherwise `unavailable` with the amounts per currency), each live group's net for the owner with its simplification opt-in, archived groups in their own list, the expense and settlement counts the hero states its arithmetic from, rate suggestions quoted from this vault's own earlier expenses, and the reminders you prepared (none of which was sent). All balances are derived from expenses, payers and settlements — never stored.",
       "input": {
         "type": "object",
         "properties": {},
@@ -1621,11 +1718,11 @@
           "recurring": {
             "type": "array"
           },
-          "owe_total_minor": {
-            "type": "integer"
+          "owe": {
+            "type": "object"
           },
-          "owed_total_minor": {
-            "type": "integer"
+          "owed": {
+            "type": "object"
           },
           "vaultDenied": {
             "type": "object"
@@ -1855,6 +1952,29 @@
             "type": "boolean"
           },
           "window": {
+            "type": "object"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "matches",
+      "description": "Cross-source match proposals (#996 OQ-12): pairs of imported transactions that are the same money on two different accounts within a few days, with the pairs the owner has already answered removed. It proposes; it never merges, and it writes nothing.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array"
+          },
+          "accounts": {
             "type": "object"
           },
           "vaultDenied": {

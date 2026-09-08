@@ -19,6 +19,7 @@
 
 import type { ReplicaRow } from "../../../packages/client/src/replica/types.js";
 import type { MobileGateway } from "./gateway.js";
+import { readEntity } from "./reads.js";
 import type { MobileSeat } from "./seat.js";
 
 /**
@@ -96,10 +97,8 @@ export interface AppRecipe {
 
 /** Agenda proposes into a calendar that must exist; the vault founds one. */
 async function personalCalendarId(seat: MobileSeat): Promise<string> {
-  const read = await seat.session.read("agenda", {
-    entity: "schedule.calendar",
-  });
-  const calendarId = read.rows[0]?.values.calendar_id;
+  const read = await readEntity(seat, "schedule.calendar");
+  const calendarId = read.rows[0]?.calendar_id;
   if (typeof calendarId !== "string")
     throw new Error("the auto-founded vault has no schedule.calendar row");
   return calendarId;

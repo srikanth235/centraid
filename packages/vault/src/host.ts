@@ -24,25 +24,20 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
 
   const device = db.vault
     .prepare(
-      // Full trust is an authority answer (#883), so the owner's recovery
-      // device joins the device-kind row that carries it.
-      `SELECT d.device_id AS device_id, d.public_key AS public_key
+      // ENROLLMENT IS FULL TRUST (#996, R11). This used to join a
+      // `share_authority` row of principal kind 'device' with verb 'edit',
+      // because full trust was an answer the member gave per seat. It is the
+      // enrollment itself now: a seat with a live key row holds this vault.
+      `SELECT d.device_id AS device_id, s.public_key AS public_key
          FROM access_device d
-         JOIN share_authority a
-           ON a.principal_kind = 'device' AND a.principal_id = d.device_id
-          AND a.subject_type = 'core.vault' AND a.subject_id = ''
-          AND a.revoked_at IS NULL AND a.decision = 'granted'
-          AND (a.expires_at IS NULL OR a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-          AND a.verb = 'edit'
+         JOIN access_device_secret s ON s.device_id = d.device_id
         WHERE d.owner_party_id = ? ORDER BY d.enrolled_at LIMIT 1`
     )
     .get(vaultRow.self_party_id) as
     | { device_id: string; public_key: string }
     | undefined;
   if (!device) {
-    throw new Error(
-      "vault exists but has no full-trust owner device to recover"
-    );
+    throw new Error("vault exists but has no enrolled owner device to recover");
   }
   const concepts: Record<string, string> = {};
   const rows = db.vault
@@ -330,7 +325,7 @@ export interface EnrolledAgent {
   status: string;
 }
 
-/** Automations enroll under Centraid app id; assistant under `_assistant`. Key is `access_agent.enrollment_key`, not `display_name`. */
+/** Automations enroll under Centraid app id; assistant under `_assistant`. Key is `access_agent_secret.enrollment_key`, not `display_name`. */
 export function lookupAgentByName(
   db: VaultDb,
   name: string
@@ -339,7 +334,8 @@ export function lookupAgentByName(
     .prepare(
       `SELECT a.agent_id, a.party_id, p.display_name, a.status
          FROM access_agent a JOIN core_party p ON p.party_id = a.party_id
-        WHERE a.enrollment_key = ? AND p.kind = 'agent' AND a.status = 'active'
+         JOIN access_agent_secret k ON k.agent_id = a.agent_id
+        WHERE k.enrollment_key = ? AND p.kind = 'agent' AND a.status = 'active'
         ORDER BY a.enrolled_at LIMIT 1`
     )
     .get(name) as
@@ -374,7 +370,9 @@ export function ensureAgentEnrolled(
   db.vault
     .prepare(
       `UPDATE access_agent SET status = 'active'
-        WHERE enrollment_key = ? AND status = 'revoked'`
+        WHERE status = 'revoked'
+          AND agent_id IN (SELECT agent_id FROM access_agent_secret
+                            WHERE enrollment_key = ?)`
     )
     .run(name);
   const existing = lookupAgentByName(db, name);
@@ -425,8 +423,9 @@ export interface AgentSummary {
 export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   const rows = db.vault
     .prepare(
-      `SELECT a.agent_id, a.enrollment_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
+      `SELECT a.agent_id, k.enrollment_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
          FROM access_agent a JOIN core_party p ON p.party_id = a.party_id
+         JOIN access_agent_secret k ON k.agent_id = a.agent_id
         WHERE a.status = 'active' ORDER BY a.enrolled_at`
     )
     .all() as {

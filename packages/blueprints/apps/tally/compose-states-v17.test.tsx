@@ -1,10 +1,12 @@
+import { describe, expect, test } from "vitest";
+
 // @vitest-environment jsdom
 // THE COMPOSING ROUTES THAT ARRIVED WITH THE TABLES AND THE DOORS (STATES.md's
 // Tally matrix, #872) — sibling of `compose-states.test.tsx`, same kit.
 //
 // EVERY PATH HERE IS ONE A MEMBER CAN ACTUALLY TAKE — reached by pressing what
 // the previous screen offers, never by setting state from outside.
-import { describe, expect, test } from "vitest";
+import { money } from "@centraid/core/money";
 
 import { EXPORT_FOOT, SIMPLIFICATION } from "./compose-copy.ts";
 import {
@@ -176,7 +178,7 @@ describe("Tally’s composing routes — the tables and the doors", () => {
             group_id: "coast",
             name: "Coast trip",
             member_count: 4,
-            owner_net_minor: 0,
+            owner_net: money(0, "GBP"),
             archived_at: "2026-05-01T00:00:00.000Z",
           },
         ],
@@ -208,7 +210,7 @@ describe("Tally’s composing routes — the tables and the doors", () => {
             name: "Tom",
             color: "",
             initials: "T",
-            net_minor: 8100,
+            balances: [money(8100, "GBP")],
           },
         ],
       });

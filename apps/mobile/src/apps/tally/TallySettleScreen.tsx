@@ -94,7 +94,6 @@ export default function TallySettleScreen({
     return [...names].map(([id, label]) => ({ id, label }));
   }, [me, vault.dashboard.friends, vault.group]);
 
-  const currency = vault.group?.currency ?? vault.dashboard.currency;
   const verdict = settleVerdict(draft, me);
   const simplification =
     draft.groupId && vault.group?.group?.group_id === draft.groupId
@@ -184,17 +183,17 @@ export default function TallySettleScreen({
           >
             {simplification.transfers.map((transfer) => (
               <LedgerRow
-                key={`${transfer.from}-${transfer.to}-${transfer.amount_minor}`}
+                key={`${transfer.from}-${transfer.to}-${transfer.amount.amount_minor}`}
                 title={transferLine(
                   nameOfMember(transfer.from),
                   nameOfMember(transfer.to),
-                  money(transfer.amount_minor, currency)
+                  money(transfer.amount.amount_minor, transfer.amount.currency)
                 )}
                 act={{
                   label: SETTLE_COMMIT,
                   onPress: () =>
                     patch({
-                      amount: (transfer.amount_minor / 100).toFixed(2),
+                      amount: (transfer.amount.amount_minor / 100).toFixed(2),
                       fromId: transfer.from,
                       toId: transfer.to,
                     }),

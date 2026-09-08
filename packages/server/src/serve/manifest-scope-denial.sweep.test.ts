@@ -45,8 +45,10 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // `release-notes-drafter` declares no vault block; its own case below
       // pins what that means for consent.
       withScopes: 36,
-      // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
-      // reads and its seats' actual reads honest; this number only tracks them.
+      // `packages/server/src/serve/app-query-plans.test.ts` is the gate
+      // keeping a manifest's declared reads and its handlers' actual reads
+      // honest — it asserts the tables of every statement that RAN against a
+      // real vault (#996, R8). This number only tracks them.
       // 278 → 277 (#916): Locker's history pane moved off the dropped
       // `locker.item_history` onto the shared revision ledger, and the two
       // scopes that named the dead table (`read` and `reveal`) became one
@@ -55,7 +57,12 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // 277 → 279 (#928): People declares `share.authority_use` and
       // `share.authority_request` so Settings → Access can date every answer
       // and draw an automation's undecided ask on the same screen.
-      declaredScopes: 279,
+      // 288 → 292 (#996, OQ-12): Tally reviews a cross-source match, and the
+      // owner's answer is a temporal `core.link` (`same-as` or
+      // `distinct-from`) between the two imported rows — so Tally declares the
+      // link scopes that judgment is written through. The same manifest change
+      // moved Tally's shape id in `replica-shape-parity.test.ts`.
+      declaredScopes: 292,
     });
   });
 

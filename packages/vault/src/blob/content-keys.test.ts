@@ -25,13 +25,11 @@ describe("content-keys", () => {
       identity: "paired-endpoint-key",
       ownerPartyId: boot.ownerPartyId,
       name: "Phone",
-      trust: "full",
     });
     const remainingId = keys.enrollPairedDevice({
       identity: "remaining-endpoint-key",
       ownerPartyId: boot.ownerPartyId,
       name: "Laptop",
-      trust: "full",
     });
     const plain = Buffer.from(
       "content-key rotation never rewrites this provider object"

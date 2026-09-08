@@ -25,7 +25,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ReactNative = typeof import("react-native");
 type ThemeModule = typeof import("../../kit/theme");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
 type ReplicaProviderModule = typeof import("../../kit/replica/ReplicaProvider");
 type WriteOutcomeModule = typeof import("../../kit/replica/write-outcome");
 type TimelineSourceModule = typeof import("./timeline-source");
@@ -228,20 +227,25 @@ vi.mock(
       useTheme: () => ({ colors: mocks.colors }),
     }) as unknown as Partial<ThemeModule>
 );
+
+// The seat's paged reads (#996 wave 4b). Photos' five shared sets and the
+// screen-local ones are walks over this phone's own copy now; the double keys
+// on the entity the read declares, exactly as the old one keyed on the request.
 vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
+  import("../../kit/hooks/useSeatPages"),
   () =>
     ({
-      useReplicaQuery: (
+      useSeatPages: (
         _app: string,
-        query: { entity: string }
+        _query: unknown,
+        read: { entity: string }
       ): { rows: unknown[] } => {
-        if (query.entity === "media.face_region") return { rows: mocks.faces };
-        if (query.entity === "core.party") return { rows: mocks.parties };
-        if (query.entity === "media.asset") return { rows: mocks.assets };
+        if (read.entity === "media.face_region") return { rows: mocks.faces };
+        if (read.entity === "core.party") return { rows: mocks.parties };
+        if (read.entity === "media.asset") return { rows: mocks.assets };
         return { rows: [] };
       },
-    }) as unknown as Partial<UseReplicaQueryModule>
+    }) as never
 );
 vi.mock(
   import("../../kit/replica/ReplicaProvider"),

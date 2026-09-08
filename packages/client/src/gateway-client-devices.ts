@@ -79,7 +79,6 @@ export interface CentraidGatewayDevice {
   /** A device tombstone, never a role (#726). */
   revoked: boolean;
   rememberDevice: boolean;
-  grantProfile?: string[];
   compute?: DeviceComputeProfile;
   checkpoint?: {
     epoch: string;

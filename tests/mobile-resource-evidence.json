@@ -133,18 +133,18 @@
       "surface": "host-proxy",
       "metric": "sync-bytes-per-pass",
       "method": "derived",
-      "value": 550491,
+      "value": 905472,
       "unit": "bytes",
       "device": {
         "model": "ci-linux-x64",
         "os": "linux",
         "class": "host-proxy"
       },
-      "at": "2026-08-21",
+      "at": "2026-09-08",
       "evidence": "tests/quality/mobile-resource-evidence.test.ts",
       "recomputedBy": "tests/quality/mobile-resource-evidence.test.ts",
       "tolerance": 0.25,
-      "note": "Serialized size of the whole replica_change table after seeding, i.e. the payload a first full replica pass moves. It bounds the bytes a phone downloads on first sync; it does NOT model radio wake cost, retry amplification or compression, which need the blocked device lanes."
+      "note": "Serialized size of the replica log after seeding (session-captured under #996), i.e. the payload a first full replica pass moves. It bounds the bytes a phone downloads on first sync; it does NOT model radio wake cost, retry amplification or compression, which need the blocked device lanes. Re-measured when the log replaced replica_change."
     },
     {
       "id": "host-support-bundle-bytes",

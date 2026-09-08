@@ -224,7 +224,7 @@ function mediaCandidates(
 
 function transactionCandidates(
   text: string,
-  accountName: string,
+  account: { name: string; ref: string },
   fallbackCurrency: string
 ): StageCandidate[] {
   return parseTransactionsCsv(text).map((txn) => {
@@ -242,7 +242,8 @@ function transactionCandidates(
         amountMinor: txn.amountMinor,
         currency,
         direction: txn.direction,
-        accountName,
+        accountName: account.name,
+        accountRef: account.ref,
       } satisfies TransactionPayload as unknown as Record<string, unknown>,
     };
   });
@@ -281,12 +282,16 @@ function markdownCandidates(filename: string, text: string): StageCandidate[] {
 
 function csvCandidates(
   text: string,
-  opts: { accountName: string; currency: string }
+  opts: { accountName: string; accountRef: string; currency: string }
 ): StageCandidate[] {
   const header = parseCsvRows(text)[0];
   return header && isPasswordsCsvHeader(header)
     ? passwordCandidates(text)
-    : transactionCandidates(text, opts.accountName, opts.currency);
+    : transactionCandidates(
+        text,
+        { name: opts.accountName, ref: opts.accountRef },
+        opts.currency
+      );
 }
 
 function extension(name: string): string {
@@ -311,7 +316,12 @@ function candidatesFor(
   db: VaultDb,
   filename: string,
   text: string,
-  opts: { accountName: string; currency: string; stagedShas: string[] }
+  opts: {
+    accountName: string;
+    accountRef: string;
+    currency: string;
+    stagedShas: string[];
+  }
 ): StageCandidate[] | null {
   switch (extension(filename)) {
     case "ics":
@@ -341,6 +351,16 @@ export function stageFile(
   const input = fileBytes(options.data, options.filename);
   const currency = options.currency ?? baseCurrency(db);
   const accountName = options.accountName ?? stem(options.filename);
+  // WHAT SELECTS THE ACCOUNT (#996, ruling R20(c); drift ONT-24). An explicit
+  // `accountName` is the member SAYING which account these rows are, so it is
+  // an owner-stated identity and repeated imports under it land on one
+  // account. Without one, the identity is the PROVENANCE — the path the rows
+  // arrived on — never the label, so two banks' "Savings" statements stay two
+  // accounts instead of silently becoming one.
+  const accountRef =
+    options.accountName === undefined
+      ? `file:${normalizeArchivePath(options.filename)}`
+      : `owner:${options.accountName}`;
   const unrouted: string[] = [];
   let kind: string;
   const candidates: StageCandidate[] = [];
@@ -372,6 +392,7 @@ export function stageFile(
         decodeImportText(entry.data, entry.name),
         {
           accountName: stem(entry.name),
+          accountRef: `file:${normalizeArchivePath(entry.name)}`,
           currency,
           stagedShas,
         }
@@ -403,6 +424,7 @@ export function stageFile(
     const text = decodeImportText(input, options.filename);
     const routed = candidatesFor(db, options.filename, text, {
       accountName,
+      accountRef,
       currency,
       stagedShas,
     });

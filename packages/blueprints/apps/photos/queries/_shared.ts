@@ -15,6 +15,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 
 interface SrcContent {
   content_id?: string;
@@ -89,13 +90,21 @@ export function srcOf(content: SrcContent | undefined) {
 }
 
 export async function readPlaces({ ctx }: { ctx: HandlerCtx }) {
-  const result = await ctx.vault.read({
-    acceptTruncation: true,
-    entity: "core.place",
+  // The gazetteer is owner-shaped and small: a walk with a stated ceiling
+  // rather than a window nobody chose (#996 wave 4, R8).
+  const places = await readPages<RawPlace>(ctx, {
+    name: "photos.shared.places",
+    select: "place_id, name, geo_lat, geo_lng, kind, address_json",
+    from: "core_place",
+    order: {
+      sortColumn: "place_id",
+      pkColumn: "place_id",
+      descending: false,
+    },
   });
   // Coordinates for the map — `null`, never 0°,0°; `kind` and gazetteer
   // because a location is a PHRASE before it is a pin.
-  const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
+  const rows = places.map((p) => ({
     place_id: p.place_id,
     name: p.name,
     lat: typeof p.geo_lat === "number" ? p.geo_lat : null,
@@ -116,25 +125,46 @@ export async function readAssetJoins({
   assetIds: string[];
   contentIds: string[];
 }) {
-  const [schemes, concepts, custody] = await Promise.all([
-    ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.concept_scheme",
+  const contentIn =
+    contentIds.length > 0 ? inList("content_id", contentIds) : null;
+  const [schemeRows, conceptRows, custodyRows] = await Promise.all([
+    readPages<SchemeRow>(ctx, {
+      name: "photos.shared.schemes",
+      select: "scheme_id, uri",
+      from: "core_concept_scheme",
+      order: {
+        sortColumn: "scheme_id",
+        pkColumn: "scheme_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({ acceptTruncation: true, entity: "core.concept" }),
-    contentIds.length > 0
-      ? ctx.vault.read({
-          acceptTruncation: true,
-          entity: "blob.custody_state",
-          where: [{ column: "content_id", op: "in", value: contentIds }],
+    readPages<ConceptRow>(ctx, {
+      name: "photos.shared.concepts",
+      select: "concept_id, scheme_id, pref_label, notation",
+      from: "core_concept",
+      order: {
+        sortColumn: "concept_id",
+        pkColumn: "concept_id",
+        descending: false,
+      },
+    }),
+    contentIn
+      ? readPages<CustodyRow>(ctx, {
+          name: "photos.shared.custody",
+          select: "content_id, custody_state",
+          from: "blob_custody_state",
+          where: contentIn.sql,
+          bind: contentIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
         })
-      : { rows: [] },
+      : Promise.resolve([] as CustodyRow[]),
   ]);
 
   // Tags target the ASSET; untag removes by tag_id, never by label.
-  const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
-  const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
-  const custodyRows = (custody.rows ?? []) as unknown as CustodyRow[];
   const tagsScheme = findScheme(schemeRows, TAGS_SCHEME_URI);
   const labelConceptById = new Map<string, string | null | undefined>(
     conceptsInScheme(conceptRows, tagsScheme).map(
@@ -158,15 +188,16 @@ export async function readAssetJoins({
   // ONE read over the windowed assets' tags, then split by scheme: the label
   // rail and the star are two readings of the same rows.
   if (assetIds.length > 0) {
-    const assetTags = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.tag",
-      where: [
-        { column: "target_type", op: "eq", value: "media.asset" },
-        { column: "target_id", op: "in", value: assetIds },
-      ],
+    const assetIn = inList("target_id", assetIds);
+    const assetTags = await readPages<TagRow>(ctx, {
+      name: "photos.shared.assetTags",
+      select: "tag_id, target_type, target_id, concept_id",
+      from: "core_tag",
+      where: `target_type = ? AND ${assetIn.sql}`,
+      bind: ["media.asset", ...assetIn.bind],
+      order: { sortColumn: "tag_id", pkColumn: "tag_id", descending: false },
     });
-    for (const t of (assetTags.rows ?? []) as unknown as TagRow[]) {
+    for (const t of assetTags) {
       if (starredConcept && t.concept_id === starredConcept.concept_id) {
         favoriteAssets.add(t.target_id);
         continue;

@@ -72,12 +72,19 @@ describe("flow", () => {
     );
     const content = db.vault
       .prepare(
-        "SELECT content_uri, sha256, byte_size, media_type, title FROM core_content_item WHERE content_id = ?"
+        `SELECT c.content_uri, c.sha256, c.byte_size, r.media_type, a.title
+           FROM core_content_item c
+           JOIN media_asset a ON a.content_id = c.content_id
+           JOIN core_content_representation r
+             ON r.owner_type = 'media.asset' AND r.owner_id = a.asset_id
+          WHERE c.content_id = ?`
       )
       .get(out.content_id) as Record<string, unknown>;
     expect(content.content_uri).toBe(blobUriFor(staged.sha256));
     expect(content.sha256).toBe(staged.sha256); // identity = raw bytes
-    expect(content.title).toBe("pixel.png"); // original filename as default title
+    // #996 (R20(b)): the reading is the ASSET's, and it has no authored title
+    // until the owner gives it one — a filename is not one.
+    expect(content.title).toBeNull();
     // Spool EXIF landed on the asset row without the caller supplying it.
     const asset = db.vault
       .prepare("SELECT width, height, kind FROM media_asset WHERE asset_id = ?")

@@ -132,14 +132,19 @@ describe("mbox-attachments", () => {
       .get() as { message_id: string };
     const attachment = db.vault
       .prepare(
-        `SELECT a.content_id, c.content_uri, c.media_type, c.title
-         FROM core_attachment a JOIN core_content_item c ON c.content_id = a.content_id
+        `SELECT a.content_id, c.content_uri, r.media_type
+         FROM core_attachment a
+         JOIN core_content_item c ON c.content_id = a.content_id
+         LEFT JOIN core_content_representation r
+                ON r.owner_type = 'core.attachment' AND r.owner_id = a.attachment_id
         WHERE a.target_type = 'social.message' AND a.target_id = ?`
       )
       .get(message.message_id) as Record<string, string>;
     expect(attachment.content_uri).toBe(blobUriFor(sha));
+    // The ATTACHMENT's own reading of the bytes (#996, ruling R20(b)); the
+    // filename is the archive's word for them and no longer a column on the
+    // byte row.
     expect(attachment.media_type).toBe("image/png");
-    expect(attachment.title).toBe("receipt.png");
     // Claimed: the staging row is gone, the bytes stay (a content item owns them).
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.

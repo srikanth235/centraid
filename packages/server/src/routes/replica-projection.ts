@@ -61,7 +61,11 @@ export interface ReplicaIntentOutcomeWire {
     actualVersion: number;
   };
   /** Who a parked write waits on, with the label from the link (#929). */
-  waitingOn?: { seat: "owner" | "origin" | "gateway"; label?: string };
+  waitingOn?: {
+    /** `intent` is the offline chain's own wait (#996, R23). */
+    seat: "owner" | "origin" | "gateway" | "intent";
+    label?: string;
+  };
   /** ORIGIN versions an executed answer stands for (#929, G1). Additive: an
    *  older reader ignores it and settles as it did. */
   answeredVersions?: {
@@ -70,6 +74,12 @@ export interface ReplicaIntentOutcomeWire {
     rowId: string;
     version: number;
   }[];
+  /** The canonical commit this answer stands for (#996, R24). */
+  commitSeq?: number;
+  /** What that commit wrote: physical table, key in declared order, version. */
+  produced?: { table: string; pk: readonly unknown[]; rowVersion?: number }[];
+  /** The intents this one was admitted behind (#996, R23). */
+  dependsOn?: string[];
 }
 
 export interface ReplicaChangeBatchWire {
@@ -156,6 +166,20 @@ function outcomeWire(
     ...(outcome.answeredVersions === undefined
       ? {}
       : { answeredVersions: [...outcome.answeredVersions] }),
+    // THE POSITION AND WHAT LANDED THERE (#996, R24). A seat keeps its
+    // pending projection until its applied cursor reaches `commitSeq`, and
+    // matches `produced` against the rows it applied — instead of guessing
+    // from a cursor, which is what clears a pending badge one round trip
+    // early. Additive: an older reader ignores both and settles as it did.
+    ...(outcome.commitSeq === undefined
+      ? {}
+      : { commitSeq: outcome.commitSeq }),
+    ...(outcome.produced === undefined
+      ? {}
+      : { produced: outcome.produced.map((row) => ({ ...row })) }),
+    ...(outcome.dependsOn === undefined
+      ? {}
+      : { dependsOn: [...outcome.dependsOn] }),
   };
 }
 

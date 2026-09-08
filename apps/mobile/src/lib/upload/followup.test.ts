@@ -65,29 +65,28 @@ function okSession(): { session: NativeReplicaSession; writes: string[] } {
 }
 
 describe("settled upload follow-ups", () => {
-  it("replays a targeted upload through the matching mounted vault session", async () => {
+  // #996 wave 3: a follow-up recorded a `targetVaultId` because the phone
+  // held four sessions and the replay had to pick one. A seat opens ONE, so
+  // the replay goes through the session it was handed — and the stamp on the
+  // follow-up is history, not a routing decision.
+  it("replays an upload follow-up through the open session, whatever vault it names", async () => {
     const { queue } = fakeQueue([
       followupOf({ targetVaultId: "vault-family" }),
     ]);
-    const writeTo = vi.fn<NonNullable<MobileReplicaSession["writeTo"]>>(
-      async (_vaultId, _shape, input) => ({
+    const write = vi.fn<MobileReplicaSession["write"]>(
+      async (_shape, input) => ({
         intentId: input.intentId!,
-        status: "executed",
+        status: "executed" as const,
       })
     );
-    const session = {
-      write: vi.fn<MobileReplicaSession["write"]>(),
-      writeTo,
-    } as unknown as MobileReplicaSession;
+    const session = { write } as unknown as MobileReplicaSession;
 
     await replaySettledUploadFollowups(queue, session, "http://gateway");
 
-    expect(writeTo).toHaveBeenCalledWith(
-      "vault-family",
+    expect(write).toHaveBeenCalledWith(
       "docs",
       expect.objectContaining({ intentId: "upload-followup-item-1-stable" })
     );
-    expect(session.write).not.toHaveBeenCalled();
   });
 
   it("replays the same intent id after a kill between execution and ledger clearing", async () => {

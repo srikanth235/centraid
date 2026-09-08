@@ -15,12 +15,13 @@ import {
   ENRICHMENT_REQUESTED_NOTE,
   ON_DEVICE_PANEL,
 } from "@centraid/blueprints/apps/photos/enrichment-consent";
+import type { PageQuery } from "@centraid/core/page";
 import { identityColor, tileFinish } from "@centraid/design";
 
 import { ConsentGate } from "../../kit/components/ConsentGate";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -30,8 +31,16 @@ import { spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
+
+/** One cluster row per face region the clusterer has grouped. */
+const FACE_CLUSTERS: PageQuery = {
+  name: "phone.photos.face-clusters",
+  select: "region_id, cluster_id, computed_at",
+  from: "media_face_cluster",
+  order: { sortColumn: "cluster_id", pkColumn: "region_id", descending: false },
+};
 
 /** Identity colour on a person card; unloaded album covers do not keep one. */
 function tintFor(key: string): string {
@@ -45,19 +54,13 @@ export default function PhotosPeopleView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session } = useReplica();
 
-  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
-  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
-  const clusters = useReplicaQuery(
-    "photos",
-    useMemo(
-      () => ({ acceptTruncation: true, entity: "media.face_cluster" }),
-      []
-    )
-  );
-  const policies = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
-  );
+  const faces = usePhotoEntity("faceRegions");
+  const parties = usePhotoEntity("parties");
+  const clusters = useSeatPages("photos", FACE_CLUSTERS, {
+    entity: "media.face_cluster",
+    rowIdColumn: "region_id",
+  });
+  const policies = usePhotoEntity("enrichPolicies");
 
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [enrichAnswered, setEnrichAnswered] = useState<

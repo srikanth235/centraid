@@ -22,6 +22,8 @@
 // member owes ask first, in the confirm's own words.
 import type { ReactNode } from "react";
 
+import { zeroMoney } from "@centraid/core/money";
+
 import { appearsOnLedger } from "../activity-model.ts";
 import {
   SIMPLIFICATION,
@@ -33,10 +35,12 @@ import {
 } from "../compose-copy.ts";
 import { entryFacts } from "../entry-facts.ts";
 import {
-  figureTone,
+  bagFigure,
+  bagTone,
+  moneyFigure,
+  moneyNetFigure,
+  moneyTone,
   metaSentence,
-  money,
-  netFigure,
   personSubLabel,
 } from "../format.ts";
 import type {
@@ -106,13 +110,15 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
   if (!data.group) return null;
   // The owner's own net in this group, read off the members list the query
   // derived — not a second fold over the ledger below it.
-  const mine = data.members.find((member) => member.is_me)?.net_minor ?? 0;
-  const tone = figureTone(mine);
+  const mine =
+    data.members.find((member) => member.is_me)?.net ??
+    zeroMoney(data.currency);
+  const tone = moneyTone(mine);
 
   return (
     <div className={styles.list}>
       <Hero
-        figure={netFigure(mine, data.currency, "Settled")}
+        figure={moneyNetFigure(mine, "Settled")}
         tone={tone}
         label={
           tone === "settled"
@@ -157,11 +163,11 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
           <Rows>
             {data.simplification.transfers.map((transfer) => (
               <LedgerRow
-                key={`${transfer.from}-${transfer.to}-${transfer.amount_minor}`}
+                key={`${transfer.from}-${transfer.to}-${transfer.amount.amount_minor}`}
                 title={transferLine(
                   nameOfMember(data, transfer.from),
                   nameOfMember(data, transfer.to),
-                  money(transfer.amount_minor, data.currency)
+                  moneyFigure(transfer.amount)
                 )}
                 narrow={props.narrow}
               />
@@ -211,9 +217,9 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
                       : CO_CONTRIBUTES
                 }
                 figure={{
-                  text: netFigure(member.net_minor, data.currency),
-                  tone: figureTone(member.net_minor),
-                  sub: personSubLabel(member.net_minor),
+                  text: moneyNetFigure(member.net),
+                  tone: moneyTone(member.net),
+                  sub: personSubLabel(member.net.amount_minor),
                 }}
                 acts={
                   member.departed || member.is_me
@@ -274,8 +280,10 @@ export interface FriendScreenProps {
 export function FriendScreen(props: FriendScreenProps): ReactNode {
   const { data } = props;
   if (!data.friend) return null;
-  const net = data.friend.net_minor;
-  const tone = figureTone(net);
+  // A FRIEND'S POSITION IS A BAG (#996, R22): one amount per currency, and
+  // the hero shows them all rather than a sum that is true in none.
+  const net = data.friend.balances;
+  const tone = bagTone(net);
   const nameOf = new Map(
     props.groups.map((group) => [group.group_id, group.name])
   );
@@ -288,7 +296,7 @@ export function FriendScreen(props: FriendScreenProps): ReactNode {
   return (
     <div className={styles.list}>
       <Hero
-        figure={netFigure(net, data.currency, "Settled")}
+        figure={bagFigure(net, "Settled")}
         tone={tone}
         label={
           tone === "settled"
@@ -313,9 +321,9 @@ export function FriendScreen(props: FriendScreenProps): ReactNode {
               key={part.group_id ?? "no-group"}
               title={part.group_name}
               figure={{
-                text: netFigure(part.net_minor, data.currency),
-                tone: figureTone(part.net_minor),
-                sub: partSubLabel(part.net_minor),
+                text: moneyNetFigure(part.net),
+                tone: moneyTone(part.net),
+                sub: partSubLabel(part.net.amount_minor),
               }}
               narrow={props.narrow}
               {...(part.group_id

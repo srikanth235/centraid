@@ -17,10 +17,12 @@ describe("the default gateway capabilities", () => {
       backupWal: true,
       assistOAuth: false,
       automationTurns: true,
-      multiVaultReplica: true,
-      crossVaultPlacements: true,
       automations: false,
       connectors: false,
+      // The two seat doors are served; the locker key answers a named
+      // "not yet" until W6 (#996).
+      seatReplica: true,
+      seatLockerKey: false,
     });
   });
 });
@@ -38,8 +40,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: false,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
       })
     ).toBe(true);
     expect(
@@ -50,8 +50,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: true,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
       })
     ).toBe(true);
     // Experimental flags are optional: absent reads as off, present must be
@@ -64,8 +62,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: false,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
         automations: true,
         connectors: false,
       })
@@ -78,8 +74,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: false,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
         automations: "yes",
       })
     ).toBe(false);
@@ -91,8 +85,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: false,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
         connectors: 1,
       })
     ).toBe(false);
@@ -104,8 +96,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: "yes",
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
       })
     ).toBe(false);
     expect(
@@ -115,33 +105,7 @@ describe(isGatewayCapabilities, () => {
         tunnel: true,
         backupWal: true,
         assistOAuth: false,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
         automationTurns: "yes",
-      })
-    ).toBe(false);
-    expect(
-      isGatewayCapabilities({
-        webSessions: true,
-        devicePairing: true,
-        tunnel: true,
-        backupWal: true,
-        assistOAuth: false,
-        automationTurns: true,
-        crossVaultPlacements: true,
-        multiVaultReplica: "yes",
-      })
-    ).toBe(false);
-    expect(
-      isGatewayCapabilities({
-        webSessions: true,
-        devicePairing: true,
-        tunnel: true,
-        backupWal: true,
-        assistOAuth: false,
-        automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: "yes",
       })
     ).toBe(false);
     expect(
@@ -152,8 +116,6 @@ describe(isGatewayCapabilities, () => {
         backupWal: "true",
         assistOAuth: false,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
       })
     ).toBe(false);
   });

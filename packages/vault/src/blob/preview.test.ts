@@ -212,7 +212,7 @@ describe("preview", () => {
     // Force this item to read as a gif so the stub declines it.
     db.vault
       .prepare(
-        "UPDATE core_content_item SET media_type = 'image/gif' WHERE content_id = ?"
+        "UPDATE core_content_representation SET media_type = 'image/gif' WHERE content_id = ?"
       )
       .run(contentId);
 
@@ -228,7 +228,7 @@ describe("preview", () => {
     const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(4)]));
     db.vault
       .prepare(
-        "UPDATE core_content_item SET media_type = 'application/pdf' WHERE content_id = ?"
+        "UPDATE core_content_representation SET media_type = 'application/pdf' WHERE content_id = ?"
       )
       .run(contentId);
     const result = await backfillPreviews(db, stubCodec);

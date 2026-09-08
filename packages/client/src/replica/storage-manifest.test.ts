@@ -2,6 +2,11 @@ import { describe, expect, test, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
+import type { SeatWorkerLike } from "./seat/seat-worker-client.js";
+import type {
+  SeatWorkerRequest,
+  SeatWorkerResponse,
+} from "./seat/worker-protocol.js";
 import {
   forgetReplicaIdentity,
   listRememberedReplicaIdentities,
@@ -18,11 +23,6 @@ import type {
 } from "./storage-manifest.js";
 import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
 import type { ReplicaIdentity } from "./types.js";
-import type { ReplicaWorkerLike } from "./worker-client.js";
-import type {
-  ReplicaWorkerRequest,
-  ReplicaWorkerResponse,
-} from "./worker-protocol.js";
 
 /** The `purgeIdentity` test seam every purge/retry option bag accepts. */
 type PurgeIdentity = NonNullable<ReplicaStoragePurgeOptions["purgeIdentity"]>;
@@ -92,23 +92,22 @@ function memoryInventory(): ReplicaIdentityInventory & {
   };
 }
 
-class SuccessfulPurgeWorker implements ReplicaWorkerLike {
+class SuccessfulPurgeWorker implements SeatWorkerLike {
   readonly #messages = new Set<
-    (event: MessageEvent<ReplicaWorkerResponse>) => void
+    (event: MessageEvent<SeatWorkerResponse>) => void
   >();
   readonly #errors = new Set<(event: ErrorEvent) => void>();
 
-  postMessage(request: ReplicaWorkerRequest): void {
-    const response: ReplicaWorkerResponse =
-      request.op === "open"
-        ? {
-            id: request.id,
-            ok: true,
-            result: { mode: "opfs-sahpool", cursor: null, schemaEpoch: null },
-          }
-        : { id: request.id, ok: true, result: undefined };
+  postMessage(request: SeatWorkerRequest): void {
+    // The seat answers `open` with its state — `undefined` on a file that was
+    // never bootstrapped, which is exactly the file a terminal purge finds.
+    const response: SeatWorkerResponse = {
+      id: request.id,
+      ok: true,
+      result: undefined,
+    };
     queueMicrotask(() => {
-      const event = new MessageEvent<ReplicaWorkerResponse>("message", {
+      const event = new MessageEvent<SeatWorkerResponse>("message", {
         data: response,
       });
       for (const listener of this.#messages) listener(event);
@@ -118,12 +117,12 @@ class SuccessfulPurgeWorker implements ReplicaWorkerLike {
   addEventListener(
     type: "message" | "error",
     listener:
-      | ((event: MessageEvent<ReplicaWorkerResponse>) => void)
+      | ((event: MessageEvent<SeatWorkerResponse>) => void)
       | ((event: ErrorEvent) => void)
   ): void {
     if (type === "message") {
       this.#messages.add(
-        listener as (event: MessageEvent<ReplicaWorkerResponse>) => void
+        listener as (event: MessageEvent<SeatWorkerResponse>) => void
       );
     } else {
       this.#errors.add(listener as (event: ErrorEvent) => void);
@@ -133,12 +132,12 @@ class SuccessfulPurgeWorker implements ReplicaWorkerLike {
   removeEventListener(
     type: "message" | "error",
     listener:
-      | ((event: MessageEvent<ReplicaWorkerResponse>) => void)
+      | ((event: MessageEvent<SeatWorkerResponse>) => void)
       | ((event: ErrorEvent) => void)
   ): void {
     if (type === "message") {
       this.#messages.delete(
-        listener as (event: MessageEvent<ReplicaWorkerResponse>) => void
+        listener as (event: MessageEvent<SeatWorkerResponse>) => void
       );
     } else {
       this.#errors.delete(listener as (event: ErrorEvent) => void);
@@ -288,7 +287,11 @@ describe("remembered replica manifest", () => {
     ).resolves.toBe(false);
   });
 
-  test("retains inventory when IDB is unavailable during terminal purge", async () => {
+  // ONE STORE, ONE UNLINK (#996, W5). This used to be about an IndexedDB
+  // outbox beside the OPFS store, deleted as its own step; the outbox is a
+  // table in the seat's file now, so the failure a member can actually hit is
+  // the FILE refusing to go — a handle still open on it.
+  test("retains inventory when the seat file will not unlink", async () => {
     const storage = memoryStorage();
     const inventory = memoryInventory();
     await inventory.activate(first);
@@ -297,7 +300,7 @@ describe("remembered replica manifest", () => {
       purgeReplicaIdentityStorage(first, {
         storage,
         inventory,
-        workerFactory: () => new SuccessfulPurgeWorker(),
+        purgeIdentity: () => Promise.reject(new Error("the seat is open")),
       })
     ).rejects.toThrow("Could not purge replica");
     await expect(inventory.list()).resolves.toStrictEqual([
@@ -308,6 +311,21 @@ describe("remembered replica manifest", () => {
         retryAt: expect.any(Number),
       },
     ]);
+  });
+
+  test("forgets the identity once the seat file is gone", async () => {
+    const storage = memoryStorage();
+    const inventory = memoryInventory();
+    await inventory.activate(first);
+
+    await expect(
+      purgeReplicaIdentityStorage(first, {
+        storage,
+        inventory,
+        workerFactory: () => new SuccessfulPurgeWorker(),
+      })
+    ).resolves.toBeUndefined();
+    await expect(inventory.list()).resolves.toStrictEqual([]);
   });
 
   test("uses the durable terminal hint when the inventory mark fails transiently", async () => {

@@ -6,6 +6,7 @@ import { lockerPendingProjection } from "@centraid/blueprints/apps/locker/pendin
 import { ROUTES } from "@centraid/core/protocol";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
+import { OnlineOnlyError } from "../../replica/errors.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import {
   installInlineCentraid,
@@ -39,6 +40,19 @@ vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
 
 type Session = NonNullable<InstallInlineCentraidOptions["session"]>;
 
+/**
+ * A page door for the share sheet's walks, keyed by the handler NAME each
+ * statement carries — which is what a page is addressed by since #996 W5.
+ * Anything unnamed answers empty, exactly as a seat without those tables does.
+ */
+function sharePages(
+  byName: Record<string, Array<Record<string, unknown>>>
+): Session["page"] {
+  return (async (query: { name: string }) => ({
+    rows: byName[query.name] ?? [],
+  })) as Session["page"];
+}
+
 function fakeSession(overrides?: Partial<Session>): Session & {
   writes: unknown[];
   subscribers: Array<(inv: readonly ReplicaInvalidation[]) => void>;
@@ -48,11 +62,9 @@ function fakeSession(overrides?: Partial<Session>): Session & {
   return {
     writes,
     subscribers,
-    read: vi.fn<Session["read"]>(async () => ({
-      rows: [],
-      cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "s", entity: "x" },
-    })),
+    // The app read path (#996 wave 4). A seat holding the file answers here;
+    // the seat with no file refuses ONLINE_ONLY, which is a case below.
+    page: (async () => ({ rows: [] })) as Session["page"],
     search: vi.fn<Session["search"]>(async () => ({
       rows: [],
       cursor: { epoch: "e", seq: 1 },
@@ -358,34 +370,13 @@ describe(installInlineCentraid, () => {
 
   it("lists People identities and preserves an invited person without a vault", async () => {
     const session = fakeSession({
-      read: vi.fn<Session["read"]>(async (_appId, request) => ({
-        rows:
-          request.entity === "core.party"
-            ? [
-                {
-                  rowId: "owner",
-                  values: { party_id: "owner", display_name: "Priya" },
-                  oversizedFields: [],
-                  hasUnavailableFields: false,
-                },
-                {
-                  rowId: "asha",
-                  values: { party_id: "asha", display_name: "Asha" },
-                  oversizedFields: [],
-                  hasUnavailableFields: false,
-                },
-              ]
-            : [
-                {
-                  rowId: "vault",
-                  values: { self_party_id: "owner" },
-                  oversizedFields: [],
-                  hasUnavailableFields: false,
-                },
-              ],
-        cursor: { epoch: "e", seq: 1 },
-        dependency: { shapeId: "people", entity: request.entity },
-      })),
+      page: sharePages({
+        "share.targets.parties": [
+          { party_id: "owner", display_name: "Priya" },
+          { party_id: "asha", display_name: "Asha" },
+        ],
+        "share.targets.vault": [{ self_party_id: "owner" }],
+      }),
     });
     const target: { centraid?: unknown } = {};
     installInlineCentraid({
@@ -404,83 +395,51 @@ describe(installInlineCentraid, () => {
 
   it("lists only deliberate Tally-backed named circles with their roster", async () => {
     const session = fakeSession({
-      read: vi.fn<Session["read"]>(async (appId, request) => {
-        const values =
-          appId === "people" && request.entity === "core.party"
-            ? [
-                { party_id: "owner", display_name: "Priya" },
-                { party_id: "asha", display_name: "Asha" },
-                { party_id: "ben", display_name: "Ben" },
-              ]
-            : appId === "people" && request.entity === "core.vault"
-              ? [{ self_party_id: "owner" }]
-              : request.entity === "social.circle"
-                ? [
-                    {
-                      circle_id: "trip",
-                      name: "Goa trip",
-                      owner_party_id: "owner",
-                    },
-                    {
-                      circle_id: "implicit",
-                      name: "Shared photo",
-                      owner_party_id: "owner",
-                    },
-                    {
-                      circle_id: "foreign",
-                      name: "Asha's group",
-                      owner_party_id: "asha",
-                    },
-                    {
-                      circle_id: "incomplete",
-                      name: "Old group",
-                      owner_party_id: "owner",
-                    },
-                  ]
-                : request.entity === "social.circle_member"
-                  ? [
-                      {
-                        member_id: "m0",
-                        circle_id: "trip",
-                        party_id: "owner",
-                        capability: "read+write",
-                      },
-                      {
-                        member_id: "m1",
-                        circle_id: "trip",
-                        party_id: "asha",
-                        capability: "read",
-                      },
-                      {
-                        member_id: "m2",
-                        circle_id: "trip",
-                        party_id: "ben",
-                        capability: "read+write",
-                      },
-                      {
-                        member_id: "m3",
-                        circle_id: "incomplete",
-                        party_id: "missing-directory-party",
-                        capability: "read",
-                      },
-                    ]
-                  : request.entity === "tally.group"
-                    ? [
-                        { group_id: "g1", circle_id: "trip" },
-                        { group_id: "g2", circle_id: "foreign" },
-                        { group_id: "g3", circle_id: "incomplete" },
-                      ]
-                    : [];
-        return {
-          rows: values.map((row, index) => ({
-            rowId: String(index),
-            values: row,
-            oversizedFields: [],
-            hasUnavailableFields: false,
-          })),
-          cursor: { epoch: "e", seq: 1 },
-          dependency: { shapeId: appId, entity: request.entity },
-        };
+      page: sharePages({
+        "share.circles.vault": [{ self_party_id: "owner" }],
+        "share.circles": [
+          { circle_id: "trip", name: "Goa trip", owner_party_id: "owner" },
+          {
+            circle_id: "implicit",
+            name: "Shared photo",
+            owner_party_id: "owner",
+          },
+          {
+            circle_id: "foreign",
+            name: "Asha's group",
+            owner_party_id: "asha",
+          },
+          {
+            circle_id: "incomplete",
+            name: "Old group",
+            owner_party_id: "owner",
+          },
+        ],
+        // NO `capability` COLUMN, because `social_circle_member` has none —
+        // the old declarative fixture invented one out of a shape's column
+        // list, and the roster answered with a capability the vault never
+        // stored. A circle offered as a destination shares read; the grant
+        // raises a member to write.
+        "share.circle-members": [
+          { member_id: "m0", circle_id: "trip", party_id: "owner" },
+          { member_id: "m1", circle_id: "trip", party_id: "asha" },
+          { member_id: "m2", circle_id: "trip", party_id: "ben" },
+          {
+            member_id: "m3",
+            circle_id: "incomplete",
+            party_id: "missing-directory-party",
+          },
+        ],
+        "share.tally-groups": [
+          { group_id: "g1", circle_id: "trip" },
+          { group_id: "g2", circle_id: "foreign" },
+          { group_id: "g3", circle_id: "incomplete" },
+        ],
+        "share.targets.parties": [
+          { party_id: "owner", display_name: "Priya" },
+          { party_id: "asha", display_name: "Asha" },
+          { party_id: "ben", display_name: "Ben" },
+        ],
       }),
     });
     const target: { centraid?: unknown } = {};
@@ -501,7 +460,7 @@ describe(installInlineCentraid, () => {
         label: "Goa trip",
         members: [
           { partyId: "asha", capability: "read" },
-          { partyId: "ben", capability: "read+write" },
+          { partyId: "ben", capability: "read" },
         ],
       },
     ]);
@@ -661,6 +620,175 @@ describe(installInlineCentraid, () => {
       query: "board",
     });
     expect(res.open).toStrictEqual(["from-gateway"]);
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/tasks/queries/board",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("answers ctx.vault.page from the seat's own file, with no network", async () => {
+    // The positive half of the pair below: the binding an app's reads use now
+    // carries `page`, so a seat holding the vault answers the handler locally.
+    const page = vi.fn<
+      () => Promise<{
+        rows: { task_id: string }[];
+        next: { sortKey: string; pk: string };
+      }>
+    >(async () => ({
+      rows: [{ task_id: "t-2" }, { task_id: "t-1" }],
+      next: { sortKey: "t-1", pk: "t-1" },
+    }));
+    const session = fakeSession({ page: page as unknown as Session["page"] });
+    const queries: InlineAppModule["queries"] = {
+      board: {
+        default: async ({ ctx }) =>
+          (await (
+            ctx as {
+              vault: {
+                page: (request: unknown) => Promise<{ rows: unknown[] }>;
+              };
+            }
+          ).vault.page({
+            query: {
+              name: "tasks.board",
+              select: "task_id",
+              from: "schedule_task",
+              order: {
+                sortColumn: "task_id",
+                pkColumn: "task_id",
+                descending: true,
+              },
+            },
+            limit: 20,
+          })) as unknown,
+      },
+    };
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries,
+      target,
+      isOnline: () => true,
+    });
+    const res = await client(target).read<{
+      rows: { task_id: string }[];
+      next?: { pk: string };
+    }>({ query: "board" });
+    expect(res.rows.map((row) => row.task_id)).toStrictEqual(["t-2", "t-1"]);
+    expect(res.next).toStrictEqual({ sortKey: "t-1", pk: "t-1" });
+    expect(page).toHaveBeenCalledOnce();
+    expect(doFetch).not.toHaveBeenCalled();
+  });
+
+  it("falls back even when the handler catches its own vault failure", async () => {
+    // EVERY BLUEPRINT HANDLER CATCHES. The board's own `catch` turns a vault
+    // failure into `{ vaultDenied }` — a "cannot read this vault" screen — so a
+    // seat refusal that only rejects inside the handler is swallowed there and
+    // the query never falls back. The guard is what carries it past that catch.
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ open: ["from-the-door"] });
+    const session = fakeSession({
+      page: (() =>
+        Promise.reject(
+          new OnlineOnlyError("this seat holds no copy of the vault")
+        )) as Session["page"],
+    });
+    const queries: InlineAppModule["queries"] = {
+      board: {
+        default: async ({ ctx }) => {
+          try {
+            return (await (
+              ctx as {
+                vault: {
+                  page: (request: unknown) => Promise<{ rows: unknown[] }>;
+                };
+              }
+            ).vault.page({
+              query: {
+                name: "tasks.board",
+                select: "task_id",
+                from: "schedule_task",
+                order: {
+                  sortColumn: "task_id",
+                  pkColumn: "task_id",
+                  descending: true,
+                },
+              },
+              limit: 20,
+            })) as unknown;
+          } catch {
+            return { open: [], vaultDenied: { message: "swallowed" } };
+          }
+        },
+      },
+    };
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries,
+      target,
+      isOnline: () => true,
+    });
+    const res = await client(target).read<{ open: unknown[] }>({
+      query: "board",
+    });
+    expect(res.open).toStrictEqual(["from-the-door"]);
+  });
+
+  it("re-runs the whole query on the gateway when the seat holds no file", async () => {
+    // W4-D2 AND R9. `ctx.vault.page` on a seat with no copy of the vault is not
+    // an error the app has to handle and not a second read vocabulary: the
+    // handler runs on the gateway instead, through the paged door, which serves
+    // the SAME statement. The fallback re-runs the QUERY rather than the one
+    // page — a page answered on the seat and the next answered on the gateway
+    // would be two walks of two orderings.
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ open: ["from-the-door"] });
+    const session = fakeSession({
+      page: (() =>
+        Promise.reject(
+          new OnlineOnlyError("this seat holds no copy of the vault")
+        )) as Session["page"],
+    });
+    const queries: InlineAppModule["queries"] = {
+      board: {
+        default: async ({ ctx }) =>
+          (await (
+            ctx as {
+              vault: {
+                page: (request: unknown) => Promise<{ rows: unknown[] }>;
+              };
+            }
+          ).vault.page({
+            query: {
+              name: "tasks.board",
+              select: "task_id",
+              from: "schedule_task",
+              order: {
+                sortColumn: "task_id",
+                pkColumn: "task_id",
+                descending: true,
+              },
+            },
+            limit: 20,
+          })) as unknown,
+      },
+    };
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries,
+      target,
+      isOnline: () => true,
+    });
+    const res = await client(target).read<{ open: unknown[] }>({
+      query: "board",
+    });
+    expect(res.open).toStrictEqual(["from-the-door"]);
     expect(doFetch).toHaveBeenCalledWith(
       "https://gw.test",
       "/centraid/tasks/queries/board",

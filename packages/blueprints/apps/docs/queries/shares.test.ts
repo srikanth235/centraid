@@ -20,6 +20,7 @@ import {
   FOLDER_SCHEME_URI,
   ROOT_FOLDER_NOTATION,
 } from "../../_shared/concept-scheme-kit.ts";
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import driveHandler from "./drive.ts";
 import searchHandler from "./search.ts";
 
@@ -184,7 +185,17 @@ function ctxOf(shareDenied: boolean) {
       });
     return { rows: ROWS[entity] ?? [] };
   });
-  return { ctx: { vault: { read, search: read } } as unknown as never, read };
+  // Every share read is a page since #996 wave 4, so the denial has to reach
+  // this door too — the taxonomy pair keeps answering, which is the point:
+  // a parked share scope costs the audience column, never the drive.
+  const { page } = pagedFixture(
+    ROWS,
+    shareDenied ? { deniedEntities: SHARE_ENTITIES } : {}
+  );
+  return {
+    ctx: { vault: { page, read, search: read } } as unknown as never,
+    read,
+  };
 }
 
 const rowFor = (documents: Row[], id: string): SharedWith[] | null => {

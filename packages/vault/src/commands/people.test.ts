@@ -349,7 +349,7 @@ describe("people", () => {
     expect(note.body_text).toContain("ceramics");
   });
 
-  test("tasks add and toggle done", () => {
+  test("tasks add, complete and reopen", () => {
     const partyId = addPerson();
     const taskId = out<{ task_id: string }>(
       invoke("people.add_task", {
@@ -366,11 +366,18 @@ describe("people", () => {
         }
       ).status;
     expect(doneOf()).toBe("needs-action");
-    expect(invoke("people.toggle_task", { task_id: taskId }).status).toBe(
+    // COMPLETE AND REOPEN, NOT A TOGGLE (#996, ONT-27): the outcome no longer
+    // depends on a state the caller did not read, so completing twice is one
+    // completion rather than a completion and an accidental reopen.
+    expect(invoke("people.complete_task", { task_id: taskId }).status).toBe(
       "executed"
     );
     expect(doneOf()).toBe("completed");
-    expect(invoke("people.toggle_task", { task_id: taskId }).status).toBe(
+    expect(invoke("people.complete_task", { task_id: taskId }).status).toBe(
+      "executed"
+    );
+    expect(doneOf()).toBe("completed");
+    expect(invoke("people.reopen_task", { task_id: taskId }).status).toBe(
       "executed"
     );
     expect(doneOf()).toBe("needs-action");

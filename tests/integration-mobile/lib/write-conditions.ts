@@ -24,6 +24,7 @@ import {
 } from "./boot-conditions.js";
 import type { PendingEntry } from "./boot-conditions.js";
 import type { MobileGateway } from "./gateway.js";
+import { readEntity } from "./reads.js";
 import type { MobileSeat } from "./seat.js";
 
 /** PENDING — a write in the durable outbox with the gateway unreachable. */
@@ -60,11 +61,9 @@ export async function arrangePending(
     const pendingWhileCut =
       (await seat.session.pendingChanges()) as PendingEntry[];
     queuedStatusWhileCut = statusOf(pendingWhileCut, queuedResult.intentId);
-    const overlay = await seat.session.read(recipe.appId, {
-      entity: recipe.entity,
-    });
+    const overlay = await readEntity(seat, recipe.entity);
     overlayKeys = overlay.rows.flatMap((row) => {
-      const key = row.values["__centraid_pending_key"];
+      const key = row["__centraid_pending_key"];
       return typeof key === "string" ? [key] : [];
     });
   } finally {

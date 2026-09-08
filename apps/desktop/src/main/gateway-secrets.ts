@@ -17,6 +17,17 @@ interface DeviceSecrets {
   irohKeys: Record<string, string>;
   loopbackTokens: Record<string, string>;
   gatewayWrappingKeys: Record<string, string>;
+  /**
+   * The PASSPHRASE-WRAPPED Locker vault key, per vault (#996, ruling R13).
+   *
+   * The WRAPPED blob, never `K`. `safeStorage` is at-rest custody that
+   * prompts for nothing — R13 names it as the thing that must not be mistaken
+   * for a boundary — so what it holds here is already useless without the
+   * owner's passphrase. The boundary is the passphrase, in
+   * `packages/client/src/locker/locker-unlock.ts`; this file is where the
+   * ciphertext sits, which is exactly the job `safeStorage` is good at.
+   */
+  lockerWrappedKeys?: Record<string, string>;
 }
 
 const FILE_FALLBACK_MAGIC = "CENTRAID-DEVICE-SECRETS-V1\n";
@@ -28,6 +39,7 @@ function emptySecrets(): DeviceSecrets {
     irohKeys: {},
     loopbackTokens: {},
     gatewayWrappingKeys: {},
+    lockerWrappedKeys: {},
   };
 }
 
@@ -205,4 +217,30 @@ export function desktopGatewayKeyStore(
     protector: aesGcmKeyProtector(getOrCreateGatewayWrappingKey(connectionId)),
     warn: (message) => console.warn(message),
   });
+}
+
+// ─── The Locker seat's wrapped key (#996, R13) ────────────────────────────
+//
+// Three functions, and deliberately no fourth that returns `K`: the renderer
+// unwraps the blob with the owner's passphrase, and the main process never
+// holds the vault key at all. A `getLockerVaultKey()` here would be the
+// prompt-free path R13 exists to close.
+
+export function readLockerWrappedKey(vaultId: string): string | null {
+  return readSecrets().lockerWrappedKeys?.[vaultId] ?? null;
+}
+
+export function storeLockerWrappedKey(vaultId: string, blob: string): void {
+  const current = readSecrets();
+  current.lockerWrappedKeys = { ...current.lockerWrappedKeys, [vaultId]: blob };
+  writeSecrets(current);
+}
+
+export function clearLockerWrappedKey(vaultId: string): void {
+  const current = readSecrets();
+  if (current.lockerWrappedKeys?.[vaultId] === undefined) return;
+  const next = { ...current.lockerWrappedKeys };
+  delete next[vaultId];
+  current.lockerWrappedKeys = next;
+  writeSecrets(current);
 }

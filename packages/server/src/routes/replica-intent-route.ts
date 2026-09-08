@@ -2,18 +2,25 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
+  expiredOutcomeRecovery,
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
+  replicaDependencyVerdict,
+  resolvePredecessorReferences,
 } from "@centraid/vault";
 import type { ReplicaIntentOutcome } from "@centraid/vault";
 
+import { projectedEditTarget } from "../serve/projected-edit.js";
+import type { ProjectedEditForwarder } from "../serve/projected-edit.js";
 import { runWithReplicaIntent } from "../serve/replica-intent-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import {
   currentConflict,
   expectedPayloadHash,
+  missingReadSetVersions,
   hasCanonicalCommit,
   parseBaseVersions,
+  parseDependsOn,
 } from "./replica-intent-shape.js";
 import type { ReplicaIntentBaseVersion } from "./replica-intent-shape.js";
 import { replicaOutcomeWire } from "./replica-projection.js";
@@ -50,6 +57,13 @@ export interface ReplicaIntentRouteContext {
   plane: VaultPlane;
   access: ReplicaShapeAccess & { deviceId: string; ownerId?: string };
   dispatch: ReplicaIntentDispatcher;
+  /**
+   * How an edit of a PROJECTED row reaches the vault that owns it (#996, R10).
+   * Absent on a host with no peer plane: such an edit stays `sending` and is
+   * answered in-flight rather than written locally, because a local write of
+   * another vault's row is the one outcome that is wrong in every case.
+   */
+  forwardProjectedEdit?: ProjectedEditForwarder;
 }
 
 const NO_TRANSIENT_OUTPUT = Symbol("no transient replica output");
@@ -123,8 +137,10 @@ export async function handleReplicaIntent(
   const payloadHash =
     typeof body.payloadHash === "string" ? body.payloadHash : "";
   let baseVersions: ReplicaIntentBaseVersion[];
+  let dependsOn: string[];
   try {
     baseVersions = parseBaseVersions(body.baseVersions);
+    dependsOn = parseDependsOn(body.dependsOn);
   } catch (error) {
     return sendJson(res, 400, {
       error: "invalid_replica_intent",
@@ -147,9 +163,36 @@ export async function handleReplicaIntent(
   if (context.access.appId && context.access.appId !== appId) {
     return sendJson(res, 400, { error: "replica_app_scope_mismatch" });
   }
+  // THE DECLARED READ-SET IS PART OF THE ADMISSION (#996, rulings R6/R21/R23).
+  // An intent that names the domain operation it runs must reference every row
+  // that operation reads to decide; a set short of it would settle against a
+  // version nobody observed, which is the conflict check answering a question
+  // it was never asked.
+  const operation =
+    typeof body.operation === "string" && body.operation.length > 0
+      ? body.operation
+      : undefined;
+  const readSetGaps = missingReadSetVersions(
+    operation,
+    body.input,
+    baseVersions
+  );
+  if (readSetGaps.length > 0) {
+    return sendJson(res, 400, {
+      error: "replica_intent_read_set_incomplete",
+      message: `${operation} reads rows this intent did not reference`,
+      missing: readSetGaps,
+    });
+  }
   let computed: string;
   try {
-    computed = expectedPayloadHash(appId, action, body.input, baseVersions);
+    computed = expectedPayloadHash(
+      appId,
+      action,
+      body.input,
+      baseVersions,
+      dependsOn
+    );
   } catch (error) {
     return sendJson(res, 400, {
       error: "invalid_replica_intent",
@@ -175,11 +218,45 @@ export async function handleReplicaIntent(
   );
   if (existing) {
     if (!sameIdentity(existing, identity)) {
-      return concealIdentityConflict(res, intentId);
+      // SAME ID, DIFFERENT PAYLOAD (#996, R24). This is the DEVICE'S OWN
+      // intent — `readReplicaIntentOutcome` is device-scoped, so another
+      // device's id never reaches here and is still concealed below — and
+      // telling it plainly is the only safe answer: the retained outcome
+      // answers the payload it was recorded for, and answering a different
+      // one with it would settle a change that never ran. There is no
+      // existence to leak: the device is asking about its own intent.
+      return sendJson(res, 409, {
+        error: "replica_intent_payload_mismatch",
+        message:
+          "this intent id was admitted with a different payload; mint a new id for a changed operation",
+        intentId,
+      });
     }
+    // THE WINDOW HAS A FAR EDGE, AND "I NO LONGER KNOW" IS THE ANSWER AT IT
+    // (#996, R24, OQ-13). The retained outcome is what makes a retry
+    // idempotent; once it has aged out, re-executing could duplicate an
+    // effect the member already has. The seat is told to mint a NEW id
+    // against a freshly observed base — the same move a conflict asks for,
+    // for the same reason — and never quietly re-run.
+    const expired = expiredOutcomeRecovery(context.plane.db.vault, intentId);
+    if (expired) {
+      return sendJson(res, 409, {
+        error: "replica_intent_outcome_expired",
+        ...expired,
+      });
+    }
+    // A CHAIN PARK IS A WAIT, NOT A VERDICT (#996, R23). Every other parked
+    // outcome is an immutable dedupe hit — it is waiting on a PERSON, and
+    // resending it changes nothing. A dependency park is waiting on another
+    // INTENT, and the whole point is that it releases when that intent lands:
+    // if this one were terminal too, the queue behind a slow predecessor
+    // would never drain and the member would have to re-queue by hand.
+    const chainPark =
+      existing.status === "parked" && existing.waitingOn?.seat === "intent";
     // Terminal/parked outcomes are immutable dedupe hits; a `sending` row
     // died pre-outcome — re-enter dispatch.
-    if (replicaOutcomeWire(existing)) return sendOutcome(res, existing);
+    if (!chainPark && replicaOutcomeWire(existing))
+      return sendOutcome(res, existing);
   }
 
   // access.canWrite is THE may-mutate predicate (#726): deny read-only
@@ -198,6 +275,104 @@ export async function handleReplicaIntent(
       return sendOutcome(res, denied);
     } catch {
       return concealIdentityConflict(res, intentId);
+    }
+  }
+
+  // A PROJECTED ROW IS THE ORIGIN'S (#996, R10). Before the chain and the
+  // conflict check on purpose: both are questions about THIS vault's rows, and
+  // a projected row's version here is the applier's local stamp rather than
+  // anything the member composed against — the origin re-asks both against the
+  // copy that counts.
+  const projected = projectedEditTarget(context.plane.db.vault, baseVersions);
+  if (projected) {
+    try {
+      recordReplicaIntentOutcome(context.plane.db.vault, {
+        intentId,
+        ...identity,
+        status: "sending",
+      });
+    } catch {
+      return concealIdentityConflict(res, intentId);
+    }
+    const answer = await (context.forwardProjectedEdit?.({
+      route: projected,
+      audienceVaultId: context.plane.boot.vaultId,
+      intentId,
+      appId,
+      action,
+      input: body.input,
+      baseVersions,
+    }) ??
+      Promise.resolve({
+        status: "retryable" as const,
+        reason: `this device's vault cannot reach ${projected.originVaultId}`,
+      }));
+    if (answer.status === "retryable") {
+      // The row stays `sending`, which is exactly what a retry consumes.
+      const pending = readReplicaIntentOutcome(
+        context.plane.db.vault,
+        intentId,
+        identity.deviceId
+      );
+      if (!pending)
+        return sendJson(res, 500, { error: "replica_intent_admission_lost" });
+      return sendOutcome(res, pending);
+    }
+    try {
+      return sendOutcome(
+        res,
+        recordReplicaIntentOutcome(context.plane.db.vault, {
+          intentId,
+          ...identity,
+          status: answer.status,
+          ...(answer.reason === undefined ? {} : { reason: answer.reason }),
+          // THE ORIGIN'S NUMBER (#996, R24). The seat drops its pending row
+          // when the share output carrying this commit lands here; a local seq
+          // would name a commit that never happened in the vault that owns it.
+          ...(answer.commitSeq === undefined
+            ? {}
+            : { commitSeq: answer.commitSeq }),
+          ...(answer.status === "parked"
+            ? { waitingOn: { seat: "origin" as const } }
+            : {}),
+        })
+      );
+    } catch (error) {
+      return sendJson(res, 500, {
+        error: "replica_intent_outcome_failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // AN OFFLINE CHAIN IS CAUSAL (#996, R23/R25), and the gateway is where that
+  // is enforced. A rename cannot execute before the create it renames; only
+  // the gateway sees the whole chain, and only the gateway can answer the
+  // question atomically with executing it. Before the conflict check on
+  // purpose: a dependent's base versions describe rows its predecessor has
+  // not produced yet, so checking them first would report a conflict where
+  // the honest answer is "not yet".
+  if (dependsOn.length > 0) {
+    const verdict = replicaDependencyVerdict(context.plane.db.vault, dependsOn);
+    if (verdict.kind !== "ready") {
+      // WAITING AND ABANDONED ARE DIFFERENT FACTS and lead to different
+      // screens: one releases on its own when the predecessor lands, the
+      // other never will, and naming the predecessor is what makes a stuck
+      // queue readable instead of silent. Both PARK — the intent is retained,
+      // not lost, so a retry of the predecessor releases it.
+      try {
+        const parked = recordReplicaIntentOutcome(context.plane.db.vault, {
+          intentId,
+          ...identity,
+          status: "parked",
+          reason: verdict.reason,
+          waitingOn: { seat: "intent", label: verdict.on },
+          dependsOn,
+        });
+        return sendOutcome(res, parked);
+      } catch {
+        return concealIdentityConflict(res, intentId);
+      }
     }
   }
 
@@ -230,11 +405,17 @@ export async function handleReplicaIntent(
       intentId,
       ...identity,
       status: "sending",
+      ...(dependsOn.length > 0 ? { dependsOn } : {}),
     });
   } catch {
     // Intentionally indistinguishable from any other immutable-id conflict.
     return concealIdentityConflict(res, intentId);
   }
+
+  const resolvedInput =
+    dependsOn.length > 0
+      ? resolvePredecessorReferences(context.plane.db.vault, body.input)
+      : body.input;
 
   // A retained marker = replay of a canonical execution; only fresh dispatch
   // may surface live output.
@@ -260,7 +441,14 @@ export async function handleReplicaIntent(
           intentId,
           appId,
           action,
-          input: body.input,
+          // THE CHAIN NAMES ROWS THAT DID NOT EXIST WHEN IT WAS WRITTEN. The
+          // create that mints the task has not run when the rename is queued,
+          // so the rename carries `{"$intent": "<id>"}` and the gateway
+          // substitutes the row that intent actually PRODUCED — plain
+          // equality against the outcome table, never "the latest task".
+          // After the hash check on purpose: the hash covers what the seat
+          // sent, which is what a retry will send again.
+          input: resolvedInput,
           ...(baseVersions.length > 0 ? { baseVersions } : {}),
         })
     );

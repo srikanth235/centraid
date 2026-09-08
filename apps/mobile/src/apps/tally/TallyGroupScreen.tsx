@@ -37,7 +37,8 @@ import { entryFacts } from "@centraid/blueprints/apps/tally/entry-facts";
 import {
   metaSentence,
   money,
-  netFigure,
+  moneyNetFigure,
+  moneyTone,
   personSubLabel,
 } from "@centraid/blueprints/apps/tally/format";
 import { GROUP } from "@centraid/blueprints/apps/tally/shelves";
@@ -78,6 +79,7 @@ import {
   renameGroupWrite,
   setSimplificationWrite,
 } from "@centraid/blueprints/apps/tally/writes";
+import { zeroMoney } from "@centraid/core/money";
 
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -128,7 +130,9 @@ export default function TallyGroupScreen({
   // The owner's own net in this group, read off the members list the query
   // derived — not a second fold over the ledger below it.
   const mine = useMemo(
-    () => data?.members.find((member) => member.is_me)?.net_minor ?? 0,
+    () =>
+      data?.members.find((member) => member.is_me)?.net ??
+      zeroMoney(data?.currency ?? "USD"),
     [data]
   );
 
@@ -147,17 +151,17 @@ export default function TallyGroupScreen({
 
   const body = ((): React.JSX.Element | null => {
     if (!data?.group) return null;
-    const level = Math.abs(mine) < 1;
+    const level = Math.abs(mine.amount_minor) < 1;
     const archived = data.group.archived_at != null;
     return (
       <ScrollView contentContainerStyle={styles.page}>
         <Hero
-          figure={netFigure(mine, data.currency, "Settled")}
-          netMinor={mine}
+          figure={moneyNetFigure(mine, "Settled")}
+          tone={moneyTone(mine)}
           label={
             level
               ? GROUP_HERO_LEVEL
-              : mine < 0
+              : mine.amount_minor < 0
                 ? GROUP_HERO_OWE
                 : GROUP_HERO_OWED
           }
@@ -194,11 +198,11 @@ export default function TallyGroupScreen({
           >
             {data.simplification.transfers.map((transfer) => (
               <LedgerRow
-                key={`${transfer.from}-${transfer.to}-${transfer.amount_minor}`}
+                key={`${transfer.from}-${transfer.to}-${transfer.amount.amount_minor}`}
                 title={transferLine(
                   nameOfMember(data, transfer.from),
                   nameOfMember(data, transfer.to),
-                  money(transfer.amount_minor, data.currency)
+                  money(transfer.amount.amount_minor, transfer.amount.currency)
                 )}
               />
             ))}
@@ -260,9 +264,9 @@ export default function TallyGroupScreen({
                       : CO_CONTRIBUTES
                 }
                 figure={{
-                  netMinor: member.net_minor,
-                  text: netFigure(member.net_minor, data.currency),
-                  sub: personSubLabel(member.net_minor),
+                  netMinor: member.net.amount_minor,
+                  text: moneyNetFigure(member.net),
+                  sub: personSubLabel(member.net.amount_minor),
                 }}
                 {...(member.departed || member.is_me
                   ? {}

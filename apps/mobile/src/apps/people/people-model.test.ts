@@ -206,7 +206,7 @@ describe("[law:people-avatar-hue] the stored hue round-trips across surfaces", (
   });
 });
 
-describe("mounted-source provenance on the roster row", () => {
+describe("the row's own source stamp on the roster row", () => {
   const roster = (
     profile: Record<string, unknown>
   ): ReturnType<typeof projectRoster> =>
@@ -220,10 +220,10 @@ describe("mounted-source provenance on the roster row", () => {
       bindings: null,
     });
 
-  it("carries the profile row's own canWrite and every source label", () => {
+  it("carries the profile row's own canWrite and its source label", () => {
     const { people } = roster({
       __centraidCanWrite: false,
-      __centraidScopeLabels: ["Studio"],
+      __centraidScopeLabel: "Studio",
     });
     expect(people[0]?.canWrite).toBe(false);
     expect(people[0]?.scopeLabels).toStrictEqual(["Studio"]);
@@ -243,7 +243,7 @@ describe("mounted-source provenance on the roster row", () => {
   it("carries the three facts down to the one-person screen", () => {
     const { people } = roster({
       __centraidCanWrite: false,
-      __centraidScopeLabels: ["Studio"],
+      __centraidScopeLabel: "Studio",
     });
     const detail = projectPersonDetail({
       person: people[0]!,

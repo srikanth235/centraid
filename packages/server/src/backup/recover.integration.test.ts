@@ -108,6 +108,7 @@ describe("backup/recover", () => {
     const grantId = recordEgressAuthority(plane.db.vault, {
       actorId: "owner",
       actorKind: "owner",
+      ownerPartyId: plane.boot.ownerPartyId,
       verb: "gmail.send",
       target: "ravi@example.com",
       grantedBy: plane.boot.ownerPartyId,

@@ -1,6 +1,9 @@
 /** Pure and read-time: no proposal table, no stored balance. Simplification
  *  is OFF unless a group opts in. */
 
+import { money } from "@centraid/core/money";
+import type { Money } from "@centraid/core/money";
+
 import type { TallyBalanceData } from "./tally-balance.js";
 import {
   tallyGroupNet,
@@ -11,7 +14,9 @@ import {
 export interface TallyTransfer {
   from: string;
   to: string;
-  amount_minor: number;
+  /** In the GROUP's currency (#996, ruling R22) — a group is one ledger, in
+   *  one money, and a proposed payment carries the money it is in. */
+  amount: Money;
 }
 
 export interface TallySimplification {
@@ -24,7 +29,8 @@ export interface TallySimplification {
 /** Min-cash-flow: each transfer zeroes a party, so at most `n - 1` payments;
  *  integer minor units, so it terminates. */
 export function minimalTransfers(
-  net: ReadonlyMap<string, number>
+  net: ReadonlyMap<string, number>,
+  currency: string
 ): TallyTransfer[] {
   const debtors: Array<[string, number]> = [];
   const creditors: Array<[string, number]> = [];
@@ -49,7 +55,7 @@ export function minimalTransfers(
       transfers.push({
         from: debtor[0],
         to: creditor[0],
-        amount_minor: amount,
+        amount: money(amount, currency),
       });
     debtor[1] -= amount;
     creditor[1] -= amount;
@@ -62,7 +68,8 @@ export function minimalTransfers(
 export function tallySimplification(
   data: TallyBalanceData,
   groupId: string,
-  optedIn: boolean
+  optedIn: boolean,
+  currency: string
 ): TallySimplification {
   const debtsBefore = tallyOpenDebtCount(tallyGroupPairNets(data, groupId));
   if (!optedIn)
@@ -72,7 +79,7 @@ export function tallySimplification(
       debts_before: debtsBefore,
       payments_after: debtsBefore,
     };
-  const transfers = minimalTransfers(tallyGroupNet(data, groupId));
+  const transfers = minimalTransfers(tallyGroupNet(data, groupId), currency);
   return {
     opted_in: true,
     transfers,

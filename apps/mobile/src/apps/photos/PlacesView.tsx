@@ -6,14 +6,13 @@ import React, { useMemo } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { imageSource } from "../../kit/media/media-source";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { TEST_ID_PREFIXES, TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
 import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
@@ -27,7 +26,7 @@ export default function PlacesView({
 }: PhotosScreenProps<"PlacesView">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const places = usePhotoEntity("places");
   const { assets } = usePhotoTimeline();
   const cards = useMemo(
     () => placeCards(assets, places.rows),

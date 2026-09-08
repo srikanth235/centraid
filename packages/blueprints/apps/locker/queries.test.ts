@@ -80,19 +80,15 @@ describe("items: the window total and the alias read-back (#872)", () => {
     const plain = ctxOf({ "locker.item": [] });
     await items({ input: {}, ctx: plain });
     expect(
-      plain.calls.find((call) => call.entity === "locker.item")?.where
-    ).toStrictEqual([
-      { column: "deleted_at", op: "is-null" },
-      { column: "archived_at", op: "is-null" },
-    ]);
+      plain.calls.find((call) => call.entity === "locker.item")?.statement
+        ?.where
+    ).toBe("deleted_at IS NULL AND archived_at IS NULL");
     const shelf = ctxOf({ "locker.item": [] });
     await items({ input: { archived: true }, ctx: shelf });
     expect(
-      shelf.calls.find((call) => call.entity === "locker.item")?.where
-    ).toStrictEqual([
-      { column: "deleted_at", op: "is-null" },
-      { column: "archived_at", op: "not-null" },
-    ]);
+      shelf.calls.find((call) => call.entity === "locker.item")?.statement
+        ?.where
+    ).toBe("deleted_at IS NULL AND archived_at IS NOT NULL");
   });
 
   it("does not ask whether the locker is unlocked", async () => {
@@ -136,12 +132,14 @@ describe("items: the window total and the alias read-back (#872)", () => {
   it("hands a local read's refusal back rather than drawing an empty locker", async () => {
     const { default: items } = await import("./queries/items.ts");
     const ctx = ctxOf({ "locker.item": [] });
-    ctx.vault.read = () =>
+    const refuse = () =>
       Promise.reject(
         Object.assign(new Error("shape does not carry it"), {
           code: "ONLINE_ONLY",
         })
       );
+    ctx.vault.page = refuse;
+    ctx.vault.read = refuse;
     // A caller that could fall back online must SEE the refusal; a
     // `vaultDenied` payload would be a locker drawn empty over rows it holds.
     await expect(items({ input: {}, ctx })).rejects.toThrow(
@@ -319,11 +317,13 @@ describe("item: the sidecars and the degradation rule (#872)", () => {
     const read = ctx.calls.find(
       (call) => call.entity === "core.entity_revision"
     );
-    expect(read.where).toStrictEqual([
-      { column: "entity_type", op: "eq", value: "locker.item" },
-      { column: "entity_id", op: "eq", value: "item-1" },
-    ]);
-    expect(read.orderBy).toStrictEqual({ column: "recorded_at", dir: "desc" });
+    expect(read.statement.where).toBe("entity_type = ? AND entity_id = ?");
+    expect(read.statement.bind).toStrictEqual(["locker.item", "item-1"]);
+    expect(read.statement.order).toStrictEqual({
+      sortColumn: "recorded_at",
+      pkColumn: "revision_id",
+      descending: true,
+    });
     expect(read.limit).toBe(50);
   });
 

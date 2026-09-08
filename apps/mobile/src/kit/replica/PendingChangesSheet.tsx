@@ -16,20 +16,18 @@ import {
   pendingChangeVerbs,
 } from "./pending-copy";
 
-/** The outbox verbs this sheet can fire; `MultiVaultReplicaSession` has them all. */
+/**
+ * The outbox verbs this sheet can fire; `NativeReplicaSession` has them all.
+ *
+ * No `vaultId` and no `kind` since #996 wave 3: a seat holds ONE vault and ONE
+ * outbox, so the id alone addresses the row. Both arguments existed to pick
+ * between four mounted sessions and two outboxes, and neither exists.
+ */
 export interface PendingChangeActions {
-  retryPendingWrite: (intentId: string, vaultId?: string) => Promise<unknown>;
-  discardPendingWrite: (intentId: string, vaultId?: string) => Promise<boolean>;
-  cancelPendingChange: (
-    id: string,
-    vaultId: string,
-    kind: "replica" | "placement"
-  ) => Promise<boolean>;
-  dismissPendingChange: (
-    id: string,
-    vaultId: string,
-    kind: "replica" | "placement"
-  ) => void;
+  retryPendingWrite: (intentId: string) => Promise<unknown>;
+  discardPendingWrite: (intentId: string) => Promise<boolean>;
+  cancelPendingChange: (intentId: string) => Promise<boolean>;
+  dismissPendingChange: (intentId: string) => void;
 }
 
 /** Only what a freshness line needs; the provider's scope satisfies it. */
@@ -111,7 +109,7 @@ export default function PendingChangesSheet({
               const title = pendingChangeTitle(item);
               return (
                 <View
-                  key={`${item.kind}:${item.vaultId}:${item.id}`}
+                  key={item.id}
                   style={[
                     styles.card,
                     {
@@ -125,7 +123,11 @@ export default function PendingChangesSheet({
                       {title}
                     </Text>
                     <Text style={[styles.cardMeta, { color: colors.textSoft }]}>
-                      {item.vaultLabel} · {humanStatus(item.status)}
+                      {item.vaultLabel} ·{" "}
+                      {/* A held dependent is not "waiting to send": nothing is
+                          wrong with it, and it releases when the change in
+                          front of it lands (R23). */}
+                      {item.heldBadge ?? humanStatus(item.status)}
                     </Text>
                     {explanation ? (
                       <Text
@@ -155,7 +157,7 @@ export default function PendingChangesSheet({
                         color={colors.accent}
                         onPress={() =>
                           run(
-                            actions?.retryPendingWrite(item.id, item.vaultId) ??
+                            actions?.retryPendingWrite(item.id) ??
                               Promise.resolve()
                           )
                         }
@@ -169,20 +171,14 @@ export default function PendingChangesSheet({
                         onPress={() =>
                           run(
                             (
-                              actions?.discardPendingWrite(
-                                item.id,
-                                item.vaultId
-                              ) ?? Promise.resolve(false)
+                              actions?.discardPendingWrite(item.id) ??
+                              Promise.resolve(false)
                             ).then((discarded) => {
                               // The outbox can settle between the poll that
                               // drew this row and the tap: clearing the
                               // attention row is then the same outcome.
                               if (!discarded)
-                                actions?.dismissPendingChange(
-                                  item.id,
-                                  item.vaultId,
-                                  item.kind
-                                );
+                                actions?.dismissPendingChange(item.id);
                             })
                           )
                         }
@@ -195,11 +191,8 @@ export default function PendingChangesSheet({
                         color={colors.danger}
                         onPress={() =>
                           run(
-                            actions?.cancelPendingChange(
-                              item.id,
-                              item.vaultId,
-                              item.kind
-                            ) ?? Promise.resolve(false)
+                            actions?.cancelPendingChange(item.id) ??
+                              Promise.resolve(false)
                           )
                         }
                       />
@@ -210,11 +203,7 @@ export default function PendingChangesSheet({
                         subject={title}
                         color={colors.textSoft}
                         onPress={() => {
-                          actions?.dismissPendingChange(
-                            item.id,
-                            item.vaultId,
-                            item.kind
-                          );
+                          actions?.dismissPendingChange(item.id);
                           refresh();
                         }}
                       />

@@ -7,7 +7,6 @@
  */
 
 import {
-  createGrantProjectionMemory,
   listShareGrantsForSubject,
   loopbackShareTransports,
   readShareGrant,
@@ -18,7 +17,6 @@ import {
   writeReceipt,
 } from "@centraid/vault";
 import type {
-  GrantProjectionMemory,
   ShareableItemType,
   ShareShapeTransport,
   ShareSubscriptionResult,
@@ -96,16 +94,11 @@ const INDEXES = new WeakMap<
   GrantFulfillmentHost,
   Map<string, GrantSubjectIndex>
 >();
-const MEMORIES = new WeakMap<GrantFulfillmentHost, GrantProjectionMemory>();
-
-function memoryFor(host: GrantFulfillmentHost): GrantProjectionMemory {
-  let memory = MEMORIES.get(host);
-  if (!memory) {
-    memory = createGrantProjectionMemory();
-    MEMORIES.set(host, memory);
-  }
-  return memory;
-}
+// THE PER-HOST PROJECTION MEMORY IS GONE (#996, R10). It cached a digest of
+// what was last composed so an unchanged shape never reached a transport; the
+// member set answers that from ORIGIN STATE — a pass whose three outputs are
+// all empty is an unchanged subscription — and a durable answer beats a cache
+// a restart empties.
 
 function buildIndex(origin: VaultDb): GrantSubjectIndex {
   const subjects = liveGrantSubjects(origin);
@@ -254,7 +247,6 @@ function passOne(input: {
         input.now
       ),
       now: input.now,
-      memory: memoryFor(input.host),
     });
     announceFirstDeliveries(input, result);
     receiptRosterDrift(input, result);
@@ -328,7 +320,6 @@ export function propagateGrantRemoval(input: {
           input.now
         ),
         now: input.now,
-        memory: memoryFor(input.host),
       }),
     };
   } catch (error) {

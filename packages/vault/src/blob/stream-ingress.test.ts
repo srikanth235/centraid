@@ -292,7 +292,6 @@ describe("stream-ingress", () => {
       identity: "paired-phone-key",
       ownerPartyId: h.boot.ownerPartyId,
       name: "Phone",
-      trust: "full",
     });
     const plain = Buffer.from(
       "the paired device seals this object before transfer"
@@ -325,7 +324,6 @@ describe("stream-ingress", () => {
       identity: "paired-tablet-key",
       ownerPartyId: h.boot.ownerPartyId,
       name: "Tablet",
-      trust: "full",
     });
     const begin = async (plain: Buffer, plaintextSize = plain.length) => {
       const sha = sha256OfBytes(plain);
@@ -373,7 +371,6 @@ describe("stream-ingress", () => {
       identity: "paired-phone-key",
       ownerPartyId: h.boot.ownerPartyId,
       name: "Phone",
-      trust: "full",
     });
     const plain = Buffer.from(
       "these bytes already live in the remote content-addressed store"
@@ -407,7 +404,6 @@ describe("stream-ingress", () => {
       identity: "paired-tablet-key",
       ownerPartyId: h.boot.ownerPartyId,
       name: "Tablet",
-      trust: "full",
     });
     const plain = Buffer.from(
       "these bytes are on disk but not yet pushed offsite"

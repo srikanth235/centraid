@@ -32,6 +32,8 @@ export interface RecurrenceInstance {
 }
 
 export interface RecurrenceException {
+  /** The SERIES-LOCAL WALL CLOCK of the occurrence (#996, R21) — never the
+   *  resolved instant. `occurrence.ts` is what builds one from a stored row. */
   originalStart: string;
   action: "skip" | "override";
   scope?: "occurrence" | "future";
@@ -291,6 +293,22 @@ function wallFromComparisonMs(
   };
 }
 
+/**
+ * THE MATCHER TAKES THE OCCURRENCE KEY (#996, ruling R21; drift ONT-25).
+ *
+ * An exception is stored keyed on `original_start_local` — the series-local
+ * WALL CLOCK, because a rule expands in wall clock and re-anchoring the series
+ * must not orphan its exceptions. This function used to match on
+ * `instance.originalStart`, which for a ZONED series is the resolved UTC
+ * instant. The two are different strings for every zoned series on earth, so
+ * a skip written by `schedule.edit_event_occurrence` matched no occurrence at
+ * all and the skipped day came back — on the web agenda, on the phone, and on
+ * Tally's template dashboard, silently, all three.
+ *
+ * `RecurrenceException.originalStart` is that wall clock. For floating and
+ * all-day readings it is what it always was, because there the wall clock IS
+ * the occurrence.
+ */
 export function applyRecurrenceExceptions(
   instances: readonly RecurrenceInstance[],
   exceptions: readonly RecurrenceException[]
@@ -305,21 +323,29 @@ export function applyRecurrenceExceptions(
     .sort((left, right) =>
       left.originalStart.localeCompare(right.originalStart)
     );
+  // A future-scope override shifts by the delta between the occurrence it
+  // excepts and where that occurrence moved to — so the anchor is that
+  // occurrence's own start, found by its key, not the key string itself.
+  const startOfKey = new Map(
+    instances.map((instance) => [instance.wallStart, instance.start])
+  );
   return instances.flatMap((instance) => {
+    const key = instance.wallStart;
     let future: RecurrenceException | undefined;
     for (const candidate of futureExceptions) {
-      if (candidate.originalStart > instance.originalStart) break;
+      if (candidate.originalStart > key) break;
       future = candidate;
     }
-    const exception =
-      occurrenceExceptions.get(instance.originalStart) ?? future;
+    const exception = occurrenceExceptions.get(key) ?? future;
     if (!exception) return [instance];
     if (exception.action === "skip") return [];
     if (exception.start === undefined) return [instance];
     if ((exception.scope ?? "occurrence") === "occurrence") {
       return [{ ...instance, start: exception.start }];
     }
-    const delta = wallDeltaMs(exception.originalStart, exception.start);
+    const anchor =
+      startOfKey.get(exception.originalStart) ?? exception.originalStart;
+    const delta = wallDeltaMs(anchor, exception.start);
     return delta === null
       ? [{ ...instance, start: exception.start }]
       : [{ ...instance, start: shiftTemporal(instance.start, delta) }];

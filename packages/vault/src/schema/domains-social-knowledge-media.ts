@@ -4,7 +4,11 @@
 // `people.profile` field and a reachable address is a
 // `social.contact_channel`, so the card had nothing of its own left to say.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const SOCIAL_DDL = `
 CREATE TABLE social_circle (
@@ -14,6 +18,7 @@ CREATE TABLE social_circle (
   kind           TEXT NOT NULL CHECK (kind IN ('family','friends','work','custom')),
   created_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (owner_party_id, name),
   FOREIGN KEY (circle_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -24,6 +29,7 @@ CREATE TABLE social_circle_member (
   party_id  TEXT NOT NULL REFERENCES core_party(party_id),
   added_at  TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (circle_id, party_id),
   FOREIGN KEY (member_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -44,6 +50,7 @@ CREATE TABLE social_thread (
   -- blob_custody_state is rebuilt. It is therefore never a source of truth.
   last_message_at TEXT,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (thread_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -56,6 +63,7 @@ CREATE TABLE social_thread_participant (
   muted     INTEGER NOT NULL CHECK (muted IN (0,1)),
   last_read_at TEXT,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (thread_id, party_id),
   CHECK (party_id IS NOT NULL OR handle IS NOT NULL),
   FOREIGN KEY (tp_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -74,6 +82,7 @@ CREATE TABLE social_message (
   external_id     TEXT UNIQUE,
   created_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   CHECK (sender_party_id IS NOT NULL OR sender_handle IS NOT NULL),
   FOREIGN KEY (message_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -97,10 +106,17 @@ CREATE TABLE knowledge_note (
   author_party_id TEXT NOT NULL REFERENCES core_party(party_id),
   title           TEXT NOT NULL,
   body_content_id TEXT NOT NULL REFERENCES core_content_item(content_id),
+  -- THE NEWEST REVISION OCCURRENCE (#996, ruling R20(a)), exactly as
+  -- \`core_document\` carries it: a note's body history is the chain of
+  -- \`core_entity_revision\` rows walked from here through
+  -- \`parent_revision_id\`. ON DELETE SET NULL — a pointer into history never
+  -- wedges a delete.
+  current_revision_id TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   format          TEXT NOT NULL CHECK (format IN ('markdown','html','plain')),
   pinned          INTEGER NOT NULL CHECK (pinned IN (0,1)),
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   -- Trash (issue #308 A6): delete is reversible — the soft-delete pair, with
   -- real deletion deferred to the lifecycle sweep's purge window. The FTS
   -- spec's deletedColumn guard keeps trashed notes out of the index. The guard
@@ -114,6 +130,7 @@ CREATE INDEX IF NOT EXISTS knowledge_note_purge_idx
   ON knowledge_note(purge_at) WHERE purge_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_note_author_party ON knowledge_note(author_party_id);
 CREATE INDEX IF NOT EXISTS idx_note_body_content ON knowledge_note(body_content_id);
+CREATE INDEX IF NOT EXISTS idx_note_current_revision ON knowledge_note(current_revision_id);
 
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,
@@ -124,6 +141,7 @@ CREATE TABLE knowledge_annotation (
   body_text       TEXT NOT NULL,
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (annotation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (target_type, target_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
@@ -140,6 +158,14 @@ CREATE TABLE media_asset (
   asset_id         TEXT PRIMARY KEY,
   content_id       TEXT NOT NULL UNIQUE REFERENCES core_content_item(content_id),
   kind             TEXT NOT NULL CHECK (kind IN ('photo','video','audio','scan')),
+  -- THE AUTHORED TITLE (#996, ruling R20(b), OQ-9). The owner's own caption
+  -- for this photo, moved off \`core_content_item.title\` where a generated
+  -- caption used to overwrite it and where two assets sharing a sha would
+  -- have shared one. NULL means the owner has not named it — never an empty
+  -- string, and never a machine's words: a GENERATED caption is a derived row
+  -- keyed to the representation, and the owner promotes one here with
+  -- \`media.promote_caption\`, which is an AUTHORED write.
+  title            TEXT,
   captured_at      TEXT,
   -- Capture-local UTC offset in minutes (issue #419): captured_at is a UTC
   -- instant, so a native client needs the offset to render the wall-clock time
@@ -176,6 +202,7 @@ CREATE TABLE media_asset (
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   -- Archived and trashed are different answers, and a row claiming both is
   -- neither (#916).
   CHECK (archived_at IS NULL OR deleted_at IS NULL),
@@ -212,6 +239,7 @@ CREATE TABLE media_face_region (
                           CHECK (review_state IN ('proposed','confirmed','rejected','dismissed')),
   created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   -- ONE SOURCE OF TRUTH, STRUCTURALLY. "confirmed" is already derivable from
   -- confirmed_by_party_id, so the two facts are pinned to each other here
   -- rather than left to agree by convention: a writer cannot mark a region

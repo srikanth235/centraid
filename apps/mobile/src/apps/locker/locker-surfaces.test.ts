@@ -58,7 +58,6 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
 type Gateway = typeof import("./locker-gateway");
 const wire = vi.hoisted(() => ({
   access: vi.fn<Gateway["lockerAccess"]>(),
-  auth: vi.fn<Gateway["lockerAuth"]>(),
   batches: vi.fn<Gateway["lockerImportBatches"]>(),
   discard: vi.fn<Gateway["discardLockerImport"]>(),
   publish: vi.fn<Gateway["publishLockerImport"]>(),
@@ -70,10 +69,10 @@ vi.mock(import("./locker-gateway"), () => {
     ACCESS_WINDOW: 200,
     discardLockerImport: wire.discard,
     lockerAccess: wire.access,
-    lockerAuth: wire.auth,
     lockerImportBatches: wire.batches,
     lockerImportRows: wire.rows,
     lockerItem: vi.fn<Gateway["lockerItem"]>(),
+    lockerRevealReceipt: vi.fn<Gateway["lockerRevealReceipt"]>(),
     publishLockerImport: wire.publish,
     stageLockerImport: wire.stage,
   };
@@ -137,13 +136,8 @@ const REVEAL = {
 };
 
 async function openSession(): Promise<void> {
-  wire.auth.mockResolvedValue({
-    ok: true,
-    configured: true,
-    sessionToken: "s1",
-  });
   reads.items.mockResolvedValue({ items: [], truncated: false });
-  await unlockLocker("a-long-enough-passphrase");
+  await unlockLocker();
 }
 
 describe("access history on this seat", () => {
@@ -185,17 +179,27 @@ describe("access history on this seat", () => {
     expect(readLockerVault().accessError).toContain("Could not reach");
   });
 
-  it("locks when the receipts read says the session is gone", async () => {
-    wire.access.mockResolvedValue({ authRequired: true });
+  it("reads the history while LOCKED (#996, W6-D2)", async () => {
+    // The inversion is the point. It used to refuse without a session; with
+    // the gateway no longer decrypting, this ledger is the only record that
+    // anyone looked, and hiding it behind the boundary it audits would mean a
+    // member could not ask "what was read on this device" without first
+    // unlocking the thing they are worried about.
+    lockNow();
+    wire.access.mockResolvedValue({
+      entries: [REVEAL],
+      window: 200,
+      truncated: false,
+    });
     await loadLockerAccess();
-    expect(readLockerVault().session.phase).toBe("locked");
-    expect(readLockerVault().bag.sessionToken).toBeNull();
+    expect(wire.access).toHaveBeenCalledOnce();
+    expect(readLockerVault().bag.accessEntries).toStrictEqual([REVEAL]);
   });
 
-  it("asks nothing without a session — there is no unauthenticated ledger", async () => {
-    lockNow();
+  it("carries no session token, because there is none to carry", async () => {
+    wire.access.mockResolvedValue({ entries: [], window: 200 });
     await loadLockerAccess();
-    expect(wire.access).not.toHaveBeenCalled();
+    expect(wire.access.mock.calls[0]?.[0]).not.toBe("s1");
   });
 
   it("takes the receipts with it on a lock", async () => {

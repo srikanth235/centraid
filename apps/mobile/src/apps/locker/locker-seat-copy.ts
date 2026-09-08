@@ -16,17 +16,14 @@
 /** The lock wall's second way in, where one has been enrolled. */
 export const DEVICE_UNLOCK = "Unlock with this device";
 
-/** Enrolling and revoking. Both name the §7 word for what they act on. */
-export const DEVICE_ENROL = "Enrol a device credential";
-export const DEVICE_REVOKE = "Revoke it";
+/** Forgetting the vault key on this device — the revoke gesture's local half
+ *  (#996, R13). It is not "revoke a credential" any more: what this phone
+ *  holds is `K` itself, and dropping it is what stops this device reading. */
+export const DEVICE_FORGET = "Forget this vault's key";
 
-/** Why a device credential is a second way in rather than a replacement. */
+/** What this phone actually holds, said plainly (#996, R13 / W6-D2). */
 export const DEVICE_NOTE =
-  "A device credential is revocable and the passphrase is not · this phone holds a random secret, and the vault holds a verifier for it.";
-
-/** The enrolment offer, on the list, once a session is open — enrolling needs
- *  one, so the offer cannot stand on the lock wall that asks for it. */
-export const DEVICE_OFFER = "This phone can hold a device credential.";
+  "This phone holds this vault's key behind Face ID, Touch ID or your passcode · secrets are opened here, never on the gateway.";
 
 /** The switcher mask. A hidden window ends the session at once; this is what
  *  the OS screenshots instead of a list of titles. */

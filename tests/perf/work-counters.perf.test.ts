@@ -55,7 +55,7 @@ describe("the per-PR work-counter gate", () => {
     const gateway = createGateway(db);
     registerAtlasCommands(gateway);
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device_secret LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const owner: Credential = {
       kind: "device",
@@ -106,7 +106,7 @@ describe("the per-PR work-counter gate", () => {
     onTestFinished(() => db.close());
     const gateway = createGateway(db);
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device_secret LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const owner: Credential = {
       kind: "device",

@@ -1,179 +1,49 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
+// THE SHELL'S SESSION, OVER A SEAT (#996, W5).
+//
+// WHAT THIS SUITE STOPPED BEING ABOUT. It used to drive a COORDINATOR: a
+// shaped store behind a worker, a catalog of shapes, a windowed bootstrap that
+// could stop half-way, and a declarative read grammar the session resolved
+// against that catalog. None of that exists — a seat is the vault's own file,
+// a page is a statement, and the outbox is a table inside the same file — so
+// the claims that were about the coordinator's plumbing went with it.
+//
+// WHAT IS LEFT, AND WHERE. This file holds the two rails that are about the
+// BROWSER: storage keyed by a DURABLE identity rather than a transport URL,
+// terminal purge that forgets the manifest only once storage is gone, and a
+// read rail that REFUSES rather than answers when this browser holds no copy
+// (W4-D2, R9). The write rail — idempotent posts, the durable queued answer,
+// revision over a second write, admission — is `shell-session-writes.test.ts`.
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
-// governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
-import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import { useFakeClock } from "@centraid/test-kit/fake-clock";
-
-import type {
-  ReplicaShellSessionOptions,
-  ShellReplicaCoordinator,
-} from "./shell-session.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
+import type * as TypeImport_identity from "./replica-identity.js";
+import type * as TypeImport_scopes from "./shell-session-scopes.js";
 import type * as TypeImport_1vwuba6 from "./shell-session.js";
+import {
+  cursorKey,
+  installGatewayApiStub,
+  intent,
+  options,
+  outcomeResponse,
+} from "./shell-session.test-fixtures.js";
 import type { ReplicaFetcher } from "./shell-transport.js";
 import {
   listRememberedReplicaIdentities,
   rememberReplicaIdentity,
 } from "./storage-manifest.js";
-import type {
-  ReplicaIntent,
-  ReplicaInvalidation,
-  ReplicaShape,
-} from "./types.js";
+import type { ReplicaInvalidation } from "./types.js";
 
 let ReplicaShellSession: typeof TypeImport_1vwuba6.ReplicaShellSession;
-let replicaIdentityForGatewayAuth: typeof TypeImport_1vwuba6.replicaIdentityForGatewayAuth;
-let purgeCurrentReplicaDevice: typeof TypeImport_1vwuba6.purgeCurrentReplicaDevice;
+let replicaIdentityForGatewayAuth: typeof TypeImport_identity.replicaIdentityForGatewayAuth;
+let purgeCurrentReplicaDevice: typeof TypeImport_scopes.purgeCurrentReplicaDevice;
 
 describe("shell-session", () => {
   beforeAll(async () => {
-    Object.assign(window, {
-      CentraidApi: {
-        getGatewayAuth: () =>
-          Promise.resolve({
-            baseUrl: "https://gateway.example",
-            gatewayId: "profile-home",
-            vaultId: "vault",
-            rememberDevice: false,
-          }),
-        onGatewayChanged: () => () => undefined,
-        onVaultChanged: () => () => undefined,
-      },
-    });
-    ({
-      ReplicaShellSession,
-      purgeCurrentReplicaDevice,
-      replicaIdentityForGatewayAuth,
-    } = await import("./shell-session.js"));
+    installGatewayApiStub();
+    ({ ReplicaShellSession } = await import("./shell-session.js"));
+    ({ replicaIdentityForGatewayAuth } = await import("./replica-identity.js"));
+    ({ purgeCurrentReplicaDevice } = await import("./shell-session-scopes.js"));
   });
-
-  const shapes: ReplicaShape[] = [
-    {
-      shapeId: "shape-todos",
-      appId: "todos",
-      entities: [
-        {
-          entity: "core.task",
-          primaryKey: "task_id",
-          columns: ["task_id", "title"],
-        },
-      ],
-    },
-    {
-      shapeId: "shape-notes",
-      appId: "notes",
-      entities: [
-        {
-          entity: "core.note",
-          primaryKey: "note_id",
-          columns: ["note_id", "title"],
-        },
-      ],
-    },
-    {
-      shapeId: "shape-tasks",
-      appId: "tasks",
-      entities: [
-        {
-          entity: "schedule.task",
-          primaryKey: "task_id",
-          columns: ["task_id", "title", "project_id"],
-        },
-      ],
-    },
-    {
-      shapeId: "shape-todos-billing",
-      appId: "todos",
-      entities: [
-        {
-          entity: "core.task",
-          primaryKey: "task_id",
-          columns: ["task_id", "cost"],
-        },
-      ],
-    },
-  ];
-
-  function intent(): ReplicaIntent {
-    return {
-      intentId: "intent-1",
-      payloadHash: "a".repeat(64),
-      appId: "todos",
-      action: "complete",
-      input: { taskId: "task-1" },
-      state: "sending",
-      createdOrder: 1,
-      attempts: 1,
-      optimistic: [],
-    };
-  }
-
-  function fakeCoordinator(
-    overrides: Partial<ShellReplicaCoordinator> = {}
-  ): ShellReplicaCoordinator {
-    return {
-      bootstrap: vi
-        .fn<ShellReplicaCoordinator["bootstrap"]>()
-        .mockResolvedValue({ epoch: "e", seq: 1 }),
-      status: vi
-        .fn<ShellReplicaCoordinator["status"]>()
-        .mockResolvedValue({ mode: "memory", cursor: null, schemaEpoch: null }),
-      catalog: vi
-        .fn<ShellReplicaCoordinator["catalog"]>()
-        .mockResolvedValue(shapes),
-      readWire: vi.fn<ShellReplicaCoordinator["readWire"]>().mockResolvedValue({
-        rows: [],
-        cursor: { epoch: "e", seq: 1 },
-        dependency: { shapeId: "shape-todos", entity: "core.task" },
-      }),
-      searchWire: vi
-        .fn<ShellReplicaCoordinator["searchWire"]>()
-        .mockResolvedValue({
-          rows: [],
-          cursor: { epoch: "e", seq: 1 },
-          dependency: { shapeId: "shape-todos", entity: "core.task" },
-        }),
-      enqueue: vi
-        .fn<ShellReplicaCoordinator["enqueue"]>()
-        .mockResolvedValue(intent()),
-      claimNextIntent: vi
-        .fn<ShellReplicaCoordinator["claimNextIntent"]>()
-        .mockResolvedValue(undefined),
-      markIntentTransportFailed: vi
-        .fn<ShellReplicaCoordinator["markIntentTransportFailed"]>()
-        .mockResolvedValue(intent()),
-      markIntentAwaitingChange: vi
-        .fn<ShellReplicaCoordinator["markIntentAwaitingChange"]>()
-        .mockResolvedValue(intent()),
-      applyIntentOutcome: vi
-        .fn<ShellReplicaCoordinator["applyIntentOutcome"]>()
-        .mockResolvedValue(intent()),
-      discardIntent: vi
-        .fn<ShellReplicaCoordinator["discardIntent"]>()
-        .mockResolvedValue(false),
-      retryIntent: vi
-        .fn<ShellReplicaCoordinator["retryIntent"]>()
-        .mockResolvedValue(undefined),
-      recoverSending: vi
-        .fn<ShellReplicaCoordinator["recoverSending"]>()
-        .mockResolvedValue([]),
-      pendingIntents: vi
-        .fn<ShellReplicaCoordinator["pendingIntents"]>()
-        .mockResolvedValue([]),
-      subscribeInvalidations: vi
-        .fn<ShellReplicaCoordinator["subscribeInvalidations"]>()
-        .mockReturnValue(() => undefined),
-      close: vi
-        .fn<ShellReplicaCoordinator["close"]>()
-        .mockResolvedValue(undefined),
-      purge: vi
-        .fn<ShellReplicaCoordinator["purge"]>()
-        .mockResolvedValue(undefined),
-      ...overrides,
-    };
-  }
 
   describe("ReplicaShellSession", () => {
     test("keys storage by stable gateway identity rather than a transient transport URL", () => {
@@ -244,61 +114,10 @@ describe("shell-session", () => {
       }
     });
 
-    test("sync() pulls the coordinator to the gateway head once a cursor exists", async () => {
-      const syncNow = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-      const coordinator = fakeCoordinator({
-        status: vi.fn<ShellReplicaCoordinator["status"]>().mockResolvedValue({
-          mode: "memory",
-          cursor: { epoch: "e", seq: 1 },
-          schemaEpoch: "schema",
-          coverage: "complete",
-        }),
-        syncNow,
-      });
-      const session = new ReplicaShellSession(
-        {
-          baseUrl: "http://127.0.0.1:49152",
-          gatewayId: "profile-home",
-          vaultId: "vault",
-        },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => true }
-      );
-      await session.start(await coordinator.status());
-
-      await session.sync();
-
-      expect(syncNow.mock.calls).toStrictEqual([[]]);
-      await session.close();
-    });
-
-    test("sync() before the first fill defers to bootstrap rather than pulling", async () => {
-      const syncNow = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-      const coordinator = fakeCoordinator({ syncNow });
-      const session = new ReplicaShellSession(
-        {
-          baseUrl: "http://127.0.0.1:49152",
-          gatewayId: "profile-home",
-          vaultId: "vault",
-        },
-        coordinator,
-        // Offline, so the deferred bootstrap parks instead of fetching — the
-        // point here is only that a cursor-less replica never pulls changes.
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start(await coordinator.status());
-
-      await session.sync();
-
-      expect(syncNow).not.toHaveBeenCalled();
-      await session.close();
-    });
-
     test("closing for a gateway switch preserves remembered storage for a warm return", async () => {
       localStorage.clear();
       const identity = { gatewayId: "profile-home", vaultId: "vault" };
       rememberReplicaIdentity(identity);
-      const coordinator = fakeCoordinator();
       const session = new ReplicaShellSession(
         {
           baseUrl: "http://127.0.0.1:49152",
@@ -306,32 +125,25 @@ describe("shell-session", () => {
           vaultId: identity.vaultId,
           rememberDevice: true,
         },
-        coordinator,
-        {
-          eventTarget: new EventTarget(),
-          isOnline: () => false,
-          rememberStorage: true,
-        }
+        options({ rememberStorage: true })
       );
 
       await session.close();
 
-      expect(vi.mocked(coordinator.close).mock.calls).toStrictEqual([[]]);
-      expect(coordinator.purge).not.toHaveBeenCalled();
+      // A switch is not a revoke: the file stays, and so does the manifest
+      // entry that says this browser holds one.
       expect(listRememberedReplicaIdentities()).toStrictEqual([identity]);
       localStorage.clear();
     });
 
     test("terminal scope purge forgets the durable manifest only after storage is wiped", async () => {
       localStorage.clear();
-      const cursorKey = `centraid:vault-change-cursor:${encodeURIComponent("profile-home\u0000vault")}`;
       sessionStorage.setItem(
-        cursorKey,
+        cursorKey(),
         JSON.stringify({ epoch: "old", seq: 9 })
       );
       const identity = { gatewayId: "profile-home", vaultId: "vault" };
       rememberReplicaIdentity(identity);
-      const coordinator = fakeCoordinator();
       const session = new ReplicaShellSession(
         {
           baseUrl: "http://127.0.0.1:49152",
@@ -339,28 +151,20 @@ describe("shell-session", () => {
           vaultId: identity.vaultId,
           rememberDevice: true,
         },
-        coordinator,
-        {
-          eventTarget: new EventTarget(),
-          isOnline: () => false,
-          rememberStorage: true,
-        }
+        options({ rememberStorage: true })
       );
 
       await session.purge();
 
-      expect(coordinator.purge).toHaveBeenCalledOnce();
       expect(listRememberedReplicaIdentities()).toStrictEqual([]);
-      expect(sessionStorage.getItem(cursorKey)).toBeNull();
+      expect(sessionStorage.getItem(cursorKey())).toBeNull();
     });
 
     test("purge after close still clears terminal scope state", async () => {
-      const cursorKey = `centraid:vault-change-cursor:${encodeURIComponent("profile-home\u0000vault")}`;
       sessionStorage.setItem(
-        cursorKey,
+        cursorKey(),
         JSON.stringify({ epoch: "old", seq: 9 })
       );
-      const coordinator = fakeCoordinator();
       const session = new ReplicaShellSession(
         {
           baseUrl: "https://gateway.example",
@@ -368,18 +172,13 @@ describe("shell-session", () => {
           vaultId: "vault",
           rememberDevice: false,
         },
-        coordinator,
-        {
-          eventTarget: new EventTarget(),
-          isOnline: () => false,
-          rememberStorage: false,
-        }
+        options()
       );
 
       await session.close();
       await session.purge();
 
-      expect(sessionStorage.getItem(cursorKey)).toBeNull();
+      expect(sessionStorage.getItem(cursorKey())).toBeNull();
     });
 
     test("keeps the manifest entry when terminal storage purge fails", async () => {
@@ -393,199 +192,123 @@ describe("shell-session", () => {
           vaultId: identity.vaultId,
           rememberDevice: true,
         },
-        fakeCoordinator({
-          purge: vi
-            .fn<ShellReplicaCoordinator["purge"]>()
-            .mockRejectedValue(new Error("OPFS busy")),
-        }),
-        {
-          eventTarget: new EventTarget(),
-          isOnline: () => false,
+        options({
           rememberStorage: true,
-        }
+          // The manifest is the record of what this browser still holds; a
+          // purge that could not reach the storage must leave it standing, or
+          // the file is orphaned with nothing naming it.
+          inventory: {
+            activate: () => Promise.reject(new Error("IDB unavailable")),
+            markTerminal: () => Promise.reject(new Error("IDB unavailable")),
+            deferTerminal: () => Promise.reject(new Error("IDB unavailable")),
+            remove: () => Promise.reject(new Error("IDB unavailable")),
+            list: () => Promise.reject(new Error("IDB unavailable")),
+          },
+        })
       );
 
-      await expect(session.purge()).rejects.toThrow("OPFS busy");
+      await expect(session.purge()).rejects.toThrow(/IDB unavailable/u);
       expect(listRememberedReplicaIdentities()).toStrictEqual([identity]);
       localStorage.clear();
     });
 
-    test("reuses a warm catalog, maps app entities and filters subscription invalidations", async () => {
-      let emit: ((values: readonly ReplicaInvalidation[]) => void) | undefined;
-      const listener =
-        vi.fn<(invalidations: readonly ReplicaInvalidation[]) => void>();
-      const coordinator = fakeCoordinator({
-        subscribeInvalidations: vi.fn<
-          ShellReplicaCoordinator["subscribeInvalidations"]
-        >((next) => {
-          emit = next;
-          return () => undefined;
-        }),
-      });
-      const session = new ReplicaShellSession(
-        {
-          baseUrl: "https://gateway.example",
-          vaultId: "vault",
-          rememberDevice: true,
-        },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "opfs-sahpool",
-        cursor: { epoch: "warm", seq: 42 },
-        schemaEpoch: "schema",
-      });
-      expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
-      await session.read("todos", {
-        entity: "core.task",
-        shapeId: "shape-todos",
-      });
-      expect(coordinator.readWire).toHaveBeenCalledWith({
-        shapeId: "shape-todos",
-        entity: "core.task",
-      });
-      // ONE APP, ONE SHAPE IS THE DEFAULT (#928 A1), but a catalog that holds
-      // two for one entity is still resolvable — by NAMING one. The retired
-      // `purpose` selector chose between them implicitly; the shape id says it.
-      await session.read("todos", {
-        entity: "core.task",
-        shapeId: "shape-todos-billing",
-      });
-      expect(coordinator.readWire).toHaveBeenLastCalledWith({
-        shapeId: "shape-todos-billing",
-        entity: "core.task",
-      });
-      await session.search("todos", {
-        entity: "core.task",
-        query: "local",
-        shapeId: "shape-todos",
-      });
-      expect(coordinator.searchWire).toHaveBeenCalledWith({
-        shapeId: "shape-todos",
-        entity: "core.task",
-        query: "local",
-      });
-
-      session.subscribe("todos", [{ entity: "core.task" }], listener);
-      emit?.([
-        { shapeId: "shape-notes", entity: "core.note", source: "canonical" },
-        {
-          shapeId: "shape-todos-billing",
-          entity: "core.task",
-          source: "canonical",
-        },
-        { shapeId: "shape-todos", entity: "core.task", source: "canonical" },
-      ]);
-      expect(listener).toHaveBeenCalledWith([
-        {
-          shapeId: "shape-todos-billing",
-          entity: "core.task",
-          source: "canonical",
-        },
-        { shapeId: "shape-todos", entity: "core.task", source: "canonical" },
-      ]);
-      const billingListener =
-        vi.fn<(invalidations: readonly ReplicaInvalidation[]) => void>();
-      session.subscribe(
-        "todos",
-        [{ shapeId: "shape-todos-billing", entity: "core.task" }],
-        billingListener
-      );
-      emit?.([
-        { shapeId: "shape-todos", entity: "core.task", source: "canonical" },
-        {
-          shapeId: "shape-todos-billing",
-          entity: "core.task",
-          source: "canonical",
-        },
-      ]);
-      expect(billingListener).toHaveBeenCalledWith([
-        {
-          shapeId: "shape-todos-billing",
-          entity: "core.task",
-          source: "canonical",
-        },
-      ]);
-      await session.purge();
-    });
-
-    test("retries a transient bootstrap failure without waiting for an online event", async () => {
-      const clock = useFakeClock();
-      const coordinator = fakeCoordinator();
-      const fetcher = vi
-        .fn<ReplicaFetcher>()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ error: "gateway_error" }), {
-            status: 503,
-            headers: { "content-type": "application/json" },
-          })
-        )
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              protocolVersion: 1,
-              vaultId: "vault",
-              schemaEpoch: "schema",
-              cursor: { epoch: "epoch", seq: 7 },
-              shapes: [],
-              rows: [],
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          )
-        );
+    test("a seat with no copy refuses reads instead of answering them empty", async () => {
       const session = new ReplicaShellSession(
         { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        {
-          fetcher,
-          eventTarget: new EventTarget(),
-          isOnline: () => true,
-          retryDelayMs: 10,
-        }
+        options()
       );
+      await session.start();
 
-      await session.start({
-        mode: "memory",
-        cursor: null,
-        schemaEpoch: null,
-      });
-      expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
-      await clock.advance(10);
-      await vi.waitFor(() =>
-        expect(coordinator.bootstrap).toHaveBeenCalledOnce()
+      // SEARCH IS THE SEAT'S NOW (#996, ruling W5-D1) and so is every page.
+      // No file means ONLINE_ONLY, and the caller re-runs the whole query on
+      // the gateway's paged door — an empty answer would be a lie about the
+      // vault (W4-D2, R9).
+      await expect(
+        session.search("todos", { entity: "schedule.task", query: "local" })
+      ).rejects.toThrow(/online/iu);
+      await expect(
+        session.page(
+          {
+            name: "tasks.board",
+            select: "*",
+            from: "schedule_task",
+            order: {
+              sortColumn: "task_id",
+              pkColumn: "task_id",
+              descending: false,
+            },
+          },
+          { limit: 10 }
+        )
+      ).rejects.toThrow(/online/iu);
+      await session.close();
+    });
+
+    test("invalidates by entity, and only for the entities a screen asked about", async () => {
+      const listener =
+        vi.fn<(invalidations: readonly ReplicaInvalidation[]) => void>();
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        options()
       );
-      expect(fetcher).toHaveBeenCalledTimes(2);
+      await session.start();
+      session.subscribe("todos", [{ entity: "schedule.task" }], listener);
+
+      // A WRITE IS AN INVALIDATION. Its dependency set is the entities the
+      // write touched — one task edited used to invalidate the whole app,
+      // because a shape was the smallest thing the old plane could name.
+      await session.write("todos", {
+        intentId: "intent-task",
+        action: "edit",
+        input: { task_id: "task-1" },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "schedule.task",
+            rowId: "task-1",
+            values: { task_id: "task-1", title: "Edited" },
+          },
+        ],
+      });
+      // The listener fired, and every invalidation it was told about is about
+      // ITS entity — one list proves both.
+      expect(
+        listener.mock.calls
+          .flatMap(([values]) => values)
+          .map((invalidation) => invalidation.entity)
+      ).toStrictEqual(["schedule.task", "schedule.task"]);
+
+      listener.mockClear();
+      await session.write("notes", {
+        intentId: "intent-note",
+        action: "edit",
+        input: { note_id: "note-1" },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "knowledge.note",
+            rowId: "note-1",
+            values: { note_id: "note-1" },
+          },
+        ],
+      });
+      expect(listener).not.toHaveBeenCalled();
       await session.close();
     });
 
     test("ships an idempotent intent and keeps its overlay until canonical execution arrives", async () => {
-      const queued = intent();
-      const claimNextIntent = vi
-        .fn<() => Promise<ReplicaIntent | undefined>>()
-        .mockResolvedValueOnce(queued)
-        .mockResolvedValue(undefined);
-      const coordinator = fakeCoordinator({ claimNextIntent });
-      const fetcher = vi.fn<ReplicaFetcher>().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            protocolVersion: 1,
-            outcome: { intentId: queued.intentId, status: "executed" },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
-      );
+      const store = new MemoryIntentStore();
+      const queued = await store.add({ ...intent(), state: "queued" });
+      const fetcher = vi
+        .fn<ReplicaFetcher>()
+        .mockResolvedValue(outcomeResponse(queued.intentId, "executed"));
       const session = new ReplicaShellSession(
         { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { fetcher, eventTarget: new EventTarget(), isOnline: () => true }
+        options({ intentStore: store, fetcher, isOnline: () => true })
       );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
+      await session.start();
       await session.flushIntents();
+
       expect(JSON.parse(String(fetcher.mock.calls[0]![2].body))).toStrictEqual({
         intentId: queued.intentId,
         appId: queued.appId,
@@ -593,645 +316,10 @@ describe("shell-session", () => {
         input: queued.input,
         payloadHash: queued.payloadHash,
       });
-      expect(coordinator.markIntentAwaitingChange).toHaveBeenCalledWith(
-        queued.intentId
-      );
-      expect(coordinator.applyIntentOutcome).toHaveBeenCalledTimes(0);
+      // The overlay survives the ANSWER: it clears when the commit lands, not
+      // when the gateway says it will (#929, R24).
+      expect((await store.get(queued.intentId))?.state).toBe("awaiting-change");
       await session.close();
-    });
-
-    test("returns a durable queued acknowledgement immediately while offline", async () => {
-      const coordinator = fakeCoordinator();
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-
-      await expect(
-        session.write("todos", {
-          action: "complete",
-          input: { taskId: "task-1" },
-          optimistic: [
-            {
-              op: "upsert",
-              entity: "core.task",
-              rowId: "task-1",
-              values: { cost: 42 },
-              shapeId: "shape-todos-billing",
-            },
-          ],
-        })
-      ).resolves.toStrictEqual({
-        intentId: "intent-1",
-        status: "queued",
-        reason: "waiting for a connection",
-      });
-      expect(coordinator.enqueue).toHaveBeenCalledWith({
-        appId: "todos",
-        action: "complete",
-        input: { taskId: "task-1" },
-        dependencies: [
-          { shapeId: "shape-todos", entity: "core.task" },
-          { shapeId: "shape-todos-billing", entity: "core.task" },
-        ],
-        optimistic: [
-          {
-            op: "upsert",
-            shapeId: "shape-todos-billing",
-            entity: "core.task",
-            rowId: "task-1",
-            values: { cost: 42 },
-          },
-        ],
-      });
-      expect(coordinator.claimNextIntent).toHaveBeenCalledTimes(0);
-      await session.close();
-    });
-
-    test("queues a first-open offline write before a replica catalog exists", async () => {
-      const captureBaseVersions = vi
-        .fn<NonNullable<ShellReplicaCoordinator["captureBaseVersions"]>>()
-        .mockRejectedValue(new Error("must not read an unbootstrapped store"));
-      const coordinator = fakeCoordinator({
-        catalog: vi
-          .fn<ShellReplicaCoordinator["catalog"]>()
-          .mockResolvedValue([]),
-        captureBaseVersions,
-      });
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: null,
-        schemaEpoch: null,
-        coverage: "partial",
-        durability: "memory",
-      });
-
-      await expect(
-        session.write("todos", {
-          action: "complete",
-          input: { taskId: "task-1" },
-          optimistic: [
-            {
-              op: "upsert",
-              entity: "core.task",
-              rowId: "task-1",
-              values: { title: "Saved before bootstrap" },
-            },
-          ],
-        })
-      ).resolves.toStrictEqual({
-        intentId: "intent-1",
-        status: "queued",
-        reason: "waiting for a connection",
-      });
-      expect(captureBaseVersions.mock.calls).toStrictEqual([]);
-      expect(vi.mocked(coordinator.enqueue).mock.calls).toStrictEqual([
-        [
-          {
-            appId: "todos",
-            action: "complete",
-            input: { taskId: "task-1" },
-            dependencies: [],
-            optimistic: [],
-          },
-        ],
-      ]);
-      await session.close();
-    });
-
-    test("does not treat pending-shaped user copy as a synthetic row identity", async () => {
-      const coordinator = fakeCoordinator();
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-
-      await expect(
-        session.write("todos", {
-          action: "complete",
-          input: {
-            task_id: "task-1",
-            title: stablePendingRowId("ordinary", "content"),
-          },
-        })
-      ).resolves.toMatchObject({ status: "queued" });
-      expect(coordinator.enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: {
-            task_id: "task-1",
-            title: stablePendingRowId("ordinary", "content"),
-          },
-        })
-      );
-      await session.close();
-    });
-
-    test("enqueues a child write whose foreign key references a pending parent", async () => {
-      const reviseIntent = vi
-        .fn<NonNullable<ShellReplicaCoordinator["reviseIntent"]>>()
-        .mockResolvedValue(undefined);
-      const coordinator = fakeCoordinator({ reviseIntent });
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-
-      await expect(
-        session.write("tasks", {
-          action: "add",
-          input: {
-            project_id: stablePendingRowId("intent-project", "project"),
-            title: "Child of a pending project",
-          },
-        })
-      ).resolves.toMatchObject({ status: "queued" });
-      expect(reviseIntent).not.toHaveBeenCalled();
-      expect(coordinator.enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          appId: "tasks",
-          action: "add",
-          input: {
-            project_id: stablePendingRowId("intent-project", "project"),
-            title: "Child of a pending project",
-          },
-        })
-      );
-      await session.close();
-    });
-
-    test("routes a Tally synthetic expense edit through one declared revision", async () => {
-      const replacement: ReplicaIntent = {
-        ...intent(),
-        intentId: "intent-tally-replacement",
-        appId: "tally",
-        action: "add-expense",
-        input: { description: "Edited lunch" },
-        state: "queued",
-      };
-      const reviseIntent = vi
-        .fn<NonNullable<ShellReplicaCoordinator["reviseIntent"]>>()
-        .mockResolvedValue(replacement);
-      // #922 G2: the session asks the OUTBOX which queued intent minted the
-      // row this edit names — the id no longer spells it.
-      const coordinator = fakeCoordinator({
-        reviseIntent,
-        pendingIntentForInput: vi
-          .fn<NonNullable<ShellReplicaCoordinator["pendingIntentForInput"]>>()
-          .mockResolvedValue({
-            intentId: "intent-tally-original",
-            expectedActions: ["add-expense", "add-receipt-expense"],
-          }),
-      });
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-      const revision = {
-        expense_id: stablePendingRowId("intent-tally-original", "expense"),
-        description: "Edited lunch",
-        amount_minor: 1_250,
-        paid_by: "owner",
-        category: "food",
-        splits: [{ party_id: "owner", share_minor: 1_250 }],
-      };
-
-      await expect(
-        session.write("tally", { action: "edit-expense", input: revision })
-      ).resolves.toMatchObject({
-        intentId: "intent-tally-replacement",
-        status: "queued",
-      });
-      expect(reviseIntent).toHaveBeenCalledExactlyOnceWith(
-        "intent-tally-original",
-        revision,
-        ["add-expense", "add-receipt-expense"]
-      );
-      expect(coordinator.enqueue).not.toHaveBeenCalled();
-      await session.close();
-    });
-
-    test("replaces a retained canonical task edit instead of layering a second write", async () => {
-      const replacement: ReplicaIntent = {
-        ...intent(),
-        intentId: "intent-task-replacement",
-        appId: "tasks",
-        action: "edit",
-        input: { task_id: "task-1", title: "Correct title" },
-        state: "queued",
-      };
-      const reviseIntentForProjection = vi
-        .fn<NonNullable<ShellReplicaCoordinator["reviseIntentForProjection"]>>()
-        .mockResolvedValue({
-          replacement,
-          supersededIntentId: "intent-task-original",
-        });
-      const coordinator = fakeCoordinator({ reviseIntentForProjection });
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-
-      await expect(
-        session.write("tasks", {
-          action: "edit",
-          input: { task_id: "task-1", title: "Correct title" },
-          optimistic: [
-            {
-              op: "upsert",
-              entity: "schedule.task",
-              rowId: "task-1",
-              values: { task_id: "task-1", title: "Correct title" },
-            },
-          ],
-        })
-      ).resolves.toMatchObject({
-        intentId: "intent-task-replacement",
-        status: "queued",
-      });
-      expect(reviseIntentForProjection).toHaveBeenCalledWith(
-        "tasks",
-        "edit",
-        { task_id: "task-1", title: "Correct title" },
-        [
-          expect.objectContaining({
-            shapeId: "shape-tasks",
-            entity: "schedule.task",
-            rowId: "task-1",
-          }),
-        ],
-        []
-      );
-      expect(coordinator.enqueue).not.toHaveBeenCalled();
-      await session.close();
-    });
-
-    test("captures canonical base versions for an offline row edit", async () => {
-      const captureBaseVersions = vi
-        .fn<NonNullable<ShellReplicaCoordinator["captureBaseVersions"]>>()
-        .mockResolvedValue([
-          {
-            shapeId: "shape-todos",
-            entity: "core.task",
-            rowId: "task-1",
-            version: 8,
-          },
-        ]);
-      const coordinator = fakeCoordinator({ captureBaseVersions });
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-
-      await session.write("todos", {
-        action: "edit",
-        input: { taskId: "task-1", title: "Offline edit" },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.task",
-            rowId: "task-1",
-            values: { task_id: "task-1", title: "Offline edit" },
-            shapeId: "shape-todos",
-          },
-        ],
-      });
-
-      expect(captureBaseVersions).toHaveBeenCalledOnce();
-      expect(coordinator.enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          baseVersions: [
-            expect.objectContaining({ rowId: "task-1", version: 8 }),
-          ],
-        })
-      );
-      await session.close();
-    });
-
-    test("returns the gateway admission outcome for an online write", async () => {
-      let online = false;
-      const queued = intent();
-      const coordinator = fakeCoordinator({
-        claimNextIntent: vi
-          .fn<() => Promise<ReplicaIntent | undefined>>()
-          .mockResolvedValueOnce(queued)
-          .mockResolvedValue(undefined),
-      });
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        {
-          eventTarget: new EventTarget(),
-          isOnline: () => online,
-          fetcher: vi.fn<ReplicaFetcher>().mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                protocolVersion: 1,
-                outcome: {
-                  intentId: queued.intentId,
-                  status: "parked",
-                  reason: "confirm first",
-                },
-              }),
-              { status: 200, headers: { "content-type": "application/json" } }
-            )
-          ),
-        }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-      online = true;
-
-      await expect(
-        session.write("todos", {
-          action: "complete",
-          input: { taskId: "task-1" },
-        })
-      ).resolves.toStrictEqual({
-        intentId: "intent-1",
-        status: "parked",
-        reason: "confirm first",
-      });
-      expect(coordinator.applyIntentOutcome).toHaveBeenCalledWith({
-        intentId: "intent-1",
-        status: "parked",
-        reason: "confirm first",
-      });
-      await session.close();
-    });
-
-    test("an online event keeps a warm cursor instead of re-downloading bootstrap", async () => {
-      const events = new EventTarget();
-      const coordinator = fakeCoordinator();
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { eventTarget: events, isOnline: () => true }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "warm", seq: 7 },
-        schemaEpoch: "s",
-      });
-
-      events.dispatchEvent(new Event("online"));
-      await Promise.resolve();
-      expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
-      await session.close();
-    });
-
-    test("reruns an active drain when an enqueue races its empty claim", async () => {
-      let releaseEmptyClaim: (() => void) | undefined;
-      const emptyClaim = new Promise<undefined>((resolve) => {
-        releaseEmptyClaim = () => resolve(undefined);
-      });
-      const queued = intent();
-      const claimNextIntent = vi
-        .fn<() => Promise<ReplicaIntent | undefined>>()
-        .mockReturnValueOnce(emptyClaim)
-        .mockResolvedValueOnce(queued)
-        .mockResolvedValue(undefined);
-      const coordinator = fakeCoordinator({ claimNextIntent });
-      const fetcher = vi.fn<ReplicaFetcher>().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            protocolVersion: 1,
-            outcome: {
-              intentId: queued.intentId,
-              status: "parked",
-              reason: "confirm first",
-            },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
-      );
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { fetcher, eventTarget: new EventTarget(), isOnline: () => true }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-      expect(claimNextIntent).toHaveBeenCalledOnce();
-
-      const result = session.write("todos", {
-        action: queued.action,
-        input: queued.input,
-      });
-      await vi.waitFor(() =>
-        expect(coordinator.enqueue).toHaveBeenCalledOnce()
-      );
-      releaseEmptyClaim?.();
-
-      await expect(result).resolves.toStrictEqual({
-        intentId: queued.intentId,
-        status: "parked",
-        reason: "confirm first",
-      });
-      expect(claimNextIntent).toHaveBeenCalledTimes(3);
-      await session.close();
-    });
-
-    test("purges OPFS and IDB state when the gateway revokes authorization", async () => {
-      const coordinator = fakeCoordinator({
-        claimNextIntent: vi
-          .fn<() => Promise<ReplicaIntent | undefined>>()
-          .mockResolvedValueOnce(intent())
-          .mockResolvedValue(undefined),
-      });
-      const revoked =
-        vi.fn<
-          NonNullable<ReplicaShellSessionOptions["onAuthorizationRevoked"]>
-        >();
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        {
-          fetcher: vi.fn<ReplicaFetcher>().mockResolvedValue(
-            new Response(
-              JSON.stringify({ error: "replica_device_not_enrolled" }),
-              {
-                status: 403,
-              }
-            )
-          ),
-          eventTarget: new EventTarget(),
-          isOnline: () => true,
-          onAuthorizationRevoked: revoked,
-        }
-      );
-      await session.start({
-        mode: "memory",
-        cursor: { epoch: "e", seq: 1 },
-        schemaEpoch: "s",
-      });
-      await session.flushIntents();
-      expect(revoked).toHaveBeenCalledWith(session);
-      expect(coordinator.purge).toHaveBeenCalledOnce();
-    });
-
-    test("a rebootstrap demanded mid-bootstrap runs after it, instead of being dropped", async () => {
-      let releaseBootstrap: (() => void) | undefined;
-      const gate = new Promise<void>((resolve) => {
-        releaseBootstrap = () => resolve();
-      });
-      const coordinator = fakeCoordinator({
-        bootstrap: vi
-          .fn<ShellReplicaCoordinator["bootstrap"]>()
-          .mockImplementationOnce(async () => {
-            await gate;
-            return { epoch: "epoch", seq: 7 };
-          })
-          .mockResolvedValue({ epoch: "epoch", seq: 8 }),
-      });
-      // A fresh Response per call: both bootstraps read the body.
-      const fetcher = vi.fn<ReplicaFetcher>().mockImplementation(
-        async () =>
-          new Response(
-            JSON.stringify({
-              protocolVersion: 1,
-              vaultId: "vault",
-              schemaEpoch: "schema",
-              cursor: { epoch: "epoch", seq: 7 },
-              shapes: [],
-              rows: [],
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          )
-      );
-      const session = new ReplicaShellSession(
-        { baseUrl: "https://gateway.example", vaultId: "vault" },
-        coordinator,
-        { fetcher, eventTarget: new EventTarget(), isOnline: () => true }
-      );
-
-      const started = session.start({
-        mode: "memory",
-        cursor: null,
-        schemaEpoch: null,
-      });
-      await vi.waitFor(() =>
-        expect(coordinator.bootstrap).toHaveBeenCalledOnce()
-      );
-      // The gateway rejects the state this walk began from, while it walks.
-      session.requireBootstrap();
-      releaseBootstrap?.();
-      await started;
-
-      await vi.waitFor(() =>
-        expect(coordinator.bootstrap).toHaveBeenCalledTimes(2)
-      );
-      await session.close();
-    });
-  });
-  // The windowed-bootstrap `target` hands the coordinator's own methods to
-  // `runWindowedBootstrap`, which invokes them as `target.bootstrapBegin(...)`.
-  // A bare method reference therefore arrives with `this` bound to the object
-  // literal, and `bootstrapBegin` calls a private method on itself as its very
-  // first act — so detaching them threw `this.resetFeedGeneration is not a
-  // function` on any vault large enough to take the windowed path. Unit tests
-  // stayed green because nothing here drives a real windowed bootstrap; it
-  // surfaced only when the desktop Home springboard began reading the replica.
-  //
-  // This is a STRUCTURAL guard, not a behavioural one: a windowed-bootstrap
-  // fixture does not exist yet, so this pins the shape of the call site until
-  // one does.
-  describe("windowed bootstrap target", () => {
-    test("passes coordinator methods wrapped, never as detached references", () => {
-      const source = readFileSync(
-        path.join(import.meta.dirname, "shell-session.ts"),
-        "utf8"
-      );
-      const target = /target:\s*\{(?<body>[\s\S]*?)\n\s{8}\}/u.exec(source)
-        ?.groups?.body;
-      expect(target, "windowed-bootstrap target literal not found").toBeTypeOf(
-        "string"
-      );
-      // A bare `this.coordinator.foo!,` or `this.coordinator.foo,` entry is the
-      // regression; every method must be reached through an arrow that keeps
-      // the coordinator as the receiver.
-      expect(target).not.toMatch(/:\s*this\.coordinator\.\w+!?,/u);
-      expect(target).toMatch(/[=]>\s*this\.coordinator\.bootstrapBegin!\(/u);
-    });
-
-    // The second way this literal goes wrong, and the one the compiler cannot
-    // see: a function that accepts FEWER parameters than its target type is
-    // assignable in TypeScript, so a wrapper that quietly drops an argument
-    // typechecks. `bootstrapCommit(cursor, header, outcomes)` wrapped as
-    // `(cursor, header) => ...` compiled clean while discarding the intent
-    // outcomes reconciled against the page-1 cursor — every write in flight
-    // across a bootstrap was left unresolved with nothing to report it.
-    test("forwards every parameter each wrapper declares", () => {
-      const source = readFileSync(
-        path.join(import.meta.dirname, "shell-session.ts"),
-        "utf8"
-      );
-      const target = /target:\s*\{(?<body>[\s\S]*?)\n\s{8}\}/u.exec(source)
-        ?.groups?.body;
-      const wrappers = [
-        ...(target ?? "").matchAll(
-          /\((?<params>[^)]*)\)\s*=>\s*this\.coordinator\.(?<method>\w+)!?\((?<args>[^)]*)\)/gu
-        ),
-      ];
-      expect(wrappers.length).toBeGreaterThanOrEqual(5);
-      const names = (list: string): string[] =>
-        list
-          .split(",")
-          .map((part) => part.trim())
-          .filter(Boolean);
-      for (const wrapper of wrappers) {
-        const { args, method, params } = wrapper.groups!;
-        expect(
-          names(args!),
-          `${method} drops or reorders a parameter`
-        ).toStrictEqual(names(params!));
-      }
     });
   });
 });

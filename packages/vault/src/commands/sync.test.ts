@@ -199,9 +199,18 @@ describe("sync", () => {
     expect(published.status).toBe("executed");
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
+    // A REMOTE FILE IS A DOCUMENT (#996, ruling R20(b)): bytes carry neither
+    // the source's title nor its media type, so the listing gets the wrapper
+    // it always described and its own representation.
     expect({
       ...db.vault
-        .prepare("SELECT title, media_type, content_uri FROM core_content_item")
+        .prepare(
+          `SELECT d.title, r.media_type, c.content_uri
+             FROM core_document d
+             JOIN core_content_item c ON c.content_id = d.current_content_id
+             JOIN core_content_representation r
+               ON r.owner_type = 'core.document' AND r.owner_id = d.document_id`
+        )
         .get(),
     }).toStrictEqual({
       title: "Quarterly plan.pdf",

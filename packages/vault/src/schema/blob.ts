@@ -19,7 +19,7 @@
 // A match inside a PDF must surface the DOCUMENT (#352: core_document,
 // not the raw content item), so extracted text feeds the OWNING document's
 // FTS row rather than a shadow row. The v2 triggers rebuilt the row from
-// `vault_content_text` alone — any title rename would clobber derivative
+// the decoded body alone — any title rename would clobber derivative
 // text — so this recreates them with the derivative-aware body expression,
 // and mirrors it from the derivative side. A content item can be the
 // current body of more than one document (sha256 dedup, or two documents
@@ -32,18 +32,31 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { truncateForIndex } from "./fts.js";
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  OWNED_TITLE_SQL,
+  ftsRefreshByContent,
+  ftsRefreshStatement,
+  truncateForIndex,
+} from "./fts.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
-/** Body of a document's FTS row: extracted text, transcript, inline text. */
+/** Body of a document's FTS row: extracted text, transcript, inline text.
+ *  The inline branch reads `core_content_text`, written at representation
+ *  time (#996, R4/R8) — the owner's reading of the bytes still decides the
+ *  text, it just decided it earlier, and the trigger is plain SQL that runs
+ *  unchanged on a seat. */
 const DOCUMENT_BODY = (ref: string) =>
   truncateForIndex(`COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'text'),
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'transcript'),
-    (SELECT vault_content_text(ci."media_type", ci."content_uri") FROM core_content_item ci
-      WHERE ci.content_id = ${ref}."current_content_id"))`);
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = ${ref}."current_content_id"))`);
 
 /**
  * Core content search text: the owner's title plus whichever spoken/visible
@@ -52,9 +65,14 @@ const DOCUMENT_BODY = (ref: string) =>
  * (a slide deck's extracted text layer alongside the speaker's transcript;
  * `derivatives.test.ts` covers exactly this), so folding in only the first
  * present would silently drop the other's words from the index (#724).
+ *
+ * The title half is now the OWNING ASSET's authored title (#996, R20(b)):
+ * `core_content_item.title` is gone, because a caption is not a property of
+ * bytes. `media_asset`'s own triggers below keep this row in step with a
+ * rename.
  */
 const CONTENT_ITEM_SEARCH_TEXT = (ref: string) =>
-  truncateForIndex(`trim(COALESCE(${ref}."title", '') || ' ' || COALESCE(
+  truncateForIndex(`trim(COALESCE(${OWNED_TITLE_SQL(ref)}, '') || ' ' || COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."content_id" AND dv.variant = 'text'), '') || ' ' || COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
@@ -67,6 +85,16 @@ const REFRESH_DOCUMENT_FTS = (contentIdRef: string) => `
   SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY("d")}
     FROM core_document d
    WHERE d.current_content_id = ${contentIdRef} AND d."deleted_at" IS NULL;`;
+
+/** One document's FTS row, addressed by ITS id rather than its bytes. */
+const REFRESH_DOCUMENT_FTS_FOR = (idRef: string, extra: string) => `
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE document_id = ${idRef})
+     AND ${extra};
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY("d")}
+    FROM core_document d
+   WHERE d."document_id" = ${idRef} AND ${extra} AND d."deleted_at" IS NULL;`;
 
 const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
   DELETE FROM fts_core_content_item
@@ -206,6 +234,45 @@ END;
 
 ${BLOB_CONTENT_ITEM_FTS_DDL}
 
+-- The content item's indexed title is its OWNING ASSET's authored title
+-- (#996, R20(b)) — a value on another table, so a rename there has to reach
+-- this index the way extracted text does. Insert as well as update: an asset
+-- is adopted onto content that already has its FTS row.
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_asset_ai AFTER INSERT ON media_asset
+BEGIN${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_asset_au AFTER UPDATE OF title, content_id ON media_asset
+BEGIN${REFRESH_CONTENT_ITEM_FTS("OLD.content_id")}${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_asset_ad AFTER DELETE ON media_asset
+BEGIN${REFRESH_CONTENT_ITEM_FTS("OLD.content_id")}
+END;
+
+-- A REPRESENTATION IS WRITTEN AFTER ITS OWNER (#996, ruling R20(b)): the
+-- wrapper row must exist before anything can own a reading of its bytes, so
+-- the wrapper's own \`_ai\` trigger has already run with no media type to
+-- decode by. These put the index back in step the moment the reading lands,
+-- and again if the owner is re-pointed or re-typed. Documents take the
+-- derivative-aware body above; notes and messages take the generated one.
+CREATE TRIGGER IF NOT EXISTS trg_fts_representation_ai AFTER INSERT ON core_content_representation
+BEGIN${REFRESH_DOCUMENT_FTS_FOR("NEW.owner_id", "NEW.owner_type = 'core.document'")}${ftsRefreshStatement("knowledge.note", "NEW.owner_id", "NEW.owner_type = 'knowledge.note'")}${ftsRefreshStatement("social.message", "NEW.owner_id", "NEW.owner_type = 'social.message'")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_representation_au AFTER UPDATE ON core_content_representation
+BEGIN${REFRESH_DOCUMENT_FTS_FOR("NEW.owner_id", "NEW.owner_type = 'core.document'")}${ftsRefreshStatement("knowledge.note", "NEW.owner_id", "NEW.owner_type = 'knowledge.note'")}${ftsRefreshStatement("social.message", "NEW.owner_id", "NEW.owner_type = 'social.message'")}
+END;
+
+-- AND ON A SEAT, THE TEXT ARRIVES SEPARATELY (#996, R4/R5). The applier
+-- writes a commit's rows in TABLE order, so \`core_content_text\` can land
+-- after the note or document that reads it, and a seat runs no DDL and no
+-- refresh pass of its own — these are what put the index in step there,
+-- from the same trigger text the gateway runs.
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_text_ai AFTER INSERT ON core_content_text
+BEGIN${REFRESH_DOCUMENT_FTS("NEW.content_id")}${ftsRefreshByContent("knowledge.note", "NEW.content_id")}${ftsRefreshByContent("social.message", "NEW.content_id")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_text_au AFTER UPDATE ON core_content_text
+BEGIN${REFRESH_DOCUMENT_FTS("NEW.content_id")}${ftsRefreshByContent("knowledge.note", "NEW.content_id")}${ftsRefreshByContent("social.message", "NEW.content_id")}
+END;
+
 -- Extracted text can arrive AFTER the document already exists (async OCR/
 -- text-layer extraction) — refresh whichever document(s) are currently
 -- pointed at the derivative's parent content item.
@@ -290,6 +357,7 @@ CREATE TABLE core_content_derivative (
   text_content  TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (content_id, variant),
   CHECK ((variant IN ('thumb','preview','poster')) = (sha256 IS NOT NULL)),
   CHECK ((variant IN ('text','transcript','embedding','phash','thumbhash')) = (text_content IS NOT NULL)),

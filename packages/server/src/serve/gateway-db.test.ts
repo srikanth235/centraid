@@ -43,7 +43,6 @@ describe("gateway-db scenarios", () => {
       "backup_targets",
       "cas_reconciliations",
       "device_checkpoints",
-      "device_surface_projection",
       "devices",
       "erase_intents",
       "gateway_meta",

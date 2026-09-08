@@ -229,6 +229,43 @@ describe("link ceremony", () => {
     expect(replay.json).toStrictEqual({ state: "not_found" });
   });
 
+  /*
+   * OPEN QUESTION 7 (#996, R17): a link is a CHANNEL, not a permission slip.
+   * The far side's hello used to be spread verbatim into a column called
+   * `permissions`, so a peer could persist arbitrary keys in this gateway;
+   * nothing ever read them, which is the only reason it was not a hole. What
+   * the link keeps from the exchange is WHO each side is — and that is the one
+   * thing the far side may contribute.
+   */
+  it("keeps who the peer is and nothing else its hello asks to store", async () => {
+    const links = openStore();
+    const handler = makeHandler(links);
+    const ticket = links.tickets.mint(LOCAL_VAULT, LOCAL_KEY);
+    const result = await call(handler, {
+      method: "POST",
+      url: "/centraid/_peer/link/redeem",
+      body: redeemBody({
+        ticketId: ticket.ticketId,
+        secret: ticket.secret,
+        ownerPartyId: "party_priya",
+        // Both spellings of the old open bag, plus a permission the peer would
+        // very much like this gateway to remember it granted itself.
+        permissions: {
+          admin: true,
+          commonsPartyIds: { [LOCAL_VAULT]: "nope" },
+        },
+        partyIds: { [LOCAL_VAULT]: "nope" },
+      }),
+    });
+    expect(result.status).toBe(200);
+    // The reply carries no bag either — a field nothing reads is a field the
+    // next reader puts a permission in.
+    expect(result.json).not.toHaveProperty("permissions");
+    expect(result.json).not.toHaveProperty("partyIds");
+    const stored = links.peerForEndpoint(PEER_ENDPOINT);
+    expect(stored?.partyIds).toStrictEqual({ [PEER_VAULT]: "party_priya" });
+  });
+
   it("refuses a redemption that claims a vault this gateway holds (#750)", async () => {
     const links = openStore();
     const handler = makeHandler(links);

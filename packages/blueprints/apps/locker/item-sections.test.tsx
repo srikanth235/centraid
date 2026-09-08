@@ -80,7 +80,6 @@ const DETAIL: LockerDetail = {
       attachment_id: "at1",
       content_id: "c1",
       role: "attachment",
-      title: "recovery-kit.pdf",
       media_type: "application/pdf",
       byte_size: 20_480,
     },
@@ -271,7 +270,9 @@ describe("the passkey slot draws its metadata and the key's PRESENCE", () => {
 describe("attachments state the boundary they actually have", () => {
   test("what the file is, how big, and that the bytes ride the vault file", () => {
     const markup = item();
-    expect(markup).toContain("recovery-kit.pdf");
+    // The ROLE names the row, not a filename: bytes carry no title since #996
+    // (ruling R20(b)), and an attachment is not a wrapper that could hold one.
+    expect(markup).toContain("attachment");
     expect(markup).toContain("application/pdf");
     expect(markup).toContain("20 KB");
     expect(markup).toContain(ATTACHMENTS_NOTE);

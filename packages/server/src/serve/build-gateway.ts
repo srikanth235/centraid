@@ -61,7 +61,6 @@ import {
   ASSISTANT_APP_ID,
   AUTHED_DEVICE_HEADER,
   AUTHED_PLANE_HEADER,
-  COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   AutomationTriggerStore,
   Dispatcher,
@@ -221,6 +220,7 @@ import {
   makeScopesRouteHandler,
   SCOPES_PATH,
 } from "../routes/scopes-routes.js";
+import { makeSeatRouteHandler } from "../routes/seat-routes.js";
 import { makeStorageRouteHandler } from "../routes/storage-routes.js";
 import { makeTemplatesRouteHandler } from "../routes/templates-routes.js";
 import { makeVaultLinksRouteHandler } from "../routes/vault-links-routes.js";
@@ -244,7 +244,6 @@ import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
-import { companionAccess } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
 import { defaultLogger } from "./default-logger.js";
@@ -292,6 +291,7 @@ import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { announceLocalRoutes } from "./peer-route-announce.js";
 import { PowerContextMonitor } from "./power-context.js";
 import { PricingWarmer } from "./pricing-warmer.js";
+import { forwardOverPeer } from "./projected-edit.js";
 import { ResourceAccounting } from "./resource-accounting.js";
 import {
   formatEventLoopDetail,
@@ -305,7 +305,7 @@ import type { ResourceMode } from "./resource-mode.js";
 import { RouteLatencyMetrics } from "./route-latency.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
-import { pullShareShape } from "./share-subscriber.js";
+import { pullShareTail } from "./share-subscriber.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
@@ -3633,8 +3633,6 @@ export async function buildGateway(
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
           automationTurns: experimental.automations,
-          multiVaultReplica: true,
-          crossVaultPlacements: true,
           automations: experimental.automations,
           connectors: experimental.connectors,
         },
@@ -3876,6 +3874,12 @@ export async function buildGateway(
           ),
         ]
       : []),
+    // THE SEAT DOORS (#996, R4/R5), ahead of the shaped route's prefixes so
+    // `/seat/*` is never swallowed by the generic `_vault` 404 below.
+    forRoutePrefixes(
+      ["/centraid/_vault/seat"],
+      makeSeatRouteHandler(vaultRegistry, { enrollments: enrollmentStore })
+    ),
     forRoutePrefixes(
       ["/centraid/_vault/replica", "/centraid/_vault/changes"],
       makeReplicaRouteHandler(vaultRegistry, {
@@ -3892,6 +3896,31 @@ export async function buildGateway(
               intentId: input.intentId,
             })
           ),
+        // A PROJECTED ROW'S EDIT GOES HOME (#996, R10). Which link reaches the
+        // origin is this host's fact, exactly as `pullShape` above; the route
+        // itself never learns an address. No dial or no link is a fact about
+        // REACH — the intent stays retryable rather than being written here.
+        forwardProjectedEdit: async (request) => {
+          const dial = options.peerPlane?.dial;
+          const link = vaultLinksStore.peerForVault(
+            request.route.originVaultId,
+            request.audienceVaultId
+          );
+          if (!dial || !link)
+            return {
+              status: "retryable" as const,
+              reason: `no link from ${request.audienceVaultId} to ${request.route.originVaultId}`,
+            };
+          return forwardOverPeer(
+            {
+              dial,
+              peerRoute: link.route,
+              signAsVault: (vaultId, bytes) =>
+                vaultRegistry.signAsVault(vaultId, bytes),
+            },
+            request
+          );
+        },
       })
     ),
     // The generic owner consent surface: it answers 404 for any `_vault`
@@ -4147,15 +4176,20 @@ export async function buildGateway(
                 state: "unreachable" as const,
                 detail: `no link from ${input.audienceVaultId} to ${input.originVaultId}`,
               };
-            return pullShareShape({
-              dial,
-              route: link.route,
-              originVaultId: input.originVaultId,
-              audienceVaultId: input.audienceVaultId,
-              shapeId: input.shapeId,
-              seat: input.seat,
-              now: () => new Date().toISOString(),
-            });
+            return (
+              (await pullShareTail({
+                dial,
+                route: link.route,
+                originVaultId: input.originVaultId,
+                audienceVaultId: input.audienceVaultId,
+                shapeId: input.shapeId,
+                seat: input.seat,
+                now: () => new Date().toISOString(),
+              })) ?? {
+                state: "unreachable" as const,
+                detail: "the origin cannot serve this grant as rows",
+              }
+            );
           },
         },
       })
@@ -4305,7 +4339,6 @@ export async function buildGateway(
     // A proved device enrollment scopes what may be addressed; the header
     // picks within it, and no identity is a HARD refusal (#289). Loopback
     // embeds use the persisted host enrollment, not wildcard reach.
-    delete req.headers[COMPANION_GRANTS_HEADER];
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
     const deviceKey = effectiveDeviceAccess?.deviceKeyFor(req);
@@ -4363,31 +4396,6 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    const access = companionAccess({
-      attenuated: enrollment?.attenuated === true,
-      projected:
-        enrollment?.attenuated === true
-          ? enrollmentStore.projectedSurfaces(deviceKey, vaultId)
-          : undefined,
-      req,
-      enrollmentId: enrollment?.enrollmentId ?? "",
-    });
-    if (access.kind === "unreadable")
-      return sendJson(res, 403, {
-        error: "companion_attenuation_unavailable",
-        message:
-          "this Companion device's surface answer has not been read from the vault yet",
-      });
-    if (access.kind === "refused")
-      return sendJson(res, 403, {
-        error: "companion_profile",
-        message:
-          "this Companion device is not granted access to that gateway surface",
-      });
-    const companionSurfaces =
-      access.kind === "allowed" ? access.surfaces : undefined;
-    if (companionSurfaces !== undefined)
-      req.headers[COMPANION_GRANTS_HEADER] = companionSurfaces.join(",");
     return runWithVaultContext(
       {
         vaultId,
@@ -4398,7 +4406,6 @@ export async function buildGateway(
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
-        ...(companionSurfaces === undefined ? {} : { companionSurfaces }),
       },
       () => dispatchChain(req, res)
     );

@@ -3,8 +3,8 @@ import { describe, expect, test } from "vitest";
 import { fc } from "@centraid/test-kit/fast-check";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 
-import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
 
 const intentIdArb = fc
   .tuple(

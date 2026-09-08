@@ -17,9 +17,6 @@
 // `queries/dashboard.ts`'s one balance engine; this module moves payloads and
 // records when they landed.
 
-// `ACTIVITY_WINDOW` / `ACTIVITY_STEP` are imported rather than restated: the
-// feed's window and its step are the shared fold's numbers, and two spellings
-// of 60 is exactly the drift `activity-model.ts` exists to prevent.
 import {
   ACTIVITY_STEP,
   ACTIVITY_WINDOW,
@@ -34,6 +31,10 @@ import type {
   SearchData,
   VaultDenied,
 } from "@centraid/blueprints/apps/tally/types";
+// `ACTIVITY_WINDOW` / `ACTIVITY_STEP` are imported rather than restated: the
+// feed's window and its step are the shared fold's numbers, and two spellings
+// of 60 is exactly the drift `activity-model.ts` exists to prevent.
+import { EMPTY_BAG, valuate } from "@centraid/core/money";
 
 import {
   tallyActivity,
@@ -58,8 +59,8 @@ const EMPTY_DASHBOARD: DashboardData = {
   groups: [],
   trash: [],
   recurring: [],
-  owe_total_minor: 0,
-  owed_total_minor: 0,
+  owe: valuate(EMPTY_BAG, "USD"),
+  owed: valuate(EMPTY_BAG, "USD"),
 };
 
 export interface TallySearchState {

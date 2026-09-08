@@ -18,7 +18,7 @@ export {
 
 export {
   GATEWAY_PLANE_PREFIX,
-  MAX_MULTIPLEX_REPLICA_SCOPES,
+  MAX_REPLICA_FEED_MOUNTS,
   VAULT_PLANE_PREFIX,
   APPS_PLANE_PREFIX,
   WEB_PLANE_PREFIX,
@@ -89,15 +89,40 @@ export {
   shareShapeId,
   subscriberQuery,
   PEER_REPLICA_BLOB_PATH,
-  PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
   PEER_REPLICA_INTENTS_PATH,
   PEER_REPLICA_PATHS,
+  PEER_REPLICA_TAIL_PATH,
   REPLICA_POST_ADMISSION_CONTRACT,
   SHARE_SHAPE_SIGIL,
   type ReplicaSubscriberCredential,
   type SubscriberCredentialVerdict,
 } from "./replica-subscription.js";
+
+export {
+  SEAT_LOG_MAX_PAGE,
+  SEAT_SNAPSHOT_EPOCH_HEADER,
+  SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
+  SEAT_SNAPSHOT_SEQ_HEADER,
+  type SeatLockerKeyWire,
+  type SeatLogOp,
+  type SeatLogPageWire,
+  type SeatLogRowWire,
+  type SeatRebootstrapReason,
+  type SeatRebootstrapRequiredWire,
+  type SeatSnapshotHead,
+} from "./seat-log.js";
+
+export {
+  applyRowSql,
+  decodeWireRow,
+  decodeWireValue,
+  deleteRowSql,
+  encodeWireRow,
+  encodeWireValue,
+  type WireRowImage,
+  type WireValue,
+} from "./row-json.js";
 
 export {
   judgePeerHandshake,

@@ -304,10 +304,8 @@ const NAME_COLLISIONS = {
     "cloneAutomationTemplate",
     "formatBytes",
     "formatUptime",
-    "gatewayAuth",
     "getNotifications",
     "isPinned",
-    "json",
     "listAutomationTurns",
     "listAutomations",
     "listConnections",
@@ -337,7 +335,10 @@ const BODY_COLLISIONS = {
   ],
   tally: ["undoIsLive ↔ undoIsLive"],
   tasks: [],
-  kit: ["gatewayAuth ↔ gatewayAuth"],
+  // `gatewayAuth` and `json` left this list with the old replica plane (#996
+  // W5): both had a second, seat-local spelling inside it, and the plane is
+  // gone. Shrinks only — this is a shrink.
+  kit: [],
   screens: [],
 } as const;
 

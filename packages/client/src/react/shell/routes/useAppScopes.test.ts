@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
 import type { AppScopeEntry } from "../../../gateway-client-vault.js";
 import type * as TypeImport_lhrfvk from "../../../gateway-client-vault.js";
-import type * as TypeImport_ntzl9 from "../../../replica/shell-session.js";
+import type * as TypeImport_ntzl9 from "../../../replica/shell-session-scopes.js";
 
 const { readAppScopePlane } = vi.hoisted(() => ({
   readAppScopePlane: vi.fn<typeof TypeImport_lhrfvk.readAppScopePlane>(),
@@ -20,7 +20,7 @@ vi.mock(import("../../../gateway-client-core.js") as Promise<unknown>, () => ({
   })),
 }));
 vi.mock(
-  import("../../../replica/shell-session.js") as Promise<unknown>,
+  import("../../../replica/shell-session-scopes.js") as Promise<unknown>,
   () => ({
     addressedGatewayAuth: vi.fn<typeof TypeImport_ntzl9.addressedGatewayAuth>(
       async () => ({

@@ -31,9 +31,11 @@ describe("placement-lifecycle suite", () => {
     const photo = seedPhoto(origin, originBoot, "f");
     const realPrepare = audience.vault.prepare.bind(audience.vault);
     audience.vault.prepare = ((sql: string) => {
-      // Injected on the DERIVATIVE write, which lands after the content item:
-      // a failure at the first statement would prove nothing about rollback.
-      if (sql.includes("core_content_derivative"))
+      // Injected on the MEDIA ASSET write, which lands after the content item
+      // and its bytes: a failure at the first statement would prove nothing
+      // about rollback. (It used to be the derivative write, which no longer
+      // exists — a derived row never projects, #996 R10.)
+      if (sql.includes("INSERT INTO media_asset"))
         throw new Error("injected mid-share failure");
       return realPrepare(sql);
     }) as typeof audience.vault.prepare;
@@ -89,17 +91,13 @@ describe("placement-lifecycle suite", () => {
       now: 1_000,
     });
     expect(held.deleted).toStrictEqual([]);
-    expect(held.graceHeld.sort()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].sort()
-    );
+    expect(held.graceHeld).toStrictEqual([photo.sha256]);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(true);
     const reclaimed = sweepLocalOrphans(audience, {
       graceWindowMs: 3 * day,
       now: 1_000 + 4 * day,
     }).deleted;
-    expect(reclaimed.sort()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].sort()
-    );
+    expect(reclaimed).toStrictEqual([photo.sha256]);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
     // Reclaiming the audience's directory entry never touched the origin's.
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
@@ -131,9 +129,7 @@ describe("placement-lifecycle suite", () => {
     );
 
     expect(result.removed).toBe(true);
-    expect(result.orphanedShas.toSorted()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].toSorted()
-    );
+    expect(result.orphanedShas).toStrictEqual([photo.sha256]);
     expect(
       plainSqliteRow(
         audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
@@ -191,7 +187,7 @@ describe("placement-lifecycle suite", () => {
     const again = share();
 
     expect(again.items[0]!.deduped).toBe(false);
-    expect(again.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
+    expect(again.blobs.map((b) => b.mode)).toStrictEqual(["linked"]);
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
   });
 
@@ -234,9 +230,9 @@ describe("placement-lifecycle suite", () => {
     // The inode survived: the audience still holds its own directory entry, so
     // the family's copy of the photo reads exactly as before.
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
-    expect(audience.blobs.getSync(photo.thumbSha)).toStrictEqual(
-      photo.thumbBytes
-    );
+    // The thumb's bytes never crossed, so the origin's sweep took the only
+    // copy there was — which is the audience re-deriving its own, not a loss.
+    expect(audience.blobs.hasSync(photo.thumbSha)).toBe(false);
     expect(statSync(casPath(audience, photo.sha256)).nlink).toBe(1);
 
     // And only after the LAST vault unlinks does the content actually go.

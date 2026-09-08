@@ -17,87 +17,15 @@ import {
   vi,
 } from "vitest";
 
-import type { ShellReplicaCoordinator } from "./shell-session.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
+import type * as TypeImport_identity from "./replica-identity.js";
 import type * as TypeImport_1vwuba6 from "./shell-session.js";
-import type { ReplicaShape, ReplicaStatus } from "./types.js";
 
 let ReplicaShellSession: typeof TypeImport_1vwuba6.ReplicaShellSession;
-let fetchReplicaForScope: typeof TypeImport_1vwuba6.fetchReplicaForScope;
+let fetchReplicaForScope: typeof TypeImport_identity.fetchReplicaForScope;
 
 const FOCUSED_VAULT = "vault-focused";
 const BASE_URL = "https://gateway.example";
-
-const shapes: ReplicaShape[] = [
-  {
-    shapeId: "shape-media",
-    appId: "photos",
-    entities: [
-      {
-        entity: "media.asset",
-        primaryKey: "asset_id",
-        columns: ["asset_id", "captured_at"],
-      },
-    ],
-  },
-];
-
-function fakeCoordinator(): ShellReplicaCoordinator {
-  return {
-    bootstrap: vi
-      .fn<ShellReplicaCoordinator["bootstrap"]>()
-      .mockResolvedValue({ epoch: "e", seq: 1 }),
-    status: vi
-      .fn<ShellReplicaCoordinator["status"]>()
-      .mockResolvedValue({ mode: "memory", cursor: null, schemaEpoch: null }),
-    catalog: vi
-      .fn<ShellReplicaCoordinator["catalog"]>()
-      .mockResolvedValue(shapes),
-    readWire: vi.fn<ShellReplicaCoordinator["readWire"]>().mockResolvedValue({
-      rows: [],
-      cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "shape-media", entity: "media.asset" },
-    }),
-    searchWire: vi
-      .fn<ShellReplicaCoordinator["searchWire"]>()
-      .mockResolvedValue({
-        rows: [],
-        cursor: { epoch: "e", seq: 1 },
-        dependency: { shapeId: "shape-media", entity: "media.asset" },
-      }),
-    enqueue: vi.fn<ShellReplicaCoordinator["enqueue"]>(),
-    claimNextIntent: vi
-      .fn<ShellReplicaCoordinator["claimNextIntent"]>()
-      .mockResolvedValue(undefined),
-    markIntentTransportFailed:
-      vi.fn<ShellReplicaCoordinator["markIntentTransportFailed"]>(),
-    markIntentAwaitingChange:
-      vi.fn<ShellReplicaCoordinator["markIntentAwaitingChange"]>(),
-    applyIntentOutcome: vi.fn<ShellReplicaCoordinator["applyIntentOutcome"]>(),
-    discardIntent: vi
-      .fn<ShellReplicaCoordinator["discardIntent"]>()
-      .mockResolvedValue(false),
-    retryIntent: vi
-      .fn<ShellReplicaCoordinator["retryIntent"]>()
-      .mockResolvedValue(undefined),
-    recoverSending: vi
-      .fn<ShellReplicaCoordinator["recoverSending"]>()
-      .mockResolvedValue([]),
-    pendingIntents: vi
-      .fn<ShellReplicaCoordinator["pendingIntents"]>()
-      .mockResolvedValue([]),
-    subscribeInvalidations: vi
-      .fn<ShellReplicaCoordinator["subscribeInvalidations"]>()
-      .mockReturnValue(() => undefined),
-    close: vi
-      .fn<ShellReplicaCoordinator["close"]>()
-      .mockResolvedValue(undefined),
-    purge: vi
-      .fn<ShellReplicaCoordinator["purge"]>()
-      .mockResolvedValue(undefined),
-  };
-}
-
-const COLD: ReplicaStatus = { mode: "memory", cursor: null, schemaEpoch: null };
 
 let fetchMock: ReturnType<typeof vi.fn<typeof globalThis.fetch>>;
 let priorFetch: typeof globalThis.fetch;
@@ -113,7 +41,6 @@ function bootstrapResponse(): Response {
         seq: 1,
       },
       rows: [],
-      shapes,
       outcomes: [],
     }),
     {
@@ -140,8 +67,8 @@ describe("shell-session-scopes suite", () => {
         onVaultChanged: () => () => undefined,
       },
     });
-    ({ ReplicaShellSession, fetchReplicaForScope } =
-      await import("./shell-session.js"));
+    ({ ReplicaShellSession } = await import("./shell-session.js"));
+    ({ fetchReplicaForScope } = await import("./replica-identity.js"));
   });
 
   beforeEach(() => {
@@ -193,34 +120,31 @@ describe("shell-session-scopes suite", () => {
   });
 
   test("two concurrently mounted sessions each address their own scope", async () => {
-    const own = new ReplicaShellSession(
-      {
-        baseUrl: BASE_URL,
-        token: "token",
-        gatewayId: "profile-home",
-        vaultId: "vault-own",
-      },
-      fakeCoordinator(),
-      {
-        isOnline: () => true,
-        eventTarget: { addEventListener() {}, removeEventListener() {} },
-      }
-    );
-    const family = new ReplicaShellSession(
-      {
-        baseUrl: BASE_URL,
-        token: "token",
-        gatewayId: "profile-home",
-        vaultId: "vault-family",
-      },
-      fakeCoordinator(),
-      {
-        isOnline: () => true,
-        eventTarget: { addEventListener() {}, removeEventListener() {} },
-      }
-    );
-    await own.start(COLD);
-    await family.start(COLD);
+    // Each session gets its own outbox, and the wire calls under test are the
+    // INTENT posts: a write is the one thing both sessions do that must carry
+    // the scope it belongs to.
+    const scoped = (vaultId: string): TypeImport_1vwuba6.ReplicaShellSession =>
+      new ReplicaShellSession(
+        {
+          baseUrl: BASE_URL,
+          token: "token",
+          gatewayId: "profile-home",
+          vaultId,
+        },
+        {
+          intentStore: new MemoryIntentStore(),
+          isOnline: () => true,
+          eventTarget: { addEventListener() {}, removeEventListener() {} },
+        }
+      );
+    const own = scoped("vault-own");
+    const family = scoped("vault-family");
+    await own.start();
+    await family.start();
+    await Promise.all([
+      own.write("todos", { action: "rename", input: { title: "Own" } }),
+      family.write("todos", { action: "rename", input: { title: "Family" } }),
+    ]);
     await vi.waitFor(() =>
       expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2)
     );

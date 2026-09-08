@@ -23,7 +23,6 @@ import {
 } from "./locker-gateway";
 import {
   loadLockerItems,
-  lockNow,
   readLockerVault,
   setLockerSurfaceState,
 } from "./locker-store";
@@ -42,16 +41,14 @@ function emitBag(patch: Parameters<typeof setLockerSurfaceState>[0]): void {
  * never confuse.
  */
 export async function loadLockerAccess(): Promise<void> {
-  const vault = readLockerVault();
-  const token = vault.bag.sessionToken;
-  if (!token) return;
   setLockerSurfaceState({ surfaceBusy: true, accessError: "" });
   try {
-    const payload = await lockerAccess(token);
-    if (payload.authRequired) {
-      lockNow();
-      return;
-    }
+    // No session token, and no `authRequired` branch (#996, W6-D2): the
+    // history is the app grant's to read and carries no secret VALUE. With the
+    // gateway no longer decrypting it is the only record that anyone looked,
+    // and hiding it behind the boundary it audits would mean a member could
+    // not ask "what was read on this device" without unlocking first.
+    const payload = await lockerAccess();
     if (payload.vaultDenied) {
       readLockerVault().bag.accessEntries = null;
       emitBag({

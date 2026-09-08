@@ -11,7 +11,7 @@ import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import Tappable from "../../kit/components/Tappable";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -37,7 +37,7 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { faceReviewCounts, photoLibraryCounts } from "./photos-library-counts";
 import { protectedAssetIdsFromPins } from "./photos-library-pins";
 import { styles } from "./PhotosLibrary.styles";
@@ -48,7 +48,7 @@ import { usePhotoTimeline } from "./timeline-source";
 const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
 
 type AlbumRow = {
-  album: ReturnType<typeof useReplicaQuery>["rows"][number];
+  album: ReplicaQueryState["rows"][number];
   cover: PhotoAsset | undefined;
   count: number;
 };
@@ -107,13 +107,10 @@ export default function PhotosLibrary({
   const { session } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
-  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
-  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
-  const entries = useReplicaQuery(
-    "photos",
-    PHOTO_ENTITY_READS.collectionEntries
-  );
+  const collections = usePhotoEntity("collections");
+  const faces = usePhotoEntity("faceRegions");
+  const places = usePhotoEntity("places");
+  const entries = usePhotoEntity("collectionEntries");
   const [keptAlbums, setKeptAlbums] = useState<string[]>([]);
   const [pinsReady, setPinsReady] = useState(false);
   const [freeing, setFreeing] = useState(false);

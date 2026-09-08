@@ -67,6 +67,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     /centraid/_vault/blobs|blob-routes.ts
     /centraid/_vault/replica|replica-routes.ts
     /centraid/_vault/changes|replica-routes.ts
+    /centraid/_vault/seat|seat-routes.ts
   `
   ),
   ...defineRouteGroup(

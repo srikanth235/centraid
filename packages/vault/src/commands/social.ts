@@ -10,6 +10,7 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
+import { setRepresentation } from "../schema/representation.js";
 import { bindContactReach } from "./contact-reach.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 
@@ -271,8 +272,8 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
     ctx.db
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, 'text/plain', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+           (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+         VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
       )
       .run(
         contentId,
@@ -293,6 +294,15 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(messageId, threadId, sender, ctx.now, contentId);
   ctx.wrote("social.message", messageId);
+  // THIS MESSAGE'S READING OF ITS BODY BYTES (#996, R20(b)).
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: "social.message",
+    ownerId: messageId,
+    mediaType: "text/plain",
+    charset: "utf-8",
+    interpretation: "body",
+  });
   ctx.cite({
     claim: `draft composed in thread ${threadId}; sending stays behind its own command`,
     entityType: "social.thread",

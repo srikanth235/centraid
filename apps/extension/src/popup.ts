@@ -105,7 +105,7 @@ async function render(): Promise<void> {
         vaultId: string;
         vaultName?: string;
       }[];
-      grantProfile?: readonly CompanionModule[];
+      modules?: readonly CompanionModule[];
     };
   }>({ type: "status" });
   byId("pairing").hidden = status.paired;
@@ -139,7 +139,7 @@ async function render(): Promise<void> {
     ? "Unlock"
     : "Lock";
   byId("actions").toggleAttribute("inert", status.locked);
-  const paused = pausedModuleStatuses(status.pairing?.grantProfile ?? []);
+  const paused = pausedModuleStatuses(status.pairing?.modules ?? []);
   if (status.locked) {
     renderModules(paused);
     byId("approvals").textContent =

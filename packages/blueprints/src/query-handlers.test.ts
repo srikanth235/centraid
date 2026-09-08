@@ -11,13 +11,9 @@
 // agenda bounding recurring expansion to the visible range.
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  applyRecurrenceExceptions,
-  collapseMissedOccurrences,
-  describeRecurrence,
-  expandRecurrence,
-  shiftTemporal,
-} from "@centraid/core/time";
+import { queryHandlerCtx } from "./query-handler-ctx.test-fixtures.js";
+
+const ctxOf = queryHandlerCtx;
 
 type VaultReadTestSeam = (input: {
   entity?: string;
@@ -31,35 +27,6 @@ type VaultInvokeTestSeam = (input: {
   command: string;
   input?: unknown;
 }) => Promise<{ status: string; output: unknown }>;
-
-/** A mock ctx.vault that returns fixture rows keyed by entity name. */
-function ctxOf(rowsByEntity: Record<string, unknown[]>) {
-  return {
-    time: {
-      applyRecurrenceExceptions,
-      collapseMissedOccurrences,
-      describeRecurrence,
-      expandRecurrence,
-      shiftTemporal,
-    },
-    vault: {
-      read: async ({ entity }: { entity: string }) => ({
-        rows: rowsByEntity[entity] ?? [],
-      }),
-      resolve: async () => ({ cards: [] }),
-      invoke: async () => ({ status: "executed", output: { items: [] } }),
-      search: async () => ({ rows: rowsByEntity.__search__ ?? [] }),
-      // Companion/query tests default to an unlocked Locker; lock gates are
-      // covered by vault unit tests of LockerAuthentication.
-      authenticate: async () => ({
-        ok: true,
-        configured: false,
-        authenticated: false,
-        unlocked: true,
-      }),
-    },
-  };
-}
 
 const dataUri = (text: string) =>
   `data:text/markdown,${encodeURIComponent(text)}`;
@@ -105,40 +72,51 @@ describe("Locker Companion queries (#462)", () => {
     expect(JSON.stringify(result)).not.toContain("«sealed»");
   });
 
-  it("refuses candidate enumeration while Locker is locked", async () => {
+  it("enumerates candidates without asking an authentication plane (#996, W6-D2)", async () => {
+    // IT USED TO REFUSE WHILE LOCKED, and the reason it no longer does is
+    // worth stating: the gate read "a paired device could otherwise map every
+    // login's item_id + url while locked", which was true of a device that had
+    // to ASK the gateway to enumerate. A seat holds `vault.db` whole (R1) and
+    // those columns are plaintext there by design, so the enumeration this
+    // gate refused is a local read now and refusing it here refuses nothing.
+    // The Companion — a browser extension, which holds no vault — is gated on
+    // its own side; raised as an open question in the wave-6 receipt.
     const { default: candidates } = await importQuery(
       "../apps/locker/queries/autofill-candidates.ts"
     );
     const ctx = ctxOf({ "locker.item": [] });
-    ctx.vault.authenticate = async () => ({
-      ok: true,
-      configured: true,
-      authenticated: false,
-      unlocked: false,
-    });
+    let asked = false;
+    ctx.vault.authenticate = async () => {
+      asked = true;
+      return {};
+    };
     const result = await candidates({ ctx });
-    expect(result).toMatchObject({
-      candidates: [],
-      authRequired: true,
-      configured: true,
-    });
+    expect(result).toMatchObject({ candidates: [] });
+    expect(result.authRequired).toBeUndefined();
+    expect(asked).toBe(false);
   });
 
-  it("reveals password with page context and asks only for a TOTP derivative", async () => {
+  it("names the matched login and refuses the value — the Companion holds no key", async () => {
+    // #996, rulings R13 and W6-D2. This handler used to ask the gateway to
+    // unseal a password for a matched origin, which is exactly the thing the
+    // gateway no longer does. It cannot decrypt locally either: the Companion
+    // is a browser extension, it holds no vault, and it must not be handed `K`
+    // — a surface that could read the key could exfiltrate it.
+    //
+    // So it says WHICH login it matched and why the value is not here. A blank
+    // answer and "the page does not match" are different facts, and the next
+    // test is about the second one. Filling from the browser needs a host that
+    // already holds `K` behind the member's unlock; that wiring is an open
+    // question in the wave-6 receipt, not something this handler may invent.
     const { default: fill } = await importQuery(
       "../apps/locker/queries/autofill-item.ts"
     );
-    const reveal = vi.fn<VaultRevealTestSeam>().mockResolvedValue({
-      values: { password: "live-password" },
-      receiptId: "receipt-fill",
-    });
-    const invoke = vi.fn<VaultInvokeTestSeam>().mockResolvedValue({
-      status: "executed",
-      output: { code: "123456", remaining: 12 },
-    });
+    const reveal = vi.fn<VaultRevealTestSeam>();
+    const invoke = vi.fn<VaultInvokeTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
+        // `autofill-item` reads its one login as a PAGE since #996 wave 4.
+        page: async () => ({
           rows: [
             {
               item_id: "login-1",
@@ -158,24 +136,19 @@ describe("Locker Companion queries (#462)", () => {
       input: { item_id: "login-1", page_origin: "https://example.com" },
       ctx,
     });
-    expect(result.fill).toStrictEqual({
+
+    expect(result.fill).toBeNull();
+    expect(result.reason).toContain("a device that holds this vault's key");
+    // The MATCH is still the answer's useful half — the Companion knows which
+    // login it would have filled.
+    expect(result.match).toStrictEqual({
+      item_id: "login-1",
       username: "priya",
-      password: "live-password",
-      totp: "123456",
-      receipt_id: "receipt-fill",
     });
-    expect(reveal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        columns: ["password"],
-        context: { kind: "fill", origin: "https://example.com" },
-      })
-    );
-    expect(invoke).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: "locker.totp_code",
-        input: { item_id: "login-1" },
-      })
-    );
+    // Nothing was asked of the gateway's sealed door, and no TOTP was minted
+    // for a fill that is not happening.
+    expect(reveal).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("otp_seed");
   });
 
@@ -186,7 +159,7 @@ describe("Locker Companion queries (#462)", () => {
     const reveal = vi.fn<VaultRevealTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
+        page: async () => ({
           rows: [
             {
               item_id: "login-1",
@@ -462,11 +435,14 @@ describe("replica-local search projections (issue #406)", () => {
     const { default: search } = await importQuery(
       "../apps/photos/queries/search.js"
     );
+    // BYTES CARRY NO TITLE (#996, ruling R20(b)). The authored title is the
+    // ASSET's — `core_content_item` is bytes alone — so the fixture puts it
+    // where the grid now reads it from. This test was left behind by the
+    // representation split and has been red since; it is corrected here rather
+    // than left as a red row nobody owns.
     const content = {
       content_id: "content-off-window",
-      title: "Moonlit campsite in Ladakh",
       content_uri: "blob:sha256:photo",
-      media_type: "image/jpeg",
       byte_size: 42,
       created_at: "2024-01-01T00:00:00.000Z",
       deleted_at: null,
@@ -474,6 +450,7 @@ describe("replica-local search projections (issue #406)", () => {
     const asset = {
       asset_id: "asset-off-window",
       content_id: content.content_id,
+      title: "Moonlit campsite in Ladakh",
       captured_at: "2024-01-01T00:00:00.000Z",
       deleted_at: null,
       place_id: null,

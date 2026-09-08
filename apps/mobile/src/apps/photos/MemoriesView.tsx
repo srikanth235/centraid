@@ -12,13 +12,15 @@ import {
 } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
 
+import type { FanOutBound } from "@centraid/blueprints/apps/_shared/paged-reads";
 import { projectPlaces } from "@centraid/blueprints/apps/photos/place-map";
 import type { TripRoutePoint } from "@centraid/blueprints/apps/photos/trips";
+import type { PageQuery } from "@centraid/core/page";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -39,7 +41,7 @@ import type {
   SimilarMemory,
   TripMemory,
 } from "./memories-model";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { usePhotosRung } from "./photos-rung-store";
 import { rungHeight } from "./photos-rungs";
 import { useVaultFacts } from "./photos-vaults";
@@ -238,6 +240,39 @@ function SimilarBlock({
   );
 }
 
+/** Every computed memory, newest first — the screen draws them in that order. */
+const MEMORIES_READ: PageQuery = {
+  name: "phone.photos.memories",
+  select:
+    "memory_id, kind, title_hint, day_key, place_id, started_at, ended_at",
+  from: "media_memory",
+  order: {
+    sortColumn: "started_at",
+    pkColumn: "memory_id",
+    descending: true,
+  },
+};
+
+/** Which assets each memory holds, and in what order it holds them. */
+const MEMORY_MEMBERS_READ: PageQuery = {
+  name: "phone.photos.memory-members",
+  select: "memory_id, asset_id, ordinal",
+  from: "media_memory_member",
+  order: {
+    sortColumn: "memory_id",
+    pkColumn: "asset_id",
+    descending: false,
+  },
+};
+
+/**
+ * Memberships fan out over the LIBRARY, not over the memories, so the default
+ * join bound would throw on a real one. Twenty thousand rows is the ceiling
+ * this screen has always named; it is stated here instead of hidden in a
+ * window that quietly cut the answer short.
+ */
+const MEMBER_FAN_OUT: FanOutBound = { pageSize: 500, fanOutPages: 40 };
+
 export default function MemoriesView({
   navigation,
 }: PhotosScreenProps<"PhotosMemories">): React.JSX.Element {
@@ -245,15 +280,20 @@ export default function MemoriesView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { assets } = usePhotoTimeline();
 
-  const memoryRows = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.memory", limit: 2000 }), [])
-  );
-  const memberRows = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.memory_member", limit: 20_000 }), [])
-  );
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  // Both sets are the WHOLE of what this screen composes — a memory with a
+  // missing member is a memory drawn short — so they walk rather than take a
+  // window. The membership walk states its own ceiling: memories fan out over
+  // assets, and `JOIN_FAN_OUT`'s 4,000 is a library's worth of photographs.
+  const memoryRows = useSeatPages("photos", MEMORIES_READ, {
+    entity: "media.memory",
+    rowIdColumn: "memory_id",
+  });
+  const memberRows = useSeatPages("photos", MEMORY_MEMBERS_READ, {
+    entity: "media.memory_member",
+    rowIdColumn: "asset_id",
+    bound: MEMBER_FAN_OUT,
+  });
+  const places = usePhotoEntity("places");
 
   const placeFacts = useMemo(
     () => memoryPlacesById(places.rows as readonly RawPlaceRow[]),

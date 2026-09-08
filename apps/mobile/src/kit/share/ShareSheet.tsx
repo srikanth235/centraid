@@ -13,17 +13,20 @@
 // (`share-targets.ts`). There is no invite-a-stranger row, because there is no
 // mechanism behind one.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { View as RNView } from "react-native";
 
 import { manualShareSelection } from "@centraid/blueprints/apps/_shared/named-circle-selection";
 import type { PlaceableItemType } from "@centraid/blueprints/apps/_shared/placement-registry";
 import {
+  SHARE_ENRICHMENT_IS_THEIRS,
   SHARE_FAILED,
+  SHARE_IS_A_COPY,
   sharedWithOutcome,
 } from "@centraid/blueprints/apps/_shared/shared-copy";
 
+import { postCommons } from "../../lib/replica/commons-transport";
 import { listLinks } from "../../lib/replica/links-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
 import AnchoredMenu from "../components/AnchoredMenu";
@@ -33,12 +36,13 @@ import { Text, TextInput } from "../components/NativeText";
 import PersonAvatar from "../components/PersonAvatar";
 import Tappable from "../components/Tappable";
 import TopSafeArea from "../components/TopSafeArea";
-import { useReplicaQuery } from "../hooks/useReplicaQuery";
+import { useSeatPages } from "../hooks/useSeatPages";
 import { useReplica } from "../replica/ReplicaProvider";
 import { TEST_IDS } from "../test-ids";
 import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { useNamedShareCircles } from "./named-circles";
+import { SHARE_PARTIES, SHARE_VAULT } from "./share-audience-queries";
 import {
   nativeShareTargets,
   selectionsForNativeCircle,
@@ -60,9 +64,16 @@ const ROLE_LABEL: Record<ShareCapability, string> = {
 };
 const NO_ACCESS = "No access";
 
-/** What the receiving vault keeps, said once, where a reader looks for scope. */
-const GENERAL_ACCESS =
-  "Everyone you add gets the full shared item in their own vault and backup.";
+/**
+ * What the receiving vault keeps, said once, where a reader looks for scope —
+ * and, since #996, the two things that were true all along and unsaid: a share
+ * is a COPY (R10) and the copy is enriched under the RECIPIENT's answers (R18).
+ */
+const GENERAL_ACCESS = [
+  "Everyone you add gets the full shared item in their own vault and backup.",
+  SHARE_IS_A_COPY,
+  SHARE_ENRICHMENT_IS_THEIRS,
+].join(" ");
 
 /** Nobody linked is not an empty roster — it is a ceremony not yet performed,
  *  and the sentence says where to perform it. */
@@ -93,14 +104,14 @@ export default function ShareSheet({
 }: ShareSheetProps): React.JSX.Element {
   const { colors } = useTheme();
   const replica = useReplica();
-  const parties = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.party", limit: 500 }), [])
-  );
-  const vault = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
-  );
+  const parties = useSeatPages("people", SHARE_PARTIES, {
+    entity: "core.party",
+    rowIdColumn: "party_id",
+  });
+  const vault = useSeatPages("people", SHARE_VAULT, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+  });
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [selections, setSelections] = useState<ShareSelections>({});
   const [busy, setBusy] = useState(false);
@@ -195,9 +206,15 @@ export default function ShareSheet({
       return;
     setBusy(true);
     try {
+      // Sharing needs a gateway, and it is an HTTP call rather than a
+      // session verb (#996 wave 3): a share is a predicate the gateway
+      // compiles, not something this phone queues.
+      if (!replica.gatewayBase)
+        throw new Error("Sharing needs a gateway connection.");
+      const baseUrl = replica.gatewayBase;
       await Promise.all(
         itemIds.map((containerId) =>
-          replica.session!.share({
+          postCommons(baseUrl, {
             sourceVaultId,
             containerType: itemType,
             containerId,
