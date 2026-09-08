@@ -276,6 +276,51 @@ describe("the seat worker core", () => {
     worker.close();
   });
 
+  /**
+   * A DELETE QUEUED OFFLINE TAKES THE ROW OFF THE LIST (#996 wave 5, #922 G1).
+   *
+   * Red-first against `apps/web/tests/e2e/tasks.spec.ts`: a landed task
+   * deleted while the gateway is down stayed on the board, wearing no badge.
+   * "Deleted, and you will see it again in a moment" is the one answer a
+   * destructive projection must never give — the member did the thing and the
+   * screen says they did not.
+   *
+   * The overlay is the whole of it on this side: the file still holds the
+   * gateway's row, and only the outbox knows it is on its way out.
+   */
+  it("takes a row off the list while its delete is still in the outbox", async () => {
+    const root = workspace();
+    const { worker, cleared } = await seated(root);
+    await worker.outbox().add({
+      intentId: "intent-delete",
+      appId: "knowledge",
+      action: "delete",
+      input: { note_id: "n1" },
+      payloadHash: "d".repeat(64),
+      state: "queued",
+      attempts: 0,
+      commitSeq: 9,
+      optimistic: [
+        {
+          op: "delete",
+          shapeId: "shape-notes",
+          entity: "knowledge.note",
+          rowId: "n1",
+        },
+      ],
+      dependencies: [],
+    });
+
+    expect(worker.query(NOTES)).toStrictEqual([]);
+    // The FILE still holds it: the row leaves the member's list, not the vault,
+    // until the gateway answers.
+    expect(
+      worker.query({ sql: `SELECT count(*) AS n FROM note` })
+    ).toStrictEqual([{ n: 1 }]);
+    expect(cleared).toStrictEqual([]);
+    worker.close();
+  });
+
   it("refuses to bootstrap before it has been opened", async () => {
     const root = workspace();
     const { core: worker } = core(root, []);

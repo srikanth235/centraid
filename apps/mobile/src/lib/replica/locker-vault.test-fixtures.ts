@@ -17,7 +17,6 @@
 import { seedSeatTables } from "./seat-fixture.test-fixtures";
 import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
-export const VAULT_ID = "personal";
 export const FLAGS_SCHEME = "https://centraid.dev/schemes/flags";
 export const TAGS_SCHEME = "https://centraid.dev/schemes/locker-tags";
 

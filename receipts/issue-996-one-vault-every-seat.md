@@ -8181,3 +8181,60 @@ twice.
 - **A spec that names two claims must reach the second one.** Waiting for the
   creation to settle is not a workaround: an unsettled creation makes the
   delete a held dependent, which is a different (and correct) behaviour.
+
+## Wave 5d — where the queued delete is NOT lost (#996)
+
+### The seat's overlay deletes; measured, not argued
+
+Wave 4t named a finding for this lane: a delete queued on an offline seat
+leaves the row on the Tasks board with no badge
+(`apps/web/tests/e2e/tasks.spec.ts:347`, reproduced here — 2 passed, 1 failed,
+timing out at line 407 with the row `Queued delete target · today` present and
+carrying no `data-pending`).
+
+`worker-core.test.ts` now pins the seat half directly: a `delete` mutation
+sitting in `seat_outbox` in state `queued` takes its row off the list the
+member reads, while the FILE still holds it — the row leaves the list, not the
+vault, until the gateway answers. **It passes.** `overlaySeatRows` has always
+had the delete arm (`byId.delete(mutation.rowId)`), and this is the evidence
+that it runs.
+
+So the defect is UPSTREAM of the overlay, and the two candidates the trace
+narrows it to are:
+
+1. **The board read did not run on the seat at all.** If the shell session
+   holds no file, `ctx.vault.page` is answered by the gateway's paged door
+   (W4-D2), which cannot know about an intent that has not been sent — and no
+   overlay is applied there by construction. The failing snapshot shows a full
+   board (`498 of 500 · this is a window, not everything open`) from the
+   preceding truncation test, which is consistent with either side.
+2. **The delete's optimistic mutation never reached the outbox.**
+   `ShellReplicaSession.write` normalises `input.optimistic` through
+   `prepareReplicaWrite` against the OLD store's shape catalog and drops it
+   entirely when that catalog is empty. A delete carries no `values`, so it is
+   also the mutation shape most likely to be filtered somewhere on that rail.
+
+Distinguishing them needs the outbox and the page's own answer read out of the
+browser at the moment of failure, which is instrumentation this lane did not
+add. **The finding stands open, relocated: it is not the seat overlay.**
+
+### Gates
+
+- `bun run --cwd packages/client test -- src/replica/seat` — 12 files, 84
+  tests, all passing.
+- `bun run --cwd apps/web e2e -- tasks.spec.ts` — 2 passed, 1 failed
+  (`tasks.spec.ts:347`), unchanged by this commit.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/client/src/replica/seat/worker-core.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the finding
+
+- **A finding is relocated with evidence, never with an argument.** The seat's
+  delete arm is pinned by a test that would go red if it stopped running; that
+  is what moves the question off this lane rather than a reading of the code.
