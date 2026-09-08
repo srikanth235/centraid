@@ -50,6 +50,25 @@ const MINTED_TITLE = "Queued minted task";
 const MINTED_ID_RE =
   /^[\da-f]{8}-[\da-f]{4}-8[\da-f]{3}-8[\da-f]{3}-[\da-f]{12}$/iu;
 
+/**
+ * CAPTURE, FROM THE TODAY SHELF (#996, W4-D3).
+ *
+ * A shelf is a filter, and an item created inside it belongs to it: the app
+ * stamps a task captured on Today with today's date
+ * (`quickAddInput`/`shelfDue`), so the row the member just added is on the
+ * board they are looking at. Driving the overlay rather than
+ * `window.centraid.write` is what makes this spec assert THAT rule — a raw
+ * rail write carries no shelf, lands undated, and belongs to the Inbox.
+ */
+async function addFromTodayShelf(page: Page, title: string): Promise<void> {
+  await page.getByRole("button", { name: "Add", exact: true }).first().click();
+  const panel = page.getByRole("dialog", { name: "Add" });
+  await expect(panel).toBeVisible();
+  await panel.getByLabel("Add", { exact: true }).fill(title);
+  await panel.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(panel).toBeHidden();
+}
+
 async function openFirstParty(page: Page, name: string): Promise<void> {
   // Re-click until the palette actually opens: right after a reload the Search
   // button can paint before its React listener attaches, and a click that
@@ -322,6 +341,9 @@ test("Tasks says the board has more when its window fills", async ({
 // while the gateway is down must LEAVE the board — a plain patch would leave
 // it wearing a badge. A task added on that same rail must appear at once with
 // the id the seat minted (canonical UUIDv8, not `pending:…`) and say so.
+//
+// Both adds are made through the TODAY SHELF's own capture, so the rows are
+// stamped due today (W4-D3) and land on the board this test is looking at.
 test("Tasks hides a queued delete and shows a minted pending add", async ({
   page,
 }) => {
@@ -329,27 +351,7 @@ test("Tasks hides a queued delete and shows a minted pending add", async ({
   await connectPwa(page);
   await openFirstParty(page, "Tasks");
 
-  await expect
-    .poll(
-      () =>
-        page.evaluate(
-          async ({ title, intentId }) => {
-            try {
-              const outcome = await window.centraid.write({
-                action: "add",
-                input: { title },
-                intentId,
-              });
-              return outcome.status;
-            } catch {
-              return "replica-not-ready";
-            }
-          },
-          { title: DELETE_TITLE, intentId: "tasks-e2e-queued-delete-target" }
-        ),
-      { timeout: 60_000 }
-    )
-    .toBe("executed");
+  await addFromTodayShelf(page, DELETE_TITLE);
 
   const landed = page
     .locator("[data-task-id]")
@@ -391,15 +393,7 @@ test("Tasks hides a queued delete and shows a minted pending add", async ({
     )
     .toBe(true);
 
-  await page.evaluate(
-    async ({ title, intentId }) =>
-      window.centraid.write({
-        action: "add",
-        input: { title },
-        intentId,
-      }),
-    { title: MINTED_TITLE, intentId: "tasks-e2e-queued-minted-add" }
-  );
+  await addFromTodayShelf(page, MINTED_TITLE);
   const pendingRow = page
     .locator("[data-task-id][data-pending='true']")
     .filter({ hasText: MINTED_TITLE });

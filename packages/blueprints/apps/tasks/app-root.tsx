@@ -74,6 +74,7 @@ import {
   upcomingGroups,
   windowEnd,
 } from "./logic.ts";
+import { QUICK_ADD_EMPTY, quickAddInput } from "./quick-add.ts";
 import { readBoard } from "./scope-fanout.ts";
 import {
   ALL,
@@ -932,14 +933,15 @@ export function Root({
             const title = captureRef.current?.value.trim();
             if (!title) return;
             closeOverlay();
+            // add_task does not take project_id; membership is organize-task.
+            // The shelf's own stamp is `quickAddInput`'s, so the phone's
+            // capture and this one answer W4-D3 with one rule.
             void act(
               "add",
+              quickAddInput({ ...QUICK_ADD_EMPTY, title }, now, shelf),
               {
-                title,
-                // add_task does not take project_id; membership is organize-task.
-                ...(shelf === null ? { due_at: dayKey(now) } : {}),
-              },
-              { scope: stateRef.current.landsIn }
+                scope: stateRef.current.landsIn,
+              }
             );
           }}
         />

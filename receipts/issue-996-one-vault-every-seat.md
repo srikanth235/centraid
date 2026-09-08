@@ -7594,3 +7594,65 @@ lane-attributable delta of 12 KB.**
 **Changed:**
 
 - `receipts/issue-996-one-vault-every-seat.md`
+
+## Wave 4q — the Today shelf stamps what is captured in it (#996)
+
+### The owner's ruling, W4-D3
+
+Wave 4n measured `tasks.spec.ts:325` and found a product question rather than a
+paging one: a task added with no due date, from the Today shelf, appears on no
+shelf the member is looking at. The owner ruled it on 2026-09-07:
+
+> A task created from the Today shelf is stamped due today — a shelf is a
+> filter, and an item created inside it belongs to it. An undated task belongs
+> to the Inbox shelf and is never shown on Today.
+
+Applied in the app, not in the spec. `shelfDue(shelf, now)` answers today's day
+key for the Today shelf (`null` in `TASK_SHELVES`) and nothing for every other,
+and `quickAddInput(draft, now, shelf)` takes the member's own When chip first
+and the shelf's stamp second. `undefined` is a third value on purpose: a
+capture that came from no board at all is not a capture on Today.
+
+The second half needed no code. `todayGroups` is overdue plus lands-today, so
+an undated task was never drawn there; `inboxGroup` is open-and-unfiled, so an
+undated task with no project was already in the Inbox. What was missing was
+only the stamp.
+
+The web capture had the rule inline (`shelf === null ? { due_at: dayKey(now) }`)
+and the phone's did not have it at all, so a task captured on the phone's Today
+board landed undated. Both call `quickAddInput` now, and there is one rule.
+
+### `tasks.spec.ts:325` now asserts the ruling
+
+Both adds in "Tasks hides a queued delete and shows a minted pending add" go
+through the Today shelf's own capture overlay (`addFromTodayShelf`) instead of
+`window.centraid.write`. That is the difference the ruling names: the rail
+carries no shelf, so a rail write is undated and belongs to the Inbox — which
+is correct, and is not what a spec standing on the Today board should assert.
+The offline half is unchanged: the capture fires on the same write rail, so the
+minted id and the pending badge are still what is under test.
+
+### Gates
+
+- `bunx vitest run packages/blueprints/apps/tasks` — 11 files, 315 passed
+  (`quick-add.test.ts` red first on the three new cases).
+- `bunx vitest run --root apps/mobile src/apps/tasks` — 5 files, 34 passed.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/apps/tasks/TasksHome.tsx`
+- `apps/web/tests/e2e/tasks.spec.ts`
+- `docs/decisions.md`
+- `packages/blueprints/apps/tasks/app-root.tsx`
+- `packages/blueprints/apps/tasks/quick-add.test.ts`
+- `packages/blueprints/apps/tasks/quick-add.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the shelf
+
+- **A filter you can create inside is not only a filter.** The alternative
+  readings — a Today group for rows that are not due today, or an add that
+  refuses without a date — both make the shelf lie or make capture argue.
