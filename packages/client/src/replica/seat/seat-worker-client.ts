@@ -10,6 +10,7 @@
 // presents to the member as an app that has stopped rather than as an error
 // it could retry.
 
+import { ReplicaProtocolError } from "../replica-protocol-error.js";
 import type { SeatChangeNotice } from "./applier.js";
 import type {
   SeatBootstrapProgress,
@@ -19,6 +20,7 @@ import { SeatDriftError } from "./seat-drift-error.js";
 import type { SeatState } from "./state.js";
 import type {
   SeatApplySummary,
+  SeatOutboxMethod,
   SeatWorkerApplyOptions,
   SeatWorkerBootstrapOptions,
   SeatWorkerOpenOptions,
@@ -116,6 +118,17 @@ export class SeatWorkerClient {
     return this.call("query", request) as Promise<T[]>;
   }
 
+  /**
+   * One outbox method, forwarded (#996, R24).
+   *
+   * Typed loosely on purpose: the shape each method takes and answers is
+   * `IntentRecordStore`'s, and `SeatWorkerOutbox` is where that contract is
+   * stated. Restating it here would be a second copy to keep in step.
+   */
+  outbox<T>(method: SeatOutboxMethod, args: readonly unknown[]): Promise<T> {
+    return this.call("outbox", { method, args }) as Promise<T>;
+  }
+
   async close(): Promise<void> {
     if (this.#closed) return;
     try {
@@ -166,6 +179,13 @@ export function reviveSeatError(error: SerializedSeatError): Error {
       error.message
     );
   }
+  // A QUEUE REFUSAL MUST SURVIVE AS A QUEUE REFUSAL (#996, R24). The outbox
+  // now answers across this boundary (`SeatWorkerOutbox`), and every one of its
+  // refusals — an id reused with another payload, a transition from a state
+  // that does not allow it — is a `ReplicaProtocolError`. An anonymous `Error`
+  // with the same message is one the queue would merely surface.
+  if (error.code === "REPLICA_PROTOCOL_ERROR")
+    return new ReplicaProtocolError(error.message);
   const revived = new Error(error.message);
   revived.name = error.name;
   return revived;

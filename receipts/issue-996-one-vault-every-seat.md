@@ -8802,3 +8802,82 @@ all already async in the interface. The phone needs no proxy
   branch head rather than assumed.
 - **A gate that goes red because a screen started working is a finding, not a
   regression to revert.** The index stays; the contrast defect is filed.
+
+## Wave 5m — the seat worker's wire carries the outbox (#996)
+
+### The owner ruling this wave runs under
+
+W5-D1, 2026-09-08: **search stays on the seat, not the gateway.** Wave 2 kept
+the FTS sync triggers and rebuilds the index after the bootstrap copy, so the
+seat file already carries the vault's shadow tables; `REPLICA_LOCAL_SEARCH`
+becomes a statement-as-data page over them, and the eight declarative call sites
+convert BEFORE the cut, in their own commits. The cut itself stays one atomic
+commit.
+
+### The seam neither brief carried, and it is now on the wire
+
+Wave 5l measured it and left it: `SeatWorkerCore.outbox()` returns a
+`SeatIntentStore` over the seat's own file — the whole of R24, because an
+executed answer clears its overlay in the transaction that carries its commit —
+but `worker-protocol.ts` carried only open/bootstrap/state/apply/query/close.
+The phone needs no proxy (`inProcessSeatChannel` calls the core); the browser
+keeps the applier off the thread that paints, so its outbox is behind a
+`postMessage` and the queue that drives it is not.
+
+**ONE OP, NOT NINE.** `SeatOutboxMethod` is DERIVED from `IntentRecordStore`
+itself — a mapped type over the members that return a promise — so a method that
+grows on the interface cannot be forgotten on the wire. `close` is excluded by
+construction: it is synchronous, and on this store it is a no-op, because the
+driver belongs to the seat and a queue does not get to close it.
+
+**A QUEUE REFUSAL SURVIVES AS A QUEUE REFUSAL.** Every `SeatIntentStore` refusal
+— an id reused with another payload, a transition from a state that does not
+allow it — is a `ReplicaProtocolError`, and `serializeSeatError` already carries
+its `code`. `reviveSeatError` now revives it as itself; an anonymous `Error`
+with the same message is one the queue would merely surface. The same argument
+`SeatDriftError` made beside it.
+
+### The proof is the contract suite, not a unit test
+
+`offline-chain.contract.test.ts` grew a FOURTH backend, `seat-worker`: the REAL
+`SeatWorkerCore` over `node:sqlite`, driven through the REAL message protocol,
+with only the THREAD faked. All twelve chain claims pass across the boundary —
+ordering, holds, abandonment, replayed outcomes, and both settlement orderings
+(`acknowledgement before delta` and `delta before acknowledgement`) — which is
+the only interesting question a proxy can be asked: whether the chain can tell.
+
+### Gates
+
+- `bun run --cwd packages/client test` — 293 files, **2,658 tests, 0 failed**
+  (2,646 at `cb0596127`; the twelve new ones are the fourth backend).
+- `bun run check:push:static` — 4/4.
+- `bun run knip` — exit 0.
+- `bun run typecheck` — 25/25.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/client/src/replica/seat/seat-worker-outbox.ts`
+- `packages/client/src/replica/seat/inline-seat-worker.test-fixtures.ts`
+
+**Changed:**
+
+- `packages/client/src/replica/seat/worker-protocol.ts`
+- `packages/client/src/replica/seat/worker-core.ts`
+- `packages/client/src/replica/seat/seat-worker-client.ts`
+- `packages/client/src/replica/seat/index.ts`
+- `packages/client/src/replica/offline-chain.contract.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the wire
+
+- **A wire derived from the interface cannot drift from it.** `SeatOutboxMethod`
+  is a mapped type, not a hand-kept union.
+- **A proxy holds no state.** No cache, no optimism, no local ordering: the
+  queue's correctness argument is that ONE durable table decides transitions,
+  and a proxy that answered from memory would be a second writer with a
+  different opinion.
+- **Additive is not the cut.** This adds a capability the cut will use; it reads
+  nothing from the old plane and dual-writes nothing, so it is not the half-a-
+  deletion that waves 5i and 5l refused.

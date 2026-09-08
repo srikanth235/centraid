@@ -21,6 +21,7 @@ export * from "./seat-drift-error.js";
 export * from "./seat-loop.js";
 export * from "./seat-rebootstrap-required-error.js";
 export * from "./seat-worker-client.js";
+export * from "./seat-worker-outbox.js";
 export * from "./watermark.js";
 export * from "./web-seat.js";
 export * from "./seat-snapshot-moved-error.js";

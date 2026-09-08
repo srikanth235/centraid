@@ -14,6 +14,7 @@
 
 import type { SeatLogPageWire } from "@centraid/core/protocol";
 
+import type { IntentRecordStore } from "../intent-record-store.js";
 import type { SeatChangeNotice } from "./applier.js";
 import type {
   SeatBootstrapProgress,
@@ -56,12 +57,47 @@ export interface SeatWorkerQuery {
   readonly overlay?: SeatReadOverlay;
 }
 
+/**
+ * THE OUTBOX, PROXIED (#996, R24).
+ *
+ * `SeatWorkerCore.outbox()` is a `SeatIntentStore` over the seat's own file,
+ * and the whole reason it lives there is that an executed answer clears its
+ * overlay in the transaction that carries its commit. The phone calls it
+ * directly — `inProcessSeatChannel` has no boundary to cross — but the browser
+ * keeps the applier off the thread that paints, so its store is on the far
+ * side of a `postMessage`.
+ *
+ * ONE OP RATHER THAN NINE. The methods are `IntentRecordStore`'s, they are
+ * already all async, and their arguments and answers are JSON by construction
+ * (an intent is hashed as canonical JSON). A method-name-plus-arguments frame
+ * keeps the wire's shape — one request, one response — instead of growing nine
+ * near-identical cases that would then have to be kept in step with the
+ * interface by hand.
+ *
+ * `close` is absent deliberately: it is synchronous, and on the seat store it
+ * is a no-op — the driver belongs to the seat, shared with the applier and the
+ * reader, and a queue does not get to close it.
+ */
+export type SeatOutboxMethod = {
+  [K in keyof IntentRecordStore]-?: IntentRecordStore[K] extends (
+    ...args: never[]
+  ) => Promise<unknown>
+    ? K
+    : never;
+}[keyof IntentRecordStore];
+
+export interface SeatWorkerOutboxCall {
+  readonly method: SeatOutboxMethod;
+  readonly args: readonly unknown[];
+}
+
 export type SeatWorkerRequest =
   | { id: number; op: "open"; payload: SeatWorkerOpenOptions }
   | { id: number; op: "bootstrap"; payload: SeatWorkerBootstrapOptions }
   | { id: number; op: "state"; payload: undefined }
   | { id: number; op: "apply"; payload: SeatWorkerApplyOptions }
   | { id: number; op: "query"; payload: SeatWorkerQuery }
+  | { id: number; op: "outbox"; payload: SeatWorkerOutboxCall }
   | { id: number; op: "close"; payload: undefined };
 
 export interface SeatWorkerResults {
@@ -70,6 +106,7 @@ export interface SeatWorkerResults {
   state: SeatState | undefined;
   apply: SeatApplySummary;
   query: object[];
+  outbox: unknown;
   close: undefined;
 }
 

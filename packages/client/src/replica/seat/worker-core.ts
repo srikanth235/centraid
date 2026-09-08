@@ -39,6 +39,7 @@ import type {
   SeatWorkerApplyOptions,
   SeatWorkerBootstrapOptions,
   SeatWorkerOpenOptions,
+  SeatWorkerOutboxCall,
   SeatWorkerQuery,
   SeatWorkerRequest,
 } from "./worker-protocol.js";
@@ -95,6 +96,8 @@ export class SeatWorkerCore {
         return this.apply(request.payload);
       case "query":
         return this.query(request.payload);
+      case "outbox":
+        return this.outboxCall(request.payload);
       case "close":
         this.close();
         return undefined;
@@ -182,6 +185,23 @@ export class SeatWorkerCore {
     if (this.#outbox?.driver !== driver)
       this.#outbox = { driver, store: SeatIntentStore.create(driver) };
     return this.#outbox.store;
+  }
+
+  /**
+   * One outbox method, by name (#996, R24).
+   *
+   * The far side of `worker-protocol.ts`'s `outbox` op, and the only reason it
+   * exists: the browser's store is behind a `postMessage`, and the queue that
+   * drives it runs on the thread that paints. `SeatOutboxMethod` is derived
+   * from `IntentRecordStore` itself, so a method that grows on the interface
+   * cannot be forgotten here — this dispatches whatever the type admits.
+   */
+  outboxCall(call: SeatWorkerOutboxCall): Promise<unknown> {
+    const store = this.outbox();
+    const method = store[call.method] as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    return method.apply(store, [...call.args]);
   }
 
   state(): SeatState | undefined {

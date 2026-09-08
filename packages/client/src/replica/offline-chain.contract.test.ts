@@ -34,8 +34,11 @@ import {
 import { ReplicaIntentRecoveryError } from "./replica-intent-recovery-error.js";
 import { ReplicaRebootstrapRequiredError } from "./replica-rebootstrap-error.js";
 import { openSeatFile } from "./seat/driver.js";
+import { inlineMemorySeatWorker } from "./seat/inline-seat-worker.test-fixtures.js";
 import { NodeSeatDriver } from "./seat/node-seat-driver.js";
 import { SeatIntentStore } from "./seat/seat-intent-store.js";
+import { SeatWorkerClient } from "./seat/seat-worker-client.js";
+import { SeatWorkerOutbox } from "./seat/seat-worker-outbox.js";
 import { postReplicaIntent } from "./shell-transport.js";
 import type { ReplicaFetcher } from "./shell-transport.js";
 import type { OptimisticMutation, ReplicaIntent } from "./types.js";
@@ -76,6 +79,30 @@ const BACKENDS: readonly Backend[] = [
         store: SeatIntentStore.create(driver),
         dispose: () => driver.close(),
       });
+    },
+  },
+  {
+    // THE SAME SQLITE OUTBOX, ACROSS THE WORKER BOUNDARY (#996, R24). This is
+    // the browser's arrangement: the seat's file — and therefore its outbox —
+    // is behind a `postMessage`, because the applier walks hundreds of
+    // thousands of rows and must not do that on the thread that paints. The
+    // chain must not be able to tell.
+    name: "seat-worker",
+    open: async () => {
+      const { worker, close } = inlineMemorySeatWorker();
+      const client = new SeatWorkerClient(worker);
+      await client.open({
+        vaultId: "vault-1",
+        dbName: "/seat.db",
+        remember: true,
+      });
+      return {
+        store: new SeatWorkerOutbox(client),
+        dispose: () => {
+          void client.close();
+          close();
+        },
+      };
     },
   },
 ];
