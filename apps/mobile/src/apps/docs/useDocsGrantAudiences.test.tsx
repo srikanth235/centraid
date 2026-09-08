@@ -30,13 +30,17 @@ vi.mock(
 const rows = vi.hoisted(() => ({
   value: {} as Record<string, Record<string, unknown>[]>,
 }));
+// The roster reads are pages over the seat now (#996 wave 5); the entity a
+// read depends on rides the hook's options, so that is what this keys on.
 vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
+  import("../../kit/hooks/useSeatPages"),
   () =>
     ({
-      useReplicaQuery: (_name: string, query: { entity: string }) => ({
-        rows: rows.value[query.entity] ?? [],
-      }),
+      useSeatPages: (
+        _name: string,
+        _query: unknown,
+        options: { entity: string }
+      ) => ({ rows: rows.value[options.entity] ?? [] }),
     }) as never
 );
 

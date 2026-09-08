@@ -160,19 +160,25 @@ vi.mock(import("../components/AnchoredMenu"), async () => {
   } as never;
 });
 
+// The roster reads are pages over the seat now (#996 wave 5); the entity a
+// read depends on rides the hook's options, so that is what this keys on.
 vi.mock(
-  import("../hooks/useReplicaQuery"),
+  import("../hooks/useSeatPages"),
   () =>
     ({
-      useReplicaQuery: (_appId: string, request: { entity: string }) => ({
+      useSeatPages: (
+        _appId: string,
+        _query: unknown,
+        options: { entity: string }
+      ) => ({
         rows:
-          request.entity === "core.party"
+          options.entity === "core.party"
             ? mocks.parties
-            : request.entity === "core.vault"
+            : options.entity === "core.vault"
               ? [{ self_party_id: "owner" }]
-              : request.entity === "social.circle"
+              : options.entity === "social.circle"
                 ? mocks.circles
-                : request.entity === "social.circle_member"
+                : options.entity === "social.circle_member"
                   ? mocks.circleMembers
                   : mocks.containers,
       }),

@@ -13,7 +13,7 @@
 // (`share-targets.ts`). There is no invite-a-stranger row, because there is no
 // mechanism behind one.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { View as RNView } from "react-native";
 
@@ -36,12 +36,13 @@ import { Text, TextInput } from "../components/NativeText";
 import PersonAvatar from "../components/PersonAvatar";
 import Tappable from "../components/Tappable";
 import TopSafeArea from "../components/TopSafeArea";
-import { useReplicaQuery } from "../hooks/useReplicaQuery";
+import { useSeatPages } from "../hooks/useSeatPages";
 import { useReplica } from "../replica/ReplicaProvider";
 import { TEST_IDS } from "../test-ids";
 import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { useNamedShareCircles } from "./named-circles";
+import { SHARE_PARTIES, SHARE_VAULT } from "./share-audience-queries";
 import {
   nativeShareTargets,
   selectionsForNativeCircle,
@@ -103,14 +104,14 @@ export default function ShareSheet({
 }: ShareSheetProps): React.JSX.Element {
   const { colors } = useTheme();
   const replica = useReplica();
-  const parties = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.party", limit: 500 }), [])
-  );
-  const vault = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
-  );
+  const parties = useSeatPages("people", SHARE_PARTIES, {
+    entity: "core.party",
+    rowIdColumn: "party_id",
+  });
+  const vault = useSeatPages("people", SHARE_VAULT, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+  });
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [selections, setSelections] = useState<ShareSelections>({});
   const [busy, setBusy] = useState(false);

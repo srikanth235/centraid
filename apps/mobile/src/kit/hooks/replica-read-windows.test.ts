@@ -106,8 +106,12 @@ describe("the phone's screen reads", () => {
     const sites = readSites();
     // A census, not a sample: if this number moves, a screen gained or lost a
     // read and the counter suite beside this file has a new number to hold.
-    // Forty-four of them left for the seat in wave 4b (#996).
-    expect(sites.length).toBeGreaterThanOrEqual(55);
+    // Forty-four left for the seat in wave 4b, and the eleven roster reads the
+    // share and grant sheets made left in wave 5 (#996). The floor tracks the
+    // population DOWN as reads convert and never up: a read that comes back
+    // wearing no window is caught by `undeclared` below and by the tripwire
+    // above, neither of which this number can excuse.
+    expect(sites.length).toBeGreaterThanOrEqual(44);
     const undeclared = sites.filter((site) => !declaresWindow(site.text));
     expect(
       undeclared.map((site) => `${site.file}: ${site.text.slice(0, 80)}`)

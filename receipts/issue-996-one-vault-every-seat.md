@@ -7672,3 +7672,89 @@ cutover item, not a fixture item.
   a reason to seed the one the code no longer reads.
 - **A reference plane that re-implements a deleted grammar is deleted with it**,
   not kept as the last program that can still answer the old questions.
+
+## Wave 5b — the share and grant sheets read the seat (#996)
+
+### Eleven roster reads, one statement each, in one file
+
+Five sheets asked the same question — who can this be shared with — as
+thirteen declarative entity requests spread across five files, each with its
+own hand-picked window (500 parties here, 2,000 members there, `limit: 1` for
+the vault row). They drifted, because nothing held them together.
+
+`kit/share/share-audience-queries.ts` is the answer they now share: five
+`PageQuery` statements over `core_party`, `core_vault`, `social_circle`,
+`social_circle_member` and `tally_group`, read through `useSeatPages` — the
+walk, so the set is the set rather than a number somebody guessed. A sheet that
+needs a column nobody selected changes it where every other sheet sees the
+change.
+
+Converted: `ShareSheet.tsx` (parties, vault), `named-circles.ts` (circles,
+members, groups), `photo-grants.ts` (all five), `useDocsGrantAudiences.ts`
+(parties, vault), `TallyShareGroup.tsx` (groups).
+
+**Every statement carries its ordering columns.** `created_at`/`added_at` with
+the primary key as tie-break: the keyset compares the two by name, so a select
+that omits them cannot produce a cursor.
+
+### The census floor moved DOWN, and only down
+
+`replica-read-windows.test.ts` counts the phone's remaining declarative reads.
+Eleven left in this commit, so the floor is 44 rather than 55. It tracks the
+population down as reads convert and never up — a read that comes back wearing
+no window is caught by `undeclared` and by the `acceptTruncation` /
+`UNBOUNDED_READ` tripwire beside it, neither of which this number can excuse.
+
+### What is NOT done, and what it blocks
+
+**Forty-four declarative reads remain on the phone** — Home's springboard and
+search recents, People's twenty-three, Photos' memories, Notes' versions,
+Agenda, and Settings → Access (whose reads run through
+`packages/client/src/access-lens.ts`, shared with the web shell). Each one goes
+`useReplicaQuery` → `session.read` → `ReplicaCoordinator.readWire` →
+`ReplicaSqliteStore` → `read-plan.ts`.
+
+That is the whole of what blocks W5's deletions. `sqlite-store.ts`,
+`store-core.ts`, `read-plan.ts`, `ReplicaWorkerClient` and its worker,
+`replica_row`/`payload_json`, the census probes, the deferred values,
+`unavailable-columns.ts`'s masking half, the per-app row-key HMAC and the
+device half of shape composition (`replica-routes.ts`, `buildReplicaShapes`,
+~9,000 lines under `packages/server/src/routes/replica-*`) are all downstream
+of one fact: the phone still reads and still bootstraps from the old store.
+None of them can be deleted while it does, and no part of the list can be
+deleted independently of the rest — they are one plane.
+
+`grep -rn shape_id packages/client apps/` is 42 (down from 53): the three
+fixture and test files that carried it are re-seeded, and what remains is
+`read-plan.ts` and `store-core.ts` themselves.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,436 tests, all passing.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/kit/share/share-audience-queries.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/docs/useDocsGrantAudiences.test.tsx`
+- `apps/mobile/src/apps/docs/useDocsGrantAudiences.ts`
+- `apps/mobile/src/apps/photos/photo-grants.ts`
+- `apps/mobile/src/apps/tally/TallyShareGroup.test.tsx`
+- `apps/mobile/src/apps/tally/TallyShareGroup.tsx`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/kit/share/ShareSheet.test.tsx`
+- `apps/mobile/src/kit/share/ShareSheet.tsx`
+- `apps/mobile/src/kit/share/named-circles.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the roster
+
+- **A question five screens ask is one statement, not five.** The windows
+  drifted precisely because nothing made them the same read.
+- **A census floor is a population count, not a budget.** It moves down when
+  reads legitimately leave and never up to admit one.

@@ -1,6 +1,9 @@
-import { useMemo } from "react";
-
-import { useReplicaQuery } from "../hooks/useReplicaQuery";
+import { useSeatPages } from "../hooks/useSeatPages";
+import {
+  SHARE_CIRCLES,
+  SHARE_CIRCLE_MEMBERS,
+  SHARE_GROUPS,
+} from "./share-audience-queries";
 import type { NativeShareTarget } from "./share-targets";
 import { nativeNamedShareCircles } from "./share-targets";
 
@@ -11,18 +14,18 @@ export function useNamedShareCircles(
   targets: readonly NativeShareTarget[],
   ownerPartyId?: string
 ) {
-  const circles = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "social.circle", limit: 500 }), [])
-  );
-  const members = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "social.circle_member", limit: 2_000 }), [])
-  );
-  const groups = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "tally.group", limit: 500 }), [])
-  );
+  const circles = useSeatPages("tally", SHARE_CIRCLES, {
+    entity: "social.circle",
+    rowIdColumn: "circle_id",
+  });
+  const members = useSeatPages("tally", SHARE_CIRCLE_MEMBERS, {
+    entity: "social.circle_member",
+    rowIdColumn: "member_id",
+  });
+  const groups = useSeatPages("tally", SHARE_GROUPS, {
+    entity: "tally.group",
+    rowIdColumn: "group_id",
+  });
   return nativeNamedShareCircles({
     circles: circles.rows,
     members: members.rows,

@@ -7,8 +7,9 @@ import React, { useMemo, useState } from "react";
 import { placementEntity } from "@centraid/blueprints/apps/_shared/placement-registry";
 
 import { postStatus } from "../../kit/components/status-line";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { SHARE_GROUPS } from "../../kit/share/share-audience-queries";
 import ShareSheet from "../../kit/share/ShareSheet";
 import { TEST_IDS } from "../../kit/test-ids";
 import {
@@ -30,10 +31,10 @@ export default function TallyShareGroup({
   const replica = useReplica();
   const [open, setOpen] = useState(false);
   // The gateway binds this commons to the group circle's exact stored roster.
-  const groups = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "tally.group", limit: 500 }), [])
-  );
+  const groups = useSeatPages("tally", SHARE_GROUPS, {
+    entity: "tally.group",
+    rowIdColumn: "group_id",
+  });
   const circleId = groups.rows.flatMap((row) =>
     row.group_id === groupId && typeof row.circle_id === "string"
       ? [row.circle_id]
