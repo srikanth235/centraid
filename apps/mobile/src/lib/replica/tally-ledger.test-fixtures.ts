@@ -15,18 +15,15 @@ import { DatabaseSync } from "node:sqlite";
 import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 
 import { NodeSqliteDriver } from "./node-sqlite-driver";
+import { seedSeatTables } from "./seat-fixture.test-fixtures";
+import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 export const VAULT_ID = "personal";
 export const SHAPE_ID = "tally-default";
 export const OWNER = "party-owner";
 export const FRIENDS = ["party-ana", "party-bo", "party-cy"] as const;
 
-export interface SeedEntity {
-  entity: string;
-  primaryKey: string;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-}
+export type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 /**
  * A ledger with real arithmetic in it: three friends, a group, multi-payer and
@@ -101,12 +98,22 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.friend",
       primaryKey: "party_id",
+      seatColumns: ["friend_id", "party_id", "created_at"],
       columns: ["party_id"],
       rows: FRIENDS.map((party_id) => ({ party_id })),
     },
     {
       entity: "tally.group",
       primaryKey: "group_id",
+      seatColumns: [
+        "group_id",
+        "circle_id",
+        "icon",
+        "color",
+        "simplify_opt_in",
+        "archived_at",
+        "currency",
+      ],
       columns: [
         "group_id",
         "circle_id",
@@ -137,6 +144,7 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "social.circle",
       primaryKey: "circle_id",
+      seatColumns: ["circle_id", "owner_party_id", "name", "kind"],
       columns: ["circle_id", "name"],
       rows: [
         { circle_id: "circle-flat", name: "14 Sitwell Road" },
@@ -156,6 +164,23 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.expense",
       primaryKey: "expense_id",
+      seatColumns: [
+        "expense_id",
+        "group_id",
+        "description",
+        "amount_minor",
+        "currency",
+        "paid_by",
+        "split_method",
+        "split_params_json",
+        "spent_on",
+        "category",
+        "txn_id",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "purge_at",
+      ],
       columns: [
         "expense_id",
         "group_id",
@@ -192,6 +217,18 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.settlement",
       primaryKey: "settlement_id",
+      seatColumns: [
+        "settlement_id",
+        "group_id",
+        "from_party",
+        "to_party",
+        "amount_minor",
+        "currency",
+        "paid_on",
+        "txn_id",
+        "created_at",
+        "deleted_at",
+      ],
       columns: [
         "settlement_id",
         "from_party",
@@ -214,6 +251,17 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.obligation",
       primaryKey: "obligation_id",
+      seatColumns: [
+        "obligation_id",
+        "from_party",
+        "to_party",
+        "amount_minor",
+        "currency",
+        "reason",
+        "incurred_on",
+        "settled_at",
+        "deleted_at",
+      ],
       columns: [
         "obligation_id",
         "from_party",
@@ -238,6 +286,15 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.nudge",
       primaryKey: "nudge_id",
+      seatColumns: [
+        "nudge_id",
+        "party_id",
+        "group_id",
+        "as_of_minor",
+        "note",
+        "prepared_at",
+        "created_at",
+      ],
       columns: [
         "nudge_id",
         "party_id",
@@ -260,6 +317,26 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.recurring_expense",
       primaryKey: "template_id",
+      seatColumns: [
+        "template_id",
+        "group_id",
+        "description",
+        "original_amount_minor",
+        "original_currency",
+        "settlement_currency",
+        "paid_by",
+        "category",
+        "rrule",
+        "anchor_start",
+        "tz",
+        "rate_scaled",
+        "rate_scale",
+        "rate_source",
+        "rate_date",
+        "status",
+        "last_materialized_start",
+        "updated_at",
+      ],
       columns: [
         "template_id",
         "group_id",
@@ -292,6 +369,16 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "schedule.recurrence_exception",
       primaryKey: "exception_id",
+      seatColumns: [
+        "exception_id",
+        "target_type",
+        "target_id",
+        "original_start_local",
+        "recurrence_semantics",
+        "scope",
+        "action",
+        "override_json",
+      ],
       columns: [
         "exception_id",
         "target_type",
@@ -316,6 +403,14 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "core.attachment",
       primaryKey: "attachment_id",
+      seatColumns: [
+        "attachment_id",
+        "target_type",
+        "target_id",
+        "content_id",
+        "role",
+        "is_primary",
+      ],
       columns: [
         "attachment_id",
         "target_type",
@@ -348,11 +443,28 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "core.content_item",
       primaryKey: "content_id",
+      seatColumns: ["content_id", "content_uri", "media_type", "byte_size"],
       columns: ["content_id", "content_uri", "media_type"],
       rows: [],
     },
   ];
 }
+
+/** Tables the ledger's handlers read past their own rows into. */
+const TALLY_DECORATION_TABLES = [
+  {
+    table: "core_entity_revision",
+    columns: [
+      "revision_id",
+      "entity_type",
+      "entity_id",
+      "revision_no",
+      "created_at",
+      "actor_party_id",
+      "summary",
+    ],
+  },
+] as const;
 
 export function seedScope(file: string): void {
   const entities = seedEntities();
@@ -394,4 +506,16 @@ export function seedScope(file: string): void {
       );
   database.exec("COMMIT");
   database.close();
+}
+
+/**
+ * The same ledger, in the tables a handler's SQL names (#996 wave 5).
+ *
+ * `seedScope` writes the old store's one blob table; this writes the vault's
+ * own, which is what `ctx.vault.page` reads. The tables the dashboard only
+ * DECORATES from — revisions, the attachment's bytes — are created empty: on a
+ * real seat they exist and answer nothing.
+ */
+export function seedSeatScope(file: string): void {
+  seedSeatTables(file, seedEntities(), TALLY_DECORATION_TABLES);
 }

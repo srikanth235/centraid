@@ -7594,3 +7594,81 @@ lane-attributable delta of 12 KB.**
 **Changed:**
 
 - `receipts/issue-996-one-vault-every-seat.md`
+
+## Wave 5a — the airplane oracles re-seeded on the seat (#996)
+
+### The owner ruling this wave opens under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+`mobile/*` rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head `a1e8c4390` stand as v0 evidence; the rows stay open
+ledger rows with provenance `emulator`.
+
+### Ten tests were red, and the seed was why
+
+Tally's and Locker's airplane oracles, and the Metro-loader spike beside them,
+seeded the OLD store: one `replica_row` table of `payload_json` blobs keyed by
+a shape id. Every read those three files prove has since become a handler's
+plain SQL over the vault's own tables (`ctx.vault.page`, R8, W4-D2), and plain
+SQL cannot run on a JSON blob at all — so all ten failed with `page is
+online-only` or a denial derived from it.
+
+The seed moves with the reads. `seat-fixture.test-fixtures.ts` writes the same
+rows into the tables the gateway names them in — `tally.expense` IS
+`tally_expense`, the entity name with its dot replaced — and hands back the
+seat's own `page`, assembled by `seatWorkerPage`, the same function the phone
+runs. What differs between the fixture and a device is the distance to the
+driver, and nothing else.
+
+**The physical table is wider than the fixture's rows, and it says so.**
+`seatColumns` is the table's whole column list where a handler's `SELECT` names
+columns this ledger has no value for. A column left out of the table is `no
+such column`, which reads as a broken handler; a column present and null is
+what a real vault has. `LOCKER_ITEM_COLUMNS` is reproduced whole for exactly
+this reason: every Locker shelf projects the whole list.
+
+**`read` and `search` refuse on these planes.** `seatOnlyReadPlane` throws from
+both, so a handler that reached back for the declarative store would name
+itself at the call rather than pass quietly through the old file.
+
+### The row-array reference is gone, and what replaced it
+
+`inline-query-ctx.native.test.ts` compared the seat's answer byte-for-byte
+against a ctx that re-implemented the declarative `where`/`orderBy`/`limit`
+grammar in JavaScript. **That grammar is deleted in this wave**, and a
+reference that had to parse SQL to answer would be a second SQLite. Ruled here:
+the row-array reference dies with the grammar it implements; the spike's
+surviving claims are the two it was actually for — the same module file,
+unmodified, answers a complete dashboard over the phone's own copy, and the
+payload carries none of this seat's own bookkeeping. The web-vs-phone oracle
+one program over (`tests/integration-mobile/`) is untouched here and is a
+cutover item, not a fixture item.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,436 tests, 0 failed (2 failed
+  before this commit; 8 more in the two airplane files).
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/lib/replica/seat-fixture.test-fixtures.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/locker/locker-airplane.test.ts`
+- `apps/mobile/src/apps/tally/tally-airplane.test.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`
+- `apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts`
+- `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the seed
+
+- **A fixture seeds the store the reads run on.** Two stores in the tree is not
+  a reason to seed the one the code no longer reads.
+- **A reference plane that re-implements a deleted grammar is deleted with it**,
+  not kept as the last program that can still answer the old questions.
