@@ -181,6 +181,7 @@ describe("HouseholdScreen suite", () => {
           head: 1_204,
           behind: 304,
           deferredPending: false,
+          epoch: "e1",
           contents: "full" as const,
         },
       });

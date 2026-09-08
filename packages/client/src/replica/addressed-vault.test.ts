@@ -9,7 +9,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_vault from "../gateway-client-vault.js";
-import type * as TypeImport_shellSession from "./shell-session.js";
+import type * as TypeImport_identity from "./replica-identity.js";
+import type * as TypeImport_scopes from "./shell-session-scopes.js";
 
 const vaultStatus = vi.fn<typeof TypeImport_vault.vaultStatus>();
 vi.mock(import("../gateway-client-vault.js"), async (importOriginal) => ({
@@ -44,9 +45,17 @@ function installHost(vaultId?: string): void {
 }
 
 /** A fresh module graph — a reload, as far as the session map is concerned. */
-async function reboot(): Promise<typeof TypeImport_shellSession> {
+async function reboot(): Promise<
+  typeof TypeImport_scopes & typeof TypeImport_identity
+> {
   vi.resetModules();
-  return import("./shell-session.js");
+  // The scope registry holds the module state a reload resets; the identity
+  // helpers are pure, and are folded in so the assertions read as one surface.
+  const [scopes, identity] = await Promise.all([
+    import("./shell-session-scopes.js"),
+    import("./replica-identity.js"),
+  ]);
+  return { ...scopes, ...identity };
 }
 
 describe("addressedGatewayAuth", () => {

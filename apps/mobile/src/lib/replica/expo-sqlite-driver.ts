@@ -1,20 +1,42 @@
 import { openDatabaseSync } from "expo-sqlite";
 import type { SQLiteBindValue, SQLiteDatabase } from "expo-sqlite";
 
-import { replicaDatabaseName } from "@centraid/client/replica/native";
-import type {
-  ReplicaBindValue,
-  ReplicaDigest,
-  ReplicaIdentity,
-  ReplicaSqliteDriver,
-} from "@centraid/client/replica/native";
-
 import { ReplicaFts5UnavailableError } from "./replica-fts5-error";
 import { ReplicaSqliteVecUnavailableError } from "./replica-sqlite-vec-error";
 import {
   asReplicaStorageError,
   isReplicaStorageFullError,
 } from "./replica-storage-error";
+
+/**
+ * WHAT IS LEFT OF THIS FILE AFTER #996 W5.
+ *
+ * It opened the phone's REPLICA STORE — a projection of the vault into
+ * `replica_row` blobs — and that store is deleted. What survives is the driver
+ * itself, because the UPLOAD QUEUE is a second, unrelated SQLite database on
+ * this phone (`lib/upload/native-queue.ts`) and it needs the same expo-sqlite
+ * seam: the key pragma, the busy timeout, the error taxonomy.
+ *
+ * The seat has its OWN driver (`expo-seat-driver.ts`): its bind union carries
+ * `Uint8Array` and `bigint`, which a projection of JSON never needed.
+ */
+
+/** The three types the upload queue binds. */
+export type ExpoBindValue = string | number | null;
+
+/**
+ * The synchronous SQLite surface the upload queue is written over.
+ *
+ * It was `ReplicaSqliteDriver`, borrowed from the replica store because the two
+ * happened to need the same three methods. The store is gone; the queue's
+ * database is its own, and so is its seam.
+ */
+export interface UploadSqliteDriver {
+  run: (sql: string, bind?: readonly ExpoBindValue[]) => void;
+  all: <T extends object>(sql: string, bind?: readonly ExpoBindValue[]) => T[];
+  exec: (sql: string) => void;
+  close: () => void;
+}
 
 // The phone's engine is expo-sqlite built against SQLCipher (#996 wave 3), and
 // it differs from every other seat's in one way that reaches this file: there
@@ -43,7 +65,7 @@ export interface ExpoSqliteOpenOptions {
   useNewConnection?: boolean;
 }
 
-export class ExpoSqliteDriver implements ReplicaSqliteDriver {
+export class ExpoSqliteDriver implements UploadSqliteDriver {
   private constructor(private readonly db: SQLiteDatabase) {}
 
   /**
@@ -82,7 +104,7 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
-  run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
+  run(sql: string, bind: readonly ExpoBindValue[] = []): void {
     try {
       this.db.runSync(sql, bind as SQLiteBindValue[]);
     } catch (error) {
@@ -90,10 +112,7 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
-  all<T extends object>(
-    sql: string,
-    bind: readonly ReplicaBindValue[] = []
-  ): T[] {
+  all<T extends object>(sql: string, bind: readonly ExpoBindValue[] = []): T[] {
     try {
       return this.db.getAllSync<T>(sql, bind as SQLiteBindValue[]);
     } catch (error) {
@@ -112,7 +131,7 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
    * (`bootstrap-statement-budget.test.ts`) is what keeps N honest.
    */
   async runBatchAsync(
-    statements: readonly { sql: string; bind: readonly ReplicaBindValue[] }[]
+    statements: readonly { sql: string; bind: readonly ExpoBindValue[] }[]
   ): Promise<void> {
     try {
       await this.db.withTransactionAsync(async () => {
@@ -131,7 +150,7 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
   /** Off-thread read. Reads only — the write path stays synchronous. */
   async allAsync<T extends object>(
     sql: string,
-    bind: readonly ReplicaBindValue[] = []
+    bind: readonly ExpoBindValue[] = []
   ): Promise<T[]> {
     try {
       return await this.db.getAllAsync<T>(sql, bind as SQLiteBindValue[]);
@@ -191,29 +210,4 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
  */
 export function keyPragma(key: string): string {
   return `PRAGMA key = '${key.replaceAll("'", "''")}'`;
-}
-
-export async function openNativeReplicaDriver(
-  identity: ReplicaIdentity,
-  digest?: ReplicaDigest,
-  location?: string
-): Promise<ExpoSqliteDriver> {
-  const name = await nativeReplicaDatabaseName(identity, digest);
-  return ExpoSqliteDriver.open({ name, ...(location ? { location } : {}) });
-}
-
-export async function nativeReplicaDatabaseName(
-  identity: ReplicaIdentity,
-  digest?: ReplicaDigest
-): Promise<string> {
-  return (await replicaDatabaseName(identity, digest)).replace(/^\/+/u, "");
-}
-
-export async function nativeReplicaDatabasePath(
-  identity: ReplicaIdentity,
-  digest?: ReplicaDigest,
-  location?: string
-): Promise<string> {
-  const name = await nativeReplicaDatabaseName(identity, digest);
-  return location ? `${location.replace(/\/+$/u, "")}/${name}` : name;
 }

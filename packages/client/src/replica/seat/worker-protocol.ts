@@ -98,6 +98,7 @@ export type SeatWorkerRequest =
   | { id: number; op: "apply"; payload: SeatWorkerApplyOptions }
   | { id: number; op: "query"; payload: SeatWorkerQuery }
   | { id: number; op: "outbox"; payload: SeatWorkerOutboxCall }
+  | { id: number; op: "purge"; payload: undefined }
   | { id: number; op: "close"; payload: undefined };
 
 export interface SeatWorkerResults {
@@ -107,6 +108,7 @@ export interface SeatWorkerResults {
   apply: SeatApplySummary;
   query: object[];
   outbox: unknown;
+  purge: undefined;
   close: undefined;
 }
 

@@ -21,6 +21,7 @@ import {
   beginReplicaCommit,
   endReplicaCommit,
   openVaultDb,
+  REPLICA_SCHEMA_EPOCH,
 } from "@centraid/vault";
 import { buildOntologyScenarios } from "@centraid/vault/tests/ontology-scenarios";
 
@@ -261,7 +262,9 @@ describe("seat-routes", () => {
       hasMore: boolean;
       watermark: number;
     }>();
-    expect(page.schemaEpoch).toBe(2);
+    // ASSERTED AGAINST THE CONSTANT, not a copy of its value: #996 W5 bumped
+    // the epoch 2 -> 3 and these two pins were the only things left saying 2.
+    expect(page.schemaEpoch).toBe(REPLICA_SCHEMA_EPOCH);
     // The limit was one; the page carries the whole first commit anyway.
     expect(page.rows.length).toBeGreaterThan(1);
     const first = page.rows[0]!.commitSeq;
@@ -331,7 +334,9 @@ describe("seat-routes", () => {
     expect(full.getHeader("accept-ranges")).toBe("bytes");
     const etag = full.getHeader("etag")!;
     expect(etag).toContain(String(full.getHeader("x-centraid-seat-seq")));
-    expect(full.getHeader("x-centraid-schema-epoch")).toBe("2");
+    expect(full.getHeader("x-centraid-schema-epoch")).toBe(
+      String(REPLICA_SCHEMA_EPOCH)
+    );
     // It really is the vault: gunzip it and the private tables are gone.
     const bytes = gunzipSync(full.body);
     expect(bytes.length).toBeGreaterThan(0);

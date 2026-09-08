@@ -9,8 +9,6 @@
  */
 export { MAX_REPLICA_FEED_MOUNTS as MAX_BACKGROUND_FEED_MOUNTS } from "@centraid/core/protocol";
 
-export const MOBILE_REPLICA_BOOTSTRAP_WINDOW = 5_000;
-
 /**
  * THE WINDOW A SCREEN'S WHOLE-ENTITY READ DECLARES (#922 E2).
  *

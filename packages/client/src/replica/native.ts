@@ -8,7 +8,6 @@
  * composes them over an expo-sqlite driver and an `expo/fetch` change feed.
  */
 /* oxlint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath; governance: allow-no-unjustified-suppressions stable cross-platform API boundary */
-export * from "./coordinator.js";
 export * from "./digest.js";
 export * from "./errors.js";
 export * from "./inline-query-ctx-core.js";
@@ -17,27 +16,32 @@ export * from "./intent-record-store.js";
 export * from "./intent-revision.js";
 export * from "./intents.js";
 export * from "./key.js";
-export * from "./live-query.js";
-export * from "./live-query-registry.js";
-export * from "./memory-intent-store.js";
+// NOT RE-EXPORTED HERE, and deliberately: `live-query.ts`, `live-query-registry.ts`
+// and `memory-intent-store.js`. The phone has no consumer for any of the three —
+// the seat's invalidation bus is what a screen re-reads on, and the outbox is a
+// table in the seat's file, never an in-memory stand-in — and a barrel that names
+// a module puts it in the Hermes bundle whether a screen reaches it or not. They
+// stay on the browser barrel, where `shell-session.ts` still opens the memory
+// store as its no-file fallback.
 // The offline chain (#996, R23–R25): the phone derives its own edges, holds and
 // restart projection from the outbox, because the badge has to be right in
 // airplane mode where the gateway's verdict does not exist yet.
 export * from "./offline-chain.js";
 export * from "./payload-hash.js";
-export * from "./query.js";
 // The read grammar's compiler: public here because the native seat composes it
 // over its mounted vault databases (#883).
-export * from "./read-plan.js";
 export * from "./rebootstrap-copy.js";
 export * from "./search.js";
 export * from "./shell-transport.js";
-export * from "./store.js";
-export * from "./store-core.js";
 export * from "./trace.js";
+export * from "./shell-admission.js";
+export * from "./shell-invalidation-bus.js";
+export * from "./shell-intent-drain.js";
+export * from "./shell-outcomes.js";
+export * from "./vault-tables.js";
+export * from "./seat/invalidations.js";
 export * from "./types.js";
 export * from "./work-counters.js";
-export * from "./windowed-bootstrap.js";
 export * from "./write-helpers.js";
 export {
   authHeaders,
@@ -68,6 +72,8 @@ export * from "./seat/seat-loop.js";
 export * from "./seat/seat-page-reader.js";
 export * from "./seat/seat-rebootstrap-required-error.js";
 export * from "./seat/seat-snapshot-moved-error.js";
+export * from "./seat/seat-doors.js";
+export * from "./seat/base-versions.js";
 export * from "./seat/state.js";
 export * from "./seat/watermark.js";
 export * from "./seat/worker-core.js";

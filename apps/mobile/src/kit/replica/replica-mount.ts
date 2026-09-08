@@ -4,7 +4,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { File } from "expo-file-system";
 
-import { fetchReplicaBootstrapPage } from "@centraid/client/replica/native";
+import { probeSeatVault } from "@centraid/client/replica/native";
 import type {
   GatewayAuth,
   ReplicaFetcher,
@@ -12,11 +12,11 @@ import type {
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
-import { nativeReplicaDatabasePath } from "../../lib/replica/expo-sqlite-driver";
 import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import type { MobileGatewayFeatures } from "../../lib/replica/mobile-gateway-compatibility-core";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
+import { nativeSeatDatabasePath } from "../../lib/replica/native-seat-path";
 import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import { LAST_BASE, noteActiveIdentity } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
@@ -141,10 +141,7 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   // Ladder: endpoint id, carried vault, literal — never the display name,
   // which demotes a durable id to a renameable one.
   const [probe, endpointId] = await Promise.all([
-    fetchReplicaBootstrapPage(
-      { baseUrl: liveBase },
-      { window: 1, fetcher: fetcher() }
-    ),
+    probeSeatVault(liveBase, { headers: authHeader() }),
     fetchEndpointId(liveBase),
   ]);
   const gatewayId = endpointId ?? vault?.gatewayId ?? MANUAL_GATEWAY_FALLBACK;
@@ -216,10 +213,13 @@ export async function vaultScopes(
   return Promise.all(
     ordered.map(async (scope) => ({
       ...scope,
-      databaseName: await nativeReplicaDatabasePath(
-        { gatewayId: identity.gatewayId, vaultId: scope.vaultId },
-        nativeReplicaDigest,
-        storageLocation
+      databaseName: await nativeSeatDatabasePath(
+        {
+          gatewayId: identity.gatewayId,
+          vaultId: scope.vaultId,
+          digest: nativeReplicaDigest,
+        },
+        storageLocation ?? ""
       ),
     }))
   );

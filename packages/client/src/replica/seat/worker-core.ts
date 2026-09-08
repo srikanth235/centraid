@@ -60,6 +60,10 @@ export interface SeatWorkerHost {
   readonly transport: (
     options: SeatWorkerBootstrapOptions
   ) => SeatSnapshotTransport | Promise<SeatSnapshotTransport>;
+  /** Unlink the seat's file. Absent where there is no file to unlink. */
+  readonly destroyDatabase?: (
+    options: SeatWorkerOpenOptions
+  ) => void | Promise<void>;
 }
 
 export interface SeatWorkerSink {
@@ -98,6 +102,9 @@ export class SeatWorkerCore {
         return this.query(request.payload);
       case "outbox":
         return this.outboxCall(request.payload);
+      case "purge":
+        await this.purge();
+        return undefined;
       case "close":
         this.close();
         return undefined;
@@ -242,6 +249,25 @@ export class SeatWorkerCore {
       seatPendingOverlay(driver, request.overlay.entity),
       request.overlay.rowIdColumn
     );
+  }
+
+  /**
+   * DELETE THIS SEAT'S FILE (#996, R9 and the revocation path).
+   *
+   * A closed seat still has the vault on disk, and "the member revoked this
+   * device" has to mean the copy is gone — not that nothing is reading it. The
+   * outbox goes with the file, which is the same fact R24 rests on read from
+   * the other end.
+   *
+   * A host with no `destroyDatabase` (a suite over `:memory:`) closes and is
+   * done: there is no file to unlink.
+   */
+  async purge(): Promise<void> {
+    const open = this.#open;
+    this.close();
+    this.#outbox = undefined;
+    if (open) await this.host.destroyDatabase?.(open);
+    this.#open = undefined;
   }
 
   close(): void {

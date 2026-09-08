@@ -114,7 +114,7 @@ export default function HouseholdRoute({
         onRevokeDevice={revokeGatewayDevice}
         onRenameDevice={renameGatewayDevice}
         onCurrentDeviceRevoked={() =>
-          import("../../../replica/shell-session.js").then((replica) =>
+          import("../../../replica/shell-session-scopes.js").then((replica) =>
             replica.purgeCurrentReplicaDevice()
           )
         }

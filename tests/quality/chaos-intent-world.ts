@@ -25,9 +25,9 @@ import type { AddressInfo, Server } from "node:net";
 
 import type { SeededRandom } from "@centraid/test-kit/random";
 
-import { SqliteIntentStore } from "../../apps/mobile/src/lib/replica/sqlite-intent-store.js";
 import { IntentQueue } from "../../packages/client/src/replica/intents.js";
-import { NodeSqliteDriver } from "../../packages/client/src/replica/node-sqlite-test-driver.js";
+import { NodeSeatDriver } from "../../packages/client/src/replica/seat/node-seat-driver.js";
+import { SeatIntentStore } from "../../packages/client/src/replica/seat/seat-intent-store.js";
 import { handleReplicaIntent } from "../../packages/server/src/routes/replica-intent-route.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import type { VaultPlane } from "../../packages/server/src/serve/vault-plane.js";
@@ -97,9 +97,24 @@ export interface ChaosIntentWorld {
   close: () => Promise<void>;
 }
 
-/** A durable client outbox backed by the mobile SQLite store. */
+/**
+ * A durable client outbox — the seat's own, which is the only one there is
+ * since #996 W5: `seat_outbox` in the seat's file, here over `node:sqlite`.
+ *
+ * NO APPLIER BEHIND IT, AND IT SAYS SO (R24). On a device an executed answer
+ * parks on its `commit_seq` until the seat's applier reaches it, and the
+ * overlay clears inside the transaction that carries the commit. This world
+ * has no log and no applier — it chaoses the TRANSPORT — so a queue that
+ * inherited the seat store's default would hold every settled intent in
+ * `awaiting-change` forever. `IntentQueueOptions` exists for exactly this.
+ */
 export function chaosIntentQueue(): IntentQueue {
-  return new IntentQueue(SqliteIntentStore.create(new NodeSqliteDriver()));
+  return new IntentQueue(
+    SeatIntentStore.create(new NodeSeatDriver(":memory:")),
+    {
+      settlesByCommitSeq: false,
+    }
+  );
 }
 
 /** `label` names the case; it seeds this world's two endpoint identities. */

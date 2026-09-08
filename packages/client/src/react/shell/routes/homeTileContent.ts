@@ -488,6 +488,6 @@ export async function loadHomeTileContent(input: {
 
 export async function homeTileReader(): Promise<HomeTileReader> {
   const { getReplicaShellSession } =
-    await import("../../../replica/shell-session.js");
+    await import("../../../replica/shell-session-scopes.js");
   return getReplicaShellSession();
 }

@@ -82,7 +82,7 @@ function recentsQuery(
 
 export async function fetchPaletteRecents(): Promise<PaletteRecentHit[]> {
   const { getReplicaShellSession } =
-    await import("../../../replica/shell-session.js");
+    await import("../../../replica/shell-session-scopes.js");
   const session = await getReplicaShellSession();
   const settled = await Promise.allSettled(
     recentableTargets().map(async (target) => {

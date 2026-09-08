@@ -111,10 +111,16 @@ export interface InlineRowsResult {
 }
 
 /**
- * The seat's whole contribution: how a read and a search reach rows.
+ * The seat's whole contribution beside `page`: how a SEARCH reaches rows.
+ *
+ * `read` is gone (#996, W5). A declarative read against a shaped store was the
+ * other half of this pair; a seat holds the vault's own tables, so a handler's
+ * read is `ctx.vault.page` — plain SQL a reviewer can see — and there is no
+ * second read vocabulary for one to come back in. Search stays because ranked
+ * FTS is not a page: it is a bounded top-N over the shadow tables the seat's
+ * file already carries (W5-D1).
  */
-export interface InlineCtxReads<Read, Search> {
-  read: (request: Read) => Promise<InlineRowsResult>;
+export interface InlineCtxReads<Search> {
   search: (request: Search) => Promise<InlineRowsResult>;
 }
 
@@ -163,16 +169,13 @@ export interface InlineWireResult {
  * does not — so neither belongs in a module both seats share. What IS shared is
  * that they are asked at the same two points, which is what this hook fixes.
  */
-export interface InlineReadHooks<Read, Search> {
-  /** Runs before the request reaches the session; throw to refuse it. */
-  beforeRead?: (request: Read) => void;
+export interface InlineReadHooks<Search> {
   beforeSearch?: (request: Search) => void;
-  /** Runs on every read and search result, before rows are projected. */
+  /** Runs on every search result, before rows are projected. */
   onResult?: (result: InlineWireResult) => void;
 }
 
-export interface InlineWireSession<Read, Search> {
-  read: (appId: string, request: Read) => Promise<InlineWireResult>;
+export interface InlineWireSession<Search> {
   search: (appId: string, request: Search) => Promise<InlineWireResult>;
 }
 
@@ -182,15 +185,15 @@ export interface InlineWireSession<Read, Search> {
  * for itself is what one ROW becomes — the shell threads pending-row
  * provenance onto it, the phone does not.
  */
-export function inlineReadsFor<Read, Search>(
-  session: InlineWireSession<Read, Search>,
+export function inlineReadsFor<Search>(
+  session: InlineWireSession<Search>,
   appId: string,
   row: (
     envelope: ReplicaRowEnvelope,
     sidecar: PendingOverlaySidecar
   ) => unknown,
-  hooks: InlineReadHooks<Read, Search> = {}
-): InlineCtxReads<Read, Search> {
+  hooks: InlineReadHooks<Search> = {}
+): InlineCtxReads<Search> {
   const project = (result: InlineWireResult): InlineRowsResult => {
     hooks.onResult?.(result);
     // One sidecar per read, shared by every row it answers for: the rows carry
@@ -203,10 +206,6 @@ export function inlineReadsFor<Read, Search>(
     };
   };
   return {
-    read: async (request) => {
-      hooks.beforeRead?.(request);
-      return project(await session.read(appId, request));
-    },
     search: async (request) => {
       hooks.beforeSearch?.(request);
       return project(await session.search(appId, request));
@@ -235,8 +234,8 @@ const INLINE_CTX_TIME = {
   shiftTemporal,
 } as const;
 
-export interface InlineCtxCoreOptions<Read, Search> {
-  reads: InlineCtxReads<Read, Search>;
+export interface InlineCtxCoreOptions<Search> {
+  reads: InlineCtxReads<Search>;
   /** Absent on a seat with no local file: `ctx.vault.page` is then online-only. */
   page?: InlinePage;
   signal?: AbortSignal;
@@ -260,8 +259,8 @@ const OPTIONAL_INVOKE_UNAVAILABLE = {
  * empty cards, never a blank board (#505 P4) — and every remaining verb is an
  * online-only effect.
  */
-export function buildInlineCtxCore<Read, Search>(
-  options: InlineCtxCoreOptions<Read, Search>,
+export function buildInlineCtxCore<Search>(
+  options: InlineCtxCoreOptions<Search>,
   guard: OnlineOnlyGuard
 ): unknown {
   const effect = (name: string) => (): Promise<never> =>
@@ -271,7 +270,10 @@ export function buildInlineCtxCore<Read, Search>(
     fetch: (): Promise<never> =>
       Promise.reject(guard.mark("fetch is online-only")),
     vault: {
-      read: options.reads.read,
+      // NO `read` (#996, W5). A handler that still called one would get the
+      // online-only refusal every other absent verb gives, which is the honest
+      // answer: the plane it addressed does not exist on a seat any more.
+      read: effect("read"),
       search: options.reads.search,
       page: options.page ?? effect("page"),
       resolve: (): Promise<{ cards: unknown[] }> =>

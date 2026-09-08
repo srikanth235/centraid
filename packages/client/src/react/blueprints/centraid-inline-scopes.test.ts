@@ -54,10 +54,8 @@ function fakeSession(): Fake {
     emit(invalidation: ReplicaInvalidation) {
       for (const listener of subscribers.slice()) listener([invalidation]);
     },
-    read: vi.fn<InlineScopeSession["read"]>(async () => ({
+    page: vi.fn<NonNullable<InlineScopeSession["page"]>>(async () => ({
       rows: [],
-      cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "s", entity: "media.asset" },
     })),
     search: vi.fn<InlineScopeSession["search"]>(async () => ({
       rows: [],
@@ -89,8 +87,20 @@ function tellScope(name: string): InlineAppModule["queries"] {
   return {
     [name]: {
       default: ({ ctx }: { ctx: unknown }) =>
-        (ctx as { vault: { read: (r: unknown) => Promise<unknown> } }).vault
-          .read({ entity: "media.asset", acceptTruncation: true })
+        (ctx as { vault: { page: (r: unknown) => Promise<unknown> } }).vault
+          .page({
+            query: {
+              name: "photos.library",
+              select: "*",
+              from: "media_asset",
+              order: {
+                sortColumn: "asset_id",
+                pkColumn: "asset_id",
+                direction: "asc",
+              },
+            },
+            limit: 50,
+          })
           .then(() => ({ ok: true })),
     },
   } as unknown as InlineAppModule["queries"];
@@ -133,11 +143,11 @@ describe("multi-scope inline client", () => {
       { scope: family, session: familySession },
     ]);
     await client.read({ query: "library" });
-    expect(ownSession.read).toHaveBeenCalledOnce();
-    expect(familySession.read).not.toHaveBeenCalled();
+    expect(ownSession.page).toHaveBeenCalledOnce();
+    expect(familySession.page).not.toHaveBeenCalled();
 
     await client.read({ query: "library", scope: "vault-family" });
-    expect(familySession.read).toHaveBeenCalledOnce();
+    expect(familySession.page).toHaveBeenCalledOnce();
   });
 
   it("refuses a scope that is not mounted rather than falling back", async () => {
@@ -152,7 +162,7 @@ describe("multi-scope inline client", () => {
   it("readAll fans out and reports a failing scope as data, not a rejection", async () => {
     const ownSession = fakeSession();
     const brokenSession = fakeSession();
-    (brokenSession.read as ReturnType<typeof vi.fn>).mockRejectedValue(
+    (brokenSession.page as ReturnType<typeof vi.fn>).mockRejectedValue(
       Object.assign(new Error("audience is unreachable"), {
         code: "VAULT_ERROR",
       })
@@ -183,7 +193,7 @@ describe("multi-scope inline client", () => {
       scopes: ["vault-family"],
     });
     expect(results.map((r) => r.scope)).toStrictEqual(["vault-family"]);
-    expect(ownSession.read).not.toHaveBeenCalled();
+    expect(ownSession.page).not.toHaveBeenCalled();
   });
 
   it("write reaches the named scope", async () => {
@@ -283,7 +293,7 @@ describe("multi-scope inline client", () => {
 
   it("the online-read fallback names the scope so the gateway cannot answer for another", async () => {
     const offline = fakeSession();
-    (offline.read as ReturnType<typeof vi.fn>).mockRejectedValue(
+    (offline.page as ReturnType<typeof vi.fn>).mockRejectedValue(
       Object.assign(new Error("needs the online vault"), {
         code: "ONLINE_ONLY",
       })

@@ -58,11 +58,6 @@ function fakeSession(): Session & { writes: unknown[] } {
   const writes: unknown[] = [];
   return {
     writes,
-    read: vi.fn<Session["read"]>(async () => ({
-      rows: [],
-      cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "s", entity: "x" },
-    })),
     search: vi.fn<Session["search"]>(async () => ({
       rows: [],
       cursor: { epoch: "e", seq: 1 },

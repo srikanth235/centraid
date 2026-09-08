@@ -94,6 +94,18 @@ const host: SeatWorkerHost = {
       ...(options.expansion === undefined ? {} : {}),
     });
   },
+  // THE FILE, GONE (#996, R9 and the revocation path). A closed seat still has
+  // the vault on disk; a revoked device must not. `unlink` removes it from the
+  // SAH pool, and `wipeFiles` clears whatever a half-finished bootstrap left
+  // staged in the same pool.
+  destroyDatabase: async (options) => {
+    const held = await poolFor(options);
+    try {
+      held.unlink(options.dbName);
+    } catch {
+      // A pool that never held this name has nothing to unlink.
+    }
+  },
   transport: (options) =>
     httpSeatSnapshotTransport({
       url: options.snapshotUrl,

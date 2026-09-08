@@ -1,5 +1,7 @@
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
+import type { VaultChangeMessage } from "../vault-change-sse.js";
+
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id" as const;
 
@@ -216,7 +218,14 @@ export interface ReplicaSearchRequest {
 }
 
 export interface ReplicaDependency {
-  shapeId: string;
+  /**
+   * OPTIONAL SINCE #996 W5: a seat holds ONE vault and one file, so an entity
+   * names its own rows and there is no per-app shape left to select between.
+   * It survives on an OVERLAY invalidation, where an optimistic mutation still
+   * carries the shape its projection was written against; a CANONICAL one, born
+   * from the seat's own change notice, has no shape to name.
+   */
+  shapeId?: string;
   entity: string;
   /** The one row this dependency is confined to. ABSENT MEANS THE WHOLE
    *  ENTITY, which is what the engine emits today (#883). */
@@ -317,7 +326,13 @@ export interface ReplicaStatus {
 
 export interface OptimisticUpsert {
   op: "upsert";
-  shapeId: string;
+  /**
+   * OPTIONAL SINCE #996 W5. A shape was an app's slice of a vault and a seat
+   * holds one whole vault, so nothing resolves anything from this — an app's
+   * own name for its projection survives where one is stated, and the overlay
+   * draws by `(entity, rowId)` either way.
+   */
+  shapeId?: string;
   entity: string;
   rowId: string;
   values: ReplicaRow;
@@ -325,7 +340,7 @@ export interface OptimisticUpsert {
 
 export interface OptimisticDelete {
   op: "delete";
-  shapeId: string;
+  shapeId?: string;
   entity: string;
   rowId: string;
 }
@@ -445,4 +460,24 @@ export interface ApplyChangesResult {
   cursor: ReplicaCursor;
   invalidations: ReplicaInvalidation[];
   outcomes: IntentOutcome[];
+}
+
+/**
+ * WHAT A CHANGE FEED IS FOR SINCE #996 W5: a WAKE.
+ *
+ * The coordinator drove this adapter — it attested a shape catalog before the
+ * stream opened and wrote back a resume cursor after every applied batch,
+ * because the feed was the delivery mechanism for changes. It is not: a seat
+ * pulls its own pages from the log door, and the only thing a frame has to do
+ * is say "the gateway moved". The seat's own applied position is the one cursor
+ * anything resumes from.
+ *
+ * `setShapeIds` and `resume` survive as the STREAM's own bookkeeping — the door
+ * takes a `since` cursor, and reopening from the last frame is cheaper than
+ * reopening from zero — but nothing downstream of it holds a second position.
+ */
+export interface ReplicaChangeFeedAdapter {
+  subscribe: (listener: (message: VaultChangeMessage) => void) => () => void;
+  setShapeIds: (shapeIds: readonly string[]) => Promise<void>;
+  resume: (cursor: ReplicaCursor) => Promise<void>;
 }

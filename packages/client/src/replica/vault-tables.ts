@@ -17,3 +17,37 @@
 export function vaultPhysicalTable(entity: string): string {
   return entity.replace(".", "_");
 }
+
+/**
+ * The tables a seat's file holds that are NOT the vault's entities.
+ *
+ * The seat's own bookkeeping and the log's, which the applier writes and no
+ * app reads. A change notice names tables, and naming one of these as an
+ * entity would invalidate a screen every time the cursor moved.
+ */
+const SEAT_OWN_TABLES: ReadonlySet<string> = new Set([
+  "seat_state",
+  "seat_outbox",
+  "seat_outbox_settled",
+  "replica_log",
+  "replica_change",
+  "replica_meta",
+]);
+
+/**
+ * `schedule_task` → `schedule.task`, the inverse of {@link vaultPhysicalTable}.
+ *
+ * ONLY THE FIRST UNDERSCORE, because only the first one is the schema
+ * separator: `media_asset_phash` is `media.asset_phash`, one entity, not two.
+ * `undefined` for a table the vault does not own — the seat's own bookkeeping,
+ * SQLite's internals, an FTS shadow — so a caller that is turning a change
+ * notice into invalidations drops it rather than inventing an entity name for
+ * it.
+ */
+export function vaultEntityOfTable(table: string): string | undefined {
+  if (SEAT_OWN_TABLES.has(table)) return undefined;
+  if (table.startsWith("sqlite_") || table.startsWith("fts_")) return undefined;
+  const underscore = table.indexOf("_");
+  if (underscore <= 0) return undefined;
+  return `${table.slice(0, underscore)}.${table.slice(underscore + 1)}`;
+}

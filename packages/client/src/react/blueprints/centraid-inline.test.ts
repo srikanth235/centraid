@@ -40,6 +40,19 @@ vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
 
 type Session = NonNullable<InstallInlineCentraidOptions["session"]>;
 
+/**
+ * A page door for the share sheet's walks, keyed by the handler NAME each
+ * statement carries — which is what a page is addressed by since #996 W5.
+ * Anything unnamed answers empty, exactly as a seat without those tables does.
+ */
+function sharePages(
+  byName: Record<string, Array<Record<string, unknown>>>
+): Session["page"] {
+  return (async (query: { name: string }) => ({
+    rows: byName[query.name] ?? [],
+  })) as Session["page"];
+}
+
 function fakeSession(overrides?: Partial<Session>): Session & {
   writes: unknown[];
   subscribers: Array<(inv: readonly ReplicaInvalidation[]) => void>;
@@ -49,11 +62,6 @@ function fakeSession(overrides?: Partial<Session>): Session & {
   return {
     writes,
     subscribers,
-    read: vi.fn<Session["read"]>(async () => ({
-      rows: [],
-      cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "s", entity: "x" },
-    })),
     // The app read path (#996 wave 4). A seat holding the file answers here;
     // the seat with no file refuses ONLINE_ONLY, which is a case below.
     page: (async () => ({ rows: [] })) as Session["page"],
@@ -362,34 +370,13 @@ describe(installInlineCentraid, () => {
 
   it("lists People identities and preserves an invited person without a vault", async () => {
     const session = fakeSession({
-      read: vi.fn<Session["read"]>(async (_appId, request) => ({
-        rows:
-          request.entity === "core.party"
-            ? [
-                {
-                  rowId: "owner",
-                  values: { party_id: "owner", display_name: "Priya" },
-                  oversizedFields: [],
-                  hasUnavailableFields: false,
-                },
-                {
-                  rowId: "asha",
-                  values: { party_id: "asha", display_name: "Asha" },
-                  oversizedFields: [],
-                  hasUnavailableFields: false,
-                },
-              ]
-            : [
-                {
-                  rowId: "vault",
-                  values: { self_party_id: "owner" },
-                  oversizedFields: [],
-                  hasUnavailableFields: false,
-                },
-              ],
-        cursor: { epoch: "e", seq: 1 },
-        dependency: { shapeId: "people", entity: request.entity },
-      })),
+      page: sharePages({
+        "share.targets.parties": [
+          { party_id: "owner", display_name: "Priya" },
+          { party_id: "asha", display_name: "Asha" },
+        ],
+        "share.targets.vault": [{ self_party_id: "owner" }],
+      }),
     });
     const target: { centraid?: unknown } = {};
     installInlineCentraid({
@@ -408,83 +395,51 @@ describe(installInlineCentraid, () => {
 
   it("lists only deliberate Tally-backed named circles with their roster", async () => {
     const session = fakeSession({
-      read: vi.fn<Session["read"]>(async (appId, request) => {
-        const values =
-          appId === "people" && request.entity === "core.party"
-            ? [
-                { party_id: "owner", display_name: "Priya" },
-                { party_id: "asha", display_name: "Asha" },
-                { party_id: "ben", display_name: "Ben" },
-              ]
-            : appId === "people" && request.entity === "core.vault"
-              ? [{ self_party_id: "owner" }]
-              : request.entity === "social.circle"
-                ? [
-                    {
-                      circle_id: "trip",
-                      name: "Goa trip",
-                      owner_party_id: "owner",
-                    },
-                    {
-                      circle_id: "implicit",
-                      name: "Shared photo",
-                      owner_party_id: "owner",
-                    },
-                    {
-                      circle_id: "foreign",
-                      name: "Asha's group",
-                      owner_party_id: "asha",
-                    },
-                    {
-                      circle_id: "incomplete",
-                      name: "Old group",
-                      owner_party_id: "owner",
-                    },
-                  ]
-                : request.entity === "social.circle_member"
-                  ? [
-                      {
-                        member_id: "m0",
-                        circle_id: "trip",
-                        party_id: "owner",
-                        capability: "read+write",
-                      },
-                      {
-                        member_id: "m1",
-                        circle_id: "trip",
-                        party_id: "asha",
-                        capability: "read",
-                      },
-                      {
-                        member_id: "m2",
-                        circle_id: "trip",
-                        party_id: "ben",
-                        capability: "read+write",
-                      },
-                      {
-                        member_id: "m3",
-                        circle_id: "incomplete",
-                        party_id: "missing-directory-party",
-                        capability: "read",
-                      },
-                    ]
-                  : request.entity === "tally.group"
-                    ? [
-                        { group_id: "g1", circle_id: "trip" },
-                        { group_id: "g2", circle_id: "foreign" },
-                        { group_id: "g3", circle_id: "incomplete" },
-                      ]
-                    : [];
-        return {
-          rows: values.map((row, index) => ({
-            rowId: String(index),
-            values: row,
-            oversizedFields: [],
-            hasUnavailableFields: false,
-          })),
-          cursor: { epoch: "e", seq: 1 },
-          dependency: { shapeId: appId, entity: request.entity },
-        };
+      page: sharePages({
+        "share.circles.vault": [{ self_party_id: "owner" }],
+        "share.circles": [
+          { circle_id: "trip", name: "Goa trip", owner_party_id: "owner" },
+          {
+            circle_id: "implicit",
+            name: "Shared photo",
+            owner_party_id: "owner",
+          },
+          {
+            circle_id: "foreign",
+            name: "Asha's group",
+            owner_party_id: "asha",
+          },
+          {
+            circle_id: "incomplete",
+            name: "Old group",
+            owner_party_id: "owner",
+          },
+        ],
+        // NO `capability` COLUMN, because `social_circle_member` has none —
+        // the old declarative fixture invented one out of a shape's column
+        // list, and the roster answered with a capability the vault never
+        // stored. A circle offered as a destination shares read; the grant
+        // raises a member to write.
+        "share.circle-members": [
+          { member_id: "m0", circle_id: "trip", party_id: "owner" },
+          { member_id: "m1", circle_id: "trip", party_id: "asha" },
+          { member_id: "m2", circle_id: "trip", party_id: "ben" },
+          {
+            member_id: "m3",
+            circle_id: "incomplete",
+            party_id: "missing-directory-party",
+          },
+        ],
+        "share.tally-groups": [
+          { group_id: "g1", circle_id: "trip" },
+          { group_id: "g2", circle_id: "foreign" },
+          { group_id: "g3", circle_id: "incomplete" },
+        ],
+        "share.targets.parties": [
+          { party_id: "owner", display_name: "Priya" },
+          { party_id: "asha", display_name: "Asha" },
+          { party_id: "ben", display_name: "Ben" },
+        ],
       }),
     });
     const target: { centraid?: unknown } = {};
@@ -505,7 +460,7 @@ describe(installInlineCentraid, () => {
         label: "Goa trip",
         members: [
           { partyId: "asha", capability: "read" },
-          { partyId: "ben", capability: "read+write" },
+          { partyId: "ben", capability: "read" },
         ],
       },
     ]);

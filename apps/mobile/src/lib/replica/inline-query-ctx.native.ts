@@ -29,12 +29,11 @@ import {
 import type {
   InlinePage,
   InlineQueryRunnable,
-  ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
 
-import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
+import type { NativeSearchRequest } from "./native-session";
 import type { NativeSeatPagePort } from "./seat-port";
 import {
   REPLICA_CAN_WRITE,
@@ -81,10 +80,6 @@ export function withoutScopeProvenance(
  * over the vault's real tables cannot run on it at all.
  */
 export interface NativeInlineQuerySession {
-  read: (
-    appId: string,
-    request: NativeReadRequest
-  ) => Promise<ReplicaReadWireResult>;
   search: (
     appId: string,
     request: NativeSearchRequest
@@ -100,10 +95,10 @@ export type { NativeSeatPagePort } from "./seat-port";
  * The read plane a handler actually runs on: the session's rows, the seat's
  * pages.
  *
- * They are separate objects because they are separate FILES until W5 — the
- * session's is the old store's, the seat's is `vault.db` — and composing them
- * here rather than inside the session keeps that seam visible at the one place
- * a screen hands a plane over.
+ * ONE FILE SINCE W5. The session's search and the seat's page are the SAME
+ * `vault.db`; what is composed here is not two stores but two shapes of read —
+ * a ranked window and a keyset page — which a handler reaches through one ctx.
+ * The seam stays visible at the one place a screen hands a plane over.
  */
 export function seatReadPlane(
   session: NativeInlineQuerySession,
@@ -111,7 +106,6 @@ export function seatReadPlane(
 ): NativeInlineQuerySession {
   if (!seat) return session;
   return {
-    read: (appId, request) => session.read(appId, request),
     search: (appId, request) => session.search(appId, request),
     page: seat.page,
   };
@@ -128,7 +122,7 @@ export function buildNativeInlineCtx(
   guard: OnlineOnlyGuard
 ): unknown {
   const { session, appId, signal } = options;
-  return buildInlineCtxCore<NativeReadRequest, NativeSearchRequest>(
+  return buildInlineCtxCore<NativeSearchRequest>(
     {
       // Every row the handler sees carries the read's pending sidecar, so the
       // phone answers `readPendingOverlay(row, pendingSidecarOf(row))` exactly

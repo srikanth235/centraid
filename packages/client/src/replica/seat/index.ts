@@ -17,6 +17,7 @@ export * from "./gunzip.js";
 export * from "./http-snapshot-transport.js";
 export * from "./seat-bootstrap-no-room-error.js";
 export * from "./seat-channel.js";
+export * from "./seat-doors.js";
 export * from "./seat-drift-error.js";
 export * from "./seat-loop.js";
 export * from "./seat-rebootstrap-required-error.js";

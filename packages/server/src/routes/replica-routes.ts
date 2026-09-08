@@ -1,28 +1,18 @@
 // governance: allow-repo-hygiene file-size-limit (#406) one protocol route keeps bootstrap, pull/SSE, lazy-row, checkpoint, and intent admission semantics together
 /* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
-import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type * as TypeImport_18fk7n9 from "node:sqlite";
 
 import { SseStream } from "@centraid/server/engine";
 import {
   currentReplicaLogState,
-  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   InvalidReplicaCursorError,
   parseReplicaCursor,
-  readReplicaIntentOutcome,
   ReplicaRebootstrapRequiredError,
   REPLICA_RETENTION_DAYS,
   REPLICA_RETENTION_MAX_ENTRIES,
-  withReplicaSnapshot,
 } from "@centraid/vault";
-import type {
-  ReplicaCursor,
-  ReplicaLogState,
-  ReplicaRow,
-  ReplicaSnapshotResult,
-  ReplicaSnapshotReader,
-} from "@centraid/vault";
+import type { ReplicaCursor, ReplicaLogState } from "@centraid/vault";
 
 import { unrefTimer } from "../lib/unref-timer.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
@@ -38,60 +28,12 @@ import type { ReplicaRequestAccess } from "./replica-access.js";
 import { replicaProjectionHub } from "./replica-fanout.js";
 import { handleReplicaIntent } from "./replica-intent-route.js";
 import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
-import {
-  applyReplicaIntentOutcomes,
-  projectReplicaPage,
-  replicaOutcomeWire,
-  replicaShapeIds,
-  sameReplicaShapeIds,
-} from "./replica-projection.js";
-import type { ReplicaProjectedPage } from "./replica-projection.js";
-import {
-  buildReplicaShapes,
-  replicaRowColumns,
-  replicaShapesWire,
-  REPLICA_PROTOCOL_VERSION,
-  REPLICA_SYNTHETIC_PRIMARY_KEY,
-  replicaWireRowId,
-  shapeReplicaRow,
-} from "./replica-shape.js";
-import type {
-  ReplicaEntityShape,
-  ReplicaServerShape,
-} from "./replica-shape.js";
-import { readJson, sendJson } from "./route-helpers.js";
-import { preparedStatement } from "./sql-statement-cache.js";
+import { replicaShapeIds, sameReplicaShapeIds } from "./replica-projection.js";
+import { sendJson } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
-const BOOTSTRAP_PATH = "/centraid/_vault/replica/bootstrap";
 const CHANGES_PATH = "/centraid/_vault/changes";
-const ROW_PATH = "/centraid/_vault/replica/row";
-const CHECKPOINT_PATH = "/centraid/_vault/replica/checkpoint";
-const OUTCOMES_PATH = "/centraid/_vault/replica/outcomes";
 export const REPLICA_INTENTS_PATH = "/centraid/_vault/replica/intents";
-const OUTCOME_RECONCILE_LIMIT = 500;
-const DEFAULT_MAX_BOOTSTRAP_ROWS = 100_000;
-const DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS = 25_000;
-/** Windowed bootstrap page size bounds (#419). */
-const DEFAULT_BOOTSTRAP_WINDOW = 5_000;
-const MAX_BOOTSTRAP_WINDOW = 20_000;
-/** Internal read-page size while filling one window from the snapshot reader. */
-const BOOTSTRAP_READ_PAGE = 10_000;
-
-class ReplicaWorkLimitError extends Error {
-  constructor(readonly kind: "bootstrap" | "synthetic-row") {
-    super(`replica ${kind} work limit exceeded`);
-    this.name = "ReplicaWorkLimitError";
-  }
-}
-
-type BootstrapValue = {
-  shapes: ReplicaServerShape[];
-  rows: NonNullable<ReturnType<typeof shapeReplicaRow>>[];
-};
-
-type BootstrapWireRow = NonNullable<ReturnType<typeof shapeReplicaRow>>;
-
 // Windowed bootstrap (#419), an ADDITIVE paging protocol: `?window=<1..20000>`
 // and/or `?after=<token>` opt in, and absent both the single-shot body below is
 // byte-for-byte unchanged. Page 1 carries the shapes; continuations do not.
@@ -105,218 +47,6 @@ type BootstrapWireRow = NonNullable<ReturnType<typeof shapeReplicaRow>>;
 // 409 mid-pagination on an epoch, schemaEpoch or shape-set change, or a log
 // floor past the pinned page-1 cursor; 400 on a tampered token.
 
-interface BootstrapWindowToken {
-  v: 1;
-  epoch: string;
-  schemaEpoch: number;
-  /** Page-1 cursor — the delta floor the client replays from after completion. */
-  first: { epoch: string; seq: number };
-  /** Fingerprint of the page-1 shape set; a mismatch mid-pagination ⇒ 409. */
-  shapeSig: string;
-  /** Iteration position: shape index, entity index within it, and row `after`. */
-  shapeIdx: number;
-  entityIdx: number;
-  after: string | null;
-}
-
-function shapeSignature(shapeIds: string[]): string {
-  return crypto
-    .createHash("sha256")
-    .update(JSON.stringify(shapeIds))
-    .digest("hex")
-    .slice(0, 32);
-}
-
-function encodeBootstrapToken(token: BootstrapWindowToken): string {
-  return Buffer.from(JSON.stringify(token)).toString("base64url");
-}
-
-function isSafeIndex(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function decodeBootstrapToken(raw: string): BootstrapWindowToken {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
-  } catch {
-    throw new Error("replica bootstrap token is not valid base64url JSON");
-  }
-  const t = parsed as Record<string, unknown>;
-  const first = t.first as Record<string, unknown> | undefined;
-  if (
-    !t ||
-    typeof t !== "object" ||
-    t.v !== 1 ||
-    typeof t.epoch !== "string" ||
-    !Number.isSafeInteger(t.schemaEpoch) ||
-    !first ||
-    typeof first !== "object" ||
-    typeof first.epoch !== "string" ||
-    !Number.isSafeInteger(first.seq) ||
-    typeof t.shapeSig !== "string" ||
-    !isSafeIndex(t.shapeIdx) ||
-    !isSafeIndex(t.entityIdx) ||
-    !(t.after === null || typeof t.after === "string")
-  ) {
-    throw new Error("replica bootstrap token structure is invalid");
-  }
-  return {
-    v: 1,
-    epoch: t.epoch,
-    schemaEpoch: t.schemaEpoch as number,
-    first: { epoch: first.epoch, seq: first.seq as number },
-    shapeSig: t.shapeSig,
-    shapeIdx: t.shapeIdx,
-    entityIdx: t.entityIdx,
-    after: t.after as string | null,
-  };
-}
-
-/** `?window` bound (1..20000); default when omitted on a continuation. */
-function parseBootstrapWindow(url: URL): number | "invalid" {
-  const raw = url.searchParams.get("window");
-  if (raw === null) return DEFAULT_BOOTSTRAP_WINDOW;
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_BOOTSTRAP_WINDOW)
-    return "invalid";
-  return value;
-}
-
-interface BootstrapPosition {
-  shapeIdx: number;
-  entityIdx: number;
-  after: string | null;
-}
-
-/** Throws (⇒ 400) only on a malformed `after` row id the reader rejects. */
-function collectBootstrapWindow(
-  reader: ReplicaSnapshotReader,
-  shapes: ReplicaServerShape[],
-  nowMs: number,
-  start: BootstrapPosition,
-  windowLimit: number
-): {
-  rows: BootstrapWireRow[];
-  position: BootstrapPosition;
-  complete: boolean;
-} {
-  const rows: BootstrapWireRow[] = [];
-  let { shapeIdx, entityIdx, after } = start;
-  while (shapeIdx < shapes.length) {
-    const shape = shapes[shapeIdx];
-    if (!shape || entityIdx >= shape.entities.length) {
-      shapeIdx += 1;
-      entityIdx = 0;
-      after = null;
-      continue;
-    }
-    const entity = shape.entities[entityIdx]!.entity;
-    const page = reader.readRows(entity, {
-      ...(after ? { after } : {}),
-      limit: Math.min(BOOTSTRAP_READ_PAGE, windowLimit - rows.length),
-      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
-    });
-    for (const row of page.rows) {
-      const shaped = shapeReplicaRow(shape, entity, row, nowMs);
-      if (shaped) rows.push(shaped);
-    }
-    if (page.nextAfter) {
-      after = page.nextAfter;
-    } else {
-      entityIdx += 1;
-      after = null;
-    }
-    if (rows.length >= windowLimit) break;
-  }
-  return {
-    rows,
-    position: { shapeIdx, entityIdx, after },
-    complete: shapeIdx >= shapes.length,
-  };
-}
-
-/**
- * First-paint window for native Photos/Docs, deliberately a DUPLICATE prefix:
- * the continuation still starts the canonical walk at zero, so lazy backfill
- * cannot skip anything and ordinary upserts collapse the repeated rows.
- */
-function collectNewestVisibleRows(
-  db: TypeImport_18fk7n9.DatabaseSync,
-  reader: ReplicaSnapshotReader,
-  shapes: ReplicaServerShape[],
-  nowMs: number,
-  windowLimit: number
-): BootstrapWireRow[] {
-  const candidates = [
-    ...(db
-      .prepare(
-        `SELECT asset_id AS row_id,
-                COALESCE(captured_at, '') AS modified_at,
-                'media.asset' AS entity
-           FROM media_asset
-          ORDER BY COALESCE(captured_at, '') DESC LIMIT ?`
-      )
-      .all(windowLimit) as unknown as Array<{
-      row_id: string;
-      modified_at: string;
-      entity: string;
-    }>),
-    ...(db
-      .prepare(
-        `SELECT document_id AS row_id, updated_at AS modified_at,
-                'core.document' AS entity
-           FROM core_document ORDER BY updated_at DESC LIMIT ?`
-      )
-      .all(windowLimit) as unknown as Array<{
-      row_id: string;
-      modified_at: string;
-      entity: string;
-    }>),
-  ].sort((left, right) => right.modified_at.localeCompare(left.modified_at));
-  const rows: BootstrapWireRow[] = [];
-  const seen = new Set<string>();
-  const append = (entity: string, rowId: string): ReplicaRow | undefined => {
-    const raw = reader.readRow(entity, rowId, {
-      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
-    });
-    if (!raw) return undefined;
-    for (const shape of shapes) {
-      if (!shape.entityMap.has(entity)) continue;
-      const shaped = shapeReplicaRow(shape, entity, raw, nowMs);
-      const key = shaped
-        ? `${shaped.shapeId}\u0000${shaped.entity}\u0000${shaped.rowId}`
-        : "";
-      if (shaped && !seen.has(key) && rows.length < windowLimit) {
-        seen.add(key);
-        rows.push(shaped);
-      }
-    }
-    return raw;
-  };
-  for (const candidate of candidates) {
-    if (rows.length >= windowLimit) break;
-    const raw = append(candidate.entity, candidate.row_id);
-    const contentId =
-      typeof raw?.values.content_id === "string"
-        ? raw.values.content_id
-        : typeof raw?.values.current_content_id === "string"
-          ? raw.values.current_content_id
-          : undefined;
-    if (!contentId) continue;
-    append("core.content_item", contentId);
-    const derivatives = db
-      .prepare(
-        `SELECT derivative_id FROM core_content_derivative
-          WHERE content_id = ? ORDER BY variant`
-      )
-      .all(contentId) as Array<{ derivative_id: string }>;
-    for (const derivative of derivatives)
-      append("core.content_derivative", derivative.derivative_id);
-  }
-  return rows;
-}
-
 export interface ReplicaRouteOptions {
   enrollments?: EnrollmentStore;
   dispatchIntent: ReplicaIntentDispatcher;
@@ -324,11 +54,7 @@ export interface ReplicaRouteOptions {
    *  a host with no peer plane; the route then answers in-flight rather than
    *  writing another vault's row locally. */
   forwardProjectedEdit?: ProjectedEditForwarder;
-  pollIntervalMs?: number;
   heartbeatMs?: number;
-  /** Authenticated-DoS bounds; overrides are used by focused route tests. */
-  maxBootstrapRows?: number;
-  maxSyntheticLookupRows?: number;
   /** Concurrent change streams this gateway will hold open (#883 C2). */
   subscriberCap?: SseSubscriberCap;
 }
@@ -419,11 +145,6 @@ function isSse(req: IncomingMessage, url: URL): boolean {
     String(req.headers.accept ?? "").includes("text/event-stream")
   );
 }
-
-function isNdjson(req: IncomingMessage): boolean {
-  return String(req.headers.accept ?? "").includes("application/x-ndjson");
-}
-
 // Bounded writer (#659): a device that stops draining is dropped and re-syncs
 // from its checkpoint, rather than accumulating in gateway memory.
 function writeSse(stream: SseStream, event: string, data: unknown): void {
@@ -433,134 +154,6 @@ function writeSse(stream: SseStream, event: string, data: unknown): void {
 function sameCursor(left: ReplicaCursor, right: ReplicaCursor): boolean {
   return left.epoch === right.epoch && left.seq === right.seq;
 }
-
-function requestedColumns(url: URL): string[] {
-  return [
-    ...url.searchParams.getAll("column"),
-    ...(url.searchParams.get("columns") ?? "").split(","),
-  ]
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-function quoteIdentifier(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
-/**
- * Cached (#883 C2) — a lazy-row GET otherwise re-prepares this pragma twice per
- * request. The table name comes from a server-derived shape, never the wire.
- */
-function primaryKeyColumns(
-  db: TypeImport_18fk7n9.DatabaseSync,
-  schema: ReplicaEntityShape
-): string[] {
-  return (
-    preparedStatement(
-      db,
-      `PRAGMA table_info(${JSON.stringify(schema.physical)})`
-    ).all() as {
-      name: string;
-      pk: number;
-    }[]
-  )
-    .filter((column) => column.pk > 0)
-    .sort((left, right) => left.pk - right.pk)
-    .map((column) => column.name);
-}
-
-function rawKeyValues(
-  db: TypeImport_18fk7n9.DatabaseSync,
-  schema: ReplicaEntityShape,
-  rowId: string
-): unknown[] {
-  const pk = primaryKeyColumns(db, schema);
-  if (pk.length === 1) return [rowId];
-  const parsed = JSON.parse(rowId) as unknown;
-  if (!Array.isArray(parsed) || parsed.length !== pk.length)
-    throw new Error("invalid replica row id");
-  return parsed;
-}
-
-function rawValues(
-  db: TypeImport_18fk7n9.DatabaseSync,
-  schema: ReplicaEntityShape,
-  rowId: string,
-  columns: string[]
-): Record<string, unknown> | undefined {
-  const pk = primaryKeyColumns(db, schema);
-  const real = columns.filter(
-    (column) => column !== REPLICA_SYNTHETIC_PRIMARY_KEY
-  );
-  const selected =
-    real.length > 0 ? real.map(quoteIdentifier).join(", ") : "1 AS __present";
-  const where = pk
-    .map((column) => `${quoteIdentifier(column)} = ?`)
-    .join(" AND ");
-  const row = preparedStatement(
-    db,
-    `SELECT ${selected} FROM ${quoteIdentifier(schema.physical)} WHERE ${where}`
-  ).get(
-    ...(rawKeyValues(db, schema, rowId) as (
-      | string
-      | number
-      | bigint
-      | Uint8Array
-      | null
-    )[])
-  ) as Record<string, unknown> | undefined;
-  if (!row) return undefined;
-  const values: Record<string, unknown> = {};
-  for (const column of columns) {
-    const value =
-      column === REPLICA_SYNTHETIC_PRIMARY_KEY ? rowId : row[column];
-    values[column] =
-      value instanceof Uint8Array
-        ? {
-            base64: Buffer.from(value).toString("base64"),
-            byteSize: value.byteLength,
-          }
-        : typeof value === "bigint"
-          ? value.toString()
-          : value;
-  }
-  return values;
-}
-
-function rowForWireId(
-  reader: ReplicaSnapshotReader,
-  shape: ReplicaServerShape,
-  schema: ReplicaEntityShape,
-  entity: string,
-  wireRowId: string,
-  maxRows: number
-): ReplicaRow | undefined {
-  if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) {
-    return reader.readRow(entity, wireRowId, {
-      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
-    });
-  }
-  let after: string | undefined;
-  let scanned = 0;
-  do {
-    const page = reader.readRows(entity, {
-      ...(after ? { after } : {}),
-      limit: Math.min(10_000, Math.max(1, maxRows - scanned)),
-      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
-    });
-    const found = page.rows.find(
-      (row) => replicaWireRowId(shape, entity, row.rowId) === wireRowId
-    );
-    if (found) return found;
-    scanned += page.rows.length;
-    if (page.nextAfter && scanned >= maxRows) {
-      throw new ReplicaWorkLimitError("synthetic-row");
-    }
-    after = page.nextAfter;
-  } while (after);
-  return undefined;
-}
-
 function accessFor(
   req: IncomingMessage,
   res: ServerResponse,
@@ -575,30 +168,6 @@ function accessFor(
   }
   return resolution.access;
 }
-
-function sendProjected(
-  res: ServerResponse,
-  req: IncomingMessage,
-  page: ReplicaProjectedPage
-): true {
-  if (isNdjson(req)) {
-    res.statusCode = 200;
-    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
-    res.write(
-      `${JSON.stringify({ type: "meta", ...page.batch, changes: undefined, outcomes: undefined })}\n`
-    );
-    for (const change of page.batch.changes)
-      res.write(`${JSON.stringify({ type: "change", change })}\n`);
-    for (const outcome of page.batch.outcomes ?? [])
-      res.write(`${JSON.stringify({ type: "outcome", outcome })}\n`);
-    res.end(
-      `${JSON.stringify({ type: "cursor", cursor: page.batch.to, hasMore: page.batch.hasMore ?? false })}\n`
-    );
-    return true;
-  }
-  return sendJson(res, 200, page.batch);
-}
-
 function parseSince(url: URL): ReplicaCursor {
   const since = url.searchParams.get("since");
   if (since === null)
@@ -606,33 +175,6 @@ function parseSince(url: URL): ReplicaCursor {
   if (since === "0:0")
     throw new InvalidReplicaCursorError("replica bootstrap sentinel");
   return parseReplicaCursor(since);
-}
-
-function parseOutcomeReconciliation(body: Record<string, unknown>): {
-  intentIds: string[];
-  through: ReplicaCursor;
-} {
-  if (
-    !Array.isArray(body.intentIds) ||
-    body.intentIds.length > OUTCOME_RECONCILE_LIMIT ||
-    body.intentIds.some(
-      (intentId) =>
-        typeof intentId !== "string" ||
-        intentId.length < 1 ||
-        intentId.length > 512
-    ) ||
-    body.through === null ||
-    typeof body.through !== "object" ||
-    Array.isArray(body.through)
-  ) {
-    throw new Error(
-      `intentIds must contain at most ${OUTCOME_RECONCILE_LIMIT} valid ids`
-    );
-  }
-  return {
-    intentIds: [...new Set(body.intentIds as string[])],
-    through: parseReplicaCursor(body.through as ReplicaCursor),
-  };
 }
 
 function sendSseRebootstrap(
@@ -811,312 +353,31 @@ async function streamChanges(
   return true;
 }
 
-type WindowedBootstrapResult =
-  | { rebootstrap: string }
-  | { badToken: true }
-  | {
-      shapes: ReplicaServerShape[];
-      shapeIds: string[];
-      rows: BootstrapWireRow[];
-      complete: boolean;
-      next?: string;
-    };
-
-/** One page of the windowed bootstrap (#419 — contract above). */
-function handleWindowedBootstrap(
-  res: ServerResponse,
-  url: URL,
-  db: TypeImport_18fk7n9.DatabaseSync,
-  vaultId: string,
-  access: ReplicaRequestAccess
-): true {
-  const windowLimit = parseBootstrapWindow(url);
-  if (windowLimit === "invalid")
-    return sendJson(res, 400, { error: "invalid_replica_window" });
-  const rawToken = url.searchParams.get("after");
-  let token: BootstrapWindowToken | null = null;
-  if (rawToken !== null) {
-    try {
-      token = decodeBootstrapToken(rawToken);
-    } catch {
-      return sendJson(res, 400, { error: "invalid_replica_bootstrap_token" });
-    }
-  }
-
-  const snapshot = withReplicaSnapshot(
-    db,
-    (reader): WindowedBootstrapResult => {
-      const state = reader.state;
-      const nowMs = Date.now();
-      const shapes = buildReplicaShapes(
-        db,
-        access,
-        new Date(nowMs).toISOString()
-      );
-      const shapeIds = replicaShapeIds(shapes);
-      const shapeSig = shapeSignature(shapeIds);
-      let start: BootstrapPosition = { shapeIdx: 0, entityIdx: 0, after: null };
-      if (token) {
-        if (
-          token.epoch !== state.epoch ||
-          token.schemaEpoch !== state.schemaEpoch
-        ) {
-          return { rebootstrap: "epoch-changed" };
-        }
-        // The delta the client will replay after completion must still be in the
-        // log; a floor past our pinned page-1 cursor means it was GC'd.
-        if (token.first.seq < state.floor.seq)
-          return { rebootstrap: "snapshot-retention" };
-        if (token.shapeSig !== shapeSig)
-          return { rebootstrap: "shape-changed" };
-        if (token.shapeIdx > shapes.length) return { badToken: true };
-        start = {
-          shapeIdx: token.shapeIdx,
-          entityIdx: token.entityIdx,
-          after: token.after,
-        };
-      }
-      let collected: ReturnType<typeof collectBootstrapWindow>;
-      try {
-        const priority =
-          !token && url.searchParams.get("priority") === "newest"
-            ? collectNewestVisibleRows(db, reader, shapes, nowMs, windowLimit)
-            : [];
-        collected =
-          priority.length > 0
-            ? {
-                rows: priority,
-                position: { shapeIdx: 0, entityIdx: 0, after: null },
-                complete: false,
-              }
-            : collectBootstrapWindow(reader, shapes, nowMs, start, windowLimit);
-      } catch {
-        return { badToken: true }; // a malformed `after` row id the reader rejected
-      }
-      const first = token
-        ? token.first
-        : { epoch: state.epoch, seq: state.watermark.seq };
-      const next = collected.complete
-        ? undefined
-        : encodeBootstrapToken({
-            v: 1,
-            epoch: state.epoch,
-            schemaEpoch: state.schemaEpoch,
-            first,
-            shapeSig,
-            shapeIdx: collected.position.shapeIdx,
-            entityIdx: collected.position.entityIdx,
-            after: collected.position.after,
-          });
-      return {
-        shapes,
-        shapeIds,
-        rows: collected.rows,
-        complete: collected.complete,
-        ...(next ? { next } : {}),
-      };
-    }
-  );
-
-  const value = snapshot.value;
-  if ("rebootstrap" in value) {
-    return sendJson(
-      res,
-      409,
-      rebootstrapBody(value.rebootstrap, snapshot.state)
-    );
-  }
-  if ("badToken" in value) {
-    return sendJson(res, 400, { error: "invalid_replica_bootstrap_token" });
-  }
-  // 403 only on the first page: a continuation already proved the shapes
-  // existed and would 409 on any shape change.
-  if (!token && access.appId && value.shapes.length === 0) {
-    return sendJson(res, 403, { error: "replica_shape_empty" });
-  }
-  const base = {
-    protocolVersion: REPLICA_PROTOCOL_VERSION,
-    vaultId,
-    schemaEpoch: String(snapshot.state.schemaEpoch),
-    cursor: snapshot.state.watermark,
-    rows: value.rows,
-    complete: value.complete,
-    ...(value.next ? { next: value.next } : {}),
-  };
-  if (token) return sendJson(res, 200, base);
-  return sendJson(res, 200, {
-    ...base,
-    shapes: replicaShapesWire(value.shapes),
-    shapeIds: value.shapeIds,
-    canWrite: access.canWrite,
-    rememberDevice: access.rememberDevice,
-  });
-}
-
+/**
+ * WHAT IS LEFT OF THE REPLICA ROUTES AFTER #996 W5.
+ *
+ * Two doors. The INTENT door, which is how a member's write reaches the
+ * gateway and has not changed; and the CHANGE FEED, which is now a WAKE and
+ * only a wake — a seat that is told there is something to read goes and reads
+ * the gateway's own log door for itself.
+ *
+ * The bootstrap, row, checkpoint and outcome-reconciliation doors are gone
+ * with the plane they served: each of them composed the vault into a device's
+ * SHAPES, and a seat holds the vault's own file.
+ */
 export function makeReplicaRouteHandler(
   vaults: VaultRegistry,
   options: ReplicaRouteOptions
 ): RouteHandler {
   return async (req, res): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
-    if (
-      ![
-        BOOTSTRAP_PATH,
-        CHANGES_PATH,
-        ROW_PATH,
-        CHECKPOINT_PATH,
-        OUTCOMES_PATH,
-        REPLICA_INTENTS_PATH,
-      ].includes(url.pathname)
-    )
+    if (![CHANGES_PATH, REPLICA_INTENTS_PATH].includes(url.pathname))
       return false;
     const plane = vaults.current();
     const vaultId = vaultContext()?.vaultId ?? plane.boot.vaultId;
     const access = accessFor(req, res, url, vaultId, options.enrollments);
     if (!access) return true;
     const method = (req.method ?? "GET").toUpperCase();
-
-    if (url.pathname === OUTCOMES_PATH) {
-      if (method !== "POST") return methodAllowed(res, "POST");
-      let requested: ReturnType<typeof parseOutcomeReconciliation>;
-      try {
-        requested = parseOutcomeReconciliation(await readJson(req));
-      } catch (error) {
-        return sendJson(res, 400, {
-          error: "invalid_replica_outcome_reconciliation",
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-      const snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
-        if (requested.through.epoch !== reader.state.epoch) {
-          return { reason: "epoch-mismatch" as const, outcomes: [] };
-        }
-        if (
-          requested.through.seq < reader.state.floor.seq ||
-          requested.through.seq > reader.state.watermark.seq
-        ) {
-          return { reason: "cursor-gap" as const, outcomes: [] };
-        }
-        const outcomes = requested.intentIds.flatMap((intentId) => {
-          const latest = plane.db.vault
-            .prepare(
-              `SELECT MAX(seq) AS seq FROM replica_change
-                WHERE epoch = ? AND entity = 'replica.intent' AND row_id = ?`
-            )
-            .get(reader.state.epoch, intentId) as { seq: number | null };
-          // A transition newer than the bootstrap watermark remains visible
-          // through incremental pull and must not clear its overlay early.
-          if (latest.seq !== null && latest.seq > requested.through.seq)
-            return [];
-          const outcome = readReplicaIntentOutcome(
-            plane.db.vault,
-            intentId,
-            access.deviceId
-          );
-          if (!outcome || (access.appId && outcome.appId !== access.appId))
-            return [];
-          const wire = replicaOutcomeWire(outcome);
-          return wire ? [wire] : [];
-        });
-        return { outcomes };
-      });
-      if ("reason" in snapshot.value && snapshot.value.reason) {
-        return sendJson(
-          res,
-          409,
-          rebootstrapBody(snapshot.value.reason, snapshot.state)
-        );
-      }
-      return sendJson(res, 200, {
-        protocolVersion: REPLICA_PROTOCOL_VERSION,
-        outcomes: snapshot.value.outcomes,
-      });
-    }
-
-    if (url.pathname === BOOTSTRAP_PATH) {
-      if (method !== "GET") return methodAllowed(res, "GET");
-      // Windowed mode (#419): additive, and only when the client opts in
-      // via `?window`/`?after`. The single-shot path below is untouched.
-      if (url.searchParams.has("window") || url.searchParams.has("after")) {
-        return handleWindowedBootstrap(
-          res,
-          url,
-          plane.db.vault,
-          vaultId,
-          access
-        );
-      }
-      let snapshot: ReplicaSnapshotResult<BootstrapValue>;
-      try {
-        snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
-          const nowMs = Date.now();
-          const shapes = buildReplicaShapes(
-            plane.db.vault,
-            access,
-            new Date(nowMs).toISOString()
-          );
-          const cache = new Map<string, ReplicaRow[]>();
-          const rowsFor = (entity: string): ReplicaRow[] => {
-            const found = cache.get(entity);
-            if (found) return found;
-            const rows: ReplicaRow[] = [];
-            let after: string | undefined;
-            do {
-              const page = reader.readRows(entity, {
-                ...(after ? { after } : {}),
-                limit: 10_000,
-                maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
-              });
-              rows.push(...page.rows);
-              if (
-                rows.length >
-                (options.maxBootstrapRows ?? DEFAULT_MAX_BOOTSTRAP_ROWS)
-              ) {
-                throw new ReplicaWorkLimitError("bootstrap");
-              }
-              after = page.nextAfter;
-            } while (after);
-            cache.set(entity, rows);
-            return rows;
-          };
-          const rows = shapes.flatMap((shape) =>
-            shape.entities.flatMap((entity) =>
-              rowsFor(entity.entity).flatMap((row) => {
-                const shaped = shapeReplicaRow(
-                  shape,
-                  entity.entity,
-                  row,
-                  nowMs
-                );
-                return shaped ? [shaped] : [];
-              })
-            )
-          );
-          return { shapes, rows };
-        });
-      } catch (error) {
-        if (
-          error instanceof ReplicaWorkLimitError &&
-          error.kind === "bootstrap"
-        ) {
-          return sendJson(res, 413, { error: "replica_bootstrap_too_large" });
-        }
-        throw error;
-      }
-      if (access.appId && snapshot.value.shapes.length === 0)
-        return sendJson(res, 403, { error: "replica_shape_empty" });
-      return sendJson(res, 200, {
-        protocolVersion: REPLICA_PROTOCOL_VERSION,
-        vaultId,
-        schemaEpoch: String(snapshot.state.schemaEpoch),
-        cursor: snapshot.state.watermark,
-        shapes: replicaShapesWire(snapshot.value.shapes),
-        shapeIds: replicaShapeIds(snapshot.value.shapes),
-        rows: snapshot.value.rows,
-        canWrite: access.canWrite,
-        rememberDevice: access.rememberDevice,
-      });
-    }
 
     if (url.pathname === CHANGES_PATH) {
       if (method !== "GET") return methodAllowed(res, "GET");
@@ -1134,175 +395,16 @@ export function makeReplicaRouteHandler(
           limit ?? 1_000,
           options.subscriberCap ?? defaultReplicaSubscriberCap
         );
-      if (url.searchParams.get("since") === "0:0")
-        return sendJson(
-          res,
-          409,
-          rebootstrapBody("initial", currentReplicaLogState(plane.db.vault))
-        );
-      try {
-        // The projection is device-neutral; this device's intent outcomes are
-        // layered on top (#922 A4).
-        const page = applyReplicaIntentOutcomes(
-          plane.db.vault,
-          projectReplicaPage(
-            plane.db.vault,
-            access,
-            parseSince(url),
-            limit ?? 1_000
-          ),
-          access
-        );
-        const expected = expectedReplicaShapeIds(url);
-        if (
-          page.rebootstrapReason ||
-          (expected && !sameReplicaShapeIds(page.shapes, expected))
-        ) {
-          return sendJson(
-            res,
-            409,
-            rebootstrapBody(
-              page.rebootstrapReason ?? "shape-changed",
-              currentReplicaLogState(plane.db.vault)
-            )
-          );
-        }
-        return sendProjected(res, req, page);
-      } catch (error) {
-        if (error instanceof ReplicaRebootstrapRequiredError)
-          return sendJson(res, 409, rebootstrapBody(error.reason, error.state));
-        if (
-          error instanceof InvalidReplicaCursorError ||
-          error instanceof RangeError
-        )
-          return sendJson(res, 400, {
-            error: "invalid_replica_cursor",
-            message: error.message,
-          });
-        throw error;
-      }
-    }
-
-    if (url.pathname === ROW_PATH) {
-      if (method !== "GET") return methodAllowed(res, "GET");
-      const shapeId = url.searchParams.get("shapeId") ?? "";
-      const entity = url.searchParams.get("entity") ?? "";
-      const rowId =
-        url.searchParams.get("rowId") ?? url.searchParams.get("row_id") ?? "";
-      const columns = requestedColumns(url);
-      if (!shapeId || !entity || !rowId)
-        return sendJson(res, 400, { error: "invalid_replica_row_request" });
-      try {
-        const result = withReplicaSnapshot(plane.db.vault, (reader) => {
-          const nowMs = Date.now();
-          // Only the named shape is built (#883 C2).
-          const shape = buildReplicaShapes(
-            plane.db.vault,
-            access,
-            new Date(nowMs).toISOString(),
-            { onlyShapeId: shapeId }
-          ).find((candidate) => candidate.shapeId === shapeId);
-          const schema = shape?.entityMap.get(entity);
-          const row =
-            shape && schema
-              ? rowForWireId(
-                  reader,
-                  shape,
-                  schema,
-                  entity,
-                  rowId,
-                  options.maxSyntheticLookupRows ??
-                    DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS
-                )
-              : undefined;
-          if (!shape || !schema || !row) return undefined;
-          const allowed = replicaRowColumns(shape, entity, row, nowMs);
-          if (!allowed) return undefined;
-          if (columns.length === 0)
-            return shapeReplicaRow(shape, entity, row, nowMs);
-          if (columns.some((column) => !allowed.has(column)))
-            throw new Error("field_not_in_shape");
-          const values = rawValues(plane.db.vault, schema, row.rowId, columns);
-          return values ? { shapeId, entity, rowId, values } : undefined;
-        });
-        if (!result.value)
-          return sendJson(res, 404, { error: "replica_row_not_found" });
-        return sendJson(res, 200, {
-          protocolVersion: REPLICA_PROTOCOL_VERSION,
-          schemaEpoch: String(result.state.schemaEpoch),
-          cursor: result.state.watermark,
-          row: result.value,
-        });
-      } catch (error) {
-        if (
-          error instanceof ReplicaWorkLimitError &&
-          error.kind === "synthetic-row"
-        ) {
-          return sendJson(res, 413, { error: "replica_row_lookup_too_large" });
-        }
-        if (error instanceof Error && error.message === "field_not_in_shape")
-          return sendJson(res, 403, { error: "replica_field_not_in_shape" });
-        return sendJson(res, 400, { error: "invalid_replica_row_request" });
-      }
-    }
-
-    if (url.pathname === CHECKPOINT_PATH) {
-      if (method !== "POST") return methodAllowed(res, "POST");
-      let body: Record<string, unknown>;
-      try {
-        body = await readJson(req);
-      } catch {
-        return sendJson(res, 400, { error: "malformed_request" });
-      }
-      const rawCursor = body.cursor;
-      const rawSchema = body.schemaEpoch;
-      if (!rawCursor || typeof rawCursor !== "object")
-        return sendJson(res, 400, { error: "invalid_replica_checkpoint" });
-      try {
-        const cursor = parseReplicaCursor(rawCursor as ReplicaCursor);
-        const schemaEpoch = Number(rawSchema);
-        const state = currentReplicaLogState(plane.db.vault);
-        if (
-          !Number.isSafeInteger(schemaEpoch) ||
-          schemaEpoch !== state.schemaEpoch ||
-          cursor.epoch !== state.epoch ||
-          cursor.seq < state.floor.seq ||
-          cursor.seq > state.watermark.seq
-        ) {
-          return sendJson(
-            res,
-            409,
-            rebootstrapBody("checkpoint-incompatible", state)
-          );
-        }
-        if (!access.deviceKey || !options.enrollments)
-          return sendJson(res, 200, { ok: true, persisted: false, cursor });
-        // The server offering a snapshot is not an acknowledgement: only the
-        // client POST after its SQLite commit initializes/replaces an epoch.
-        // Within one epoch, acknowledgements remain strictly monotonic.
-        const previous = options.enrollments.get(
-          access.deviceKey,
-          vaultId
-        )?.checkpoint;
-        const checkpoint =
-          !previous ||
-          previous.epoch !== cursor.epoch ||
-          previous.schemaEpoch !== schemaEpoch
-            ? options.enrollments.resetCheckpoint(access.deviceKey, vaultId, {
-                ...cursor,
-                schemaEpoch,
-              })
-            : options.enrollments.advanceCheckpoint(access.deviceKey, vaultId, {
-                ...cursor,
-                schemaEpoch,
-              });
-        return sendJson(res, 200, { ok: true, persisted: true, checkpoint });
-      } catch (error) {
-        return sendJson(res, 409, {
-          error: "replica_checkpoint_conflict",
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
+      // THE FEED IS A WAKE, AND ONLY A WAKE (#996, W5). The JSON page that
+      // used to be served here was the SHAPED projection: a device asked for
+      // changes since a cursor and got rows composed against its shapes. A
+      // seat reads the gateway's own log door instead, so what is left of this
+      // route is the stream that tells a seat there is something to read.
+      return sendJson(res, 410, {
+        error: "replica_changes_removed",
+        message:
+          "the shaped changes page is gone; a seat reads /centraid/_vault/seat/log",
+      });
     }
 
     if (method !== "POST") return methodAllowed(res, "POST");

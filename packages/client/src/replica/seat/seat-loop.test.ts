@@ -166,17 +166,40 @@ describe("the seat loop with no worker in it", () => {
     await loop.close();
   });
 
+  it("refuses a read on a seat with no copy instead of answering it empty", async () => {
+    // ABSENT IS NEVER EMPTY. The file carries the vault's DDL from the
+    // baseline, so every table a copy would hold already exists and an
+    // unguarded read of one answers zero rows — an empty library drawn over a
+    // vault full of them, with nothing to tell the member which it is.
+    const root = tempDirSync("seat-loop-nocopy-");
+    const loop = loopOver(root, doorAnswering([]).fetch, () =>
+      seatArtifact(root)
+    );
+    await loop.open();
+    await expect(loop.query({ sql: "SELECT 1" })).rejects.toThrow(
+      /holds no copy/u
+    );
+    await loop.close();
+  });
+
   it("turns the core's SYNCHRONOUS refusal into a rejection, not a thrown call", async () => {
     // A read before `open` throws inside the core. Across a worker that is a
     // serialised error and a rejected promise; in process it would be a throw
     // past the caller's `await` unless the channel wraps it — and the loop's
-    // drift recovery is written against a rejection.
-    const root = tempDirSync("seat-loop-sync-");
-    const loop = loopOver(root, doorAnswering([]).fetch, () =>
-      seatArtifact(root)
-    );
-    await expect(loop.query({ sql: "SELECT 1" })).rejects.toThrow(
-      /has not been opened/u
-    );
+    // drift recovery is written against a rejection. Asserted on the CHANNEL:
+    // the loop refuses a copyless read of its own accord now, so it never
+    // reaches the core to be thrown at.
+    const core = new SeatWorkerCore({
+      openDatabase: () => new NodeSeatDriver(":memory:"),
+      staging: () => {
+        throw new Error("no bootstrap in this case");
+      },
+      transport: () => {
+        throw new Error("no bootstrap in this case");
+      },
+    });
+    await expect(
+      inProcessSeatChannel(core).query({ sql: "SELECT 1" })
+    ).rejects.toThrow(/has not been opened/u);
   });
 });

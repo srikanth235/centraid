@@ -45,23 +45,21 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
   COMPOSE_OUTCOMES,
   CONTRIB_SECTIONS,
 } from "@centraid/blueprints/apps/tally/compose-copy";
 import { OFFLINE_NOTICE } from "@centraid/blueprints/apps/tally/view-copy";
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 // @vitest-environment jsdom
 import { EMPTY_BAG, valuate } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
+import { openNodeNativeSeat } from "../../lib/replica/native-seat.test-fixtures";
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type {
   NativeChangeFeed,
   NativeReplicaSession,
 } from "../../lib/replica/native-session";
-import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 
 // The shared block stub, plus the one primitive it does not wire: it forwards
 // `onPress` and drops every other handler, and a journey that TYPES needs
@@ -211,49 +209,6 @@ const { default: TallyHome } = await import("./TallyHome");
 const VAULT = "personal";
 const SPENT = "Airplane dinner at the Ship";
 
-/** The shape the seat's writes project into. Copied from the reader suite's
- *  own journey shape rather than shared: a fixture two suites edit together is
- *  a fixture neither one owns. Payers and splits are entities of their own, so
- *  an expense with nowhere to put them reads back unpaid. */
-const TALLY_SHAPE = {
-  shapeId: "tally-default",
-  appId: "tally",
-  entities: [
-    {
-      entity: "tally.expense",
-      primaryKey: "expense_id",
-      columns: [
-        "expense_id",
-        "group_id",
-        "split_method",
-        "description",
-        "amount_minor",
-        "original_amount_minor",
-        "original_currency",
-        "settlement_currency",
-        "rate_scaled",
-        "rate_scale",
-        "rate_source",
-        "rate_date",
-        "paid_by",
-        "category",
-        "spent_on",
-        "deleted_at",
-      ],
-    },
-    {
-      entity: "tally.expense_split",
-      primaryKey: "__centraid_row_id",
-      columns: ["__centraid_row_id", "expense_id", "party_id", "share_minor"],
-    },
-    {
-      entity: "tally.expense_payer",
-      primaryKey: "__centraid_row_id",
-      columns: ["__centraid_row_id", "expense_id", "party_id", "paid_minor"],
-    },
-  ],
-};
-
 /** The dashboard this phone last landed while the gateway still answered. The
  *  composer divides between the people it names, so a seat with no landed
  *  spine has nobody to divide between — which is exactly why the journey
@@ -284,29 +239,22 @@ let workspace = "";
 let replicaFile = "";
 let facade: NativeReplicaSession | undefined;
 
-function seedReplica(): void {
-  const store = new ReplicaSqliteStore(
-    new NodeSqliteDriver(replicaFile),
-    VAULT
-  );
-  store.bootstrap({
-    protocolVersion: 1,
-    vaultId: VAULT,
-    schemaEpoch: "1",
-    cursor: { epoch: `epoch-${VAULT}`, seq: 1 },
-    shapes: [
-      {
-        ...TALLY_SHAPE,
-        entities: TALLY_SHAPE.entities.map((entity) => ({
-          ...entity,
-          columns: [...entity.columns],
-        })),
-      },
-    ],
-    rows: [],
-  });
-  store.close();
-}
+/**
+ * The vault's own `tally_expense`, which a seat's file holds directly (#996
+ * W5). It used to be a SHAPED bootstrap — a catalog, a shape and a projection
+ * of the table into `replica_row` — and the seat has the table.
+ */
+const SEAT_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS tally_expense (
+    expense_id TEXT PRIMARY KEY,
+    description TEXT,
+    amount_minor INTEGER,
+    currency TEXT,
+    spent_on TEXT,
+    deleted_at TEXT,
+    row_version INTEGER NOT NULL DEFAULT 1
+  ) STRICT;
+`;
 
 /**
  * One process's worth of session over the file on disk.
@@ -327,7 +275,10 @@ async function mountProcess(): Promise<NativeReplicaSession> {
     fetcher: () =>
       Promise.reject(new Error("the offline journey must not reach a gateway")),
     changeFeed: inertFeed(),
-    driver: new NodeSqliteDriver(replicaFile),
+    seat: await openNodeNativeSeat({
+      path: replicaFile,
+      schema: SEAT_SCHEMA,
+    }),
     isConnected: () => false,
     digest: () => Promise.resolve("digest"),
     idFactory: () => `intent-${(minted += 1)}`,
@@ -442,7 +393,8 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
   beforeEach(async () => {
     workspace = tempDirSync("centraid-tally-restart-");
     replicaFile = path.join(workspace, `${VAULT}.db`);
-    seedReplica();
+    // No seeding: the seat's file IS the vault's tables, created when the
+    // fixture adopts it. A shaped bootstrap had to be poured in first.
     posted.length = 0;
     resetTallyVault();
     container = document.createElement("div");
@@ -530,27 +482,27 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     });
   });
 
-  it("recovers the pending expense itself through the session's read path", async () => {
+  it("recovers the pending expense itself, from the outbox in the seat's file", async () => {
     await recordExpense();
     unmount();
     await restartProcess();
 
-    // The session the app mounts, over the file the killed process left. The
-    // expense is an OPTIMISTIC projection, so the overlay is what carries it —
-    // description, queued status and the vault it belongs to.
-    const found = await facade!.read("tally", {
-      entity: "tally.expense",
-      where: [{ column: "description", op: "eq", value: SPENT }],
-    });
-    expect(found.rows[0]?.values).toMatchObject({
+    // The session the app mounts, over the FILE the killed process left. The
+    // expense is an OPTIMISTIC projection and the seat's file is where it
+    // lives — `seat_outbox`, in the same database as the rows it is about
+    // (#996, R24). Nothing else could have carried it across the restart:
+    // process memory died with the process and no read can land offline.
+    const projection = await facade!.pendingProjection();
+    const upsert = projection.find(
+      (mutation) =>
+        mutation.op === "upsert" && mutation.entity === "tally.expense"
+    );
+    expect(upsert?.op === "upsert" ? upsert.values : {}).toMatchObject({
       description: SPENT,
       amount_minor: 1234,
-      __centraidScopeId: VAULT,
     });
-    const intentId = found.rows[0]?.values[PENDING_OVERLAY_FIELDS.key];
-    // Queued is a fact about the WRITE, so the read's sidecar says it (G3).
-    expect(found.pending?.[String(intentId)]).toMatchObject({
-      status: "queued",
-    });
+    const [pending] = await facade!.pendingChanges();
+    // Queued is a fact about the WRITE, and the sheet reads it from there.
+    expect(pending?.status).toBe("queued");
   });
 });

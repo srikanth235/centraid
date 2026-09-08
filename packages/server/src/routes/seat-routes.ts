@@ -205,9 +205,19 @@ export function makeSeatRouteHandler(
     ];
     if (!SEAT_PATHS.includes(url.pathname)) return false;
     const method = (req.method ?? "GET").toUpperCase();
-    if (method !== "GET") {
+    // HEAD IS A SNAPSHOT-DOOR METHOD, and only there (#996, W5). The shipped
+    // transport asks HEAD before it asks for bytes — deliberately, so the door
+    // has BUILT the artifact and the seat can measure the phone's free space
+    // against a real size before it starts a download it cannot finish. The
+    // log and key doors answer JSON a caller either wants or does not, so
+    // there is nothing for a HEAD of them to buy.
+    const headOnly = method === "HEAD" && url.pathname === SEAT_SNAPSHOT_PATH;
+    if (method !== "GET" && !headOnly) {
       res.statusCode = 405;
-      res.setHeader("Allow", "GET");
+      res.setHeader(
+        "Allow",
+        url.pathname === SEAT_SNAPSHOT_PATH ? "GET, HEAD" : "GET"
+      );
       res.end();
       return true;
     }
@@ -374,6 +384,13 @@ export function makeSeatRouteHandler(
     }
     res.statusCode = 200;
     res.setHeader("Content-Length", String(artifact.bytes));
+    // A HEAD gets every header the GET would carry and none of the bytes —
+    // which is the whole point of asking: the size, the ETag and the two seat
+    // numbers, without spending the artifact on the wire.
+    if (headOnly) {
+      res.end();
+      return true;
+    }
     await pipeline(
       createReadStream(artifact.file),
       res as unknown as NodeJS.WritableStream

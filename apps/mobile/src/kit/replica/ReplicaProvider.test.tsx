@@ -34,7 +34,7 @@ type HashModule = typeof import("../../lib/replica/native-hash");
 type MultiplexModule =
   typeof import("../../lib/replica/native-multiplex-change-feed");
 type NativeSessionModule = typeof import("../../lib/replica/native-session");
-type DriverModule = typeof import("../../lib/replica/expo-sqlite-driver");
+type SeatMountModule = typeof import("./replica-seat-mount");
 type ThumbnailModule = typeof import("../../lib/replica/thumbnail-pack");
 type UploadPolicyModule = typeof import("../../lib/upload/native-policy");
 type VaultLinksModule = typeof import("../../lib/vault-links");
@@ -233,6 +233,7 @@ vi.mock(
           pullForeground: () =>
             Promise.resolve({ landed: true, policyBlocked: false }),
           status: () => Promise.resolve({ coverage: "complete" }),
+          watermark: () => ({ commitSeq: 1, epoch: 1 }),
           subscribe: () => (): void => undefined,
           notifyReachable: (): void => undefined,
           updateGatewayBase: (): void => undefined,
@@ -242,14 +243,17 @@ vi.mock(
 );
 
 vi.mock(
-  import("../../lib/replica/expo-sqlite-driver"),
+  import("./replica-seat-mount"),
   () =>
     ({
-      openNativeReplicaDriver: (identity: { vaultId: string }) => {
+      openMountSeat: (identity: { vaultId: string }) => {
         world.opened.push(identity.vaultId);
-        return Promise.resolve({ close: (): void => undefined });
+        return Promise.resolve({
+          watermark: () => undefined,
+          close: () => Promise.resolve(),
+        });
       },
-    }) as unknown as Partial<DriverModule>
+    }) as unknown as Partial<SeatMountModule>
 );
 
 vi.mock(

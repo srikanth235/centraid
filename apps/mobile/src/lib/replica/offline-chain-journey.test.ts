@@ -30,19 +30,40 @@ import {
   pendingChangeExplanation,
   pendingChangeVerbs,
 } from "../../kit/replica/pending-copy";
+import { openNodeNativeSeat } from "./native-seat.test-fixtures";
 import { createNativeReplicaSession } from "./native-session";
-import {
-  createFeed,
-  gatewayAuth,
-  json,
-  noChanges,
-  nodeDigest,
-  page,
-  sequentialIds,
-} from "./native-session.test-fixtures";
-import { NodeSqliteDriver } from "./node-sqlite-driver";
+import type { NativeChangeFeed } from "./native-session";
 
-const CURSOR = { epoch: "replica-1", seq: 1 };
+const gatewayAuth = {
+  baseUrl: "http://127.0.0.1:18789",
+  gatewayId: "gateway-1",
+  vaultId: "vault-a",
+};
+
+/** A feed that carries nothing: this arc drives the session directly. */
+function createFeed(): NativeChangeFeed {
+  return {
+    subscribe: () => () => undefined,
+    setShapeIds: () => Promise.resolve(),
+    resume: () => Promise.resolve(),
+    setActive: () => undefined,
+  };
+}
+
+const nodeDigest = (canonical: string): Promise<string> =>
+  Promise.resolve(`digest:${canonical.length}`);
+
+function sequentialIds(): () => string {
+  let n = 0;
+  return () => `intent-${(n += 1)}`;
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 /** The other writer's edit landed while this phone was in the air. */
 const SECOND_WRITER = {
@@ -63,10 +84,6 @@ describe("the offline chain's whole arc", () => {
       pathname: string,
       init: RequestInit
     ): Promise<Response> => {
-      if (pathname.includes("/replica/bootstrap"))
-        return Promise.resolve(json(page(CURSOR)));
-      if (pathname.includes("/changes"))
-        return Promise.resolve(json(noChanges(CURSOR)));
       if (pathname.includes("/replica/intents")) {
         const sent = JSON.parse(String(init.body)) as { intentId: string };
         // THE SECOND WRITER, exactly where a real one lands: on the FIRST
@@ -89,18 +106,21 @@ describe("the offline chain's whole arc", () => {
       }
       return Promise.resolve(new Response("{}", { status: 200 }));
     };
-    const open = (driver: NodeSqliteDriver) =>
+    // ONE FILE, TWICE. The relaunch is the point of this arc: the second
+    // session opens the SAME seat file and has to find the chain the first one
+    // queued into `seat_outbox`.
+    const open = async () =>
       createNativeReplicaSession({
-        gatewayAuth,
+        gatewayAuth: { ...gatewayAuth },
         fetcher,
         changeFeed: createFeed(),
-        driver,
+        seat: await openNodeNativeSeat({ path: file }),
         digest: nodeDigest,
         idFactory: sequentialIds(),
         isConnected: () => online,
       });
 
-    let session = await open(new NodeSqliteDriver(file));
+    let session = await open();
     try {
       // ── Five changes, no radio ────────────────────────────────────────────
       const captions = [
@@ -147,7 +167,7 @@ describe("the offline chain's whole arc", () => {
 
       // ── Killed and relaunched, still offline ──────────────────────────────
       await session.close();
-      session = await open(new NodeSqliteDriver(file));
+      session = await open();
       const afterRestart = toPendingChanges(
         (await session.pendingChanges()) as SessionPendingRow[],
         "Home"

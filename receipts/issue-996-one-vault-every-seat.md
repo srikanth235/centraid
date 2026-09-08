@@ -9221,3 +9221,382 @@ sees no remote twins and re-uploads photos the vault has.
   for the same reason `timeline-page.ts` already imports the paged handler that
   way: a barrel re-export puts every module behind it into the Hermes bundle
   whether a screen reaches it or not.
+
+## Wave 5p — THE CUT: the old replica plane is deleted (#996, W5, part B)
+
+### The owner ruling this wave runs under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+mobile/* rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head a1e8c4390 stand as v0 evidence; the rows stay open
+ledger rows with provenance emulator.
+
+W5-D1, 2026-09-08 also stands: search runs on the seat, the declarative call
+sites converted before the cut in waves 5n and 5o, and the cut is one commit.
+
+### What went, and what took its place
+
+One atomic commit, and the shape of it is a subtraction: **59 files deleted,
+26 added, 104 changed**, about 22,700 lines out against 2,900 in. The old
+plane — a projection of the vault into `replica_row` blobs behind a worker, a
+declarative read grammar, a windowed bootstrap that walked shapes page by page,
+a census ladder of expression indexes, per-app row-key HMACs, deferred values,
+and an outbox in a second database beside it — is gone entire. A seat holds
+`vault.db`: a read is SQL, a bootstrap is a file copy, and the queue is a table
+in the same file as the rows it is about (R24).
+
+THE INTENT RAIL now fronts `SeatIntentStore` on both hosts — enqueue, pending
+replacement and revision targets, invalidations, outcomes, and settlement by
+`commit_seq`. The browser reaches it through `SeatWorkerOutbox` over the wire's
+`outbox` op (landed in `c1934a01a`); the phone holds the same store in process.
+`coordinator.ts`, `coordinator-web.ts` and the #738 file-size waiver they
+carried are deleted together — the waiver went with its file, not on its own.
+
+THE TWO SESSIONS were rewritten onto the seat and split at their seams, with no
+waiver added anywhere: `shell-session.ts` 1,701 → 610 over seven new modules
+(`shell-session-scopes.ts`, `shell-session-types.ts`, `shell-admission.ts`,
+`shell-intent-drain.ts`, `shell-invalidation-bus.ts`, `shell-outcomes.ts`,
+`shell-session-purge.ts`), and `native-session.ts` 1,345 → 557 over
+`native-session-types.ts` and `native-write-rail.ts`. `shell-session.test.ts`
+(686) split at the same seam into itself, `shell-session-writes.test.ts` and a
+shared `shell-session.test-fixtures.ts`.
+
+THE DEVICE HALF OF SHAPE COMPOSITION went from `replica-routes.ts`: the shaped
+snapshot, the windowed bootstrap, the row door, the checkpoint, the outcome
+reconciliation and the JSON changes page. What is left is two doors — the
+intent door, unchanged, and the change feed, which is a WAKE. Its suite went
+with the doors it covered: `replica-routes.test.ts` 797 → 270, and the three
+`ReplicaRouteOptions` members the deleted doors owned (`pollIntervalMs`,
+`maxBootstrapRows`, `maxSyntheticLookupRows`) with them.
+
+### `buildReplicaShapes` STAYS, and that corrects the brief
+
+The instruction was to delete it with the device half. Measured against the
+tree, it cannot be: `replica-projection.ts` and `replica-intent-shape.ts`
+compose against it on the LIVE intent path, which this cut does not touch. What
+is device-facing about shape composition is gone; the composer that the origin
+still projects an intent through is not, and neither is the share door or
+`composeShareShape`. `replica-shape-parity.test.ts` therefore stays too — and
+is re-pinned once below.
+
+### Four defects the seat rail had, found by the integration tier
+
+`test:integration:mobile` was eight files red and none of it was harness noise.
+Each is fixed at its own layer, and each is a thing a phone would have done:
+
+1. **The snapshot door answered 405 to HEAD.** The shipped transport asks HEAD
+   first, deliberately — so the door has BUILT the artifact and the seat can
+   measure free space against a real size before starting a download it cannot
+   finish. Nothing had ever driven the real transport against the real door.
+   `seat-routes.ts` now allows HEAD on the snapshot door only: every header the
+   GET would carry, and none of the bytes.
+2. **`in-process-channel.ts` handed out the outbox BY VALUE.** A bootstrap
+   replaces the file, so the core closes one driver and adopts another; a queue
+   that captured the store at construction — which is what both hosts do — went
+   on asking a closed database for the rest of the process (`database is not
+   open`). It now hands out a face that resolves `core.outbox()` per call, the
+   property the browser's `SeatWorkerOutbox` already had by being a proxy.
+3. **A seat with no copy answered ZERO ROWS.** The baseline DDL means every
+   table a copy would hold already exists, so an unguarded read draws an
+   entirely believable empty library over a vault full of rows — "absent is
+   never empty", violated on the phone while the shell refused correctly.
+   `SeatLoop.query` now REJECTS (never throws: it is not `async`, and a
+   synchronous throw lands past the caller's `await`) with `OnlineOnlyError`.
+4. **#905 reopened by the cut.** `catchUp()` ran even when the mount believed it
+   was offline, and a REFUSED catch-up scheduled nothing — every trigger fires
+   once per event and none of them is a schedule, so the one attempt after a
+   wake was the only one. `catchUp` is gated on `isConnected()` and schedules
+   the retry when it does not land; `pullNow`/`pullForeground` report that
+   verdict instead of always answering `landed: true`, which is what the
+   pull-to-refresh spinner reads.
+
+### Three stale pins, re-pinned with their reasons
+
+None of these was the cut's doing; all three were landed #996 changes that
+forgot their pin, and all three were red at `bb98b46e8`:
+
+| pin | was | is | why |
+| --- | --- | --- | --- |
+| `seat-routes.test.ts` × 2 | `2` | `REPLICA_SCHEMA_EPOCH` | W5's one epoch bump, 2 → 3. Asserted against the constant now, so it cannot go stale again. |
+| `replica-shape-parity.test.ts` | `tally:ac08d115…` | `tally:e801d3ac…` | `4f3cf31aa` (OQ-12): answering a proposed cross-source match writes a temporal `core.link`, so Tally's manifest gained the link scopes and its composed column set moved. |
+| `manifest-scope-denial.sweep.test.ts` | `288` | `292` | The same four manifest scopes, counted from the other end. |
+
+`one-computation.test.ts` shrank rather than moved: `gatewayAuth` and `json`
+left the kit collision lists with the plane that owned their second spellings.
+That list is marked "shrinks only", and this is a shrink.
+
+### The app-weight overage was the NATIVE BARREL, named with its bytes
+
+First measurement after the cut: iOS 8,193,833 B under the 8,220,000 ceiling,
+Android 8,229,402 B — 9,402 B over. The remaining weight was read off the Hermes
+sourcemap and it was not a screen: `packages/client/src/replica/native.ts`
+re-exported `live-query.ts` (5,946 source B), `live-query-registry.ts` (1,107)
+and `memory-intent-store.ts` (4,500), and `export *` ships a module the barrel
+names whether a screen reaches it or not. No phone module imports any of the
+three. Dropped from the NATIVE barrel only; they stay on `index.ts`, where
+`shell-session.ts` still opens the memory store as its no-file fallback. Final:
+**iOS 8,193,833 B, Android 8,214,162 B**, ceiling untouched.
+
+### A finding this cut does not take
+
+`LiveQuery` and `LiveQueryRegistry` now have NO consumer on either host — only
+the two barrels and their own suites reach them — so #927's `invalidations` and
+`reReads` counters have no writer left in practice. Deleting them outright
+means two protocol counters that can only ever read zero, which is a
+`packages/core` protocol decision and not a client cleanup. Left for the owner.
+
+### Docs the cut made false
+
+`docs/traps/expression-index-spelling.md` was about `replica_row`'s census and
+order EXPRESSION indexes, the spelling rule that made a renamed helper silently
+un-index a read, and the plan assertion in `order-census.test.ts` — all three
+gone. It is REWRITTEN as a supersession marker rather than deleted, and its
+README row says so: `QUALITY.md`'s resolved-issue record for #922 C3 cites it,
+and that section is frozen history the `doc-integrity` gate will not let this
+commit edit. Deleting the file would have broken a link out of frozen history,
+which is the one thing worse than a stale trap. `docs/mobile-offline.md`'s
+ordered-read paragraph now describes the seat's stated composite indexes
+instead.
+
+### Gates
+
+| gate | result |
+| --- | --- |
+| `grep -rn shape_id packages/client apps/ tests/` | **0** |
+| `bun run typecheck` | pass (25/25) |
+| `bun run knip` | pass, 0 findings |
+| `bun run check:push:static` | 4/4 |
+| `bun run governance < /dev/null` | only `bcf17bd3f`, the known one |
+| `bun run --cwd apps/mobile ci:native-state` | pass, no `--write` needed |
+| client / mobile / vault / server / blueprints | 2,476 / 2,357 / 1,743 / 3,500 / 7,095 |
+| `bun run test:integration:mobile` | **69/69** (was 8 files red) |
+| `tests/quality/seat-replay-parity.test.ts` | 2/2 against the year-3 corpus |
+| quality lane | 15 red → 5, and those 5 are identical at `bb98b46e8` |
+| web e2e | 20 failed / 30 passed — **byte-identical at `bb98b46e8`**, measured |
+| app-weight (mobile) | iOS 8,193,833 B, Android 8,214,162 B < 8,220,000 |
+
+INHERITED, MEASURED, NOT THIS CUT. The web e2e was run at `bb98b46e8` with this
+working tree stashed and answers the same 20/30, failure for failure; the brief's
+"5 inherited failures" figure was stale. The server's remaining four
+(`acp/.../launch` × 2, `gateway-db-lock.integration`, and its `sqlite3` binary
+this container has not got) and the quality lane's five were reproduced the same
+way. None of them names a file this commit touches.
+
+### Every file this commit touches
+
+**Deleted (59):**
+
+- `apps/mobile/src/lib/replica/bootstrap-statement-budget.test.ts`
+- `apps/mobile/src/lib/replica/expo-sqlite-driver.test.ts`
+- `apps/mobile/src/lib/replica/native-replica-store.test.ts`
+- `apps/mobile/src/lib/replica/native-replica-store.ts`
+- `apps/mobile/src/lib/replica/native-session-first-bootstrap.test.ts`
+- `apps/mobile/src/lib/replica/native-session-rebootstrap.test.ts`
+- `apps/mobile/src/lib/replica/native-session-write-rail.test.ts`
+- `apps/mobile/src/lib/replica/native-session.test-fixtures.ts`
+- `apps/mobile/src/lib/replica/node-sqlite-driver.jsdom.test.ts`
+- `apps/mobile/src/lib/replica/node-sqlite-driver.ts`
+- `apps/mobile/src/lib/replica/off-thread-apply.test.ts`
+- `apps/mobile/src/lib/replica/ordered-read-plan.test.ts`
+- `apps/mobile/src/lib/replica/pending-write-visibility.test.ts`
+- `apps/mobile/src/lib/replica/sqlite-intent-store.test.ts`
+- `apps/mobile/src/lib/replica/sqlite-intent-store.ts`
+- `apps/mobile/src/lib/replica/vault-read-plane.ts`
+- `docs/traps/expression-index-spelling.md`
+- `packages/client/src/react/blueprints/inline-read-truncation.test.ts`
+- `packages/client/src/replica/app-convergence.contract.test.ts`
+- `packages/client/src/replica/convergence-properties.test.ts`
+- `packages/client/src/replica/coordinator-web.ts`
+- `packages/client/src/replica/coordinator.test.ts`
+- `packages/client/src/replica/coordinator.ts`
+- `packages/client/src/replica/deferred-values.test.ts`
+- `packages/client/src/replica/intent-store.test.ts`
+- `packages/client/src/replica/intent-store.ts`
+- `packages/client/src/replica/multi-writer.contract.test.ts`
+- `packages/client/src/replica/node-sqlite-test-driver.ts`
+- `packages/client/src/replica/order-census.test.ts`
+- `packages/client/src/replica/query.test.ts`
+- `packages/client/src/replica/query.ts`
+- `packages/client/src/replica/read-plan-clauses.ts`
+- `packages/client/src/replica/read-plan-parity.test-fixtures.ts`
+- `packages/client/src/replica/read-plan-parity.test.ts`
+- `packages/client/src/replica/read-plan-refusals.test.ts`
+- `packages/client/src/replica/read-plan-truncation.test.ts`
+- `packages/client/src/replica/read-plan.ts`
+- `packages/client/src/replica/rebootstrap-loop.test.ts`
+- `packages/client/src/replica/shell-transport.test.ts`
+- `packages/client/src/replica/sqlite-store.test.ts`
+- `packages/client/src/replica/sqlite-store.ts`
+- `packages/client/src/replica/sqlite-worker.test.ts`
+- `packages/client/src/replica/sqlite-worker.ts`
+- `packages/client/src/replica/store-core-bootstrap-walk.test.ts`
+- `packages/client/src/replica/store-core-storage-lifecycle.test.ts`
+- `packages/client/src/replica/store-core.test-fixtures.ts`
+- `packages/client/src/replica/store-core.test.ts`
+- `packages/client/src/replica/store-core.ts`
+- `packages/client/src/replica/store-docs-search.test.ts`
+- `packages/client/src/replica/store.ts`
+- `packages/client/src/replica/wasm-sqlite-driver.ts`
+- `packages/client/src/replica/windowed-bootstrap-resume.test.ts`
+- `packages/client/src/replica/windowed-bootstrap.test-fixtures.ts`
+- `packages/client/src/replica/windowed-bootstrap.test.ts`
+- `packages/client/src/replica/windowed-bootstrap.ts`
+- `packages/client/src/replica/worker-client.test.ts`
+- `packages/client/src/replica/worker-client.ts`
+- `packages/client/src/replica/worker-protocol.ts`
+- `tests/quality/replica-bootstrap-fixture.ts`
+
+**Added (26):**
+
+- `apps/mobile/src/lib/replica/native-pending-changes.ts`
+- `apps/mobile/src/lib/replica/native-seat-path.ts`
+- `apps/mobile/src/lib/replica/native-seat.test-fixtures.ts`
+- `apps/mobile/src/lib/replica/native-session-types.ts`
+- `apps/mobile/src/lib/replica/native-write-rail.ts`
+- `apps/mobile/src/lib/replica/pending-waiting-on.test.ts`
+- `packages/client/src/replica/replica-identity.ts`
+- `packages/client/src/replica/seat/base-versions.test.ts`
+- `packages/client/src/replica/seat/base-versions.ts`
+- `packages/client/src/replica/seat/invalidations.test.ts`
+- `packages/client/src/replica/seat/invalidations.ts`
+- `packages/client/src/replica/seat/seat-doors.ts`
+- `packages/client/src/replica/seat/seat-storage-purge.ts`
+- `packages/client/src/replica/seat/seat-sync-loop.ts`
+- `packages/client/src/replica/shell-admission.ts`
+- `packages/client/src/replica/shell-intent-drain.ts`
+- `packages/client/src/replica/shell-invalidation-bus.ts`
+- `packages/client/src/replica/shell-outcomes.ts`
+- `packages/client/src/replica/shell-session-purge.ts`
+- `packages/client/src/replica/shell-session-scopes.ts`
+- `packages/client/src/replica/shell-session-types.ts`
+- `packages/client/src/replica/shell-session-writes.test.ts`
+- `packages/client/src/replica/shell-session.test-fixtures.ts`
+- `packages/client/src/replica/terminal-purge.ts`
+- `tests/integration-mobile/lib/node-seat.ts`
+- `tests/integration-mobile/lib/reads.ts`
+
+**Changed (104):**
+
+- `QUALITY.md`
+- `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`
+- `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `apps/mobile/src/kit/replica/replica-mount.test.ts`
+- `apps/mobile/src/kit/replica/replica-mount.ts`
+- `apps/mobile/src/kit/replica/replica-seat-mount.ts`
+- `apps/mobile/src/lib/replica/background-sync.test.ts`
+- `apps/mobile/src/lib/replica/background-sync.ts`
+- `apps/mobile/src/lib/replica/expo-sqlite-driver.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `apps/mobile/src/lib/replica/locker-online-only.test.ts`
+- `apps/mobile/src/lib/replica/native-seat.ts`
+- `apps/mobile/src/lib/replica/native-session.test.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/lib/replica/offline-budgets.ts`
+- `apps/mobile/src/lib/replica/offline-chain-journey.test.ts`
+- `apps/mobile/src/lib/replica/reconnect-to-fresh.fixture.ts`
+- `apps/mobile/src/lib/replica/seat-read-plane.test.ts`
+- `apps/mobile/src/lib/upload/node-sqlite-driver.ts`
+- `apps/mobile/src/lib/upload/store-migrations.ts`
+- `apps/mobile/src/lib/upload/store.ts`
+- `docs/mobile-offline.md`
+- `docs/traps/README.md`
+- `knip.json`
+- `packages/blueprints/src/one-computation.test.ts`
+- `packages/client/package.json`
+- `packages/client/src/react/blueprints/centraid-inline-doors.test.ts`
+- `packages/client/src/react/blueprints/centraid-inline-scopes.test.ts`
+- `packages/client/src/react/blueprints/centraid-inline.test.ts`
+- `packages/client/src/react/blueprints/centraid-inline.ts`
+- `packages/client/src/react/blueprints/inline-change-feed.test.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/react/boot.test.tsx`
+- `packages/client/src/react/boot.tsx`
+- `packages/client/src/react/screens/HouseholdScreen.test.tsx`
+- `packages/client/src/react/shell/routes/HouseholdRoute.tsx`
+- `packages/client/src/react/shell/routes/InlineAppRoute.test.tsx`
+- `packages/client/src/react/shell/routes/InlineAppRoute.tsx`
+- `packages/client/src/react/shell/routes/homeSample.test.ts`
+- `packages/client/src/react/shell/routes/homeSample.ts`
+- `packages/client/src/react/shell/routes/homeTileContent.ts`
+- `packages/client/src/react/shell/routes/paletteEntitySearch.ts`
+- `packages/client/src/react/shell/routes/paletteRecents.ts`
+- `packages/client/src/react/shell/routes/settingsAccessData.ts`
+- `packages/client/src/react/shell/routes/useAppScopes.test.ts`
+- `packages/client/src/react/shell/routes/useAppScopes.ts`
+- `packages/client/src/react/shell/useSeatWatermark.test.tsx`
+- `packages/client/src/react/shell/useSeatWatermark.ts`
+- `packages/client/src/replica/addressed-vault.test.ts`
+- `packages/client/src/replica/index.ts`
+- `packages/client/src/replica/inline-query-ctx-core.ts`
+- `packages/client/src/replica/intent-idempotency-properties.test.ts`
+- `packages/client/src/replica/intent-settlement.test.ts`
+- `packages/client/src/replica/intents.contract.test.ts`
+- `packages/client/src/replica/native.ts`
+- `packages/client/src/replica/offline-chain.contract.test.ts`
+- `packages/client/src/replica/seat/in-process-channel.ts`
+- `packages/client/src/replica/seat/index.ts`
+- `packages/client/src/replica/seat/node-seat-driver.ts`
+- `packages/client/src/replica/seat/seat-channel.ts`
+- `packages/client/src/replica/seat/seat-loop.test.ts`
+- `packages/client/src/replica/seat/seat-loop.ts`
+- `packages/client/src/replica/seat/seat-worker-client.ts`
+- `packages/client/src/replica/seat/seat-worker-outbox.ts`
+- `packages/client/src/replica/seat/seat-worker.ts`
+- `packages/client/src/replica/seat/session-seat.test.ts`
+- `packages/client/src/replica/seat/session-seat.ts`
+- `packages/client/src/replica/seat/watermark.ts`
+- `packages/client/src/replica/seat/web-seat.ts`
+- `packages/client/src/replica/seat/worker-core.ts`
+- `packages/client/src/replica/seat/worker-protocol.ts`
+- `packages/client/src/replica/shell-session-addressing.test.ts`
+- `packages/client/src/replica/shell-session-admission.contract.test.ts`
+- `packages/client/src/replica/shell-session-lifecycle.test.ts`
+- `packages/client/src/replica/shell-session-scopes.test.ts`
+- `packages/client/src/replica/shell-session.test.ts`
+- `packages/client/src/replica/shell-session.ts`
+- `packages/client/src/replica/shell-transport.ts`
+- `packages/client/src/replica/storage-manifest.test.ts`
+- `packages/client/src/replica/storage-manifest.ts`
+- `packages/client/src/replica/trace.test.ts`
+- `packages/client/src/replica/types.ts`
+- `packages/client/src/replica/vault-tables.ts`
+- `packages/client/src/replica/write-helpers.ts`
+- `packages/server/src/routes/replica-routes.test.ts`
+- `packages/server/src/routes/replica-routes.ts`
+- `packages/server/src/routes/replica-shape-parity.test.ts`
+- `packages/server/src/routes/seat-routes.test.ts`
+- `packages/server/src/routes/seat-routes.ts`
+- `packages/server/src/serve/manifest-scope-denial.sweep.test.ts`
+- `tests/integration-mobile/bootstrap-recovery.integration.test.ts`
+- `tests/integration-mobile/lib/apps.ts`
+- `tests/integration-mobile/lib/boot-conditions.ts`
+- `tests/integration-mobile/lib/seat.ts`
+- `tests/integration-mobile/lib/write-conditions.ts`
+- `tests/integration-mobile/offline.integration.test.ts`
+- `tests/quality/chaos-intent-world.ts`
+- `tests/quality/chaos-replica-store.ts`
+- `tests/quality/offline-reconnect.integration.test.ts`
+- `tests/scale/mobile-offline-chain.scale.test.ts`
+- `tests/scale/mobile-reconnect-to-fresh.scale.test.ts`
+- `tests/scale/mobile-screen-reads.scale.test.ts`
+
+### Decisions — the cut
+
+- **A waiver is deleted with its file, never on its own.** The #738 waiver went
+  because `coordinator.ts` went. The one on `offline-chain.contract.test.ts`
+  stays because its file does; it was there before this cut and the file shrank
+  under it.
+- **A brief is measured against the tree.** `buildReplicaShapes` was named for
+  deletion and stays, because the live intent path composes against it. The
+  IndexedDB backend was named as a fourth in `offline-chain.contract.test.ts`
+  and there are three, because the store it belonged to is what this deletes.
+- **The integration tier is where a seat's product claims are decided.** Four
+  defects, all of them things a phone would do and none of them visible to a
+  unit suite: the door that refused the transport's first question, the handle a
+  bootstrap invalidated, the empty library over a full vault, and the retry that
+  was never scheduled.
+- **A pin asserts the constant, not a copy of it.** Both schema-epoch pins are
+  the reason: a literal `2` beside a `REPLICA_SCHEMA_EPOCH` of 3 is a gate that
+  has stopped gating.

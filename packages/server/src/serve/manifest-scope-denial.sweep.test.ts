@@ -57,7 +57,12 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // 277 → 279 (#928): People declares `share.authority_use` and
       // `share.authority_request` so Settings → Access can date every answer
       // and draw an automation's undecided ask on the same screen.
-      declaredScopes: 288,
+      // 288 → 292 (#996, OQ-12): Tally reviews a cross-source match, and the
+      // owner's answer is a temporal `core.link` (`same-as` or
+      // `distinct-from`) between the two imported rows — so Tally declares the
+      // link scopes that judgment is written through. The same manifest change
+      // moved Tally's shape id in `replica-shape-parity.test.ts`.
+      declaredScopes: 292,
     });
   });
 

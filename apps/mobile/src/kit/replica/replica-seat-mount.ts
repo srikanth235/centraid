@@ -15,70 +15,54 @@
 
 import { authHeader } from "../../lib/gateway";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
-import type { NativeReplicaSession } from "../../lib/replica/native-session";
-import type { NativeSeatPagePort } from "../../lib/replica/seat-port";
+import type { NativeSeat } from "../../lib/replica/native-seat";
 
-/** What the provider hands over: its identity, its scope, and its liveness. */
+/** What the provider hands over: its identity and where the file lives. */
 export interface ReplicaSeatMountOptions {
   readonly gatewayId: string;
   readonly vaultId: string;
   readonly baseUrl: string;
   /** The module's durable directory; `undefined` means this host has none. */
   readonly storageLocation: string | undefined;
-  /** The session this seat belongs to, captured non-optional by the caller. */
-  readonly session: NativeReplicaSession;
-  /** True once the mount that asked for this seat has been torn down. */
-  readonly cancelled: () => boolean;
-  /** Called with the seat once it is filled, adopted and attached. */
-  readonly onOpened: (seat: MountedSeat) => void;
 }
 
 /**
- * The half of `NativeSeat` a mount holds: what it PUBLISHES to screens, plus
- * the one verb teardown needs. Structural rather than `NativeSeat` itself so
- * this module does not pull expo-sqlite into the provider's import graph — the
- * lazy `import()` below is the whole point.
- */
-export interface MountedSeat extends NativeSeatPagePort {
-  close: () => Promise<void>;
-}
-
-/**
- * Open this scope's seat, fill it, and hand it back — or hand nothing back.
+ * OPEN THE FILE. Not the copy — the FILE (#996, W5, and this is the ordering
+ * the cut got wrong first).
  *
- * Fire-and-forget by design: it returns immediately and the mount goes on
- * without a copy. A failure is not raised anywhere, because "this phone has no
- * seat yet" is a normal state and not an error a screen can act on.
+ * The bootstrap is a download and it may take minutes; the OUTBOX cannot wait
+ * for it, because a member's first write can happen on the train before the
+ * copy has landed and an outbox that waited would put it in memory and lose it
+ * on relaunch. `SeatWorkerCore` creates `seat_outbox` when it adopts the file,
+ * empty or not, so opening is enough to make the queue durable.
+ *
+ * The copy still arrives behind the mount: the session syncs in `start`, and
+ * until that first sync lands, reads refuse ONLINE_ONLY and run on the
+ * gateway's paged door (W4-D2, R9).
+ *
+ * `undefined` is a host with no durable directory — the seat is then online
+ * only, and the caller mounts without one.
  */
-export function mountReplicaSeat(options: ReplicaSeatMountOptions): void {
-  if (options.storageLocation === undefined) return;
-  const storageLocation = options.storageLocation;
-  // Imported lazily, like `native-hash`: a static import would drag
-  // expo-sqlite and expo-file-system into every suite that mounts the
-  // provider, and the seat is opened at most once per mount anyway.
-  void import("../../lib/replica/native-seat")
-    .then(({ openSyncedNativeSeat }) =>
-      openSyncedNativeSeat({
-        gatewayId: options.gatewayId,
-        vaultId: options.vaultId,
-        baseUrl: options.baseUrl,
-        headers: authHeader(),
-        storageLocation,
-        digest: nativeReplicaDigest,
-      })
-    )
-    .then((opened) => {
-      if (!opened) return;
-      if (options.cancelled()) {
-        // Hand the handles back: the mount that wanted this file is gone, and
-        // expo caches connections by name.
-        void opened.close().catch(() => undefined);
-        return;
-      }
-      // SEARCH RUNS ON THE SEAT (W5-D1), so the session has to be told the
-      // copy arrived — it holds no seat until this moment.
-      options.session.attachSeat(opened);
-      options.onOpened(opened);
-    })
-    .catch(() => undefined);
+export async function openMountSeat(
+  options: ReplicaSeatMountOptions
+): Promise<NativeSeat | undefined> {
+  if (options.storageLocation === undefined) return undefined;
+  try {
+    // Imported lazily, like `native-hash`: a static import would drag
+    // expo-sqlite and expo-file-system into every suite that mounts the
+    // provider, and the seat is opened at most once per mount anyway.
+    const { NativeSeat } = await import("../../lib/replica/native-seat");
+    return await NativeSeat.open({
+      gatewayId: options.gatewayId,
+      vaultId: options.vaultId,
+      baseUrl: options.baseUrl,
+      headers: authHeader(),
+      storageLocation: options.storageLocation,
+      digest: nativeReplicaDigest,
+    });
+  } catch {
+    // A phone whose file will not open has no seat, which the read path
+    // answers online-only rather than as an error a screen can act on.
+    return undefined;
+  }
 }

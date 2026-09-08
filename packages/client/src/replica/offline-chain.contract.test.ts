@@ -2,20 +2,26 @@
 //
 // THE OFFLINE CHAIN, AGAINST EVERY OUTBOX THAT WILL RUN IT (#996, R23–R25).
 //
-// Three durable outboxes exist — in-memory, the browser's IndexedDB, and the
-// seat's own SQLite table — and the chain has to behave identically on all
-// three. It is one contract, not three suites, because the differences that
-// matter (a store that shares a transaction with the replica versus one that
-// cannot) are exactly the differences that would otherwise hide a divergence.
+// Three outboxes exist since W5 — an in-memory one, the seat's SQLite table,
+// and that same table across the browser's WORKER BOUNDARY — and the chain has
+// to behave identically on all three. It is one contract, not three suites,
+// because the difference that matters (a store that shares a transaction with
+// the rows it is about, and a proxy that reaches it at a distance) is exactly
+// the difference that would otherwise hide a divergence.
+//
+// THE INDEXEDDB BACKEND IS GONE, with the store itself. The browser's outbox
+// was a separate database beside the replica, which is why R24's central
+// promise — an executed answer clearing its overlay IN THE TRANSACTION THAT
+// CARRIES ITS COMMIT — could not be expressed there and had to be reconciled
+// across two stores with a window in between. The seat's file is one store.
 
-import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import type { IntentRecordStore } from "./intent-record-store.js";
-import { IndexedDbIntentStore, MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
 import {
   absenceReconciled,
   chainBadgeCopy,
@@ -59,16 +65,6 @@ const BACKENDS: readonly Backend[] = [
         store: new MemoryIntentStore(),
         dispose: () => undefined,
       }),
-  },
-  {
-    name: "indexeddb",
-    open: async () => {
-      const store = await IndexedDbIntentStore.open(
-        `centraid-chain-${crypto.randomUUID()}`,
-        new IDBFactory()
-      );
-      return { store, dispose: () => store.close() };
-    },
   },
   {
     name: "sqlite",
@@ -177,12 +173,10 @@ describe.each(BACKENDS)(
     let opened: { store: IntentRecordStore; dispose: () => void };
 
     beforeEach(async () => {
-      vi.stubGlobal("IDBKeyRange", IDBKeyRange);
       opened = await backend.open();
     });
     afterEach(() => {
       opened.dispose();
-      vi.unstubAllGlobals();
     });
 
     test("orders the chain and names each predecessor exactly once", async () => {

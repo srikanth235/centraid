@@ -23,6 +23,12 @@ import type { SeatState } from "./state.js";
 import type { SeatContents } from "./storage-probe.js";
 
 export interface SeatWatermark {
+  /**
+   * The gateway's log epoch this file is a copy of. A wake feed resumes from
+   * `(epoch, applied)` — the seat's own applied position is the only cursor
+   * anything resumes from since #996 W5.
+   */
+  readonly epoch: string;
   /** Where this file stands in the gateway's log. */
   readonly applied: number;
   /** The gateway's head, as of the last page this seat received. */
@@ -37,6 +43,7 @@ export interface SeatWatermark {
 export function seatWatermark(state: SeatState): SeatWatermark {
   const head = Math.max(state.gatewayWatermark, state.appliedSeq);
   return {
+    epoch: state.epoch,
     applied: state.appliedSeq,
     head,
     behind: head - state.appliedSeq,

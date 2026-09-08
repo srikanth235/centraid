@@ -80,17 +80,19 @@ vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
 }));
 
 vi.mock(import("@centraid/client/replica/native") as Promise<unknown>, () => ({
-  fetchReplicaBootstrapPage: async () => ({ vaultId: "vault-1" }),
+  probeSeatVault: async () => ({ vaultId: "vault-1" }),
+  replicaStorageKey: async (
+    identity: { gatewayId: string; vaultId: string },
+    digest?: (value: string) => Promise<string>
+  ) =>
+    (digest ?? (async (value: string) => value))(
+      `${identity.gatewayId} ${identity.vaultId}`
+    ),
 }));
 
 vi.mock(import("../../lib/replica/native-hash") as Promise<unknown>, () => ({
   nativeReplicaDigest: async (value: string) => value,
 }));
-
-vi.mock(
-  import("../../lib/replica/expo-sqlite-driver") as Promise<unknown>,
-  () => ({ nativeReplicaDatabasePath: async () => "replica.sqlite3" })
-);
 
 vi.mock(import("../../lib/vault-links") as Promise<unknown>, () => ({
   LAST_BASE: "replica.lastBase",

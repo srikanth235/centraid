@@ -12,7 +12,7 @@ const sync = vi.fn<() => Promise<void>>();
 const getReplicaShellSession = vi.fn<
   () => Promise<TypeImport_session.ReplicaShellSession>
 >(async () => ({ sync }) as unknown as TypeImport_session.ReplicaShellSession);
-vi.mock(import("../../../replica/shell-session.js"), () => ({
+vi.mock(import("../../../replica/shell-session-scopes.js"), () => ({
   getReplicaShellSession: () => getReplicaShellSession(),
 }));
 const vaultDemoLoad = vi.fn<(appId: string) => Promise<{ rows: number }>>();

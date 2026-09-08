@@ -10,6 +10,7 @@ import type {
   InlineAppModule,
   InlineScope,
 } from "@centraid/blueprints/apps/inline-types";
+import type { Page, PageCursor, PageQuery } from "@centraid/core/page";
 // The inline `window.centraid` every blueprint app talks to, backed by the
 // shell replica session. Writes carry the caller's `intentId` VERBATIM — #406
 // dedupe lives in the session/route and is never re-minted here.
@@ -82,7 +83,7 @@ export type InlineScopeSession = Pick<
   // left optional so an app's handler reaches the seat's own file through the
   // same binding its reads use; on a seat with no file it refuses ONLINE_ONLY
   // and the whole query re-runs on the gateway's paged door (W4-D2).
-  "read" | "search" | "write" | "subscribe" | "page"
+  "search" | "write" | "subscribe" | "page"
 > &
   Partial<
     Pick<ReplicaShellSession, "discardPendingWrite" | "retryPendingWrite">
@@ -387,37 +388,91 @@ function errorDetail(error: unknown): { code?: string; message: string } {
   };
 }
 
+/**
+ * A bounded walk of one share-sheet table over the seat (#996, R8).
+ *
+ * The share sheet is the ONE place in the shell that reads whole small tables:
+ * a member's people, their circles and who is in them. It is not a screen a
+ * cursor helps — every row is drawn — so it walks to the end, bounded, and a
+ * seat with no file answers nothing rather than throwing: the sheet then offers
+ * the links it could resolve, which is what it did when the read refused.
+ */
+const SHARE_PAGE = 500;
+const SHARE_MAX_PAGES = 8;
+
+async function sharePage<Row extends object>(
+  session: InlineScopeSession,
+  query: PageQuery<Row>
+): Promise<Row[]> {
+  const rows: Row[] = [];
+  let after: PageCursor | undefined = undefined;
+  for (let page = 0; page < SHARE_MAX_PAGES; page += 1) {
+    let answer: Page<Row>;
+    try {
+      // Sequential by definition: the next page continues from this one.
+      // oxlint-disable-next-line no-await-in-loop
+      answer = await session.page<Row>(query, {
+        limit: SHARE_PAGE,
+        ...(after ? { after } : {}),
+      });
+    } catch {
+      // ONLINE_ONLY on a seat with no file, or a table this grant does not
+      // carry. Both are "nothing to offer from here".
+      return rows;
+    }
+    rows.push(...answer.rows);
+    if (!answer.next) break;
+    after = answer.next;
+  }
+  return rows;
+}
+
 async function loadShareTargets(
   session: InlineScopeSession,
   ownVaultId: string
 ): Promise<InlineShareTarget[]> {
-  const [peopleResult, vaultResult, links] = await Promise.all([
-    session
-      .read("people", {
-        entity: "core.party",
-        orderBy: { column: "display_name", dir: "asc" },
-        limit: 500,
-      })
-      .catch(() => undefined),
-    session
-      .read("people", { entity: "core.vault", limit: 1 })
-      .catch(() => undefined),
+  const [people, vault, links] = await Promise.all([
+    sharePage<{
+      party_id: string;
+      display_name: string;
+      kind: string;
+    }>(session, {
+      name: "share.targets.parties",
+      select: "party_id, display_name, kind",
+      from: "core_party",
+      where: "deleted_at IS NULL",
+      order: {
+        sortColumn: "display_name",
+        pkColumn: "party_id",
+        descending: false,
+      },
+    }),
+    sharePage<{ vault_id: string; self_party_id: string | null }>(session, {
+      name: "share.targets.vault",
+      select: "vault_id, self_party_id",
+      from: "core_vault",
+      order: {
+        sortColumn: "vault_id",
+        pkColumn: "vault_id",
+        descending: false,
+      },
+    }),
     loadLinkDestinations(ownVaultId),
   ]);
-  const ownerPartyId = vaultResult?.rows[0]?.values["self_party_id"];
+  const ownerPartyId = vault[0]?.self_party_id;
   const linkedByParty = new Map(
     links.map((link) => [link.partyId, link.vaultId])
   );
   const targets = new Map<string, InlineShareTarget>();
-  for (const row of peopleResult?.rows ?? []) {
-    const partyId = row.values["party_id"];
-    const displayName = row.values["display_name"];
+  for (const row of people) {
+    const partyId: unknown = row.party_id;
+    const displayName: unknown = row.display_name;
     if (
       typeof partyId !== "string" ||
       partyId === ownerPartyId ||
       typeof displayName !== "string" ||
       !displayName.trim() ||
-      !isAddressablePartyKind(row.values["kind"])
+      !isAddressablePartyKind(row.kind)
     )
       continue;
     const vaultId = linkedByParty.get(partyId);
@@ -427,7 +482,7 @@ async function loadShareTargets(
       ...(vaultId ? { vaultId } : {}),
       // Queued-ness is the row's one pending column; the facts behind it are
       // not needed to refuse a destination that is not real yet (#922 G3).
-      ...(pendingRowIntentId(row.values) ? { pending: true } : {}),
+      ...(pendingRowIntentId(row) ? { pending: true } : {}),
     });
   }
   for (const link of links) {
@@ -464,53 +519,76 @@ async function loadShareCircles(
   ownVaultId: string
 ): Promise<InlineShareCircle[]> {
   const [circles, members, groups, targets, vault] = await Promise.all([
-    session
-      .read("tally", { entity: "social.circle", limit: 500 })
-      .catch(() => undefined),
-    session
-      .read("tally", { entity: "social.circle_member", limit: 2_000 })
-      .catch(() => undefined),
-    session
-      .read("tally", { entity: "tally.group", limit: 500 })
-      .catch(() => undefined),
+    sharePage<{
+      circle_id: string;
+      owner_party_id: string;
+      name: string;
+    }>(session, {
+      name: "share.circles",
+      select: "circle_id, owner_party_id, name",
+      from: "social_circle",
+      order: {
+        sortColumn: "circle_id",
+        pkColumn: "circle_id",
+        descending: false,
+      },
+    }),
+    sharePage<{ member_id: string; circle_id: string; party_id: string }>(
+      session,
+      {
+        name: "share.circle-members",
+        select: "member_id, circle_id, party_id",
+        from: "social_circle_member",
+        order: {
+          sortColumn: "member_id",
+          pkColumn: "member_id",
+          descending: false,
+        },
+      }
+    ),
+    sharePage<{ group_id: string; circle_id: string }>(session, {
+      name: "share.tally-groups",
+      select: "group_id, circle_id",
+      from: "tally_group",
+      order: {
+        sortColumn: "group_id",
+        pkColumn: "group_id",
+        descending: false,
+      },
+    }),
     loadShareTargets(session, ownVaultId),
-    session
-      .read("people", { entity: "core.vault", limit: 1 })
-      .catch(() => undefined),
+    sharePage<{ vault_id: string; self_party_id: string | null }>(session, {
+      name: "share.circles.vault",
+      select: "vault_id, self_party_id",
+      from: "core_vault",
+      order: {
+        sortColumn: "vault_id",
+        pkColumn: "vault_id",
+        descending: false,
+      },
+    }),
   ]);
-  const ownerPartyId = vault?.rows[0]?.values["self_party_id"];
+  const ownerPartyId = vault[0]?.self_party_id;
   if (typeof ownerPartyId !== "string") return [];
   const ownedCircles = new Set(
-    (circles?.rows ?? []).flatMap((row) => {
-      const circleId = row.values["circle_id"];
-      return typeof circleId === "string" &&
-        row.values["owner_party_id"] === ownerPartyId
-        ? [circleId]
-        : [];
-    })
+    circles.flatMap((row) =>
+      row.owner_party_id === ownerPartyId ? [row.circle_id] : []
+    )
   );
   const reusable = new Set(
-    (groups?.rows ?? []).flatMap((row) => {
-      const circleId = row.values["circle_id"];
-      return typeof circleId === "string" && ownedCircles.has(circleId)
-        ? [circleId]
-        : [];
-    })
+    groups.flatMap((row) =>
+      ownedCircles.has(row.circle_id) ? [row.circle_id] : []
+    )
   );
   const targetByParty = new Map(
     targets.map((target) => [target.partyId, target])
   );
   const byCircle = new Map<string, InlineShareCircle["members"]>();
   const incomplete = new Set<string>();
-  for (const row of members?.rows ?? []) {
-    const circleId = row.values["circle_id"];
-    const partyId = row.values["party_id"];
-    if (
-      typeof circleId !== "string" ||
-      !reusable.has(circleId) ||
-      typeof partyId !== "string"
-    )
-      continue;
+  for (const row of members) {
+    const circleId = row.circle_id;
+    const partyId = row.party_id;
+    if (!reusable.has(circleId)) continue;
     if (partyId === ownerPartyId) continue;
     const target = targetByParty.get(partyId);
     // The steward is implicit in createCommonsGrant. Every other member must resolve exactly: a partial roster is not offered as reusable.
@@ -518,8 +596,10 @@ async function loadShareCircles(
       incomplete.add(circleId);
       continue;
     }
-    const capability =
-      row.values["capability"] === "read+write" ? "read+write" : "read";
+    // `social_circle_member` carries no capability column; a circle offered as
+    // a reusable destination shares read, and a member is raised to write by
+    // the grant, never by the roster.
+    const capability = "read" as const;
     const list = byCircle.get(circleId) ?? [];
     list.push({
       partyId,
@@ -528,11 +608,10 @@ async function loadShareCircles(
     });
     byCircle.set(circleId, list);
   }
-  return (circles?.rows ?? []).flatMap((row) => {
-    const circleId = row.values["circle_id"];
-    const label = row.values["name"];
+  return circles.flatMap((row) => {
+    const circleId = row.circle_id;
+    const label = row.name;
     if (
-      typeof circleId !== "string" ||
       !reusable.has(circleId) ||
       incomplete.has(circleId) ||
       typeof label !== "string" ||

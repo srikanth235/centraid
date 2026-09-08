@@ -7,6 +7,7 @@
 // now, so the ONE thing this file still says is which channel the loop talks
 // through.
 
+import type { IntentRecordStore } from "../intent-record-store.js";
 import { SeatLoop } from "./seat-loop.js";
 import type { SeatLoopOptions } from "./seat-loop.js";
 import {
@@ -23,6 +24,8 @@ import type { SeatWorkerQuery } from "./worker-protocol.js";
 export interface WebSeatOptions extends SeatLoopOptions {
   readonly workerFactory?: SeatWorkerFactory;
   readonly listeners?: SeatWorkerListeners;
+  /** R24: intents whose overlay an apply cleared, inside its transaction. */
+  readonly onOverlaysCleared?: (intentIds: readonly string[]) => void;
 }
 
 export class WebSeat {
@@ -41,12 +44,21 @@ export class WebSeat {
     return this.loop.watermark();
   }
 
+  /** The outbox in this seat's file — the queue's durable store (R24). */
+  outbox(): IntentRecordStore {
+    return this.loop.outbox();
+  }
+
   sync(): Promise<SeatWatermark | undefined> {
     return this.loop.sync();
   }
 
   query<T extends object>(request: SeatWorkerQuery): Promise<T[]> {
     return this.loop.query<T>(request);
+  }
+
+  purge(): Promise<void> {
+    return this.loop.purge();
   }
 
   close(): Promise<void> {

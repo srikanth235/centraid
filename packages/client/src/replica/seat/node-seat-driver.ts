@@ -13,6 +13,7 @@ import type { SeatBindValue, SeatSqliteDriver } from "./driver.js";
 
 export class NodeSeatDriver implements SeatSqliteDriver {
   readonly #db: DatabaseSync;
+  #closed = false;
 
   constructor(path = ":memory:") {
     this.#db = new DatabaseSync(path);
@@ -39,7 +40,18 @@ export class NodeSeatDriver implements SeatSqliteDriver {
     this.#db.exec(sql);
   }
 
+  /**
+   * CLOSING TWICE IS CLOSED, not an error.
+   *
+   * A seat's handle has two owners by design — the core that opened it and the
+   * loop that owns the core — and a terminal path can reach both: `purge`
+   * closes before it unlinks, and teardown closes again. `node:sqlite` throws
+   * `ERR_INVALID_STATE` on the second, which the other two drivers do not, and
+   * a caller asking for a state the handle is already in has been answered.
+   */
   close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
     this.#db.close();
   }
 }

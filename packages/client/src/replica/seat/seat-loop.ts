@@ -29,6 +29,8 @@
 import { ROUTES } from "@centraid/core/protocol";
 import type { SeatLogPageWire } from "@centraid/core/protocol";
 
+import { OnlineOnlyError } from "../errors.js";
+import type { IntentRecordStore } from "../intent-record-store.js";
 import type { SeatChannel } from "./seat-channel.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import { SeatRebootstrapRequiredError } from "./seat-rebootstrap-required-error.js";
@@ -131,7 +133,33 @@ export class SeatLoop {
    * can drop it is one that will.
    */
   query<T extends object>(request: SeatWorkerQuery): Promise<T[]> {
+    // ABSENT IS NEVER EMPTY (docs/mobile-offline.md). A seat with no copy has
+    // the vault's DDL in its file — the baseline states it — so every table it
+    // will ever hold is there and every read of one answers ZERO ROWS. That is
+    // the worst answer available: a member is shown an empty library over a
+    // vault full of rows and has no way to tell. So a seat that has not
+    // bootstrapped REFUSES, with the code the inline runner already falls back
+    // to the gateway on. The shell checks this on its own door too; it is here
+    // as well because the phone's door is a different one.
+    // REJECTED, never thrown: `query` is not `async`, and a synchronous throw
+    // lands past the caller's `await` — the same trap the channel exists to
+    // close for the core (see `in-process-channel.ts`).
+    if (!this.#state)
+      return Promise.reject(
+        new OnlineOnlyError("this seat holds no copy of the vault")
+      );
     return this.channel.query<T>(request);
+  }
+
+  /** The outbox in this seat's file — the queue's durable store (R24). */
+  outbox(): IntentRecordStore {
+    return this.channel.outbox();
+  }
+
+  /** Delete the file this seat holds. Terminal; the loop is done after it. */
+  async purge(): Promise<void> {
+    await this.channel.purge();
+    this.#state = undefined;
   }
 
   close(): Promise<void> {

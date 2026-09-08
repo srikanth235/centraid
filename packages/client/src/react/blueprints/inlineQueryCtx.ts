@@ -25,26 +25,17 @@ import {
   runInlineQueryCore,
 } from "../../replica/inline-query-ctx-core.js";
 import type { InlineWireResult } from "../../replica/inline-query-ctx-core.js";
-import { assertBoundedReplicaRead } from "../../replica/read-plan.js";
 import type { SeatReadOverlay } from "../../replica/seat/read-overlay.js";
-import type {
-  ShellReplicaReadRequest,
-  ShellReplicaSearchRequest,
-} from "../../replica/shell-session.js";
+import type { ShellReplicaSearchRequest } from "../../replica/shell-session.js";
 // Inline query ctx over the shell replica. Touching a field the shape does
 // not carry marks ONLINE_ONLY so the caller can fall back with the same error.
 import type {
-  ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "../../replica/types.js";
 import { postStatus } from "../../status-channel.js";
 
 export interface InlineReplicaSession {
-  read: (
-    appId: string,
-    request: ShellReplicaReadRequest
-  ) => Promise<ReplicaReadWireResult>;
   search: (
     appId: string,
     request: ShellReplicaSearchRequest
@@ -173,7 +164,7 @@ export function buildInlineCtx(
   sidecars: PendingOverlaySidecar[] = []
 ): unknown {
   const { session, appId, signal } = options;
-  return buildInlineCtxCore<ShellReplicaReadRequest, ShellReplicaSearchRequest>(
+  return buildInlineCtxCore<ShellReplicaSearchRequest>(
     {
       // The shell's contributions, and only the shell's: each row carries its
       // pending-row provenance so a projection can be traced back to the
@@ -195,16 +186,9 @@ export function buildInlineCtx(
           return marker ? attachPendingSidecar(row, sidecar) : row;
         },
         {
-          // THE WEB SEAT'S BOUNDARY (#922 0a). A query that declares no window
-          // and does not accept the default one is refused HERE, where the
-          // caller's own file is named in the stack, rather than answered with
-          // a page silently capped at 1,000 rows.
-          beforeRead: assertBoundedReplicaRead,
-          // Honesty is not optional and not the app's to forget: a window that
-          // cut rows off says so on the one status line, from the read itself.
-          // A ranked search page that filled its window hides hits exactly as a
-          // list read hides rows, and says so on the same line (#922 0a) —
-          // which is why this is `onResult` and not two copies.
+          // Honesty is not optional and not the app's to forget: a ranked
+          // search page that filled its window hides hits, and says so on the
+          // one status line, from the read itself (#922 0a).
           onResult: (result: InlineWireResult) => {
             if (result.pending) sidecars.push(result.pending);
             if (result.truncated && result.appliedLimit !== undefined)

@@ -10,6 +10,7 @@
 // presents to the member as an app that has stopped rather than as an error
 // it could retry.
 
+import type { IntentRecordStore } from "../intent-record-store.js";
 import { ReplicaProtocolError } from "../replica-protocol-error.js";
 import type { SeatChangeNotice } from "./applier.js";
 import type {
@@ -17,6 +18,7 @@ import type {
   SeatBootstrapResult,
 } from "./bootstrap.js";
 import { SeatDriftError } from "./seat-drift-error.js";
+import { SeatWorkerOutbox } from "./seat-worker-outbox.js";
 import type { SeatState } from "./state.js";
 import type {
   SeatApplySummary,
@@ -57,8 +59,17 @@ interface Pending {
   reject: (error: Error) => void;
 }
 
+/** The one method `SeatWorkerOutbox` needs; typed here to keep the cycle off. */
+export interface SeatOutboxCaller {
+  outboxCall: <T>(
+    method: SeatOutboxMethod,
+    args: readonly unknown[]
+  ) => Promise<T>;
+}
+
 export class SeatWorkerClient {
   #next = 1;
+  #outbox: IntentRecordStore | undefined;
   #closed = false;
   readonly #pending = new Map<number, Pending>();
 
@@ -125,8 +136,28 @@ export class SeatWorkerClient {
    * `IntentRecordStore`'s, and `SeatWorkerOutbox` is where that contract is
    * stated. Restating it here would be a second copy to keep in step.
    */
-  outbox<T>(method: SeatOutboxMethod, args: readonly unknown[]): Promise<T> {
+  outboxCall<T>(
+    method: SeatOutboxMethod,
+    args: readonly unknown[]
+  ): Promise<T> {
     return this.call("outbox", { method, args }) as Promise<T>;
+  }
+
+  /**
+   * The outbox in this seat's file, as an `IntentRecordStore` (#996, R24).
+   *
+   * Memoised so the queue holds ONE store: the proxy is stateless, but a queue
+   * that took a new one per ask would make "one durable table decides
+   * transitions" harder to read than it is.
+   */
+  outbox(): IntentRecordStore {
+    this.#outbox ??= new SeatWorkerOutbox(this);
+    return this.#outbox;
+  }
+
+  /** Delete this seat's file; the worker is closed by the caller after. */
+  purge(): Promise<void> {
+    return this.call("purge", undefined) as Promise<void>;
   }
 
   async close(): Promise<void> {

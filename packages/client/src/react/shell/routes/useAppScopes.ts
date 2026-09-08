@@ -9,10 +9,8 @@ import type {
   AppScopeEntry,
   AppScopePlane,
 } from "../../../gateway-client-vault.js";
-import {
-  addressedGatewayAuth,
-  replicaIdentityForGatewayAuth,
-} from "../../../replica/shell-session.js";
+import { replicaIdentityForGatewayAuth } from "../../../replica/replica-identity.js";
+import { addressedGatewayAuth } from "../../../replica/shell-session-scopes.js";
 import type { ReplicaIdentity } from "../../../replica/types.js";
 import { useAsyncData } from "../useAsyncData.js";
 import type { AsyncState } from "../useAsyncData.js";

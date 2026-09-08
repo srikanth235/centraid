@@ -29,7 +29,7 @@
 import { useEffect, useState } from "react";
 
 import type { SeatWatermark } from "../../replica/seat/watermark.js";
-import { getReplicaShellSession } from "../../replica/shell-session.js";
+import { getReplicaShellSession } from "../../replica/shell-session-scopes.js";
 
 /** The one thing this hook needs of a session; injected whole in tests. */
 export interface SeatWatermarkSource {

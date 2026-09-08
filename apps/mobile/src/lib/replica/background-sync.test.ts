@@ -156,9 +156,16 @@ vi.mock(import("./native-session") as Promise<unknown>, () => ({
   createNativeReplicaSession: (options: CreateSessionOptions) =>
     createNativeReplicaSession(options),
 }));
-vi.mock(import("./expo-sqlite-driver") as Promise<unknown>, () => ({
-  openNativeReplicaDriver: async () => ({ close: () => undefined }),
-  nativeReplicaDatabasePath: async () => "/replica/db.sqlite3",
+// The seat class itself is expo-sqlite; a headless pass is exercised here for
+// its SCOPE bookkeeping, so the file it would open is a stub.
+vi.mock(import("./native-seat") as Promise<unknown>, () => ({
+  NativeSeat: {
+    open: async () => ({
+      sync: async () => undefined,
+      watermark: () => undefined,
+      close: async () => undefined,
+    }),
+  },
 }));
 
 const {

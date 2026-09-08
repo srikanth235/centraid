@@ -7,20 +7,8 @@ import {
 import { chainRecoveryFromExpiredOutcome } from "./offline-chain.js";
 import { ReplicaIntentRecoveryError } from "./replica-intent-recovery-error.js";
 import type { RebootstrapReason } from "./replica-rebootstrap-error.js";
-import type {
-  IntentOutcome,
-  REPLICA_PROTOCOL_VERSION,
-  ReplicaChangeBatch,
-  ReplicaCursor,
-  ReplicaIntent,
-  ReplicaShape,
-  ReplicaSnapshot,
-  ReplicaSnapshotRow,
-} from "./types.js";
+import type { IntentOutcome, ReplicaIntent } from "./types.js";
 import { bumpClientWorkCounter } from "./work-counters.js";
-
-/** Matches the gateway's own default; kept explicit so the request is self-describing. */
-export const DEFAULT_REPLICA_BOOTSTRAP_WINDOW = 5_000;
 
 /** Request init widened with `cache`, which React Native's `RequestInit` type omits. */
 export type ReplicaRequestInit = RequestInit & { cache?: string };
@@ -87,228 +75,6 @@ export interface ReplicaIntentResponse {
     | { intentId: string; status: "in-flight"; reason?: string };
 }
 
-const OUTCOME_RECONCILE_BATCH = 500;
-
-export async function fetchReplicaBootstrap(
-  gatewayAuth: GatewayAuth,
-  fetcher: ReplicaFetcher = defaultReplicaFetcher,
-  signal?: AbortSignal
-): Promise<ReplicaSnapshot> {
-  const response = await countedRoundTrip(fetcher)(
-    gatewayAuth.baseUrl,
-    "/centraid/_vault/replica/bootstrap",
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders(gatewayAuth.token),
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      ...(signal ? { signal } : {}),
-    }
-  );
-  const snapshot = await readReplicaJson<ReplicaSnapshot>(
-    response,
-    "bootstrap replica"
-  );
-  validateOutcomes(snapshot.outcomes);
-  return snapshot;
-}
-
-/**
- * One page of a windowed bootstrap. Every page carries its OWN snapshot cursor —
- * pages are not globally consistent — and `complete`/`next` drive the walk.
- */
-export interface ReplicaBootstrapPage {
-  protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
-  vaultId: string;
-  schemaEpoch: string;
-  cursor: ReplicaCursor;
-  rows: ReplicaSnapshotRow[];
-  complete: boolean;
-  /** Opaque continuation token; absent exactly when `complete` is true. */
-  next?: string;
-}
-
-/** Page 1 additionally carries the catalog and trust envelope; later pages do not. */
-export interface ReplicaBootstrapFirstPage extends ReplicaBootstrapPage {
-  shapes: ReplicaShape[];
-  shapeIds?: string[];
-  trust?: string;
-  rememberDevice?: boolean;
-}
-
-export interface FetchReplicaBootstrapPageOptions {
-  /** Rows per page (server bounds: 1..20000, default 5000). */
-  window?: number;
-  /** Page-1 `next` token. Omit for page 1. */
-  after?: string;
-  fetcher?: ReplicaFetcher;
-  signal?: AbortSignal;
-  /** Page 1 may prioritize the newest visible Photos/Docs era. */
-  priority?: "newest";
-}
-
-/**
- * Fetch one windowed bootstrap page. Opting in (`window` and/or `after`) is what
- * selects the paging protocol server-side; {@link fetchReplicaBootstrap} keeps
- * the single-shot behavior for callers that pass neither.
- */
-export async function fetchReplicaBootstrapPage(
-  gatewayAuth: GatewayAuth,
-  options: FetchReplicaBootstrapPageOptions = {}
-): Promise<ReplicaBootstrapFirstPage | ReplicaBootstrapPage> {
-  const fetcher = options.fetcher ?? defaultReplicaFetcher;
-  const params = new URLSearchParams();
-  if (options.window !== undefined)
-    params.set("window", String(options.window));
-  if (options.after !== undefined) params.set("after", options.after);
-  if (options.priority !== undefined) params.set("priority", options.priority);
-  // Neither param present would silently fall back to the single-shot envelope.
-  if ([...params].length === 0)
-    params.set("window", String(DEFAULT_REPLICA_BOOTSTRAP_WINDOW));
-  const response = await countedRoundTrip(fetcher)(
-    gatewayAuth.baseUrl,
-    `/centraid/_vault/replica/bootstrap?${params}`,
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders(gatewayAuth.token),
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      ...(options.signal ? { signal: options.signal } : {}),
-    }
-  );
-  const page = await readReplicaJson<ReplicaBootstrapPage>(
-    response,
-    "bootstrap replica"
-  );
-  validateBootstrapPage(page, options.after === undefined);
-  return page;
-}
-
-function validateBootstrapPage(
-  page: ReplicaBootstrapPage,
-  first: boolean
-): void {
-  if (typeof page.complete !== "boolean" || !Array.isArray(page.rows)) {
-    throw new ReplicaProtocolError("Replica bootstrap page is malformed");
-  }
-  if (page.complete === (page.next !== undefined)) {
-    throw new ReplicaProtocolError(
-      "Replica bootstrap page continuation contradicts completeness"
-    );
-  }
-  if (first && !Array.isArray((page as ReplicaBootstrapFirstPage).shapes)) {
-    throw new ReplicaProtocolError(
-      "First replica bootstrap page did not carry a catalog"
-    );
-  }
-}
-
-export async function fetchReplicaChanges(
-  gatewayAuth: GatewayAuth,
-  cursor: ReplicaCursor,
-  signal: AbortSignal,
-  shapeIdsOrFetcher?: readonly string[] | ReplicaFetcher,
-  customFetcher: ReplicaFetcher = defaultReplicaFetcher
-): Promise<ReplicaChangeBatch> {
-  const shapeIds =
-    shapeIdsOrFetcher === undefined || typeof shapeIdsOrFetcher === "function"
-      ? undefined
-      : normalizedShapeIds(shapeIdsOrFetcher);
-  const fetcher =
-    typeof shapeIdsOrFetcher === "function" ? shapeIdsOrFetcher : customFetcher;
-  const params = new URLSearchParams({
-    since: `${cursor.epoch}:${cursor.seq}`,
-  });
-  // Presence is significant: `shapeIds=` attests a persisted empty catalog.
-  if (shapeIds) params.set("shapeIds", shapeIds.join(","));
-  const response = await countedRoundTrip(fetcher)(
-    gatewayAuth.baseUrl,
-    `/centraid/_vault/changes?${params}`,
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders(gatewayAuth.token),
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      signal,
-    }
-  );
-  const batch = await readReplicaJson<ReplicaChangeBatch>(
-    response,
-    "pull replica changes"
-  );
-  validateOutcomes(batch.outcomes);
-  return batch;
-}
-
-/**
- * Reconcile only the durable outbox entries the client still overlays. The
- * snapshot cursor fences each batch so a newer canonical transition remains
- * in the incremental log instead of clearing its overlay too early.
- */
-export async function fetchReplicaIntentOutcomes(
-  gatewayAuth: GatewayAuth,
-  intentIds: readonly string[],
-  through: ReplicaCursor,
-  fetcher: ReplicaFetcher = defaultReplicaFetcher,
-  signal?: AbortSignal
-): Promise<IntentOutcome[]> {
-  const ids = [...new Set(intentIds.filter(Boolean))];
-  const outcomes = new Map<string, IntentOutcome>();
-  const batches = Array.from(
-    { length: Math.ceil(ids.length / OUTCOME_RECONCILE_BATCH) },
-    (_, index) =>
-      ids.slice(
-        index * OUTCOME_RECONCILE_BATCH,
-        (index + 1) * OUTCOME_RECONCILE_BATCH
-      )
-  );
-  const receivedBatches = await Promise.all(
-    batches.map(async (batch) => {
-      const response = await countedRoundTrip(fetcher)(
-        gatewayAuth.baseUrl,
-        "/centraid/_vault/replica/outcomes",
-        {
-          method: "POST",
-          headers: {
-            ...authHeaders(gatewayAuth.token, "application/json"),
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ intentIds: batch, through }),
-          cache: "no-store",
-          ...(signal ? { signal } : {}),
-        }
-      );
-      const body = await readReplicaJson<{ outcomes?: IntentOutcome[] }>(
-        response,
-        "reconcile replica intents"
-      );
-      validateOutcomes(body.outcomes);
-      return { batch, outcomes: body.outcomes ?? [] };
-    })
-  );
-  for (const { batch, outcomes: receivedOutcomes } of receivedBatches) {
-    for (const outcome of receivedOutcomes) {
-      if (!batch.includes(outcome.intentId)) {
-        throw new ReplicaProtocolError(
-          "Replica outcome did not match a requested intent"
-        );
-      }
-      outcomes.set(outcome.intentId, outcome);
-    }
-  }
-  return [...outcomes.values()];
-}
-
-function normalizedShapeIds(shapeIds: readonly string[]): string[] {
-  return [...new Set(shapeIds.filter((shapeId) => shapeId.length > 0))].sort();
-}
-
 export async function postReplicaIntent(
   gatewayAuth: GatewayAuth,
   intent: ReplicaIntent,
@@ -352,27 +118,6 @@ export async function postReplicaIntent(
     );
   }
   return { outcome };
-}
-
-export async function postReplicaCheckpoint(
-  gatewayAuth: GatewayAuth,
-  cursor: ReplicaCursor,
-  schemaEpoch: string,
-  fetcher: ReplicaFetcher = defaultReplicaFetcher
-): Promise<void> {
-  const response = await countedRoundTrip(fetcher)(
-    gatewayAuth.baseUrl,
-    "/centraid/_vault/replica/checkpoint",
-    {
-      method: "POST",
-      headers: {
-        ...authHeaders(gatewayAuth.token, "application/json"),
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ cursor, schemaEpoch }),
-    }
-  );
-  await readReplicaJson<unknown>(response, "save replica checkpoint");
 }
 
 async function readReplicaJson<T>(
@@ -505,13 +250,6 @@ function rebootstrapReason(body: unknown): RebootstrapReason {
   if (reason === "epoch-mismatch" || reason === "restore")
     return "epoch-mismatch";
   return "cursor-gap";
-}
-
-function validateOutcomes(outcomes: IntentOutcome[] | undefined): void {
-  if (outcomes === undefined) return;
-  if (!Array.isArray(outcomes))
-    throw new ReplicaProtocolError("Replica outcomes must be an array");
-  for (const outcome of outcomes) parseOutcome(outcome, false);
 }
 
 const INTENT_RECOVERY_ERRORS = new Set([

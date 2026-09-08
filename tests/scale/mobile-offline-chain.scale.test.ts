@@ -31,21 +31,43 @@ import { describe, expect, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
+import { openNodeNativeSeat } from "../../apps/mobile/src/lib/replica/native-seat.test-fixtures";
 import { createNativeReplicaSession } from "../../apps/mobile/src/lib/replica/native-session";
-import {
-  createFeed,
-  gatewayAuth,
-  json,
-  noChanges,
-  nodeDigest,
-  page,
-  sequentialIds,
-} from "../../apps/mobile/src/lib/replica/native-session.test-fixtures";
-import { NodeSqliteDriver } from "../../apps/mobile/src/lib/replica/node-sqlite-driver";
+import type { NativeChangeFeed } from "../../apps/mobile/src/lib/replica/native-session";
 import { journeyCeiling } from "../helpers/journeys.js";
 
 const OWNER = "tests/scale/mobile-offline-chain.scale.test.ts";
-const CURSOR = { epoch: "replica-1", seq: 1 };
+
+const gatewayAuth = {
+  baseUrl: "http://127.0.0.1:18789",
+  gatewayId: "gateway-1",
+  vaultId: "vault-a",
+};
+
+/** The tables this chain's projections draw over, in the seat's own file. */
+const VAULT_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS media_asset (
+    asset_id TEXT PRIMARY KEY, caption TEXT,
+    row_version INTEGER NOT NULL DEFAULT 1
+  ) STRICT;
+`;
+
+function createFeed(): NativeChangeFeed {
+  return {
+    subscribe: () => () => undefined,
+    setShapeIds: () => Promise.resolve(),
+    resume: () => Promise.resolve(),
+    setActive: () => undefined,
+  };
+}
+
+const nodeDigest = (canonical: string): Promise<string> =>
+  Promise.resolve(`digest:${canonical.length}`);
+
+function sequentialIds(): () => string {
+  let n = 0;
+  return () => `intent-${(n += 1)}`;
+}
 /** The acceptance row's five: create, rename twice, due date, complete. */
 const CHAIN = [
   { action: "photos.add_caption", input: { caption: "Book the ferry" } },
@@ -74,40 +96,39 @@ describe("the offline chain's four intervals", () => {
       pathname: string,
       init: RequestInit
     ): Promise<Response> => {
-      if (pathname.includes("/replica/bootstrap"))
-        return Promise.resolve(json(page(CURSOR)));
-      if (pathname.includes("/changes"))
-        return Promise.resolve(json(noChanges(CURSOR)));
       if (pathname.includes("/replica/intents")) {
         const sent = JSON.parse(String(init.body)) as { intentId: string };
         return Promise.resolve(
-          json({
-            outcome: {
-              intentId: sent.intentId,
-              status: "executed",
-              commitSeq: 1,
-            },
-          })
+          new Response(
+            JSON.stringify({
+              outcome: {
+                intentId: sent.intentId,
+                status: "executed",
+                commitSeq: 1,
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
         );
       }
       return Promise.resolve(new Response("{}", { status: 200 }));
     };
     let online = true;
-    const open = async (driver: NodeSqliteDriver) =>
+    // THE SAME FILE TWICE IS THE SAME SEAT. That is what makes the restart
+    // interval below a restart: the second session reopens the outbox the
+    // first one committed to, rather than starting an empty one.
+    const open = async () =>
       createNativeReplicaSession({
         gatewayAuth,
         fetcher,
         changeFeed: createFeed(),
-        driver,
+        seat: await openNodeNativeSeat({ path: file, schema: VAULT_SCHEMA }),
         digest: nodeDigest,
         idFactory: sequentialIds(),
         isConnected: () => online,
       });
 
-    // A bootstrapped seat, so the projections have a catalog and the rows
-    // the screen draws are real ones — a deferred projection would measure
-    // an outbox write with no render behind it.
-    let session = await open(new NodeSqliteDriver(file));
+    let session = await open();
     online = false;
 
     const savedMs: number[] = [];
@@ -127,11 +148,11 @@ describe("the offline chain's four intervals", () => {
     const pendingRenderMs = performance.now() - renderStarted;
     expect(pending).toHaveLength(CHAIN.length);
 
-    // Killed and relaunched, still offline: a new driver over the SAME file
-    // is what a process restart is on this seat.
+    // Killed and relaunched, still offline: a new seat over the SAME file is
+    // what a process restart is.
     await session.close();
     const restartStarted = performance.now();
-    session = await open(new NodeSqliteDriver(file));
+    session = await open();
     const recovered = await session.pendingChanges();
     const restartRecoveryMs = performance.now() - restartStarted;
     expect(recovered).toHaveLength(CHAIN.length);

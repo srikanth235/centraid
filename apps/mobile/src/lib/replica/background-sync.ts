@@ -15,13 +15,13 @@ import { nativeSyncAllowed } from "../upload/native-policy";
 import { getActiveVaultLink, hydrateVaultLinks } from "../vault-links";
 import { selectBackgroundScopes } from "./background-scopes";
 import type { CachedBackgroundScope } from "./background-scopes";
-import { openNativeReplicaDriver } from "./expo-sqlite-driver";
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { NativeVaultChangeFeed } from "./native-change-feed";
 import { nativeReplicaDigest } from "./native-hash";
+import { NativeSeat } from "./native-seat";
+import type { NativeSeatPort } from "./native-seat";
 import { createNativeReplicaSession } from "./native-session";
 import { flushNativeTraces } from "./native-trace";
-import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "./offline-budgets";
 
 const REPLICA_BACKGROUND_TASK = "centraid-replica-background-sync";
 const REPLICA_PUSH_TASK = "centraid-replica-push-wake";
@@ -168,7 +168,7 @@ export async function runBackgroundReplicaSync(
   // Kept per vault for the same reason the provider keeps them: a revoked
   // scope's file cannot be deleted while its handle is open, and `purge()`
   // deliberately leaves that handle alive.
-  const scopeDrivers = new Map<string, { close: () => void }>();
+  const scopeSeats = new Map<string, NativeSeatPort>();
   try {
     // Per-scope isolation, not `Promise.all` (#880): one vault whose bootstrap
     // or pull throws used to reject the whole pass, so placements and uploads
@@ -188,15 +188,19 @@ export async function runBackgroundReplicaSync(
         let session:
           | Awaited<ReturnType<typeof createNativeReplicaSession>>
           | undefined;
-        let driver:
-          | Awaited<ReturnType<typeof openNativeReplicaDriver>>
-          | undefined;
+        let seat: NativeSeatPort | undefined;
+        if (storageLocation === undefined) return;
         try {
-          driver = await openNativeReplicaDriver(
-            { gatewayId: active.gatewayId, vaultId: scope.vaultId },
-            nativeReplicaDigest,
-            storageLocation
-          );
+          // The FILE, not the copy: a headless pass opens the seat, catches it
+          // up and drains the queue, all through the one handle (#996, W5).
+          seat = await NativeSeat.open({
+            gatewayId: active.gatewayId,
+            vaultId: scope.vaultId,
+            baseUrl,
+            headers: authHeader(),
+            storageLocation,
+            digest: nativeReplicaDigest,
+          });
           feed = new NativeVaultChangeFeed({
             gatewayAuth: auth,
             storage: AsyncStorage,
@@ -206,17 +210,16 @@ export async function runBackgroundReplicaSync(
             gatewayAuth: auth,
             fetcher: fetcher(scope.vaultId),
             changeFeed: feed,
-            driver,
+            seat,
             appState: {
               currentState: "background",
               addEventListener: () => ({ remove: () => undefined }),
             },
             isConnected: () => connected,
             isNetworkWorkAllowed: nativeSyncAllowed,
-            bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
           });
           sessions.set(scope.vaultId, session);
-          scopeDrivers.set(scope.vaultId, driver);
+          scopeSeats.set(scope.vaultId, seat);
           await session.pullNow();
           await session.flushIntents();
           if (deadline.expired()) {
@@ -233,9 +236,9 @@ export async function runBackgroundReplicaSync(
           });
           if (session) {
             sessions.delete(scope.vaultId);
-            scopeDrivers.delete(scope.vaultId);
+            scopeSeats.delete(scope.vaultId);
             await session.close();
-          } else driver?.close();
+          } else await seat?.close().catch(() => undefined);
         }
       })
     );

@@ -4,8 +4,8 @@ import { describe, expect, test, vi } from "vitest";
 import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
-import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue, SHAPE_REVOKED_REASON } from "./intents.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
 import type { ReplicaValue } from "./types.js";
 
 describe(IntentQueue, () => {

@@ -35,7 +35,7 @@ export async function accessRegistryReader(): Promise<AccessRegistryReader> {
  */
 export async function accessReader(): Promise<AccessReader> {
   const { getReplicaShellSession } =
-    await import("../../../replica/shell-session.js");
+    await import("../../../replica/shell-session-scopes.js");
   const session = await getReplicaShellSession();
   return {
     page: (request) =>

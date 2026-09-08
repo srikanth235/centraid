@@ -56,6 +56,13 @@ const logger = {
 // `locker` moved AGAIN with #996 R13: the three Locker tables that hold
 // ciphertext gained `key_id`, so a seat can tell a secret it may open from one
 // the vault has rotated past. No other app's shape touches those tables.
+//
+// `tally` moved with `4f3cf31aa` — OQ-12's cross-source match review. Answering
+// a proposed match writes a temporal `core.link` (`same-as` or `distinct-from`)
+// between the two imported rows, so Tally's manifest gained the link scope and
+// its composed column set moved with it. A deliberate reshape, re-pinned here
+// once and said so in the receipt; the other seven ids are unchanged, which is
+// what this file is for.
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   agenda: "agenda:e279df85d90abec66a555fd4",
   docs: "docs:3463271306aa9de9eeee6770",
@@ -63,7 +70,7 @@ const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   notes: "notes:f969445530d0b54a5999f95e",
   people: "people:20e089695fca9f55a59937c7",
   photos: "photos:ec39825c59933ed5cbe9b925",
-  tally: "tally:ac08d11530e533bcbb220ab6",
+  tally: "tally:e801d3ace4ab7f264ea20279",
   tasks: "tasks:c7ee5f1f79eabe0574ece317",
 };
 

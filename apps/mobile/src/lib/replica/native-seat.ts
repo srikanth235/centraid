@@ -22,14 +22,16 @@
 
 import {
   inProcessSeatChannel,
-  replicaStorageKey,
   SeatLoop,
   seatWorkerPage,
   SeatWorkerCore,
   httpSeatSnapshotTransport,
 } from "@centraid/client/replica/native";
 import type {
+  IntentRecordStore,
   InlinePage,
+  OptimisticMutation,
+  ReplicaBaseVersion,
   InlinePageRequest,
   ReplicaDigest,
   ReplicaSearchWireResult,
@@ -39,12 +41,17 @@ import type {
 // By its OWN subpath (see the note in `timeline-page.ts`): the phone's bundle
 // is over its weight ceiling, and the seat barrel would pull the browser's
 // worker client and OPFS probe in behind it.
+import {
+  SeatRowKeys,
+  seatBaseVersions,
+} from "@centraid/client/replica/seat/base-versions";
 import { seatSearchEnvelopes } from "@centraid/client/replica/seat/search-page";
 import type { SeatSearchRequest } from "@centraid/client/replica/seat/search-page";
 import type { Page } from "@centraid/core/page";
 
 import { ExpoSeatDriver } from "./expo-seat-driver";
 import { expoSeatStaging } from "./expo-seat-staging";
+import { nativeSeatDatabaseName } from "./native-seat-path";
 
 export interface NativeSeatOptions {
   readonly gatewayId: string;
@@ -60,18 +67,28 @@ export interface NativeSeatOptions {
   readonly fetch?: typeof globalThis.fetch;
 }
 
-/** `centraid-seat-…`, beside — never over — the old store's file. */
-export async function nativeSeatDatabaseName(
-  options: Pick<NativeSeatOptions, "gatewayId" | "vaultId" | "digest">
-): Promise<string> {
-  const stem = await replicaStorageKey(
-    { gatewayId: options.gatewayId, vaultId: options.vaultId },
-    options.digest
-  );
-  return `centraid-seat-${stem}.sqlite3`;
+/**
+ * What the session needs from this phone's seat.
+ *
+ * Structural rather than the class, for the reason `SeatQueryPort` is: a suite
+ * drives the SAME `SeatWorkerCore` over `node:sqlite`, and requiring the class
+ * would require expo-sqlite in a node run. The class satisfies it.
+ */
+export interface NativeSeatPort {
+  outbox: () => IntentRecordStore;
+  search: (request: SeatSearchRequest) => Promise<ReplicaSearchWireResult>;
+  baseVersions: (
+    mutations: readonly OptimisticMutation[]
+  ) => Promise<ReplicaBaseVersion[]>;
+  sync: () => Promise<SeatWatermark | undefined>;
+  watermark: () => SeatWatermark | undefined;
+  purge: () => Promise<void>;
+  close: () => Promise<void>;
 }
 
-export class NativeSeat {
+export class NativeSeat implements NativeSeatPort {
+  #rowKeys: SeatRowKeys | undefined;
+
   private constructor(private readonly loop: SeatLoop) {}
 
   static async open(options: NativeSeatOptions): Promise<NativeSeat> {
@@ -114,6 +131,29 @@ export class NativeSeat {
 
   sync(): Promise<SeatWatermark | undefined> {
     return this.loop.sync();
+  }
+
+  /** The outbox in this phone's seat file — the queue's durable store (R24). */
+  outbox(): IntentRecordStore {
+    return this.loop.outbox();
+  }
+
+  /**
+   * The versions a queued write is against (#922 G5), read from CANONICAL rows.
+   *
+   * The overlay is bypassed deliberately: a queued edit must not become its own
+   * base version, and a retry must observe the row that rejected it.
+   */
+  baseVersions(
+    mutations: readonly OptimisticMutation[]
+  ): Promise<ReplicaBaseVersion[]> {
+    this.#rowKeys ??= new SeatRowKeys(this.loop);
+    return seatBaseVersions(this.loop, this.#rowKeys, mutations);
+  }
+
+  /** Delete this phone's copy of the vault, outbox and all (revocation). */
+  purge(): Promise<void> {
+    return this.loop.purge();
   }
 
   watermark(): SeatWatermark | undefined {

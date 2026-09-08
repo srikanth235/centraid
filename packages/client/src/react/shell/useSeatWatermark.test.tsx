@@ -8,6 +8,7 @@ import { useSeatWatermark } from "./useSeatWatermark.js";
 import type { SeatWatermarkSource } from "./useSeatWatermark.js";
 
 const CURRENT: SeatWatermark = {
+  epoch: "e1",
   applied: 900,
   head: 1_204,
   behind: 304,

@@ -1,5 +1,4 @@
 import { createIndexedDbReplicaIdentityInventory } from "./identity-inventory.js";
-import { replicaIntentDatabaseName } from "./key.js";
 import {
   forgetReplicaPurgeSelector,
   listReplicaPurgeSelectors,
@@ -7,9 +6,9 @@ import {
   replicaPurgeSelectorMatches,
 } from "./purge-selector.js";
 import type { ReplicaPurgeSelector } from "./purge-selector.js";
+import { purgeSeatStorage } from "./seat/seat-storage-purge.js";
+import type { SeatWorkerFactory } from "./seat/seat-worker-client.js";
 import type { ReplicaIdentity } from "./types.js";
-import { ReplicaWorkerClient } from "./worker-client.js";
-import type { ReplicaWorkerFactory } from "./worker-client.js";
 
 const MANIFEST_KEY = "centraid.replica.remembered.v1";
 const TERMINAL_MANIFEST_KEY = "centraid.replica.terminal-pending.v1";
@@ -20,7 +19,7 @@ type ManifestStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export interface ReplicaStoragePurgeOptions {
   storage?: ManifestStorage;
-  workerFactory?: ReplicaWorkerFactory;
+  workerFactory?: SeatWorkerFactory;
   indexedDbFactory?: IDBFactory;
   /** Test seam for the authoritative global durable-scope inventory. */
   inventory?: ReplicaIdentityInventory;
@@ -224,33 +223,23 @@ export async function purgeReplicaIdentityStorage(
     if (options.purgeIdentity) {
       await options.purgeIdentity(identity);
     } else {
-      const client = await ReplicaWorkerClient.createForPurge(
+      // THE SEAT'S FILE IS THE WHOLE OF THIS SCOPE'S STORAGE NOW (#996, W5).
+      // It used to be two: an OPFS store and an IndexedDB outbox beside it,
+      // deleted separately, each able to survive the other's failure. The
+      // outbox is a table in the file, so one unlink takes both.
+      await purgeSeatStorage(
         identity,
-        options.workerFactory
+        ...(options.workerFactory ? [options.workerFactory] : [])
       );
-      await client.purge();
     }
   } catch (error) {
     failures.push(error);
   }
 
-  const factory = options.indexedDbFactory ?? availableIndexedDb();
-  if (!options.purgeIdentity) {
-    if (factory) {
-      try {
-        await deleteIndexedDb(
-          factory,
-          await replicaIntentDatabaseName(identity)
-        );
-      } catch (error) {
-        failures.push(error);
-      }
-    } else {
-      failures.push(
-        new Error("IndexedDB is unavailable for confirmed replica outbox purge")
-      );
-    }
-  }
+  // NO SECOND STORE TO DELETE (#996, W5). The outbox was an IndexedDB database
+  // beside the OPFS store, and purging it was its own step that could fail on
+  // its own. It is a table in the seat's file now, so the unlink above is the
+  // whole deletion and there is nothing left here that could half-succeed.
 
   if (failures.length === 0) {
     try {
@@ -508,19 +497,6 @@ function writeTerminalPurgeHints(
   } catch {
     return false;
   }
-}
-
-function deleteIndexedDb(factory: IDBFactory, name: string): Promise<void> {
-  const request = factory.deleteDatabase(name);
-  return new Promise((resolve, reject) => {
-    request.addEventListener("success", () => resolve());
-    request.addEventListener("error", () =>
-      reject(request.error ?? new Error(`Could not delete IndexedDB ${name}`))
-    );
-    request.addEventListener("blocked", () =>
-      reject(new Error(`IndexedDB ${name} is still open`))
-    );
-  });
 }
 
 function validIdentity(value: unknown): value is ReplicaIdentity {

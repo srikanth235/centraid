@@ -19,14 +19,11 @@ import {
   syncNotifications,
 } from "../../lib/notifications-core";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
-import { openNativeReplicaDriver } from "../../lib/replica/expo-sqlite-driver";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
-import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { NativeMultiplexChangeFeed } from "../../lib/replica/native-multiplex-change-feed";
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
-import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "../../lib/replica/offline-budgets";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
@@ -66,7 +63,7 @@ import {
   startCompatibilityWall,
   vaultScopes,
 } from "./replica-mount";
-import { mountReplicaSeat } from "./replica-seat-mount";
+import { openMountSeat } from "./replica-seat-mount";
 import {
   attemptedReachability,
   loadRevokedNotices,
@@ -157,7 +154,8 @@ export function ReplicaProvider({
     let reachabilityWork: CoalescedWork | undefined;
     let freshnessWork: CoalescedWork | undefined;
     let flushFreshness = async (): Promise<void> => undefined;
-    const looseDrivers: Array<{ close: () => void }> = [];
+    // A seat opened but not yet owned by a session: torn down on cancel.
+    const looseSeats: Array<{ close: () => Promise<void> }> = [];
     // Every mid-mount update goes through here: a torn-down mount publishes
     // nothing, and a mount whose gateway key has moved on never overwrites its
     // successor.
@@ -241,20 +239,12 @@ export function ReplicaProvider({
           if (cancelled || reachable === connected) return;
           reachabilityWork?.signal();
         };
-        // Kept past the session taking over: a revoked scope's file cannot be
-        // deleted while its handle is still open, and `purge()` deliberately
-        // leaves that handle alive.
-        let openDriver: { close: () => void } | undefined;
         const revokedScopeIds = new Set<string>();
         const reclaimRevokedReplica = (scope: ReplicaVaultScope): void => {
-          if (scope.vaultId === openScope.vaultId) {
-            try {
-              openDriver?.close();
-            } catch {
-              // A handle the purge already tore down is one less to close.
-            }
-            openDriver = undefined;
-          }
+          // THE OPEN SCOPE'S FILE IS DELETED BY ITS OWN PURGE (#996, W5).
+          // `session.purge()` unlinks it through the seat, which closes the
+          // handle first — a file cannot be replaced under an open SQLite
+          // connection — so there is no second handle for this to reclaim.
           // A vault this seat is NOT holding open has no handle at all, so its
           // file is deletable outright — which is the whole reason one open
           // file is simpler than four: revocation of a closed vault is a file
@@ -304,10 +294,8 @@ export function ReplicaProvider({
                 // along with the rows, and a member told nothing is a vault
                 // that vanished silently.
                 if (scope) revoked.note(scope);
-                // Purge empties the tables in place and keeps the handle, so
-                // the file is still at full size for a vault this phone may
-                // never see again. Purge then reclaim is the only order in
-                // which the delete cannot race a live writer.
+                // The purge closes the handle and unlinks the file, so a vault
+                // this phone may never see again costs nothing on disk.
                 if (vaultId === openScope.vaultId) await session?.purge();
                 if (scope) reclaimRevokedReplica(scope);
               } finally {
@@ -328,17 +316,30 @@ export function ReplicaProvider({
             })().catch(() => undefined);
           },
         });
-        const driver = await openNativeReplicaDriver(
-          { gatewayId: identity.gatewayId, vaultId: openScope.vaultId },
-          nativeReplicaDigest,
-          storageLocation
-        );
-        looseDrivers.push(driver);
+        // THE FILE BEFORE THE SESSION (#996, W5): the outbox is a table in it,
+        // and a write made before the first bootstrap has to be durable.
+        const openedSeat = await openMountSeat({
+          gatewayId: identity.gatewayId,
+          vaultId: openScope.vaultId,
+          baseUrl: identity.auth.baseUrl,
+          storageLocation,
+        });
+        if (!openedSeat) {
+          // No durable directory on this host: there is no file to hold a copy
+          // or a queue in, so there is no session to open either.
+          publish((value) => ({
+            ...value,
+            ready: true,
+            error: "This phone has no storage for an offline copy.",
+          }));
+          return;
+        }
+        looseSeats.push(openedSeat);
         session = await createNativeReplicaSession({
+          seat: openedSeat,
           gatewayAuth: { ...identity.auth, vaultId: openScope.vaultId },
           fetcher: fetcher(openScope.vaultId),
           changeFeed: multiplex.scope(openScope.vaultId),
-          driver,
           // Every row this session hands back says which vault it came from
           // and whether the member may write there. One answer now, but it is
           // still the row's answer — eighteen screens ask it about a row.
@@ -351,39 +352,21 @@ export function ReplicaProvider({
           isConnected: () => connected,
           isNetworkWorkAllowed: nativeSyncAllowed,
           isRowSyncAllowed: nativeRowSyncAllowed,
-          bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
-          progressiveBootstrap: true,
           // A vault the member does not own is one a queued write may have to
           // wait for somebody at, so its pending rows carry the waiting-on
           // label from admission (`waiting-on.ts`). `personal` is the founding
           // marker; an older cache omits it and reads as their own, which is
           // the answer that promises nothing.
           ...(openScope.personal === false ? { origin: {} } : {}),
-          onBootstrapProgress: (progress) =>
-            bootstrap.report(openScope, progress),
           onGatewayOutcome: noteGatewayOutcome,
           // Out of room parks this seat's feed; the phone, not the vault, is
           // what ran out.
           onStorageFull: () =>
             publish((value) => ({ ...value, storageFull: true })),
         });
-        looseDrivers.splice(looseDrivers.indexOf(driver), 1);
-        openDriver = driver;
-        // Captured non-optional: `session` is the outer `let` the teardown
-        // also reads, and the seat's download outlives this scope's narrowing.
-        const mountedSession = session;
-        mountReplicaSeat({
-          gatewayId: identity.gatewayId,
-          vaultId: openScope.vaultId,
-          baseUrl: identity.auth.baseUrl,
-          storageLocation,
-          session: mountedSession,
-          cancelled: () => cancelled,
-          onOpened: (opened) => {
-            seat = opened;
-            publish((value) => ({ ...value, seat: opened }));
-          },
-        });
+        looseSeats.splice(looseSeats.indexOf(openedSeat), 1);
+        seat = openedSeat;
+        publish((value) => ({ ...value, seat: openedSeat }));
         if (revokedScopeIds.has(openScope.vaultId)) {
           await session.purge();
           reclaimRevokedReplica(openScope);
@@ -403,18 +386,24 @@ export function ReplicaProvider({
         // nothing saying so: the in-process bootstrap that would have reported
         // pages died with the old process (docs/mobile-offline.md).
         const refreshCoverage = async (): Promise<void> => {
-          const status = await session?.status().catch(() => undefined);
-          if (!status) return;
+          // COVERAGE IS THE SEAT'S WATERMARK NOW (#996, W5). It was a shaped
+          // store's per-scope `coverage` column, written by a windowed
+          // bootstrap that could stop half-way. A seat's copy is a FILE: it is
+          // either the one the gateway sent or it is not there, so "complete"
+          // is "this file has arrived" and nothing else can be half-true.
+          const watermark = session?.watermark();
+          if (!watermark) return;
+          const coverage = "complete" as const;
           publish((value) => ({
             ...value,
-            coverage: status.coverage,
+            coverage,
             // Only the open vault has a coverage answer at all. A closed
             // vault's file is whatever the last mount left it at, and
             // asserting a stale `complete` over it would be the one label a
             // truncated library must never carry.
             scopes: (value.scopes ?? []).map((scope) =>
               scope.vaultId === openScope.vaultId
-                ? { ...scope, coverage: status.coverage }
+                ? { ...scope, coverage }
                 : scope
             ),
           }));
@@ -588,7 +577,7 @@ export function ReplicaProvider({
       void session?.close();
       void seat?.close().catch(() => undefined);
       multiplex?.close();
-      for (const driver of looseDrivers) driver.close();
+      for (const held of looseSeats) void held.close().catch(() => undefined);
     };
   }, [mountKey, gatewayKey, hydrated, retryNonce]);
 

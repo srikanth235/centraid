@@ -207,7 +207,7 @@ export async function searchPaletteEntities(
   // the palette source independently testable, this avoids eagerly booting the
   // renderer bridge just because the command palette module was imported.
   const { getReplicaShellSession } =
-    await import("../../../replica/shell-session.js");
+    await import("../../../replica/shell-session-scopes.js");
   const session = await getReplicaShellSession();
   const settled = await Promise.allSettled(
     targets.map(async (target) => {

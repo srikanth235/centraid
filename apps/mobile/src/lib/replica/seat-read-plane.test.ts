@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type {
   InlinePage,
   InlineQueryRunnable,
-  ReplicaReadWireResult,
 } from "@centraid/client/replica/native";
 
 import type { NativeInlineQuerySession } from "./inline-query-ctx.native";
@@ -12,16 +11,15 @@ import { runNativeInlineQuery, seatReadPlane } from "./inline-query-ctx.native";
 /**
  * THE PHONE'S `ctx.vault.page` (#996 wave 4b).
  *
- * Until this wave, `buildNativeInlineCtx` built the ctx out of `read` and
+ * Until wave 4b, `buildNativeInlineCtx` built the ctx out of `read` and
  * `search` only, so `ctx.vault.page` on a phone was the core's online-only
  * stub — which is why the shared `readRepresentations` conversion had to be
  * reverted with Tally and Locker named as the blockers. What is pinned here is
  * that a handler's page reaches the SEAT, and that a phone without one still
- * refuses rather than reaching for the old store's file.
+ * refuses. `read` is gone entirely since W5: there is no other file to reach
+ * for, so ONLINE_ONLY is the only remaining answer.
  */
 const rowsOnly: NativeInlineQuerySession = {
-  read: (): Promise<ReplicaReadWireResult> =>
-    Promise.resolve({ rows: [] } as unknown as ReplicaReadWireResult),
   search: () =>
     Promise.reject(new Error("the handler under test never searches")),
 };

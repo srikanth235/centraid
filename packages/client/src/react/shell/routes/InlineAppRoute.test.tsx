@@ -12,8 +12,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
+import type * as TypeImport_ntzl9 from "../../../replica/shell-session-scopes.js";
 import type { ReplicaShellSession } from "../../../replica/shell-session.js";
-import type * as TypeImport_ntzl9 from "../../../replica/shell-session.js";
 import type { ShellActions } from "../actions.js";
 import type * as TypeImport_g611bp from "../prompt.js";
 import type { ShellNav } from "../ShellApp.js";
@@ -85,18 +85,14 @@ vi.mock(import("../prompt.js") as Promise<unknown>, () => ({
 }));
 
 const fakeSession = {
-  read: vi.fn<ReplicaShellSession["read"]>(),
   search: vi.fn<ReplicaShellSession["search"]>(),
   write: vi.fn<ReplicaShellSession["write"]>(),
   subscribe: vi.fn<ReplicaShellSession["subscribe"]>(() => () => undefined),
-} satisfies Pick<
-  ReplicaShellSession,
-  "read" | "search" | "write" | "subscribe"
->;
-// This route only touches the explicit read/search/write/subscription boundary.
+} satisfies Pick<ReplicaShellSession, "search" | "write" | "subscribe">;
+// This route only touches the explicit search/write/subscription boundary.
 const fakeShellSession = fakeSession as unknown as ReplicaShellSession;
 vi.mock(
-  import("../../../replica/shell-session.js") as Promise<unknown>,
+  import("../../../replica/shell-session-scopes.js") as Promise<unknown>,
   () => ({
     getReplicaShellSession: vi.fn<
       typeof TypeImport_ntzl9.getReplicaShellSession
@@ -197,7 +193,7 @@ async function flush(): Promise<void> {
 describe("InlineAppRoute suite", () => {
   beforeEach(() => {
     doFetch.mockReset();
-    fakeSession.read.mockReset();
+    fakeSession.search.mockReset();
     (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
       tileFinish: () => ({
         background: "#111",

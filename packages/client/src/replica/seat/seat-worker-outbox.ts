@@ -22,28 +22,28 @@ import type {
   NewStoredIntent,
 } from "../intent-record-store.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "../types.js";
-import type { SeatWorkerClient } from "./seat-worker-client.js";
+import type { SeatOutboxCaller } from "./seat-worker-client.js";
 
 export class SeatWorkerOutbox implements IntentRecordStore {
   /** The seat has the applied-commit cursor; see `SeatIntentStore`. */
   readonly settlesByCommitSeq = true;
 
-  constructor(private readonly client: SeatWorkerClient) {}
+  constructor(private readonly client: SeatOutboxCaller) {}
 
   add(intent: NewStoredIntent): Promise<ReplicaIntent> {
-    return this.client.outbox<ReplicaIntent>("add", [intent]);
+    return this.client.outboxCall<ReplicaIntent>("add", [intent]);
   }
 
   get(intentId: string): Promise<ReplicaIntent | undefined> {
-    return this.client.outbox<ReplicaIntent | undefined>("get", [intentId]);
+    return this.client.outboxCall<ReplicaIntent | undefined>("get", [intentId]);
   }
 
   list(states?: readonly IntentState[]): Promise<ReplicaIntent[]> {
-    return this.client.outbox<ReplicaIntent[]>("list", [states]);
+    return this.client.outboxCall<ReplicaIntent[]>("list", [states]);
   }
 
   claimNext(): Promise<ReplicaIntent | undefined> {
-    return this.client.outbox<ReplicaIntent | undefined>("claimNext", []);
+    return this.client.outboxCall<ReplicaIntent | undefined>("claimNext", []);
   }
 
   transition(
@@ -51,7 +51,7 @@ export class SeatWorkerOutbox implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    return this.client.outbox<ReplicaIntent>("transition", [
+    return this.client.outboxCall<ReplicaIntent>("transition", [
       intentId,
       allowed,
       patch,
@@ -63,7 +63,7 @@ export class SeatWorkerOutbox implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    return this.client.outbox<ReplicaIntent>("settle", [
+    return this.client.outboxCall<ReplicaIntent>("settle", [
       intentId,
       allowed,
       patch,
@@ -71,11 +71,11 @@ export class SeatWorkerOutbox implements IntentRecordStore {
   }
 
   listSettled(limit?: number): Promise<IntentOutcome[]> {
-    return this.client.outbox<IntentOutcome[]>("listSettled", [limit]);
+    return this.client.outboxCall<IntentOutcome[]>("listSettled", [limit]);
   }
 
   clear(): Promise<void> {
-    return this.client.outbox<void>("clear", []);
+    return this.client.outboxCall<void>("clear", []);
   }
 
   close(): void {
@@ -84,6 +84,6 @@ export class SeatWorkerOutbox implements IntentRecordStore {
   }
 
   destroy(): Promise<void> {
-    return this.client.outbox<void>("destroy", []);
+    return this.client.outboxCall<void>("destroy", []);
   }
 }

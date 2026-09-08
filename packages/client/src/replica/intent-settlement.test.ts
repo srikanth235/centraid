@@ -18,8 +18,8 @@
 import { describe, expect, test } from "vitest";
 
 import type { IntentRecordStore } from "./intent-record-store.js";
-import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
 import { openSeatFile } from "./seat/driver.js";
 import { NodeSeatDriver } from "./seat/node-seat-driver.js";
 import { SeatIntentStore } from "./seat/seat-intent-store.js";
