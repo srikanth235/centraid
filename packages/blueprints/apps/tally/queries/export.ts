@@ -6,6 +6,7 @@
  * partial export is never read as a whole one.
  */
 
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   deniedPayload,
   expenseCurrency,
@@ -73,26 +74,33 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
     const nameOf = (partyId: string): string =>
       data.people.get(partyId)?.name ?? "Someone";
 
-    // THE WINDOW ASKS FOR THE ROWS IT WANTS (#928). This used to read the
-    // newest `MAX_LIMIT` revisions of everything and keep the ones it had
-    // exported — correct only while the declared row filter narrowed the read
-    // to this app's own entity type BEFORE the window was applied. The clamp
-    // still refuses everything else, but a window is not a filter: name the
-    // exported expenses in SQL, so the page cannot fill with rows this export
-    // is about to discard.
+    // THE WINDOW ASKS FOR THE ROWS IT WANTS (#928, re-cut by #996 wave 4).
+    // This used to read the newest 2,000 revisions of everything and keep the
+    // ones it had exported — correct only while the declared row filter
+    // narrowed the read to this app's own entity type BEFORE the window was
+    // applied. Now the entity type and the exported ids are both in the
+    // statement, so the walk cannot fill with rows this export is about to
+    // discard, and it ends where the set does rather than at a number.
     const exported = expenses.map((e) => e.expense_id);
-    const revisionsRes =
-      exported.length === 0
-        ? { rows: [] }
-        : await ctx.vault.read({
-            entity: "core.entity_revision",
-            where: [{ column: "entity_id", op: "in", value: exported }],
-            orderBy: { column: "recorded_at", dir: "desc" },
-            limit: MAX_LIMIT,
-          });
-    const revisions = (
-      (revisionsRes.rows ?? []) as unknown as RevisionRow[]
-    ).map((row) => ({
+    const exportedIn =
+      exported.length === 0 ? undefined : inList("entity_id", exported);
+    const revisionRows: RevisionRow[] = exportedIn
+      ? await readPages<RevisionRow>(ctx, {
+          name: "tally.export.revisions",
+          select:
+            "revision_id, entity_type, entity_id, operation, recorded_at, " +
+            "undone_at",
+          from: "core_entity_revision",
+          where: `entity_type = ? AND ${exportedIn.sql}`,
+          bind: ["tally.expense", ...exportedIn.bind],
+          order: {
+            sortColumn: "recorded_at",
+            pkColumn: "revision_id",
+            descending: true,
+          },
+        })
+      : [];
+    const revisions = revisionRows.map((row) => ({
       revision_id: row.revision_id,
       expense_id: row.entity_id,
       operation: row.operation,

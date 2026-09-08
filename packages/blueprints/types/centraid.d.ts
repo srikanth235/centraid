@@ -58,31 +58,6 @@ interface VaultWhere {
   value?: unknown;
 }
 
-/** Consent-checked read of a canonical entity as a bounded window. */
-interface VaultReadRequest {
-  entity: string;
-  where?: VaultWhere[];
-  orderBy?: { column: string; dir?: "asc" | "desc" };
-  limit?: number;
-  /**
-   * "Give me the default window and tell me when it fills" (#922 0a). A read
-   * declaring neither `limit` nor this is REFUSED at the inline seat's
-   * boundary: the default cap is a bound a caller may take, never one the
-   * engine applies behind their back.
-   */
-  acceptTruncation?: boolean;
-}
-
-/** `ctx.vault.read` result: the projected rows plus the read's receipt id. */
-interface VaultReadResult {
-  rows: Record<string, unknown>[];
-  receiptId?: string;
-  /** Set only when the window cut rows off (#922 0a); absent means it did not. */
-  truncated?: boolean;
-  /** The window `rows` was produced under. */
-  appliedLimit?: number;
-}
-
 /** Full-text search over a text-indexed entity (each row carries `_snippet`). */
 interface VaultSearchRequest {
   entity: string;
@@ -129,7 +104,7 @@ interface VaultResolveResult {
  * ONE PAGE OF ONE HANDLER'S SQL (#996 wave 4, R8).
  *
  * `limit` is required, so a handler that declares no window does not compile —
- * that is the whole of what replaces `acceptTruncation`. The answer carries a
+ * that is the whole of what replaces the truncation flag. The answer carries a
  * cursor rather than a `truncated` flag: one says where to carry on, the other
  * only that the answer was cut.
  */
@@ -168,7 +143,6 @@ interface VaultApi {
   page: <Row = Record<string, unknown>>(
     request: VaultPageRequest
   ) => Promise<VaultPageResult<Row>>;
-  read: (request: VaultReadRequest) => Promise<VaultReadResult>;
   search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
   invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;
   /** Query a registered app view, clamped to this app's declared manifest. */

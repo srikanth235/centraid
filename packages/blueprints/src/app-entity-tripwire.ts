@@ -327,6 +327,28 @@ export const INDIRECT_ENTITY_READS: Readonly<Record<string, IndirectEntry>> = {
       "media.asset_phash",
     ],
   },
+  // `useSeatPages("photos", read.query, { entity: read.entity, … })` — the five
+  // sets fourteen Photos screens share are records now (#996 wave 4b), so the
+  // entity reaches the read through the record rather than as a literal at the
+  // call site. The literals are all still in this file, which is what
+  // `registerDrift` holds this entry against.
+  //
+  // `media.asset` is in the list as a FILTER VALUE, not a read: the collection
+  // entries this module pages are bounded to `target_type = 'media.asset'`, and
+  // a bare string in a `bind` array is a shape this scanner cannot tell from a
+  // reference. Photos reads that entity through its timeline anyway, so the
+  // entry claims nothing the app does not already reach.
+  "apps/mobile/src/apps/photos/photo-entity-reads.ts": {
+    entities: [
+      "core.collection",
+      "core.collection_entry",
+      "core.party",
+      "core.place",
+      "enrich.policy",
+      "media.asset",
+      "media.face_region",
+    ],
+  },
   "apps/mobile/src/apps/tasks/useTasks.ts": {
     entities: ["schedule.project", "schedule.section", "schedule.task"],
   },

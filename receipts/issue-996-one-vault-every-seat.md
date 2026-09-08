@@ -7461,3 +7461,88 @@ question about where a save lands, not a paging one.
 - **A symbol does not cross `postMessage`.** The facts travel as a field and
   stop at the first module on the other side, so no handler can spread them
   into a view model or onto JSON.
+
+## Wave 4o — the last two `ctx.vault.read` callers, and the tripwire that keeps them gone (#996)
+
+### Tally's history and export were the last apps holding the declarative read
+
+`expenseHistory` took a window of 100 revisions and said nothing when an expense
+had more. `exportHandler`'s revision read was already narrowed to the exported
+ids by #928, but its entity type was a manifest row filter rather than a
+predicate, and its ceiling was the number 2,000.
+
+Both are statements now, and both name `entity_type` in SQL. `grep -rn
+"vault\.read(" packages/blueprints/apps` is empty: no app calls the generic
+declarative read after this wave. `gateway.read` itself is untouched — it serves
+automations and the server's own callers, where R17's "truncation is never
+silent" is a property something depends on (F2).
+
+The export's test double for `where` goes with the caller: the fixture answers
+the statement — predicate, order and all — so the SQL is what is under test.
+One expectation moved: two occurrences sharing a `recorded_at` are now ordered
+by the keyset's tiebreak, an order the declarative read never had.
+
+### The tripwire
+
+`packages/blueprints/src/paged-read-tripwire.test.ts` greps
+`packages/blueprints/apps` for `acceptTruncation`, `UNBOUNDED_READ` and
+`ctx.vault.read(`, and fails on any hit — comments included, because a word
+allowed in a comment is a word somebody pastes back into a request. The phone's
+half is `replica-read-windows.test.ts` (wave 4m).
+
+`VaultReadRequest`, `VaultReadResult` and `VaultApi.read` are deleted from
+`packages/blueprints/types/centraid.d.ts` with their `acceptTruncation`,
+`truncated` and `appliedLimit` fields. `truncated` survives as a HANDLER's own
+output, derived from `page.next !== undefined` — a continuation the handler
+computed, not a notice the reader appended.
+
+### The indirection register gained one entry, and it is honest about why
+
+Photos' five shared reads are records now, so the entity reaches the read
+through the record: `photo-entity-reads.ts` is registered in
+`INDIRECT_ENTITY_READS`. `media.asset` is in that entry as a FILTER VALUE — the
+collection entries are bounded to `target_type = 'media.asset'` and a bare
+string in a `bind` array is a shape the scanner cannot tell from a reference.
+Photos reaches that entity through its timeline regardless, so the entry claims
+nothing new.
+
+### NOT done here, and why
+
+`app-entity-tripwire.ts`, its test, `app-entity-tripwire.filters.json`,
+`app-manifest-reads.test.ts` and the manifests' `vault.scopes` are to be deleted
+in the SAME commit that lands the plan snapshots as the sole review diff (F2,
+F6). The plan snapshots are not built, so nothing is deleted: a register with no
+replacement is a review diff removed, not replaced. The tripwire went red on the
+Photos change and was repaired rather than loosened.
+
+### Gates
+
+- `bun run --cwd packages/blueprints test` — 216 files, 7,120 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/src/paged-read-tripwire.test.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/_shared/representation-reads.paged.test.ts`
+- `packages/blueprints/apps/tally/queries/export.test.ts`
+- `packages/blueprints/apps/tally/queries/export.ts`
+- `packages/blueprints/apps/tally/queries/history.ts`
+- `packages/blueprints/src/app-entity-tripwire.test.ts`
+- `packages/blueprints/src/app-entity-tripwire.ts`
+- `packages/blueprints/types/centraid.d.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the last caller
+
+- **A vocabulary is deleted when its last caller is, not before.** The two Tally
+  handlers were the last, and the type went with them.
+- **A register entry states why a string is in it.** A filter value that reads
+  like a reference is named as one, or the register becomes the hiding place it
+  exists to prevent.

@@ -4,7 +4,7 @@
 // carried the whole ledger anyway. These cases pin the honest version — what
 // `since` excludes, what it keeps, and that the counts the foot reads describe
 // the range rather than the group.
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import exportHandler from "./export.ts";
@@ -80,12 +80,14 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
   "core.entity_revision": [
     {
       revision_id: "revision-of-in-range",
+      entity_type: "tally.expense",
       entity_id: "expense-this-month",
       operation: "update",
       recorded_at: "2026-08-05T09:00:00.000Z",
     },
     {
       revision_id: "revision-of-out-of-range",
+      entity_type: "tally.expense",
       entity_id: "expense-last-year",
       operation: "update",
       recorded_at: "2026-08-05T09:00:00.000Z",
@@ -98,29 +100,13 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
 };
 
 function run(input: Record<string, unknown>) {
-  // THE DOUBLE HONOURS `where` (#928). The export used to read every revision
-  // and keep the ones it wanted; now it asks for the rows it wants, so a stub
-  // that ignored the clause would leave the SQL untested and pass on the
-  // handler's discarded leftovers.
-  const read = vi.fn<
-    (request: {
-      entity: string;
-      where?: Array<{ column: string; op: string; value?: unknown }>;
-    }) => Promise<{
-      rows: Array<Record<string, unknown>>;
-    }>
-  >(async ({ entity, where }) => ({
-    rows: (ROWS[entity] ?? []).filter((row) =>
-      (where ?? []).every((clause) =>
-        clause.op === "in" && Array.isArray(clause.value)
-          ? clause.value.includes(row[clause.column])
-          : clause.op !== "eq" || row[clause.column] === clause.value
-      )
-    ),
-  }));
+  // ONE READ PLANE, AND IT IS THE PAGE (#996 wave 4). The export's revision
+  // read was the last `ctx.vault.read` in any app; the double that used to
+  // honour the declarative `where` is gone with it, and the fixture answers the
+  // statement — predicate, order and all — so the SQL is what is under test.
   return exportHandler({
     input,
-    ctx: { vault: { page: pagedFixture(ROWS).page, read } },
+    ctx: { vault: { page: pagedFixture(ROWS).page } },
   } as unknown as HandlerArgs);
 }
 
@@ -177,9 +163,12 @@ describe("Tally export, ranged", () => {
 
   it("ships only the revisions of the expenses that travel", async () => {
     const whole = await run({ group_id: "group-flat" });
+    // Both occurrences share a `recorded_at`, so the keyset's tiebreak — the
+    // revision id, descending — decides, which is an order the declarative read
+    // never had: it returned them in whatever order the rows happened to be in.
     expect(ids(whole.revisions, "revision_id")).toStrictEqual([
-      "revision-of-in-range",
       "revision-of-out-of-range",
+      "revision-of-in-range",
     ]);
 
     const ranged = await run({ group_id: "group-flat", since: "2026-08-01" });

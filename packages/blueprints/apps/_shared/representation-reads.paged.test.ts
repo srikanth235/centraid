@@ -1,7 +1,7 @@
 // THE ONE READ EVERY APP MAKES, PAGED (#996 wave 4b, R8).
 //
 // `readRepresentations` is what fills in a row's `media_type` — every first-
-// party app calls it, and it said `acceptTruncation: true`, so on a vault with
+// party app calls it, and it declared the truncation flag, so on a vault with
 // enough representations the answer silently stopped and rows came back with no
 // type rather than with the wrong one. It could not be converted in wave 4
 // because the phone's inline ctx had no `page` (Tally and Locker run through
