@@ -7789,3 +7789,108 @@ fixture gains `page` over `Gateway.page`, and the four pass.
 - **A clamp is not a review artifact.** `vault.scopes` stopped being one the
   moment the paged door began enforcing it, and the plan's wording was written
   before that door existed.
+
+## Wave 4s — OQ-12: the match a member is asked about, never told about (#996)
+
+### What was missing
+
+Wave 0b/0c closed drift ONT-24 by deleting the inference: `core_transaction`'s
+global `UNIQUE` and the publisher's global probe went, and `accountFor` stopped
+selecting an account by its display label. That left two imports of the same
+real movement as two rows, which is correct and incomplete — R20(c) names the
+other half, a cross-source match that is "explicit evidence producing a
+reviewable result (OQ-12)", and the 0d flag said it was unbuilt. This is it.
+
+### The plane, and what makes it non-automatic
+
+- **The proposal is derived and writes nothing.** `queries/matches.ts` walks
+  the most recent 500 non-void transactions as pages, buckets them by exact
+  `(currency, amount_minor)`, and offers a pair when the two rows sit on
+  DIFFERENT accounts within four days. Nearest first — a same-day pair is
+  stronger evidence than a four-day one, and the easy answers should come
+  first. The handler has no write path at all: "never automatic" is the
+  module's shape, not its comment.
+- **The answer is a judgment, not a merge.** `accept-match` writes one
+  `core.link` `same-as` edge between the two transactions; `reject-match`
+  writes `distinct-from`. Both are temporal and reversible by `core.unlink`.
+  NOTHING is deleted and no amount moves: a member whose vault silently
+  swallowed one of two statement lines could never reconcile the statement
+  again, and an acceptance that destroyed a row is exactly that.
+- **A refusal is written down for the same reason an acceptance is.** A
+  proposal the member has already answered must not come back, so the read
+  excludes every pair carrying a live decision link in EITHER direction.
+  `distinct-from` is seeded into the relations scheme (`bootstrap.ts`) because
+  `core.link_entities` refuses a caller-invented notation — without the concept
+  the owner could accept a match and never refuse one.
+
+### The surface
+
+Above the Activity feed, and only when there is something to answer: the feed
+is what happened, and a proposal is what is waiting. Each row carries the whole
+of the evidence — the amount, both postings, both named accounts and how far
+apart they are — because the two verbs are judgments and a member cannot judge
+what the row did not say. The verbs are **One movement** and **Two payments**,
+not Accept and Reject: they say what the answer MEANS. The outcome line says
+"Both lines stay" either way.
+
+It reuses `LedgerRow` with two acts — the same row eight other Tally lists
+draw — so the review adds no component and no stylesheet.
+
+**Undrawn on the phone, and filed as such**: the cover has no transaction plane
+at all, so a proposal would stand on rows the phone never shows. Three
+`NATIVE_FALLBACK` entries with that reason; they die the day the cover draws an
+account.
+
+### Gates
+
+- `bunx vitest run packages/blueprints/apps/tally/queries/matches.test.ts` — 6
+  passed (red first: the handler did not exist).
+- `bunx vitest run packages/blueprints/apps/tally/actions/match-answer.test.ts`
+  — 4 passed.
+- `bunx vitest run --root packages/vault src/commands/links.test.ts` — 17
+  passed (red first on `distinct-from` as an unknown notation).
+- `bun run --cwd packages/blueprints test` — 216 files, 7,097 passed, 2
+  expected-fail.
+- `bun run --cwd packages/vault test` — 209 files, 1,743 passed.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/apps/tally/actions/accept-match.ts`
+- `packages/blueprints/apps/tally/actions/match-answer.test.ts`
+- `packages/blueprints/apps/tally/actions/reject-match.ts`
+- `packages/blueprints/apps/tally/queries/matches.test.ts`
+- `packages/blueprints/apps/tally/queries/matches.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/tally/app-root.tsx`
+- `packages/blueprints/apps/tally/app.json`
+- `packages/blueprints/apps/tally/components/Route.tsx`
+- `packages/blueprints/apps/tally/components/Screens.tsx`
+- `packages/blueprints/apps/tally/ledger-reads.ts`
+- `packages/blueprints/apps/tally/pending-projection.ts`
+- `packages/blueprints/apps/tally/types.ts`
+- `packages/blueprints/apps/tally/view-copy.ts`
+- `packages/blueprints/apps/tally/writes.ts`
+- `packages/blueprints/manifest.json`
+- `packages/blueprints/src/handler-reachability.test.ts`
+- `packages/blueprints/src/pending-projection-tripwire.test.ts`
+- `packages/server/src/serve/app-query-plans.snapshot.md`
+- `packages/vault/src/bootstrap.ts`
+- `packages/vault/src/commands/links.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the match plane
+
+- **A judgment beside two rows, never a merge.** Both statement lines survive
+  either answer, which is what keeps a vault reconcilable against the paper it
+  was imported from.
+- **A refusal is data.** An answer nobody records is a question asked again
+  tomorrow, which is how a review surface teaches a member to ignore it.
+- **No optimistic copy for either answer.** The only surface is the list of
+  UNANSWERED pairs; patching it optimistically would remove the row before the
+  vault agreed, and a queued answer that is later refused would vanish without
+  ever having been made.

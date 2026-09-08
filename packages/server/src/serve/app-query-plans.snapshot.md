@@ -1069,6 +1069,21 @@ SEARCH core_entity_revision USING INDEX core_entity_revision_entity_idx (entity_
 USE TEMP B-TREE FOR LAST TERM OF ORDER BY
 ```
 
+### tally.matches.transactions (tally/matches)
+
+```sql
+SELECT txn_id, account_id, posted_at, amount_minor, currency, direction, description
+      FROM core_transaction
+      WHERE status <> ?
+      ORDER BY posted_at DESC, txn_id DESC
+      LIMIT ?
+```
+
+```
+SCAN core_transaction
+USE TEMP B-TREE FOR ORDER BY
+```
+
 ## tasks
 
 ### tasks.board.open (tasks/board)

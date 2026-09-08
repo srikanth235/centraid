@@ -38,14 +38,21 @@ import {
   valuationFigure,
   valuationTone,
 } from "../format.ts";
-import type { ActivityData, DashboardData } from "../types.ts";
+import type {
+  ActivityData,
+  DashboardData,
+  MatchProposalRow,
+  MatchesData,
+} from "../types.ts";
 import {
   ARCHIVED_META,
   EMPTY,
   SECTIONS,
   SECTION_META,
+  SAME_DAY,
   SETTLEMENT_NOT_YOURS,
   VERBS,
+  daysApartText,
   balancesHeroSub,
   expenseCount,
   memberCount,
@@ -196,12 +203,82 @@ export function Balances(props: BalancesProps): ReactNode {
   );
 }
 
+/**
+ * CROSS-SOURCE MATCH PROPOSALS (#996, OQ-12), above the feed.
+ *
+ * Above, because it is the only thing on this screen that is WAITING on the
+ * member; the feed below is what already happened. The section renders nothing
+ * at all when there is nothing to answer — a heading over an empty list would
+ * be an invitation to look for work that does not exist.
+ *
+ * Each row states the whole of the evidence — the amount, both postings, both
+ * accounts and how far apart they are — because the two verbs are judgments
+ * and a member cannot judge what the row did not say. `One movement` and
+ * `Two payments` say what the answer MEANS: neither merges, deletes or moves
+ * anything, and the two statement lines survive either way.
+ */
+function matchMeta(row: MatchProposalRow, accountOf: (id: string) => string) {
+  return metaSentence([
+    `${row.left_posted_at.slice(0, 10)} · ${accountOf(row.left_account)}`,
+    `${row.right_posted_at.slice(0, 10)} · ${accountOf(row.right_account)}`,
+    row.days_apart === 0 ? SAME_DAY : daysApartText(row.days_apart),
+  ]);
+}
+
+export interface MatchesProps {
+  data: MatchesData;
+  narrow: boolean;
+  onAnswer: (answer: "accept" | "reject", row: MatchProposalRow) => void;
+}
+
+export function Matches(props: MatchesProps): ReactNode {
+  const rows = props.data.proposals;
+  if (rows.length === 0) return null;
+  const accountOf = (id: string): string => props.data.accounts[id] ?? id;
+  return (
+    <Section
+      label={SECTIONS.matches}
+      meta={SECTION_META.matches}
+      count={rows.length}
+    >
+      <Rows>
+        {rows.map((row) => (
+          <LedgerRow
+            key={`${row.left_txn_id}-${row.right_txn_id}`}
+            title={row.left_description || row.right_description}
+            meta={matchMeta(row, accountOf)}
+            figure={{
+              text: money(row.amount_minor, row.currency),
+              // `settled` is the recessive rung: a proposal is not a debt and
+              // must not take the figure colour that means "you owe".
+              tone: "settled",
+            }}
+            acts={[
+              {
+                label: VERBS.sameMovement,
+                run: () => props.onAnswer("accept", row),
+              },
+              {
+                label: VERBS.notTheSame,
+                run: () => props.onAnswer("reject", row),
+              },
+            ]}
+            narrow={props.narrow}
+          />
+        ))}
+      </Rows>
+    </Section>
+  );
+}
+
 export interface ActivityProps {
   data: ActivityData;
+  matches: MatchesData | null;
   now: string;
   window: number;
   narrow: boolean;
   onShowMore: () => void;
+  onAnswerMatch: (answer: "accept" | "reject", row: MatchProposalRow) => void;
 }
 
 export function Activity(props: ActivityProps): ReactNode {
@@ -211,6 +288,13 @@ export function Activity(props: ActivityProps): ReactNode {
 
   return (
     <div className={styles.list}>
+      {props.matches ? (
+        <Matches
+          data={props.matches}
+          narrow={props.narrow}
+          onAnswer={props.onAnswerMatch}
+        />
+      ) : null}
       {buckets.map((bucket) => (
         <Section
           key={bucket.key}

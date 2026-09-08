@@ -32,6 +32,7 @@ import type {
   DashboardData,
   FriendData,
   GroupData,
+  MatchesData,
 } from "./types.ts";
 import { PARKED_OUTCOME, REFUSED } from "./view-copy.ts";
 import type { TallyWrite } from "./writes.ts";
@@ -55,6 +56,10 @@ export const CHANGE_TABLES = [
   "social.circle_member",
   "core.party",
   "core.vault",
+  // The cross-source match plane (#996, OQ-12): the imported rows a proposal
+  // is drawn from, and the owner's answers about them.
+  "core.transaction",
+  "core.link",
   "tally",
 ];
 
@@ -97,6 +102,8 @@ export interface LedgerReads {
   group: GroupData | null;
   friend: FriendData | null;
   activity: ActivityData | null;
+  /** Cross-source match proposals the owner has not answered (#996, OQ-12). */
+  matches: MatchesData | null;
   /** A read has LANDED. False covers both "still in flight" and "every read so
    *  far failed": in neither case may a view claim a set is empty. */
   loaded: boolean;
@@ -146,6 +153,8 @@ interface Snapshot {
   group: GroupData | null;
   friend: FriendData | null;
   activity: ActivityData | null;
+  /** The Activity shelf's second payload: what has NOT been answered yet. */
+  matches: MatchesData | null;
   loaded: boolean;
   consent: { message: string; revokedAt: string | null } | null;
   readFailed: boolean;
@@ -160,6 +169,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   group: null,
   friend: null,
   activity: null,
+  matches: null,
   loaded: false,
   consent: null,
   readFailed: false,
@@ -199,16 +209,17 @@ export function useLedgerReads(args: {
   /** The route's own payload, beside the dashboard spine. A route that needs
    *  no second read asks for none, and gets `null` for the two it did not. */
   const readRoute = useCallback(async (): Promise<
-    Pick<Snapshot, "group" | "friend" | "activity">
+    Pick<Snapshot, "group" | "friend" | "activity" | "matches">
   > => {
     if (shelf === ACTIVITY || shelf === SPENDING) {
-      return {
-        group: null,
-        friend: null,
-        activity: await window.centraid.read<ActivityData>({
-          query: "activity",
-        }),
-      };
+      // The feed and the unanswered proposals land TOGETHER (#996, OQ-12):
+      // the review rows stand above the feed, and a member must never see a
+      // proposal beside a feed one refresh older than it.
+      const [activity, matches] = await Promise.all([
+        window.centraid.read<ActivityData>({ query: "activity" }),
+        window.centraid.read<MatchesData>({ query: "matches" }),
+      ]);
+      return { group: null, friend: null, activity, matches };
     }
     if (needsGroup(shelf) && openGroupId) {
       return {
@@ -218,6 +229,7 @@ export function useLedgerReads(args: {
         }),
         friend: null,
         activity: null,
+        matches: null,
       };
     }
     if (shelf === FRIEND && openFriendId) {
@@ -228,14 +240,15 @@ export function useLedgerReads(args: {
           input: { party_id: openFriendId },
         }),
         activity: null,
+        matches: null,
       };
     }
-    return { group: null, friend: null, activity: null };
+    return { group: null, friend: null, activity: null, matches: null };
   }, [shelf, openGroupId, openFriendId]);
 
   const refresh = useCallback(async (): Promise<void> => {
     let next: DashboardData;
-    let route: Pick<Snapshot, "group" | "friend" | "activity">;
+    let route: Pick<Snapshot, "group" | "friend" | "activity" | "matches">;
     try {
       next = await window.centraid.read<DashboardData>({ query: "dashboard" });
       route = await readRoute();

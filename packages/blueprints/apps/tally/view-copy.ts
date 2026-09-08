@@ -73,6 +73,21 @@ export const FRIEND_HERO_SUB =
 
 // ---------------------------------------------------------------- sections
 
+/**
+ * What each answer to a match proposal DID, in the vault's terms (#996,
+ * OQ-12). Neither sentence says "merged" or "removed", because neither
+ * happened: the answer is a judgment recorded beside two rows that both stay.
+ */
+export const MATCH_ACCEPTED = "Recorded as one movement. Both lines stay.";
+export const MATCH_REJECTED = "Recorded as two payments. Both lines stay.";
+
+/** The weakest part of a match proposal, said plainly (#996, OQ-12). */
+export const SAME_DAY = "same day";
+
+export function daysApartText(days: number): string {
+  return days === 1 ? "a day apart" : `${String(days)} days apart`;
+}
+
 export const SECTIONS = {
   people: "People",
   groups: "Groups",
@@ -86,6 +101,7 @@ export const SECTIONS = {
   results: "Results",
   archived: "Archived",
   simplification: "To zero everything out",
+  matches: "Same money, twice",
 } as const;
 
 export const SECTION_META = {
@@ -99,9 +115,15 @@ export const SECTION_META = {
   results: "descriptions only",
   archived: "out of the lists, and nothing lost",
   simplification: "a proposal · nothing is written by turning it on",
+  matches: "a proposal · nothing is merged until you say so",
 } as const;
 
 export const VERBS = {
+  // The two answers to a match proposal (#996, OQ-12). "One movement" says
+  // what accepting MEANS rather than saying "Accept", which would leave the
+  // member guessing what is about to happen to their two statement lines.
+  sameMovement: "One movement",
+  notTheSame: "Two payments",
   unarchive: "Bring back",
   remind: "Remind",
   approve: "Approve",

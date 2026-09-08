@@ -246,5 +246,22 @@ export const tallyPendingProjection = definePendingProjection({
     },
     "edit-recurring-expense-occurrence": ({ input }) =>
       pendingPatch("tally.recurring_expense", input.template_id, input),
+    // THE TWO MATCH ANSWERS (#996, OQ-12). Both write a `core.link` judgment
+    // BETWEEN two transactions, and the surface that would carry a pending
+    // copy is the proposal list — which is a list of what has NOT been
+    // answered. An optimistic patch there would have to remove the row the
+    // member just answered, and removing it is exactly what the answer does
+    // once it lands; showing it gone before it has is how a queued answer that
+    // is later refused disappears without ever being made.
+    "accept-match": {
+      excluded: true,
+      reason:
+        "An answer is a link between two rows, and the only surface that shows it is the list of proposals that have none — so there is no row to patch, only one that leaves when the answer lands.",
+    },
+    "reject-match": {
+      excluded: true,
+      reason:
+        "The same as accept-match: the proposal list shows unanswered pairs, and a pair leaves it when the judgment is in the vault, not when it is queued.",
+    },
   },
 });

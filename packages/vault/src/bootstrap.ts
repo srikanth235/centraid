@@ -55,6 +55,13 @@ const SEED_CONCEPTS: SeedConcept[] = [
   // step.
   { scheme: "relations", notation: "references", label: "References" },
   { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
+  // THE TWO ANSWERS TO A CROSS-SOURCE MATCH (#996, R20(c) / OQ-12). Two
+  // sources' rows that look like one movement are a PROPOSAL, and the owner
+  // decides. `same-as` (above) is the acceptance; `distinct-from` is the
+  // refusal, and it has to be a relation rather than a dismissed notification
+  // because a refusal that is not written down is a proposal the member is
+  // shown again tomorrow.
+  { scheme: "relations", notation: "distinct-from", label: "Distinct from" },
   // No `revises` relation (#996, ruling R20(a)). Version lineage was a
   // content→content link asserted by the document and note edit commands —
   // a SECOND history mechanism beside `core_entity_revision`, which [#916]

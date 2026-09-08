@@ -238,3 +238,23 @@ export function materializeWrite(
     input: { template_id: templateId, original_start_local: originalStart },
   };
 }
+
+/**
+ * The owner's answer to a cross-source match proposal (#996, OQ-12).
+ *
+ * Two writes and no Undo pair, deliberately: an answer is a temporal
+ * `core.link` judgment, and un-answering is `core.unlink`, which no surface in
+ * this room offers yet. What the member gets instead is that neither answer
+ * changes a single figure — accepting says the two lines are one movement,
+ * rejecting says they are two, and both statements stay exactly as imported.
+ */
+export function matchAnswerWrite(
+  answer: "accept" | "reject",
+  leftTxnId: string,
+  rightTxnId: string
+): TallyWrite {
+  return {
+    action: answer === "accept" ? "accept-match" : "reject-match",
+    input: { left_txn_id: leftTxnId, right_txn_id: rightTxnId },
+  };
+}

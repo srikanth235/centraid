@@ -253,6 +253,15 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.save-recurring-expense",
     "action.materialize-recurring-expense",
     "action.edit-recurring-expense-occurrence",
+    // THE MATCH REVIEW IS UNDRAWN ON THE PHONE, not merely unseen (#996,
+    // OQ-12). The cover has no transaction plane at all — no imported
+    // statement, no account list — so a proposal has nothing to stand on and
+    // a control that dispatched one would answer about rows the phone never
+    // shows. The Assistant carries both verbs; these three entries die the
+    // day the cover draws an account.
+    "action.accept-match",
+    "action.reject-match",
+    "query.matches",
   ],
   // Same read-only attachments, same missing picker, as Notes above.
   tasks: ["action.attach", "action.detach"],

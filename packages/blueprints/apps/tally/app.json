@@ -230,6 +230,26 @@
           "undo_until",
           "undone_at"
         ]
+      },
+      {
+        "schema": "core",
+        "table": "transaction",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "account",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link_entities",
+        "verbs": "act"
       }
     ]
   },
@@ -1596,6 +1616,76 @@
         }
       },
       "writes": ["tally.nudge"]
+    },
+    {
+      "name": "accept-match",
+      "description": "Record the owner's judgment that two imported transactions are one movement, as a temporal core.link same-as edge. Nothing is merged or deleted: both statement lines stay exactly as they were imported.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "left_txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["left_txn_id", "right_txn_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
+    },
+    {
+      "name": "reject-match",
+      "description": "Record the owner's judgment that two imported transactions of the same amount are two movements, as a temporal core.link distinct-from edge, so the proposal is not offered again.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "left_txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["left_txn_id", "right_txn_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
     }
   ],
   "queries": [
@@ -1862,6 +1952,29 @@
             "type": "boolean"
           },
           "window": {
+            "type": "object"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "matches",
+      "description": "Cross-source match proposals (#996 OQ-12): pairs of imported transactions that are the same money on two different accounts within a few days, with the pairs the owner has already answered removed. It proposes; it never merges, and it writes nothing.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array"
+          },
+          "accounts": {
             "type": "object"
           },
           "vaultDenied": {

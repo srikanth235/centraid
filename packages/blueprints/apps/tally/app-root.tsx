@@ -70,7 +70,9 @@ import {
   showsLedgerList,
 } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
-import type { LedgerEntry, Person } from "./types.ts";
+import type { LedgerEntry, MatchProposalRow, Person } from "./types.ts";
+import { MATCH_ACCEPTED, MATCH_REJECTED } from "./view-copy.ts";
+import { matchAnswerWrite } from "./writes.ts";
 
 /**
  * The vault entities this app's queries read — the shell's change-subscription
@@ -253,6 +255,24 @@ export function Root({
 
   const sheets = useRoomSheets({ compose, group, openGroupId });
 
+  /**
+   * The owner's answer to one match proposal (#996, OQ-12).
+   *
+   * Both answers go through the room's ONE write door, so a refusal is
+   * narrated in the vault's own words like every other act, and the refresh
+   * that follows takes the answered pair off the list. Nothing here decides
+   * anything: the member pressed a verb, and this carries it.
+   */
+  const answerMatch = useCallback(
+    (answer: "accept" | "reject", row: MatchProposalRow) => {
+      void ledger.write(
+        matchAnswerWrite(answer, row.left_txn_id, row.right_txn_id),
+        { outcome: answer === "accept" ? MATCH_ACCEPTED : MATCH_REJECTED }
+      );
+    },
+    [ledger]
+  );
+
   // The Export route's own read, beside the spine. It answers for ONE group,
   // so it is asked when a group is chosen and not before — and until it lands
   // the surface states no counts rather than zero ones.
@@ -296,6 +316,7 @@ export function Root({
       group={ledger.group}
       friend={ledger.friend}
       activity={ledger.activity}
+      matches={ledger.matches}
       search={{
         query: search.query,
         status: search.status,
@@ -332,6 +353,7 @@ export function Root({
       onOpenFriend={openFriend}
       onOpenExpense={openExpense}
       onShowMore={() => setActivityWindow((size) => size + ACTIVITY_STEP)}
+      onAnswerMatch={answerMatch}
       onAskLeave={(groupId) => compose.show({ kind: "leave", groupId })}
       onAskArchive={(groupId, archived) =>
         compose.show({ kind: "archive", groupId, archived })

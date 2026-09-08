@@ -360,6 +360,34 @@ export interface ActivityData {
   vaultDenied?: VaultDenied | null;
 }
 
+/**
+ * ONE CROSS-SOURCE MATCH PROPOSAL (#996, OQ-12), as `queries/matches.ts`
+ * answers it. Two imported transactions of the same money on two accounts,
+ * near in time, that the owner has not yet answered about. Account NAMES are
+ * carried beside the rows, keyed by id, because a proposal the member cannot
+ * attribute to two named accounts is not reviewable.
+ */
+export interface MatchProposalRow {
+  left_txn_id: string;
+  right_txn_id: string;
+  amount_minor: number;
+  currency: string;
+  direction: string;
+  left_posted_at: string;
+  right_posted_at: string;
+  left_account: string;
+  right_account: string;
+  left_description: string;
+  right_description: string;
+  days_apart: number;
+}
+
+export interface MatchesData {
+  proposals: MatchProposalRow[];
+  accounts: Record<string, string>;
+  vaultDenied?: VaultDenied | null;
+}
+
 /** One group's ledger as a file's worth of rows. Balances are excluded by
  *  design — they are arithmetic over these, and arithmetic travels in the rows. */
 export interface ExportData {
