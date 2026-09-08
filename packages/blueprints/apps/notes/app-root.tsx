@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — the app's whole orchestration is one React tree by design (#505/#834).
 // Notes — the query-free React tree (#505, rebuilt for #834).
 //
 // This file decides WHICH screen; each screen decides what it looks like

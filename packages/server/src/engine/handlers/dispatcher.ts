@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit ctx.vault bridge threading (duaility §12); validation/envelope split tracked separately
 /**
  * Declared-handler dispatcher (#107, #286): validate `input` against `app.json`
  * with Ajv, hand off to `handler-runner`. No `_sql` built-ins — handlers reach

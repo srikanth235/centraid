@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#406) trigger generation, cursor reads, and retention share one transactional log invariant
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 

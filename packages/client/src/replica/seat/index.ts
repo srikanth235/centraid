@@ -1,4 +1,4 @@
-/* oxlint-disable oxc/no-barrel-file -- (#996) the seat store's public surface, one subpath (`@centraid/client/replica/seat`), the same boundary `replica/index.ts` has; governance: allow-no-unjustified-suppressions stable package API boundary */
+/* oxlint-disable oxc/no-barrel-file -- (#996) the seat store's public surface, one subpath (`@centraid/client/replica/seat`), the same boundary `replica/index.ts` has */
 // THE SEAT STORE (#996, wave 2).
 //
 // A seat holds `vault.db` whole. Everything here serves that one sentence:

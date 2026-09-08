@@ -1,4 +1,4 @@
-/* oxlint-disable oxc/no-barrel-file -- (#406) intentional @centraid/client/replica public subpath; governance: allow-no-unjustified-suppressions stable package API boundary */
+/* oxlint-disable oxc/no-barrel-file -- (#406) intentional @centraid/client/replica public subpath */
 export * from "./digest.js";
 export * from "./errors.js";
 export * from "./inline-query-ctx-core.js";

@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#382) the shell root wires
-// every route plus the conversation actions; extracting route wiring is the
-// follow-up.
 import {
   useCallback,
   useEffect,

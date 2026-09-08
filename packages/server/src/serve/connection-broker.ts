@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the broker core is one
-// connection lifecycle — resolve → single-flight refresh → placeholder
-// injection → the PKCE consent ceremony — held together by the three
-// rot-point defenses below; the rate gate + auth-dead helper already live in
 // connection-limiter.ts, and splitting the lifecycle itself would scatter
 // the token-correctness invariants across files.
 /**

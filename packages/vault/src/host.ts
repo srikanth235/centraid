@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing debt; splitting is a separate cleanup, not bundled into a feature change
-// Host-integration helpers (§12): run a vault across restarts without storing credentials. v0 identity is key-equality.
-
 import { enrollAgent, enrollApp } from "./bootstrap.js";
 import type { BootstrapResult } from "./bootstrap.js";
 import type { VaultDb } from "./db.js";

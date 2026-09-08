@@ -1,7 +1,4 @@
 /*
- * governance: allow-repo-hygiene file-size-limit — a per-kind dispatch table
- * that grows one entry per HarnessKind by design. Split into a data module
- * before it doubles, not per added kind.
  *
  * NOTHING ELSE BRANCHES ON THE KIND: `runTurn`, preflight and model enumeration
  * all read `HARNESSES`, over one integration path. Kinds differ only in how the

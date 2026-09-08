@@ -41,15 +41,18 @@ carries its class and the reason for it in `scripts/ci/gate-classes.json`, and
 `scripts/ci/gate-classes.test.mjs` fails if a gate is classified hygiene and
 then enforced nowhere.
 
-**Rung 1 also absorbed rung 0's two repo-wide directives (#915 Wave 4).**
-`repo-hygiene` and `receipt-per-issue` are vendored, digest-locked, and
-repo-wide by construction — 86.3s between them against a rung-0 budget of 5s,
-and their `hook:` field cannot be moved in-tree without failing
+**Rung 1 also absorbed rung 0's repo-wide directives (#915 Wave 4).**
+`receipt-per-issue` is vendored, digest-locked, and repo-wide by construction,
+and its `hook:` field cannot be moved in-tree without failing
 `managed-tree-integrity`. `.githooks/pre-commit` therefore skips the ids in
 `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf` and
-`.githooks/pre-push` runs exactly those before `check:push`. A commit costs
-6.2s instead of 88.7s; a push pays what a commit used to; `.governance/run.sh`
-never changed, so CI's copy always ran all 22 either way.
+`.githooks/pre-push` runs exactly those before `check:push`. `.governance/run.sh`
+never changed, so CI's copy always runs every directive either way.
+
+The deferral's original arithmetic no longer holds: `repo-hygiene` was retired
+in governance-kit audit 0.11.0 and `receipt-per-issue` was rewritten to a much
+cheaper check, so the whole 12-directive suite now runs in about 4s. Whether
+anything still needs deferring is an open question, not a settled rule.
 
 **Fix:** run `bun run check:push` and repair what it reports. Run
 `bun run check:pr` when you want CI's full answer without waiting for CI.

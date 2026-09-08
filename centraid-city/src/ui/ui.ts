@@ -1,9 +1,6 @@
 // ui.ts — every DOM overlay: loading screen, HUD stats, inspector, tour, minimap, toast.
 // All copy comes from core/content.ts; this module never invents strings — the one exception
 // is SECTION_LABELS below, which names the groupings core/content.ts only refers to by key.
-// governance: allow-repo-hygiene file-size-limit — the DOM overlay selectors and
-// callback-driven APIs form one cohesive browser boundary; splitting them would scatter
-// the shared panel state without changing the package seam. Revisit in #704.
 
 import type * as THREE from "three";
 import type { OrbitControls } from "three/addons/controls/OrbitControls.js";

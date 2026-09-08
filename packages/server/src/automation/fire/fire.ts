@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the fire spine is one per-fire orchestration — liveness, secret preflight (#293), broker preflight (#304) and the onFailure cascade share the run bracket
 /**
  * Automation fire spine (#147). The one thing it needs from agent-runtime is the
  * `ctx.delegate` dispatch surface, injected via `openDispatch`.

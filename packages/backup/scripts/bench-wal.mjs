@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// governance: allow-repo-hygiene file-size-limit (#408) the benchmark is one reproducible 1 GiB/10 GiB capture-and-restore experiment; splitting it would duplicate the measurement harness and risk incomparable scenarios
 /*
  * WAL-shipping measurements (issue #408 acceptance: "Measured: bytes/day on
  * the wire, local bytes written/day, restore wall-clock for a 1 GB and a

@@ -1,5 +1,4 @@
 // Search on the phone (Photos v4 handoff §9, §14, §18, proto:4256-4276).
-// governance: allow-repo-hygiene file-size-limit The #712 search destination remains one cohesive query/results state machine; #716 extracts its reusable empty states.
 //
 // Search is a BAND DESTINATION, never a pushed screen: proto:4953-4954's
 // `appBandOn` excludes only the viewer, zoom, video, slideshow and the editor,

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one suite per route module (#647 added the notifications route cases); mirrors the vault-routes.ts waiver — pending split alongside the routes it exercises
 import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";

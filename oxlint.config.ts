@@ -3,6 +3,7 @@ import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
+import { oversizedFiles } from "./scripts/lint-oversized-files.mjs";
 import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
 
 // ---------------------------------------------------------------------------
@@ -207,7 +208,12 @@ export default defineConfig({
     "func-names": "off",
     "func-style": "off",
     "import/consistent-type-specifier-style": "error",
-    "max-lines": "off",
+    // The file-length ceiling (#615's 625 lines), back under oxlint after
+    // governance-kit audit 0.11.0 retired the `repo-hygiene` directive that
+    // owned it: same raw-line count, ~0.4s against that directive's 51.2s. The
+    // 131 files predating it are exempt by name in the down-only
+    // tests/inventory.json#fileSize.
+    "max-lines": ["error", { max: 625 }],
     "no-accumulating-spread": "off",
     "no-alert": "off",
     "no-bitwise": "off",
@@ -322,6 +328,12 @@ export default defineConfig({
     "unicorn/text-encoding-identifier-case": "off",
   },
   overrides: [
+    {
+      // A ledger row, not an inline `oxlint-disable`: a suppression is free
+      // to add; a row has to survive the budget.
+      files: oversizedFiles,
+      rules: { "max-lines": "off" },
+    },
     {
       // The client package root is intentionally the single public contract
       // barrel. Consumers import this boundary rather than reaching into

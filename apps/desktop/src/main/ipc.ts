@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (harness, conversation, apps, provider) once the surface stabilizes
 import { app, ipcMain, BrowserWindow, safeStorage, shell } from "electron";
 
 import { openAppFolder } from "./app-reveal-core.js";

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the second half of Tally's write surface, registered as one unit with tally.ts and read wholesale beside it.
 // Tally's group-life and re-allocation commands. No balance is stored or
 // transmitted — `simplify_opt_in` is a FLAG and the minimal-transfer set is
 // derived at read time. Nothing is ever sent: `tally.nudge` records a PREPARED

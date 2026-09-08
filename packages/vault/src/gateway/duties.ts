@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one sweep pipeline; splitting it scatters a single transaction's reasoning across files.
 // Standing duties (§10). Not request-shaped; still writes receipts.
 
 import { liveBlobShas } from "../blob/read.js";

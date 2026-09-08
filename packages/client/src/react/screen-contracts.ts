@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#363) single source of truth for every renderer screen's prop-type contract (issue #325); splitting would scatter one cohesive DTO surface across files that all need to change together
-// Screen prop-type contracts (#325). Each DTO below is the typed props one
-// React screen renders against, kept explicit so a route's derivation and its
-// screen agree field for field. This module must stay self-contained: importing
 // `app-shell-context.ts` or anything reaching ambient globals breaks the React
 // island's tsconfig. `*BridgeProps` is a naming convention; no bridge exists.
 

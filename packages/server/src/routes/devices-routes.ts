@@ -1,9 +1,5 @@
 /*
  * Paired-device roster, revoke, and pairing-ticket mint over HTTP (#376).
- * governance: allow-repo-hygiene file-size-limit (#608) cohesive device route owns listing, pairing, rename, compute, and revocation authorization
- *
- * Scope is enrollment-only: the iroh forwarder stamps the caller identity onto
- * `AUTHED_DEVICE_HEADER`, and a request without one has no authority. A vault
  * has exactly one owner (#726), so visibility IS authorization.
  *
  * The revoke cascade must mirror device-admin.ts: revoke the rows, then close

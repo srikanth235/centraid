@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# governance-kit:managed kit-version=0.14.0
+# governance-kit:managed kit-version=0.15.0
 # Shared helpers for governance directive tests.
 # Source this from every directive's check.sh. Packs always live two levels
 # deep, so directives at `.governance/packs/<owner>/<name>/directives/<id>/check.sh`

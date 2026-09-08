@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across harness, capability, workspace, attachment, stop, and transcript behavior
-// (Provider-egress consent lives on the ROUTE, not this screen — see AssistantRoute.test.tsx.)
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";

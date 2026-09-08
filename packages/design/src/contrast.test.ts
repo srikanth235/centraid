@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — this test is the single cross-emitter contrast matrix for shell, blueprint, kit, and native ink pairings; splitting its coupled floors would weaken the shared regression evidence.
 // WCAG floors for every ramp this package ships, measured against the EMITTED
 // CSS, never literals copied out of it: 4.5:1 body text, 3:1 large text and
 // non-text UI. Every rung is measured on every surface it can land on.

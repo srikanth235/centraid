@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
-// Gateway-owned git store for editing sessions. Draft DATA lives in the
-// vault's ext draft band, never in a branched data.sqlite beside the code.
 // Rollback is a NEW forward commit overlaying an older subtree, never a reset,
 // so `git log main` stays the audit of everything live. Publish and rollback
 // serialize through one per-store mutex, and fresh-path-per-publish rotates

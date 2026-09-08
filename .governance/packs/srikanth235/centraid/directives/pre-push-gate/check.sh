@@ -87,10 +87,12 @@ export GOVERNANCE_SHELL_FULL=1
 # hygiene gate is enforced nowhere.
 #
 # This directive also carries the other half of the rung-0 deferral (#915):
-# `.githooks/pre-push` runs `repo-hygiene` and `receipt-per-issue` — the two
-# repo-wide vendored directives `.githooks/pre-commit` now skips — immediately
-# before this check, so a push still pays for all 22 directives while a commit
-# pays 6s instead of 89s.
+# `.githooks/pre-push` runs `receipt-per-issue` — the repo-wide vendored
+# directive `.githooks/pre-commit` skips — immediately before this check, so a
+# push still pays for every directive while a commit skips the repo-wide one.
+# The deferral shrank with the audit 0.11.0 catalog: `repo-hygiene` was
+# retired upstream and `receipt-per-issue` was rewritten far cheaper, so the
+# list is worth re-measuring before it is kept.
 # `CENTRAID_PUSH_TIER=full` forces the full tier on a branch push. It only ever
 # widens what runs, so it needs no waiver; there is deliberately no value that
 # narrows the `main` tier.

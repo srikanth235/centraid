@@ -1,5 +1,4 @@
 // Structurally distinct tile bodies (#708 A).
-// governance: allow-repo-hygiene file-size-limit The #712 shared tile-body catalog stays together so every blueprint's shape remains comparable in one binding layer.
 //
 // Header is INVARIANT (`LauncherGrid`). Body shape names the app — Docs is ruled file rows, Notes is prose (a title over an opening line made them indistinguishable).
 // `loading` is STATIC skeletons, never a spinner. `empty`/`unknown` is the what-to-do line — fabricate neither a count nor a row.

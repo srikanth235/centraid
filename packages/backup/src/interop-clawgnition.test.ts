@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
  * `RemoteBackupProvider` against a REAL Clawgnition gateway under `wrangler
  * dev`; only the S3 data plane is swapped for `S3TestServer`. Zero fakes of OUR

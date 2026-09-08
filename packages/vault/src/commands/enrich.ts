@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
 // Enrichment commands (#299): verbs staging cannot express. OCR → inline `text` derivative (FTS on parent, #296). Face loop is one verb with three answers (#712).
 
 import { stampDerivation } from "../enrich/derivation.js";

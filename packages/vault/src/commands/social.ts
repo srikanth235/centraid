@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); social owns the whole conversation loop, so it is large by design.
 // Social domain commands (§07): the domain resolves raw addresses to parties
 // (never a duplicate person per channel) and owns conversation state. The
 // message state machine — draft → sent → delivered → read | failed — moves

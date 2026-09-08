@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
-// governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
  * Full-story backup E2E (PROTOCOL.md/FORMAT.md): no injected provider or
  * `assembleEntries` — constructed as `build-gateway.ts` does, real vault,

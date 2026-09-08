@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505/#834); the views, the rail, the editor and the states each live in their own module and this is the wiring between them.
 // Agenda — query-free React tree; keep `./queries/*` out of it.
 //
 // THE APP IS A ROUTE INSIDE THE FRAME: no bar, status line or nav column of its

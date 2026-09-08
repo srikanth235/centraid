@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — this file holds the app's
-// whole orchestration as one React tree by design (#505).
 import {
   useCallback,
   useEffect,

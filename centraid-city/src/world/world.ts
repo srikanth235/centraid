@@ -1,9 +1,6 @@
 // world.ts — scene construction: sky, ground, district plates, building silhouettes,
 // particle flows. ALL geometry (plate rects, building positions/sizes/kinds/colors) comes
 // from core/content.ts; this module only knows how to render it.
-// governance: allow-repo-hygiene file-size-limit — scene build, flow system, and the
-// animation registry share the THREE material/instancing state they allocate. Splitting
-// them means exporting that state; tracked for the TypeScript conversion in #704.
 
 import * as THREE from "three";
 

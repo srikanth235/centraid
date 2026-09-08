@@ -10,7 +10,7 @@ Both gaps below cost the `mobile-device-gate` lane days of red before the device
 
 `oxlint.config.ts` bans them through `no-restricted-properties`. Watch the rule's `files` glob: it covered `apps/mobile/src/**` and `packages/core/src/time/**` only, while the mobile bundle also reaches ~112 modules under `packages/*` — the pure logic and copy modules that `apps/mobile/src` imports (blueprint app roots, `components/*.tsx` and `queries/*` belong to the web and desktop seats and are NOT bundled). A ban that does not cover everything the bundle reaches is a ban with a hole in it.
 
-`unicorn/no-array-reverse` wants `toReversed()`, which is the method Hermes lacks. Inside mobile-reachable code that rule loses: suppress it per line with `governance: allow-no-unjustified-suppressions runtime capability gap`, the pattern already used at `apps/mobile/src/lib/replica/sqlite-intent-store.ts`.
+`unicorn/no-array-reverse` wants `toReversed()`, which is the method Hermes lacks. Inside mobile-reachable code that rule loses: suppress it per line with an `oxlint-disable-next-line` carrying the runtime-capability reason, the pattern already used at `apps/mobile/src/lib/replica/sqlite-intent-store.ts`.
 
 ## Android's `InetAddress.getLoopbackAddress()` is not 127.0.0.1
 

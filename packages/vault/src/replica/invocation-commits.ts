@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing cohesive invocation journal; decomposition is outside issue #417
 import type { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";

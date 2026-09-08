@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#679) component state, registry enumeration, failure induction, and snapshot aggregation form one health contract whose completeness is audited together
 /*
  * Component-level health for a self-hosted gateway. Uptime says "the
  * process answers"; this says WHICH subsystem stopped working and what

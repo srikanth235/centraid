@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #526 Keep the reviewed security boundary cohesive.
 /**
  * Centraid Assist OAuth courier (#526, Model B).
  *
@@ -10,7 +9,6 @@
  * minted for it at /exchange (issue #865) — possession of a stolen token
  * alone proves nothing.
  */
-// governance: allow-repo-hygiene file-size-limit #526 Keep the reviewed security boundary cohesive.
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const PUBLIC_ORIGIN = "https://oauth.centraid.dev";

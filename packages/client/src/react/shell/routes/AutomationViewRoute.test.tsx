@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across harness, model, effort, provider-consent, and reload cases
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";

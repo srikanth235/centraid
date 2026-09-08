@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#406) declared shape composition, temporal membership, and opaque row identity form one security boundary
-// Server-derived replica shapes (#406, #928): an installed app's own build-time
-// manifest, minimized by the sealed-column registry. No evaluator runs here —
-// a first-party app is not a principal (#928, AP-apps-declare), so the shape is
 // a static function of what the app declares and what the vault seals.
 
 import crypto from "node:crypto";

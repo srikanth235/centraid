@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#872) an ambient script cannot be split — the first `import`/`export` turns it into a module and every global below stops being global, so all shell-client and handler contracts are restated in this one file by construction.
 // Global ambient types for the blueprint apps (TS + CSS-modules conversion).
 //
 // These are GLOBALS on purpose: handlers and page code reference `HandlerArgs`,

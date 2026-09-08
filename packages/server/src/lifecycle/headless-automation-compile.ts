@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#567) the headless compile boundary is one lock/hydration/failover/ledger transaction; splitting settlement from dispatch would obscure its exactly-once guarantees
 import path from "node:path";
 
 import { validateManifest } from "@centraid/server/automation";

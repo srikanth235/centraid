@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit clone orchestration + identity/visual rewrites share one copy-then-rewrite pipeline — splitting would fracture the per-clone invariants
 import { promises as fs } from "node:fs";
 import path from "node:path";
 

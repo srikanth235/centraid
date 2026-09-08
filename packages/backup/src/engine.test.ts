@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#408) the engine's behavior suite — snapshot/restore/verify roundtrips plus the /1 WAL+PITR+determinism cases all share the same provider/keyring/tempdir fixtures; splitting by topic would duplicate the fixture plumbing in every shard
 import { createHash } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";

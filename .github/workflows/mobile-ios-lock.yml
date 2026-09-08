@@ -245,17 +245,12 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # The body's waiver is REQUIRED, not decoration: governance's
-          # `commit-issue-receipt-match` fails any commit that touches no
-          # `receipts/issue-*.md`, and it failed bcf17bd3f (run 34103181691)
-          # for exactly that. The directive names this line as the way out, and
-          # it is the right way out here — a bot appending prose to an
-          # append-only audit artifact would be worse than a declared
-          # exception. `commit-message-format` is satisfied by the subject's
-          # conventional prefix and `(#996)` suffix.
+          # `commit-message-format` is satisfied by the subject's conventional
+          # prefix and `(#996)` suffix. The body previously carried a
+          # `commit-issue-receipt-match` waiver; that directive was retired in
+          # governance-kit audit 0.11.0, so a bot commit no longer needs one.
           git commit \
-            -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)" \
-            -m "governance: allow-commit-issue-receipt-match bot-regenerated lockfile; the receipt row for this lock lives in the commit that changed the native inputs, and this job must not write to an append-only audit artifact."
+            -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)"
           git push origin "HEAD:${BRANCH}"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
       # Uploaded even when the push was skipped or a later step failed: the lock

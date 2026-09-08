@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for one automation run's detail view; splitting would fragment one visual unit
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 

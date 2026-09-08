@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#865) registration, wake replay, and the SSRF guard share one fixture gateway; splitting them would triple the boot cost.
 import { promises as dnsPromises } from "node:dns";
 import { promises as fs } from "node:fs";
 import http from "node:http";

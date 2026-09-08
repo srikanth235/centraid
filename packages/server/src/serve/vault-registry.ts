@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#439) the vault registry is one cohesive mount/lifecycle owner — scan, create, rename, delete, and now adopt (issue #439) all manipulate the same private plane map + auto-created-default set, so splitting the adopt seam into its own module would either expose that internal state across a boundary or duplicate the scan/delete plumbing it reuses
 /*
  * The gateway's sovereign vaults under one root. A vault's identity and name
  * live in its own `core_vault` row, so the registry persists NOTHING at the

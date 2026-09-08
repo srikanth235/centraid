@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connectors gallery surface; splitting would fragment one visual unit
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 

@@ -1,5 +1,4 @@
 import fss, { promises as fs } from "node:fs";
-// governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/marker case; sharding would duplicate the shipper per file
 /*
  * End-to-end WAL replay (FORMAT.md § WAL segments — /1, #408) over the REAL
  * pipeline. Row sets are compared against capture-time snapshots: the restore

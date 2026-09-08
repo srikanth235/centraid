@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit prepared-statement block + row mappers for every conversation-ledger column; splitting the statement table from its mappers would decouple the two halves that must change together
-
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import type {

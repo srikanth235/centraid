@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#408) the WAL capture loop is one correctness argument — detectors, capture, rollover, generation lifecycle and crash-ordering rules all lean on each other's invariants; splitting them would scatter the proof across files that only ever change together
 /*
  * In-process WAL segment shipper (#408): each tick copies the committed
  * byte-delta of `vault.db-wal` into local segment files, which the gateway's

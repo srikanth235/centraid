@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#408) one serialized run-chain contract — backup, verify, restore-verify and the wal drain share one state row, fencing and keyring
 /*
  * `BackupService` — gateway-side owner of the offsite backup engine
  * (`@centraid/backup`, PROTOCOL.md + FORMAT.md). Static config and live

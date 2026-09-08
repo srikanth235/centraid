@@ -77,7 +77,7 @@ export const BEHAVIOUR_SIGNALS = [
  * promise this file makes. Named once here so the branch and the message below
  * carry no bare marker of their own.
  */
-export const UNREVIEWED_MARKER = "TODO"; // governance: allow-no-orphan-todos
+export const UNREVIEWED_MARKER = "TODO";
 export const UNREVIEWED_REASON = `${UNREVIEWED_MARKER}: why is install-time code acceptable here?`;
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -185,8 +185,8 @@ export function fingerprintHooks(entry, readFile = readScriptFile) {
   // NUL is the separator because no path or sha can contain it, so the joined
   // parts cannot be made to collide by a crafted filename. Written as the
   // \u0000 ESCAPE, never the raw byte: a literal NUL in the source makes this
-  // file binary to grep, and the no-orphan-todos governance sweep then reports
-  // "Binary file ... matches" as a phantom violation with no line to cite.
+  // file binary to grep, and any line-oriented sweep over it then reports
+  // "Binary file ... matches" with no line to cite.
   return { digest: sha256(parts.join("\u0000")), signals, files: files.sort() };
 }
 
@@ -236,7 +236,6 @@ export function auditLifecycle(input) {
     // the unreviewed placeholder `--print-ledger` stamps — not deferred work.
     // Linking a tracker would claim someone owns the placeholder; nobody does,
     // and the whole point is that it must be replaced before the gate passes.
-    // governance: allow-no-orphan-todos the refusal sentinel, not a deferred task
     else if (pinned.reason.includes(UNREVIEWED_MARKER))
       problems.push(
         `${entry.name}: ledger entry still carries the generated ${UNREVIEWED_MARKER} reason — \`--print-ledger\` writes the shape, a human writes the review`

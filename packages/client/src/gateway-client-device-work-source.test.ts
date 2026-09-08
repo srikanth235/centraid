@@ -159,7 +159,7 @@ describe("gateway-client-device-work-source", () => {
           })
         )
       );
-      // oxlint-disable-next-line unicorn/prefer-blob-reading-methods -- jsdom's Blob lacks arrayBuffer(); governance: allow-no-unjustified-suppressions test-environment compatibility (#414)
+      // oxlint-disable-next-line unicorn/prefer-blob-reading-methods -- jsdom's Blob lacks arrayBuffer()
       reader.readAsArrayBuffer(blob);
     });
   }

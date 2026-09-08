@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#436) the reference conformance kit is one cohesive grading suite — every case shares `withProvider`/`manifestKeyFor`/`expectError` fixtures and is the executable definition of the protocol; the profile-membership assertion (#436 § Profiles) belongs in the capabilities-sanity case beside the other Layer-1 discovery checks, not in a fragmented sibling
 /*
  * The conformance kit (PROTOCOL.md § Conformance): "the reference
  * conformance kit lives in Centraid's packages/backup (conformance.ts) and

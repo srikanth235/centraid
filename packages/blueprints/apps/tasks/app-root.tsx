@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — this file holds the room's whole orchestration as one React tree by design (#834); splitting it belongs to the app's own code evolution, not this rebuild.
 // Tasks — the commitments room, query-free React tree (#505). Holds `Root`
 // plus every helper that does NOT depend on the node-side `./queries/*`
 // modules; `app-inline.tsx` pairs it with those and the pending projection.

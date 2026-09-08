@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#608) cohesive automation lifecycle suite shares one production HTTP and scheduler fixture
 import { promises as fs } from "node:fs";
 /*
  * Automation CRUD over HTTP (#141). The desktop does not

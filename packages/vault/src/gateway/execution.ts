@@ -1,8 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit S3+S4+S5 of one invocation — contract, precondition, ACID boundary and evidence are one transaction bracket
-// S3 + S4 + S5 for one already-consented invocation: contract, preconditions
-// recorded before anything mutates, the ACID boundary with postcondition
-// rollback, then evidence.
-
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 

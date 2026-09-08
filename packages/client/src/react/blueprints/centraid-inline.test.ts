@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#731) one inline host contract suite covers share/claim/resident transports and the replica-backed bridge; splitting it would hide cross-surface identity assertions.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";

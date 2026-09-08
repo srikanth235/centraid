@@ -1,5 +1,4 @@
 // Mobile agent-e2e harness. One entry point — `runFlow` — handles setup
-// governance: allow-repo-hygiene file-size-limit The #716 harness centralizes one simulator/gateway lifecycle; splitting it would duplicate cleanup and verdict invariants.
 // (run dir, sim discovery, app-install check), provides a `ctx` surface to
 // the flow body (run / restart / note), and writes a verdict.md at the end.
 //

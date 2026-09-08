@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#367) one coherent archival engine — the eligibility closure, segment builder, hash-chained manifest writer, and its verifier are one integrity unit; splitting the chain-hash writer from its verifier invites drift
-// Audit archival (#367 §E2, one file since #916): seal rows past the window
-// into CAS; keep the manifest. Two streams match FK topology (provenance
-// chain; invocation↔receipt cluster under deferred FKs), and the same run
 // prunes the LEDGER band behind its own custody latch.
 // NEEDS-WIRING (#367): nothing calls `runJournalArchival` automatically. Window-gated AND call-gated.
 

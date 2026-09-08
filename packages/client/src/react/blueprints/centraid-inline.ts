@@ -5,7 +5,6 @@ import {
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
-// governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
 import type {
   InlineAppModule,
   InlineScope,

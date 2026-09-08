@@ -1,7 +1,10 @@
-# receipt-per-issue — receipts bind 1:1 to a GitHub issue, carry four required sections (plus ## Decisions and a runnable ## Verification command on newly added receipts), and the Checklist crosswalks to evidence.
+# receipt-per-issue — unique issue receipts; a completed change is associated
+# with a well-formed receipt. A recorded fence or verdict is not proof a
+# command ran.
 category: AgentDiscipline
 recommended: true
-summary: Every tracked receipts/*.md has a unique issue-<N> filename token, includes ## Checklist, ## What changed, ## Out of scope, ## Verification, and each `- [x]` item appears (case-insensitive substring) in What changed or Verification. Receipts added in the change set must also include ## Decisions, ## Audit (a fresh-context sub-agent's PASS/REFUTED verdict against the diff and the issue), and at least one fenced code block in ## Verification; every file changed in that change set must be named in some added receipt (scope-creep guard); pre-existing receipts are grandfathered.
+always_install: true
+summary: Unique issue-<N> receipts; a completed change adds or updates one and records outcome + verification evidence. Independent review remains required.
 surface: repo-state
 hook: pre-commit
 triggers: [pre-commit, schedule]
@@ -13,29 +16,20 @@ config:
     tunable: false
   - name: RECEIPT_FILENAME_REGEX
     type: scalar
-    doc: Fixed filename convention for existing issue receipts.
+    doc: Filename convention — issue-<N>.md or optional kebab-case slug.
     default: '^issue-([0-9]+)(-[a-z0-9]+(-[a-z0-9]+)*)?\.md$'
     tunable: false
-  - name: NEW_RECEIPT_FILENAME_REGEX
+  - name: ISSUE_RECEIPT_GLOB
     type: scalar
-    doc: Fixed slug-bearing filename convention for newly added receipts.
-    default: '^issue-([0-9]+)-[a-z0-9]+(-[a-z0-9]+)*\.md$'
+    doc: Filename glob used to detect a receipt in the completed-change diff.
+    default: issue-*.md
     tunable: false
-  - name: REQUIRED_SECTIONS
+  - name: COMPLETED_SECTIONS
     type: list
-    doc: Fixed receipt sections required for every substantive receipt.
+    doc: Sections required on a non-stub receipt at the completed-change boundary.
     default:
-      - Checklist
       - What changed
-      - Out of scope
       - Verification
-    tunable: false
-  - name: NEW_RECEIPT_SECTIONS
-    type: list
-    doc: Fixed additional sections required on receipts added in the change set.
-    default:
-      - Decisions
-      - Audit
     tunable: false
   - name: ATTEST_SECTION
     type: scalar
@@ -67,11 +61,12 @@ config:
     doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
     default: ""
     tunable: true
-# Sub-agent judgment (issue #325): the `## Audit` section is a fresh-context
-# sub-agent attestation. Declared once here; check.sh gates it via judge_attest.
+# Independent review (issue #370): outcome claims and verification evidence
+# against the real diff and work item. A recorded verdict is not proof of execution.
 judge:
   inputs:  [diff, receipt, issue]
   checks:
-    - "'## What changed' faithfully describes the diff (no misrepresentation, no omission)"
-    - "each '- [x]' item is realized in the diff"
-    - "the '## Checklist' mirrors the issue's checklist"
+    - "'## What changed' faithfully describes the outcome and significant behavior of the diff (no misrepresentation, no omission of significant behavior)"
+    - "verification evidence, if taken as true, would support the claimed outcome; a recorded fence or verdict is not proof that execution occurred"
+    - "applicable acceptance criteria from the work item are met by the diff, or remaining gaps are named under Decisions/limitations"
+    - "The receipt named by the completed change is the issue the work belongs to, not an unrelated file touched to pass the gate"

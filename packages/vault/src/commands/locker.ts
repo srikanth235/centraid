@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); Locker owns the whole password-manager write surface — add/edit/trash/restore/purge plus the canonical star — so it is one file by design.
 // Locker write surface. Favorites are NOT a column: star via flags-scheme
 // (#274). Secrets (#293) are SEALED; derivatives (`totp_code`, `watchtower`)
 // unseal inside the command and return only derivatives. `sealedInput` so

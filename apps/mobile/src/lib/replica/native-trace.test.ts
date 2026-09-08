@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TraceRecord } from "@centraid/core/protocol";
 
-/* oxlint-disable max-classes-per-file -- the fake Directory and File are one expo-file-system stand-in and cannot be one class; governance: allow-no-unjustified-suppressions test double (#927) */
+/* oxlint-disable max-classes-per-file -- the fake Directory and File are one expo-file-system stand-in and cannot be one class */
 
 class FakeDirectory {
   exists = true;

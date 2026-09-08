@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit orchestration hub already at the cap; pending split of the route-handler wiring into a sibling module
 /*
  * `buildGateway()` — the host-agnostic gateway core (#280, #289).
  *

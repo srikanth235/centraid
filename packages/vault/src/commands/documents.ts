@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); documents own the whole drive loop (13 commands with their contracts), so it is large by design.
 // Document commands (core §01, #352): a document has identity SEPARATE
 // from its bytes — core_document wraps a canonical core_content_item exactly
 // like knowledge_note wraps a note body (the wrapper pattern), so a document

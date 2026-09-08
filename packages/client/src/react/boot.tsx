@@ -180,4 +180,5 @@ void (async (): Promise<void> => {
 
 const READY_LOG =
   "[react] renderer ready — App on #root; open %s for the component gallery";
-console.log(READY_LOG, PREVIEW_HASH); // governance: allow-repo-hygiene (#363) one-time boot-readiness marker, not leftover debug output
+// A one-time boot-readiness marker, not leftover debug output.
+console.log(READY_LOG, PREVIEW_HASH);

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#363) the provider-agnostic snapshot/restore/verify/recovery engine (PROTOCOL.md's data-semantics owner); splitting the pipeline stages would scatter one cohesive contract across files that all change together on a protocol revision
 /*
  * Snapshot / restore / verify / recovery. This is the data-semantics the client
  * owns (PROTOCOL.md); it reaches storage only through the `BackupProvider` +

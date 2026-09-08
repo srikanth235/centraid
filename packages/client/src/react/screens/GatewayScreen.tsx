@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one instrument-panel screen
-// (runtime, backup, storage, components, logs, alerts) threading bridge props
-// to each drill-in's own screen component.
 import { useRef, useState } from "react";
 import type { JSX } from "react";
 

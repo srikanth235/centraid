@@ -1,8 +1,4 @@
 /*
- * governance: allow-repo-hygiene file-size-limit (#567) one browser-safe conversation transport owns the route DTOs and SSE parser together so wire additions cannot drift between request and stream handling
- *
- * Renderer-side conversation transport over direct HTTP (#141), no desktop
- * relay. SSE
  * uses fetch + a ReadableStream reader, never `EventSource`: a turn needs a
  * POST body and the Bearer header.
  */

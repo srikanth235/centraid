@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { Hash } from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#418) the ingress/direct/stream/outbox coordinator is one lifecycle boundary; splitting only its close fence would separate shutdown ordering from the runner it owns
 import {
   closeSync,
   createReadStream,

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — one bespoke model per building id.
 // Already split three ways by district; each entry is independent of the others.
 // landmarks-core.ts — clients, gateway, runtime. See KIT_API.md.
 //
