@@ -257,8 +257,20 @@ export interface ReplicaReadWireResult extends ReplicaTruncation {
 export interface ReplicaSearchWireResult extends ReplicaTruncation {
   rows: ReplicaRowEnvelope[];
   pending?: PendingOverlaySidecar;
-  cursor: ReplicaCursor;
-  dependency: ReplicaDependency;
+  /**
+   * OPTIONAL SINCE #996 W5-D1. A seat search runs against the vault's own FTS
+   * shadow tables in this seat's file; the file's position is one number about
+   * the SEAT (`SeatWatermark`), not a per-read cursor, and there is no second
+   * store to reconcile a search answer against. `receiptIdFor` already reads
+   * this as optional and answers `replica:local` without it.
+   */
+  cursor?: ReplicaCursor;
+  /**
+   * OPTIONAL for the same reason. A dependency is `(shapeId, entity)`, and a
+   * seat has no shapes — one file, one vault. Only the READ path builds live
+   * queries from it, and only the shaped store answers one.
+   */
+  dependency?: ReplicaDependency;
   coverage?: ReplicaCoverage;
 }
 

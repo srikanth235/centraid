@@ -23,6 +23,10 @@ import type {
   PendingIntentRevisionTarget,
 } from "./intent-revision.js";
 import type { SeatReadOverlay } from "./seat/read-overlay.js";
+import {
+  seatSearchEnvelopes,
+  seatSearchUnavailable,
+} from "./seat/search-page.js";
 import { seatWorkerPage } from "./seat/seat-page-reader.js";
 import { SessionSeat } from "./seat/session-seat.js";
 import type { SeatOpener, SessionSeatHandle } from "./seat/session-seat.js";
@@ -354,17 +358,35 @@ export class ReplicaShellSession {
     return this.coordinator.readWire({ ...request, shapeId: shapeIdLocal });
   }
 
+  /**
+   * SEARCH RUNS ON THE SEAT (#996, ruling W5-D1).
+   *
+   * The vault's own FTS shadow tables came across in the bootstrap copy and are
+   * kept by the same triggers, so this is the gateway's statement over the
+   * member's own file — see `seat/search-page.ts`, and
+   * `tests/quality/seat-replay-parity.test.ts` for the year-3 measurement that
+   * the two answer the same rows in the same order.
+   *
+   * `appId` is no longer a scope. One vault, one file: an entity names its own
+   * rows and there is no per-app shape left to select between. It stays in the
+   * signature because it is what a caller has, and it names the app in the
+   * refusal a seat with no file raises.
+   *
+   * A SEAT WITH NO FILE IS ONLINE-ONLY, NOT BROKEN (W4-D2, R9), and the caller
+   * falls back through the gateway's paged door exactly as `page` does.
+   */
   async search(
     appId: string,
     request: ShellReplicaSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeIdLocal = this.resolveShapeId(
-      appId,
-      request.entity,
-      request.shapeId
-    );
-    return this.coordinator.searchWire({ ...request, shapeId: shapeIdLocal });
+    const seat = await this.seat();
+    if (!seat) throw seatSearchUnavailable(`${appId}/${request.entity}`);
+    return seatSearchEnvelopes(seat, {
+      entity: request.entity,
+      query: request.query,
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+    });
   }
 
   async write(

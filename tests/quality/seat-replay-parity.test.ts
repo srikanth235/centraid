@@ -29,6 +29,7 @@ import { encodeWireValue } from "@centraid/core/protocol";
 import type { SeatLogPageWire } from "@centraid/core/protocol";
 import { staticSeatSnapshotTransport } from "@centraid/test-kit/seat-snapshot-transport";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { YEAR3_CONTACT_NEEDLE } from "@centraid/test-kit/year3-vault";
 import {
   beginReplicaCommit,
   buildSeatSnapshot,
@@ -40,9 +41,11 @@ import {
 } from "@centraid/vault";
 import { buildOntologyScenarios } from "@centraid/vault/tests/ontology-scenarios";
 
+import { REPLICA_LOCAL_SEARCH } from "../../packages/client/src/replica/search.js";
 import {
   applySeatLogPage,
   bootstrapSeatFile,
+  seatSearchStatement,
 } from "../../packages/client/src/replica/seat/index.js";
 import { NodeSeatDriver } from "../../packages/client/src/replica/seat/node-seat-driver.js";
 import { nodeSeatStaging } from "../../packages/client/src/replica/seat/node-staging.js";
@@ -136,6 +139,50 @@ async function seatOf(
     bytes: compressed.byteLength,
     ms: performance.now() - started,
   };
+}
+
+/**
+ * THE FTS SHADOW TABLES' PARITY, WHICH IS A QUERY QUESTION (#996, W5-D1).
+ *
+ * `comparableTables` skips `fts_*` on purpose: an FTS5 shadow is four internal
+ * tables of b-tree segments, and two SQLite builds may lay the same terms out
+ * differently without disagreeing about a single search. So the claim is made
+ * where it means something — the statement a seat runs, run against BOTH files,
+ * answering the same rows in the same order.
+ *
+ * That is also the whole of W5-D1's evidence: search stays on the seat because
+ * the seat's answer IS the gateway's answer, measured rather than asserted.
+ */
+function assertSearchParity(
+  gateway: DatabaseSync,
+  seat: NodeSeatDriver,
+  entity: string,
+  term: string,
+  label: string
+): number {
+  const statement = seatSearchStatement({ entity, query: term, limit: 100 });
+  const theirs = gateway
+    .prepare(statement.sql)
+    .all(...statement.bind) as object[];
+  const ours = seat.all(statement.sql, statement.bind);
+  const shape = (rows: object[]): string[] =>
+    rows.map((row) =>
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(row)
+            // `rank` is a bm25 float; two builds may differ in the last bits
+            // without disagreeing about the ORDER, which the array already
+            // pins. What must match exactly is the ROWS and their sequence.
+            .filter(([column]) => column !== "rank")
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([column, value]) => [column, encodeWireValue(value)])
+        )
+      )
+    );
+  expect(shape(ours), `${label}: ${entity} for "${term}"`).toStrictEqual(
+    shape(theirs)
+  );
+  return ours.length;
 }
 
 function assertParity(
@@ -252,5 +299,22 @@ describe("a seat converges with the gateway it copied", () => {
     // The artifact is a real download, not a token one: an assertion that
     // passed on a few kilobytes would say nothing about the declared volume.
     expect(seat.bytes).toBeGreaterThan(1_000_000);
+
+    // SEARCH, ON THE SEAT, AT THE DECLARED VOLUME (#996, W5-D1). The needle is
+    // one planted row in five thousand parties, so a statement that quietly
+    // matched everything or nothing cannot pass this.
+    const found = assertSearchParity(
+      db.vault,
+      seat.driver,
+      "core.party",
+      YEAR3_CONTACT_NEEDLE,
+      "year-3"
+    );
+    expect(found).toBeGreaterThan(0);
+    // Every searchable entity answers the same on both files, needle or not:
+    // an entity whose join key or shadow table were wrong would answer nothing
+    // on the seat and something on the gateway.
+    for (const entity of Object.keys(REPLICA_LOCAL_SEARCH))
+      assertSearchParity(db.vault, seat.driver, entity, "the", "year-3");
   }, 600_000);
 });

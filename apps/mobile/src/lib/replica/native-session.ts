@@ -16,6 +16,7 @@ import {
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
+  seatSearchUnavailable,
   prepareReplicaWrite,
   reconstructPendingProjection,
   VAULT_HEADER,
@@ -44,6 +45,7 @@ import type {
   PreparedReplicaWrite,
   ReplicaValue,
   ReplicaWriteMutationInput,
+  SeatSearchRequest,
 } from "@centraid/client/replica/native";
 import { appActionPath } from "@centraid/core/protocol";
 
@@ -63,6 +65,11 @@ import { stampVaultSourceRows } from "./vault-source";
 import type { VaultSource } from "./vault-source";
 import { waitingOnLabel } from "./waiting-on";
 import type { MountedOrigin } from "./waiting-on";
+
+/** The seat's search, as the session needs it. See `attachSeat`. */
+export interface NativeSeatSearchPort {
+  search: (request: SeatSearchRequest) => Promise<ReplicaSearchWireResult>;
+}
 
 export type NativeReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
   shapeId?: string;
@@ -244,6 +251,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
   #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #appStateSub: { remove: () => void } | undefined;
+  #seat: NativeSeatSearchPort | undefined;
   #closed = false;
 
   constructor(
@@ -370,13 +378,41 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#scope ? stampVaultSourceRows(result, this.#scope) : result;
   }
 
+  /**
+   * THE PHONE'S SEAT, ONCE ITS COPY HAS ARRIVED (#996, ruling W5-D1).
+   *
+   * Attached rather than constructed: the seat is opened by the mount, after
+   * the session, because a bootstrap is a file download and a session that
+   * waited for it would leave every screen on "Loading …". Absent means no copy
+   * yet, and `search` then refuses ONLINE_ONLY so the caller falls back through
+   * the gateway's paged door (W4-D2, R9).
+   */
+  attachSeat(seat: NativeSeatSearchPort | undefined): void {
+    this.#seat = seat;
+  }
+
+  /**
+   * SEARCH RUNS ON THE SEAT (W5-D1). The vault's FTS shadow tables came across
+   * in the bootstrap copy and are kept by the same triggers, so this is the
+   * gateway's own statement over the file this phone already holds — measured
+   * equal on the year-3 corpus in `tests/quality/seat-replay-parity.test.ts`.
+   *
+   * `appId` is no longer a scope: one vault, one file, and an entity names its
+   * own rows. It stays because it is what a caller has, and it names the app in
+   * the refusal.
+   */
   async search(
     appId: string,
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
-    const result = await this.#coordinator.searchWire({ ...request, shapeId });
+    const seat = this.#seat;
+    if (!seat) throw seatSearchUnavailable(`${appId}/${request.entity}`);
+    const result = await seat.search({
+      entity: request.entity,
+      query: request.query,
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+    });
     return this.#scope ? stampVaultSourceRows(result, this.#scope) : result;
   }
 

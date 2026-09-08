@@ -2,6 +2,22 @@
 
 ## Open
 
+- **The command palette's photo target reads a `title` column the vault
+  deleted, so a photo can never be a palette hit.**
+  `packages/client/src/react/shell/routes/paletteEntitySearch.ts` and
+  `apps/mobile/src/screens/home/blueprint-search.ts` both declare the Photos
+  target as `entity: "core.content_item"` with `labels: ["title"]`, and #996
+  R20(b) removed `title` from that row — an authored title is
+  `media_asset.title` now. Both call sites drop a hit whose label is missing
+  (`if (!label) return []`), so the target matches and then discards every row.
+  Found while converting search to the seat (#996, W5-D1): the search itself
+  now works for `core.content_item`, which is what made the dead label visible.
+  The fix is a projection, not a search change — the FTS shadow already indexes
+  the owner's title as an expression over `media_asset`, so the palette needs
+  the owning asset's title on the row. Left as a finding rather than folded
+  into W5-D1: what a photo is CALLED in the palette is a product answer, and
+  the two call sites would have to agree on it.
+
 - **The letter avatar puts body ink on a hashed hue, and the People a11y test
   was passing because the roster had no rows to fail on.** `.kit-avatar` in
   `packages/design/src/elements/kit.css` sets `color: var(--text)` while

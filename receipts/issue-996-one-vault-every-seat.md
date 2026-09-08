@@ -8881,3 +8881,157 @@ the only interesting question a proxy can be asked: whether the chain can tell.
 - **Additive is not the cut.** This adds a capability the cut will use; it reads
   nothing from the old plane and dual-writes nothing, so it is not the half-a-
   deletion that waves 5i and 5l refused.
+
+## Wave 5n — search stays on the seat (#996, W5-D1)
+
+### The owner ruling this wave runs under
+
+W5-D1, 2026-09-08: **search stays on the seat, not the gateway.** Wave 2 kept
+the FTS sync triggers and rebuilds the index after the bootstrap copy, so the
+seat file already carries the vault's shadow tables; `REPLICA_LOCAL_SEARCH`
+becomes a statement-as-data page over them through `SeatWorkerClient.query`, and
+the declarative call sites convert BEFORE the cut, in their own commits. The cut
+itself stays one atomic commit.
+
+### What wave 5i's "no callers" measurement missed
+
+Wave 5i recorded the declarative plane as unreached, and waves 5l and W45b both
+inherited that as the cut's precondition. The measurement it actually ran was
+`grep -rn "useReplicaQuery("`, and that hook IS dead — two test files reach it
+and nothing else. `session.search` and `session.read` were never in that grep.
+Measured at `cb0596127`, eight production call sites reached them, each walked
+to a mounted consumer:
+
+| call site | verb | reached from |
+| --- | --- | --- |
+| `routes/paletteRecents.ts:44` | `read` | `App.tsx` |
+| `routes/paletteEntitySearch.ts:214` | `search` | `App.tsx` |
+| `routes/homeTileContent.ts:52,284` | `read` | `HomeRoute.tsx` |
+| `apps/photos/timeline-engine.ts:256` | `read` | `timeline-source.ts` |
+| `apps/notes/NotesPowerbox.tsx:64` | `search` | `NoteEditor.tsx` |
+| `apps/docs/DocsSearchView.tsx:74` | `search` | `DocsHome.tsx` |
+| `screens/home/blueprint-search.ts:155` | `search` | `SearchOverlay.tsx` |
+| `lib/replica/inline-query-ctx.native.ts:114–115` | both | `replica-context.ts` |
+
+Plus nine `ctx.vault.search` calls in seven blueprint apps' own
+`queries/search.ts`, which reach the same seam through the inline ctx.
+
+**`grep shape_id` counts the plane's IMPLEMENTATION, not its callers**, which is
+why 50-in-four-old-plane-files read as "unreached" and was not.
+
+### The statement is the gateway's statement, minus the door's half
+
+`seat/search-page.ts` is mirrored line for line from
+`packages/vault/src/gateway/search.ts`: the same join on the id the base table
+and its shadow share, the same `_rank`/`_snippet` aliases the handler contract
+documents, the same `ORDER BY rank, id` deterministic tiebreak, the same
+`min(max(limit ?? 100, 1), 1000)` clamp.
+
+What is REMOVED is the door's own half — the grant row filter, the caller's
+filters, the R17 field mask — and that is not a widening: a seat's file IS the
+rows this member may see, built by `buildSeatSnapshot` and fed by a log the
+gateway already filtered (W4-D2, R12). A seat holding rows a member may not see
+would be a bug in the snapshot, not something a WHERE clause here could repair.
+
+**NO SOFT-DELETE PREDICATE**, for the reason the gateway has none: the shadow
+table's own AFTER triggers keep a soft-deleted row out of the index. A guard
+added on one plane only is how the two start disagreeing.
+
+**AND IT IS NOT `pageStatement`.** `PageCursor.sortKey` is a STRING and the
+keyset it builds is `(sort, pk) < (?, ?)`; a ranked search sorts on FTS5's
+`rank`, a negative REAL, and SQLite compares a REAL column to a TEXT bind by
+STORAGE CLASS — every REAL sorts below every TEXT. A keyset over it would not
+mis-order, it would return the same first page forever. Ranked FTS is not a
+keyset walk in any dialect; the answer is a bounded top-N, which is exactly what
+`searchWire` has always answered. So a search page carries a window and NO
+continuation cursor, and says so in its type.
+
+### Two entities were absent because of the OLD STORE, not the vault
+
+`knowledge.note` and `core.content_item` were missing from
+`REPLICA_LOCAL_SEARCH`. The shaped store held EAGER COLUMNS: a note's body is a
+data: URI on a content item it references, and a content item's title is an
+EXPRESSION over the owning asset (R20(b)) — neither is a column of any replica
+shape, so neither could rank. A seat holds the vault's file, shadow tables and
+all, so both rank exactly as they do on the gateway.
+
+That absence was not theoretical. The command palette and the phone's search
+overlay have BOTH targeted `knowledge.note` and `core.content_item` all along,
+and both refusals were swallowed by an `allSettled` — a note search that quietly
+returned nothing, on both seats, for as long as the targets have existed.
+
+One more thing that made visible, filed in `QUALITY.md` rather than fixed here:
+the palette's photo target declares `labels: ["title"]` on `core.content_item`,
+and R20(b) deleted that column — so a photo hit is found and then discarded.
+What a photo is CALLED in the palette is a product answer.
+
+### The parity claim, measured on the year-3 corpus
+
+`tests/quality/seat-replay-parity.test.ts` already built the gateway's file and
+the seat's through the REAL bootstrap; its `comparableTables` skipped `fts_*`
+with a note that their parity "is a QUERY question, asserted separately below",
+and there was no such assertion. There is now:
+
+- every entity in `REPLICA_LOCAL_SEARCH`, searched on BOTH files with the seat's
+  own statement, row for row and in order — `_rank` excluded from the compare
+  because two SQLite builds may differ in a bm25 float's last bits without
+  disagreeing about the ORDER, which the array already pins;
+- `YEAR3_CONTACT_NEEDLE` — one planted row in five thousand parties, so a
+  statement that quietly matched everything or nothing cannot pass.
+
+And `search-parity.test.ts` pins the seat's emitted SQL against the gateway's
+SOURCE, so the mirror cannot drift silently; its FTS spec scanner was also fixed
+— the old positional regex expected the closing brace after `deletedColumn`, and
+`core.content_item` carries `foldsIn` after it, so the soft-delete column was
+being dropped. A scan that silently misses a field is a pin that passes.
+
+### Gates
+
+- `bun run --cwd packages/client test` — 294 files, **2,680 tests, 0 failed**.
+- `bun run --cwd apps/mobile test` — 289 files, **2,442 tests, 0 failed**.
+- `bun run check:push:static` — 4/4.
+- `bun run typecheck` — 25/25.
+- `bun run knip` — exit 0.
+- `tests/quality/seat-replay-parity.test.ts` — 2 tests, 0 failed, on the year-3
+  vault and the 0e ontology corpus.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/client/src/replica/seat/search-page.ts`
+- `packages/client/src/replica/seat/search-page.test.ts`
+
+**Changed:**
+
+- `packages/client/src/replica/search.ts`
+- `packages/client/src/replica/search-parity.test.ts`
+- `packages/client/src/replica/seat/index.ts`
+- `packages/client/src/replica/native.ts`
+- `packages/client/src/replica/types.ts`
+- `packages/client/src/replica/shell-session.ts`
+- `packages/client/src/replica/shell-session.test.ts`
+- `apps/mobile/src/lib/replica/native-seat.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `apps/mobile/src/lib/replica/seat-read-plane.test.ts`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `tests/quality/seat-replay-parity.test.ts`
+- `QUALITY.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the search
+
+- **Mirror the statement, do not re-derive it.** The seat runs the gateway's
+  SQL with the door's half subtracted, and the subtraction is asserted rather
+  than assumed. Two implementations that merely agree are two implementations.
+- **A registry's exclusions belong to the store that could not hold them.** The
+  seat holds the file; the two entities the shaped store could not rank rank
+  now, and a search that had been silently empty is not.
+- **A ranked search is a bounded top-N, and its type says so.** Handing back a
+  `next` cursor that cannot be honoured is worse than having none.
+- **`appId` is no longer a scope.** One vault, one file: an entity names its own
+  rows, and the shape a caller used to select between is gone. The parameter
+  stays because it is what a caller has, and it names the app in the refusal.
+- **A seat with no file is online-only, not broken.** `search` refuses exactly
+  as `page` does, and the caller falls back through the gateway's paged door.

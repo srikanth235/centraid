@@ -24,6 +24,7 @@ import {
   inProcessSeatChannel,
   replicaStorageKey,
   SeatLoop,
+  seatSearchEnvelopes,
   seatWorkerPage,
   SeatWorkerCore,
   httpSeatSnapshotTransport,
@@ -32,6 +33,8 @@ import type {
   InlinePage,
   InlinePageRequest,
   ReplicaDigest,
+  ReplicaSearchWireResult,
+  SeatSearchRequest,
   SeatWatermark,
   SeatWorkerQuery,
 } from "@centraid/client/replica/native";
@@ -125,6 +128,19 @@ export class NativeSeat {
    * loose arguments, because it carries the OVERLAY: a list read that drops it
    * shows the member everything except their own unsettled write (R23-R25).
    */
+  /**
+   * ONE RANKED WINDOW OVER THIS PHONE'S COPY (#996, ruling W5-D1).
+   *
+   * The vault's FTS shadow tables came across in the bootstrap and are kept by
+   * the same triggers, so search is the gateway's own statement over the file
+   * already here — no second index, and nothing to rebuild. `search-page.ts`
+   * assembles it; this is only which file it runs against.
+   */
+  readonly search = (
+    request: SeatSearchRequest
+  ): Promise<ReplicaSearchWireResult> =>
+    seatSearchEnvelopes(this.loop, request);
+
   readonly page: InlinePage = <Row extends object>(
     request: InlinePageRequest<Row>
   ): Promise<Page<Row>> =>

@@ -368,6 +368,10 @@ export function ReplicaProvider({
         });
         looseDrivers.splice(looseDrivers.indexOf(driver), 1);
         openDriver = driver;
+        // Captured non-optional: `session` is the outer `let` the teardown also
+        // reads, and the seat's `.then` below runs long after this scope's
+        // narrowing has expired.
+        const mountedSession = session;
         // THE SEAT ARRIVES BEHIND THE MOUNT, NEVER IN FRONT OF IT (#996 wave
         // 4b). Its first bootstrap is the whole vault file — tens of megabytes
         // over whatever connection the phone has — and a member who tapped an
@@ -395,6 +399,11 @@ export function ReplicaProvider({
                 return;
               }
               seat = opened;
+              // SEARCH RUNS ON THE SEAT (#996, W5-D1), so the session has to
+              // be told the copy arrived. Here rather than at construction:
+              // a bootstrap is a file download, and a session that waited for
+              // one would hold every screen on "Loading …".
+              mountedSession.attachSeat(opened);
               publish((value) => ({ ...value, seat: opened }));
             })
             .catch(() => undefined);

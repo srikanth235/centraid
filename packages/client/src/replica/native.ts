@@ -65,6 +65,7 @@ export * from "./seat/seat-bootstrap-no-room-error.js";
 export * from "./seat/seat-drift-error.js";
 export * from "./seat/seat-intent-store.js";
 export * from "./seat/seat-loop.js";
+export * from "./seat/search-page.js";
 export * from "./seat/seat-page-reader.js";
 export * from "./seat/seat-rebootstrap-required-error.js";
 export * from "./seat/seat-snapshot-moved-error.js";

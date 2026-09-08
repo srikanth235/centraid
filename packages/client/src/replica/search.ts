@@ -4,6 +4,13 @@ import type { ReplicaRow } from "./types.js";
 export interface ReplicaLocalSearchSpec {
   columns: readonly string[];
   deletedColumn?: string;
+  /**
+   * The base table's primary key, which is also the UNINDEXED column the
+   * vault's shadow table mirrors (`schema/fts.ts`, `idColumn`). A seat search
+   * joins the two on it, so the two names must be the SAME name — pinned by
+   * `search-parity.test.ts` against the vault's own spec.
+   */
+  idColumn: string;
 }
 
 /**
@@ -13,39 +20,90 @@ export interface ReplicaLocalSearchSpec {
 export const REPLICA_LOCAL_SEARCH: Readonly<
   Record<string, ReplicaLocalSearchSpec>
 > = {
-  // NO `core.content_item` (#996, R20(b)). The byte row lost its `title`: an
-  // authored title is `media_asset.title` and a generated caption is a
-  // `knowledge.annotation` on the representation, so the vault indexes the
-  // content item's title as an EXPRESSION over the owning asset, not as a
-  // column of the row. No replica shape carries that value, so nothing here
-  // could hold it eagerly — a Photos seat ranks its captions under
-  // `knowledge.annotation` below, and a title search goes online.
-  "core.document": { columns: ["title"], deletedColumn: "deleted_at" },
-  "social.thread": { columns: ["subject"] },
-  "core.party": { columns: ["display_name", "sort_name"] },
-  "knowledge.annotation": { columns: ["body_text"] },
+  // `core.content_item` AND `knowledge.note` ARE HERE SINCE W5-D1, and their
+  // absence was a property of the OLD STORE, not of the vault.
+  //
+  // The shaped store held EAGER COLUMNS: a note's body is a data: URI on a
+  // content item it references, and the content item's title is an EXPRESSION
+  // over the owning asset (R20(b)) — neither is a column of any replica shape,
+  // so neither could be ranked. A SEAT holds the vault's own file, shadow
+  // tables and all, so both rank exactly as they do on the gateway.
+  //
+  // That absence was not silent in theory and invisible in practice: the
+  // command palette and the phone's search overlay have both targeted
+  // `knowledge.note` and `core.content_item` all along, and both refusals were
+  // swallowed by an `allSettled` — a note search that quietly returned nothing.
+  //
+  // `columns` stays DIRECT columns only. It is what `replicaPendingSearchMatch`
+  // scans on an unsent write, and neither a decoded body nor an expression over
+  // another table is on the row that is sitting in the outbox.
+  "core.content_item": {
+    columns: [],
+    deletedColumn: "deleted_at",
+    idColumn: "content_id",
+  },
+  "knowledge.note": {
+    columns: ["title"],
+    deletedColumn: "deleted_at",
+    idColumn: "note_id",
+  },
+  "core.document": {
+    columns: ["title"],
+    deletedColumn: "deleted_at",
+    idColumn: "document_id",
+  },
+  "social.thread": { columns: ["subject"], idColumn: "thread_id" },
+  "core.party": {
+    columns: ["display_name", "sort_name"],
+    idColumn: "party_id",
+  },
+  "knowledge.annotation": { columns: ["body_text"], idColumn: "annotation_id" },
   "schedule.task": {
     columns: ["title", "description"],
     deletedColumn: "deleted_at",
+    idColumn: "task_id",
   },
   "core.event": {
     columns: ["summary", "description"],
     deletedColumn: "deleted_at",
+    idColumn: "event_id",
   },
-  "core.transaction": { columns: ["description"] },
+  "core.transaction": { columns: ["description"], idColumn: "txn_id" },
   "people.profile": {
     columns: ["role", "nickname"],
     deletedColumn: "deleted_at",
+    idColumn: "profile_id",
   },
   "locker.item": {
     columns: ["title", "username", "url"],
     deletedColumn: "deleted_at",
+    idColumn: "item_id",
   },
   "tally.expense": {
     columns: ["description"],
     deletedColumn: "deleted_at",
+    idColumn: "expense_id",
   },
 };
+
+/**
+ * The physical names a seat search touches: the base table, and the vault's
+ * shadow table beside it.
+ *
+ * DERIVED, NOT DECLARED. `packages/vault`'s `resolveEntity` composes
+ * `schema_table` for every entity in the registry, and `schema/fts.ts` names
+ * the shadow `fts_<physical>`. Restating either as a literal here would be a
+ * second owner for a name the registry owns (#883, ruling O-label), so the
+ * derivation is stated once and PINNED against the vault's own source by
+ * `search-parity.test.ts`.
+ */
+export function replicaSearchTables(entity: string): {
+  base: string;
+  fts: string;
+} {
+  const physical = entity.replace(".", "_");
+  return { base: physical, fts: `fts_${physical}` };
+}
 
 /**
  * The window a search answer is bounded by. Named here, beside the grammar it

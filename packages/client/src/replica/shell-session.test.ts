@@ -456,16 +456,15 @@ describe("shell-session", () => {
         shapeId: "shape-todos-billing",
         entity: "core.task",
       });
-      await session.search("todos", {
-        entity: "core.task",
-        query: "local",
-        shapeId: "shape-todos",
-      });
-      expect(coordinator.searchWire).toHaveBeenCalledWith({
-        shapeId: "shape-todos",
-        entity: "core.task",
-        query: "local",
-      });
+      // SEARCH IS NO LONGER THE COORDINATOR'S (#996, ruling W5-D1): it runs
+      // over the vault's own FTS shadow tables in this seat's file. This
+      // session was opened with no seat, so it refuses ONLINE_ONLY and the
+      // caller falls back through the gateway's paged door — the same answer
+      // `page` gives, for the same reason (W4-D2, R9).
+      await expect(
+        session.search("todos", { entity: "schedule.task", query: "local" })
+      ).rejects.toThrow(/online/iu);
+      expect(coordinator.searchWire).not.toHaveBeenCalled();
 
       session.subscribe("todos", [{ entity: "core.task" }], listener);
       emit?.([

@@ -56,7 +56,10 @@ describe("the seat's page on the phone's read plane", () => {
       } as never);
     };
     const answer = (await runNativeInlineQuery(handler, {
-      session: seatReadPlane(rowsOnly, { page }),
+      session: seatReadPlane(rowsOnly, {
+        page,
+        search: () => Promise.reject(new Error("not this test's question")),
+      }),
       appId: "notes",
     })) as { rows: unknown[]; next?: unknown };
     expect(answer.rows).toHaveLength(2);
