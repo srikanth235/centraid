@@ -8318,3 +8318,54 @@ shared read module is statements, and a statement has no window to declare.
   two would make every tile pay for the library it is a glance at.
 - **A cap that is inferred from a row count is a guess.** The probe row already
   knows; `countCapped` reads it now.
+
+## Wave 5f — the search shelf, Memories and a note's bodies (#996)
+
+### Eight more reads, and each one is the shape it always was
+
+- **The search overlay's five shelves** are windows: the newest twenty notes,
+  documents, expenses and photographs, plus twenty parties for the chips. Five
+  statements over the seat, module constants so a statement keeps one identity
+  across renders, ordered on the column each shelf's "newest" actually means.
+  `core_party` has no edit timestamp, so it orders on its key — the chips are a
+  set, not a recency.
+- **Memories' two reads are walks**, because a memory drawn without one of its
+  members is a memory drawn WRONG, and a window would do exactly that silently.
+  The membership walk fans out over the LIBRARY rather than over the memories,
+  so it states its own ceiling (`MEMBER_FAN_OUT`, 20,000 rows) instead of
+  hiding it in a limit that cut the answer short.
+- **A note's version bodies** are an `IN` over the ids the chain already named.
+  The chain bounds the set, so `inList` builds the predicate and its binds
+  together, and an EMPTY chain is `undefined` — a read that has not been made,
+  which the hook holds `loading` for, rather than an `IN ()` that matches
+  nothing and reads like a filter.
+
+### Census floor: 24
+
+Eight reads left. `MemoriesView.test.tsx`'s seam moves with them: it keyed on
+the request's entity and now keys on the entity the read DECLARES, which is
+the same fact in the place the seat hook carries it.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,442 tests, 0 failed.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/apps/notes/useNoteVersions.ts`
+- `apps/mobile/src/apps/photos/MemoriesView.test.tsx`
+- `apps/mobile/src/apps/photos/MemoriesView.tsx`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/screens/home/useSearchRecents.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — walk or window
+
+- **A screen that composes two sets against each other walks both.** Memories
+  joins members to memories in JavaScript; a window on either side produces a
+  memory that is silently short, which is the failure `acceptTruncation` used
+  to produce and the reason it went.

@@ -1,17 +1,20 @@
-// A note's version chain, off this device's replica. Bodies are fetched only
-// once the walk has named them: an unbounded `core.content_item` read is capped
-// server-side at 1000 rows, so older bodies would simply be missing.
+// A note's version chain, off this seat's own copy of the vault. Bodies are
+// fetched only once the chain has named them (#996 wave 5, R8): the set is
+// bounded by the chain, so the read is an `IN` over ids and never a window
+// over the content table that would leave older bodies simply missing.
 
 import { useMemo } from "react";
 
+import { inList } from "@centraid/blueprints/apps/_shared/paged-reads";
 import type { VaultRow } from "@centraid/blueprints/apps/notes/filing";
 import type { NoteVersion } from "@centraid/blueprints/apps/notes/types";
 import {
   noteVersionChain,
   projectNoteVersions,
 } from "@centraid/blueprints/apps/notes/version-chain";
+import type { PageQuery } from "@centraid/core/page";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 
 export interface NoteVersionsInput {
   headContentId: string;
@@ -33,29 +36,27 @@ export function useNoteVersions(note: NoteVersionsInput): NoteVersion[] {
       }),
     [note.currentRevisionId, note.headContentId, note.noteId, note.revisions]
   );
-  const bodies = useReplicaQuery(
+  const bodies = useSeatPages(
     "notes",
-    useMemo(
-      () =>
-        chain.contentIds.length === 0
-          ? {
-              entity: "core.content_item",
-              where: [{ column: "content_id", op: "eq", value: "__none__" }],
-              limit: 1,
-            }
-          : {
-              entity: "core.content_item",
-              where: [
-                {
-                  column: "content_id",
-                  op: "in",
-                  value: [...chain.contentIds],
-                },
-              ],
-              limit: chain.contentIds.length,
-            },
-      [chain.contentIds]
-    )
+    useMemo((): PageQuery | undefined => {
+      // A chain with no content behind it is a read that has not been made,
+      // not an empty one; the hook holds `loading` for an absent statement.
+      if (chain.contentIds.length === 0) return undefined;
+      const fragment = inList("content_id", [...chain.contentIds]);
+      return {
+        name: "phone.notes.version-bodies",
+        select: "content_id, content_uri, byte_size, created_at",
+        from: "core_content_item",
+        where: fragment.sql,
+        bind: fragment.bind,
+        order: {
+          sortColumn: "content_id",
+          pkColumn: "content_id",
+          descending: false,
+        },
+      };
+    }, [chain.contentIds]),
+    { entity: "core.content_item", rowIdColumn: "content_id" }
   );
   return useMemo(
     () =>

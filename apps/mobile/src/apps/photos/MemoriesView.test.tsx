@@ -30,7 +30,7 @@ import type { PhotoAsset } from "./timeline-model";
 
 type ReactNative = typeof import("react-native");
 type ThemeModule = typeof import("../../kit/theme");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
+type UseSeatPagesModule = typeof import("../../kit/hooks/useSeatPages");
 type TimelineSourceModule = typeof import("./timeline-source");
 
 (
@@ -167,31 +167,24 @@ vi.mock(
     }) as unknown as Partial<ThemeModule>
 );
 
-// The seat's paged reads (#996 wave 4b). Photos' five shared sets and the
-// screen-local ones are walks over this phone's own copy now; the double keys
-// on the entity the read declares, exactly as the old one keyed on the request.
+// The seat's paged reads (#996 waves 4b and 5). Photos' five shared sets AND
+// this screen's two are walks over this phone's own copy now; the double keys
+// on the entity each read declares.
 vi.mock(
   import("../../kit/hooks/useSeatPages"),
   () =>
     ({
-      useSeatPages: (): { rows: unknown[] } => ({ rows: mocks.places }),
-    }) as never
-);
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (
+      useSeatPages: (
         _app: string,
-        query: { entity: string }
+        _query: unknown,
+        options: { entity: string }
       ): { rows: unknown[] } => {
-        if (query.entity === "media.memory") return { rows: mocks.memories };
-        if (query.entity === "media.memory_member") {
+        if (options.entity === "media.memory") return { rows: mocks.memories };
+        if (options.entity === "media.memory_member")
           return { rows: mocks.members };
-        }
         return { rows: mocks.places };
       },
-    }) as unknown as Partial<UseReplicaQueryModule>
+    }) as unknown as Partial<UseSeatPagesModule>
 );
 
 vi.mock(
