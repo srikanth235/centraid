@@ -9628,6 +9628,16 @@ Follow-up on `4e9956764`: oxlint `prefer-export-from` on the Docs custody re-exp
 
 ## Decisions — CI close (quality knobs)
 
+## User impact
+
+Locker unlock, share-end, leave-vault, tally match, and the offline-chain
+recovery line are each one thought. The screens are the same; the sentences
+are shorter so U4 holds.
+
+First-run: unchanged. Unlock, share, leave, and match still do what they did.
+
+![](artifacts/e2e/ui-impact/issue-922-web-truncation-status.png)
+
 The two deviation notes `check-quality-knobs` requires quoted here, verbatim:
 
 > #880 W0.1 seeded the mobile replica-read waivers as the P3 gate extended over apps/mobile/src. #996 wave 4 replaced those reads with paged walks, so the list is empty: a stale entry is a lie, and the list may only shrink.
