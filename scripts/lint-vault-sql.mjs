@@ -56,7 +56,14 @@ const PHYSICAL_PREFIXES = [
 
 // prettier-ignore
 const SKIP_DIRS = new Set([
-  ".git", ".turbo", "artifacts", "build", "dist", "node_modules",
+  ".git",
+  ".turbo",
+  ".claude",
+  ".grok",
+  "artifacts",
+  "build",
+  "dist",
+  "node_modules",
 ]);
 const SOURCE_EXT = /\.(?:[cm]?[jt]sx?)$/u;
 /** The vault owns its own tables; that is the point. */
@@ -92,17 +99,20 @@ const TEST_ROLES = [
  * Seeded from the review's own census; anything not here fails.
  */
 export const ALLOW_LIST = {
+  // ── the phone seat: statements against its own vault.db (#996 W4-D2) ──
+  "apps/mobile/src/apps/docs/docs-queries.ts":
+    "the drive's paged statements run against the seat's own vault.db",
+  "apps/mobile/src/apps/notes/notes-queries.ts":
+    "the library's paged statements run against the seat's own vault.db",
+  "apps/mobile/src/apps/photos/library-page.ts":
+    "the library page's statements run against the seat's own vault.db",
+  "apps/mobile/src/kit/storage/custody-pages.ts":
+    "the custody page query runs against the seat's own vault.db",
   // ── the replica plane: a local mirror the vault does not manage ──
-  "apps/mobile/src/lib/replica/sqlite-intent-store.ts":
-    "owns the phone's replica intent outbox tables",
-  "packages/client/src/replica/store-core.ts":
-    "owns the client's replica mirror tables",
   "packages/server/src/routes/replica-intent-shape.ts":
     "reads the invocation commit log the replica acknowledges against",
   "packages/server/src/routes/replica-projection.ts":
     "reads the install register a replica shape is controlled by",
-  "packages/server/src/routes/replica-routes.ts":
-    "streams the change log rows that ARE the replica protocol",
   "packages/server/src/routes/replica-shape.ts":
     "answers what a replica may hold, from the install register and the change log",
   // ── the share / commons plane: server-owned tables, not vault entities ──
@@ -152,12 +162,6 @@ export const ALLOW_LIST = {
     "seeds the golden pair's six subject types directly, as a fixture",
   "packages/server/src/serve/peer-give.test-fixtures.ts":
     "is a peer-give suite's fixture builder",
-  "packages/server/src/serve/vault-plane.test-fixtures.ts":
-    "is a vault-plane suite's fixture builder",
-  "apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts":
-    "is the Locker replica fixture builder; it seeds replica_row directly after bootstrap",
-  "apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts":
-    "is the Tally replica fixture builder; it seeds replica_row directly after bootstrap",
   // ── measurement rigs that verify gateway-owned audit state ──
   "scripts/measure-read-fsync.mjs":
     "measures gateway receipt durability and re-hashes its audit chain",

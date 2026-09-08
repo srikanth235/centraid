@@ -2041,6 +2041,17 @@
       "_noBudgetMs": "Deliberate. The rig measures the client-side resume interval against `reconnectToFresh.ceilingMs` in tests/experience-budgets/mobile.json; setup and fixture construction are not the user-facing interval, and the 30-sample/1.5x drift gate tracks that interval once nightly history exists.",
       "entries": ["mobile/converge/year3-replica/ci-linux-x64-4c"]
     },
+    "tests/scale/mobile-offline-chain.scale.test.ts": {
+      "lane": "scale",
+      "volume": "The seat's own file on node:sqlite: five chained intents, radio off, close and reopen, radio on, drain — the four intervals of an offline chain (#996 R23–R25)",
+      "_noBudgetMs": "Deliberate. The ceilings this rig asserts are the four `ceilingMs` values on the ledger entries it feeds (durable-save, pending-render, restart-recovery, reconnect-drain). Setup is opening a file; the clocks are the member-facing intervals.",
+      "entries": [
+        "mobile/durable-save/none/ci-linux-x64-4c",
+        "mobile/pending-render/none/ci-linux-x64-4c",
+        "mobile/restart-recovery/none/ci-linux-x64-4c",
+        "mobile/reconnect-drain/none/ci-linux-x64-4c"
+      ]
+    },
     "tests/scale/mobile-screen-reads.scale.test.ts": {
       "lane": "scale",
       "volume": "YEAR-3: two mounted mobile vaults with 5,000 people and 5,000 agenda rows per vault, validating full-window screen reads and constant statement count",

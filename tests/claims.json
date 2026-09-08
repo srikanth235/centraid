@@ -4057,8 +4057,9 @@
       "surface": "replica-sync",
       "dimension": "concurrency",
       "tier": "contract",
-      "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
-      "minimumTests": 3
+      "owner": "packages/client/src/replica/intents.contract.test.ts",
+      "minimumTests": 3,
+      "approvedMinimumTestsDeviation": "#996 W5 deleted the IndexedDB outbox and with it multi-writer.contract.test.ts (three tab-coordinator cases over fake-indexeddb). The queue-level contract those cases named — one canonical intent id, concurrent retry serialized to one successor, Web Lock boundary — lives in intents.contract.test.ts. Floor stays 3."
     },
     {
       "id": "gateway-session-boundaries",
