@@ -15,13 +15,13 @@ export type { PhotoAsset, PhotoSection } from "./timeline-model";
  * downstream memos hold.
  */
 export function usePhotoTimeline(): TimelineSnapshot {
-  const { session, gatewayBase } = useReplica();
+  const { session, gatewayBase, seat } = useReplica();
   // Mount lifecycle (ref count) and session updates are separate effects: a
   // gateway-base change must not bounce the ref count and re-walk the library.
   useEffect(() => photoTimelineEngine.acquire(), []);
   useEffect(() => {
-    photoTimelineEngine.setSession(session, gatewayBase);
-  }, [session, gatewayBase]);
+    photoTimelineEngine.setSession(session, gatewayBase, seat);
+  }, [session, gatewayBase, seat]);
   // Backup badges are driven by a separate upload-queue db; re-read it whenever
   // a screen regains focus so queued → backed-up flips are picked up promptly.
   useFocusEffect(

@@ -25,7 +25,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ReactNative = typeof import("react-native");
 type ThemeModule = typeof import("../../kit/theme");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
 type ReplicaProviderModule = typeof import("../../kit/replica/ReplicaProvider");
 type WriteOutcomeModule = typeof import("../../kit/replica/write-outcome");
 type TimelineSourceModule = typeof import("./timeline-source");
@@ -247,21 +246,6 @@ vi.mock(
         return { rows: [] };
       },
     }) as never
-);
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (
-        _app: string,
-        query: { entity: string }
-      ): { rows: unknown[] } => {
-        if (query.entity === "media.face_region") return { rows: mocks.faces };
-        if (query.entity === "core.party") return { rows: mocks.parties };
-        if (query.entity === "media.asset") return { rows: mocks.assets };
-        return { rows: [] };
-      },
-    }) as unknown as Partial<UseReplicaQueryModule>
 );
 vi.mock(
   import("../../kit/replica/ReplicaProvider"),

@@ -159,17 +159,6 @@ vi.mock(import("../../kit/hooks/useSeatPages"), () => ({
     rows: [],
   }),
 }));
-vi.mock(import("../../kit/hooks/useReplicaQuery"), () => ({
-  useReplicaQuery: vi.fn<
-    (typeof import("../../kit/hooks/useReplicaQuery"))["useReplicaQuery"]
-  >(() => ({
-    connection: "current",
-    error: undefined,
-    loading: false,
-    refresh: async () => undefined,
-    rows: [],
-  })),
-}));
 
 vi.mock(
   import("react-native-reanimated"),

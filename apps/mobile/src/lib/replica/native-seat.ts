@@ -24,7 +24,6 @@ import {
   inProcessSeatChannel,
   replicaStorageKey,
   SeatLoop,
-  seatSearchEnvelopes,
   seatWorkerPage,
   SeatWorkerCore,
   httpSeatSnapshotTransport,
@@ -34,10 +33,14 @@ import type {
   InlinePageRequest,
   ReplicaDigest,
   ReplicaSearchWireResult,
-  SeatSearchRequest,
   SeatWatermark,
   SeatWorkerQuery,
 } from "@centraid/client/replica/native";
+// By its OWN subpath (see the note in `timeline-page.ts`): the phone's bundle
+// is over its weight ceiling, and the seat barrel would pull the browser's
+// worker client and OPFS probe in behind it.
+import { seatSearchEnvelopes } from "@centraid/client/replica/seat/search-page";
+import type { SeatSearchRequest } from "@centraid/client/replica/seat/search-page";
 import type { Page } from "@centraid/core/page";
 
 import { ExpoSeatDriver } from "./expo-seat-driver";

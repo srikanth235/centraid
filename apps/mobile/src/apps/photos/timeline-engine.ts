@@ -7,15 +7,18 @@
 import * as MediaLibrary from "expo-media-library";
 import { AppState } from "react-native";
 
-import type { ReplicaRow } from "@centraid/client/replica/native";
+import type { Page, PageCursor } from "@centraid/core/page";
 
 import { coalesceWork } from "../../lib/coalesce";
 import { authHeader } from "../../lib/gateway";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
+import type { NativeSeatPagePort } from "../../lib/replica/seat-port";
 import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
 import { UploadQueue } from "../../lib/upload/native-queue";
 import { onUploadQueueChanged } from "../../lib/upload/upload-notifications";
 import { capturedAtIso, durationSeconds } from "./device-media";
+import { photoLibraryQuery, starredConceptQuery } from "./library-page";
+import type { PhotoLibraryRow } from "./library-page";
 import { mergePhotoAssets, sectionPhotoAssets } from "./timeline-model";
 import type { BackupState, PhotoAsset, PhotoSection } from "./timeline-model";
 
@@ -50,30 +53,10 @@ const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
  */
 const REPLICA_INVALIDATION_WINDOW_MS = 120;
 
-const REPLICA_ENTITIES = [
-  "media.asset",
-  "core.content_item",
-  "core.content_derivative",
-  "media.asset_phash",
-  // The star is DERIVED (#916): `media_asset.favorite` is gone and the one
-  // truth is a flags-scheme `starred` tag on the asset — the same mechanism
-  // Docs, Locker and People already read (`docs-projection.ts`). Three more
-  // small tables, no mirror to keep in step.
-  "core.tag",
-  "core.concept",
-  "core.concept_scheme",
-] as const;
-
-/** The scheme every owner flag lives in (`packages/vault/src/commands/flags.ts`). */
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-const STARRED_NOTATION = "starred";
-/** Photos' star anchors on the ASSET — the entity Photos shows — not the
- *  shared bytes underneath it (#916, rung nine). */
-const ASSET_TARGET_TYPE = "media.asset";
-
-function value<T>(row: ReplicaRow, key: string): T | undefined {
-  return row[key] as T | undefined;
-}
+/** How many rows one page of the library walk asks for. */
+const LIBRARY_PAGE = 500;
+/** A walk is bounded; a library past this many pages is not a real library. */
+const MAX_LIBRARY_PAGES = 400;
 
 function parseExif(raw?: string): Record<string, unknown> | undefined {
   if (!raw) return undefined;
@@ -88,6 +71,13 @@ class PhotoTimelineEngine {
   #subscribers = new Set<() => void>();
   #refs = 0;
   #session?: MobileReplicaSession;
+  /**
+   * THE SEAT IS WHAT THE LIBRARY IS READ FROM (#996, W5-D1). Separate from the
+   * session because it arrives BEHIND the mount — the first bootstrap is the
+   * whole vault file — and absent means "no copy yet", which draws the device
+   * half of the timeline and nothing else.
+   */
+  #seat?: NativeSeatPagePort;
   #gatewayBase?: string;
   #generation = 0;
   #unsubscribe?: () => void;
@@ -99,13 +89,8 @@ class PhotoTimelineEngine {
   #reading = false;
   #readAgain = false;
 
-  #assetRows: ReplicaRow[] = [];
-  #contentRows: ReplicaRow[] = [];
-  #derivativeRows: ReplicaRow[] = [];
-  #phashRows: ReplicaRow[] = [];
-  #tagRows: ReplicaRow[] = [];
-  #conceptRows: ReplicaRow[] = [];
-  #schemeRows: ReplicaRow[] = [];
+  /** The library, one joined row per asset (`library-page.ts`). */
+  #libraryRows: PhotoLibraryRow[] = [];
   #deviceRows: PhotoAsset[] = [];
   #uploadByUri = new Map<string, UploadEntry>();
   #uploadSignature = "";
@@ -154,12 +139,18 @@ class PhotoTimelineEngine {
 
   setSession(
     session: MobileReplicaSession | undefined,
-    gatewayBase: string | undefined
+    gatewayBase: string | undefined,
+    seat?: NativeSeatPagePort
   ): void {
     const sessionChanged = session !== this.#session;
     const baseChanged = gatewayBase !== this.#gatewayBase;
+    // A SEAT THAT ARRIVES IS A REASON TO READ AGAIN. It lands behind the mount,
+    // so the first pass after `setSession` usually has none; without this the
+    // library would stay empty until some unrelated invalidation fired.
+    const seatChanged = seat !== this.#seat;
     this.#session = session;
     this.#gatewayBase = gatewayBase;
+    this.#seat = seat;
     if (!session) return;
     if (sessionChanged) {
       this.#generation += 1;
@@ -180,6 +171,7 @@ class PhotoTimelineEngine {
       };
       void this.readReplica();
     }
+    if (seatChanged && !sessionChanged && session) void this.readReplica();
     if (sessionChanged || baseChanged) this.refreshUploads();
     // A base change rewrites every remote URL without touching rows; re-derive, no re-walk.
     if (baseChanged && !sessionChanged) this.recompute();
@@ -245,25 +237,52 @@ class PhotoTimelineEngine {
     return this.readReplica();
   }
 
+  /**
+   * ONE STATEMENT, WALKED (#996, R8 and W5-D1).
+   *
+   * This was seven whole-table reads at `limit: 100_000` through the
+   * declarative plane, joined afterwards by five JavaScript `Map`s. The join is
+   * SQLite's, and it has the indexes for it. What is left here is the walk and
+   * the generation check.
+   *
+   * The seat is what answers it. A phone whose copy has not arrived has no
+   * library to show and says so through the same empty snapshot it always did —
+   * the device half of the timeline is unaffected, which is the whole reason
+   * the two halves are merged rather than one being the other's fallback.
+   */
   private async readReplicaPass(): Promise<void> {
-    const session = this.#session;
-    if (!session) return;
+    const seat = this.#seat;
+    if (!seat) {
+      this.#replicaLoading = false;
+      this.recompute();
+      return;
+    }
     const generation = this.#generation;
     try {
-      const [assets, content, derivatives, phashes, tags, concepts, schemes] =
-        await Promise.all(
-          REPLICA_ENTITIES.map((entity) =>
-            session.read("photos", { entity, limit: 100_000 })
-          )
-        );
-      if (generation !== this.#generation) return;
-      this.#assetRows = assets!.rows.map((row) => row.values);
-      this.#contentRows = content!.rows.map((row) => row.values);
-      this.#derivativeRows = derivatives!.rows.map((row) => row.values);
-      this.#phashRows = phashes!.rows.map((row) => row.values);
-      this.#tagRows = tags!.rows.map((row) => row.values);
-      this.#conceptRows = concepts!.rows.map((row) => row.values);
-      this.#schemeRows = schemes!.rows.map((row) => row.values);
+      const concept = (
+        await seat.page<{ concept_id: string }>({
+          query: starredConceptQuery(),
+          limit: 1,
+        })
+      ).rows[0]?.concept_id;
+      const query = photoLibraryQuery(concept);
+      const rows: PhotoLibraryRow[] = [];
+      let after: PageCursor | undefined = undefined;
+      for (let page = 0; page < MAX_LIBRARY_PAGES; page += 1) {
+        // Sequential by definition: the next page's cursor is this page's
+        // answer, and a concurrent walk would read the same window twice.
+        // oxlint-disable-next-line no-await-in-loop
+        const answer: Page<PhotoLibraryRow> = await seat.page<PhotoLibraryRow>({
+          query,
+          limit: LIBRARY_PAGE,
+          ...(after ? { after } : {}),
+        });
+        if (generation !== this.#generation) return;
+        rows.push(...answer.rows);
+        if (!answer.next) break;
+        after = answer.next;
+      }
+      this.#libraryRows = rows;
       this.#error = undefined;
       this.#replicaLoading = false;
       this.recompute();
@@ -421,131 +440,58 @@ class PhotoTimelineEngine {
       };
     });
 
-    const contentById = new Map(
-      this.#contentRows.map((row) => [value<string>(row, "content_id"), row])
-    );
-    const derivativesByContent = new Map<string, ReplicaRow[]>();
-    for (const row of this.#derivativeRows) {
-      const id = value<string>(row, "content_id");
-      if (!id) continue;
-      derivativesByContent.set(id, [
-        ...(derivativesByContent.get(id) ?? []),
-        row,
-      ]);
-    }
-    const phashByAsset = new Map(
-      this.#phashRows.map((row) => [
-        value<string>(row, "asset_id"),
-        value<string>(row, "phash"),
-      ])
-    );
-    // No flags scheme, or no `starred` concept, means nothing has ever been
-    // starred in this vault — an honest empty set, not a missing join.
-    const flagsSchemeId = this.#schemeRows.find(
-      (row) => value<string>(row, "uri") === FLAGS_SCHEME_URI
-    );
-    const starredConceptId = flagsSchemeId
-      ? value<string>(
-          this.#conceptRows.find(
-            (row) =>
-              value<string>(row, "scheme_id") ===
-                value<string>(flagsSchemeId, "scheme_id") &&
-              value<string>(row, "notation") === STARRED_NOTATION
-          ) ?? {},
-          "concept_id"
-        )
-      : undefined;
-    const favoriteAssets = new Set<string>();
-    if (starredConceptId !== undefined) {
-      for (const tag of this.#tagRows) {
-        if (value<string>(tag, "target_type") !== ASSET_TARGET_TYPE) continue;
-        if (value<string>(tag, "concept_id") !== starredConceptId) continue;
-        const target = value<string>(tag, "target_id");
-        if (target) favoriteAssets.add(target);
-      }
-    }
-    const remote = this.#assetRows.flatMap<PhotoAsset>((asset) => {
-      const contentId = value<string>(asset, "content_id");
-      const assetId = value<string>(asset, "asset_id");
-      const item = contentId ? contentById.get(contentId) : undefined;
-      const sha = item ? value<string>(item, "sha256") : undefined;
-      if (!contentId || !assetId || !sha) return [];
-      const rungs = derivativesByContent.get(contentId) ?? [];
-      const thumbhash = rungs.find(
-        (row) => value(row, "variant") === "thumbhash"
-      );
-      const kind = (value<string>(asset, "kind") ??
-        "photo") as PhotoAsset["kind"];
-      const scopeId =
-        value<string>(asset, "__centraidScopeId") ??
-        value<string>(item!, "__centraidScopeId") ??
-        "";
+    const scope = this.#session?.scope?.();
+    const remote = this.#libraryRows.map<PhotoAsset>((row) => {
+      const kind = (row.kind ?? "photo") as PhotoAsset["kind"];
+      const scopeId = scope?.vaultId ?? "";
       const original = base
         ? `${base}/centraid/_gateway/blobs/${encodeURIComponent(
             scopeId
-          )}/${encodeURIComponent(contentId)}`
+          )}/${encodeURIComponent(row.content_id)}`
         : "";
       const thumb = base
         ? `${original}?variant=${kind === "video" ? "poster" : "thumb"}`
         : original;
-      const capturedAt =
-        value<string>(asset, "captured_at") ??
-        value<string>(item!, "created_at");
-      const exifJson = value<string>(asset, "exif_json");
-      return [
-        {
-          id: `replica:${assetId}`,
-          assetId,
-          contentId,
-          placeId: value<string>(asset, "place_id"),
-          captureGroupId: value<string>(asset, "capture_group_id"),
-          uri: pinnedThumbnailUri(scopeId, contentId) ?? thumb,
-          previewUri: base ? `${original}?variant=preview` : original,
-          originalUri: original,
-          filename: value<string>(item!, "title"),
-          sha256: sha,
-          phash: phashByAsset.get(assetId),
-          thumbhash: thumbhash
-            ? value<string>(thumbhash, "text_content")
-            : undefined,
-          capturedAt: capturedAt ?? new Date(0).toISOString(),
-          tzOffsetMin: value<number>(asset, "tz_offset_min"),
-          kind,
-          width: value<number>(asset, "width"),
-          height: value<number>(asset, "height"),
-          durationS: value<number>(asset, "duration_s"),
-          fileSize: value<number>(item!, "byte_size"),
-          exif: parseExif(exifJson),
-          favorite: favoriteAssets.has(assetId),
-          archived: Boolean(value<string>(asset, "archived_at")),
-          deleted: Boolean(value<string>(asset, "deleted_at")),
-          purgeAt:
-            value<string>(asset, "purge_at") ??
-            value<string>(item!, "purge_at"),
-          backupState: "remote-only",
-          source: "replica",
-          sourceVaultId: scopeId,
-          scopeIds:
-            value<string[]>(asset, "__centraidScopeIds") ??
-            value<string[]>(item!, "__centraidScopeIds") ??
-            [],
-          scopeLabels: [
-            ...(value<string[]>(item!, "__centraidScopeLabels") ?? [
-              value<string>(asset, "__centraidScopeLabel") ??
-                value<string>(item!, "__centraidScopeLabel") ??
-                "Vault",
-            ]),
-          ],
-          writableScopeIds:
-            value<string[]>(asset, "__centraidWritableScopeIds") ??
-            value<string[]>(item!, "__centraidWritableScopeIds") ??
-            [],
-          canWrite:
-            value<boolean>(asset, "__centraidCanWrite") ??
-            value<boolean>(item!, "__centraidCanWrite") ??
-            false,
-        },
-      ];
+      return {
+        id: `replica:${row.asset_id}`,
+        assetId: row.asset_id,
+        contentId: row.content_id,
+        placeId: row.place_id ?? undefined,
+        captureGroupId: row.capture_group_id ?? undefined,
+        uri: pinnedThumbnailUri(scopeId, row.content_id) ?? thumb,
+        previewUri: base ? `${original}?variant=preview` : original,
+        originalUri: original,
+        // THE AUTHORED TITLE IS THE ASSET'S (#996, R20(b)). It was read off
+        // `core.content_item`, which has carried no `title` since the byte row
+        // lost its interpretation — so this was `undefined` for every photo in
+        // the library.
+        filename: row.title ?? undefined,
+        sha256: row.sha256,
+        phash: row.phash ?? undefined,
+        thumbhash: row.thumbhash ?? undefined,
+        capturedAt: row.captured_key || new Date(0).toISOString(),
+        tzOffsetMin: row.tz_offset_min ?? undefined,
+        kind,
+        width: row.width ?? undefined,
+        height: row.height ?? undefined,
+        durationS: row.duration_s ?? undefined,
+        fileSize: row.byte_size,
+        exif: parseExif(row.exif_json ?? undefined),
+        favorite: row.starred === 1,
+        archived: Boolean(row.archived_at),
+        deleted: Boolean(row.deleted_at),
+        purgeAt: row.purge_at ?? undefined,
+        backupState: "remote-only",
+        source: "replica",
+        sourceVaultId: scopeId,
+        // ONE VAULT, ONE SEAT (#996, R12). The scope columns these fields came
+        // from were the multi-vault reader's per-row provenance; a seat opens
+        // one file, so the answer is the session's own scope for every row.
+        scopeIds: scopeId ? [scopeId] : [],
+        scopeLabels: [scope?.label ?? "Vault"],
+        writableScopeIds: scope?.canWrite && scopeId ? [scopeId] : [],
+        canWrite: scope?.canWrite ?? false,
+      };
     });
 
     const assets = mergePhotoAssets(deviceWithQueue, remote);
@@ -578,10 +524,8 @@ class PhotoTimelineEngine {
     this.#replicaLoading = true;
     // An in-flight pass is already stale by generation; drop its follow-up too.
     this.#readAgain = false;
-    this.#assetRows = [];
-    this.#contentRows = [];
-    this.#derivativeRows = [];
-    this.#phashRows = [];
+    this.#libraryRows = [];
+    this.#seat = undefined;
     this.#deviceRows = [];
     this.#uploadByUri = new Map();
     this.#uploadSignature = "";

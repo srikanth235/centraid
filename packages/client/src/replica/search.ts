@@ -1,5 +1,6 @@
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
 import type { ReplicaRow } from "./types.js";
+import { vaultPhysicalTable } from "./vault-tables.js";
 
 export interface ReplicaLocalSearchSpec {
   columns: readonly string[];
@@ -101,7 +102,7 @@ export function replicaSearchTables(entity: string): {
   base: string;
   fts: string;
 } {
-  const physical = entity.replace(".", "_");
+  const physical = vaultPhysicalTable(entity);
   return { base: physical, fts: `fts_${physical}` };
 }
 

@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 import { occurrenceExceptionsOf } from "@centraid/core/time";
 
-import { combineReplicaQueryStates } from "../../kit/hooks/useReplicaQuery";
+import { combineReplicaQueryStates } from "../../kit/hooks/replica-query-state";
 import { useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { expandEvent } from "../../kit/schedule/recurrence";
 import type {

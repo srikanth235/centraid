@@ -6,9 +6,11 @@
  * converted. The population is ZERO now — the last of the forty-four went in
  * wave 5 — so the census becomes the tripwire it was always heading for:
  *
- *   no `useReplicaQuery` call site anywhere under `src`. A screen read is a
- *   statement over this phone's own copy of the vault, walked or windowed, and
- *   there is no second read vocabulary for one to come back in;
+ *   no `useReplicaQuery` anywhere under `src` — the hook itself is DELETED as
+ *   of #996 W5-D1's read conversion, so this no longer needs to exempt its own
+ *   definition. A screen read is a statement over this phone's own copy of the
+ *   vault, walked or windowed, and there is no second read vocabulary for one
+ *   to come back in;
  *
  *   `acceptTruncation` and `UNBOUNDED_READ` appear nowhere under `src` at all.
  *
@@ -57,7 +59,6 @@ interface ReadSite {
 function readSites(): ReadSite[] {
   const sites: ReadSite[] = [];
   for (const file of sources(SRC)) {
-    if (file.endsWith(path.join("hooks", "useReplicaQuery.ts"))) continue;
     const source = readFileSync(file, "utf8");
     for (const match of source.matchAll(/useReplicaQuery\s*\(/gu)) {
       sites.push({

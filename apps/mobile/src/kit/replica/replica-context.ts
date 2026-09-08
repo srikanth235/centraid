@@ -10,13 +10,13 @@
 
 import type { ReplicaCoverage } from "@centraid/client/replica/native";
 
-import type { NativeSeatPagePort } from "../../lib/replica/inline-query-ctx.native";
 import type {
   MobileCompatibilityDisposition,
   MobileGatewayFeatures,
 } from "../../lib/replica/mobile-gateway-compatibility-core";
 import type { AsyncStorageLike } from "../../lib/replica/native-change-feed";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import type { NativeSeatPagePort } from "../../lib/replica/seat-port";
 import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import { freshnessKey } from "./replica-mount";
 import { dismissRevokedNotice, recordRevokedNotice } from "./replica-status";

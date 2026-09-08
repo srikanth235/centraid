@@ -12,6 +12,7 @@ export function useCameraRollWatcher(scope: CameraRollScope | undefined): void {
   const session = scope?.session;
   const gatewayBase = scope?.gatewayBase;
   const vaultId = scope?.vaultId;
+  const seat = scope?.seat;
   useEffect(() => {
     if (!session || !gatewayBase) {
       setCameraRollScope(undefined);
@@ -21,6 +22,7 @@ export function useCameraRollWatcher(scope: CameraRollScope | undefined): void {
       session,
       gatewayBase,
       ...(vaultId ? { vaultId } : {}),
+      ...(seat ? { seat } : {}),
     });
     void runCameraRollSweep("app-start");
     const appState = AppState.addEventListener("change", (state) => {
@@ -33,5 +35,5 @@ export function useCameraRollWatcher(scope: CameraRollScope | undefined): void {
       appState.remove();
       library.remove();
     };
-  }, [session, gatewayBase, vaultId]);
+  }, [session, gatewayBase, vaultId, seat]);
 }

@@ -13,7 +13,7 @@ import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { coalesceWork } from "../../lib/coalesce";
 import type { CoalescedWork } from "../../lib/coalesce";
 import { scheduleDailyBriefNotification } from "../../lib/daily-brief";
-import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { resolveGatewayBase } from "../../lib/gateway";
 import {
   syncDueNotifications,
   syncNotifications,
@@ -66,6 +66,7 @@ import {
   startCompatibilityWall,
   vaultScopes,
 } from "./replica-mount";
+import { mountReplicaSeat } from "./replica-seat-mount";
 import {
   attemptedReachability,
   loadRevokedNotices,
@@ -368,46 +369,21 @@ export function ReplicaProvider({
         });
         looseDrivers.splice(looseDrivers.indexOf(driver), 1);
         openDriver = driver;
-        // Captured non-optional: `session` is the outer `let` the teardown also
-        // reads, and the seat's `.then` below runs long after this scope's
-        // narrowing has expired.
+        // Captured non-optional: `session` is the outer `let` the teardown
+        // also reads, and the seat's download outlives this scope's narrowing.
         const mountedSession = session;
-        // THE SEAT ARRIVES BEHIND THE MOUNT, NEVER IN FRONT OF IT (#996 wave
-        // 4b). Its first bootstrap is the whole vault file — tens of megabytes
-        // over whatever connection the phone has — and a member who tapped an
-        // icon must not wait for it. Until it lands, `ctx.vault.page` is the
-        // online-only stub and every screen behaves exactly as it did before.
-        if (storageLocation !== undefined) {
-          // Imported lazily, like `native-hash`: a static import would drag
-          // expo-sqlite and expo-file-system into every suite that mounts this
-          // provider, and the seat is opened at most once per mount anyway.
-          void import("../../lib/replica/native-seat")
-            .then(({ openSyncedNativeSeat }) =>
-              openSyncedNativeSeat({
-                gatewayId: identity.gatewayId,
-                vaultId: openScope.vaultId,
-                baseUrl: identity.auth.baseUrl,
-                headers: authHeader(),
-                storageLocation,
-                digest: nativeReplicaDigest,
-              })
-            )
-            .then((opened) => {
-              if (!opened) return;
-              if (cancelled) {
-                void opened.close().catch(() => undefined);
-                return;
-              }
-              seat = opened;
-              // SEARCH RUNS ON THE SEAT (#996, W5-D1), so the session has to
-              // be told the copy arrived. Here rather than at construction:
-              // a bootstrap is a file download, and a session that waited for
-              // one would hold every screen on "Loading …".
-              mountedSession.attachSeat(opened);
-              publish((value) => ({ ...value, seat: opened }));
-            })
-            .catch(() => undefined);
-        }
+        mountReplicaSeat({
+          gatewayId: identity.gatewayId,
+          vaultId: openScope.vaultId,
+          baseUrl: identity.auth.baseUrl,
+          storageLocation,
+          session: mountedSession,
+          cancelled: () => cancelled,
+          onOpened: (opened) => {
+            seat = opened;
+            publish((value) => ({ ...value, seat: opened }));
+          },
+        });
         if (revokedScopeIds.has(openScope.vaultId)) {
           await session.purge();
           reclaimRevokedReplica(openScope);

@@ -60,19 +60,6 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
 // The replica read layer stands in for the on-device database. `useTasks` and
 // every blueprint projection above it stay real, so the board arithmetic under
 // test is the shipped arithmetic; only the rows' arrival is substituted.
-vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    useReplicaQuery: (_appId: string, request: { entity?: string }) => ({
-      connection: "current" as const,
-      error: undefined,
-      loading: false,
-      refresh: async () => undefined,
-      rows: replicaRows.byEntity.get(request.entity ?? "") ?? [],
-    }),
-  };
-});
 
 const NOW = "2026-08-30T09:00:00.000Z";
 const styles = makeTasksStyles(resolveTheme("light").colors);

@@ -61,15 +61,6 @@ vi.mock(
       ) => ({ rows: rows.value[read.entity] ?? [] }),
     }) as never
 );
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (_name: string, query: { entity: string }) => ({
-        rows: rows.value[query.entity] ?? [],
-      }),
-    }) as never
-);
 
 const links = vi.hoisted(() => ({
   answer: (): Promise<unknown[]> => Promise.resolve([]),

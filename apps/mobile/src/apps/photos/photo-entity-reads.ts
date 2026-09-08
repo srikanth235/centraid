@@ -15,7 +15,7 @@
 
 import type { PageQuery } from "@centraid/core/page";
 
-import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 
 interface PhotoEntityRead {

@@ -9,8 +9,8 @@ import { useMemo } from "react";
 
 import type { DashboardData } from "@centraid/blueprints/apps/people/types";
 
-import { combineReplicaQueryStates } from "../../kit/hooks/useReplicaQuery";
-import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import { combineReplicaQueryStates } from "../../kit/hooks/replica-query-state";
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
 import { useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
 import {

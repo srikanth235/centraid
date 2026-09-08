@@ -32,7 +32,6 @@ type ThemeModule = typeof import("../kit/theme");
 type NativeTextModule = typeof import("../kit/components/NativeText");
 type IconModule = typeof import("../kit/components/Icon");
 type ReplicaProviderModule = typeof import("../kit/replica/ReplicaProvider");
-type UseReplicaQueryModule = typeof import("../kit/hooks/useReplicaQuery");
 type WriteOutcomeModule = typeof import("../kit/replica/write-outcome");
 type StatusLineModule = typeof import("../kit/components/status-line");
 type GatewayModule = typeof import("../lib/gateway");
@@ -204,14 +203,6 @@ vi.mock(
         vaultId: undefined,
       }),
     }) as unknown as Partial<ReplicaProviderModule>
-);
-
-vi.mock(
-  import("../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (): { rows: unknown[] } => ({ rows: [] }),
-    }) as unknown as Partial<UseReplicaQueryModule>
 );
 
 vi.mock(

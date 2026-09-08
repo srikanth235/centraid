@@ -15,7 +15,6 @@ import PhotosPeopleView from "./PhotosPeopleView";
 
 type ReactNative = typeof import("react-native");
 type ThemeModule = typeof import("../../kit/theme");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
 type DesignModule = typeof import("@centraid/design");
 type ReplicaProviderModule = typeof import("../../kit/replica/ReplicaProvider");
 type WriteOutcomeModule = typeof import("../../kit/replica/write-outcome");
@@ -186,26 +185,6 @@ vi.mock(
                 : mocks.policies,
       }),
     }) as never
-);
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (
-        _app: string,
-        query: { entity: string }
-      ): { loading: boolean; rows: unknown[] } => ({
-        loading: false,
-        rows:
-          query.entity === "media.face_region"
-            ? mocks.faces
-            : query.entity === "media.face_cluster"
-              ? mocks.clusters
-              : query.entity === "core.party"
-                ? mocks.parties
-                : mocks.policies,
-      }),
-    }) as unknown as Partial<UseReplicaQueryModule>
 );
 
 vi.mock(

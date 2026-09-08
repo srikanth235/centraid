@@ -14,7 +14,7 @@ import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../components/NativeText";
-import type { ReplicaQueryConnection } from "../hooks/useReplicaQuery";
+import type { ReplicaQueryConnection } from "../hooks/replica-query-state";
 import { borders, family, radii, useTheme, t } from "../theme";
 
 export default function ReplicaStateCard({

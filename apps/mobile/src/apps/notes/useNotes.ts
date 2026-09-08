@@ -11,7 +11,7 @@ import {
 } from "@centraid/blueprints/apps/notes/filing";
 import type { PageQuery } from "@centraid/core/page";
 
-import { combineReplicaQueryStates } from "../../kit/hooks/useReplicaQuery";
+import { combineReplicaQueryStates } from "../../kit/hooks/replica-query-state";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { buildNotes } from "./notes-model";
 import {

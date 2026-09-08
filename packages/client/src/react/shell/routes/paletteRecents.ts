@@ -4,6 +4,9 @@
  * sources never disagree; `schedule.task` (no recentField) is excluded.
  */
 
+import type { PageQuery } from "@centraid/core/page";
+
+import { vaultPhysicalTable } from "../../../replica/vault-tables.js";
 import {
   first,
   formatMetaValue,
@@ -35,29 +38,64 @@ function recentableTargets(): (EntityTarget & { recentField: string })[] {
   );
 }
 
+/**
+ * One target's recents, as a statement (#996, R8 and W5-D1).
+ *
+ * The declarative request this replaces named an entity, an `orderBy` and an
+ * `is-null` clause, and a compiler somewhere else turned those into SQL nobody
+ * reviewing this file could see. The statement is here now, and the target
+ * already carried every part of it: the table is the entity's physical name,
+ * the keyset is `(recentField, id)`, and the soft-delete guard is the column
+ * the target names.
+ *
+ * `select` NAMES ITS COLUMNS rather than taking `*`: this read exists to fill
+ * eight palette rows, and a `*` over `locker.item` would pull a password and a
+ * card number across the worker boundary to display a title. The order's two
+ * columns are included because `pageCursorOf` reads the cursor off the row.
+ */
+function recentsQuery(
+  target: EntityTarget & { recentField: string }
+): PageQuery {
+  const columns = [
+    ...new Set([
+      target.id,
+      target.recentField,
+      ...target.labels,
+      ...target.snippetFields,
+      ...target.metaFields,
+    ]),
+  ];
+  return {
+    name: `palette.recents.${target.entity}`,
+    select: columns.map((column) => `"${column}"`).join(", "),
+    from: vaultPhysicalTable(target.entity),
+    ...(target.deletedColumn
+      ? { where: `"${target.deletedColumn}" IS NULL` }
+      : {}),
+    order: {
+      sortColumn: target.recentField,
+      pkColumn: target.id,
+      descending: true,
+    },
+  };
+}
+
 export async function fetchPaletteRecents(): Promise<PaletteRecentHit[]> {
   const { getReplicaShellSession } =
     await import("../../../replica/shell-session.js");
   const session = await getReplicaShellSession();
   const settled = await Promise.allSettled(
     recentableTargets().map(async (target) => {
-      const result = await session.read(target.appId, {
-        entity: target.entity,
-        orderBy: { column: target.recentField, dir: "desc" },
+      const page = await session.page(recentsQuery(target), {
         limit: PER_ENTITY_LIMIT,
-        ...(target.deletedColumn
-          ? {
-              where: [{ column: target.deletedColumn, op: "is-null" as const }],
-            }
-          : {}),
       });
-      return result.rows.flatMap(
+      return page.rows.flatMap(
         (
           row
         ): (PaletteRecentHit & {
           recentAt: string;
         })[] => {
-          const values = row.values as Record<string, unknown>;
+          const values = row as Record<string, unknown>;
           const id = values[target.id];
           const label = first(values, target.labels);
           const recentAt = first(values, [target.recentField]);

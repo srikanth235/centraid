@@ -5091,6 +5091,9 @@ passing.
 **Changed:**
 
 - `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/lib/replica/native-seat.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `packages/client/package.json`
 - `receipts/issue-996-one-vault-every-seat.md`
 
 ### Decisions — quiescing
@@ -9035,3 +9038,186 @@ being dropped. A scan that silently misses a field is a pin that passes.
   stays because it is what a caller has, and it names the app in the refusal.
 - **A seat with no file is online-only, not broken.** `search` refuses exactly
   as `page` does, and the caller falls back through the gateway's paged door.
+
+## Wave 5o — the last declarative reads (#996, W5-D1)
+
+### The owner ruling this wave runs under
+
+W5-D1, 2026-09-08: search stays on the seat; the declarative call sites convert
+BEFORE the cut, in their own commits; the cut stays one atomic commit. Wave 5n
+took the eight search sites. This takes the four read sites, which is all of
+them: nothing outside the old plane's own files reaches `session.read` now.
+
+### Four call sites, four statements
+
+| was | is |
+| --- | --- |
+| `paletteRecents.ts` — `(entity, orderBy, limit, is-null)` per palette target | a `PageQuery` per target, keyed `(recentField, id)`, built from the target the file already carried |
+| `homeTileContent.ts` — `(entity, limit)` × 7, filtered `isLive` in JS | `TILE_SOURCES`: one statement per entity, live predicate in SQL, keyed `(recency, pk)` |
+| `homeTileContent.ts` — `core.content_item` by `content_id` | a bound `content_id = ?` statement, joined to the representation that carries the media type |
+| `timeline-engine.ts` — **seven entities at `limit: 100_000`**, joined by five JS `Map`s | ONE joined statement (`library-page.ts`), walked by keyset |
+
+`apps/mobile/src/kit/hooks/useReplicaQuery.ts` is deleted with them, and its two
+suites; the ten screen tests that still mocked it were mocking a hook their
+screens stopped calling in waves 5e–5h, so the mocks are deleted rather than
+repointed. `replica-read-windows.test.ts` — the tripwire that greps for the
+hook — STAYS, minus the exemption it carried for the hook's own definition.
+
+### The Photos library is not the Photos timeline, and that corrects the brief
+
+The instruction was to convert the engine to `timelinePage`. Measured against
+the tree, it cannot be: `timelinePage`'s two indexes are PARTIAL, on
+`archived_at IS NULL AND deleted_at IS NULL AND captured_at IS NOT NULL`,
+because a timeline is what a member has not put away. The engine's snapshot is
+the LIBRARY — `PhotoStateView` draws Archive and Trash out of it and
+`photos-library-counts.ts` counts them — so inheriting that predicate would
+empty two screens. Same file, same keyset discipline, different question, so
+`library-page.ts` is its own statement beside `timeline-page.ts`.
+
+**THE WALK IS KEYED ON THE PRIMARY KEY, and that was found by a test rather than
+by reading.** The first draft keyed on capture time. `captured_at` is nullable —
+an import with no EXIF date has none — and `(NULL, id) < (?, ?)` evaluates to
+NULL, so the walk STOPS at the first dateless asset and silently loses every row
+behind it. Coalescing to the bytes' `created_at` cannot be the key either:
+`pageStatement` puts the keyset in the WHERE clause and SQL cannot reference a
+SELECT alias there. `asset_id` is unique and NOT NULL, the walk reads the whole
+library anyway, and `sectionPhotoAssets` orders the snapshot afterwards — so
+`ORDER BY asset_id` is one index scan with no temp B-tree. The coalesced capture
+time is still projected, because the snapshot reads it; it is not what the pages
+are cut on.
+
+`starred` is a correlated EXISTS, not a join on `core_tag`: an asset carries
+many tags, and a join would multiply the row and then need a DISTINCT — a sort
+over the whole library to answer a boolean. The starred CONCEPT is resolved once
+per pass and bound, rather than re-derived through `core_concept` and
+`core_concept_scheme` on every row, which is what the two whole-table reads were
+doing.
+
+### Three reads that were already dead, found by writing the SQL down
+
+A declarative read that names a column the vault deleted answers `undefined`; a
+statement that names it fails to parse. Writing the statements surfaced three
+columns that are not there:
+
+- **`core_content_item.media_type`** — moved to `core_content_representation`
+  under R20(b). The home springboard's doc and note EXCERPTS read it, so
+  `isProse("")` was false for every tile and no excerpt has rendered since. The
+  statement joins the representation for the owner, and they render.
+- **`core_content_item.title`** — gone for the same reason. The Photos engine
+  read `filename` from it, so every replica photo has had an undefined filename.
+  The authored title is `media_asset.title`, which is what the joined statement
+  reads.
+- The palette's `core.content_item` photo target reads `labels: ["title"]` off
+  the same absent column and discards the hit. Filed in `QUALITY.md` in wave 5n
+  rather than fixed: what a photo is CALLED in the palette is a product answer.
+
+**The window is now taken in RECENCY ORDER, which the declarative read could not
+express.** It asked for `limit` rows in whatever order the store held them and
+each tile then sorted the window in JS — on a vault with more rows than the
+window that is the WRONG rows, sorted correctly. The order is in the statement;
+the JS sorts after it are left alone, being cheap over two dozen rows and each
+tile's own visible tiebreak.
+
+### `ReplicaProvider.tsx` was 631 lines against a 625 limit
+
+Inherited from `5bb5ccb26`, which the owner pushed past the local gate. Not
+waived: the seat's opening is extracted to `replica-seat-mount.ts`, which is a
+cohesive thing rather than a slice taken to make a number — the seat's download
+outlives the mount that started it, so it has two exits (adopted, or CLOSED so
+the next mount does not fight its handles) and both are now stated in one place.
+607 lines after.
+
+The sweep's seat is threaded through `CameraRollScope` at the same time, and
+that is a correctness fix rather than tidying: a camera-roll backup sweep dedupes
+the roll against what the vault already holds, by sha256 and then by perceptual
+hash, and that half of the timeline comes from the seat. A sweep without one
+sees no remote twins and re-uploads photos the vault has.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 288 files, **2,431 tests, 0 failed**.
+- `bun run --cwd packages/client test` — 294 files, **2,680 tests, 0 failed**.
+- `bun run check:push:static` — 4/4.
+- `bun run knip` — exit 0.
+- `grep -rn "session\.read(" packages/client/src apps/mobile/src` — only
+  `inline-query-ctx-core.ts` and `inline-query-ctx.native.ts`, which wire
+  `ctx.vault.read`; no blueprint handler calls it, and the cut deletes both.
+- No file over the 625-line limit; no waiver added.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/client/src/replica/vault-tables.ts`
+- `apps/mobile/src/apps/photos/library-page.ts`
+- `apps/mobile/src/apps/photos/library-page.test.ts`
+- `apps/mobile/src/kit/replica/replica-seat-mount.ts`
+- `apps/mobile/src/lib/replica/seat-port.ts`
+
+**Deleted:**
+
+- `apps/mobile/src/kit/hooks/useReplicaQuery.ts`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx`
+
+**Changed:**
+
+- `packages/client/src/replica/search.ts`
+- `packages/client/src/replica/index.ts`
+- `packages/client/src/replica/native.ts`
+- `packages/client/src/react/shell/routes/paletteRecents.ts`
+- `packages/client/src/react/shell/routes/homeTileContent.ts`
+- `packages/client/src/react/shell/routes/homeTileContent.test.ts`
+- `packages/client/src/react/shell/routes/HomeRoute.test.tsx`
+- `apps/mobile/src/apps/photos/timeline-engine.ts`
+- `apps/mobile/src/apps/photos/timeline-engine.test.ts`
+- `apps/mobile/src/apps/photos/timeline-source.ts`
+- `apps/mobile/src/apps/photos/photos-backup.ts`
+- `apps/mobile/src/apps/photos/PhotosHome.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosPeopleView.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesView.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.test.tsx`
+- `apps/mobile/src/apps/photos/PlaceDetail.test.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.test.tsx`
+- `apps/mobile/src/apps/photos/photo-grants.test.tsx`
+- `apps/mobile/src/apps/photos/photo-entity-reads.ts`
+- `apps/mobile/src/apps/photos/PhotosLibrary.tsx`
+- `apps/mobile/src/apps/tasks/TasksHome.test.tsx`
+- `apps/mobile/src/apps/tasks/useTasks.ts`
+- `apps/mobile/src/apps/agenda/useAgenda.ts`
+- `apps/mobile/src/apps/notes/useNotes.ts`
+- `apps/mobile/src/apps/docs/useDocs.ts`
+- `apps/mobile/src/apps/people/usePeople.ts`
+- `apps/mobile/src/screens/Scan.test.tsx`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `apps/mobile/src/kit/replica/ReplicaStateCard.tsx`
+- `apps/mobile/src/kit/replica/replica-context.ts`
+- `apps/mobile/src/lib/camera-roll/watcher.ts`
+- `apps/mobile/src/lib/camera-roll/useCameraRollWatcher.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/lib/replica/native-seat.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `packages/client/package.json`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the reads
+
+- **A statement is a review diff; a shape is not.** Three columns the vault had
+  deleted were found by writing the SQL down, because a declarative read answers
+  `undefined` for a column that is not there and a statement will not parse.
+- **A keyset must be TOTAL, and a nullable sort column is not.** The failure is
+  silent — the walk stops and the rows behind it are simply absent — so the
+  suite asserts a dateless asset mid-library, not just at the end.
+- **The library is not the timeline.** An index whose predicate is a screen's
+  question does not serve a different screen's question, however similar.
+- **A file over the limit is split, never waived** — and split where it has a
+  seam, not where the line count is.
+- **A type is not worth a module graph.** `NativeSeatPagePort` moved to
+  `seat-port.ts` because naming "a seat" pulled the whole inline-query runtime
+  in behind it, and `pending-changes.ts` crossed the 100-module barrel
+  threshold. The seat's search host is imported by its own subpath on the phone
+  for the same reason `timeline-page.ts` already imports the paged handler that
+  way: a barrel re-export puts every module behind it into the Hermes bundle
+  whether a screen reaches it or not.

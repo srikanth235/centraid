@@ -16,7 +16,6 @@ import {
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
-  seatSearchUnavailable,
   prepareReplicaWrite,
   reconstructPendingProjection,
   VAULT_HEADER,
@@ -45,8 +44,13 @@ import type {
   PreparedReplicaWrite,
   ReplicaValue,
   ReplicaWriteMutationInput,
-  SeatSearchRequest,
 } from "@centraid/client/replica/native";
+// By its OWN subpath, not through `replica/native`: the phone's bundle is over
+// its weight ceiling, and a barrel re-export puts every module behind it into
+// the Hermes bundle whether or not a screen reaches it — the same rule
+// `timeline-page.ts` follows for the paged handler's host.
+import { seatSearchUnavailable } from "@centraid/client/replica/seat/search-page";
+import type { SeatSearchRequest } from "@centraid/client/replica/seat/search-page";
 import { appActionPath } from "@centraid/core/protocol";
 
 import { backoffSchedule } from "../backoff";
@@ -118,6 +122,13 @@ export interface MobileReplicaSession {
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
   pullNow: () => Promise<void | boolean>;
+  /**
+   * The one vault this session holds (#996, R12). Every row a seat hands back
+   * belongs to it, so a screen that has to say WHICH vault a row came from and
+   * whether it may write there asks the session once rather than reading a
+   * per-row stamp that now has a single answer.
+   */
+  scope?: () => VaultSource | undefined;
 }
 
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */

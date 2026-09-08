@@ -11,7 +11,7 @@ import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import Tappable from "../../kit/components/Tappable";
-import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";

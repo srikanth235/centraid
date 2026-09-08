@@ -101,18 +101,6 @@ vi.mock(
       }),
     }) as never
 );
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (
-        _appId: string,
-        query: { entity?: string }
-      ): { rows: unknown[] } => ({
-        rows: query.entity === "core.place" ? mocks.places : [],
-      }),
-    }) as never
-);
 
 vi.mock(
   import("../../kit/media/use-image-fallback"),

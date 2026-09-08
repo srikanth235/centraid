@@ -21,7 +21,6 @@ import PlacesMap from "./PlacesMap";
 
 type ReactNative = typeof import("react-native");
 type ThemeModule = typeof import("../../kit/theme");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
 type TimelineSourceModule = typeof import("./timeline-source");
 
 (
@@ -213,13 +212,6 @@ vi.mock(
     ({
       useSeatPages: (): { rows: unknown[] } => ({ rows: mocks.places }),
     }) as never
-);
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: (): { rows: unknown[] } => ({ rows: mocks.places }),
-    }) as unknown as Partial<UseReplicaQueryModule>
 );
 
 vi.mock(

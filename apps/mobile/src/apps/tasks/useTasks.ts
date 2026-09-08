@@ -14,8 +14,8 @@ import type {
 import type { ReplicaValue } from "@centraid/client/replica/native";
 import type { PageQuery } from "@centraid/core/page";
 
-import { combineReplicaQueryStates } from "../../kit/hooks/useReplicaQuery";
-import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import { combineReplicaQueryStates } from "../../kit/hooks/replica-query-state";
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {

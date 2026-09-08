@@ -32,10 +32,10 @@ import type {
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
-  SeatSearchRequest,
 } from "@centraid/client/replica/native";
 
 import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
+import type { NativeSeatPagePort } from "./seat-port";
 import {
   REPLICA_CAN_WRITE,
   REPLICA_SCOPE_ID,
@@ -92,17 +92,9 @@ export interface NativeInlineQuerySession {
   page?: InlinePage;
 }
 
-/**
- * What a screen may do with the phone's seat: a page, and a ranked search.
- *
- * Both are the seat's own file. `search` joined it under #996 W5-D1 — the FTS
- * shadow tables copied across with the rest of the vault, so a search is a
- * statement over this file rather than a second store to keep in step.
- */
-export interface NativeSeatPagePort {
-  page: InlinePage;
-  search: (request: SeatSearchRequest) => Promise<ReplicaSearchWireResult>;
-}
+// The seat's port lives in `seat-port.ts` — a type nothing should have to pull
+// this module in to name. Re-exported because callers import it from here.
+export type { NativeSeatPagePort } from "./seat-port";
 
 /**
  * The read plane a handler actually runs on: the session's rows, the seat's
