@@ -7072,3 +7072,50 @@ directions: what an app reads, and what it declared and never reaches for.
   its collision search are one answer; the rest of the person sheet is others.
 - **A reachability check must see every door**, or the door it cannot see is
   the one an undeclared read goes through.
+
+## Wave 4j — the web e2e, measured after the eight apps landed (#996)
+
+### Every converted app mounts
+
+`PATH=…/v24.4.1/bin CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e`:
+
+| tree | failed | passed |
+| --- | --- | --- |
+| branch head `2d5038634` (inherited, from wave 4b) | 20 | 30 |
+| after wave 4b's four fixes | — | Tasks specs 1 failed / 5 passed |
+| this tree (`db8097c7b`, all eight apps paged) | 7 | 43 |
+
+The thirteen app specs that were red because their handlers read through the
+old coordinator are green: `agenda`, `agenda-compact-band`, `docs-drive`,
+`docs-grant`, `notes`, `people`, `people-grants`, `photos-grants`,
+`locker-seat`, `settings-access`, both `rebuilt-apps` cases and both passing
+Tasks cases. That is the wave's exit condition for the app half.
+
+### The seven that remain, and whose they are
+
+- **`tasks.spec.ts:325` — queued delete / minted pending add.** Named in wave
+  4b's receipt as the next thing to chase and still it: the board paints THREE
+  rows where the vault holds the twenty-one the truncation case seeded plus its
+  own, so the row the member just wrote is on no screen. It is the seat's
+  overlay-and-tail path, not a handler's read — every other Tasks case, the
+  truncation one included, reads the same paged board and passes. NOT converted
+  by this wave and NOT fixed here.
+- **`accessibility.spec.ts:96` — People, colour contrast (serious).** NEW
+  EVIDENCE RATHER THAN A REGRESSION: the People roster now renders, so axe has
+  people to scan for the first time, and the person avatar's initials fail AA
+  — `#141414` on `--c-violet` `#7a5283`, 2.94:1 against 4.5:1, at 10.8px. This
+  is a DESIGN decision about the identity wheel (#883, ruling O-identity: the
+  wheel has eight places and the ninth is the ink brand), not a paging one, so
+  it goes to the owner rather than being changed under a read wave: **does the
+  avatar's initial ink become the wheel's own on-colour, or does the chip stop
+  carrying initials at that size?**
+- `offline-reconnect.spec.ts:132`, `offline-search.spec.ts:167`,
+  `renderer-leak.spec.ts:199` (Tasks), `perf-waterfall.spec.ts:338` and
+  `:1099` — the same five that were red at the branch head, on paths this wave
+  does not touch.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `receipts/issue-996-one-vault-every-seat.md`
