@@ -13,16 +13,11 @@
  * and the phone-vs-web comparison in
  * `tests/integration-mobile/locker-rows-parity.integration.test.ts`.
  */
-import { DatabaseSync } from "node:sqlite";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
-
-import { NodeSqliteDriver } from "./node-sqlite-driver";
 import { seedSeatTables } from "./seat-fixture.test-fixtures";
 import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 export const VAULT_ID = "personal";
-export const SHAPE_ID = "locker-default";
 export const FLAGS_SCHEME = "https://centraid.dev/schemes/flags";
 export const TAGS_SCHEME = "https://centraid.dev/schemes/locker-tags";
 
@@ -210,53 +205,12 @@ export function seedEntities(): SeedEntity[] {
   ];
 }
 
-export function seedScope(file: string): void {
-  const entities = seedEntities();
-  const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), VAULT_ID);
-  store.bootstrap({
-    protocolVersion: 1,
-    vaultId: VAULT_ID,
-    schemaEpoch: "1",
-    cursor: { epoch: "epoch-1", seq: 1 },
-    shapes: [
-      {
-        shapeId: SHAPE_ID,
-        appId: "locker",
-        entities: entities.map((entity) => ({
-          entity: entity.entity,
-          primaryKey: entity.primaryKey,
-          columns: [...entity.columns],
-        })),
-      },
-    ],
-    rows: [],
-  });
-  store.close();
-
-  const database = new DatabaseSync(file);
-  const insert = database.prepare(
-    `INSERT INTO replica_row
-       (shape_id, entity, row_id, payload_json, oversized_json)
-     VALUES (?, ?, ?, ?, '[]')`
-  );
-  database.exec("BEGIN IMMEDIATE");
-  for (const entity of entities)
-    for (const row of entity.rows)
-      insert.run(
-        SHAPE_ID,
-        entity.entity,
-        String(row[entity.primaryKey]),
-        JSON.stringify(row)
-      );
-  database.exec("COMMIT");
-  database.close();
-}
-
 /**
  * The same ledger, in the tables a handler's SQL names (#996 wave 5).
  *
- * `seedScope` writes the old store's one blob table; this writes the vault's
- * own, which is what `ctx.vault.page` reads. Both exist while both stores do.
+ * The old store's one blob table had no callers left once the airplane oracles
+ * and the two parity oracles moved, so it is gone; what a fixture writes is
+ * the vault's own tables, which is what `ctx.vault.page` reads.
  */
 export function seedSeatScope(file: string): void {
   seedSeatTables(file, seedEntities());

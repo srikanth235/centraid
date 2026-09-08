@@ -10,16 +10,11 @@
  * `tests/integration-mobile/tally-balance-parity.integration.test.ts`. Sharing
  * the seed is what makes "the same rows" a fact rather than a claim.
  */
-import { DatabaseSync } from "node:sqlite";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
-
-import { NodeSqliteDriver } from "./node-sqlite-driver";
 import { seedSeatTables } from "./seat-fixture.test-fixtures";
 import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 export const VAULT_ID = "personal";
-export const SHAPE_ID = "tally-default";
 export const OWNER = "party-owner";
 export const FRIENDS = ["party-ana", "party-bo", "party-cy"] as const;
 
@@ -466,53 +461,12 @@ const TALLY_DECORATION_TABLES = [
   },
 ] as const;
 
-export function seedScope(file: string): void {
-  const entities = seedEntities();
-  const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), VAULT_ID);
-  store.bootstrap({
-    protocolVersion: 1,
-    vaultId: VAULT_ID,
-    schemaEpoch: "1",
-    cursor: { epoch: "epoch-1", seq: 1 },
-    shapes: [
-      {
-        shapeId: SHAPE_ID,
-        appId: "tally",
-        entities: entities.map((entity) => ({
-          entity: entity.entity,
-          primaryKey: entity.primaryKey,
-          columns: [...entity.columns],
-        })),
-      },
-    ],
-    rows: [],
-  });
-  store.close();
-
-  const database = new DatabaseSync(file);
-  const insert = database.prepare(
-    `INSERT INTO replica_row
-       (shape_id, entity, row_id, payload_json, oversized_json)
-     VALUES (?, ?, ?, ?, '[]')`
-  );
-  database.exec("BEGIN IMMEDIATE");
-  for (const entity of entities)
-    for (const row of entity.rows)
-      insert.run(
-        SHAPE_ID,
-        entity.entity,
-        String(row[entity.primaryKey]),
-        JSON.stringify(row)
-      );
-  database.exec("COMMIT");
-  database.close();
-}
-
 /**
  * The same ledger, in the tables a handler's SQL names (#996 wave 5).
  *
- * `seedScope` writes the old store's one blob table; this writes the vault's
- * own, which is what `ctx.vault.page` reads. The tables the dashboard only
+ * The old store's one blob table had no callers left once the airplane and
+ * parity oracles moved, so it is gone; what a fixture writes is the vault's
+ * own tables, which is what `ctx.vault.page` reads. The tables the dashboard only
  * DECORATES from — revisions, the attachment's bytes — are created empty: on a
  * real seat they exist and answer nothing.
  */

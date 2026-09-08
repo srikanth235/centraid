@@ -10,12 +10,14 @@
  * Both sides run the identical module over the identical rows
  * (`tally-ledger.test-fixtures.ts`, seeded once into one replica database):
  *
- *   web    `runInlineQuery` over `ReplicaSqliteStore` — the shell's builder,
- *          the shell's read plane.
- *   phone  `runNativeInlineQuery` over `VaultReadPlane` — the seat's builder
- *          over its one open file, stamping the vault on every row
- *          with `__centraid*` provenance and then strips it before the handler
- *          sees it (precondition (b)).
+ *   web    `runInlineQuery` — the shell's builder, whose `page` takes the
+ *          statement, the request and the overlay as three arguments.
+ *   phone  `runNativeInlineQuery` — the seat's builder, whose `page` takes one
+ *          request object (precondition (b)).
+ *
+ * Since #996 wave 5 both run the SAME statement against the SAME seat file, so
+ * what this oracle now holds is the half that can still differ: two ctx
+ * builders, two `page` shapes, one payload.
  *
  * The assertion is STRICT EQUALITY of the whole payload, not of the totals: a
  * seat that agreed on `owed_total_minor` while disagreeing about which friend
@@ -28,15 +30,11 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { runNativeInlineQuery } from "../../apps/mobile/src/lib/replica/inline-query-ctx.native";
-import { NativeReplicaStore } from "../../apps/mobile/src/lib/replica/native-replica-store";
-import { NodeSqliteDriver } from "../../apps/mobile/src/lib/replica/node-sqlite-driver";
 import {
-  SHAPE_ID,
-  VAULT_ID,
-  seedScope,
-} from "../../apps/mobile/src/lib/replica/tally-ledger.test-fixtures";
-import { VaultReadPlane } from "../../apps/mobile/src/lib/replica/vault-read-plane";
-import { ReplicaSqliteStore } from "../../packages/client/src/replica/store-core";
+  SeatPageFixture,
+  seatOnlyReadPlane,
+} from "../../apps/mobile/src/lib/replica/seat-fixture.test-fixtures";
+import { seedSeatScope } from "../../apps/mobile/src/lib/replica/tally-ledger.test-fixtures";
 import type { Money, Valuation } from "../../packages/core/src/money";
 import { tempDirSync } from "../../packages/test-kit/src/temp-dir";
 
@@ -148,6 +146,7 @@ async function loadUncompilable(): Promise<{
 interface InlineReplicaSession {
   read: (appId: string, request: never) => Promise<unknown>;
   search: (appId: string, request: never) => Promise<unknown>;
+  page?: (query: never, request: never, overlay?: never) => Promise<unknown>;
 }
 
 const closers: Array<() => void> = [];
@@ -156,34 +155,38 @@ const closers: Array<() => void> = [];
 function ledger(): string {
   const root = tempDirSync("centraid-tally-parity-");
   const databaseName = path.join(root, "personal.db");
-  seedScope(databaseName);
+  seedSeatScope(databaseName);
   return databaseName;
 }
 
-/** The shell's read plane: one store, one shape, no multi-vault bookkeeping. */
-function webSession(databaseName: string): InlineReplicaSession {
-  const store = new ReplicaSqliteStore(
-    new NodeSqliteDriver(databaseName),
-    VAULT_ID
-  );
-  closers.push(() => store.close());
-  return {
-    read: (_appId, request) =>
-      Promise.resolve(
-        store.read({ ...(request as object), shapeId: SHAPE_ID } as never)
-      ),
-    search: () => Promise.reject(new Error("the dashboard does not search")),
-  };
+/** One seat file, one handle, closed with the test. */
+function seat(databaseName: string): SeatPageFixture {
+  const fixture = new SeatPageFixture(databaseName);
+  closers.push(() => fixture.close());
+  return fixture;
 }
 
-/** The phone's read plane: the seat's own, over the same database. */
-function phoneSession(databaseName: string): VaultReadPlane {
-  const reader = new VaultReadPlane(
-    NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
-    { vaultId: VAULT_ID, label: "Personal", canWrite: true }
-  );
-  closers.push(() => reader.close());
-  return reader;
+/**
+ * The shell's read plane. Its `page` is POSITIONAL — statement, request,
+ * overlay — where the phone's is one object, and that difference is the whole
+ * of what this oracle still varies.
+ */
+function webSession(fixture: SeatPageFixture): InlineReplicaSession {
+  const refuse = (): never => {
+    throw new Error(
+      "this seat answers pages only: the declarative read is not part of it"
+    );
+  };
+  return {
+    read: refuse,
+    search: refuse,
+    page: ((query: never, request: { limit: number; after?: never }) =>
+      fixture.page({
+        query,
+        limit: request.limit,
+        ...(request.after ? { after: request.after } : {}),
+      })) as InlineReplicaSession["page"],
+  };
 }
 
 describe("Tally's balances, phone against web, over the same rows", () => {
@@ -194,24 +197,15 @@ describe("Tally's balances, phone against web, over the same rows", () => {
   test("the two seats derive the identical dashboard", async () => {
     const { dashboardQuery, runInlineQuery } = await loadUncompilable();
     const databaseName = ledger();
-    const reader = phoneSession(databaseName);
+    const fixture = seat(databaseName);
 
     const phone = (await runNativeInlineQuery(
       { default: dashboardQuery } as never,
-      {
-        session: {
-          read: reader.read.bind(reader),
-          search: reader.search.bind(reader),
-        },
-        appId: "tally",
-      }
+      { session: seatOnlyReadPlane(fixture.page), appId: "tally" }
     )) as Dashboard;
     const web = (await runInlineQuery(
       { default: dashboardQuery },
-      {
-        session: webSession(databaseName),
-        appId: "tally",
-      }
+      { session: webSession(fixture), appId: "tally" }
     )) as Dashboard;
 
     // A denial or an empty ledger would make the comparison vacuous.
@@ -242,24 +236,15 @@ describe("Tally's balances, phone against web, over the same rows", () => {
   test("every friend's net agrees, not just the totals", async () => {
     const { dashboardQuery, runInlineQuery } = await loadUncompilable();
     const databaseName = ledger();
-    const reader = phoneSession(databaseName);
+    const fixture = seat(databaseName);
 
     const phone = (await runNativeInlineQuery(
       { default: dashboardQuery } as never,
-      {
-        session: {
-          read: reader.read.bind(reader),
-          search: reader.search.bind(reader),
-        },
-        appId: "tally",
-      }
+      { session: seatOnlyReadPlane(fixture.page), appId: "tally" }
     )) as Dashboard;
     const web = (await runInlineQuery(
       { default: dashboardQuery },
-      {
-        session: webSession(databaseName),
-        appId: "tally",
-      }
+      { session: webSession(fixture), appId: "tally" }
     )) as Dashboard;
 
     // PER-CURRENCY BAGS, not a net integer (#996 R22). This read

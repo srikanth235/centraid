@@ -8045,3 +8045,94 @@ fixture and test files that carried it are re-seeded, and what remains is
   drifted precisely because nothing made them the same read.
 - **A census floor is a population count, not a budget.** It moves down when
   reads legitimately leave and never up to admit one.
+
+## Wave 5c — the two parity oracles, and the old-store seed's last caller (#996)
+
+### Correction to wave 5b
+
+Wave 5b's section states `grep -rn shape_id packages/client apps/` was 42. It
+was **53** at that commit: the two airplane fixtures still carried `seedScope`,
+the old store's blob-table seed, because the two parity oracles in
+`tests/integration-mobile/` still called it. The claim was written from the
+intended end state rather than measured, and the number is corrected here
+rather than edited there.
+
+### Seven tests were red before this lane opened, for the same reason
+
+`locker-rows-parity` and `tally-balance-parity` compare the web seat's payload
+against the phone's over the same rows. Both sides ran the OLD store, and both
+handlers read pages, so all seven failed with `page is online-only` — inherited
+red, not caused by wave 5a or 5b.
+
+Both are re-rigged on the seat file. **The oracle is not tautological after the
+move**: the shell's `page` is POSITIONAL — statement, request, overlay — and the
+phone's takes one request object, and the two ctx builders wrap them
+differently. Same statement, same file, two builders, one payload is exactly
+what these two files still have to prove. The `__centraid*` provenance
+assertion stays: it now holds because a page row IS the table's columns, rather
+than because a strip ran.
+
+### `seedScope` is gone from both fixtures
+
+With the airplane oracles (5a) and the parity oracles (here) moved, the
+old store's seed had no caller left, so it is deleted along with `SHAPE_ID` and
+the `ReplicaSqliteStore` / `NodeSqliteDriver` / `node:sqlite` imports that
+served it. `grep -rn shape_id packages/client apps/ tests/` is **52**, and what
+holds it is `read-plan.ts`, `store-core.ts`, their two tests,
+`home-tile-reads.test.ts` and `tests/schema-export-fingerprint.json`.
+
+### Gates at this lane's head
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,436 tests, all passing.
+- `bun run test:integration:mobile` — 11 files, 69 tests, all passing (7 were
+  failing on the branch head).
+- `bun run typecheck` — 25/25.
+- `bun run knip` — 1 unused export, `DEVICE_OFFER` in
+  `apps/mobile/src/apps/locker/locker-seat-copy.ts`, inherited from `4a7d70229`
+  and untouched here.
+- `bun run governance < /dev/null` — 21 passed, 1 failed: `bcf17bd3f`, the known
+  inherited violation.
+- `bun run --cwd apps/mobile ci:native-state` — Pod lock, project paths and
+  iOS/Android fingerprints agree; no native input changed, nothing regenerated.
+- `bun run check:push:static` — 4/4 on every committed tree.
+
+### App weight, measured on this Linux worktree
+
+| tree | iOS largest chunk | Android largest chunk |
+| --- | --- | --- |
+| `3a8d8ee95` (wave 4's head, from wave 4p) | 8,338,619 B | 8,366,810 B |
+| this lane's head | 8,338,639 B | 8,367,348 B |
+| ceiling (`mobile/app-weight/build-artifact/any`) | 8,220,000 B | 8,220,000 B |
+
+**The ceiling is not raised.** Both trees are over and the overage is
+inherited: the branch head was already 106,559 B (iOS) / 134,352 B (Android)
+past it before wave 4 opened. This lane's three commits add **20 B (iOS) and
+538 B (Android)** — the five `PageQuery` statements, minus the request objects
+they replaced.
+
+**The import that carries the overage is the old store**, and it is still in
+the phone's bundle because forty-four screen reads still call it:
+`@centraid/client/replica/native` re-exports `store-core.ts` (1,873 lines),
+`read-plan.ts` (478), `read-plan-clauses.ts` (339), `query.ts` (397),
+`coordinator.ts` (911) and `windowed-bootstrap.ts` (285) — 4,283 lines of
+source that the seat store has replaced and nothing but those forty-four reads
+still needs. Its shipped byte cost cannot be attributed exactly until it is
+removed, which is the deletion this wave exists to make possible.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts`
+- `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `tests/integration-mobile/locker-rows-parity.integration.test.ts`
+- `tests/integration-mobile/tally-balance-parity.integration.test.ts`
+
+### Decisions — the oracles
+
+- **A parity oracle keeps its job when the plane under it changes, or it is
+  deleted.** What still differs between the two seats is the ctx builder and
+  the `page` shape, and that is what these two files hold now.
+- **A measured number goes in the receipt, never an intended one.** Wave 5b's
+  count was written from the plan; the correction is appended, not edited in.
