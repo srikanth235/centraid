@@ -29,24 +29,20 @@ export function purgeBrowserReplicaCaches(): void {
   } catch {
     /* Desktop and hardened browsers have no service-worker cache lane. */
   }
-  try {
-    if (typeof caches !== "undefined") {
-      void caches
-        .keys()
-        .then((names) =>
-          Promise.all(
-            names
-              .filter(
-                (name) =>
-                  name.startsWith("centraid-tunnel-assets-") ||
-                  name.startsWith("centraid-tunnel-blobs-")
-              )
-              .map((name) => caches.delete(name))
+  // Cache Storage can throw on access even when the global is present, and
+  // `keys()` / `delete()` reject; one promise chain captures both.
+  void Promise.resolve()
+    .then(() => (typeof caches === "undefined" ? [] : caches.keys()))
+    .then((names) =>
+      Promise.all(
+        names
+          .filter(
+            (name) =>
+              name.startsWith("centraid-tunnel-assets-") ||
+              name.startsWith("centraid-tunnel-blobs-")
           )
-        )
-        .catch(() => undefined);
-    }
-  } catch {
-    /* Cache Storage may be denied even when the global is present. */
-  }
+          .map((name) => caches.delete(name))
+      )
+    )
+    .catch(() => undefined);
 }

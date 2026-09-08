@@ -312,7 +312,7 @@ describe("authz deny matrix (generated from ROUTES)", () => {
       [
         ...PRINCIPAL_ENTITY_KINDS.keys(),
         ...NON_ENTITY_PRINCIPAL_KINDS,
-      ].toSorted()
+      ].toSorted((left, right) => left.localeCompare(right))
     ).toStrictEqual(["automation", "circle", "harness", "person"]);
   });
 

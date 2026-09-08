@@ -38,7 +38,7 @@ export const SHARE_FAILED = "Could not share with the selected people.";
  * would be the product promising something it has no mechanism for.
  */
 export const SHARE_IS_A_COPY =
-  "Ending a share removes their copy and stops updates. Anything they exported first stays theirs.";
+  "Ending a share removes their copy and stops updates; anything they exported first stays theirs.";
 
 /**
  * EGRESS ANSWERS DO NOT TRAVEL WITH A SHARE (#996, R18). The copy is enriched
@@ -55,7 +55,7 @@ export const SHARE_ENRICHMENT_IS_THEIRS =
  * things, and the one question people actually ask is which.
  */
 export const LEAVING_SHARED_VAULT =
-  "Leaving ends your access to this vault. Copies already shared into your own vault stay.";
+  "Leaving ends your access to this vault; copies already shared into your own vault stay.";
 
 /**
  * The denied-vault banner's title, said the same way by every app's chrome.

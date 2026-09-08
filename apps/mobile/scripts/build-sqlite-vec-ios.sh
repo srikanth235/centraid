@@ -152,7 +152,7 @@ grep -q "SQLITE_VEC_VERSION \"v$version\"" "$src/sqlite-vec.h" || {
 # call through the api struct, so "whichever header we found" is not a detail a
 # build gets to vary.
 echo "build-sqlite-vec-ios: vendoring $AMALGAMATION"
-curl --fail --silent --show-error --location \
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   -o "$work/amalgamation.zip" "$AMALGAMATION"
 unzip -q -o "$work/amalgamation.zip" -d "$work/amalgamation"
 vendor="$(dirname "$(find "$work/amalgamation" -name sqlite3ext.h | head -1)")"

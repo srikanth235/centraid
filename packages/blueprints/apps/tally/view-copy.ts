@@ -78,8 +78,8 @@ export const FRIEND_HERO_SUB =
  * OQ-12). Neither sentence says "merged" or "removed", because neither
  * happened: the answer is a judgment recorded beside two rows that both stay.
  */
-export const MATCH_ACCEPTED = "Recorded as one movement. Both lines stay.";
-export const MATCH_REJECTED = "Recorded as two payments. Both lines stay.";
+export const MATCH_ACCEPTED = "Recorded as one movement, and both lines stay.";
+export const MATCH_REJECTED = "Recorded as two payments, and both lines stay.";
 
 /** The weakest part of a match proposal, said plainly (#996, OQ-12). */
 export const SAME_DAY = "same day";

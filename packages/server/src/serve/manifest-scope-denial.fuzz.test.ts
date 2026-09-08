@@ -43,14 +43,14 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
   describe("fuzz: arbitrary clamps and requests fail closed, never throw, never widen", () => {
     const declaredSchemas = [
       ...new Set(MANIFESTS.flatMap((m) => m.scopes.map((s) => s.schema))),
-    ].toSorted();
+    ].toSorted((left, right) => left.localeCompare(right));
     const declaredTables = [
       ...new Set(
         MANIFESTS.flatMap((m) =>
           m.scopes.flatMap((s) => (s.table === undefined ? [] : [s.table]))
         )
       ),
-    ].toSorted();
+    ].toSorted((left, right) => left.localeCompare(right));
 
     const arbVerbs = fc.constantFrom<ClampScope["verbs"][]>(
       "read",

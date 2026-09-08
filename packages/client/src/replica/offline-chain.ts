@@ -422,7 +422,7 @@ export function chainRecoveryFromExpiredOutcome(
   return {
     action: "recover",
     mintNewIntent: true,
-    copy: "This waited too long to be sure it ran. Check, then send it again.",
+    copy: "This waited too long to be sure it ran — check, then send it again.",
     reason: answer.reason,
   };
 }

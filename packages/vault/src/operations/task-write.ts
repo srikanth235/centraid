@@ -150,7 +150,8 @@ export const TASK_WRITE_CONDITIONS: readonly TaskCondition[] = [
       }
       const seen = new Set<string>(image.taskId === null ? [] : [image.taskId]);
       let cursor: string | null = image.parentTaskId;
-      for (let depth = 0; cursor !== null; depth += 1) {
+      let depth = 0;
+      while (cursor !== null) {
         if (seen.has(cursor)) {
           return "That parent is already below this task — a task hierarchy has no loops.";
         }
@@ -161,6 +162,7 @@ export const TASK_WRITE_CONDITIONS: readonly TaskCondition[] = [
         const parent = stored(vault, cursor);
         if (!parent) return null;
         cursor = parent.parent_task_id;
+        depth += 1;
       }
       return null;
     },
