@@ -9696,3 +9696,66 @@ and the file is present at `b07bf9a9f`. The list is the entry that is wrong.
 bun run format
 bash .governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh
 ```
+
+## Close pass — the doc step, slice 2: docs/multi-agent.md rewritten (#996)
+
+The doc had grown by accretion into three lettered groups whose numbering no
+longer matched anything, and it carried no answer to the question every wave of
+this umbrella actually asked: **how big is a lane**. It is replaced with the
+doctrine this issue's own orchestration ran on, in the repo's voice.
+
+### What the new doc says that the old one did not
+
+- **Lane sizing has a floor and a ceiling**, each with named signs and a fix.
+  Ceremony cost is fixed per lane; confusion cost grows faster than lane size,
+  so both edges are real and the reading set is what decides the lane.
+- **Roles are split into what the root does and what it never does** — the root
+  does not edit, commit, or commit a worker's WIP — and what a worker owes.
+- **Census before cut**: a deletion slice is preceded by an enumeration of every
+  consumer, suite and gate, and that enumeration IS the brief.
+- **The brief's eight sections**, State-from-evidence first, push gates last.
+- **Handoff and recovery**: the milestone note, resume-before-respawn, and why
+  the root never commits WIP to save it.
+- **Verification**: a claim names its grep; inherited red is measured at every
+  merge; the close pass is one worker with five numbered steps.
+
+### What was kept from the old doc
+
+The parallel-work norms are folded into `## Execution` and `## Supervision
+caps` rather than dropped: heavy suites serialised behind a shared lock with
+single-file and package-filtered runs preferred, trusting a sibling's reported
+green, never restarting a shared long-running service, the isolation-defaults
+table, and the iteration caps (gate-fix cycle, flaky re-run, review nits, and
+no tool-call budget). The red-first verifier rule and the falsification section
+it replaces for every other lane are kept verbatim in `## Verification`.
+
+Per the owner, the doc is **generic**: it carries no issue numbers, so it reads
+as standing doctrine rather than as this umbrella's log. The rulings that were
+cited by number in the old text live in `docs/decisions.md`, which is where a
+dated ruling belongs.
+
+### The five referencing files are unchanged, and that is checked
+
+`AGENTS.md` (twice), `QUALITY.md`, `docs/decisions.md`, `docs/dev-environment.md`
+(twice) and `docs/traps/worktrees.md` (twice) reference the file. No reference
+uses an anchor, and every referring sentence still describes the new text —
+lanes by reading set, briefs carrying a reading set and a doctrine digest, a
+standalone verifier only for red-first slices, the doc pass per umbrella at
+close, and "do not run full suites in every worktree at once" are all still in
+it. One dangling citation is NOT introduced by this slice and is not repaired
+here: `QUALITY.md`'s resolved-issue prose cites a `G1` section that the previous
+version of this doc did not have either, and that section of `QUALITY.md` is
+frozen history the `doc-integrity` gate will not let this commit edit.
+
+### Every file this commit touches
+
+- `docs/multi-agent.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Gates
+
+```
+bun run format
+bash .governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh
+wc -l docs/multi-agent.md
+```
