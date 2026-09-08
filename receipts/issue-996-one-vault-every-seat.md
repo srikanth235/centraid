@@ -9759,3 +9759,75 @@ bun run format
 bash .governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh
 wc -l docs/multi-agent.md
 ```
+
+## Close pass — the doc step, slice 3: the doc step's own close (#996)
+
+The owner opened the DOC step of the close pass only. This section closes it:
+the exit list as run, what the two doc commits changed by full path, and what
+this worker found that belongs to the sweep and PR-readiness steps it was told
+not to do.
+
+### The exit list, line by line
+
+| # | Command | Result |
+| --- | --- | --- |
+| 1 | `grep -rn -i "coordinator\|replica_row\|payload_json\|vault\.read\|read-plan\|row-key\|declarative read\|replica store" docs *.md packages/*/README.md apps/*/README.md` | 26 hits before, all live prose; after, every hit is an unrelated meaning or an explicit supersession marker carrying the #996 link |
+| 2 | `bash .governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh` (the repo's link check; there is no `lint:links` script — the directive is the gate) | ✓ `internal-doc-links` |
+| 3 | `bun run format` then `bun run lint` | format wrote, `format:check` then clean; lint clean |
+| 4 | `bun run typecheck` | 25 successful, 25 total |
+| 5 | `bun run governance < /dev/null` | 21 passed, 1 failed — **only** the inherited `bcf17bd3fe0a54fb494de659188e5ccf591509a0` `commit-issue-receipt-match` finding |
+| 6 | `bun run check:push:static` | 4/4 in 78.9s |
+| 7 | `wc -l docs/multi-agent.md` → 209 (< 625); `grep -rn -i "opus\|sonnet\|fable\|haiku" docs *.md` | no model identifier in any file this pass wrote; the surviving hits are `CONSTITUTION.md`'s own directive text and the `COSTS.md` ledger, both pre-existing |
+
+### Every file this pass changed, by full path
+
+- `ARCHITECTURE.md`
+- `QUALITY.md`
+- `TESTING.md`
+- `docs/decisions.md`
+- `docs/logs.md`
+- `docs/mobile-offline.md`
+- `docs/multi-agent.md`
+- `docs/vault-ontology.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Left for the sweep and the PR steps
+
+Found while reading, deliberately not acted on:
+
+1. **`LiveQuery`, `LiveQueryRegistry` and the two counters they feed.**
+   `packages/client/src/replica/live-query.ts` and `live-query-registry.ts` are
+   reached only by `index.ts`, `native.ts` (which no longer re-exports them) and
+   their own `trace.test.ts`. `docs/logs.md` now says the `invalidations` and
+   `reReads` counters have no writer; deleting them is a `packages/core`
+   protocol decision the cut already handed to the owner.
+2. **The value-policy chain is orphaned the same way.**
+   `packages/vault/src/replica/value-policy.ts` and `replica/snapshot.ts` are
+   imported by nothing but `packages/vault/src/index.ts`, and
+   `entity-catalog.ts` still declares `replicaValues.textCeilingBytes` on two
+   entities. A seat holds every replicated column whole, so the ceiling has no
+   consumer — `docs/mobile-offline.md` says so, and the code is the sweep's.
+3. **Two ledgers still name a deleted test.** `tests/claims.json` (claim
+   `replica-multi-writer`, owner
+   `packages/client/src/replica/multi-writer.contract.test.ts`),
+   `tests/floors.json#…replica-multi-writer` and `tests/inventory.json` all point
+   at a file the cut deleted. `TESTING.md`'s catalog was repaired in slice 1;
+   the ledgers were not, because rewriting a floors/claims row is a ratchet
+   change, not a doc change.
+4. **`bun run lint:ledgers` is red, and it is inherited.** Measured at
+   `b07bf9a9f` with this tree stashed: it fails identically there, on
+   `tests/journeys.json` entries removed without extending the section's
+   `approvedDeviation`. Not this pass's, and not repaired by weakening the
+   ledger.
+5. **A stale code comment the sweep should take with its file.**
+   `apps/mobile/src/lib/replica/storage-accounting.ts` still explains the
+   "near-empty per-gateway mounted-reader host database"; the doc it mirrors was
+   updated, the comment was left so this commit stayed doc-only.
+6. **`QUALITY.md` cites a `G1` section of `docs/multi-agent.md`.** The citation
+   is in the frozen `## Resolved` half, it dangled before this pass (the previous
+   version of the doc had no `G1` either), and `doc-integrity` will not let a
+   commit edit it. Owner's call whether frozen history keeps a dangling section
+   letter.
+
+Not done, by the owner's ruling: the dead-code sweep, PR readiness (body,
+draft-off, issue-body reconciliation) and CI triage.
