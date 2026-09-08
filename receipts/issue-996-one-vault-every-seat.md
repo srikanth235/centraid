@@ -7656,3 +7656,136 @@ minted id and the pending badge are still what is under test.
 - **A filter you can create inside is not only a filter.** The alternative
   readings — a Today group for rows that are not due today, or an add that
   refuses without a date — both make the shelf lie or make capture argue.
+
+## Wave 4r — the plan snapshots land, and the two registers they replace go (#996)
+
+### The review diff is 77 statements, and it came from statements that RAN
+
+`packages/server/src/serve/app-query-plans.test.ts` invokes every one of the
+eight apps' manifested query handlers against a REAL vault — bootstrapped, not
+mocked — with `ctx.vault.page` wired to `Gateway.page`, the paged door W4-D2
+ruled. Every distinct statement a handler issued is captured, assembled through
+`pageStatement` exactly as a seat would, and its `EXPLAIN QUERY PLAN` written to
+`packages/server/src/serve/app-query-plans.snapshot.md`: 77 statements across
+the eight apps, each with its SQL and its access path.
+
+It lives in `packages/server` for one reason — it needs both halves. The
+handlers are blueprints', the vault and the door are `packages/vault`'s, and
+`packages/server` is the only package that depends on both. The fixture-input
+builder the behavioural smoke test already had (`schemaFixture`, derived from
+each handler's own manifest schema) moved to
+`packages/test-kit/src/manifest-fixture-input.ts` so both suites use one, rather
+than the plan suite growing a second copy that drifts.
+
+R8 is explicit that this is NOT the performance gate — an outer `LIMIT` does not
+bound a sort, an efficient traversal can print as `SCAN`, and plan text moves
+between SQLite versions. It is the derived manifest, reviewed as a diff.
+
+### What the first snapshot says, and it is a finding
+
+**35 of the 77 statements sort in a temp B-tree**, and the hot list walks —
+`tasks.board.open`, `notes.library.recent`, `photos.library.live`,
+`locker.items.archived`, `tally.dashboard.expenses`, `people.roster.profiles` —
+full-scan their table to do it. The cause is one shape repeated: a keyset walk
+orders by `(sort_column, pk)` and the indexes that exist are on `sort_column`
+alone, so SQLite can seek the range and then has to sort the last term. This is
+what the snapshot exists to make visible on its first day. **The composite
+`(sort_column, pk)` indexes are NOT added here**: they are a schema rung, and
+the store cutover working in parallel on `w996/cutover` owns the schema epoch
+and the golden re-freeze this wave. Named for the umbrella with the snapshot as
+its evidence.
+
+### `vault.scopes` STAYS, and that is a correction to the plan
+
+The issue's line 165 has plan snapshots replacing "the manifest's
+`vault.scopes` and `app-entity-tripwire.ts` as review diffs". Half of that is
+right and half of it was overtaken by W4-D2. `app-entity-tripwire.ts` is a
+review artifact and goes. `vault.scopes` is not one any more: the paged door
+runs a remote-only seat's statement under a credential whose `scopeClamp` IS
+the app's declared manifest (`vault-plane.ts:1717`), and `executionClamp`
+(`packages/vault/src/gateway/access.ts:84`) is **fail-closed** — an app with no
+covering scope reaches nothing. Deleting the scopes would delete the door's
+attenuation, which is weakening a policy to close a checklist item.
+
+**OWNER DECISION, taken to keep moving:** the scopes stay as the door's clamp;
+what is deleted is the review machinery over them. If the owner wants them gone,
+the door needs a different attenuation first, and that is a wave of its own.
+
+### The two registers, and what carries their property now
+
+Deleted: `app-entity-tripwire.ts`, its test, `app-entity-tripwire.filters.json`
+and `app-manifest-reads.test.ts` (F2, F6). Their law
+(`tests/claims.json#laws.app-entity-tripwire`, "an app reads only what its
+manifest declares") is **retargeted, not retired**, onto the plan suite — which
+asserts it from the tables of the statements that actually ran rather than from
+a regex over source text, and keeps the flow's `minimumTests` floor of 17
+exactly. What is NOT carried is `app-manifest-reads.test.ts`'s "declares no read
+nothing reaches for": since #928 installing is not a grant and no member is
+asked to approve a scope, an unused declaration costs nobody anything.
+
+### The side tables were already there
+
+R8 names four wide values. Each already lives off its hot row, and no new table
+is needed:
+
+| Wide value | Where it lives | Evidence |
+| --- | --- | --- |
+| decoded body text | `core_content_text`, 1:1, `ON DELETE CASCADE` | `packages/vault/src/schema/core-side-tables.ts:57` |
+| note and document bodies | `core_content_item` → `core_blob`; `knowledge_note` holds `body_content_id`, never bytes | `packages/vault/src/schema/domains-social-knowledge-media.ts:108` |
+| thumbs, previews, posters | `core_content_derivative`, `sha256` into the CAS | `packages/vault/src/schema/blob.ts:353` |
+| transcripts and extracted text | `core_content_derivative`, `text_content` | `packages/vault/src/schema/blob.ts:363` |
+
+### The paged door reached `appQueryCtx`, which was red at the lane's head
+
+`share-surface-queries.test.ts` — the suite that runs the shipped Docs and
+People handlers against the golden pair's real vaults — was **4 failed** at
+`7c825e6a1`: its `ctx.vault` had `read` and `search` and no `page`, so every
+converted handler answered an empty screen and the suite asserted it. The
+fixture gains `page` over `Gateway.page`, and the four pass.
+
+### Gates
+
+- `bunx vitest run --root packages/server src/serve/app-query-plans.test.ts` —
+  17 passed (the floor the retargeted flow keeps).
+- `bun run --cwd packages/blueprints test` — 214 files, 7,076 passed, 2
+  expected-fail.
+- `bun run --cwd packages/server test` — 389 files, 3,498 passed, 3 failed:
+  `gateway-db-lock.integration.test.ts` (SIGKILL/sqlite3) and two
+  `acp/backends/acp/launch.test.ts` `IS_SANDBOX` cases — all three are this
+  container's environment, untouched here and red at the lane's head too.
+- `bun run governance < /dev/null` — 21 passed, 1 failed: `bcf17bd3f`, known.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/server/src/serve/app-query-plans.snapshot.md`
+- `packages/server/src/serve/app-query-plans.test.ts`
+- `packages/test-kit/src/manifest-fixture-input.ts`
+
+**Deleted:**
+
+- `packages/blueprints/src/app-entity-tripwire.filters.json`
+- `packages/blueprints/src/app-entity-tripwire.test.ts`
+- `packages/blueprints/src/app-entity-tripwire.ts`
+- `packages/blueprints/src/app-manifest-reads.test.ts`
+
+**Changed:**
+
+- `packages/blueprints/src/handler-crud-smoke.integration.test.ts`
+- `packages/blueprints/src/pending-projection-tripwire.ts`
+- `packages/server/src/serve/manifest-scope-denial.sweep.test.ts`
+- `packages/server/src/serve/share-subscription-peer.test-fixtures.ts`
+- `packages/test-kit/package.json`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `tests/claims.json`
+- `tests/inventory.json`
+
+### Decisions — the snapshots
+
+- **A register with no replacement is a review diff removed, not replaced.**
+  The tripwire went in the same commit as the thing that carries its property.
+- **A clamp is not a review artifact.** `vault.scopes` stopped being one the
+  moment the paged door began enforcing it, and the plan's wording was written
+  before that door existed.

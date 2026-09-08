@@ -45,8 +45,10 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // `release-notes-drafter` declares no vault block; its own case below
       // pins what that means for consent.
       withScopes: 36,
-      // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
-      // reads and its seats' actual reads honest; this number only tracks them.
+      // `packages/server/src/serve/app-query-plans.test.ts` is the gate
+      // keeping a manifest's declared reads and its handlers' actual reads
+      // honest — it asserts the tables of every statement that RAN against a
+      // real vault (#996, R8). This number only tracks them.
       // 278 → 277 (#916): Locker's history pane moved off the dropped
       // `locker.item_history` onto the shared revision ledger, and the two
       // scopes that named the dead table (`read` and `reveal`) became one

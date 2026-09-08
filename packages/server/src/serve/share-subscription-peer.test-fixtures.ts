@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { PageCursor, PageQuery } from "@centraid/core/page";
 import {
   createGateway,
   createShareGrant,
@@ -326,6 +327,19 @@ export function appQueryCtx(
         read,
         search: async (request: Record<string, unknown>) =>
           side.gateway.search(credential, request as never),
+        // THE PAGED DOOR (#996, W4-D2). A converted handler asks for pages,
+        // and this ctx is the one place a shipped handler meets a real vault
+        // in this package: without the door the handler's read answers
+        // nothing and the suite asserts an empty screen.
+        page: async (request: {
+          query: PageQuery;
+          limit: number;
+          after?: PageCursor;
+        }) =>
+          side.gateway.page(credential, request.query, {
+            limit: request.limit,
+            ...(request.after ? { after: request.after } : {}),
+          }),
       },
     },
   };
@@ -334,4 +348,9 @@ export function appQueryCtx(
 interface VaultApiish {
   read: (request: Record<string, unknown>) => Promise<unknown>;
   search: (request: Record<string, unknown>) => Promise<unknown>;
+  page: (request: {
+    query: PageQuery;
+    limit: number;
+    after?: PageCursor;
+  }) => Promise<unknown>;
 }

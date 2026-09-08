@@ -1514,8 +1514,8 @@
       "flow": "blueprint-one-computation-law"
     },
     "app-entity-tripwire": {
-      "statement": "Every entity a bundled app's queries, actions and phone screens read, and every command they invoke, is declared in that app's app.json#vault.scopes — minimisation is a build-time check over the manifest, not a runtime grant evaluation (#928 A1).",
-      "owner": "packages/blueprints/src/app-entity-tripwire.test.ts",
+      "statement": "Every table a bundled app's query handlers read is declared in that app's app.json#vault.scopes, checked against the statements those handlers actually RAN against a real vault through the paged door — minimisation is a build-time check over the manifest and its committed query plans, not a runtime grant evaluation (#928 A1, #996 R8).",
+      "owner": "packages/server/src/serve/app-query-plans.test.ts",
       "flow": "blueprint-app-entity-tripwire-law"
     },
     "select-all-filtered": {
@@ -3798,11 +3798,11 @@
     },
     {
       "id": "blueprint-app-entity-tripwire-law",
-      "name": "An app reads and invokes only what its manifest declares",
-      "surface": "blueprints",
+      "name": "An app reads only the tables its manifest declares",
+      "surface": "server",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/blueprints/src/app-entity-tripwire.test.ts",
+      "owner": "packages/server/src/serve/app-query-plans.test.ts",
       "minimumTests": 17
     },
     {

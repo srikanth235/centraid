@@ -14,19 +14,11 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { schemaFixture } from "@centraid/test-kit/manifest-fixture-input";
+import type { JsonSchema } from "@centraid/test-kit/manifest-fixture-input";
+
 const here = import.meta.dirname;
 const appsRoot = path.resolve(here, "../apps");
-
-interface JsonSchema {
-  type?: string | string[];
-  enum?: unknown[];
-  properties?: Record<string, JsonSchema>;
-  items?: JsonSchema;
-  required?: string[];
-  minimum?: number;
-  minLength?: number;
-  pattern?: string;
-}
 
 interface ManifestHandler {
   name: string;
@@ -88,57 +80,6 @@ function handlerPath(
     }
   }
   return null;
-}
-
-function stringFixture(name: string, schema: JsonSchema): string {
-  if (schema.enum?.length) return String(schema.enum[0]);
-  if (name === "data_uri") return "data:text/plain;base64,c2VlZC1maXh0dXJl";
-  if (name === "staged_sha") return "a".repeat(64);
-  if (name === "phash") return "0f0f";
-  if (name === "thumbhash") return "AAAAAA";
-  if (name.includes("origin")) return "https://example.test";
-  if (name.includes("uri") || name === "url")
-    return "https://example.test/seed";
-  if (name === "rrule") return "FREQ=DAILY;COUNT=2";
-  if (
-    name.includes("_at") ||
-    name === "from" ||
-    name === "to" ||
-    name.includes("date")
-  )
-    return "2026-07-29T09:00:00.000Z";
-  if (name === "spent_on") return "2026-07-29";
-  return `seed-${name}`.padEnd(schema.minLength ?? 1, "x");
-}
-
-function schemaFixture(schema: JsonSchema = {}, name = "value"): unknown {
-  if (schema.enum?.length) return schema.enum[0];
-  const type = Array.isArray(schema.type)
-    ? (schema.type.find((candidate) => candidate !== "null") ?? "null")
-    : schema.type;
-  switch (type) {
-    case undefined:
-      return stringFixture(name, schema);
-    case "array":
-      return [schemaFixture(schema.items, `${name}_item`)];
-    case "boolean":
-      return true;
-    case "integer":
-      return Math.max(1, schema.minimum ?? 1);
-    case "number":
-      return Math.max(1, schema.minimum ?? 1);
-    case "object":
-      return Object.fromEntries(
-        Object.entries(schema.properties ?? {}).map(([key, property]) => [
-          key,
-          schemaFixture(property, key),
-        ])
-      );
-    case "null":
-      return null;
-    default:
-      return stringFixture(name, schema);
-  }
 }
 
 function schemaMismatch(
