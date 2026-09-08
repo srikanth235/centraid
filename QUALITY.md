@@ -2,6 +2,27 @@
 
 ## Open
 
+- **The letter avatar puts body ink on a hashed hue, and the People a11y test
+  was passing because the roster had no rows to fail on.** `.kit-avatar` in
+  `packages/design/src/elements/kit.css` sets `color: var(--text)` while
+  `packages/blueprints/apps/_shared/Avatar.tsx` sets `background` to a hashed
+  identity hue, so the monogram's contrast is whatever the two happen to be:
+  measured on People's roster it is **2.91:1** (`#141414` on `#8c4c61`) against
+  a 4.5:1 floor, and axe reports 233 nodes. It is not a new defect — the design
+  system already ships the paired on-colours (`--c-rose-text` and its siblings,
+  used by `contextMenu.module.css` and `automation.module.css`) and the avatar
+  is the one place that does not reach for them. What is new is that anything
+  SEES it: `accessibility.spec.ts` "People has no WCAG A/AA violations" passed
+  at `4ef887bf4` and fails at `192e08da6`, whose only relevant change is the
+  `people_profile_created_page_idx` ordering index — the roster now renders its
+  rows inside the test's window, so axe finally has avatars to measure. A test
+  that passes because the screen is empty is not evidence, which is the second
+  half of this entry. The fix is the paired token, not a new colour: `Avatar`
+  emits the `--c-<key>-text` that goes with the hue it picked, and `kit.css`
+  reads it. Left for the design owner rather than folded into #996's W5 — it is
+  a rulebook change (DESIGN.md) across every avatar in the product, and the
+  index commit only revealed it.
+
 - **A golden-corpus re-freeze cannot be read as a diff, and the freezer's own
   header says it should be.** `scripts/golden-vault/build.mjs` derives every
   corpus id from a fixed seed for exactly that reason ("a corpus seeded with

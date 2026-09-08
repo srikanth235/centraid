@@ -8710,3 +8710,95 @@ reads it, so it is a sentence the product does not say. Deleted.
 
 - `apps/mobile/src/apps/locker/locker-seat-copy.ts`
 - `receipts/issue-996-one-vault-every-seat.md`
+
+## Wave 5l — where W5 stands, measured, and the one thing the index commit revealed (#996)
+
+### The owner ruling this wave ran under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+`mobile/*` rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head `a1e8c4390` stand as v0 evidence; the rows stay open
+ledger rows with provenance `emulator`.
+
+### The exits, measured at `a9613e1e4`
+
+| exit | measured |
+| --- | --- |
+| `grep -rn shape_id packages/client apps/ tests/` | **50** — `read-plan.ts`, `store-core.ts`, their two tests, `tests/schema-export-fingerprint.json`; every one inside the old plane itself |
+| `bun run knip` | **exit 0** |
+| `bun run governance < /dev/null` | 21 passed, 1 failed: `bcf17bd3f`, the known inherited violation |
+| `bun run --cwd apps/mobile ci:native-state` | agrees; nothing regenerated |
+| `bun run test:integration:mobile` | 11 files, 69 tests, 0 failed |
+| web e2e | 44 passed, 6 failed — **5 inherited** (measured on `4ef887bf4`: `offline-reconnect`, `offline-search`, `perf-waterfall` ×2, `tasks.spec.ts:347`), 1 newly SEEN, below |
+| app weight, iOS largest chunk | **8,347,554 B** |
+| app weight, Android largest chunk | **8,368,216 B** |
+| ceiling (`mobile/app-weight/build-artifact/any`) | 8,220,000 B — **not raised** |
+
+The overage is the same inherited one wave 5i measured (8,347,464 / 8,368,281 B):
+`@centraid/client/replica/native` still re-exports `store-core.ts`,
+`read-plan.ts`, `read-plan-clauses.ts`, `query.ts`, `coordinator.ts` and
+`windowed-bootstrap.ts` — 4,283 lines nothing reads. Removing it is the cut, and
+the cut is not made.
+
+### The a11y failure the index commit revealed, and it is a finding
+
+`accessibility.spec.ts` "People has no WCAG A/AA violations in its real
+renderer" passes at `4ef887bf4` and fails at `192e08da6`. The cause is not a
+regression in what People draws: it is that People now DRAWS. The roster's
+statement was sorting a temp B-tree; `people_profile_created_page_idx` turned it
+into a seek, the rows arrive inside the test's window, and axe finally has
+avatars to measure. It measures `#141414` on `#8c4c61` — **2.91:1** against a
+4.5:1 floor, 233 nodes.
+
+`.kit-avatar` keeps `color: var(--text)` while `Avatar.tsx` sets an arbitrary
+hashed hue as its background, and the design system already ships the paired
+on-colours (`--c-rose-text` and siblings) that every other hue-on-surface in the
+product uses. So the fix is a token pairing, not a new colour — and it is a
+DESIGN.md change across every avatar in the product, which is the design owner's
+and not this brief's. Filed in `QUALITY.md`. **A test that passed because the
+screen was empty is the second half of the finding.**
+
+### What is NOT done: step 4's cut, unchanged in shape from wave 5i
+
+The atomic cut — the intent rail off `ReplicaCoordinator` onto the seat session,
+and the old plane deleted in the same commit — is **not started**, for the
+reason wave 5i gave and this lane re-measured rather than re-argued: the reading
+set is ~70 files, of which `shell-session.ts` (1,701 lines),
+`native-session.ts` (1,345) and roughly 3,000 lines of suites
+(`shell-session.test.ts` 1,325, `intents.contract.test.ts` 1,169,
+`offline-chain.contract.test.ts` 616, `shell-session-admission.contract.test.ts`
+499, the four `native-session*` suites 911) are rewrites rather than deletions.
+Half a deletion is the compatibility path the deletion exists to remove.
+
+What this lane DID land is the half of step 4 that is independently green and
+was blocking nothing else: the DDL, the plan snapshot, the epoch bump, the
+corpus, and knip. Two things the cut still needs are now measured rather than
+predicted, and both correct the brief:
+
+- the index shape is `(equality predicate columns, sort column, primary key)`,
+  not `(sort column, pk)` — see wave 5j;
+- the four pk-ordered groups are fixed in `@centraid/core/page`, not by an
+  index: no index removes `ORDER BY id, id`.
+
+One seam the cut will meet that neither brief names: the seat worker has **no
+outbox op on its wire**. `SeatWorkerCore.outbox()` exists and returns a
+`SeatIntentStore`, but `worker-protocol.ts` carries only open/bootstrap/state/
+apply/query/close, so "front `SeatIntentStore` over the seat worker client"
+means adding an `IntentRecordStore` proxy op in the same commit — nine methods,
+all already async in the interface. The phone needs no proxy
+(`inProcessSeatChannel` calls the core directly); the browser does.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `QUALITY.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the standing
+
+- **An exit criterion is reported as measured, never as intended.** Six e2e
+  failures are reported as six, with the five inherited ones measured on the
+  branch head rather than assumed.
+- **A gate that goes red because a screen started working is a finding, not a
+  regression to revert.** The index stays; the contrast defect is filed.
