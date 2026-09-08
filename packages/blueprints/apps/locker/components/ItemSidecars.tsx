@@ -259,7 +259,7 @@ export function AttachmentSection({
       {attachments.map((file) => (
         <FieldRow
           key={file.attachment_id}
-          label={file.title ?? file.role}
+          label={file.role}
           value={[file.media_type, byteSize(file.byte_size)]
             .filter(Boolean)
             .join("  ·  ")}

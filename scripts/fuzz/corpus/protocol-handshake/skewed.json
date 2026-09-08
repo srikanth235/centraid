@@ -9,8 +9,6 @@
     "backupWal": true,
     "assistOAuth": false,
     "automationTurns": true,
-    "multiVaultReplica": true,
-    "crossVaultPlacements": true,
     "automations": false,
     "connectors": false
   }

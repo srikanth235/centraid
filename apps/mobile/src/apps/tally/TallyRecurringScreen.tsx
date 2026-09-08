@@ -85,7 +85,7 @@ export default function TallyRecurringScreen({
                 title={template.description}
                 meta={metaSentence([
                   sentence ?? NO_PREVIEW,
-                  template.time_zone,
+                  template.tz,
                   money(
                     template.original_amount_minor,
                     template.original_currency

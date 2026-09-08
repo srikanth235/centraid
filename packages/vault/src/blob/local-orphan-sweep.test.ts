@@ -43,9 +43,9 @@ describe("local-orphan-sweep suite", () => {
       now: 1_000,
     });
     expect(first.deleted).toStrictEqual([]);
-    expect(first.graceHeld.sort()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].sort()
-    );
+    // Only the ORIGINAL crossed: a derived row never projects (#996, R10),
+    // so the thumb's bytes were never in this vault to be orphaned.
+    expect(first.graceHeld).toStrictEqual([photo.sha256]);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(true);
 
     // Inside the window it is still held, and the clock does NOT reset.
@@ -60,9 +60,7 @@ describe("local-orphan-sweep suite", () => {
       graceWindowMs: 3 * DAY,
       now: 1_000 + 4 * DAY,
     });
-    expect(reclaimed.deleted.sort()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].sort()
-    );
+    expect(reclaimed.deleted).toStrictEqual([photo.sha256]);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
   });
 
@@ -202,8 +200,10 @@ describe("local-orphan-sweep suite", () => {
       now: 2_000,
     });
 
-    expect(reclaimed.deleted.sort()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].sort()
+    // The origin still holds the THUMB it derived for its own library; the
+    // audience never received it, so only the original is shared bytes.
+    expect(reclaimed.deleted.toSorted()).toStrictEqual(
+      [photo.sha256, photo.thumbSha].toSorted()
     );
     expect(origin.blobs.hasSync(photo.sha256)).toBe(false);
     // The family's copy reads exactly as before — same inode, still one link.

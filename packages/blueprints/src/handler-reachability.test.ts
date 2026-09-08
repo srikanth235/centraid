@@ -111,10 +111,15 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     rationale:
       "Tasks about a person are excluded here because Tasks is its own app; the assistant files them without People growing a second board.",
   },
-  "people.action.toggle-task": {
+  "people.action.complete-task": {
     kind: "agent-only",
     rationale:
       "Same excluded tasks section: People draws no checkbox to tick, and the assistant completes the task the member names.",
+  },
+  "people.action.reopen-task": {
+    kind: "agent-only",
+    rationale:
+      "The other half of the completion operation (#996, ONT-27) — the toggle it replaced had the same excluded-section reason.",
   },
   "people.action.add-gift": {
     kind: "agent-only",
@@ -248,6 +253,15 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.save-recurring-expense",
     "action.materialize-recurring-expense",
     "action.edit-recurring-expense-occurrence",
+    // THE MATCH REVIEW IS UNDRAWN ON THE PHONE, not merely unseen (#996,
+    // OQ-12). The cover has no transaction plane at all — no imported
+    // statement, no account list — so a proposal has nothing to stand on and
+    // a control that dispatched one would answer about rows the phone never
+    // shows. The Assistant carries both verbs; these three entries die the
+    // day the cover draws an account.
+    "action.accept-match",
+    "action.reject-match",
+    "query.matches",
   ],
   // Same read-only attachments, same missing picker, as Notes above.
   tasks: ["action.attach", "action.detach"],

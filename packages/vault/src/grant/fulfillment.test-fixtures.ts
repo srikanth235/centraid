@@ -70,10 +70,9 @@ export function audienceTitles(db: DatabaseSync): string[] {
   return (
     db
       .prepare(
-        `SELECT c.title AS title
+        `SELECT a.title AS title
            FROM core_collection_entry e
            JOIN media_asset a ON a.asset_id = e.target_id
-           JOIN core_content_item c ON c.content_id = a.content_id
           ORDER BY e.position`
       )
       .all() as { title: string }[]

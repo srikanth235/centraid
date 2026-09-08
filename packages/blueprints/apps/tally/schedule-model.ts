@@ -88,7 +88,7 @@ export function templateSaveBase(
     !template.category ||
     !template.rrule ||
     !template.anchor_start ||
-    !template.time_zone
+    !template.tz
   )
     return null;
   return {
@@ -103,7 +103,7 @@ export function templateSaveBase(
     splits,
     rrule: template.rrule,
     anchor_start: template.anchor_start,
-    time_zone: template.time_zone,
+    tz: template.tz,
     ...(template.rate_scaled ? { rate_scaled: template.rate_scaled } : {}),
     ...(typeof template.rate_scale === "number"
       ? { rate_scale: template.rate_scale }

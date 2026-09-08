@@ -1,3 +1,4 @@
+import { inList } from "../../_shared/paged-reads.ts";
 /**
  * Access history (README-Locker §1). ONLINE-ONLY: `access.receipt` lives in
  * the vault's audit band, not the replica, so `ctx.vault.authenticate` marks the run
@@ -62,34 +63,30 @@ export default async function accessHandler({
     MAX_WINDOW
   );
   try {
-    const authentication = (await ctx.vault.authenticate({
-      operation: "status",
-      sessionToken: String(input?.auth_session ?? ""),
-    })) as { authenticated?: boolean; configured?: boolean };
-    if (!authentication.authenticated) {
-      return {
-        entries: [],
-        authRequired: true,
-        configured: authentication.configured ?? false,
-      };
-    }
+    // NO SESSION CHECK (#996, W6-D2). The access history is the app GRANT's to
+    // read (#928) and it carries no secret value — it is the record of who
+    // looked, which is the one thing that must stay readable now that the
+    // gateway no longer decrypts. Gating it on an unlock session would have
+    // hidden the audit trail behind the boundary it audits.
     const itemId = String(input?.item_id ?? "");
-    const result = await ctx.vault.read({
-      entity: "access.receipt",
-      where: [
-        {
-          column: "object_type",
-          op: "in",
-          value: [LOCKER_ITEM_TYPE, LOCKER_AUTH_TYPE],
+    const typeIn = inList("object_type", [LOCKER_ITEM_TYPE, LOCKER_AUTH_TYPE]);
+    const result = await ctx.vault.page<ReceiptRow>({
+      query: {
+        name: "locker.access.receipts",
+        select:
+          "receipt_id, action, object_type, object_id, decision, occurred_at, detail_json",
+        from: "access_receipt",
+        where: itemId ? `${typeIn.sql} AND object_id = ?` : typeIn.sql,
+        bind: itemId ? [...typeIn.bind, itemId] : typeIn.bind,
+        order: {
+          sortColumn: "occurred_at",
+          pkColumn: "receipt_id",
+          descending: true,
         },
-        ...(itemId
-          ? [{ column: "object_id", op: "eq" as const, value: itemId }]
-          : []),
-      ],
-      orderBy: { column: "occurred_at", dir: "desc" },
+      },
       limit: window,
     });
-    const rows = (result.rows ?? []) as unknown as ReceiptRow[];
+    const rows = result.rows;
     const entries = rows
       .toSorted((a, b) =>
         String(b.occurred_at ?? "").localeCompare(String(a.occurred_at ?? ""))

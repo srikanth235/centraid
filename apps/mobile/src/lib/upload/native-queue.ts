@@ -5,7 +5,7 @@
 // can exercise them.
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
-import { OpSqliteDriver } from "../replica/op-sqlite-driver";
+import { ExpoSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
 import { webCryptoUploadCrypto } from "./crypto";
 import type { UploadCrypto } from "./crypto";
@@ -21,6 +21,7 @@ import type {
   UploadFollowup,
   UploadItem,
 } from "./store";
+import { notifyUploadQueueChanged } from "./upload-notifications";
 import { UploadDrainer } from "./uploader";
 import type { DrainSummary, UploadPolicy } from "./uploader";
 
@@ -50,7 +51,7 @@ export class UploadQueue {
 
   static open(options: UploadQueueOptions): UploadQueue {
     const store = UploadQueueStore.create(
-      OpSqliteDriver.open({
+      ExpoSqliteDriver.open({
         name: UPLOAD_DB_NAME,
         ...(replicaStorageDirectory()
           ? { location: replicaStorageDirectory() }
@@ -87,7 +88,7 @@ export class UploadQueue {
     input: EnqueueInput,
     makeFollowup?: UploadFollowupFactory
   ): Promise<UploadItem> {
-    return enqueueLocalFile(
+    const item = await enqueueLocalFile(
       {
         store: this.store,
         openFile: expoFileSource,
@@ -97,6 +98,9 @@ export class UploadQueue {
       input,
       makeFollowup
     );
+    // The writer announces; nobody polls (#996 wave 3).
+    notifyUploadQueueChanged();
+    return item;
   }
 
   /**
@@ -106,7 +110,13 @@ export class UploadQueue {
    * resumes from the queue rather than restarting the work.
    */
   async drain(): Promise<DrainSummary> {
-    return this.drainer.drainOnce();
+    // Announced in a `finally`: a pass that threw part-way still moved rows,
+    // and a badge left on the old answer is the failure this replaces.
+    try {
+      return await this.drainer.drainOnce();
+    } finally {
+      notifyUploadQueueChanged();
+    }
   }
 
   pending(): UploadItem[] {

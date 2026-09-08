@@ -40,8 +40,8 @@ vi.mock(
 
 const groupRows = vi.hoisted(() => [] as Record<string, unknown>[]);
 vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () => ({ useReplicaQuery: () => ({ rows: groupRows }) }) as never
+  import("../../kit/hooks/useSeatPages"),
+  () => ({ useSeatPages: () => ({ rows: groupRows }) }) as never
 );
 
 // The sheet has its own suite (`kit/share/ShareSheet.test.tsx`); here it is a

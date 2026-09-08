@@ -1,7 +1,7 @@
 // Grant-sheet host seam (#825): kit owns the write door; this says who is in
 // the room and where refusals land. Addressing law lives in grantAudiencesFrom.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import {
   grantAudiencesFrom,
@@ -10,8 +10,15 @@ import {
 } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import type { GrantAudienceOption } from "@centraid/blueprints/apps/_shared/grant-plane";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import {
+  SHARE_CIRCLES,
+  SHARE_CIRCLE_MEMBERS,
+  SHARE_GROUPS,
+  SHARE_PARTIES,
+  SHARE_VAULT,
+} from "../../kit/share/share-audience-queries";
 import {
   nativeNamedShareCircles,
   nativeShareTargets,
@@ -35,27 +42,27 @@ export function usePhotoGrantEntry(
   refuse: (message: string) => void
 ): PhotoGrantEntry {
   const replica = useReplica();
-  const parties = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.party", limit: 500 }), [])
-  );
-  const vault = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
-  );
+  const parties = useSeatPages("people", SHARE_PARTIES, {
+    entity: "core.party",
+    rowIdColumn: "party_id",
+  });
+  const vault = useSeatPages("people", SHARE_VAULT, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+  });
   // Only an owned, group-decorated circle is a deliberate audience.
-  const circles = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "social.circle", limit: 500 }), [])
-  );
-  const circleMembers = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "social.circle_member", limit: 2_000 }), [])
-  );
-  const groups = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "tally.group", limit: 500 }), [])
-  );
+  const circles = useSeatPages("tally", SHARE_CIRCLES, {
+    entity: "social.circle",
+    rowIdColumn: "circle_id",
+  });
+  const circleMembers = useSeatPages("tally", SHARE_CIRCLE_MEMBERS, {
+    entity: "social.circle_member",
+    rowIdColumn: "member_id",
+  });
+  const groups = useSeatPages("tally", SHARE_GROUPS, {
+    entity: "tally.group",
+    rowIdColumn: "group_id",
+  });
   const [audiences, setAudiences] = useState<readonly GrantAudienceOption[]>(
     []
   );

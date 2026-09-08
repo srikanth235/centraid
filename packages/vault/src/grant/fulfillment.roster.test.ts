@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso, uuidv7 } from "../ids.js";
-import { closeOpenVaults, household } from "../share/placement-fixture.js";
-import { ShareShapeMaxSizeError } from "../share/subscription-frame.js";
-import { loopbackShareTransports } from "../share/subscription-transport.js";
 import {
-  createGrantProjectionMemory,
-  startShareSubscription,
-} from "./fulfillment.js";
+  closeOpenVaults,
+  household,
+  inCommit,
+} from "../share/placement-fixture.js";
+import { ShareSizeCeilingError } from "../share/share-ceiling.js";
+import { loopbackShareTransports } from "../share/subscription-transport.js";
+import { startShareSubscription } from "./fulfillment.js";
 import {
   addParty,
   audienceTitles,
@@ -133,7 +134,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
         transportFor: () => undefined,
         now,
       })
-    ).toThrow(ShareShapeMaxSizeError);
+    ).toThrow(ShareSizeCeilingError);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, "vault-elsewhere")
     ).toBeUndefined();
@@ -168,7 +169,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
         }),
         now,
       })
-    ).toThrow(ShareShapeMaxSizeError);
+    ).toThrow(ShareSizeCeilingError);
     expect(audienceTitles(home.audience.vault)).toStrictEqual([]);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
@@ -254,7 +255,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
       seatFor,
       now: () => now,
     });
-    const memory = createGrantProjectionMemory();
     const grant = createShareGrant(home.origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "core.collection",
@@ -270,7 +270,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
         grantId: grant.grantId,
         transportFor,
         now: at,
-        memory,
       });
 
     const first = pass(now);
@@ -311,12 +310,15 @@ describe("grant/fulfillment — roster and ceiling", () => {
       // it on write — so the delivery instant is what this asserts.
     ).toMatchObject({ deliveredAt: now });
     // The diff is a skip, never a stop.
-    home.origin.vault
-      .prepare("UPDATE core_collection SET name = ? WHERE collection_id = ?")
-      .run("Trip (final)", albumId);
+    inCommit(home.origin, () =>
+      home.origin.vault
+        .prepare("UPDATE core_collection SET name = ? WHERE collection_id = ?")
+        .run("Trip (final)", albumId)
+    );
     const third = pass("2032-01-01T00:00:00.000Z");
     expect(third.steps[0]?.unchanged).toBeUndefined();
-    // Delivered once: the memory is what the notice hangs on.
+    // Delivered once: `delivered_at` is what the notice hangs on, and the
+    // membership on the origin is what says the third pass had work.
     expect(third.steps[0]?.firstDelivery).toBeUndefined();
   });
 });

@@ -469,8 +469,12 @@ describe("outbox", () => {
 
       const msg = db.vault
         .prepare(
-          `SELECT m.delivery, m.external_id, m.thread_id, m.sender_party_id, i.title, i.content_uri
-           FROM social_message m JOIN core_content_item i ON i.content_id = m.body_content_id
+          `SELECT m.delivery, m.external_id, m.thread_id, m.sender_party_id,
+                  r.media_type, i.content_uri
+           FROM social_message m
+           JOIN core_content_item i ON i.content_id = m.body_content_id
+           JOIN core_content_representation r
+             ON r.owner_type = 'social.message' AND r.owner_id = m.message_id
           WHERE m.message_id = ?`
         )
         .get(messageId) as {
@@ -478,13 +482,15 @@ describe("outbox", () => {
         external_id: string;
         thread_id: string;
         sender_party_id: string;
-        title: string;
+        media_type: string;
         content_uri: string;
       };
       expect(msg.delivery).toBe("sent");
       expect(msg.external_id).toBe(`outbox:${itemId}`);
       expect(msg.sender_party_id).toBe(boot.ownerPartyId);
-      expect(msg.title).toBe("Hi");
+      // The artifact's subject is the THREAD's; bytes carry no title since
+      // #996 (R20(b)), and the message says what it reads them as.
+      expect(msg.media_type).toBe("text/plain");
       expect(decodeURIComponent(msg.content_uri.split(",")[1] ?? "")).toBe(
         "See you at 6."
       );
@@ -495,6 +501,13 @@ describe("outbox", () => {
         )
         .get(msg.thread_id) as { channel: string; external_ref: string };
       expect(thread.channel).toBe("email");
+      expect(
+        (
+          db.vault
+            .prepare("SELECT subject FROM social_thread WHERE thread_id = ?")
+            .get(msg.thread_id) as { subject: string | null }
+        ).subject
+      ).toBe("Hi");
       expect(thread.external_ref).toBe(`outbox:conn-1:ravi@example.com`);
 
       const parts = db.vault

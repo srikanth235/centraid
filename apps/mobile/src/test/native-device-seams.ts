@@ -252,10 +252,10 @@ vi.mock("expo-share-intent", () => ({
 
 // The on-device SQLite engine. A replica read/write in this tier is answered by
 // the test's own `useReplicaQuery` seam, never by a fake database.
-vi.mock("@op-engineering/op-sqlite", () => ({
-  open: vi.fn<() => never>(() => {
+vi.mock("expo-sqlite", () => ({
+  openDatabaseSync: vi.fn<() => never>(() => {
     throw new Error(
-      "op-sqlite is a device engine: an RNTL test must seam the replica read layer instead"
+      "expo-sqlite is a device engine: an RNTL test must seam the replica read layer instead"
     );
   }),
 }));

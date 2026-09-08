@@ -1,374 +1,284 @@
-// Home cold start (#880, #883 D1). Nine reads fire at open, three of them "the
-// newest N". These hold the tile reads against the real reader over a
-// four-scope fixture and read the SQL back off the driver, pinning the SHAPE of
-// the work: one composed statement per read that orders and limits the union of
-// every attached vault, a pushed `IN` on body lookups, and a page that crosses
-// the driver at `limit`, not `limit x scopes`.
+/*
+ * HOME COLD START, AS PAGES OVER THE SEAT (#880, #883 D1; #996 wave 5, R8).
+ *
+ * Nine reads fire when the springboard opens. What this file holds is the
+ * SHAPE of the work each one asks SQLite for, against a real file through the
+ * SAME assembler the phone runs (`seatWorkerPage`):
+ *
+ *   a tile is ONE page, and it crosses the driver at `limit + 1` — the window
+ *   plus the single probe row that tells a filled window apart from a set that
+ *   merely ends there, dropped before the tile sees it;
+ *
+ *   "the newest N" is SQLite's ordering, not a re-sort of an arbitrary page,
+ *   so the rows the tile draws are the newest rows in the file;
+ *
+ *   a body lookup costs the ids it asks for: the `IN` is the predicate, never
+ *   a slice of the entity taken afterwards.
+ *
+ * The old store's union arms, its order-guard census and its
+ * `json_extract(payload_json, …)` are all absent because the plane is: a page
+ * row IS the table's columns.
+ */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
-import type { ReplicaBindValue } from "@centraid/client/replica/native";
+import { seatWorkerPage } from "@centraid/client/replica/native";
+import type { SeatWorkerQuery } from "@centraid/client/replica/native";
+import type { Page, PageCursor, PageQuery } from "@centraid/core/page";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
-import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
+import { seedSeatTables } from "../../lib/replica/seat-fixture.test-fixtures";
 import {
+  expenseTileRead,
+  HOME_BODY_LOOKUP,
   HOME_ORDERED_TILE_READS,
   HOME_TILE_LIMITS,
   HOME_TILE_READS,
-  idFilter,
+  idList,
 } from "./home-tile-reads";
 
-/** Days per scope. Four scopes × one row per day is the whole library. */
-const DAYS = 500;
+/** Past the largest tile window (500), so no window ends where the file does. */
+const DAYS = 700;
 const DAY_MS = 86_400_000;
-const SCOPES = ["personal", "family", "school", "club"] as const;
-
-const SHAPES = [
-  {
-    shapeId: "photos-default",
-    appId: "photos",
-    entities: [
-      {
-        entity: "media.asset",
-        primaryKey: "asset_id",
-        columns: [
-          "asset_id",
-          "content_id",
-          "captured_at",
-          "favorite",
-          "archived_at",
-          "deleted_at",
-        ],
-      },
-    ],
-  },
-  {
-    shapeId: "docs-default",
-    appId: "docs",
-    entities: [
-      {
-        entity: "core.document",
-        primaryKey: "document_id",
-        columns: [
-          "document_id",
-          "title",
-          "current_content_id",
-          "created_at",
-          "updated_at",
-          "deleted_at",
-        ],
-      },
-      {
-        // The content-hashed entity: equal bytes in two vaults collapse into
-        // one badged row, so this one is never given a per-scope page.
-        entity: "core.content_item",
-        primaryKey: "content_id",
-        columns: ["content_id", "title", "sha256", "byte_size", "deleted_at"],
-      },
-    ],
-  },
-  {
-    shapeId: "notes-default",
-    appId: "notes",
-    entities: [
-      {
-        entity: "knowledge.note",
-        primaryKey: "note_id",
-        columns: [
-          "note_id",
-          "title",
-          "body_content_id",
-          "created_at",
-          "updated_at",
-          "deleted_at",
-        ],
-      },
-    ],
-  },
-  {
-    shapeId: "tasks-default",
-    appId: "tasks",
-    entities: [
-      {
-        entity: "schedule.task",
-        primaryKey: "task_id",
-        columns: ["task_id", "title", "status", "completed_at", "deleted_at"],
-      },
-    ],
-  },
-] as const;
 
 function stamp(day: number): string {
   return new Date(Date.UTC(2016, 0, 1) + day * DAY_MS).toISOString();
 }
 
-/** Record what each read asked SQLite for, and how much it got back. */
-class RecordingDriver extends NodeSqliteDriver {
-  readonly reads: Array<{ sql: string; rows: number }> = [];
-
-  override async allAsync<T extends object>(
-    sql: string,
-    bind: readonly ReplicaBindValue[] = []
-  ): Promise<T[]> {
-    const rows = await super.allAsync<T>(sql, bind);
-    this.reads.push({ sql, rows: rows.length });
-    return rows;
-  }
-}
+const pad = (day: number): string => String(day).padStart(4, "0");
 
 /**
- * One vault's slice of a household library: the same day sequence in every
- * scope, so the global newest page spans all four and the fixed primary-key
- * tie-break is exercised on every tied day.
+ * The seat's `page` over a real file, with every statement and its row count
+ * recorded. `SeatPageFixture` beside this carries no recorder — the airplane
+ * oracles assert on ANSWERS, and what this file asserts on is the WORK.
  */
-function seedScope(file: string, vaultId: string): void {
-  const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), vaultId);
-  store.bootstrap({
-    protocolVersion: 1,
-    vaultId,
-    schemaEpoch: "1",
-    cursor: { epoch: `epoch-${vaultId}`, seq: DAYS },
-    shapes: SHAPES.map((shape) => ({
-      ...shape,
-      entities: shape.entities.map((entity) => ({
-        ...entity,
-        columns: [...entity.columns],
-      })),
-    })),
-    rows: [],
-  });
-  store.close();
+class RecordingSeat {
+  readonly reads: Array<{ sql: string; rows: number }> = [];
+  readonly #db: DatabaseSync;
 
-  const database = new DatabaseSync(file);
-  const insert = database.prepare(
-    `INSERT INTO replica_row
-       (shape_id, entity, row_id, payload_json, oversized_json)
-     VALUES (?, ?, ?, ?, '[]')`
-  );
-  database.exec("BEGIN IMMEDIATE");
-  for (let day = 0; day < DAYS; day += 1) {
-    const suffix = `${vaultId}-${String(day).padStart(4, "0")}`;
-    const at = stamp(day);
-    insert.run(
-      "photos-default",
-      "media.asset",
-      `asset-${suffix}`,
-      JSON.stringify({
-        asset_id: `asset-${suffix}`,
-        content_id: `content-${suffix}`,
-        captured_at: at,
-        favorite: 0,
-        archived_at: null,
-        deleted_at: null,
-      })
-    );
-    insert.run(
-      "docs-default",
-      "core.document",
-      `document-${suffix}`,
-      JSON.stringify({
-        document_id: `document-${suffix}`,
-        title: `Household plan ${day}`,
-        current_content_id: `content-${suffix}`,
-        created_at: at,
-        updated_at: at,
-        deleted_at: null,
-      })
-    );
-    insert.run(
-      "docs-default",
-      "core.content_item",
-      `content-${suffix}`,
-      JSON.stringify({
-        content_id: `content-${suffix}`,
-        title: `Household plan ${day}`,
-        sha256: `sha-${suffix}`,
-        byte_size: 42,
-        deleted_at: null,
-      })
-    );
-    insert.run(
-      "notes-default",
-      "knowledge.note",
-      `note-${suffix}`,
-      JSON.stringify({
-        note_id: `note-${suffix}`,
-        title: `Note ${day}`,
-        body_content_id: `content-${suffix}`,
-        created_at: at,
-        updated_at: at,
-        deleted_at: null,
-      })
-    );
-    insert.run(
-      "tasks-default",
-      "schedule.task",
-      `task-${suffix}`,
-      JSON.stringify({
-        task_id: `task-${suffix}`,
-        title: `Task ${day}`,
-        status: "open",
-        completed_at: null,
-        deleted_at: null,
-      })
-    );
+  constructor(file: string) {
+    this.#db = new DatabaseSync(file, { readOnly: true });
   }
-  database.exec("COMMIT");
-  database.close();
+
+  readonly query = <T extends object>(
+    request: SeatWorkerQuery
+  ): Promise<T[]> => {
+    const rows = (
+      this.#db.prepare(request.sql).all(...(request.bind ?? [])) as T[]
+    ).map((row) => ({ ...row }));
+    this.reads.push({ sql: request.sql, rows: rows.length });
+    return Promise.resolve(rows);
+  };
+
+  page<Row extends object>(request: {
+    query: PageQuery<Row>;
+    limit: number;
+    after?: PageCursor;
+  }): Promise<Page<Row>> {
+    return seatWorkerPage(this, request.query, {
+      limit: request.limit,
+      ...(request.after ? { after: request.after } : {}),
+    });
+  }
+
+  close(): void {
+    this.#db.close();
+  }
 }
 
-interface Household {
-  driver: RecordingDriver;
-  reader: MultiVaultReplicaReader;
+const opened: RecordingSeat[] = [];
+
+function seat(): RecordingSeat {
+  const dir = tempDirSync("home-tiles-");
+  const file = path.join(dir, "vault.db");
+  seedSeatTables(file, [
+    {
+      entity: "media.asset",
+      primaryKey: "asset_id",
+      columns: ["asset_id", "content_id", "kind", "captured_at", "deleted_at"],
+      rows: Array.from({ length: DAYS }, (_, day) => ({
+        asset_id: `asset-${pad(day)}`,
+        content_id: `content-${pad(day)}`,
+        kind: "photo",
+        captured_at: stamp(day),
+        deleted_at: null,
+      })),
+    },
+    {
+      entity: "core.document",
+      primaryKey: "document_id",
+      columns: [
+        "document_id",
+        "title",
+        "current_content_id",
+        "updated_at",
+        "deleted_at",
+      ],
+      rows: Array.from({ length: DAYS }, (_, day) => ({
+        document_id: `document-${pad(day)}`,
+        title: `Household plan ${String(day)}`,
+        current_content_id: `content-${pad(day)}`,
+        updated_at: stamp(day),
+        deleted_at: null,
+      })),
+    },
+    {
+      entity: "knowledge.note",
+      primaryKey: "note_id",
+      columns: [
+        "note_id",
+        "title",
+        "body_content_id",
+        "updated_at",
+        "deleted_at",
+      ],
+      rows: Array.from({ length: DAYS }, (_, day) => ({
+        note_id: `note-${pad(day)}`,
+        title: `Note ${String(day)}`,
+        body_content_id: `content-${pad(day)}`,
+        updated_at: stamp(day),
+        deleted_at: null,
+      })),
+    },
+    {
+      entity: "core.content_item",
+      primaryKey: "content_id",
+      columns: ["content_id", "content_uri", "byte_size"],
+      rows: Array.from({ length: DAYS }, (_, day) => ({
+        content_id: `content-${pad(day)}`,
+        content_uri: `data:text/markdown,line-${String(day)}`,
+        byte_size: 64 + day,
+      })),
+    },
+    {
+      entity: "schedule.task",
+      primaryKey: "task_id",
+      columns: ["task_id", "title", "status", "completed_at", "sort_order"],
+      rows: Array.from({ length: DAYS }, (_, day) => ({
+        task_id: `task-${pad(day)}`,
+        title: `Task ${String(day)}`,
+        status: "needs-action",
+        completed_at: null,
+        sort_order: day,
+      })),
+    },
+    {
+      entity: "tally.expense",
+      primaryKey: "expense_id",
+      columns: ["expense_id", "amount_minor", "spent_on", "deleted_at"],
+      rows: Array.from({ length: DAYS }, (_, day) => ({
+        expense_id: `expense-${pad(day)}`,
+        amount_minor: 100 + day,
+        spent_on: stamp(day).slice(0, 10),
+        deleted_at: null,
+      })),
+    },
+  ]);
+  const fixture = new RecordingSeat(file);
+  opened.push(fixture);
+  return fixture;
 }
 
-function household(): Household {
-  const root = tempDirSync("centraid-home-tiles-");
-  const scopes = SCOPES.map((vaultId) => ({
-    vaultId,
-    label: vaultId,
-    canWrite: vaultId === "personal",
-    databaseName: path.join(root, `${vaultId}.db`),
-  }));
-  for (const scope of scopes) seedScope(scope.databaseName, scope.vaultId);
-  const driver = new RecordingDriver(path.join(root, "mounted.db"));
-  return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
-}
-
-/** The composed page: the one statement a read compiles its grammar into. */
-function pageReads(driver: RecordingDriver): Array<{
-  sql: string;
-  rows: number;
-}> {
-  // The ORDER GUARD CENSUS is its own statement since #922 C3, and it also
-  // selects over the union; the PAGE is the one that orders and limits.
-  return driver.reads.filter(
-    (read) => read.sql.includes("AS verdict") && read.sql.includes("LIMIT ?")
-  );
-}
-
-function censusReads(driver: RecordingDriver): string[] {
-  return driver.reads
-    .map((read) => read.sql)
-    .filter((sql) => sql.includes("order_straddle"));
-}
-
-function onePage(driver: RecordingDriver): { sql: string; rows: number } {
-  const pages = pageReads(driver);
-  expect(pages).toHaveLength(1);
-  return pages[0]!;
-}
+const ORDERED = [
+  {
+    tile: "photos",
+    query: HOME_ORDERED_TILE_READS.photos,
+    column: "captured_at",
+    limit: HOME_TILE_LIMITS.photos,
+  },
+  {
+    tile: "documents",
+    query: HOME_ORDERED_TILE_READS.documents,
+    column: "updated_at",
+    limit: HOME_TILE_LIMITS.documents,
+  },
+  {
+    tile: "notes",
+    query: HOME_ORDERED_TILE_READS.notes,
+    column: "updated_at",
+    limit: HOME_TILE_LIMITS.notes,
+  },
+] as const;
 
 describe("Home tile reads", () => {
-  const ordered = [
-    {
-      name: "photos",
-      appId: "photos",
-      request: HOME_ORDERED_TILE_READS.photos,
-      column: "captured_at",
-      limit: HOME_TILE_LIMITS.photos,
-    },
-    {
-      name: "documents",
-      appId: "docs",
-      request: HOME_ORDERED_TILE_READS.documents,
-      column: "updated_at",
-      limit: HOME_TILE_LIMITS.documents,
-    },
-    {
-      name: "notes",
-      appId: "notes",
-      request: HOME_ORDERED_TILE_READS.notes,
-      column: "updated_at",
-      limit: HOME_TILE_LIMITS.notes,
-    },
-  ];
-
-  test.each(ordered)("the $name tile pages inside SQLite", async (tile) => {
-    const { driver, reader } = household();
-
-    const page = await reader.read(tile.appId, tile.request);
-
-    const paged = onePage(driver);
-    // Escalating rows lead the page, then the caller's own key.
-    expect(paged.sql).toContain(
-      `ORDER BY (verdict = 0) ASC, json_extract(payload_json, '$.${tile.column}') DESC`
-    );
-    // The refusal guards still span EVERY attached vault, but they ride their
-    // OWN statement (#922 C3): as `OVER ()` window columns on this one they
-    // forced SQLite to materialize the whole union before returning a row, so
-    // neither the limit nor an index could bound the work.
-    expect(paged.sql).not.toContain("OVER ()");
-    const census = censusReads(driver);
-    expect(census).toHaveLength(1);
-    expect(census[0]).toContain("order_oversized");
-    expect(census[0]).toContain("order_straddle");
-    expect(census[0]).toContain("UNION ALL");
-    // One arm per attached vault, one page across their union.
-    expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
-    expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    // The page is the answer, plus ONE probe row and no more: the statement
-    // over-fetches by exactly one so a filled window can be told apart from a
-    // set that merely ends there, and that row is dropped before the caller
-    // sees it (#922 0a). Anything beyond `limit + 1` would be fetched only to
-    // be discarded.
-    expect(paged.rows).toBe(tile.limit + 1);
-
-    expect(page.rows).toHaveLength(tile.limit);
-    // Four scopes share one day sequence, so the global newest `limit` rows
-    // are exactly the newest `limit / 4` days of all four.
-    const oldest = page.rows
-      .map((row) => String(row.values[tile.column]))
-      .sort()[0];
-    expect(oldest).toBe(stamp(DAYS - tile.limit / SCOPES.length));
-    reader.close();
+  afterEach(() => {
+    for (const fixture of opened.splice(0)) fixture.close();
   });
 
-  test("an unordered tile read is one bounded page over the union", async () => {
-    const { driver, reader } = household();
+  test.each(ORDERED)(
+    "the $tile tile is one page of the newest N",
+    async (tile) => {
+      const fixture = seat();
 
-    const page = await reader.read("tasks", HOME_TILE_READS.tasks);
+      const page = await fixture.page({ query: tile.query, limit: tile.limit });
 
-    const paged = onePage(driver);
-    expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    // `limit + 1`: the one probe row that makes truncation visible (#922 0a).
-    expect(paged.rows).toBe(HOME_TILE_LIMITS.tasks + 1);
+      // ONE statement: a tile is a window, and a window is never a walk.
+      expect(fixture.reads).toHaveLength(1);
+      expect(fixture.reads[0]?.sql).toContain(`ORDER BY ${tile.column} DESC`);
+      expect(fixture.reads[0]?.sql).not.toContain("payload_json");
+      // The answer plus exactly one probe row, dropped before the tile sees it.
+      expect(fixture.reads[0]?.rows).toBe(tile.limit + 1);
+      expect(page.rows).toHaveLength(tile.limit);
+      // A cursor, because the library ran past the window — this is what the
+      // tile draws as `countCapped`.
+      expect(page.next).toBeDefined();
+      // One row per day, so the newest `limit` rows are the newest `limit` days.
+      const oldest = page.rows
+        .map((row) => String((row as Record<string, unknown>)[tile.column]))
+        .sort()[0];
+      expect(oldest).toBe(stamp(DAYS - tile.limit));
+    }
+  );
+
+  test("an unordered tile read is one bounded page", async () => {
+    const fixture = seat();
+
+    const page = await fixture.page({
+      query: HOME_TILE_READS.tasks,
+      limit: HOME_TILE_LIMITS.tasks,
+    });
+
+    expect(fixture.reads).toHaveLength(1);
+    expect(fixture.reads[0]?.rows).toBe(HOME_TILE_LIMITS.tasks + 1);
     expect(page.rows).toHaveLength(HOME_TILE_LIMITS.tasks);
-    reader.close();
   });
 
-  // `core.content_item` carries `sha256`, so no limit may be carried into a
-  // cross-scope read of it: the collapse runs after the statement and could
-  // drop the duplicate supplying a source badge. Tiles fetch bodies by id
-  // instead, bounded by the pushed predicate.
-  test("the document body lookup costs the ids it asks for", async () => {
-    const { driver, reader } = household();
-    const ids = Array.from({ length: 12 }, (_, index) =>
-      index === 0
-        ? `content-personal-0499`
-        : `content-personal-${String(499 - index).padStart(4, "0")}`
+  test("the month's expenses are bounded by the predicate, not the window", async () => {
+    const fixture = seat();
+    const from = stamp(DAYS - 30).slice(0, 10);
+
+    const page = await fixture.page({
+      query: expenseTileRead(from),
+      limit: HOME_TILE_LIMITS.expenses,
+    });
+
+    expect(fixture.reads[0]?.sql).toContain("spent_on >= ?");
+    // Thirty days out of 700: the predicate is what makes the read cheap.
+    expect(page.rows).toHaveLength(30);
+    expect(page.next).toBeUndefined();
+  });
+
+  test("the body lookup costs the ids it asks for", async () => {
+    const fixture = seat();
+    const ids = Array.from(
+      { length: 12 },
+      (_, index) => `content-${pad(699 - index)}`
     );
 
-    const page = await reader.read(
-      "docs",
-      idFilter("core.content_item", "content_id", ids)
-    );
+    const query = idList(HOME_BODY_LOOKUP, ids);
+    const page = await fixture.page({ query: query!, limit: 500 });
 
-    const paged = onePage(driver);
-    expect(paged.sql).toContain("json_extract(payload_json, '$.content_id')");
-    // The read still says it could not carry the caller's limit, rather than
-    // quietly costing the entity (`mounted-read-scoping.ts`).
-    expect(page.degraded?.map((entry) => entry.fallback)).toStrictEqual([
-      "content-hash-badges",
-    ]);
-    // One scope holds these ids; the other three answer with nothing. The
-    // whole entity is 2,000 rows.
-    expect(paged.rows).toBe(ids.length);
+    expect(fixture.reads[0]?.sql).toContain("content_id IN (");
+    // Twelve ids cost twelve rows out of a table of 700.
+    expect(fixture.reads[0]?.rows).toBe(ids.length);
     expect(page.rows).toHaveLength(ids.length);
-    reader.close();
+  });
+
+  test("an empty id set is not a read at all", () => {
+    // `IN ()` matches nothing, which is the right ANSWER and the wrong SHAPE:
+    // the screen has not got its input yet, so the hook holds `loading`.
+    expect(idList(HOME_BODY_LOOKUP, [])).toBeUndefined();
   });
 });

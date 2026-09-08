@@ -163,9 +163,12 @@ describe("commands/share", () => {
     expect((edit as { reason: string }).reason).toContain(
       "can be shared for view, not for edit"
     );
+    // Was 1 — the owner's own `device` row. `device` left the principal
+    // vocabulary (#996, R17) and enrollment is full trust (R11), so a refused
+    // triple now leaves the plane EMPTY, which is the stronger statement.
     expect(
       db.vault.prepare("SELECT count(*) AS n FROM share_authority").get()
-    ).toMatchObject({ n: 1 }); // the owner's own device row, and nothing else
+    ).toMatchObject({ n: 0 });
   });
 
   test("changing a verb is a revoke plus a new answer, never an edit in place", () => {

@@ -7,7 +7,11 @@
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
-import { receiptHash, writeReceipt } from "./evidence.js";
+import {
+  receiptHash,
+  writeAuthorityReceipt,
+  writeReceipt,
+} from "./evidence.js";
 
 interface Row {
   receipt_id: string;
@@ -118,6 +122,74 @@ describe(writeReceipt, () => {
         .prepare("UPDATE access_receipt SET authority_id = 'authority-2'")
         .run();
       expect(verify(chain(db))).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+/*
+ * OPEN QUESTION 8 (#996, R17): `share_authority_use` goes "for an index over
+ * receipts unless `evidence.ts` names a property it cannot serve".
+ *
+ * `writeAuthorityReceipt` stamps the use row from the same input, in the same
+ * call, as a receipt carrying the same `authority_id`, and
+ * `idx_receipt_authority(authority_id, occurred_at)` already exists — so for a
+ * LIVE receipt the index is exactly as good, and this file names no property
+ * the two disagree on. The property is in the receipt's LIFETIME, not in its
+ * content: the audit band is retained 365 days and its `journal-archive` duty
+ * DELETES the rows it seals out of `access_receipt`, while the use row is one
+ * row per authority with no history and is never archived. So "granted a year
+ * ago, nothing has used it since" — the one fact that makes a stale answer
+ * visible on Settings → Access — is exactly the case where the index answers
+ * "never used" and the use row answers correctly. The table stays. This test
+ * pins the divergence rather than driving it: the answer here is KEEP, so
+ * there is no behaviour to make red.
+ */
+describe(writeAuthorityReceipt, () => {
+  test("the use row outlives the receipt an index would have to read", () => {
+    const db = openVaultDb();
+    try {
+      writeAuthorityReceipt(db, {
+        authorityId: "authority-1",
+        invocationId: null,
+        action: "read core.event",
+        objectType: "core.event",
+        objectId: "event-1",
+        decision: "allow",
+      });
+      const lastUsed = (): string | undefined =>
+        (
+          db.vault
+            .prepare(
+              "SELECT last_used_at FROM share_authority_use WHERE authority_id = ?"
+            )
+            .get("authority-1") as { last_used_at: string } | undefined
+        )?.last_used_at;
+      const overReceipts = (): string | null =>
+        (
+          db.audit
+            .prepare(
+              "SELECT MAX(occurred_at) AS at FROM access_receipt WHERE authority_id = ?"
+            )
+            .get("authority-1") as { at: string | null }
+        ).at;
+      // While the receipt is live the two agree, which is why the question was
+      // asked at all.
+      expect(lastUsed()).toBeDefined();
+      expect(overReceipts()).not.toBeNull();
+
+      // The archive pass, through its own door — the band refuses DELETE any
+      // other way.
+      db.audit.exec("INSERT INTO audit_archive_pass (active) VALUES (1)");
+      db.audit
+        .prepare("DELETE FROM access_receipt WHERE authority_id = ?")
+        .run("authority-1");
+      db.audit.exec("DELETE FROM audit_archive_pass WHERE active = 1");
+
+      // The index now says "never used" about an answer that WAS used.
+      expect(overReceipts()).toBeNull();
+      expect(lastUsed()).toBeDefined();
     } finally {
       db.close();
     }

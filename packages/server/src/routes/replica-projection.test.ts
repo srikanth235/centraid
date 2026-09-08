@@ -423,9 +423,9 @@ describe("replica projection of declared long text", () => {
     vault.db.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title,
+           (content_id, content_uri, sha256, byte_size,
             created_at)
-         VALUES ('long-note', 'text/markdown', ?, ?, ?, 'Long note',
+         VALUES ('long-note', ?, ?, ?,
                  '2026-01-01T00:00:00.000Z')`
       )
       .run(uri, "f".repeat(64), Buffer.byteLength(body));

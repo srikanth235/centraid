@@ -24,7 +24,7 @@ const EDITOR = readFileSync(
 const series: AgEvent = {
   event_id: "standup",
   dtstart: "2026-08-21T09:00:00.000Z",
-  original_start: "2026-08-21T09:00:00.000Z",
+  original_start_local: "2026-08-21T09:00:00.000Z",
   rrule: "FREQ=WEEKLY",
 };
 
@@ -41,7 +41,7 @@ describe("the scope panel maps a press to one edit-occurrence ask", () => {
   it("keys the ask by the stable instance identity", () => {
     expect(
       occurrenceEdit({ event: series, scope: "occurrence", intent: "edit" })
-        ?.original_start
+        ?.original_start_local
     ).toBe("2026-08-21T09:00:00.000Z");
   });
 
@@ -52,7 +52,7 @@ describe("the scope panel maps a press to one edit-occurrence ask", () => {
     };
     expect(
       occurrenceEdit({ event: oneOff, scope: "occurrence", intent: "edit" })
-        ?.original_start
+        ?.original_start_local
     ).toBe("2026-08-21T12:00:00.000Z");
   });
 

@@ -29,6 +29,7 @@ import {
   sealKeyFingerprint,
   writeSealKeyFile,
 } from "../schema/sealed.js";
+import { unsealCell } from "./owner-vault.test-fixtures.js";
 import { resealVaultKey } from "./reseal.js";
 
 let root: string;
@@ -145,12 +146,12 @@ describe("seal-custody", () => {
     const moved = openVaultDb({ dir: newDir });
     const gw2 = createGateway(moved);
     registerLockerCommands(gw2);
-    const revealed = gw2.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(revealed.values["password"]).toBe("hunter2-Corr3ct");
+    // Read the cell with the moved vault's OWN key: the door refuses a locker
+    // row now (#996, W6-D2), and what this test is about is CUSTODY — that the
+    // key which travelled with the directory still opens what it sealed.
+    expect(unsealCell(moved, "locker_item", "password", itemId)).toBe(
+      "hunter2-Corr3ct"
+    );
     moved.close();
     db = openVaultDb({ dir: vaultDir, sealKey: Buffer.alloc(32) }); // placate afterEach
     vaultDir = newDir;
@@ -176,22 +177,19 @@ describe("seal-custody", () => {
     expect(result.newFingerprint).toBe(readSealKeyFingerprint(db.vault));
     expect(result.newFingerprint).not.toBe(result.oldFingerprint);
     // Live handle keeps working (buffer swapped in place)…
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(revealed.values["password"]).toBe("rotate-me-1234");
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(
+      "rotate-me-1234"
+    );
     // …and so does a fresh open from the rotated key file.
     db = reopen();
-    const gw2 = createGateway(db);
-    registerLockerCommands(gw2);
-    const again = gw2.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(again.values["password"]).toBe("rotate-me-1234");
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(
+      "rotate-me-1234"
+    );
+    // The OLD key no longer opens the rotated cell — which is what a rotation
+    // is for, and the half a "it still reads" assertion alone would miss.
+    expect(() =>
+      unsealCell(db, "locker_item", "password", itemId, before)
+    ).toThrow(/unable to authenticate/u);
   });
 
   test("reseal is receipted in the journal", () => {
@@ -248,14 +246,9 @@ describe("seal-custody", () => {
     expect(sealKeyFingerprint(db.sealKey)).toBe(
       readSealKeyFingerprint(db.vault)
     );
-    const gw2 = createGateway(db);
-    registerLockerCommands(gw2);
-    const revealed = gw2.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(revealed.values["password"]).toBe("heal-me-5678");
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(
+      "heal-me-5678"
+    );
   });
 
   // ── structural predicate (issue #298 item 8) ────────────────────────────
@@ -268,12 +261,7 @@ describe("seal-custody", () => {
       .prepare("SELECT password FROM locker_item WHERE item_id = ?")
       .get(itemId) as { password: string };
     expect(isSealedValue(raw.password)).toBe(true); // sealed at rest, not stored verbatim
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(revealed.values["password"]).toBe(devious);
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(devious);
   });
 
   test("genuine sealed values still satisfy the structural predicate", () => {
@@ -388,14 +376,21 @@ describe("seal-custody", () => {
 
   // ── stable connector aliases (issue #298 item 4) ────────────────────────
 
-  test("reveal resolves a stable alias to the live item", () => {
-    addLogin("by-alias-secret", "github-token");
-    const out = gw.reveal(owner, {
-      entity: "locker.item",
-      alias: "github-token",
-      columns: ["password"],
-    });
-    expect(out.values["password"]).toBe("by-alias-secret");
+  test("alias resolution still runs, and then the door refuses the schema", () => {
+    // The alias is the connector's stable name for an item and it still
+    // resolves — the failure below is the SCHEMA refusal (#996, W6-D2), not
+    // "no such alias", which is what makes the next two tests meaningful.
+    const itemId = addLogin("by-alias-secret", "github-token");
+    expect(() =>
+      gw.reveal(owner, {
+        entity: "locker.item",
+        alias: "github-token",
+        columns: ["password"],
+      })
+    ).toThrow(/does not unseal locker rows/u);
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(
+      "by-alias-secret"
+    );
   });
 
   test("delete+recreate heals an alias binding — the rotation gesture", () => {
@@ -413,14 +408,18 @@ describe("seal-custody", () => {
         columns: ["password"],
       })
     ).toThrow(/no live locker item/u);
-    // Add the replacement with the SAME alias — the binding heals, no manifest edit.
-    addLogin("new-token", "github-token");
-    const healed = gw.reveal(owner, {
-      entity: "locker.item",
-      alias: "github-token",
-      columns: ["password"],
-    });
-    expect(healed.values["password"]).toBe("new-token");
+    // Add the replacement with the SAME alias — the binding heals, no manifest
+    // edit. The alias now resolves to the NEW item, which the refusal's own
+    // wording distinguishes from "no live item holds it".
+    const newId = addLogin("new-token", "github-token");
+    expect(() =>
+      gw.reveal(owner, {
+        entity: "locker.item",
+        alias: "github-token",
+        columns: ["password"],
+      })
+    ).toThrow(/does not unseal locker rows/u);
+    expect(unsealCell(db, "locker_item", "password", newId)).toBe("new-token");
   });
 
   test("a trashed item frees its alias for a live item to claim", () => {

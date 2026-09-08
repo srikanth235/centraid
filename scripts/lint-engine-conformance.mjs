@@ -1317,52 +1317,132 @@ const WRITES_NONE_LEDGER = new Map([
  * The shape is `schema: { table: { label, blurb? }, … }`, so the walk is one
  * brace level deeper than the old one: schema keys at depth 1, table keys at
  * depth 2, and nothing below that (a label is a string, not a nested object).
+ *
+ * AND IT FOLLOWS SPREADS ACROSS FILES (#996 wave 7). The registry outgrew the
+ * repo's file-size rule and was split: `VAULT_ENTITIES` now spreads
+ * `...VAULT_DOMAIN_ENTITIES` out of `entity-catalog-domains.ts`. A scan of one
+ * file cannot see through that — it read 47 names where the registry has 100+
+ * — and 47 is under the anti-vacuity floor, so this whole lane went red rather
+ * than quietly under-counting. Both failure modes are the same defect: the
+ * scanner has to follow the composition the registry actually has.
+ *
+ * AN UNRESOLVABLE SPREAD THROWS. Silently skipping one is exactly how a text
+ * scanner goes vacuous behind its own guard: the count would still look
+ * plausible, and every `writes:` naming a domain table would pass unchecked.
+ * `checkDeclaredWrites` turns the throw into a finding.
  */
 export function vaultEntityNames(root = ROOT) {
-  const source = blankComments(
-    readFileSync(path.join(root, VAULT_TABLES_PATH), "utf8")
-  );
   const names = new Set();
-  for (const constant of ["VAULT_ENTITIES", "JOURNAL_ENTITIES"]) {
-    const start = source.indexOf(`export const ${constant}`);
-    if (start === -1) continue;
-    const open = source.indexOf("{", start);
-    let depth = 0;
-    let schema = null;
-    for (let i = open; i < source.length; i++) {
-      const char = source[i];
-      if (char === '"' || char === "'" || char === "`") {
-        // A label's own braces would otherwise be counted as structure.
-        const quote = char;
-        for (i++; i < source.length; i++) {
-          if (source[i] === "\\") i++;
-          else if (source[i] === quote) break;
-        }
-        continue;
-      }
-      if (char === "{") {
-        depth++;
-        continue;
-      }
-      if (char === "}") {
-        if (--depth === 0) break;
-        if (depth === 1) schema = null;
-        continue;
-      }
-      // A key sits immediately before its `:` at the depth it belongs to.
-      const key = /^(?<name>[A-Za-z_][\w]*)\s*:/u.exec(source.slice(i));
-      if (!key) continue;
-      if (depth === 1) schema = key.groups.name;
-      else if (depth === 2 && schema) names.add(`${schema}.${key.groups.name}`);
-      i += key[0].length - 1;
-    }
-  }
+  for (const constant of ["VAULT_ENTITIES", "JOURNAL_ENTITIES"])
+    collectEntityNames(root, VAULT_TABLES_PATH, constant, names, new Set());
   return names;
+}
+
+/** `import { A, B } from "./x.js"` → which file each name comes from. */
+function importedFrom(source, fromFile) {
+  const sources = new Map();
+  const importRe =
+    /import\s+(?:type\s+)?\{(?<names>[^}]*)\}\s*from\s*["'](?<spec>[^"']+)["']/gu;
+  for (const match of source.matchAll(importRe)) {
+    // A relative specifier only: the registry composes files, never packages,
+    // and a scanner that started resolving node_modules would be guessing.
+    const spec = match.groups.spec;
+    if (!spec.startsWith(".")) continue;
+    const file = path.join(
+      path.dirname(fromFile),
+      // Source, not build output: the declarations live in the `.ts`.
+      spec.replace(/\.js$/u, ".ts")
+    );
+    for (const name of match.groups.names.split(","))
+      // `A as B` binds B locally, which is the name a spread would use.
+      sources.set(
+        name
+          .trim()
+          .split(/\s+as\s+/u)
+          .pop()
+          .trim(),
+        file
+      );
+  }
+  return sources;
+}
+
+/**
+ * Read one registry constant, following `...IDENT` spreads into the files that
+ * declare them. `seen` breaks a cycle rather than recursing forever.
+ */
+function collectEntityNames(root, file, constant, names, seen) {
+  const key = `${file}#${constant}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  let source;
+  try {
+    source = blankComments(readFileSync(path.join(root, file), "utf8"));
+  } catch {
+    throw new Error(`${file}: the registry names it and it cannot be read`);
+  }
+  const start = source.indexOf(`export const ${constant}`);
+  if (start === -1) {
+    if (seen.size === 1) return;
+    throw new Error(`${file}: does not export ${constant}`);
+  }
+  const imports = importedFrom(source, file);
+  const open = source.indexOf("{", start);
+  let depth = 0;
+  let schema = null;
+  for (let i = open; i < source.length; i++) {
+    const char = source[i];
+    if (char === '"' || char === "'" || char === "`") {
+      // A label's own braces would otherwise be counted as structure.
+      const quote = char;
+      for (i++; i < source.length; i++) {
+        if (source[i] === "\\") i++;
+        else if (source[i] === quote) break;
+      }
+      continue;
+    }
+    if (char === "{") {
+      depth++;
+      continue;
+    }
+    if (char === "}") {
+      if (--depth === 0) break;
+      if (depth === 1) schema = null;
+      continue;
+    }
+    // A SPREAD OF ANOTHER REGISTRY, at the level a schema key sits.
+    const spread = /^\.\.\.(?<name>[A-Za-z_][\w]*)/u.exec(source.slice(i));
+    if (spread && depth === 1) {
+      const from = imports.get(spread.groups.name);
+      if (!from)
+        throw new Error(
+          `${file}: spreads ${spread.groups.name} into ${constant} and this scan ` +
+            `cannot resolve where it comes from — the entity vocabulary would be ` +
+            `under-counted, which is how this gate goes vacuous`
+        );
+      collectEntityNames(root, from, spread.groups.name, names, seen);
+      i += spread[0].length - 1;
+      continue;
+    }
+    // A key sits immediately before its `:` at the depth it belongs to.
+    const key2 = /^(?<name>[A-Za-z_][\w]*)\s*:/u.exec(source.slice(i));
+    if (!key2) continue;
+    if (depth === 1) schema = key2.groups.name;
+    else if (depth === 2 && schema) names.add(`${schema}.${key2.groups.name}`);
+    i += key2[0].length - 1;
+  }
 }
 
 function checkDeclaredWrites(root) {
   const findings = [];
-  const entities = vaultEntityNames(root);
+  let entities;
+  try {
+    entities = vaultEntityNames(root);
+  } catch (error) {
+    // A registry this scan cannot read whole is a RED lane, never a smaller
+    // vocabulary quietly passing every declaration made against it.
+    return [`${VAULT_TABLES_PATH}: ${error.message}`];
+  }
   // Anti-vacuity: an empty or tiny vocabulary would pass every declaration.
   // Floor is 90, not 100: post-#929 catalog after the commons rail left
   // (~14 share.commons_* tables gone; share.subscription + lineage added).

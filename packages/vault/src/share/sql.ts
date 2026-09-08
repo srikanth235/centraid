@@ -9,6 +9,7 @@
 
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
+import { prepared } from "../grant/prepared.js";
 import { uuidv7 } from "../ids.js";
 import { entitySupertypeMembers } from "../schema/entity.js";
 import type { WireRow } from "./closure.js";
@@ -79,14 +80,16 @@ export function freeId(
   column: string,
   preferred: string
 ): string {
-  const taken = db
-    .prepare(`SELECT 1 AS present FROM "${table}" WHERE "${column}" = ?`)
-    .get(preferred);
+  const taken = prepared(
+    db,
+    `SELECT 1 AS present FROM "${table}" WHERE "${column}" = ?`
+  ).get(preferred);
   if (taken) return uuidv7();
   if (!ENTITY_TABLES.has(table)) return preferred;
-  const held = db
-    .prepare(`SELECT 1 AS present FROM core_entity WHERE entity_id = ?`)
-    .get(preferred);
+  const held = prepared(
+    db,
+    `SELECT 1 AS present FROM core_entity WHERE entity_id = ?`
+  ).get(preferred);
   return held ? uuidv7() : preferred;
 }
 

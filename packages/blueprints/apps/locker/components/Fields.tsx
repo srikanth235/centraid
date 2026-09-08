@@ -15,7 +15,7 @@ import type { ReactNode } from "react";
 import { Meter } from "../../_shared/Meter.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import { SEALED_RUN } from "../item-fields.ts";
-import { concealsInSeconds, revealedForSeconds } from "../permits.ts";
+import { concealsInSeconds, revealedForSeconds } from "../reveal.ts";
 import { strength, useTotp } from "../totp.ts";
 import {
   CONCEAL,

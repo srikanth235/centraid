@@ -1,7 +1,7 @@
 /*
  * START, STOP, REPORT (#929). A grant is kept true by a SUBSCRIPTION, not by
  * the origin reaching into an audience vault: this module decides who should
- * hold the shape and hands frames to a transport. The transport is the only
+ * hold the grant's rows and hands each audience its three outputs. The transport is the only
  * thing that knows whether the audience is co-hosted (loopback) or on another
  * gateway (the peer replica route), which is what makes one delivery path
  * serve both — the reach that confined cross-gateway sharing to a second rail.
@@ -10,10 +10,18 @@
  * row, and revocation settles `removed` only on the seat's acknowledgement.
  */
 
-import { sha256Hex } from "../ids.js";
+import { shareOutputsAreEmpty } from "../share/closure-outputs.js";
 import type { ShareVaultRef } from "../share/placement.js";
-import type { ShareShapeFrame } from "../share/subscription-frame.js";
-import { composeShareShape } from "../share/subscription-frame.js";
+import { assertShareCeiling } from "../share/share-ceiling.js";
+import {
+  readSubscription,
+  recordSubscription,
+} from "../share/subscription-store.js";
+import type {
+  ShareTailFrame,
+  ShareTailPass,
+} from "../share/subscription-tail.js";
+import { composeShareTail } from "../share/subscription-tail.js";
 import { channelForParty } from "./channel.js";
 import type { ShareFulfillmentState, ShareGrantRecord } from "./grant-store.js";
 import {
@@ -28,10 +36,21 @@ export type ShareTransportRoute = "loopback" | "peer";
 
 export type ShareDeliveryOutcome =
   | {
+      /**
+       * The audience holds rows it wrote over the origin's. Not a failure and
+       * not a delivery: the caller resends the whole membership, which is what
+       * erases them (ruling G-view, #846; #996 R10 keeps the property while
+       * moving the mechanism off "re-read everything, every pass").
+       */
+      outcome: "diverged";
+      diverged: number;
+    }
+  | {
       outcome: "delivered";
-      /** What the ingest had to write — the work-counter reading (#927). */
-      apply: "bootstrap" | "reproject" | "fields";
-      fieldUpdates: number;
+      /** What the audience had to write — the work-counter reading (#927). */
+      entered: number;
+      updated: number;
+      left: number;
     }
   | { outcome: "unreachable"; detail: string };
 
@@ -47,9 +66,10 @@ export type ShareRemovalOutcome =
  */
 export interface ShareShapeTransport {
   route: ShareTransportRoute;
-  deliver: (frame: ShareShapeFrame) => ShareDeliveryOutcome;
+  deliver: (frame: ShareTailFrame) => ShareDeliveryOutcome;
   remove: (input: {
-    shapeId: string;
+    /** The GRANT (#996, R10): the grant is the shape. */
+    authorityId: string;
     audienceVaultId: string;
   }) => ShareRemovalOutcome;
 }
@@ -60,8 +80,10 @@ export interface ShareSubscriptionStep {
   peerVaultId?: string;
   route?: ShareTransportRoute;
   detail?: string;
-  apply?: "bootstrap" | "reproject" | "fields";
-  fieldUpdates?: number;
+  /** What the audience wrote — the three outputs' own counts (#996, R10). */
+  entered?: number;
+  updated?: number;
+  left?: number;
   /** Already matched: nothing composed, nothing written, no device woken. */
   unchanged?: true;
   /** The FIRST time the subject reached this peer (#846). */
@@ -83,35 +105,14 @@ export interface ShareSubscriptionResult {
   };
 }
 
-/**
- * Per-grant × peer memory of WHAT was last composed. Rebuildable, so it lives
- * in host memory: a restart re-composes once and converges. Its only job is to
- * stop an unchanged shape reaching a transport at all.
+/*
+ * THE HOST-MEMORY DIGEST IS GONE (#996, R10). Its one job was to stop an
+ * unchanged shape reaching a transport, and the member set answers that
+ * question better and durably: a pass whose three outputs are all empty IS an
+ * unchanged subscription, decided from origin state rather than from a cache
+ * a restart empties. `share_subscription_member` is its successor, so nothing
+ * was deleted without one.
  */
-export interface GrantProjectionMemory {
-  read: (grantId: string, peerVaultId: string) => string | undefined;
-  write: (grantId: string, peerVaultId: string, digest: string) => void;
-  forget: (grantId: string) => void;
-}
-
-/** The default: one Map per host, cleared with the process. */
-export function createGrantProjectionMemory(): GrantProjectionMemory {
-  const digests = new Map<string, string>();
-  const key = (grantId: string, peerVaultId: string): string =>
-    `${grantId} ${peerVaultId}`;
-  return {
-    read: (grantId, peerVaultId) => digests.get(key(grantId, peerVaultId)),
-    write: (grantId, peerVaultId, digest) => {
-      digests.set(key(grantId, peerVaultId), digest);
-    },
-    forget: (grantId) => {
-      const stale = [...digests.keys()].filter((existing) =>
-        existing.startsWith(`${grantId} `)
-      );
-      for (const entry of stale) digests.delete(entry);
-    },
-  };
-}
 
 /** Grant-keyed shape id. Mirrors `@centraid/core/protocol`'s `shareShapeId`;
  *  the peer replica route's test holds the two equal. */
@@ -126,8 +127,6 @@ export interface StartShareSubscriptionInput {
   /** A fact about REACH, never about the grant. */
   transportFor: (peerVaultId: string) => ShareShapeTransport | undefined;
   now: string;
-  /** Omitted: every pass composes. */
-  memory?: GrantProjectionMemory;
 }
 
 /**
@@ -167,22 +166,50 @@ function park(input: {
   };
 }
 
-function frameFor(
+/**
+ * ONE PASS PER AUDIENCE, and no longer one composition per grant (#996, R10).
+ *
+ * The frame composer was audience-independent — the only thing an audience
+ * contributed was the vault id it was addressed to — so one composition could
+ * be re-stamped for everyone. A TAIL is not: it is the difference since THIS
+ * audience's cursor, and re-stamping one audience's diff onto another would
+ * hand the second a set of rows computed against a position it is not at.
+ * The cost is one closure walk per audience rather than one per pass, over a
+ * roster that is a circle's members.
+ *
+ * `undefined` means the row applier cannot place this closure — today only a
+ * Locker item, whose sealed columns must be re-sealed under the audience DEK
+ * inside one process. Such a grant was never deliverable over a subscription
+ * (the ingest had no keys to re-seal with and threw); now it parks with the
+ * reason said out loud instead.
+ */
+function passFor(
   input: StartShareSubscriptionInput,
   grant: ShareGrantRecord,
-  audienceVaultId: string
-): ShareShapeFrame {
-  return composeShareShape({
-    origin: input.origin,
+  audienceVaultId: string,
+  options: { resend?: boolean } = {}
+): ShareTailPass | undefined {
+  const standing = options.resend
+    ? undefined
+    : readSubscription(input.origin.vault, grant.grantId, audienceVaultId);
+  return composeShareTail({
+    origin: input.origin.vault,
     originVaultId: input.originVaultId,
     audienceVaultId,
-    shapeId: shareGrantShapeId(grant.grantId),
-    grantId: grant.grantId,
+    authorityId: grant.grantId,
     subjectType: grant.subjectType,
     subjectId: grant.subjectId,
     maxSizeBytes: grant.maxSizeBytes,
+    ...(standing?.cursor.epoch == null
+      ? {}
+      : {
+          since: { epoch: standing.cursor.epoch, seq: standing.cursor.seq },
+        }),
   });
 }
+
+const UNPLACEABLE_DETAIL =
+  "this grant's closure carries rows the audience cannot place as rows";
 
 /** Idempotent. A departed member's copy ends by revocation, never by drift. */
 export function startShareSubscription(
@@ -195,14 +222,16 @@ export function startShareSubscription(
     throw new Error(
       `share grant ${input.grantId} is revoked; stop its subscriptions instead`
     );
-  // COMPOSED ONCE, for every audience of this grant. The ceiling is judged
-  // here, so an over-ceiling grant leaves no fulfillment row and dials no
-  // transport; and the only thing the audience contributes to a frame is the
-  // vault id it is addressed to, so re-stamping beats re-reading the closure —
-  // one composition per pass rather than one per audience plus this one, and
-  // every audience of a grant provably receives the same shape.
-  const shape = frameFor(input, grant, "");
-  const digest = sha256Hex(JSON.stringify(shape.closure));
+  // JUDGED ONCE, BEFORE ANY AUDIENCE. An over-ceiling grant leaves no
+  // fulfillment row and dials no transport, including when every peer is
+  // unreachable — a check inside the loop would skip exactly that case.
+  assertShareCeiling(db, {
+    authorityId: grant.grantId,
+    originVaultId: input.originVaultId,
+    subjectType: grant.subjectType,
+    subjectId: grant.subjectId,
+    maxSizeBytes: grant.maxSizeBytes,
+  });
   const steps: ShareSubscriptionStep[] = [];
   const audience = resolveGrantAudienceParties(db, grant);
   const reached = new Map<string, string>();
@@ -224,6 +253,12 @@ export function startShareSubscription(
       continue;
     }
     const peerVaultId = channel.vaultId;
+    // COMPOSED BEFORE REACH IS CONSULTED, deliberately: the ceiling is a
+    // property of the GRANT, so an over-ceiling subject must leave no
+    // fulfillment row and dial nothing whether or not a transport exists.
+    // Composing after the reach check would make an unreachable peer the one
+    // case where the ceiling is not judged.
+    const pass = passFor(input, grant, peerVaultId);
     const transport = input.transportFor(peerVaultId);
     if (!transport) {
       // Channel open, this host cannot carry it now: `syncing` is honest.
@@ -238,14 +273,32 @@ export function startShareSubscription(
       steps.push({ partyId, state: "syncing", peerVaultId, detail });
       continue;
     }
-    // DIFF FIRST. An unchanged shape over a peer already holding it composes no
-    // frame and dials no transport. Consult `delivered_at`, never the
-    // rebuildable digest alone.
     const standing = readFulfillment(db, grant.grantId, peerVaultId);
+    if (!pass) {
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId,
+        state: "syncing",
+        updatedAt: input.now,
+        detail: UNPLACEABLE_DETAIL,
+      });
+      steps.push({
+        partyId,
+        state: "syncing",
+        peerVaultId,
+        detail: UNPLACEABLE_DETAIL,
+      });
+      continue;
+    }
+    // DIFF FIRST, from ORIGIN STATE. A pass whose three outputs are all empty
+    // is an unchanged subscription: nothing is dialled and nothing is written.
+    // Consult `delivered_at` too, never the diff alone — a lost-reach row sits
+    // in `syncing` with an audience that never received the copy, and its
+    // membership was never settled, so its outputs would not be empty anyway.
     if (
       standing?.state === "delivered" &&
       standing.deliveredAt !== null &&
-      input.memory?.read(grant.grantId, peerVaultId) === digest
+      shareOutputsAreEmpty(pass.frame.outputs)
     ) {
       steps.push({
         partyId,
@@ -262,10 +315,30 @@ export function startShareSubscription(
       state: "syncing",
       updatedAt: input.now,
     });
-    const delivery = transport.deliver({
-      ...shape,
-      audienceVaultId: peerVaultId,
-    });
+    let delivery = transport.deliver(pass.frame);
+    if (delivery.outcome === "diverged") {
+      // ONE RESEND, in this same pass, so the divergence is erased by the pass
+      // that found it rather than by the next one. `since` omitted is the
+      // resend: every member goes out as an `enter`, and `entered_seq` makes
+      // that an upsert on the rows the audience legitimately holds.
+      const resend = passFor(input, grant, peerVaultId, { resend: true });
+      delivery = resend
+        ? transport.deliver(resend.frame)
+        : { outcome: "unreachable", detail: UNPLACEABLE_DETAIL };
+      if (resend && delivery.outcome === "delivered") resend.settle();
+    }
+    if (delivery.outcome === "diverged") {
+      const detail = `the audience holds ${delivery.diverged} row(s) it wrote over the origin's`;
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId,
+        state: "syncing",
+        updatedAt: input.now,
+        detail,
+      });
+      steps.push({ partyId, state: "syncing", peerVaultId, detail });
+      continue;
+    }
     if (delivery.outcome === "unreachable") {
       setFulfillmentState(db, {
         grantId: grant.grantId,
@@ -289,14 +362,31 @@ export function startShareSubscription(
       state: "delivered",
       updatedAt: input.now,
     });
-    input.memory?.write(grant.grantId, peerVaultId, digest);
+    // SETTLED ONLY ONCE THE AUDIENCE HAS THE ROWS. Membership is what the
+    // origin believes the audience holds; advancing it on a failed delivery
+    // would make the next pass's `enter` empty and lose the rows silently.
+    pass.settle();
+    // AND RECORDED, on the ORIGIN. `share_subscription.cursor_seq` is the
+    // origin's own note of what it last served this audience: the tail door
+    // compares an audience's claimed cursor against it, and the next pass
+    // reads it as where to diff from.
+    recordSubscription(db, {
+      authorityId: grant.grantId,
+      audienceVaultId: peerVaultId,
+      originVaultId: input.originVaultId,
+      subjectType: grant.subjectType,
+      cursor: pass.frame.outputs.cursor,
+      state: "subscribed",
+      now: input.now,
+    });
     steps.push({
       partyId,
       state: "delivered",
       peerVaultId,
       route: transport.route,
-      apply: delivery.apply,
-      fieldUpdates: delivery.fieldUpdates,
+      entered: delivery.entered,
+      updated: delivery.updated,
+      left: delivery.left,
       // Read off the DURABLE memory as it stood BEFORE this pass (#846), so
       // the "shared with you" notice fires once per grant.
       ...(standing?.deliveredAt ? {} : { firstDelivery: true as const }),
@@ -366,8 +456,6 @@ export interface StopShareSubscriptionInput {
   grantId: string;
   transportFor: (peerVaultId: string) => ShareShapeTransport | undefined;
   now: string;
-  /** Forgotten here, so a re-grant re-composes rather than trust a digest. */
-  memory?: GrantProjectionMemory;
 }
 
 /**
@@ -386,7 +474,6 @@ export function stopShareSubscription(
     throw new Error(
       `share grant ${input.grantId} still stands; revoke it before stopping it`
     );
-  input.memory?.forget(input.grantId);
   const shapeId = shareGrantShapeId(grant.grantId);
   const steps: ShareSubscriptionStopStep[] = [];
   for (const row of listFulfillment(db, grant.grantId)) {
@@ -420,7 +507,10 @@ export function stopShareSubscription(
     });
     const transport = input.transportFor(row.peerVaultId);
     const answer: ShareRemovalOutcome = transport
-      ? transport.remove({ shapeId, audienceVaultId: row.peerVaultId })
+      ? transport.remove({
+          authorityId: grant.grantId,
+          audienceVaultId: row.peerVaultId,
+        })
       : {
           outcome: "unreachable",
           detail: `removal sent to ${row.peerVaultId}; the peer has not acknowledged it`,

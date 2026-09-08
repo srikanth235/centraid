@@ -16,7 +16,7 @@ import type {
 } from "../grant/fulfillment.js";
 import { placeBlob } from "./blobs.js";
 import type { ShareVaultRef } from "./placement.js";
-import { ingestShareShape, purgeShareShape } from "./subscription-seat.js";
+import { ingestShareTail, purgeShareShape } from "./subscription-seat.js";
 
 export interface LoopbackShareTransportInput {
   /** `undefined` is a fact about this HOST, never about the grant. */
@@ -47,21 +47,27 @@ export function loopbackShareTransport(
     deliver: (frame): ShareDeliveryOutcome => {
       // Bytes first: a hardlink is idempotent and the origin is never written,
       // so no two-database transaction exists.
-      for (const blob of frame.closure.blobs)
+      for (const blob of frame.blobs)
         placeBlob(input.origin.blobs.local, seat.blobs.local, blob.sha256);
-      const result = ingestShareShape(seat.vault, frame, {
+      const result = ingestShareTail(seat.vault, frame, {
         audienceVaultId,
         now: input.now(),
       });
+      // The seat had rows of its own written over the origin's (ruling
+      // G-view): it is not delivered until a resend erases them, and the seat
+      // has already held its cursor back so the next pass is one.
+      if (result.diverged > 0)
+        return { outcome: "diverged", diverged: result.diverged };
       return {
         outcome: "delivered",
-        apply: result.apply,
-        fieldUpdates: result.fieldUpdates,
+        entered: result.entered,
+        updated: result.updated,
+        left: result.left,
       };
     },
     remove: (removal): ShareRemovalOutcome => {
       const result = purgeShareShape(seat.vault, {
-        shapeId: removal.shapeId,
+        authorityId: removal.authorityId,
         audienceVaultId: removal.audienceVaultId,
         now: input.now(),
       });

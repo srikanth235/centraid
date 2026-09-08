@@ -146,8 +146,8 @@ describe("inline-body-guard", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/plain', ?, 'deadbeef', ?, NULL, NULL, NULL, NULL, NULL, NULL, ?)`
+         (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, ?, 'de' || substr(hex(zeroblob(31)), 1, 62), ?, NULL, NULL, NULL, NULL, NULL, ?)`
       )
       .run(
         contentId,

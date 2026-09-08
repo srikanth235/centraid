@@ -5,7 +5,8 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import type { ConditionSpec, Risk } from "./types.js";
+import { isOperationCondition } from "./types.js";
+import type { CommandCondition, ConditionSpec, Risk } from "./types.js";
 
 export interface CommandRow {
   command_id: string;
@@ -70,10 +71,41 @@ function compare(
  */
 export function evaluateConditions(
   vault: DatabaseSync,
-  specs: ConditionSpec[],
+  specs: readonly CommandCondition[],
   input: Record<string, unknown>
 ): ConditionResult[] {
   return specs.map((spec) => {
+    // A domain-operation condition (#996, R21): the same contract stage, with
+    // a predicate that can read the proposed row image rather than one SQL
+    // string. Its refusal sentence IS the message, so a member reads the
+    // operation's words and the receipt keeps the operation's name.
+    if (isOperationCondition(spec)) {
+      const predicate = `${spec.operation}/${spec.name}`;
+      try {
+        const refusal = spec.assert(vault, input);
+        return {
+          name: spec.name,
+          predicate,
+          ...(refusal === null
+            ? spec.message === undefined
+              ? {}
+              : { message: spec.message }
+            : { message: refusal }),
+          passed: refusal === null,
+          observed: { operation: spec.operation },
+        };
+      } catch (error) {
+        return {
+          name: spec.name,
+          predicate,
+          ...(spec.message === undefined ? {} : { message: spec.message }),
+          passed: false,
+          observed: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    }
     const predicate = `${spec.name}: ${spec.column} ${spec.op} ${JSON.stringify(spec.value)}`;
     try {
       const params: Record<string, string | number | null> = {};

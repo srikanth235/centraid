@@ -8,8 +8,8 @@
 // Locker's TABLES.
 //
 // AND ONE TABLE THAT IS NOT A ROUTE: `suppressesNavigation`. The band, the
-// rail and every list are withdrawn while locked, at setup, when denied and on
-// the refused seat — not dimmed, not disabled, WITHDRAWN. A navigation spine
+// rail and every list are withdrawn while locked, when denied and on the
+// refused seat — not dimmed, not disabled, WITHDRAWN. A navigation spine
 // standing over a locked vault would be advertising destinations that do not
 // exist yet, which is the shape of a lie this app cannot afford.
 import { createShelfRoutes } from "../_shared/shelves.ts";
@@ -17,8 +17,6 @@ import type { BandDestination, Shelf, ShelfId } from "../_shared/shelves.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
-/** The first-run gate. Nothing is browsable before it (§6, First run). */
-export const SETUP = "built-in:setup";
 /** The lock screen, and the facts table about what a session is. */
 export const LOCK = "built-in:lock";
 /** One item — where reveal, conceal and copy live. */
@@ -45,7 +43,6 @@ export const FILL = "built-in:fill";
  * `items` one.
  */
 export const LOCKER_SHELVES: readonly Shelf[] = [
-  { id: SETUP, label: "First run", segment: "setup" },
   { id: LOCK, label: "Lock", segment: "lock" },
   { id: null, label: "Items", segment: "" },
   { id: ITEM, label: "Item", segment: "item" },
@@ -110,7 +107,7 @@ export const MORE_SHELVES: readonly ShelfId[] = [
 export function backRow(
   shelf: ShelfId
 ): { shelf: ShelfId; label: string } | null {
-  if (shelf === SETUP || shelf === LOCK || shelf === null) return null;
+  if (shelf === LOCK || shelf === null) return null;
   const label =
     shelf === ITEM || shelf === EDIT || shelf === GEN ? "Items" : "Locker";
   return { shelf: null, label };
@@ -119,13 +116,7 @@ export function backRow(
 /** The routes that draw the 232px rail (§1, the Rail column). The item, the
  *  editor and the export screen are single subjects: a rail beside one field
  *  set is a column of destinations nobody is going to. */
-const RAILLESS: ReadonlySet<string> = new Set([
-  SETUP,
-  LOCK,
-  ITEM,
-  EDIT,
-  EXPORT,
-]);
+const RAILLESS: ReadonlySet<string> = new Set([LOCK, ITEM, EDIT, EXPORT]);
 
 export function showsRail(shelf: ShelfId): boolean {
   return shelf === null || !RAILLESS.has(shelf);
@@ -141,14 +132,17 @@ export function showsItems(shelf: ShelfId): boolean {
 /**
  * WHAT THE APP LOOKS LIKE WHEN THERE IS NOTHING TO NAVIGATE.
  *
- * Four conditions, and each is a different fact: the passphrase does not exist
- * yet, the session does not, the grant does not, or the seat itself refuses.
- * All four withdraw the band, the rail and every list — see the file header.
+ * Three conditions, and each is a different fact: the session does not exist,
+ * the grant does not, or the seat itself refuses. All three withdraw the band,
+ * the rail and every list — see the file header.
+ *
+ * `setup` is GONE (#996, W6-D2). It meant "no passphrase yet", a question for
+ * an app that collected the passphrase. Enrolment is the shell's — it is what
+ * happens when a device receives `K` — so a first-run gate here would be a
+ * gate this app cannot open.
  */
 export interface NavigationGate {
-  /** No passphrase yet — the first-run gate is standing. */
-  setup: boolean;
-  /** A passphrase exists; no session does. */
+  /** The shell's Locker is locked, or offers no door at all. */
   locked: boolean;
   /** The vault refused the read. Denial is DATA, and it is a screen. */
   denied: boolean;
@@ -159,13 +153,12 @@ export interface NavigationGate {
 }
 
 export function suppressesNavigation(gate: NavigationGate): boolean {
-  return gate.setup || gate.locked || gate.denied || gate.refused;
+  return gate.locked || gate.denied || gate.refused;
 }
 
 /** Which route a gate forces, whatever the member last asked for. A locked
  *  vault is on the Lock screen, full stop — there is no "locked Items". */
 export function gatedShelf(gate: NavigationGate, shelf: ShelfId): ShelfId {
-  if (gate.setup) return SETUP;
   if (gate.locked) return LOCK;
   return shelf;
 }

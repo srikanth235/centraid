@@ -4,28 +4,32 @@
  * by _shared/grant-audiences.ts. null = unreadable-or-unread, distinct from empty.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { grantAudiencesFrom } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import type { GrantAudienceOption } from "@centraid/blueprints/apps/_shared/grant-plane";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useNamedShareCircles } from "../../kit/share/named-circles";
+import {
+  SHARE_PARTIES,
+  SHARE_VAULT,
+} from "../../kit/share/share-audience-queries";
 import { nativeShareTargets } from "../../kit/share/share-targets";
 import { listLinks } from "../../lib/replica/links-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
 
 export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
   const replica = useReplica();
-  const parties = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.party", limit: 500 }), [])
-  );
-  const vault = useReplicaQuery(
-    "people",
-    useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
-  );
+  const parties = useSeatPages("people", SHARE_PARTIES, {
+    entity: "core.party",
+    rowIdColumn: "party_id",
+  });
+  const vault = useSeatPages("people", SHARE_VAULT, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+  });
   const [links, setLinks] = useState<GatewayLink[] | "unreadable" | null>(null);
   const gatewayBase = replica.gatewayBase;
 

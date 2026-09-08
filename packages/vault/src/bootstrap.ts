@@ -5,7 +5,6 @@ import { randomBytes } from "node:crypto";
 
 import type { VaultDb } from "./db.js";
 import type { FilterClause, Risk } from "./gateway/types.js";
-import { setDeviceTrust } from "./grant/device-trust.js";
 import { nowIso, uuidv7 } from "./ids.js";
 
 export interface BootstrapResult {
@@ -56,9 +55,18 @@ const SEED_CONCEPTS: SeedConcept[] = [
   // step.
   { scheme: "relations", notation: "references", label: "References" },
   { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
-  // Version lineage (#352): newer content revises older, asserted by the
-  // document and note edit commands.
-  { scheme: "relations", notation: "revises", label: "Revises" },
+  // THE TWO ANSWERS TO A CROSS-SOURCE MATCH (#996, R20(c) / OQ-12). Two
+  // sources' rows that look like one movement are a PROPOSAL, and the owner
+  // decides. `same-as` (above) is the acceptance; `distinct-from` is the
+  // refusal, and it has to be a relation rather than a dismissed notification
+  // because a refusal that is not written down is a proposal the member is
+  // shown again tomorrow.
+  { scheme: "relations", notation: "distinct-from", label: "Distinct from" },
+  // No `revises` relation (#996, ruling R20(a)). Version lineage was a
+  // content→content link asserted by the document and note edit commands —
+  // a SECOND history mechanism beside `core_entity_revision`, which [#916]
+  // ruled the only one. A version is now an occurrence, and the concept that
+  // named the edge has no writer; seeding it would be dormant DDL (ONT-06).
   { scheme: "activity-kinds", notation: "meeting", label: "Meeting" },
   { scheme: "activity-kinds", notation: "run", label: "Run" },
   { scheme: "activity-kinds", notation: "sleep", label: "Sleep" },
@@ -153,6 +161,14 @@ export function bootstrapVault(
     ownerPartyId,
     options.deviceName ?? "first device"
   );
+  // `K` IS MINTED AT VAULT FOUNDING (#996, R13). Here rather than in
+  // `openVaultDb`, because the key is named for the vault and the vault does
+  // not exist until this function has written `core_vault`. Founding it now
+  // rather than at first need is what makes every later question answerable:
+  // the recovery kit always has a key file to carry, and a missing one is
+  // unambiguously custody loss rather than possibly a vault that never had a
+  // secret — the window #298 spent a whole ruling on for the sealed-column DEK.
+  db.lockerKey();
   return {
     vaultId,
     displayName,
@@ -163,11 +179,16 @@ export function bootstrapVault(
   };
 }
 
+/**
+ * ENROLLMENT IS FULL TRUST (#996, R11). There was a `trust` parameter here,
+ * written next door as a `share_authority` row of principal kind 'device'. A
+ * seat either holds this vault or it does not: what it may reach is the
+ * owner's reach, and revoking it takes its key rather than narrowing an answer.
+ */
 export function enrollDevice(
   db: VaultDb,
   ownerPartyId: string,
-  name: string,
-  trust: "full" | "readonly" = "full"
+  name: string
 ): { deviceId: string; deviceKey: string } {
   const deviceId = uuidv7();
   const deviceKey = randomBytes(32).toString("hex");
@@ -176,11 +197,17 @@ export function enrollDevice(
   // is, `share_authority` what the member let it do (#883).
   db.vault
     .prepare(
-      `INSERT INTO access_device (device_id, owner_party_id, name, platform, public_key, enrolled_at, last_seen_at, sync_cursor)
-       VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL)`
+      `INSERT INTO access_device (device_id, owner_party_id, name, platform, enrolled_at, last_seen_at)
+       VALUES (?, ?, ?, NULL, ?, NULL)`
     )
-    .run(deviceId, ownerPartyId, name, deviceKey, now);
-  setDeviceTrust(db.vault, { deviceId, ownerPartyId, trust, now });
+    .run(deviceId, ownerPartyId, name, now);
+  // The key material rides in the private sibling (#996, R3).
+  db.vault
+    .prepare(
+      `INSERT INTO access_device_secret (device_id, public_key, sync_cursor)
+       VALUES (?, ?, NULL)`
+    )
+    .run(deviceId, deviceKey);
   return { deviceId, deviceKey };
 }
 
@@ -233,17 +260,16 @@ export function enrollAgent(
   const agentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO access_agent (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'active')`
+      `INSERT INTO access_agent (agent_id, party_id, model_ref, version, enrolled_at, status)
+       VALUES (?, ?, ?, ?, ?, 'active')`
     )
-    .run(
-      agentId,
-      partyId,
-      options.name,
-      options.modelRef,
-      options.version ?? "0",
-      now
-    );
+    .run(agentId, partyId, options.modelRef, options.version ?? "0", now);
+  // The enrollment credential rides in the private sibling (#996, R3).
+  db.vault
+    .prepare(
+      `INSERT INTO access_agent_secret (agent_id, enrollment_key) VALUES (?, ?)`
+    )
+    .run(agentId, options.name);
   return { agentId, partyId };
 }
 

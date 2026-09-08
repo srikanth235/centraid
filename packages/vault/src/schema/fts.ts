@@ -6,50 +6,49 @@
 //
 // Canonical note/message bodies are not prose columns — they are data: URIs
 // on the referenced core.content_item (rent the bytes, own the reference).
-// Triggers therefore decode through `vault_content_text`, an app-defined
-// function `openVaultDb` registers on every vault connection before
-// migrations run. Only the gateway holds connections (§10), so the function
-// is always present when a trigger fires.
+// Triggers used to decode them through an app-defined SQL function every
+// vault connection registered — which is precisely what
+// pinned the index to the gateway, because expo-sqlite cannot register one
+// and a trigger must index a COLUMN. Since #996 (R4/R8) the decode happens at
+// write time in `setRepresentation` and the trigger reads
+// `core_content_text.body_text`: PLAIN SQL, byte-identical on every seat.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { sealedColumnsOf } from "./sealed.js";
 import { resolveEntity } from "./tables.js";
 
-/** Decoded text of a canonical body, or null for anything non-text. */
-export function contentText(
-  mediaType: unknown,
-  contentUri: unknown
-): string | null {
-  if (typeof mediaType !== "string" || !mediaType.startsWith("text/"))
-    return null;
-  if (typeof contentUri !== "string" || !contentUri.startsWith("data:"))
-    return null;
-  const comma = contentUri.indexOf(",");
-  if (comma < 0) return null;
-  const meta = contentUri.slice(0, comma);
-  const payload = contentUri.slice(comma + 1);
-  try {
-    return meta.includes(";base64")
-      ? Buffer.from(payload, "base64").toString("utf8")
-      : decodeURIComponent(payload);
-  } catch {
-    return null;
-  }
-}
-
-/** Register `vault_content_text` on a vault connection (triggers call it). */
-export function registerContentTextFn(db: DatabaseSync): void {
-  db.function("vault_content_text", { deterministic: true }, contentText);
-}
+/**
+ * The AUTHORED title of whatever owns these bytes (#996, R20(b)). Only
+ * `media.asset` has one that is not already indexed under its own entity —
+ * a document's title is `fts_core_document.title`, a note's is
+ * `fts_knowledge_note.title` — and `media_asset.content_id` is UNIQUE, so the
+ * join is one row. `schema/blob.ts` wraps this with the derivative text.
+ */
+export const OWNED_TITLE_SQL = (prefix: string): string =>
+  `(SELECT a."title" FROM media_asset a WHERE a.content_id = ${prefix}."content_id")`;
 
 type FtsColumn =
   /** A text column of the base table itself. */
   | { name: string; kind: "column" }
   /** Decoded body of the core.content_item the base row references via `fk`. */
   | { name: string; kind: "content"; fk: string }
-  /** core.content_item indexing its own uri (text media only). */
-  | { name: string; kind: "self-content" };
+  /**
+   * A value the base row does NOT carry as a column — a SQL expression over
+   * it. `reads` names whatever base columns the expression touches, so the
+   * sealed-column gate and a grant's field mask still have something to
+   * check; `sql` takes the row prefix (`new`, or a base alias).
+   *
+   * The one user is `core.content_item`'s title (#996, R20(b)): the byte row
+   * lost its `title` column, and what an owner calls those bytes now lives on
+   * the wrapper. `schema/blob.ts` supplies the expression.
+   */
+  | {
+      name: string;
+      kind: "expr";
+      reads: readonly string[];
+      sql: (prefix: string) => string;
+    };
 
 export interface FtsEntitySpec {
   /** Logical entity, e.g. `knowledge.note`. */
@@ -59,6 +58,11 @@ export interface FtsEntitySpec {
   columns: FtsColumn[];
   /** Column that, when non-null, keeps the row out of the index (soft delete). */
   deletedColumn?: string;
+  /**
+   * Entities beyond `core.content_item` whose text this index folds in, each
+   * needing its own read consent before a search runs.
+   */
+  foldsIn?: readonly string[];
 }
 
 // The baseline's spec list, in the order rung one composed it. Two entries
@@ -73,13 +77,18 @@ const RETIRED_ENTITIES: ReadonlySet<string> = new Set([
 
 const BASELINE_SPECS: readonly FtsEntitySpec[] = [
   {
-    // Photo captions are stored as the content item's title. Keeping this a
-    // direct-column surface makes the Photos grid search complete without
-    // indexing blob bytes; soft-deleted content leaves the index immediately.
+    // The content item's own search surface, complete without indexing blob
+    // bytes; soft-deleted content leaves the index immediately. Its `title`
+    // is no longer a column on the byte row (#996, R20(b)): a photo's
+    // AUTHORED title lives on `media_asset`, so the value is an expression
+    // over the owning asset — see `OWNED_TITLE_SQL`. A GENERATED caption is
+    // not folded in here at all: it is a `knowledge.annotation` on the
+    // representation (OQ-9), which carries its own index.
     entity: "core.content_item",
     idColumn: "content_id",
-    columns: [{ name: "title", kind: "column" }],
+    columns: [{ name: "title", kind: "expr", reads: [], sql: OWNED_TITLE_SQL }],
     deletedColumn: "deleted_at",
+    foldsIn: ["media.asset"],
   },
   {
     entity: "knowledge.note",
@@ -307,8 +316,12 @@ export function assertFtsSpecsRegistered(): void {
 }
 
 function maskColumnsOf(spec: FtsEntitySpec): string[] {
-  return spec.columns.map((c) =>
-    c.kind === "column" ? c.name : c.kind === "content" ? c.fk : "content_uri"
+  return spec.columns.flatMap((c) =>
+    c.kind === "column"
+      ? [c.name]
+      : c.kind === "content"
+        ? [c.fk]
+        : [...c.reads]
   );
 }
 
@@ -321,9 +334,12 @@ export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> =
         fts: `fts_${physical(spec.entity)}`,
         idColumn: spec.idColumn,
         maskColumns: maskColumnsOf(spec),
-        alsoConsent: spec.columns.some((c) => c.kind === "content")
-          ? ["core.content_item"]
-          : [],
+        alsoConsent: [
+          ...(spec.columns.some((c) => c.kind === "content")
+            ? ["core.content_item"]
+            : []),
+          ...(spec.foldsIn ?? []),
+        ],
       },
     ])
   );
@@ -353,15 +369,29 @@ export function truncateForIndex(
                  ELSE ${expr} END)`;
 }
 
-/** Value expression for one indexed column, `prefix` = `new` or a base alias. */
-function valueExpr(column: FtsColumn, prefix: string): string {
+/**
+ * Value expression for one indexed column, `prefix` = `new` or a base alias.
+ *
+ * FUNCTION-FREE SINCE #996 (rulings R4 / R8). A body used to be decoded here
+ * by calling an application-defined SQL function over the media type and the
+ * data: URI, one only `openVaultDb` registered. That is what
+ * pinned the search index to the gateway: expo-sqlite cannot register a SQL
+ * function, and a trigger must index a COLUMN. The decode now happens at
+ * write time, in `setRepresentation`, and this reads the column it wrote — so
+ * the very same trigger text runs on the phone.
+ *
+ * The owner's reading of the bytes is still what decides the text (R20(b));
+ * it decided it earlier, which is why the same sha can be indexed as HTML
+ * under one note and as plain text under another.
+ */
+function valueExpr(
+  column: FtsColumn,
+  prefix: string,
+  _spec: FtsEntitySpec
+): string {
   if (column.kind === "column") return `${prefix}."${column.name}"`;
-  if (column.kind === "self-content") {
-    return truncateForIndex(
-      `vault_content_text(${prefix}."media_type", ${prefix}."content_uri")`
-    );
-  }
-  return truncateForIndex(`(SELECT vault_content_text(media_type, content_uri) FROM core_content_item
+  if (column.kind === "expr") return truncateForIndex(column.sql(prefix));
+  return truncateForIndex(`(SELECT body_text FROM core_content_text
             WHERE content_id = ${prefix}."${column.fk}")`);
 }
 
@@ -374,13 +404,14 @@ export function assertNoSealedFtsColumns(spec: FtsEntitySpec): void {
   const sealed = sealedColumnsOf(spec.entity);
   if (sealed.length === 0) return;
   for (const col of spec.columns) {
-    const name =
+    const names =
       col.kind === "column"
-        ? col.name
+        ? [col.name]
         : col.kind === "content"
-          ? col.fk
-          : "content_uri";
-    if (sealed.includes(name)) {
+          ? [col.fk]
+          : col.reads;
+    for (const name of names) {
+      if (!sealed.includes(name)) continue;
       throw new Error(
         `fts spec for ${spec.entity} names sealed column "${name}" — sealed columns are never indexed (issue #293)`
       );
@@ -398,7 +429,7 @@ function valuesOf(spec: FtsEntitySpec, prefix: string): string {
   return [
     `${prefix}.rowid`,
     `${prefix}."${spec.idColumn}"`,
-    ...spec.columns.map((c) => valueExpr(c, prefix)),
+    ...spec.columns.map((c) => valueExpr(c, prefix, spec)),
   ].join(", ");
 }
 
@@ -407,6 +438,69 @@ function liveGuardOf(spec: FtsEntitySpec, prefix: string): string {
   return spec.deletedColumn
     ? ` WHERE ${prefix}."${spec.deletedColumn}" IS NULL`
     : "";
+}
+
+/**
+ * Re-index ONE row of a searchable entity, from the SAME generator its own
+ * triggers use.
+ *
+ * A body's media type moved off the byte row in #996 (R20(b)), so the decode
+ * now reads the owner's representation — and a representation is written
+ * AFTER the wrapper row, which is when its `_ai` trigger has already run with
+ * nothing to read. `schema/blob.ts` puts a trigger on
+ * `core_content_representation` that runs this, so the index sees the reading
+ * the moment it exists rather than one edit later.
+ */
+export function ftsRefreshStatement(
+  entity: string,
+  idExpr: string,
+  extraPredicate: string
+): string {
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  const live = spec.deletedColumn
+    ? ` AND b."${spec.deletedColumn}" IS NULL`
+    : "";
+  return `
+  DELETE FROM ${fts}
+   WHERE rowid IN (SELECT rowid FROM ${base} WHERE "${spec.idColumn}" = ${idExpr})
+     AND ${extraPredicate};
+  INSERT INTO ${fts}(${insertColumnsOf(spec)})
+  SELECT ${valuesOf(spec, "b")} FROM ${base} b
+   WHERE b."${spec.idColumn}" = ${idExpr} AND ${extraPredicate}${live};`;
+}
+
+/**
+ * Re-index every row of `entity` whose BODY is `contentExpr` (#996, R4/R5).
+ *
+ * `ftsRefreshStatement` above keys on the entity's own id, which is the right
+ * shape when the owner changed. This one is for when the decoded TEXT
+ * changed and the owners have to be found from it — one content item can be
+ * the body of several rows (sha dedupe, or two notes deliberately sharing
+ * bytes), so the refresh fans out to all of them.
+ */
+export function ftsRefreshByContent(
+  entity: string,
+  contentExpr: string
+): string {
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  const body = spec.columns.find((column) => column.kind === "content");
+  if (!body)
+    throw new Error(`${entity} has no content-backed column to refresh`);
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  const live = spec.deletedColumn
+    ? ` AND b."${spec.deletedColumn}" IS NULL`
+    : "";
+  return `
+  DELETE FROM ${fts}
+   WHERE rowid IN (SELECT rowid FROM ${base} WHERE "${body.fk}" = ${contentExpr});
+  INSERT INTO ${fts}(${insertColumnsOf(spec)})
+  SELECT ${valuesOf(spec, "b")} FROM ${base} b
+   WHERE b."${body.fk}" = ${contentExpr}${live};`;
 }
 
 /**
@@ -420,6 +514,22 @@ function backfillStatement(spec: FtsEntitySpec): string {
 SELECT ${valuesOf(spec, "b")} FROM ${base} b${liveGuardOf(spec, "b")};`;
 }
 
+function triggerDdl(spec: FtsEntitySpec): string {
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  const insertRow = `INSERT INTO ${fts}(${insertColumnsOf(spec)}) SELECT ${valuesOf(spec, "new")}${liveGuardOf(spec, "new")};`;
+  return `CREATE TRIGGER ${fts}_ai AFTER INSERT ON ${base} BEGIN
+  ${insertRow}
+END;
+CREATE TRIGGER ${fts}_au AFTER UPDATE ON ${base} BEGIN
+  DELETE FROM ${fts} WHERE rowid = old.rowid;
+  ${insertRow}
+END;
+CREATE TRIGGER ${fts}_ad AFTER DELETE ON ${base} BEGIN
+  DELETE FROM ${fts} WHERE rowid = old.rowid;
+END;`;
+}
+
 function entityDdl(spec: FtsEntitySpec): string {
   assertNoSealedFtsColumns(spec);
   const base = physical(spec.entity);
@@ -428,8 +538,6 @@ function entityDdl(spec: FtsEntitySpec): string {
     `${spec.idColumn} UNINDEXED`,
     ...spec.columns.map((c) => c.name),
   ];
-  const insertColumns = insertColumnsOf(spec);
-  const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${valuesOf(spec, "new")}${liveGuardOf(spec, "new")};`;
   // detail= tuning (#367): left at the FTS5 default, detail=full.
   // detail=column/none shrink the index by dropping per-term POSITION data,
   // but snippet()/highlight() degrade to whole-column matches without it —
@@ -446,16 +554,7 @@ CREATE VIRTUAL TABLE ${fts} USING fts5(
   ${ftsColumns.join(", ")},
   tokenize = "unicode61 remove_diacritics 2"
 );
-CREATE TRIGGER ${fts}_ai AFTER INSERT ON ${base} BEGIN
-  ${insertRow}
-END;
-CREATE TRIGGER ${fts}_au AFTER UPDATE ON ${base} BEGIN
-  DELETE FROM ${fts} WHERE rowid = old.rowid;
-  ${insertRow}
-END;
-CREATE TRIGGER ${fts}_ad AFTER DELETE ON ${base} BEGIN
-  DELETE FROM ${fts} WHERE rowid = old.rowid;
-END;
+${triggerDdl(spec)}
 ${backfillStatement(spec)}
 `;
 }

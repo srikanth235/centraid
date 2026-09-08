@@ -29,15 +29,14 @@ import { describe, expect, test } from "vitest";
 import { ONLINE_ONLY_ACTIONS } from "@centraid/blueprints/apps/locker/writes";
 import type {
   GatewayAuth,
-  ReplicaCursor,
   ReplicaDigest,
   ReplicaIdFactory,
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
 
+import { openNodeNativeSeat } from "./native-seat.test-fixtures";
 import type { NativeChangeFeed } from "./native-session";
 import { createNativeReplicaSession } from "./native-session";
-import { NodeSqliteDriver } from "./node-sqlite-driver";
 
 const gatewayAuth: GatewayAuth = {
   baseUrl: "http://127.0.0.1:18789",
@@ -52,24 +51,6 @@ const nodeDigest: ReplicaDigest = (input) =>
 function sequentialIds(): ReplicaIdFactory {
   let next = 0;
   return () => `intent-${++next}`;
-}
-
-const CURSOR: ReplicaCursor = { epoch: "replica-1", seq: 1 };
-
-/** One complete windowed bootstrap page, with an empty catalog: this test
- *  never reads a row, and an empty catalog is also the honest first-open
- *  state a secret write must survive. */
-function bootstrapPage(): Record<string, unknown> {
-  return {
-    protocolVersion: 1,
-    vaultId: "vault-a",
-    schemaEpoch: "schema-1",
-    cursor: CURSOR,
-    rows: [],
-    complete: true,
-    shapes: [],
-    shapeIds: [],
-  };
 }
 
 function feed(): NativeChangeFeed {
@@ -113,25 +94,11 @@ async function openSession(options: { actionFails?: boolean } = {}): Promise<{
   const session = await createNativeReplicaSession({
     gatewayAuth: { ...gatewayAuth },
     changeFeed: feed(),
-    driver: new NodeSqliteDriver(),
+    seat: await openNodeNativeSeat({ path: ":memory:" }),
     digest: nodeDigest,
     idFactory: sequentialIds(),
     fetcher: (_base, pathname, init) => {
       calls.push({ pathname, body: String(init.body ?? "") });
-      if (pathname.includes("/replica/bootstrap")) {
-        return Promise.resolve(json(bootstrapPage()));
-      }
-      if (pathname.includes("/changes")) {
-        return Promise.resolve(
-          json({
-            protocolVersion: 1,
-            schemaEpoch: "schema-1",
-            from: CURSOR,
-            to: CURSOR,
-            changes: [],
-          })
-        );
-      }
       if (pathname.includes("/actions/")) {
         return options.actionFails
           ? Promise.reject(new Error("the gateway is unreachable"))

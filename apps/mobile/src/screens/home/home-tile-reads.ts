@@ -1,29 +1,28 @@
-// Every Home springboard read, as data (#708 A, #880).
+// Every Home springboard read, as a STATEMENT (#708 A, #880; #996 wave 5, R8).
 //
-// Held apart from `useSpringboardTiles` because the claim these requests make
-// is a property of the REQUEST, not of React: the mounted reader can be
-// pointed straight at them and asked what SQL it emits
-// (`home-tile-reads.test.ts`). No runtime imports, so that test costs nothing
-// but SQLite.
+// Held apart from `useSpringboardTiles` because the claim these reads make is a
+// property of the STATEMENT, not of React: the seat's page reader can be
+// pointed straight at them and asked what it runs (`home-tile-reads.test.ts`).
+// No runtime imports, so that test costs nothing but SQLite.
 //
-// Two separate bounds are at work, and only one of them used to hold:
+// TWO SHAPES, AND THE DIFFERENCE IS THE SCREEN'S OWN CLAIM:
 //
-//  - Every read carries an explicit `limit`, because an unbounded read
-//    silently defaults to 1000 rows
-//    (packages/client/src/replica/read-plan.ts).
-//  - A limit bounds the ANSWER. It bounds the WORK only where the mounted
-//    reader can carry it into SQLite (lib/replica/multi-vault-reader.ts). The
-//    compiled plan expresses the whole read grammar, so the remaining
-//    exception is dedupe's: an entity that carries a content hash collapses
-//    equal bytes from several vaults into one badged row AFTER the statement,
-//    so its limit is not pushed and the whole matching set is read.
+//  - A TILE IS A WINDOW. "The newest 200 photographs" is what the tile draws
+//    and what its count means; walking a real library to the end to render four
+//    thumbnails would read the whole library on every focus. These take
+//    `useSeatWindow`, one page, and the fact that the rows ran past the window
+//    comes back as `truncated` rather than being swallowed — which is exactly
+//    what `countCapped` draws.
+//  - A BODY LOOKUP IS A SET. The document and note bodies are fetched by the
+//    ids the window already named, so the set is bounded by the window and the
+//    walk is finite; `idList` builds the `IN (…)` and its binds together.
 //
-// `media.asset`, `core.document` and `knowledge.note` each clear that bar:
-// no `sha256`. `core.content_item` does NOT — it is the content-hashed entity
-// — which is why the document and note BODIES are fetched by id (`idFilter`)
-// rather than ordered: an id filter pushes as a predicate and costs the ids
-// asked for, with or without a page.
-import type { NativeReadRequest } from "../../lib/replica/native-session";
+// `from` names the PHYSICAL table because the same statement runs against the
+// seat's own file and against the gateway's paged door for a seat that holds
+// none (W4-D2), and the door resolves tables and columns before it will run it.
+
+import { inList } from "@centraid/blueprints/apps/_shared/paged-reads";
+import type { PageQuery } from "@centraid/core/page";
 
 export const HOME_TILE_LIMITS = {
   documents: 300,
@@ -38,70 +37,146 @@ export const HOME_TILE_LIMITS = {
 } as const;
 
 /**
- * The three tiles that mean "the newest". Each one pages per scope inside
- * SQLite, so it costs its page rather than the library; the evaluator still
- * re-sorts the union and remains the authority on the final order.
+ * The three tiles that mean "the newest": ordered by the column the tile
+ * itself sorts on, so the window is the newest rows rather than an arbitrary
+ * page the screen re-sorts into a wrong "newest".
  */
 export const HOME_ORDERED_TILE_READS = {
   photos: {
-    entity: "media.asset",
-    where: [{ column: "deleted_at", op: "is-null" }],
-    orderBy: { column: "captured_at", dir: "desc" },
-    limit: HOME_TILE_LIMITS.photos,
+    name: "phone.home.photos",
+    select: "asset_id, content_id, kind, captured_at",
+    from: "media_asset",
+    where: "deleted_at IS NULL",
+    order: {
+      sortColumn: "captured_at",
+      pkColumn: "asset_id",
+      descending: true,
+    },
   },
   documents: {
-    entity: "core.document",
-    where: [{ column: "deleted_at", op: "is-null" }],
-    orderBy: { column: "updated_at", dir: "desc" },
-    limit: HOME_TILE_LIMITS.documents,
+    name: "phone.home.documents",
+    select: "document_id, title, current_content_id, updated_at",
+    from: "core_document",
+    where: "deleted_at IS NULL",
+    order: {
+      sortColumn: "updated_at",
+      pkColumn: "document_id",
+      descending: true,
+    },
   },
   notes: {
-    entity: "knowledge.note",
-    where: [{ column: "deleted_at", op: "is-null" }],
-    orderBy: { column: "updated_at", dir: "desc" },
-    limit: HOME_TILE_LIMITS.notes,
+    name: "phone.home.notes",
+    select: "note_id, title, body_content_id, updated_at",
+    from: "knowledge_note",
+    where: "deleted_at IS NULL",
+    order: { sortColumn: "updated_at", pkColumn: "note_id", descending: true },
   },
-} satisfies Record<string, NativeReadRequest>;
+} satisfies Record<string, PageQuery>;
 
 /**
- * Tiles that fold their whole bounded set in JavaScript — recurrence
- * expansion, an open-task count, a month's sum — so they ask for no order and
- * take an arbitrary bounded page.
+ * Tiles that fold their whole window in JavaScript — recurrence expansion, an
+ * open-task count, a month's sum. They order on the primary key because the
+ * fold does the ordering and a sort column nobody reads would only be a second
+ * index to keep.
  */
 export const HOME_TILE_READS = {
-  events: { entity: "core.event", limit: HOME_TILE_LIMITS.events },
-  exceptions: {
-    entity: "schedule.recurrence_exception",
-    limit: HOME_TILE_LIMITS.exceptions,
+  events: {
+    name: "phone.home.events",
+    select: "event_id, summary, dtstart, dtend, start_tz, rrule, status",
+    from: "core_event",
+    order: { sortColumn: "event_id", pkColumn: "event_id", descending: false },
   },
-  profiles: { entity: "people.profile", limit: HOME_TILE_LIMITS.profiles },
-  tasks: { entity: "schedule.task", limit: HOME_TILE_LIMITS.tasks },
-  vault: { entity: "core.vault", limit: HOME_TILE_LIMITS.vaults },
-} satisfies Record<string, NativeReadRequest>;
+  exceptions: {
+    name: "phone.home.exceptions",
+    select:
+      "exception_id, target_type, target_id, original_start_local, " +
+      "recurrence_semantics, scope, action, override_json",
+    from: "schedule_recurrence_exception",
+    order: {
+      sortColumn: "exception_id",
+      pkColumn: "exception_id",
+      descending: false,
+    },
+  },
+  profiles: {
+    name: "phone.home.profiles",
+    select: "profile_id, party_id, avatar_color, deleted_at",
+    from: "people_profile",
+    order: {
+      sortColumn: "profile_id",
+      pkColumn: "profile_id",
+      descending: false,
+    },
+  },
+  tasks: {
+    name: "phone.home.tasks",
+    select: "task_id, title, status, completed_at, sort_order",
+    from: "schedule_task",
+    order: { sortColumn: "task_id", pkColumn: "task_id", descending: false },
+  },
+  vault: {
+    name: "phone.home.vault",
+    select: "vault_id, base_currency",
+    from: "core_vault",
+    order: { sortColumn: "vault_id", pkColumn: "vault_id", descending: false },
+  },
+} satisfies Record<string, PageQuery>;
 
 /** `spent_on` is a day string, so the month bound compares as text. */
-export function expenseTileRead(monthStart: string): NativeReadRequest {
+export function expenseTileRead(monthStart: string): PageQuery {
   return {
-    entity: "tally.expense",
-    where: [
-      { column: "deleted_at", op: "is-null" },
-      { column: "spent_on", op: "gte", value: monthStart },
-    ],
-    limit: HOME_TILE_LIMITS.expenses,
+    name: "phone.home.expenses",
+    select: "expense_id, amount_minor, spent_on",
+    from: "tally_expense",
+    where: "deleted_at IS NULL AND spent_on >= ?",
+    bind: [monthStart],
+    order: {
+      sortColumn: "expense_id",
+      pkColumn: "expense_id",
+      descending: false,
+    },
   };
 }
 
-/** Bounded: an unbounded second read blows past the 1000-row default. */
-export function idFilter(
-  entity: string,
-  column: string,
+/**
+ * The rows a window already named, by id.
+ *
+ * `undefined` for an empty set rather than a statement that matches nothing:
+ * an `IN ()` read is a read that should not have been made, and the hooks hold
+ * `loading` for a query they have not got their input for yet.
+ */
+export function idList(
+  spec: { name: string; select: string; from: string; column: string },
   ids: readonly string[]
-): NativeReadRequest {
-  return ids.length === 0
-    ? { entity, where: [{ column, op: "eq", value: "__none__" }], limit: 1 }
-    : {
-        entity,
-        where: [{ column, op: "in", value: [...ids] }],
-        limit: Math.max(ids.length, 1),
-      };
+): PageQuery | undefined {
+  if (ids.length === 0) return undefined;
+  const fragment = inList(spec.column, ids);
+  return {
+    name: spec.name,
+    select: spec.select,
+    from: spec.from,
+    where: fragment.sql,
+    bind: fragment.bind,
+    order: {
+      sortColumn: spec.column,
+      pkColumn: spec.column,
+      descending: false,
+    },
+  };
 }
+
+/** Document and note bodies: the prose excerpt and the byte size. */
+export const HOME_BODY_LOOKUP = {
+  name: "phone.home.bodies",
+  select: "content_id, content_uri, byte_size",
+  from: "core_content_item",
+  column: "content_id",
+} as const;
+
+/** The names behind the profile discs the People tile draws. */
+export const HOME_PARTY_LOOKUP = {
+  name: "phone.home.parties",
+  select: "party_id, display_name",
+  from: "core_party",
+  column: "party_id",
+} as const;

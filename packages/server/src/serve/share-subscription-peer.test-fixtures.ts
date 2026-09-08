@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { PageCursor, PageQuery } from "@centraid/core/page";
 import {
   createGateway,
   createShareGrant,
@@ -22,7 +23,7 @@ import type { PeerReplicaPullOutcome } from "../routes/peer-replica-route.js";
 import { seedPhoto, transportTo } from "./peer-give.test-fixtures.js";
 import type { Side } from "./peer-give.test-fixtures.js";
 import type { PeerDial } from "./peer-link-client.js";
-import { pullShareShape } from "./share-subscriber.js";
+import { pullShareTail } from "./share-subscriber.js";
 
 export const DOCS_FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 
@@ -95,9 +96,9 @@ function seedDocument(side: Side): { documentId: string; contentId: string } {
   side.vault.vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language,
+         (content_id, content_uri, sha256, byte_size, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/markdown', ?, ?, ?, 'Plan', NULL, NULL, NULL, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
@@ -263,7 +264,7 @@ export function wireGoldenPair(
     shapeId: string;
     seat: typeof audience.vault;
   }): Promise<PeerReplicaPullOutcome> =>
-    pullShareShape({
+    (await pullShareTail({
       dial: toOrigin,
       route: { endpointId: origin.endpointId, relayHints: [] },
       originVaultId: input.originVaultId,
@@ -271,7 +272,10 @@ export function wireGoldenPair(
       shapeId: input.shapeId,
       seat: input.seat,
       now: nowIso,
-    });
+    })) ?? {
+      state: "unreachable" as const,
+      detail: "the origin cannot serve this grant as rows",
+    };
   const toAudience: PeerDial = {
     request: transportTo(audience, origin.endpointId, { pullShape }),
     endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
@@ -323,6 +327,19 @@ export function appQueryCtx(
         read,
         search: async (request: Record<string, unknown>) =>
           side.gateway.search(credential, request as never),
+        // THE PAGED DOOR (#996, W4-D2). A converted handler asks for pages,
+        // and this ctx is the one place a shipped handler meets a real vault
+        // in this package: without the door the handler's read answers
+        // nothing and the suite asserts an empty screen.
+        page: async (request: {
+          query: PageQuery;
+          limit: number;
+          after?: PageCursor;
+        }) =>
+          side.gateway.page(credential, request.query, {
+            limit: request.limit,
+            ...(request.after ? { after: request.after } : {}),
+          }),
       },
     },
   };
@@ -331,4 +348,9 @@ export function appQueryCtx(
 interface VaultApiish {
   read: (request: Record<string, unknown>) => Promise<unknown>;
   search: (request: Record<string, unknown>) => Promise<unknown>;
+  page: (request: {
+    query: PageQuery;
+    limit: number;
+    after?: PageCursor;
+  }) => Promise<unknown>;
 }

@@ -14,9 +14,10 @@ import type {
   MobileCompatibilityDisposition,
   MobileGatewayFeatures,
 } from "../../lib/replica/mobile-gateway-compatibility-core";
-import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
-import type { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
 import type { AsyncStorageLike } from "../../lib/replica/native-change-feed";
+import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import type { NativeSeatPagePort } from "../../lib/replica/seat-port";
+import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import { freshnessKey } from "./replica-mount";
 import { dismissRevokedNotice, recordRevokedNotice } from "./replica-status";
 import type {
@@ -24,7 +25,7 @@ import type {
   ReplicaRevokedNotice,
 } from "./replica-status";
 
-export interface ReplicaScopeFreshness extends MountedReplicaScope {
+export interface ReplicaScopeFreshness extends ReplicaVaultScope {
   updatedAt?: string;
   /** Durable per-source coverage; `partial` survives a kill mid-backfill. */
   coverage?: ReplicaCoverage;
@@ -38,17 +39,33 @@ export interface ReplicaBootstrapProgress {
 }
 
 export interface ReplicaContextValue {
-  session?: MultiVaultReplicaSession;
+  /**
+   * THE ONE OPEN VAULT (#996 wave 3, R12). This was a facade over up to four
+   * mounted sessions; a seat opens one file, so it is that file's session.
+   */
+  session?: NativeReplicaSession;
+  /**
+   * THE SEAT'S PAGED READ (#996 wave 4b), when the phone's copy of `vault.db`
+   * has arrived. Separate from `session` because it is a separate FILE until
+   * W5 deletes the old store, and absent means "no copy yet", which the read
+   * path answers online-only rather than by reaching for the other file.
+   */
+  seat?: NativeSeatPagePort;
   gatewayBase?: string;
-  /** Visible VaultLink filter / default write target; not a session identity. */
+  /** Visible VaultLink filter / write target; the session's own vault. */
   vaultId?: string;
+  /**
+   * Every vault this phone holds a replica FILE for — the switcher's list, not
+   * what is open. Exactly one of them is `session`'s, and switching to another
+   * closes this mount and opens that one.
+   */
   scopes?: readonly ReplicaScopeFreshness[];
   ready: boolean;
   online: boolean;
   reachability?: ReplicaReachability;
-  /** Conservative aggregate over the mounted sources: one partial keeps it
-   *  partial. Read from durable status, so a library truncated by a kill
-   *  mid-backfill is still labelled partial after an offline relaunch. */
+  /** The open vault's durable coverage. Read from durable status, so a library
+   *  truncated by a kill mid-backfill is still labelled partial after an
+   *  offline relaunch. */
   coverage?: ReplicaCoverage;
   bootstrapProgress?: readonly ReplicaBootstrapProgress[];
   /** Scopes revoked while this phone held them, until the member dismisses. */
@@ -179,7 +196,7 @@ export function createRevokedNoticeStore(input: {
 
 export interface ReplicaBootstrapTracker {
   report: (
-    scope: MountedReplicaScope,
+    scope: ReplicaVaultScope,
     progress: { phase: "first-page" | "backfill" | "complete"; pages: number }
   ) => void;
   forget: (vaultId: string) => void;

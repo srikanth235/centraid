@@ -176,9 +176,9 @@ describe("takeout photo import", () => {
     db.vault
       .prepare(
         `SELECT a.asset_id, a.kind, a.captured_at, a.capture_group_id,
-                a.place_id, c.title, c.sha256
+                a.place_id, a.title, c.sha256
            FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
-          ORDER BY c.title`
+          ORDER BY a.title`
       )
       .all() as Record<string, unknown>[];
 

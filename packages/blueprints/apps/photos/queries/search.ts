@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 /**
  * Photo search as a vault projection (#352): the in-vault FTS5 index matches
  * titles/captions on core.content_item. Only matched content ids' live assets
@@ -7,7 +8,14 @@
  * render straight into the existing grid; album-name matching stays
  * client-side. Consent denial is a first-class outcome.
  */
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
+
+/** The search shelf shows this many matches. */
+const MATCH_ROWS = 300;
 
 interface RawHit {
   content_id: string;
@@ -24,13 +32,12 @@ interface RawContent {
   content_id: string;
   content_uri?: unknown;
   byte_size?: number | null;
-  media_type?: string | null;
-  title?: string | null;
   created_at?: string | null;
   deleted_at?: string | null;
 }
 
 interface RawEntry {
+  entry_id: string;
   target_id: string;
   collection_id: string;
 }
@@ -59,55 +66,80 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
 
     // Only matched content ids' LIVE assets — a trashed asset stays out
     // (re-upload is the restore path).
-    const liveAssets = await ctx.vault.read({
-      entity: "media.asset",
-      where: [
-        { column: "content_id", op: "in", value: contentIds },
-        { column: "deleted_at", op: "is-null" },
-      ],
-      limit: 300,
+    const matchedIn = inList("content_id", contentIds);
+    const liveAssets = await ctx.vault.page<RawAsset>({
+      query: {
+        name: "photos.search.assets",
+        select:
+          "asset_id, content_id, kind, title, captured_at, place_id, width, height, duration_s, deleted_at",
+        from: "media_asset",
+        where: `${matchedIn.sql} AND deleted_at IS NULL`,
+        bind: matchedIn.bind,
+        order: {
+          sortColumn: "captured_at",
+          pkColumn: "asset_id",
+          descending: true,
+        },
+      },
+      limit: MATCH_ROWS,
     });
-    const assetsRaw = (liveAssets.rows ?? []) as unknown as RawAsset[];
+    const assetsRaw = liveAssets.rows;
     if (assetsRaw.length === 0) return { assets: [] };
 
     const assetIds = assetsRaw.map((a) => a.asset_id);
-    const [contents, entries, albums, places, joins] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.content_item",
-        where: [{ column: "content_id", op: "in", value: contentIds }],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.collection_entry",
-        where: [
-          { column: "target_type", op: "eq", value: "media.asset" },
-          { column: "target_id", op: "in", value: assetIds },
-        ],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.collection",
-      }),
-      readPlaces({ ctx }),
-      readAssetJoins({ ctx, assetIds, contentIds }),
-    ]);
+    const [contents, entries, albums, places, joins, representations] =
+      await Promise.all([
+        readPages<RawContent>(ctx, {
+          name: "photos.search.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: matchedIn.sql,
+          bind: matchedIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
+        }),
+        readPages<RawEntry>(ctx, {
+          name: "photos.search.albumEntries",
+          select: "entry_id, target_type, target_id, collection_id",
+          from: "core_collection_entry",
+          where: `target_type = ? AND ${inList("target_id", assetIds).sql}`,
+          bind: ["media.asset", ...inList("target_id", assetIds).bind],
+          order: {
+            sortColumn: "entry_id",
+            pkColumn: "entry_id",
+            descending: false,
+          },
+        }),
+        readPages<RawCollection>(ctx, {
+          name: "photos.search.albums",
+          select: "collection_id, name, cover_content_id",
+          from: "core_collection",
+          order: {
+            sortColumn: "collection_id",
+            pkColumn: "collection_id",
+            descending: false,
+          },
+        }),
+        readPlaces({ ctx }),
+        readAssetJoins({ ctx, assetIds, contentIds }),
+        // Bytes carry no media type since #996 (R20(b)).
+        readRepresentations({ ctx, contentIds }),
+      ]);
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as RawContent[]).map(
-        (c) => [c.content_id, c] as const
-      )
+      contents.map((c) => [c.content_id, c] as const)
     );
     const { tagsByAsset, favoriteAssets, custodyByContent } = joins;
 
-    const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map(
-      (c) => ({
-        album_id: c.collection_id,
-        title: c.name,
-        cover_content_id: c.cover_content_id ?? null,
-      })
-    );
+    const albumRows = albums.map((c) => ({
+      album_id: c.collection_id,
+      title: c.name,
+      cover_content_id: c.cover_content_id ?? null,
+    }));
     const albumIdsByAsset = new Map<string, string[]>();
-    for (const entry of (entries.rows ?? []) as unknown as RawEntry[]) {
+    for (const entry of entries) {
       if (!albumIdsByAsset.has(entry.target_id))
         albumIdsByAsset.set(entry.target_id, []);
       albumIdsByAsset.get(entry.target_id)!.push(entry.collection_id);
@@ -145,8 +177,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           preview_uri: preview,
           poster_uri: poster,
           byte_size: content?.byte_size ?? null,
-          media_type: content?.media_type ?? null,
-          title: content?.title ?? null,
+          media_type:
+            representations.byOwner.get(
+              ownerKey("media.asset", asset.asset_id)
+            ) ?? null,
           taken_at: asset.captured_at ?? content?.created_at ?? null,
           album_ids: albumIds,
           album_titles: albumIds

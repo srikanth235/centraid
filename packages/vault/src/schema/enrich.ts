@@ -214,7 +214,11 @@
 //     LOWEST `region_id` in it, so unchanged membership never shuffles the id
 //     a shelf displays.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const ENRICH_DDL = `
 CREATE TABLE media_asset_phash (
@@ -223,7 +227,8 @@ CREATE TABLE media_asset_phash (
   -- Near-duplicate cluster projection (issue #352 phase 3/4) — see header.
   cluster_id  TEXT,
   computed_at TEXT NOT NULL,
-  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_asset_phash_cluster
   ON media_asset_phash(cluster_id) WHERE cluster_id IS NOT NULL;
@@ -273,7 +278,8 @@ CREATE TABLE enrich_policy (
   -- 'local' and 'model' are the pre-#712 tier names, kept legal here as a
   -- read compatibility shim only — see the header comment above.
   tier       TEXT NOT NULL CHECK (tier IN ('off','device','gateway','local','model')),
-  updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 -- Backfill for vaults that predate this table (bootstrap seeds fresh ones);
 -- guarded the same way as the vision/doctype schemes below.
@@ -421,7 +427,8 @@ CREATE TABLE media_face_cluster (
   -- The group's LOWEST region_id (deterministic — see the header).
   cluster_id  TEXT NOT NULL,
   computed_at TEXT NOT NULL,
-  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_face_cluster_cluster
   ON media_face_cluster(cluster_id);
@@ -453,6 +460,7 @@ CREATE TABLE enrich_policy_rule (
   trigger_on TEXT CHECK (trigger_on IS NULL
     OR trigger_on IN ('on-ingest','on-view','on-demand')),
   updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   CHECK ((scope_type = 'vault') = (scope_ref = '')),
   CHECK (enabled IS NOT NULL OR profile IS NOT NULL OR trigger_on IS NOT NULL),
   UNIQUE (scope_type, scope_ref, capability)

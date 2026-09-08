@@ -10,8 +10,7 @@
 // memory. Presigned URLs are not persisted — they expire, and `begin`
 // re-mints them.
 
-import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
-
+import type { UploadSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
 import { stableFollowupIntentId, toUploadFollowup } from "./followup-record";
 import type {
@@ -148,9 +147,9 @@ interface PendingGroupRow {
 }
 
 export class UploadQueueStore {
-  private constructor(private readonly driver: ReplicaSqliteDriver) {}
+  private constructor(private readonly driver: UploadSqliteDriver) {}
 
-  static create(driver: ReplicaSqliteDriver): UploadQueueStore {
+  static create(driver: UploadSqliteDriver): UploadQueueStore {
     driver.exec("PRAGMA journal_mode=WAL;");
     driver.exec("PRAGMA synchronous=FULL;");
     const version =

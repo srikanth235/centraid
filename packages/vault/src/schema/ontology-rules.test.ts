@@ -204,7 +204,14 @@ describe("R5/R6 — an occurrence is identified by its own wall clock", () => {
     const db = baselineVault();
     expect(
       columnsOf(db, "schedule_recurrence_exception_attendee")
-    ).toStrictEqual(["exception_id", "party_id", "created_at", "updated_at"]);
+    ).toStrictEqual([
+      "exception_id",
+      "party_id",
+      "created_at",
+      "updated_at",
+      // The conflict comparator every mutable table carries (#996, R6).
+      "row_version",
+    ]);
     expect(
       onDeleteOf(db, "schedule_recurrence_exception_attendee", "exception_id")
     ).toBe("CASCADE");

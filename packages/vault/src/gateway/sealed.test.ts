@@ -23,6 +23,7 @@ import {
   unsealValue,
   ephemeralSealKey,
 } from "../schema/sealed.js";
+import { unsealCell } from "./owner-vault.test-fixtures.js";
 
 let db: VaultDb;
 let gw: Gateway;
@@ -164,20 +165,26 @@ describe("sealed", () => {
     expect(input.title).toBe("example.com");
   });
 
-  test("the owner reveals; the reveal is receipted per item with column names only", () => {
+  test("the owner is refused a Locker reveal, and the refusal is receipted per item", () => {
+    // #996, W6-D2: the gateway does not unseal a Locker row for anyone, the
+    // owner included. What this test kept from the version that proved the
+    // ALLOW is the receipt's shape — the trail still names the action, the
+    // object and the columns, and still carries no value.
     const itemId = addLogin("pw-for-reveal");
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-      context: { kind: "fill", origin: "https://example.com" },
-    });
-    expect(revealed.values.password).toBe("pw-for-reveal");
+    expect(() =>
+      gw.reveal(owner, {
+        entity: "locker.item",
+        entityId: itemId,
+        columns: ["password"],
+        context: { kind: "fill", origin: "https://example.com" },
+      })
+    ).toThrow(/does not unseal locker rows/u);
     const receipt = db.audit
       .prepare(
-        "SELECT action, object_type, object_id, decision, detail_json FROM access_receipt WHERE receipt_id = ?"
+        `SELECT action, object_type, object_id, decision, detail_json
+           FROM access_receipt WHERE action = 'reveal' ORDER BY seq DESC LIMIT 1`
       )
-      .get(revealed.receiptId) as {
+      .get() as {
       action: string;
       object_type: string;
       object_id: string;
@@ -188,13 +195,13 @@ describe("sealed", () => {
       action: "reveal",
       object_type: "locker.item",
       object_id: itemId,
-      decision: "allow",
+      decision: "deny",
     });
     expect(receipt.detail_json).not.toContain("pw-for-reveal");
-    expect(JSON.parse(receipt.detail_json)).toMatchObject({
-      columns: ["password"],
-      context: { kind: "fill", origin: "https://example.com" },
-    });
+    // And the secret is intact behind the refusal — a seat opens it.
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(
+      "pw-for-reveal"
+    );
   });
 
   test("reveal fill context accepts origins only and receipts malformed attempts", () => {
@@ -288,21 +295,30 @@ describe("sealed", () => {
       ],
       { clamped: true, assistant: true }
     );
-    const ok = gw.reveal(assistant, {
-      entity: "locker.item",
-      entityId: itemA,
-      columns: ["password"],
-    });
-    expect(ok.values.password).toBe("secret-A");
-    // The clamp is the boundary the connector's run declared.
+    // Even the row the clamp ALLOWS is refused now (#996, W6-D2): a Locker
+    // reveal is not an authorization question any more, it is a place the key
+    // is not. The clamp itself still governs the entities the door does serve
+    // (`locker-sidecar-reveal.test.ts` keeps that half on
+    // `sync.connection_credential`).
+    expect(() =>
+      gw.reveal(assistant, {
+        entity: "locker.item",
+        entityId: itemA,
+        columns: ["password"],
+      })
+    ).toThrow(/does not unseal locker rows/u);
+    // …and the row the clamp REFUSES is still refused by the clamp.
     expect(() =>
       gw.reveal(assistant, { entity: "locker.item", entityId: itemB })
     ).toThrow(/deny/u);
   });
 
-  test("a readonly device browses placeholders but never reveals", () => {
+  // Was "a readonly device": there is no readonly seat any more (#996, R11),
+  // and the property this proved never depended on one — the refusal is the
+  // SCHEMA's and arrives before any answer about the caller is consulted.
+  test("a second enrolled seat browses placeholders but never reveals", () => {
     const itemId = addLogin();
-    const viewer = enrollDevice(db, boot.ownerPartyId, "kiosk", "readonly");
+    const viewer = enrollDevice(db, boot.ownerPartyId, "kiosk");
     const cred: Credential = {
       kind: "device",
       deviceId: viewer.deviceId,
@@ -313,12 +329,14 @@ describe("sealed", () => {
       where: [{ column: "item_id", op: "eq", value: itemId }],
     });
     expect(read.rows[0]?.password).toBe(SEALED_PLACEHOLDER);
+    // The refusal is the SCHEMA's now — this seat and the owner get the same
+    // answer, which is the point of the key not being here.
     expect(() =>
       gw.reveal(cred, {
         entity: "locker.item",
         entityId: itemId,
       })
-    ).toThrow(/readonly/u);
+    ).toThrow(/does not unseal locker rows/u);
   });
 
   test("parked summaries carry hash tokens, not secrets", () => {
@@ -455,12 +473,9 @@ describe("sealed", () => {
       },
     });
     expect(edit.status).toBe("executed");
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(revealed.values.password).toBe("keep-me-safe");
+    expect(unsealCell(db, "locker_item", "password", itemId)).toBe(
+      "keep-me-safe"
+    );
   });
 
   test("ctx.unseal refuses cells a command has not declared", () => {
@@ -536,13 +551,12 @@ describe("sealed", () => {
       )
       .get() as { item_id: string; password: string };
     expect(isSealedValue(item.password)).toBe(true);
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item",
-      entityId: item.item_id,
-      columns: ["password", "otp_seed"],
-    });
-    expect(revealed.values.password).toBe("gh-s3cret-!x");
-    expect(revealed.values.otp_seed).toBe("JBSWY3DPEHPK3PXP");
+    expect(unsealCell(db, "locker_item", "password", item.item_id)).toBe(
+      "gh-s3cret-!x"
+    );
+    expect(unsealCell(db, "locker_item", "otp_seed", item.item_id)).toBe(
+      "JBSWY3DPEHPK3PXP"
+    );
 
     const stagedRows = db.vault
       .prepare(

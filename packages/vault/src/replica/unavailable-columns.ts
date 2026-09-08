@@ -10,9 +10,10 @@ import { sealedColumnsOf } from "../schema/sealed.js";
 const REPLICA_PROTOCOL_CREDENTIAL_COLUMNS: Readonly<
   Record<string, readonly string[]>
 > = {
+  // `access.agent` and `access.device` no longer appear here: their key
+  // material moved to private sibling tables (#996, R3), so it is excluded by
+  // TABLE rather than by column and nothing has to remember to list it.
   "access.app": ["signing_key"],
-  "access.agent": ["enrollment_key"],
-  "access.device": ["public_key"],
 };
 
 /** One structural deny-list shared by log snapshots, bootstrap, and lazy reads. */

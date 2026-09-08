@@ -4,11 +4,12 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { VaultShareError } from "../errors.js";
+import { uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import { setRepresentation } from "../schema/representation.js";
 import { CLOSURE_FORMAT_VERSION, shareOriginEntityType } from "./closure.js";
 import type {
   ContentItemRow,
-  DerivativeRow,
   DocumentRow,
   MediaAssetRow,
   ProjectedItem,
@@ -70,9 +71,9 @@ function projectContentItems(
   );
   const write = audience.prepare(
     `INSERT INTO core_content_item
-       (content_id, media_type, content_uri, sha256, byte_size, title, language,
+       (content_id, content_uri, sha256, byte_size, language,
         creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
   );
   for (const row of contentItems) {
     const existing = bySha.get(row.sha256) as
@@ -84,11 +85,9 @@ function projectContentItems(
     if (!existing) {
       write.run(
         contentId,
-        row.media_type,
         row.content_uri,
         row.sha256,
         row.byte_size,
-        row.title,
         row.language,
         row.deleted_at,
         row.purge_at,
@@ -103,44 +102,11 @@ function projectContentItems(
   }
 }
 
-function projectDerivatives(
-  audience: DatabaseSync,
-  derivatives: readonly DerivativeRow[],
-  into: Projected
-): void {
-  const held = audience.prepare(
-    "SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?"
-  );
-  const write = audience.prepare(
-    `INSERT INTO core_content_derivative
-       (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const row of derivatives) {
-    const contentId = contentOf(into, row.content_id);
-    if (held.get(contentId, row.variant)) continue;
-    write.run(
-      freeId(
-        audience,
-        "core_content_derivative",
-        "derivative_id",
-        row.derivative_id
-      ),
-      contentId,
-      row.variant,
-      row.sha256,
-      row.media_type,
-      row.byte_size,
-      row.text_content,
-      row.created_at
-    );
-  }
-}
-
 function projectMediaAssets(
   audience: DatabaseSync,
   assets: readonly MediaAssetRow[],
-  into: Projected
+  into: Projected,
+  mediaTypes: ReadonlyMap<string, string>
 ): void {
   // Do not project `source_asset_id` (#711): it names an origin asset.
   const byContent = audience.prepare(
@@ -148,10 +114,10 @@ function projectMediaAssets(
   );
   const write = audience.prepare(
     `INSERT INTO media_asset
-       (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
+       (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id,
         place_id, camera_device_id, width, height, duration_s, exif_json,
         archived_at, deleted_at, purge_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const row of assets) {
     const contentId = contentOf(into, row.content_id);
@@ -171,6 +137,7 @@ function projectMediaAssets(
       assetId,
       contentId,
       row.kind,
+      row.title,
       row.captured_at,
       row.tz_offset_min,
       row.capture_group_id,
@@ -182,6 +149,14 @@ function projectMediaAssets(
       row.deleted_at,
       row.purge_at
     );
+    projectRepresentation(audience, {
+      contentId,
+      ownerType: "media.asset",
+      ownerId: assetId,
+      mediaType: mediaTypes.get(row.content_id),
+      interpretation: "original",
+      createdAt: row.captured_at,
+    });
     record(into, "media.asset", row.asset_id, {
       itemId: assetId,
       deduped: false,
@@ -190,10 +165,42 @@ function projectMediaAssets(
   }
 }
 
+/**
+ * The audience's own reading of projected bytes (#996, ruling R20(b)). A
+ * representation belongs to an OWNER, and the audience's owner is an audience
+ * row — so this writes a fresh one rather than projecting the origin's.
+ */
+function projectRepresentation(
+  audience: DatabaseSync,
+  input: {
+    contentId: string;
+    ownerType: string;
+    ownerId: string;
+    mediaType: string | undefined;
+    interpretation: string;
+    createdAt: string | null;
+  }
+): void {
+  if (!input.mediaType) return;
+  setRepresentation(
+    audience,
+    uuidv7,
+    input.createdAt ?? new Date(0).toISOString(),
+    {
+      contentId: input.contentId,
+      ownerType: input.ownerType,
+      ownerId: input.ownerId,
+      mediaType: input.mediaType,
+      interpretation: input.interpretation,
+    }
+  );
+}
+
 function projectDocuments(
   audience: DatabaseSync,
   documents: readonly DocumentRow[],
-  into: Projected
+  into: Projected,
+  mediaTypes: ReadonlyMap<string, string>
 ): void {
   for (const row of documents) {
     const contentId = contentOf(into, row.current_content_id);
@@ -237,6 +244,14 @@ function projectDocuments(
         row.deleted_at,
         row.purge_at
       );
+    projectRepresentation(audience, {
+      contentId,
+      ownerType: "core.document",
+      ownerId: documentId,
+      mediaType: mediaTypes.get(row.current_content_id),
+      interpretation: "body",
+      createdAt: row.created_at,
+    });
     record(into, "core.document", row.document_id, {
       itemId: documentId,
       deduped: false,
@@ -387,10 +402,15 @@ function projectRows(
   keys: { origin: Buffer; audience: Buffer } | undefined
 ): Projected {
   const into: Projected = new Map();
+  // The wire's media type, keyed by ORIGIN content id (#996, R20(b)): the
+  // audience writes it onto ITS OWN owners' representations below, because a
+  // reading belongs to an owner and the audience's owners are its own rows.
+  const mediaTypes = new Map(
+    closure.rows.contentItems.map((row) => [row.content_id, row.media_type])
+  );
   projectContentItems(audience, closure.rows.contentItems, into);
-  projectDerivatives(audience, closure.rows.derivatives, into);
-  projectMediaAssets(audience, closure.rows.mediaAssets, into);
-  projectDocuments(audience, closure.rows.documents, into);
+  projectMediaAssets(audience, closure.rows.mediaAssets, into, mediaTypes);
+  projectDocuments(audience, closure.rows.documents, into, mediaTypes);
   projectDocsFolders(audience, closure.rows.docsFolders, into);
   for (const row of closure.rows.lockerItems) {
     if (!keys)
@@ -431,7 +451,7 @@ function resolve(into: Projected, item: WireItem): ProjectedItem {
 }
 
 /**
- * A LINEAGE CLAIM FOR EVERY PROJECTED ROW, KEYED BY THE SHAPE (#929).
+ * A LINEAGE CLAIM FOR EVERY PROJECTED ROW, KEYED BY THE GRANT (#929, #996).
  *
  * Every row the projection wrote is claimed, not only the top-level items —
  * the album, the folder. Stamping the items alone was the revoke evasion
@@ -439,26 +459,26 @@ function resolve(into: Projected, item: WireItem): ProjectedItem {
  * removed its collection entry, so removal's walk over LIVE membership found
  * nothing to sweep, and the asset and its content survived to be restored.
  *
- * SHAPE-KEYED, so two grants over one photograph are two claims and the second
+ * GRANT-KEYED, so two grants over one photograph are two claims and the second
  * one keeps the row when the first is revoked. That is the whole reason a
  * row-keyed provenance table, which names one sender, could not stay.
  *
  * A PLACEMENT CLAIMS NOTHING. Same-owner placement is a MOVE between the
- * owner's own vaults: the item ends up as the owner's own row, with no shape
+ * owner's own vaults: the item ends up as the owner's own row, with no grant
  * to end and no sender to name, so a lineage row would assert a subscription
  * that does not exist (#928 A6).
  */
 function recordLineage(
   audience: DatabaseSync,
-  shape: ShareShapeClaim,
+  grant: ShareGrantClaim,
   projected: Projected,
   items: readonly ProjectedItem[]
 ): number {
   const write = audience.prepare(
     `INSERT INTO share_subscription_lineage
-       (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+       (authority_id, target_type, target_id, origin_item_id, origin_row_version)
      VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (shape_id, target_type, target_id) DO UPDATE SET
+     ON CONFLICT (authority_id, target_type, target_id) DO UPDATE SET
        origin_item_id = excluded.origin_item_id,
        origin_row_version = excluded.origin_row_version`
   );
@@ -470,11 +490,11 @@ function recordLineage(
   ): void => {
     const entity = shareOriginEntityType(itemType);
     write.run(
-      shape.shapeId,
+      grant.authorityId,
       entity,
       itemId,
       originItemId,
-      shape.rowVersions.get(`${entity} ${originItemId}`) ?? 0
+      grant.rowVersions.get(`${entity} ${originItemId}`) ?? 0
     );
     claimed.add(`${entity} ${itemId}`);
   };
@@ -488,17 +508,18 @@ function recordLineage(
 }
 
 /**
- * The subscription a projection is being ingested FOR. Absent on the placement
- * path, which claims nothing — see `recordLineage`.
+ * The subscription a projection is being ingested FOR — the GRANT, since the
+ * grant is the shape (#996, R10). Absent on the placement path, which claims
+ * nothing — see `recordLineage`.
  */
-export interface ShareShapeClaim {
-  shapeId: string;
+export interface ShareGrantClaim {
+  authorityId: string;
   /** `<entity> <originItemId>` → the origin's replica change sequence. */
   rowVersions: ReadonlyMap<string, number>;
 }
 
 export interface ProjectShareClosureOptions {
-  shape?: ShareShapeClaim;
+  grant?: ShareGrantClaim;
   now?: () => number;
   keys?: { origin: Buffer; audience: Buffer };
 }
@@ -522,8 +543,8 @@ export function projectShareClosure(
     replicaCommit = beginReplicaCommit(audience);
     const projected = projectRows(audience, closure, options.keys);
     const items = closure.items.map((item) => resolve(projected, item));
-    const lineageRows = options.shape
-      ? recordLineage(audience, options.shape, projected, items)
+    const lineageRows = options.grant
+      ? recordLineage(audience, options.grant, projected, items)
       : 0;
     runProjectionIngest(audience, [...projected.values()], {
       now: new Date(sharedAt).toISOString(),

@@ -12,6 +12,8 @@ export interface NativeNote {
   updatedAt: string;
   createdAt: string;
   bodyContentId: string;
+  /** The note's newest revision occurrence; null before it has one. */
+  currentRevisionId: string | null;
   purgeAt?: string;
   sourceVaultId?: string;
   canWrite: boolean;
@@ -59,6 +61,10 @@ export function buildNotes(
         createdAt: String(row.created_at ?? ""),
         bodyContentId:
           typeof row.body_content_id === "string" ? row.body_content_id : "",
+        currentRevisionId:
+          typeof row.current_revision_id === "string"
+            ? row.current_revision_id
+            : null,
         ...(typeof row.purge_at === "string" ? { purgeAt: row.purge_at } : {}),
         ...(scope ? { sourceVaultId: scope } : {}),
         canWrite: row.__centraidCanWrite !== false,

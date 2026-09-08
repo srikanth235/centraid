@@ -75,14 +75,20 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
   // The replica protocol's own plane. Its whole job is to describe changes to
   // registered rows; a change log inside the export it feeds would be a loop.
   ["replica_change", "the change log itself — the mechanism, not the data"],
+  ["replica_log", "the gateway log itself — the mechanism, not the data"],
   ["replica_meta", "this vault's replica epoch, floor and trigger marker"],
   ["replica_intent_outcome", "device-scoped outcome of one submitted intent"],
   ["replica_invocation_commit", "the commit group one invocation wrote"],
   ["replica_parked_payload", "a sealed request awaiting the member's answer"],
-  // By ruling (L-alias's neighbour, decisions.md): the locker's own unlock
-  // credential is how THIS installation is opened, not a secret it holds.
-  [
-    "locker_auth_credential",
-    "this installation's unlock credential, by ruling",
-  ],
+  // The private siblings of the two split identity registers (#996, R3). The
+  // identity projection next door replicates so `origin_device_id` and
+  // `camera_device_id` resolve on a seat; the key material is a gateway fact
+  // about a seat, never a fact the seat carries about itself.
+  ["access_device_secret", "a device's key material and gateway sync cursor"],
+  ["access_agent_secret", "an enrolled agent's host-side enrollment key"],
+  // The Locker key plane's id register (#996, R13). Which key `K` currently
+  // is, and when this host retired the one before, is a fact about THIS
+  // gateway's custody — the key material itself never touches the file, and a
+  // seat learns which key it holds from the key door, not from a row.
+  ["locker_key", "which Locker key this gateway holds, and its predecessors"],
 ]);

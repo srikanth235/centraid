@@ -1,20 +1,22 @@
 /*
  * A real native replica session against a real gateway (#890 W3).
  *
- * Everything below the transport is production: `createNativeReplicaSession`
- * builds the shipped `NativeReplicaStore`, the shipped `SqliteIntentStore`, and
- * the shipped `ReplicaCoordinator`. Three things are stand-ins, and each is
- * named here rather than left to be discovered:
+ * Everything below the transport is production: the shipped `SeatWorkerCore`
+ * applies a real snapshot into a real file, the outbox is that file's own
+ * `seat_outbox` table, and `createNativeReplicaSession` is the shipped one.
+ * Three things are stand-ins, and each is named here rather than left to be
+ * discovered:
  *
- * 1. the SQLite driver is `NodeSqliteDriver`, the repo's existing `node:sqlite`
- *    stand-in for op-sqlite — same SQL, no native module (its own file says so);
+ * 1. the SQLite driver is `NodeSeatDriver`, the repo's `node:sqlite` stand-in
+ *    for op-sqlite — same SQL, no native module (its own file says so), and
+ *    the staging is the node filesystem one the desktop seat uses;
  * 2. `digest`/`idFactory` are injected, exactly as the device injects
  *    expo-crypto, so no Expo native module is resolved here;
  * 3. the change feed never emits. The SSE feed is a device concern; every
- *    suite here advances the session with `pullNow()`, which is the same
- *    coordinator path a feed frame triggers. What this tier therefore CANNOT
- *    claim is that a live SSE frame wakes the pull — that stays with the
- *    device journeys.
+ *    suite here advances the session with `pullNow()`, which is the same seat
+ *    catch-up a feed frame wakes. What this tier therefore CANNOT claim is
+ *    that a live SSE frame wakes the pull — that stays with the device
+ *    journeys.
  *
  * The transport itself is real `fetch` over loopback, and `cut()` moves it to a
  * port nothing listens on so a failure is the platform's, not a flag's.
@@ -28,11 +30,12 @@ import type {
   NativeChangeFeed,
   NativeReplicaSession,
 } from "../../../apps/mobile/src/lib/replica/native-session.js";
-import { NodeSqliteDriver } from "../../../apps/mobile/src/lib/replica/node-sqlite-driver.js";
 import { href } from "../../../packages/client/src/gateway-auth.js";
 import type { ReplicaFetcher } from "../../../packages/client/src/replica/native.js";
 import { deadLoopbackUrl } from "./gateway.js";
 import type { MobileGateway } from "./gateway.js";
+import { openNodeSeat } from "./node-seat.js";
+import type { IntegrationSeat } from "./node-seat.js";
 
 /** Hex SHA-256 over UTF-8 — the contract expo-crypto satisfies on device. */
 const nodeDigest = (input: string): Promise<string> =>
@@ -54,6 +57,8 @@ function silentFeed(): NativeChangeFeed & { active: boolean } {
 
 export interface MobileSeat {
   readonly session: NativeReplicaSession;
+  /** This phone's copy of the vault — the read door every suite here uses. */
+  readonly seat: IntegrationSeat;
   /** The phone loses the network: every request now refuses to connect. */
   cut: () => void;
   /** The network comes back on the same gateway. */
@@ -64,8 +69,6 @@ export interface MobileSeat {
 }
 
 export interface OpenSeatOptions {
-  /** Rows per bootstrap page; small on purpose so a walk really pages. */
-  bootstrapWindow?: number;
   /** Distinct per seat so two seats on one gateway keep separate replicas. */
   label?: string;
   /**
@@ -102,6 +105,23 @@ export async function openSeat(
     attempts.push(pathname);
     return fetch(href(live ? baseUrl : dead, pathname), init as RequestInit);
   };
+  const seat = await openNodeSeat({
+    directory: path.join(gateway.dataDir, `seat-${label}`),
+    vaultId: gateway.vaultId,
+    baseUrl: gateway.url,
+    headers: { Authorization: `Bearer ${gateway.token}` },
+    fetch: (input, init) => {
+      // THE SEAT'S OWN DOORS COUNT AS ATTEMPTS TOO (#996, W5). A bootstrap is a
+      // snapshot download now, not a walk of the shaped bootstrap route, so a
+      // suite counting "did it ask again" has to see the transport's calls and
+      // not only the session's.
+      attempts.push(new URL(String(input)).pathname);
+      return fetch(
+        live ? input : new URL(String(input).replace(gateway.url, dead)),
+        init
+      );
+    },
+  });
   const session = await createNativeReplicaSession({
     gatewayAuth: {
       baseUrl: gateway.url,
@@ -111,20 +131,26 @@ export async function openSeat(
     },
     fetcher,
     changeFeed: silentFeed(),
-    driver: new NodeSqliteDriver(
-      path.join(gateway.dataDir, `replica-${label}.db`)
-    ),
+    seat,
     digest: nodeDigest,
     idFactory: () => `${label}-intent-${++counter}`,
-    bootstrapWindow: options.bootstrapWindow ?? 200,
     ...(options.isConnected ? { isConnected: options.isConnected } : {}),
     // The drain must not re-arm behind the test's back: every suite here
     // flushes explicitly, so a background retry would make "did it settle"
     // depend on a timer rather than on the arrangement.
     retryDelayMs: options.retryDelayMs ?? 10 * 60_000,
   });
+  // THE FIRST COPY, AWAITED — which the phone never does. `start()` fires the
+  // first catch-up and deliberately does NOT await it (a member who tapped an
+  // icon must not wait for the whole vault file), so on the phone the screens
+  // draw behind the mount and re-read when the copy lands. A suite has no
+  // screens: it reads once, immediately, and would be reading through the
+  // window in which the file handle is released for the snapshot swap. This
+  // joins the catch-up already running rather than starting a second one.
+  await session.pullNow();
   return {
     session,
+    seat,
     cut: () => {
       live = false;
     },

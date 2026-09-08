@@ -1,7 +1,7 @@
 // Share closure contract (#599 decision 11, #726): readShareClosure(origin) →
 // WireClosure → projectShareClosure(audience), sharing no db handle — so
 // WireClosure must stay plain JSON (no Buffers, handles, functions).
-// STRUCTURAL ONLY: item + content item + derivatives, never tags, links,
+// STRUCTURAL ONLY: item + content item, never derivatives, tags, links,
 // annotations or enrichment; the audience derives its own via
 // projection-ingest.ts. Cross-vault FKs (party/device/place/camera) project
 // NULL — which vault a row came from is the SUBSCRIPTION's answer
@@ -62,26 +62,21 @@ export type WireRow = Record<string, WireValue>;
 
 export interface ContentItemRow {
   content_id: string;
+  /**
+   * A WIRE FIELD, not a column (#996, ruling R20(b)): `core_content_item` no
+   * longer carries a media type, so the closure reads it off the ORIGIN
+   * owner's representation at the query boundary and the projection writes it
+   * back onto the AUDIENCE owner's. `title` is gone from this row entirely —
+   * a caption is the wrapper's, and a generated one is a derived row that
+   * never projects (R10).
+   */
   media_type: string;
   content_uri: string;
   sha256: string;
   byte_size: number;
-  title: string | null;
   language: string | null;
   deleted_at: string | null;
   purge_at: string | null;
-  created_at: string;
-}
-
-/** `content_id` is required: derivatives pool across the whole closure. */
-export interface DerivativeRow {
-  derivative_id: string;
-  content_id: string;
-  variant: string;
-  sha256: string | null;
-  media_type: string;
-  byte_size: number;
-  text_content: string | null;
   created_at: string;
 }
 
@@ -89,6 +84,8 @@ export interface MediaAssetRow {
   asset_id: string;
   content_id: string;
   kind: string;
+  /** The owner's AUTHORED title (#996, R20(b)) — never a generated caption. */
+  title: string | null;
   captured_at: string | null;
   tz_offset_min: number | null;
   capture_group_id: string | null;
@@ -141,10 +138,15 @@ export interface WireTallyGroup {
   lineAllocations: WireRow[];
 }
 
-/** Deduped across the closure: each content item and derivative appears ONCE. */
+/**
+ * Deduped across the closure: each content item appears ONCE.
+ *
+ * THERE IS NO `derivatives` (#996, R10). Derived rows never project — the
+ * caption, the OCR text, the transcript, the embedding and the thumbnail are
+ * the receiving vault's own work under its own egress answers (R18).
+ */
 export interface WireRows {
   contentItems: ContentItemRow[];
-  derivatives: DerivativeRow[];
   mediaAssets: MediaAssetRow[];
   documents: DocumentRow[];
   docsFolders: WireDocsFolder[];

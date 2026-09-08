@@ -14,8 +14,8 @@ function seedNoteBody(db: VaultDb, id: string, bodyBytes: number): string {
   db.vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
-       VALUES (?, 'text/markdown', ?, ?, ?, 'Long note', '2026-01-01T00:00:00.000Z')`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, ?, ?, ?, '2026-01-01T00:00:00.000Z')`
     )
     .run(id, uri, "f".repeat(64), Buffer.byteLength(body));
   return uri;

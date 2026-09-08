@@ -37,11 +37,14 @@ export const notesPendingProjection = definePendingProjection({
             deleted_at: null,
             ...pendingInputValues(input, NOTE_FIELDS),
           }),
+          // THE CONTENT ROW CARRIES NO TITLE (#996, R20(b)). The note's own
+          // title is already on `knowledge.note` above, through `NOTE_FIELDS`;
+          // `core_content_item` has neither a `title` nor a `media_type`
+          // column, and duplicating the title onto the body row was the mirror
+          // the ruling deleted. This mints the body row the note points at and
+          // nothing else.
           pendingUpsert("core.content_item", contentId, {
             content_id: contentId,
-            title:
-              typeof input.title === "string" ? input.title : "Pending note",
-            media_type: "text/markdown",
           }),
         ],
       };

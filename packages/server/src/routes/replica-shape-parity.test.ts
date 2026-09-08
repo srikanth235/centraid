@@ -39,19 +39,39 @@ const logger = {
  * re-pinned once when the current main branch retired the app grant evaluator.
  * #929 then deliberately reshaped `docs` and `people` again: docs moved from
  * the deleted commons tables to the subscription plane, while people dropped
- * its deleted invitation-only scopes. Those devices rebootstrap once. The
- * other six ids are unchanged by this PR, which is what this file is here to
- * show.
+ * its deleted invitation-only scopes. Those devices rebootstrap once.
+ *
+ * #996 wave 0c reshapes FOUR — agenda, notes, people and tasks — and says so
+ * here rather than anywhere else. The reshape is a column set, not a scope:
+ * `schedule_task` gained `series_id` (a recurring task's stable series
+ * identity, ruling R21 / drift ONT-27) and `core_event` gained `rrule_support`
+ * (an imported rule outside the expander's subset is retained with an explicit
+ * support state, ONT-31), and every app whose shape spans those two tables
+ * moves with them. `docs`, `locker`, `photos` and `tally` are untouched, which
+ * is what this file is here to show.
  */
+// Re-taken with #996 R6's `row_version`: a shape id is a digest over the
+// composed COLUMNS, and every mutable table gained one. The ids move whenever
+// the replicated column set does — which is exactly what this gate is for.
+// `locker` moved AGAIN with #996 R13: the three Locker tables that hold
+// ciphertext gained `key_id`, so a seat can tell a secret it may open from one
+// the vault has rotated past. No other app's shape touches those tables.
+//
+// `tally` moved with `4f3cf31aa` — OQ-12's cross-source match review. Answering
+// a proposed match writes a temporal `core.link` (`same-as` or `distinct-from`)
+// between the two imported rows, so Tally's manifest gained the link scope and
+// its composed column set moved with it. A deliberate reshape, re-pinned here
+// once and said so in the receipt; the other seven ids are unchanged, which is
+// what this file is for.
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
-  agenda: "agenda:16b6c558aa4f52ee7cebd0bb",
-  docs: "docs:ad333598074be54babecc6b9",
-  locker: "locker:53c326dc225e3d6f436255c1",
-  notes: "notes:ff225f22383fa792b7d09117",
-  people: "people:eff4efd9c59248235a8580ad",
-  photos: "photos:2a63ca460ee7dbf27beab4ed",
-  tally: "tally:c9884ce02ea2c78b10b0e847",
-  tasks: "tasks:01cbb634f9b8703989d97fea",
+  agenda: "agenda:e279df85d90abec66a555fd4",
+  docs: "docs:3463271306aa9de9eeee6770",
+  locker: "locker:c6c018d4d9e8a76c60e99738",
+  notes: "notes:f969445530d0b54a5999f95e",
+  people: "people:20e089695fca9f55a59937c7",
+  photos: "photos:ec39825c59933ed5cbe9b925",
+  tally: "tally:e801d3ace4ab7f264ea20279",
+  tasks: "tasks:c7ee5f1f79eabe0574ece317",
 };
 
 const APPS_ROOT = path.resolve(import.meta.dirname, "../../../blueprints/apps");

@@ -13,11 +13,21 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
+import {
+  mediaTypeOfOwner,
+  setRepresentation,
+} from "../schema/representation.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
-import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { releaseContentIfUnreferenced } from "./media.js";
 import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
-import { recordRevision } from "./revisions.js";
+import {
+  ForeignRevisionError,
+  recordBodyRevision,
+  revisionChainOf,
+} from "./revisions.js";
+
+/** The note wrapper's logical entity type. */
+const NOTE_TARGET_TYPE = "knowledge.note";
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -36,6 +46,28 @@ const MEDIA_TYPE: Record<string, string> = {
 };
 
 /** Dedupe-or-insert a text body as a canonical content item (P2). */
+/**
+ * THE NOTE'S OWN READING OF ITS BODY (#996, ruling R20(b), drift ONT-28).
+ * Two notes with identical bytes and different formats used to collide on the
+ * sha and take the FIRST note's media type — a markdown note filed after an
+ * identical plain one was markdown to nobody. The reading is the note's now.
+ */
+export function setNoteRepresentation(
+  ctx: HandlerCtx,
+  noteId: string,
+  contentId: string,
+  format: string
+): void {
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: NOTE_TARGET_TYPE,
+    ownerId: noteId,
+    mediaType: MEDIA_TYPE[format] ?? "text/plain",
+    charset: "utf-8",
+    interpretation: "body",
+  });
+}
+
 export function contentItemFor(
   ctx: HandlerCtx,
   bodyText: string,
@@ -55,12 +87,11 @@ export function contentItemFor(
   ctx.db
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+         (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
-      mediaType,
       `data:${mediaType};charset=utf-8,${encodeURIComponent(bodyText)}`,
       sha,
       Buffer.from(bodyText, "utf8").length,
@@ -156,6 +187,22 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now
     );
   ctx.wrote("knowledge.note", noteId);
+  setNoteRepresentation(ctx, noteId, contentId, format);
+  // The FIRST occurrence (#996, R20(a)): a note's original body is a version
+  // like any other, so the chain starts here.
+  ctx.db
+    .prepare(
+      "UPDATE knowledge_note SET current_revision_id = ? WHERE note_id = ?"
+    )
+    .run(
+      recordBodyRevision(ctx, {
+        entityType: NOTE_TARGET_TYPE,
+        entityId: noteId,
+        contentId,
+        previousContentId: null,
+      }),
+      noteId
+    );
   if (input.notebook_id) {
     placeNote(ctx, noteId, input.notebook_id);
   }
@@ -263,10 +310,24 @@ function editNote(ctx: HandlerCtx): Record<string, unknown> {
       input.format ?? current.format
     );
     if (contentId !== current.body_content_id) {
-      recordRevision(ctx, contentId, current.body_content_id);
+      sets.push("current_revision_id = ?");
+      values.push(
+        recordBodyRevision(ctx, {
+          entityType: NOTE_TARGET_TYPE,
+          entityId: input.note_id,
+          contentId,
+          previousContentId: current.body_content_id,
+        })
+      );
     }
     sets.push("body_content_id = ?");
     values.push(contentId);
+    setNoteRepresentation(
+      ctx,
+      input.note_id,
+      contentId,
+      input.format ?? current.format
+    );
   }
   if (input.title !== undefined) {
     sets.push("title = ?");
@@ -789,19 +850,15 @@ const RESTORE_NOTE_VERSION: CommandDefinition = {
       // NEW->OLD `revises` chain is restorable. UNION terminates cycles made
       // by restore-of-a-restore while preserving history.
       name: "target_in_chain",
-      sql: `WITH RECURSIVE chain(content_id) AS (
-              SELECT body_content_id FROM knowledge_note WHERE note_id = :note_id
+      sql: `WITH RECURSIVE chain(revision_id, content_id, parent_revision_id) AS (
+              SELECT r.revision_id, r.content_id, r.parent_revision_id
+                FROM core_entity_revision r
+                JOIN knowledge_note n ON n.current_revision_id = r.revision_id
+               WHERE n.note_id = :note_id
               UNION
-              SELECT l.to_id FROM core_link l
-                JOIN chain ON l.from_type = 'core.content_item'
-                          AND l.from_id = chain.content_id
-               WHERE l.to_type = 'core.content_item' AND l.valid_to IS NULL
-                 AND l.relation_concept_id = (
-                   SELECT c.concept_id FROM core_concept c
-                   JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                   WHERE s.uri = ${RELATIONS_SCHEME_URI_SQL}
-                     AND c.notation = 'revises'
-                 )
+              SELECT r.revision_id, r.content_id, r.parent_revision_id
+                FROM core_entity_revision r
+                JOIN chain ON chain.parent_revision_id = r.revision_id
             )
             SELECT count(*) AS n FROM chain WHERE content_id = :content_id`,
       column: "n",
@@ -813,22 +870,12 @@ const RESTORE_NOTE_VERSION: CommandDefinition = {
     {
       name: "restored_and_recorded",
       sql: `SELECT (
-              EXISTS(SELECT 1 FROM knowledge_note
-                      WHERE note_id = :note_id
-                        AND body_content_id = :content_id)
-              AND EXISTS(
-                SELECT 1 FROM core_link l
-                 WHERE l.from_type = 'core.content_item'
-                   AND l.from_id = :content_id
-                   AND l.to_type = 'core.content_item'
-                   AND l.valid_to IS NULL
-                   AND l.relation_concept_id = (
-                     SELECT c.concept_id FROM core_concept c
-                     JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                     WHERE s.uri = ${RELATIONS_SCHEME_URI_SQL}
-                       AND c.notation = 'revises'
-                   )
-              )
+              EXISTS(SELECT 1 FROM knowledge_note n
+                      JOIN core_entity_revision r ON r.revision_id = n.current_revision_id
+                     WHERE n.note_id = :note_id
+                       AND n.body_content_id = :content_id
+                       AND r.content_id = :content_id
+                       AND r.parent_revision_id IS NOT NULL)
             ) AS n`,
       column: "n",
       op: "eq",
@@ -843,12 +890,38 @@ const RESTORE_NOTE_VERSION: CommandDefinition = {
       .prepare("SELECT body_content_id FROM knowledge_note WHERE note_id = ?")
       .get(input.note_id) as { body_content_id: string } | undefined;
     if (!note) throw new Error("note vanished between check and execute");
-    recordRevision(ctx, input.content_id, note.body_content_id);
+    // A REVISION BELONGS TO ONE OBJECT (#996, R20(a)).
+    const chain = revisionChainOf(ctx, NOTE_TARGET_TYPE, input.note_id);
+    if (
+      !chain.some((occurrence) => occurrence.contentId === input.content_id)
+    ) {
+      throw new ForeignRevisionError(input.note_id, input.content_id);
+    }
+    const revisionId = recordBodyRevision(ctx, {
+      entityType: NOTE_TARGET_TYPE,
+      entityId: input.note_id,
+      contentId: input.content_id,
+      previousContentId: note.body_content_id,
+    });
     ctx.db
       .prepare(
-        "UPDATE knowledge_note SET body_content_id = ?, updated_at = ? WHERE note_id = ?"
+        "UPDATE knowledge_note SET body_content_id = ?, current_revision_id = ?, updated_at = ? WHERE note_id = ?"
       )
-      .run(input.content_id, ctx.now, input.note_id);
+      .run(input.content_id, revisionId, ctx.now, input.note_id);
+    // The representation follows the head (#996, R20(b)): a restore changes
+    // WHICH bytes the note reads, never HOW it reads them.
+    setRepresentation(ctx.db, ctx.newId, ctx.now, {
+      contentId: input.content_id,
+      ownerType: NOTE_TARGET_TYPE,
+      ownerId: input.note_id,
+      mediaType:
+        mediaTypeOfOwner(ctx.db, {
+          ownerType: NOTE_TARGET_TYPE,
+          ownerId: input.note_id,
+        }) ?? "text/plain",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     ctx.wrote("knowledge.note", input.note_id);
     ctx.cite({
       claim: `note ${input.note_id} restored to prior version ${input.content_id}`,

@@ -6,6 +6,11 @@
  * this handler.
  */
 
+import { LOCKER_ITEM_COLUMNS } from "./items.ts";
+
+/** How many logins the picker considers. */
+const LOGIN_ROWS = 2000;
+
 interface LoginRow {
   item_id: string;
   title: string;
@@ -17,47 +22,42 @@ interface LoginRow {
 }
 
 export default async function autofillCandidates({
-  input,
   ctx,
 }: {
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
   try {
-    // When Locker auth is configured, candidate enumeration requires the
-    // vault to be unlocked (any live session on this gateway) — same lock that
-    // gates fill/reveal. Without it a paired device could map every login's
-    // item_id + url while locked.
-    const authentication = (await ctx.vault.authenticate({
-      operation: "status",
-      ...(typeof input?.auth_session === "string" && input.auth_session
-        ? { sessionToken: String(input.auth_session) }
-        : {}),
-    })) as {
-      authenticated?: boolean;
-      configured?: boolean;
-      unlocked?: boolean;
-    };
-    if (
-      authentication.configured &&
-      !authentication.unlocked &&
-      !authentication.authenticated
-    ) {
-      return {
-        candidates: [],
-        authRequired: true,
-        configured: true,
-      };
-    }
+    // THE UNLOCK CHECK IS GONE FROM HERE (#996, rulings R13 and W6-D2), and
+    // what it protected is worth stating rather than quietly dropping.
+    //
+    // It read: "without it a paired device could map every login's item_id +
+    // url while locked". That was true of a device that had to ASK the gateway
+    // to enumerate. A seat holds `vault.db` WHOLE (R1) — titles, addresses and
+    // usernames are plaintext there precisely so a locked Locker still lists
+    // and searches offline — so the enumeration this gate refused is a local
+    // read on the seat now, and refusing it here refuses nothing.
+    //
+    // The Companion is the caller this still bears on: it is a browser
+    // extension, not a seat, and it does not hold the vault. Its candidate
+    // list is gated on the Companion's own side, which is where a surface
+    // that holds no vault has to be gated. Raised in the wave-6 receipt as an
+    // open question rather than settled here.
     const [response, watchtower] = await Promise.all([
-      ctx.vault.read({
-        entity: "locker.item",
-        where: [
-          { column: "type", op: "eq", value: "login" },
-          { column: "deleted_at", op: "is-null" },
-        ],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: 2000,
+      ctx.vault.page<LoginRow>({
+        query: {
+          name: "locker.autofill.logins",
+          select: LOCKER_ITEM_COLUMNS,
+          from: "locker_item",
+          where: "type = ? AND deleted_at IS NULL",
+          bind: ["login"],
+          order: {
+            sortColumn: "updated_at",
+            pkColumn: "item_id",
+            descending: true,
+          },
+        },
+        limit: LOGIN_ROWS,
       }),
       ctx.vault.invoke({ command: "locker.watchtower", input: {} }),
     ]);

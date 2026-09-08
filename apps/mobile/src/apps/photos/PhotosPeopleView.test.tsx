@@ -15,7 +15,6 @@ import PhotosPeopleView from "./PhotosPeopleView";
 
 type ReactNative = typeof import("react-native");
 type ThemeModule = typeof import("../../kit/theme");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
 type DesignModule = typeof import("@centraid/design");
 type ReplicaProviderModule = typeof import("../../kit/replica/ReplicaProvider");
 type WriteOutcomeModule = typeof import("../../kit/replica/write-outcome");
@@ -163,25 +162,29 @@ vi.mock(
     }) as unknown as Partial<ThemeModule>
 );
 
+// The seat's paged reads (#996 wave 4b). Photos' five shared sets and the
+// screen-local ones are walks over this phone's own copy now; the double keys
+// on the entity the read declares, exactly as the old one keyed on the request.
 vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
+  import("../../kit/hooks/useSeatPages"),
   () =>
     ({
-      useReplicaQuery: (
+      useSeatPages: (
         _app: string,
-        query: { entity: string }
+        _query: unknown,
+        read: { entity: string }
       ): { loading: boolean; rows: unknown[] } => ({
         loading: false,
         rows:
-          query.entity === "media.face_region"
+          read.entity === "media.face_region"
             ? mocks.faces
-            : query.entity === "media.face_cluster"
+            : read.entity === "media.face_cluster"
               ? mocks.clusters
-              : query.entity === "core.party"
+              : read.entity === "core.party"
                 ? mocks.parties
                 : mocks.policies,
       }),
-    }) as unknown as Partial<UseReplicaQueryModule>
+    }) as never
 );
 
 vi.mock(

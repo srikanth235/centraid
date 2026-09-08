@@ -22,6 +22,24 @@ export function buildIntentOutcome(settled: ReplicaIntent): IntentOutcome {
  * DOM-free so every platform's queue and coordinator share one interface.
  */
 export interface IntentRecordStore {
+  /**
+   * True when this store sits beside an APPLIED-COMMIT CURSOR that will reach
+   * an answer's `commit_seq` (#996, R24) — which today means the seat store,
+   * whose outbox shares the seat's file and whose applier clears the overlay
+   * in the transaction that carries the commit.
+   *
+   * It matters because `commit_seq` is on every executed answer since wave 1: a
+   * queue that parks on the number with no cursor behind it holds
+   * `awaiting-change` forever, and the member's pending badge never clears.
+   * Those stores keep the #929 signals — `answeredVersions` against
+   * `holdsVersion`, or the next delta apply.
+   *
+   * This is the DEFAULT, not the last word: whether a cursor is actually
+   * driven is a fact about the wiring, so `IntentQueueOptions` can override it
+   * (a harness that drives `settleAtCommitSeq` by hand over any outbox).
+   * Absent is the safe reading, so a store says this only when it means it.
+   */
+  readonly settlesByCommitSeq?: boolean;
   add: (intent: NewStoredIntent) => Promise<ReplicaIntent>;
   get: (intentId: string) => Promise<ReplicaIntent | undefined>;
   list: (states?: readonly IntentState[]) => Promise<ReplicaIntent[]>;

@@ -15,10 +15,6 @@ import { handleAppChanges } from "./http/changes-sse.js";
 import { handleLogsRoute, handleSettingsWrite } from "./http/cloud-routes.js";
 import { sendJsonNegotiated } from "./http/compression.js";
 import { readBody, sendError, sendJson } from "./http/http-utils.js";
-import {
-  COMPANION_GRANTS_HEADER,
-  companionHandlerAllowed,
-} from "./http/internal-headers.js";
 import { parseWithDraft } from "./http/router.js";
 import type { TurnLimiter } from "./http/turn-limiter.js";
 import { handleTurnRoute, parseTurnSubRoute } from "./http/turn-routes.js";
@@ -275,20 +271,6 @@ export class Runtime {
     draftSessionId?: string
   ): Promise<void> {
     if (!this.enforceWebAppScope(req, res, appId)) return;
-
-    const companionProfile = req.headers[COMPANION_GRANTS_HEADER];
-    if (typeof companionProfile === "string") {
-      const allowed = new Set(companionProfile.split(",").filter(Boolean));
-      if (!companionHandlerAllowed(allowed, kind, appId, handlerName)) {
-        sendError(
-          res,
-          403,
-          "app_session_scope",
-          "This Companion device has no grant for that module operation."
-        );
-        return;
-      }
-    }
 
     let body: Record<string, unknown> = {};
     try {

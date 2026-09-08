@@ -60,6 +60,7 @@ import {
   leaveGroupWrite,
   nudgeWrite,
 } from "@centraid/blueprints/apps/tally/writes";
+import type { Money } from "@centraid/core/money";
 
 import { postStatus } from "../../kit/components/status-line";
 import { usePendingChanges } from "../../kit/replica/pending-changes";
@@ -111,8 +112,12 @@ export default function TallyHome({
   const pendingCount = tallyPendingCount(pending);
   const nets = useMemo(
     () => [
-      ...vault.dashboard.friends.map((friend) => friend.net_minor),
-      ...vault.dashboard.groups.map((group) => group.owner_net_minor),
+      // Every amount, per currency — `allSettled` asks only whether each is
+      // level, which is a question a bag answers without being summed.
+      ...vault.dashboard.friends.flatMap((friend) =>
+        friend.balances.map((amount) => amount.amount_minor)
+      ),
+      ...vault.dashboard.groups.map((group) => group.owner_net.amount_minor),
     ],
     [vault.dashboard]
   );
@@ -159,25 +164,25 @@ export default function TallyHome({
         navigation.navigate("Settings", { screen: "Approvals" });
         return;
       }
-      // The outbox's own doors are addressed by VAULT as well as by intent —
-      // this phone holds several — so the row is looked back up in the source
-      // it was folded from rather than the vault being guessed at.
+      // One vault, one outbox, so the intent id alone addresses the row — but
+      // it is still looked up, because a row the poll drew may have settled
+      // between the draw and the tap.
       const change = pending.find((entry) => entry.id === row.intentId);
       if (!session || !change) return;
       if (verb === "cancel") {
         void session
-          .cancelPendingChange(change.id, change.vaultId, change.kind)
+          .cancelPendingChange(change.id)
           .then(() => postStatus(COMPOSE_OUTCOMES.cancelled));
         return;
       }
       if (verb === "retry") {
         void session
-          .retryPendingWrite(change.id, change.vaultId)
+          .retryPendingWrite(change.id)
           .then(() => postStatus(COMPOSE_OUTCOMES.retried));
         return;
       }
       void session
-        .discardPendingWrite(change.id, change.vaultId)
+        .discardPendingWrite(change.id)
         .then(() => postStatus(COMPOSE_OUTCOMES.discarded));
     },
     [navigation, pending, replica.session]
@@ -248,7 +253,7 @@ export default function TallyHome({
   const askRemind = (friend: {
     party_id: string;
     name: string;
-    net_minor: number;
+    balances: Money[];
   }): void =>
     setAsk({
       body: [NUDGE_BODY],
@@ -258,7 +263,9 @@ export default function TallyHome({
       onConfirm: () =>
         write(
           nudgeWrite({
-            asOfMinor: friend.net_minor,
+            // A reminder is about ONE balance; the first currency is the only
+            // one unless the position spans several (#996, R22).
+            asOfMinor: friend.balances[0]?.amount_minor ?? 0,
             partyId: friend.party_id,
           }),
           COMPOSE_OUTCOMES.added

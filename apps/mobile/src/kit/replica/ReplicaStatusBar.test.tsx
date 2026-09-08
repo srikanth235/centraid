@@ -189,21 +189,24 @@ vi.mock(
 /** What the sheet actually asked the outbox to do, in order. */
 const outbox = vi.hoisted(() => ({ calls: [] as string[][] }));
 
+// One vault, one outbox, so the intent id alone addresses the row (#996 wave
+// 3). Every verb took a `vaultId` and a `kind` when the phone held four
+// sessions and two outboxes; neither exists.
 const sessionMock = vi.hoisted(() => ({
-  retryPendingWrite: (intentId: string, vaultId?: string) => {
-    outbox.calls.push(["retry", intentId, vaultId ?? ""]);
+  retryPendingWrite: (intentId: string) => {
+    outbox.calls.push(["retry", intentId]);
     return Promise.resolve({ status: "in-flight" });
   },
-  discardPendingWrite: (intentId: string, vaultId?: string) => {
-    outbox.calls.push(["discard", intentId, vaultId ?? ""]);
+  discardPendingWrite: (intentId: string) => {
+    outbox.calls.push(["discard", intentId]);
     return Promise.resolve(true);
   },
-  cancelPendingChange: (id: string, vaultId: string) => {
-    outbox.calls.push(["cancel", id, vaultId]);
+  cancelPendingChange: (intentId: string) => {
+    outbox.calls.push(["cancel", intentId]);
     return Promise.resolve(true);
   },
-  dismissPendingChange: (id: string, vaultId: string) => {
-    outbox.calls.push(["dismiss", id, vaultId]);
+  dismissPendingChange: (intentId: string) => {
+    outbox.calls.push(["dismiss", intentId]);
   },
   resumeAfterStorageFull: () => outbox.calls.push(["resume"]),
 }));
@@ -312,7 +315,6 @@ describe("pending-changes chip visibility (issue #711)", () => {
 
 const CONFLICT: PendingChange = {
   id: "intent-1",
-  vaultId: "home",
   vaultLabel: "Home",
   status: "conflict",
   label: "tally: add_expense",
@@ -322,7 +324,7 @@ const CONFLICT: PendingChange = {
   expectedVersion: 3,
   actualVersion: 5,
   attempts: 2,
-  kind: "replica",
+  retained: true,
 };
 
 describe("the pending sheet's body (issue #880 W2.3)", () => {
@@ -350,14 +352,14 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     expect(container.textContent).not.toContain("Cancel");
   });
 
-  it("fires Retry against the vault that holds the write", async () => {
+  it("fires Retry against the intent the row names", async () => {
     pendingMock.pending = [CONFLICT];
     replicaMock.session = sessionMock;
     await render();
     await press("Pending changes 1");
     await press("Retry Tally · Add expense");
 
-    expect(outbox.calls).toStrictEqual([["retry", "intent-1", "home"]]);
+    expect(outbox.calls).toStrictEqual([["retry", "intent-1"]]);
   });
 
   it("leaves a queued write its Cancel and no outbox verbs", async () => {
@@ -417,11 +419,10 @@ describe("the outbox vocabulary (issue #880 W2.3)", () => {
   it("has a member's word for every state the outbox can be in", () => {
     // Exhaustiveness is the compiler's job — `humanStatus` has no `default`
     // arm, so a new state fails typecheck rather than reaching a member as an
-    // engine word. This pins the other half: none of the nine ARE that word.
+    // engine word. This pins the other half: none of them ARE that word.
     const states = [
       "queued",
       "sending",
-      "in-flight",
       "awaiting-change",
       "parked",
       "denied",

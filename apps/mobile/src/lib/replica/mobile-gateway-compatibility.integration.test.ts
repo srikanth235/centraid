@@ -25,8 +25,7 @@ const supportedInfo = {
     backupWal: true,
     assistOAuth: true,
     automationTurns: true,
-    multiVaultReplica: true,
-    crossVaultPlacements: true,
+    seatReplica: true,
   },
 };
 

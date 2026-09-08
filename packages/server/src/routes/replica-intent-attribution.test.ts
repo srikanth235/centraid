@@ -18,6 +18,7 @@ import { describe, afterEach, expect, test } from "vitest";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { readReplicaIntentOutcome } from "@centraid/vault";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
@@ -173,6 +174,63 @@ describe("replica-intent-attribution suite", () => {
     expect(receiptDetail(vault)).toStrictEqual(before);
     expect(before).toMatchObject({ actingOwner: sid.ownerId });
     expect(enrollments.owners.get(sid.ownerId)?.label).toBe("Siddharth");
+  });
+
+  test("a receipt intent naming a foreign device is stamped with the session's principal", async () => {
+    // #996, R13. A reveal receipt is a DEVICE INTENT the gateway stamps, and a
+    // seat now decrypts locally — so the receipt is the only record of who
+    // looked. A body-supplied `deviceId` must therefore be inert: if the
+    // payload could name the device, "which seat revealed this secret" would
+    // be a claim rather than evidence, and the reveal trail would be
+    // forgeable by the one party it exists to hold to account.
+    const vault = await plane();
+    vault.recordAppInstall("planner", {
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
+    const input = { title: "revealed the wifi password" };
+    const intentId = `intent-${crypto.randomUUID()}`;
+    await handleReplicaIntent(
+      request({
+        intentId,
+        appId: "planner",
+        action: "add_task",
+        input,
+        // The forgery: a device this session is not.
+        deviceId: "someone-elses-phone",
+        payloadHash: crypto
+          .createHash("sha256")
+          .update(
+            JSON.stringify({ action: "add_task", appId: "planner", input })
+          )
+          .digest("hex"),
+      }),
+      response(),
+      {
+        plane: vault,
+        access: {
+          canWrite: true,
+          rememberDevice: true,
+          deviceId: "sid-phone",
+          appId: "planner",
+        },
+        dispatch: async () => {
+          const result = await vault.bridgeFor("planner")({
+            op: "invoke",
+            payload: { command: "schedule.add_task", input },
+          });
+          expect(result.ok, JSON.stringify(result)).toBe(true);
+          return { status: "executed" };
+        },
+      }
+    );
+
+    // The outcome is the SESSION's, and the name in the body reaches nothing.
+    expect(
+      readReplicaIntentOutcome(vault.db.vault, intentId, "sid-phone")
+    ).toMatchObject({ deviceId: "sid-phone" });
+    expect(
+      readReplicaIntentOutcome(vault.db.vault, intentId, "someone-elses-phone")
+    ).toBeUndefined();
   });
 
   test("an app cannot name another device to claim that device intent", async () => {

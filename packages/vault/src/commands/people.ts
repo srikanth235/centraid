@@ -19,6 +19,12 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  completeTask,
+  operationConditions,
+  reopenTask,
+  SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
+} from "../operations/index.js";
 import { annotate } from "./annotations.js";
 import {
   loadEntityRevision,
@@ -26,7 +32,7 @@ import {
   recordEntityRevision,
 } from "./entity-revisions.js";
 import { setStarred, starredExistsSql } from "./flags.js";
-import { contentItemFor } from "./knowledge.js";
+import { contentItemFor, setNoteRepresentation } from "./knowledge.js";
 import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { registerPeopleOrganizeCommands } from "./people-organize.js";
@@ -1053,48 +1059,139 @@ const ADD_TASK: CommandDefinition = {
   },
 };
 
-const TOGGLE_TASK: CommandDefinition = {
-  name: "people.toggle_task",
-  ownerSchema: "people",
-  inputSchema: {
-    type: "object",
-    required: ["task_id"],
-    additionalProperties: false,
-    properties: { task_id: { type: "string", minLength: 1 } },
+const PERSON_TASK_EXISTS_SQL = `SELECT count(*) AS n FROM schedule_task t
+             JOIN core_link l ON l.from_type = 'schedule.task' AND l.from_id = t.task_id
+             JOIN people_profile p ON p.party_id = l.to_id
+            WHERE t.task_id = :task_id AND l.to_type = 'core.party' AND l.valid_to IS NULL`;
+
+/** Both task commands are named by a task and nothing else. */
+const TASK_ID_ONLY_INPUT = {
+  type: "object",
+  required: ["task_id"],
+  additionalProperties: false,
+  properties: { task_id: { type: "string", minLength: 1 } },
+} as const;
+
+/** What either of them answers with; completion adds the successor's two. */
+const TASK_STATUS_OUTPUT = {
+  type: "object",
+  required: ["task_id", "status"],
+  properties: {
+    task_id: { type: "string" },
+    status: { type: "string" },
+    series_id: { type: ["string", "null"] },
   },
+} as const;
+
+/**
+ * COMPLETION IS ONE OPERATION, AND IT IS NOT PEOPLE'S (#996, ruling R21; drift
+ * ONT-27). `people.toggle_task` flipped the status with its own `CASE`
+ * expression: a second tap reopened a task the Tasks screen had just closed,
+ * and a repeating task completed from here never got its next occurrence
+ * because only Tasks' SQL knew how to spawn one. Both apps now call
+ * `operations/task-lifecycle.ts`, so what happens to a task does not depend on
+ * which screen the member was looking at, and the toggle is gone rather than
+ * kept beside its replacement.
+ */
+const COMPLETE_TASK: CommandDefinition = {
+  name: "people.complete_task",
+  ownerSchema: "people",
+  inputSchema: TASK_ID_ONLY_INPUT,
   outputSchema: {
-    type: "object",
-    required: ["task_id"],
-    properties: { task_id: { type: "string" } },
+    ...TASK_STATUS_OUTPUT,
+    properties: {
+      ...TASK_STATUS_OUTPUT.properties,
+      next_task_id: { type: "string" },
+      next_due_at: { type: "string" },
+    },
   },
   preconditions: [
     {
       name: "task_exists",
-      sql: `SELECT count(*) AS n FROM schedule_task t
-             JOIN core_link l ON l.from_type = 'schedule.task' AND l.from_id = t.task_id
-             JOIN people_profile p ON p.party_id = l.to_id
-            WHERE t.task_id = :task_id AND l.to_type = 'core.party' AND l.valid_to IS NULL`,
+      sql: PERSON_TASK_EXISTS_SQL,
       column: "n",
       op: "eq",
       value: 1,
     },
   ],
-  postconditions: [],
+  postconditions: [
+    {
+      name: "task_is_completed_and_stamped",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND status = 'completed'
+               AND completed_at IS NOT NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
+      // The successor of a recurring "call Mum" is still about Mum (ONT-27).
+      name: "successor_inherits_the_series_links",
+      sql: SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
   idempotency: "idempotent",
   risk: "low",
   handler: (ctx) => {
     const input = ctx.input as { task_id: string };
-    ctx.db
-      .prepare(
-        `UPDATE schedule_task
-            SET status = CASE status
-              WHEN 'completed' THEN 'needs-action' ELSE 'completed' END,
-                completed_at = CASE status WHEN 'completed' THEN NULL ELSE ? END
-          WHERE task_id = ?`
-      )
-      .run(ctx.now, input.task_id);
-    ctx.wrote("schedule.task", input.task_id);
-    return { task_id: input.task_id };
+    return {
+      ...completeTask(
+        {
+          db: ctx.db,
+          now: ctx.now,
+          newId: ctx.newId,
+          wrote: ctx.wrote,
+          cite: ctx.cite,
+        },
+        input.task_id
+      ),
+    };
+  },
+};
+
+const REOPEN_TASK: CommandDefinition = {
+  name: "people.reopen_task",
+  ownerSchema: "people",
+  inputSchema: TASK_ID_ONLY_INPUT,
+  outputSchema: TASK_STATUS_OUTPUT,
+  preconditions: [
+    {
+      name: "task_exists",
+      sql: PERSON_TASK_EXISTS_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "task_is_open_and_unstamped",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND status <> 'completed'
+               AND completed_at IS NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { task_id: string };
+    return {
+      ...reopenTask(
+        {
+          db: ctx.db,
+          now: ctx.now,
+          newId: ctx.newId,
+          wrote: ctx.wrote,
+        },
+        input.task_id
+      ),
+    };
   },
 };
 
@@ -1110,11 +1207,15 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
     properties: {
       party_id: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
-      // MM-DD; February 29 is real, April 31 is not.
+      // SHAPE HERE, CALENDAR IN THE OPERATION (#996, ruling R21; drift
+      // ONT-26). This pattern used to spell out the length of every month —
+      // one writer's private copy of the calendar, which is exactly why Atlas
+      // could write February 31 while this command refused it. The schema now
+      // says only "two digits, a hyphen, two digits"; whether that day exists
+      // is `people.important_date.write`'s question, asked of every writer.
       month_day: {
         type: "string",
-        pattern:
-          "^(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-9]))$",
+        pattern: "^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$",
       },
       reminder_on: { type: "boolean" },
     },
@@ -1132,6 +1233,9 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
       op: "eq",
       value: 1,
     },
+    // February 31 was refused by this command's input pattern and written by
+    // Atlas (#996, R21 / ONT-26). Both now meet the same condition.
+    ...operationConditions("people.important_date.write", "pre"),
   ],
   postconditions: [
     {
@@ -1836,6 +1940,7 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("knowledge.note", entryId);
+    setNoteRepresentation(ctx, entryId, contentId, "plain");
     const marker = conceptId(
       ctx,
       JOURNAL_SCHEME_URI,
@@ -1870,7 +1975,8 @@ export function registerPeopleCommands(gateway: Gateway): void {
   gateway.registerCommand(MOVE_PERSON);
   gateway.registerCommand(ADD_NOTE);
   gateway.registerCommand(ADD_TASK);
-  gateway.registerCommand(TOGGLE_TASK);
+  gateway.registerCommand(COMPLETE_TASK);
+  gateway.registerCommand(REOPEN_TASK);
   gateway.registerCommand(ADD_IMPORTANT_DATE);
   gateway.registerCommand(TOGGLE_REMINDER);
   gateway.registerCommand(ADD_RELATIONSHIP);

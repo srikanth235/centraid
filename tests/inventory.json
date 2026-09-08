@@ -2380,7 +2380,6 @@
       "packages/blueprints/src/app-boot/people.test.ts": [197, 275],
       "packages/blueprints/src/app-boot/photos.test.ts": [197, 293],
       "packages/blueprints/src/app-boot/tasks.test.ts": [197, 274],
-      "packages/blueprints/src/app-manifest-reads.test.ts": [1095, 7266],
       "packages/blueprints/src/app-manifests.test.ts": [1261, 8015],
       "packages/blueprints/src/app-meta-properties.test.ts": [1296, 10168],
       "packages/blueprints/src/app-meta.test.ts": [0, 2006],

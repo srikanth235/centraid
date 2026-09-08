@@ -18,7 +18,7 @@ import App from "./shell/App.js";
 import ErrorBoundary from "./shell/ErrorBoundary.js";
 import { Gallery } from "./ui/index.js";
 
-void import("../replica/shell-session.js")
+void import("../replica/shell-session-scopes.js")
   .then((module) => module.installReplicaStorageLifecycle())
   .catch(() => undefined);
 

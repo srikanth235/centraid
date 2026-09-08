@@ -58,31 +58,6 @@ interface VaultWhere {
   value?: unknown;
 }
 
-/** Consent-checked read of a canonical entity as a bounded window. */
-interface VaultReadRequest {
-  entity: string;
-  where?: VaultWhere[];
-  orderBy?: { column: string; dir?: "asc" | "desc" };
-  limit?: number;
-  /**
-   * "Give me the default window and tell me when it fills" (#922 0a). A read
-   * declaring neither `limit` nor this is REFUSED at the inline seat's
-   * boundary: the default cap is a bound a caller may take, never one the
-   * engine applies behind their back.
-   */
-  acceptTruncation?: boolean;
-}
-
-/** `ctx.vault.read` result: the projected rows plus the read's receipt id. */
-interface VaultReadResult {
-  rows: Record<string, unknown>[];
-  receiptId?: string;
-  /** Set only when the window cut rows off (#922 0a); absent means it did not. */
-  truncated?: boolean;
-  /** The window `rows` was produced under. */
-  appliedLimit?: number;
-}
-
 /** Full-text search over a text-indexed entity (each row carries `_snippet`). */
 interface VaultSearchRequest {
   entity: string;
@@ -125,8 +100,49 @@ interface VaultResolveResult {
  * worker boundary to the host, which holds the app's vault credential and
  * enforces consent — always `await`. Mirrors app-engine's `ScopedVault`.
  */
+/**
+ * ONE PAGE OF ONE HANDLER'S SQL (#996 wave 4, R8).
+ *
+ * `limit` is required, so a handler that declares no window does not compile —
+ * that is the whole of what replaces the truncation flag. The answer carries a
+ * cursor rather than a `truncated` flag: one says where to carry on, the other
+ * only that the answer was cut.
+ */
+interface VaultPageRequest {
+  /**
+   * The handler's statement, AS DATA. Not a closure: the same handler runs
+   * inline in the shell, across the seat worker's `postMessage` seam and on the
+   * gateway through a serialising bridge, and a function survives none of
+   * those. `select` must carry both of the order's columns — the cursor is
+   * read off the row by them, so there is no second place to get it wrong.
+   */
+  query: {
+    name: string;
+    select: string;
+    from: string;
+    where?: string;
+    bind?: readonly (string | number | null)[];
+    order: { sortColumn: string; pkColumn: string; descending: boolean };
+  };
+  limit: number;
+  after?: { sortKey: string; pk: string };
+  /**
+   * Draw the outbox's pending rows over this page (R23–R25). A list a member
+   * reads their own writes from passes it; a read measuring the file does not.
+   */
+  overlay?: { entity: string; rowIdColumn: string };
+}
+
+interface VaultPageResult<Row = Record<string, unknown>> {
+  rows: Row[];
+  /** Absent when the rows ended: the walk stops, it does not wrap. */
+  next?: { sortKey: string; pk: string };
+}
+
 interface VaultApi {
-  read: (request: VaultReadRequest) => Promise<VaultReadResult>;
+  page: <Row = Record<string, unknown>>(
+    request: VaultPageRequest
+  ) => Promise<VaultPageResult<Row>>;
   search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
   invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;
   /** Query a registered app view, clamped to this app's declared manifest. */
@@ -139,7 +155,6 @@ interface VaultApi {
   /** Plaintext of one entity's sealed columns — receipted per item (#293). */
   reveal: (request: Record<string, unknown>) => Promise<unknown>;
   /** Locker-only user-presence authentication; sessions stay host-memory-only (#630). */
-  authenticate: (request: Record<string, unknown>) => Promise<unknown>;
   /** Size-bounded derivative content fetch. */
   content: (request: Record<string, unknown>) => Promise<unknown>;
 }
@@ -194,6 +209,45 @@ interface TimeApi {
   }) => { missed: number; nextDue: string | null };
   /** Shift a wall-clock or zoned instant without host-TZ conversion. */
   shiftTemporal: (value: string, deltaMs: number) => string;
+  /**
+   * THE OCCURRENCE-KEY ADAPTER (#996, ruling R21; drift ONT-25). A recurrence
+   * exception is stored keyed on the series-local wall clock; three readers
+   * spelled that column `original_start` and read `undefined`, so a skipped
+   * occurrence came back. A handler hands the stored rows to `occurrence-
+   * ExceptionsOf` and never names a column of its own.
+   */
+  occurrenceExceptionsOf: <Override = Record<string, unknown>>(
+    rows: readonly Record<string, unknown>[],
+    series: { seriesType: OccurrenceSeriesType; seriesId: string }
+  ) => OccurrenceException<Override>[];
+  /** The exceptions in the shape `applyRecurrenceExceptions` takes. */
+  recurrenceExceptionsOf: (
+    exceptions: readonly OccurrenceException<{ start?: string }>[]
+  ) => RecurrenceException[];
+  /** The override in force at a series-local wall clock, occurrence scope
+   *  first and the latest `future` scope at or before it otherwise. */
+  overrideAt: <Override>(
+    exceptions: readonly OccurrenceException<Override>[],
+    localStart: string
+  ) => Override | null;
+}
+
+type OccurrenceSeriesType = "core.event" | "tally.recurring_expense";
+
+/** Series identity plus recurrence-local identity plus semantics, as one
+ *  value — the whole occurrence key (#996, ruling R21). */
+interface OccurrenceKey {
+  readonly seriesType: OccurrenceSeriesType;
+  readonly seriesId: string;
+  readonly localStart: string;
+  readonly semantics: RecurrenceSemantics;
+}
+
+interface OccurrenceException<Override = Record<string, unknown>> {
+  readonly key: OccurrenceKey;
+  readonly action: "skip" | "override";
+  readonly scope: "occurrence" | "future";
+  readonly override: Override | null;
 }
 
 /** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault, and time. */
@@ -623,6 +677,58 @@ interface CentraidClient {
   ) => Promise<StagedBlob>;
   /** Native haptics bridge (mobile shell only; feature-detected). */
   haptic?: Record<string, (() => void) | undefined>;
+  /**
+   * THE LOCKER DOOR (#996, rulings R13 and W6-D2). Feature-detected: a host
+   * that cannot unseal locally does not offer it.
+   *
+   * An app gets the PLAINTEXT OF ONE ROW PER RECEIPT and never the vault key.
+   * `K` lives on the shell side of this bridge, behind the member's unlock —
+   * an app surface that could read it could also exfiltrate it, and no receipt
+   * would record that, because nothing was revealed. There is no `unlock()`
+   * here for the same reason a locked `reveal` returns an answer instead of
+   * prompting: a door that can raise the passphrase prompt is a door that can
+   * be used to phish it. Screens render the SHELL's lock surface off `state()`
+   * and `subscribeLock()` rather than drawing their own.
+   */
+  locker?: CentraidLockerDoor;
+}
+
+/** Why a Locker reveal was refused. Typed, because "failed" is not renderable. */
+type CentraidLockerRefusalReason =
+  | "locked"
+  | "not_enrolled"
+  | "stale_key"
+  | "not_found"
+  | "unavailable";
+
+interface CentraidLockerRevealed {
+  readonly ok: true;
+  readonly rowId: string;
+  /** Column → plaintext, for the columns that held ciphertext. */
+  readonly values: Readonly<Record<string, string>>;
+  readonly receiptId?: string;
+}
+
+interface CentraidLockerRefused {
+  readonly ok: false;
+  readonly reason: CentraidLockerRefusalReason;
+  readonly message: string;
+}
+
+interface CentraidLockerState {
+  readonly status: "locked" | "unlocked";
+  /** Milliseconds until this session ends; 0 when locked. */
+  readonly remainingMs: number;
+}
+
+interface CentraidLockerDoor {
+  reveal: (opts: {
+    rowId: string;
+    entity?: string;
+    columns?: readonly string[];
+  }) => Promise<CentraidLockerRevealed | CentraidLockerRefused>;
+  state: () => CentraidLockerState;
+  subscribeLock: (listener: (state: CentraidLockerState) => void) => () => void;
 }
 
 /** The staging receipt the blob door returns for one contribution. */

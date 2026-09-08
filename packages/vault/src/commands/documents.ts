@@ -9,12 +9,14 @@
 // models, nothing invented. The scheme's `root` concept is the drive's top
 // level; every document carries exactly one folders-scheme tag.
 //
-// Version lineage is a `revises` core.link between CONTENT ITEMS (NEW ->
-// OLD, #272's relation fabric), never a column on core_document —
-// core_document.current_content_id only ever names the HEAD; the chain
-// behind it is walked through core_link. History never rewrites (rule R3):
-// restoring an old version asserts a new link forward, it never touches the
-// old ones. Trash is the DOCUMENT row's own deleted_at/purge_at lifecycle;
+// Version lineage is a chain of `core_entity_revision` OCCURRENCES (#996,
+// R20(a)): `core_document.current_revision_id` names the newest, and each
+// occurrence names the content that became current at that moment and the
+// occurrence before it. `current_content_id` only ever names the HEAD.
+// History never rewrites (rule R3): restoring an old version APPENDS a new
+// occurrence, it never touches the ones before it — and returning to bytes the
+// document already held is a new version rather than a node a content-keyed
+// walk had to collapse. Trash is the DOCUMENT row's own deleted_at/purge_at lifecycle;
 // superseded content items are durable — never auto-purged while their
 // document lives — and purge with the document only once nothing else still
 // needs them (gateway/duties.ts sweepLifecycle's lapsedDocuments pass).
@@ -25,12 +27,20 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  mediaTypeOfOwner,
+  mediaTypeSql,
+  setRepresentation,
+} from "../schema/representation.js";
 import { writeExtractedText } from "./enrich.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
-import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
-import { recordRevision } from "./revisions.js";
+import {
+  ForeignRevisionError,
+  recordBodyRevision,
+  revisionChainOf,
+} from "./revisions.js";
 
 /** Soft-deleted documents linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
@@ -237,8 +247,8 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
   if (input.data_uri !== undefined)
     assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
-    ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
-    : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
+    ? ctx.blobs.claimStaged(input.staged_sha)
+    : mintContentFromDataUri(ctx, input.data_uri!);
   const contentId = minted.contentId;
   ctx.wrote("core.content_item", contentId);
   const documentId = mintedId(ctx, "document_id");
@@ -249,6 +259,20 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(documentId, input.title, contentId, ctx.now, ctx.now);
   ctx.wrote("core.document", documentId);
+  // THIS DOCUMENT'S READING OF THE BYTES (#996, R20(b)). The same sha filed
+  // twice as two documents now carries two readings, so a second filing can
+  // no longer inherit the first import's media type.
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: DOCUMENT_TARGET_TYPE,
+    ownerId: documentId,
+    mediaType: minted.mediaType,
+    interpretation: "body",
+  });
+  // The FIRST occurrence (#996, R20(a)). A document's original body is a
+  // version like any other, so the chain starts here rather than being
+  // inferred later from the absence of a parent edge.
+  stampRevision(ctx, documentId, contentId, null);
   if (input.extracted_text)
     writeExtractedText(ctx, contentId, input.extracted_text);
   fileInto(ctx, documentId, input.folder_id ?? rootFolderId(ctx));
@@ -619,8 +643,8 @@ const EDIT_DOCUMENT: CommandDefinition = {
       // a scanned PDF or image goes through replace_document_content.
       name: "current_content_is_text",
       sql: `SELECT count(*) AS n FROM core_document d
-              JOIN core_content_item c ON c.content_id = d.current_content_id
-             WHERE d.document_id = :document_id AND c.media_type LIKE 'text/%'`,
+             WHERE d.document_id = :document_id
+               AND ${mediaTypeSql("'core.document'", "d.document_id")} LIKE 'text/%'`,
       column: "n",
       op: "eq",
       value: 1,
@@ -633,7 +657,8 @@ const EDIT_DOCUMENT: CommandDefinition = {
               EXISTS(SELECT 1 FROM core_document d
                        JOIN core_content_item c ON c.content_id = d.current_content_id
                       WHERE d.document_id = :document_id
-                        AND vault_content_text(c.media_type, c.content_uri) = :body_text)
+                        AND (SELECT ct.body_text FROM core_content_text ct
+                               WHERE ct.content_id = c.content_id) = :body_text)
               AND (SELECT CASE WHEN :title IS NULL THEN 1
                      ELSE EXISTS(SELECT 1 FROM core_document WHERE document_id = :document_id AND title = :title) END)
             ) AS n`,
@@ -647,6 +672,26 @@ const EDIT_DOCUMENT: CommandDefinition = {
   handler: editDocument,
 };
 
+/** The first occurrence of a wrapper, written and pointed at in one step. */
+function stampRevision(
+  ctx: HandlerCtx,
+  documentId: string,
+  contentId: string,
+  previousContentId: string | null
+): void {
+  const revisionId = recordBodyRevision(ctx, {
+    entityType: DOCUMENT_TARGET_TYPE,
+    entityId: documentId,
+    contentId,
+    previousContentId,
+  });
+  ctx.db
+    .prepare(
+      "UPDATE core_document SET current_revision_id = ? WHERE document_id = ?"
+    )
+    .run(revisionId, documentId);
+}
+
 function editDocument(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     document_id: string;
@@ -655,26 +700,43 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
   };
   const doc = ctx.db
     .prepare(
-      `SELECT d.current_content_id AS content_id, c.media_type AS media_type
-         FROM core_document d JOIN core_content_item c ON c.content_id = d.current_content_id
-        WHERE d.document_id = ?`
+      `SELECT d.current_content_id AS content_id,
+              ${mediaTypeSql("'core.document'", "d.document_id")} AS media_type
+         FROM core_document d WHERE d.document_id = ?`
     )
     .get(input.document_id) as
-    | { content_id: string; media_type: string }
+    | { content_id: string; media_type: string | null }
     | undefined;
   if (!doc) throw new Error("document vanished between check and execute");
   // Same mint path add_document takes (#296): text stays inline, the
   // FTS triggers decode it in-transaction. The media type carries forward —
-  // an edit changes the words, never the format.
-  const dataUri = `data:${doc.media_type};charset=utf-8,${encodeURIComponent(input.body_text)}`;
+  // an edit changes the words, never the format — and it is read off THIS
+  // document's representation, not off bytes other documents also use (#996).
+  const mediaType = doc.media_type ?? "text/plain";
+  const dataUri = `data:${mediaType};charset=utf-8,${encodeURIComponent(input.body_text)}`;
   assertInlineDataUriWithinBudget(dataUri);
-  const minted = mintContentFromDataUri(ctx, dataUri, {});
+  const minted = mintContentFromDataUri(ctx, dataUri);
   const sets: string[] = ["updated_at = ?"];
   const values: string[] = [ctx.now];
   if (minted.contentId !== doc.content_id) {
-    recordRevision(ctx, minted.contentId, doc.content_id);
     sets.push("current_content_id = ?");
     values.push(minted.contentId);
+    sets.push("current_revision_id = ?");
+    values.push(
+      recordBodyRevision(ctx, {
+        entityType: DOCUMENT_TARGET_TYPE,
+        entityId: input.document_id,
+        contentId: minted.contentId,
+        previousContentId: doc.content_id,
+      })
+    );
+    setRepresentation(ctx.db, ctx.newId, ctx.now, {
+      contentId: minted.contentId,
+      ownerType: DOCUMENT_TARGET_TYPE,
+      ownerId: input.document_id,
+      mediaType,
+      interpretation: "body",
+    });
   }
   if (input.title !== undefined) {
     sets.push("title = ?");
@@ -690,7 +752,7 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
     claim:
       minted.contentId === doc.content_id
         ? `document ${input.document_id} edited; bytes unchanged (dedup)`
-        : `document ${input.document_id} edited; new revision ${minted.contentId} revises ${doc.content_id}`,
+        : `document ${input.document_id} edited; new occurrence naming ${minted.contentId}, after ${doc.content_id}`,
     entityType: "core.document",
     entityId: input.document_id,
   });
@@ -794,16 +856,33 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
   if (input.data_uri !== undefined)
     assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
-    ? ctx.blobs.claimStaged(input.staged_sha, {})
-    : mintContentFromDataUri(ctx, input.data_uri!, {});
+    ? ctx.blobs.claimStaged(input.staged_sha)
+    : mintContentFromDataUri(ctx, input.data_uri!);
   const contentId = minted.contentId;
   ctx.wrote("core.content_item", contentId);
+  // Replacing the bytes re-states what THIS document reads them as (#996):
+  // a scan replaced by a PDF is a new reading, not a new byte row's property.
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: DOCUMENT_TARGET_TYPE,
+    ownerId: input.document_id,
+    mediaType: minted.mediaType,
+    interpretation: "body",
+  });
   const sets: string[] = ["updated_at = ?"];
   const values: string[] = [ctx.now];
   if (contentId !== doc.current_content_id) {
-    recordRevision(ctx, contentId, doc.current_content_id);
     sets.push("current_content_id = ?");
     values.push(contentId);
+    sets.push("current_revision_id = ?");
+    values.push(
+      recordBodyRevision(ctx, {
+        entityType: DOCUMENT_TARGET_TYPE,
+        entityId: input.document_id,
+        contentId,
+        previousContentId: doc.current_content_id,
+      })
+    );
   }
   if (input.title !== undefined) {
     sets.push("title = ?");
@@ -819,7 +898,7 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
     claim:
       contentId === doc.current_content_id
         ? `document ${input.document_id} content replaced; bytes unchanged (dedup)`
-        : `document ${input.document_id} content replaced; new revision ${contentId} revises ${doc.current_content_id}`,
+        : `document ${input.document_id} content replaced; new occurrence naming ${contentId}, after ${doc.current_content_id}`,
     entityType: "core.document",
     entityId: input.document_id,
   });
@@ -827,9 +906,9 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 // core.document_history is deliberately NOT a command — the chain is a plain
-// read: walk core_link WHERE from_type='core.content_item' AND relation
-// notation 'revises' starting at the document's current_content_id. See
-// documents.test.ts for the exact SQL an app-plane read would run.
+// read: walk `core_entity_revision` from the document's `current_revision_id`
+// through `parent_revision_id`. See documents.test.ts for the exact SQL an
+// app-plane read would run.
 const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
   name: "core.restore_document_version",
   ownerSchema: "core",
@@ -867,23 +946,22 @@ const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
       value: 0,
     },
     {
-      // The target must be a genuine ancestor of the current content, walked
-      // through live `revises` links — never an arbitrary content item.
-      // Restoring an old version can make that version's content id gain a
-      // NEW outgoing edge (restore IS a revision, rule R3), which cycles the
-      // graph back through content already visited — UNION (not UNION ALL)
-      // is load-bearing here: SQLite's recursive CTE drops repeat rows, so
-      // the walk still terminates instead of looping the cycle forever.
+      // The target must be a content item THIS DOCUMENT'S OWN occurrences name
+      // (#996, R20(a)) — never an arbitrary content item, and never another
+      // document's history that happens to share the bytes. The walk is over
+      // `parent_revision_id`, so a chain that returns to bytes it already held
+      // (A→B→A→B) is four occurrences and terminates on the occurrence ids
+      // rather than on a de-duplicating UNION over content.
       name: "target_in_chain",
-      sql: `WITH RECURSIVE chain(content_id) AS (
-              SELECT current_content_id FROM core_document WHERE document_id = :document_id
+      sql: `WITH RECURSIVE chain(revision_id, content_id, parent_revision_id) AS (
+              SELECT r.revision_id, r.content_id, r.parent_revision_id
+                FROM core_entity_revision r
+                JOIN core_document d ON d.current_revision_id = r.revision_id
+               WHERE d.document_id = :document_id
               UNION
-              SELECT l.to_id FROM core_link l
-                JOIN chain ON l.from_type = 'core.content_item' AND l.from_id = chain.content_id
-               WHERE l.to_type = 'core.content_item' AND l.valid_to IS NULL
-                 AND l.relation_concept_id = (SELECT c.concept_id FROM core_concept c
-                      JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                     WHERE s.uri = ${RELATIONS_SCHEME_URI_SQL} AND c.notation = 'revises')
+              SELECT r.revision_id, r.content_id, r.parent_revision_id
+                FROM core_entity_revision r
+                JOIN chain ON chain.parent_revision_id = r.revision_id
             )
             SELECT count(*) AS n FROM chain WHERE content_id = :content_id`,
       column: "n",
@@ -895,14 +973,12 @@ const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
     {
       name: "restored_and_recorded",
       sql: `SELECT (
-              EXISTS(SELECT 1 FROM core_document
-                      WHERE document_id = :document_id AND current_content_id = :content_id)
-              AND EXISTS(SELECT 1 FROM core_link l
-                          WHERE l.from_type = 'core.content_item' AND l.from_id = :content_id
-                            AND l.to_type = 'core.content_item' AND l.valid_to IS NULL
-                            AND l.relation_concept_id = (SELECT c.concept_id FROM core_concept c
-                                 JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                                WHERE s.uri = ${RELATIONS_SCHEME_URI_SQL} AND c.notation = 'revises'))
+              EXISTS(SELECT 1 FROM core_document d
+                      JOIN core_entity_revision r ON r.revision_id = d.current_revision_id
+                     WHERE d.document_id = :document_id
+                       AND d.current_content_id = :content_id
+                       AND r.content_id = :content_id
+                       AND r.parent_revision_id IS NOT NULL)
             ) AS n`,
       column: "n",
       op: "eq",
@@ -922,14 +998,41 @@ function restoreDocumentVersion(ctx: HandlerCtx): Record<string, unknown> {
     )
     .get(input.document_id) as { current_content_id: string } | undefined;
   if (!doc) throw new Error("document vanished between check and execute");
-  // Restore is itself a new revision (rule R3): the old chain stays exactly
-  // as it was, and this link only ever appends forward.
-  recordRevision(ctx, input.content_id, doc.current_content_id);
+  // A REVISION BELONGS TO ONE OBJECT (#996, R20(a)). While a version was a
+  // content id, any document sharing those bytes — or simply naming them —
+  // could be restored into this one. The chain is this document's own
+  // occurrences, so a content id that is not in it is not its history.
+  const chain = revisionChainOf(ctx, DOCUMENT_TARGET_TYPE, input.document_id);
+  if (!chain.some((occurrence) => occurrence.contentId === input.content_id)) {
+    throw new ForeignRevisionError(input.document_id, input.content_id);
+  }
+  // Restore is itself a NEW occurrence (rule R3): nothing before it is
+  // rewritten, and returning to bytes the document already held is a fourth
+  // occurrence, not a no-op.
+  const revisionId = recordBodyRevision(ctx, {
+    entityType: DOCUMENT_TARGET_TYPE,
+    entityId: input.document_id,
+    contentId: input.content_id,
+    previousContentId: doc.current_content_id,
+  });
   ctx.db
     .prepare(
-      "UPDATE core_document SET current_content_id = ?, updated_at = ? WHERE document_id = ?"
+      "UPDATE core_document SET current_content_id = ?, current_revision_id = ?, updated_at = ? WHERE document_id = ?"
     )
-    .run(input.content_id, ctx.now, input.document_id);
+    .run(input.content_id, revisionId, ctx.now, input.document_id);
+  // The representation follows the head (#996, R20(b)): a restore changes
+  // WHICH bytes this document reads, never HOW it reads them.
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId: input.content_id,
+    ownerType: DOCUMENT_TARGET_TYPE,
+    ownerId: input.document_id,
+    mediaType:
+      mediaTypeOfOwner(ctx.db, {
+        ownerType: DOCUMENT_TARGET_TYPE,
+        ownerId: input.document_id,
+      }) ?? "text/plain",
+    interpretation: "body",
+  });
   ctx.wrote("core.document", input.document_id);
   ctx.cite({
     claim: `document ${input.document_id} restored to prior version ${input.content_id}`,

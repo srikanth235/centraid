@@ -112,13 +112,13 @@ describe("schedule organization commands", () => {
   test("occurrence and future edits persist stable exception identities", () => {
     const eventId = recurringEvent();
     for (const [scope, original, start] of [
-      ["occurrence", "2026-07-13T03:30:00.000Z", "2026-07-13T05:30:00.000Z"],
-      ["future", "2026-07-20T03:30:00.000Z", "2026-07-20T04:30:00.000Z"],
+      ["occurrence", "2026-07-13T09:00:00", "2026-07-13T05:30:00.000Z"],
+      ["future", "2026-07-20T09:00:00", "2026-07-20T04:30:00.000Z"],
     ]) {
       expect(
         invoke("schedule.edit_event_occurrence", {
           event_id: eventId,
-          original_start: original,
+          original_start_local: original,
           scope,
           action: "override",
           dtstart: start,
@@ -168,7 +168,7 @@ describe("schedule organization commands", () => {
     expect(
       invoke("schedule.edit_event_occurrence", {
         event_id: eventId,
-        original_start: "2026-07-13T03:30:00.000Z",
+        original_start_local: "2026-07-13T09:00:00",
         scope: "occurrence",
         action: "override",
         summary: "Planning (moved)",
@@ -206,7 +206,7 @@ describe("schedule organization commands", () => {
     expect(
       invoke("schedule.edit_event_occurrence", {
         event_id: eventId,
-        original_start: "2026-07-06T03:30:00.000Z",
+        original_start_local: "2026-07-06T09:00:00",
         scope: "series",
         action: "override",
         summary: "Weekly planning (retargeted)",
@@ -229,7 +229,7 @@ describe("schedule organization commands", () => {
     expect(
       invoke("schedule.edit_event_occurrence", {
         event_id: eventId,
-        original_start: "2026-07-06T04:00:00.000Z",
+        original_start_local: "2026-07-06T09:30:00",
         scope: "series",
         action: "skip",
       }).status
@@ -244,7 +244,7 @@ describe("schedule organization commands", () => {
     expect(
       invoke("schedule.edit_event_occurrence", {
         event_id: eventId,
-        original_start: "2026-07-06T04:00:00.000Z",
+        original_start_local: "2026-07-06T09:30:00",
         scope: "series",
         action: "skip",
       }).status

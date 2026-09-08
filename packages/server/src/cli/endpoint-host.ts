@@ -32,7 +32,6 @@ import {
   isDirectHostRequest,
   isLoopbackRequest,
 } from "../routes/route-helpers.js";
-import { recordCompanionAttenuation } from "../serve/companion-access.js";
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
@@ -51,15 +50,6 @@ import type { DaemonLayout } from "./paths.js";
 
 export const DEVICE_HEADER = DEVICE_IDENTITY_HEADER;
 export const DEVICE_PROOF_HEADER = TUNNEL_DEVICE_PROOF_HEADER;
-const COMPANION_MODULES = new Set([
-  "locker",
-  "tasks",
-  "notes",
-  "docs",
-  "agenda",
-  "people",
-]);
-
 /** A read failure is an empty list: no relay hint ⇒ reachable directly. */
 function relayHintsOf(ticket: string): string[] {
   try {
@@ -68,20 +58,6 @@ function relayHintsOf(ticket: string): string[] {
   } catch {
     return [];
   }
-}
-
-/** The surface set a Companion pairing request declares, validated. */
-function companionGrantProfile(value: unknown): string[] | undefined | null {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) return null;
-  if (
-    !value.every(
-      (module) => typeof module === "string" && COMPANION_MODULES.has(module)
-    )
-  ) {
-    return null;
-  }
-  return [...new Set(value as string[])];
 }
 
 export interface DaemonDevicePlane {
@@ -229,13 +205,6 @@ export function makeDaemonDevicePlane(input: {
     ) {
       return { ok: false, error: "bad_request" };
     }
-    const surfaces = companionGrantProfile(request.grantProfile);
-    if (request.platform === "extension" && surfaces === undefined) {
-      return { ok: false, error: "missing_grant_profile" };
-    }
-    if (surfaces === null) {
-      return { ok: false, error: "bad_grant_profile" };
-    }
     const registry = input.vaults();
     if (!registry) return { ok: false, error: "gateway_not_ready" };
     const enrolled = tickets.redeemAndEnroll(
@@ -249,7 +218,6 @@ export function makeDaemonDevicePlane(input: {
         ...(request.rememberDevice === undefined
           ? {}
           : { rememberDevice: request.rememberDevice }),
-        ...(surfaces === undefined ? {} : { surfaces }),
       }
     );
     const primary = enrolled?.[0];
@@ -265,22 +233,7 @@ export function makeDaemonDevicePlane(input: {
         ownerPartyId: granted.boot.ownerPartyId,
         name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
         ...(request.platform ? { platform: request.platform } : {}),
-        // `trust` only asks "may this device act" (#726); the attenuation
-        // below is orthogonal to it.
-        trust: "full",
       });
-      // The ticket the owner minted IS the answer, so it is written into the
-      // vault as authority rows here and projected for the request path in the
-      // same act (#928 A6). A Companion enrolled into a vault that is not
-      // mounted gets no rows and no projection, and is refused until it is —
-      // the closed direction.
-      if (surfaces !== undefined) {
-        recordCompanionAttenuation(enrollments, granted, {
-          endpointId,
-          surfaces,
-          now: new Date().toISOString(),
-        });
-      }
     }
     logger.info(
       `device plane: enrolled ${endpointId.slice(0, 10)}… as owner ${primary.ownerLabel} into ` +

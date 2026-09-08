@@ -70,7 +70,11 @@ export const peoplePendingProjection = definePendingProjection({
     "move-person": ({ input }) => profile(input),
     "add-note": ({ input }) => profile(input),
     "add-task": ({ input }) => profile(input),
-    "toggle-task": {
+    "complete-task": {
+      excluded: true,
+      reason: "A task id does not identify the parent People row.",
+    },
+    "reopen-task": {
       excluded: true,
       reason: "A task id does not identify the parent People row.",
     },

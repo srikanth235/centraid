@@ -9,6 +9,7 @@ import {
   findScheme,
 } from "../../_shared/concept-scheme-kit.ts";
 import { DAY_MS } from "../../_shared/format-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 
 interface RawParty {
   party_id: string;
@@ -30,6 +31,7 @@ interface RawConcept {
 }
 
 interface RawTag {
+  tag_id: string;
   target_id: string;
   concept_id: string;
 }
@@ -39,6 +41,7 @@ interface RawTask {
   status?: string;
   title?: string;
   due_at?: string | null;
+  project_id?: string | null;
 }
 
 type RelationshipTier = "inner" | "outer";
@@ -146,70 +149,99 @@ export default async function dayContext({
   try {
     // Half-open, so date-only and timed `due_at` both land.
     const dueUpper = addDays(to, 1);
-    const [parties, tasks, schemes] = await Promise.all([
-      ctx.vault.read({
-        entity: "core.party",
-        where: [
-          { column: "kind", op: "eq", value: "person" },
-          { column: "birth_date", op: "not-null" },
-        ],
+    const statusIn = inList("status", OPEN_STATUSES);
+    const [partyRows, taskPage, schemeRows] = await Promise.all([
+      ctx.vault.page<RawParty>({
+        query: {
+          name: "agenda.dayContext.birthdays",
+          select: "party_id, display_name, kind, birth_date",
+          from: "core_party",
+          where: "kind = ? AND birth_date IS NOT NULL",
+          bind: ["person"],
+          order: {
+            sortColumn: "party_id",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        },
         limit: PARTY_CAP,
       }),
-      ctx.vault.read({
-        entity: "schedule.task",
-        where: [
-          { column: "status", op: "in", value: OPEN_STATUSES },
-          { column: "due_at", op: "gte", value: from },
-          { column: "due_at", op: "lt", value: dueUpper },
-        ],
-        // Due order: a shelf lists the day's earliest rows.
-        orderBy: { column: "due_at", dir: "asc" },
+      // Due order: a shelf lists the day's earliest rows.
+      ctx.vault.page<RawTask>({
+        query: {
+          name: "agenda.dayContext.dueTasks",
+          select: "task_id, status, title, due_at, project_id",
+          from: "schedule_task",
+          where: `${statusIn.sql} AND due_at >= ? AND due_at < ?`,
+          bind: [...statusIn.bind, from, dueUpper],
+          order: {
+            sortColumn: "due_at",
+            pkColumn: "task_id",
+            descending: false,
+          },
+        },
         limit: TASK_CAP,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        where: [{ column: "uri", op: "eq", value: FLAGS_SCHEME_URI }],
+      readPages<RawScheme>(ctx, {
+        name: "agenda.dayContext.flagsScheme",
+        select: "scheme_id, uri",
+        from: "core_concept_scheme",
+        where: "uri = ?",
+        bind: [FLAGS_SCHEME_URI],
+        order: {
+          sortColumn: "scheme_id",
+          pkColumn: "scheme_id",
+          descending: false,
+        },
       }),
     ]);
 
     // No marker means nobody is starred: an honest `outer`.
-    const flagsScheme = findScheme(
-      (schemes.rows ?? []) as unknown as RawScheme[],
-      FLAGS_SCHEME_URI
-    );
+    const flagsScheme = findScheme(schemeRows, FLAGS_SCHEME_URI);
     const concepts = flagsScheme
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.concept",
-          where: [
-            { column: "scheme_id", op: "eq", value: flagsScheme.scheme_id },
-          ],
+      ? await readPages<RawConcept>(ctx, {
+          name: "agenda.dayContext.flagConcepts",
+          select: "concept_id, scheme_id, notation",
+          from: "core_concept",
+          where: "scheme_id = ?",
+          bind: [flagsScheme.scheme_id],
+          order: {
+            sortColumn: "concept_id",
+            pkColumn: "concept_id",
+            descending: false,
+          },
         })
-      : { rows: [] };
+      : [];
     const starredConceptId = findConcept(
-      (concepts.rows ?? []) as unknown as RawConcept[],
+      concepts,
       flagsScheme,
       STARRED_NOTATION
     )?.concept_id;
     const starTags = starredConceptId
-      ? await ctx.vault.read({
-          entity: "core.tag",
-          where: [
-            { column: "target_type", op: "eq", value: "core.party" },
-            { column: "concept_id", op: "eq", value: starredConceptId },
-          ],
+      ? await ctx.vault.page<RawTag>({
+          query: {
+            name: "agenda.dayContext.starTags",
+            select: "tag_id, target_type, target_id, concept_id",
+            from: "core_tag",
+            where: "target_type = ? AND concept_id = ?",
+            bind: ["core.party", starredConceptId],
+            order: {
+              sortColumn: "tag_id",
+              pkColumn: "tag_id",
+              descending: false,
+            },
+          },
           limit: TAG_CAP,
         })
-      : { rows: [] };
+      : { rows: [] as RawTag[] };
     const starred = new Set(
-      ((starTags.rows ?? []) as unknown as RawTag[])
+      starTags.rows
         .filter((tag) => tag.concept_id === starredConceptId)
         .map((tag) => tag.target_id)
     );
 
     const birthdays: BirthdayFact[] = [];
-    for (const party of (parties.rows ?? []) as unknown as RawParty[]) {
+    for (const party of partyRows.rows) {
       if (party.kind !== undefined && party.kind !== "person") continue;
       const monthDay = monthDayOf(party.birth_date);
       if (!monthDay) continue;
@@ -232,7 +264,7 @@ export default async function dayContext({
     // Days with no due task are absent, not zero-filled.
     const counts = new Map<string, number>();
     const listed = new Map<string, DueTask[]>();
-    for (const task of (tasks.rows ?? []) as unknown as RawTask[]) {
+    for (const task of taskPage.rows) {
       if (task.status !== undefined && !OPEN_STATUSES.includes(task.status))
         continue;
       const day = dayOf(task.due_at);

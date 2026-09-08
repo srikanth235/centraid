@@ -30,6 +30,34 @@ export function sharedWithOutcome(count: number): string {
 export const SHARE_FAILED = "Could not share with the selected people.";
 
 /**
+ * SHARING IS A COPY, NOT A LEASE (#996, R10) — said in the sheet, before the
+ * decision, because it is the part of a share a person cannot undo by
+ * changing their mind afterwards. Ending a share does remove the copy this
+ * product placed and does stop updates; what it cannot reach is a copy the
+ * recipient took out of their vault, and a sentence that implied otherwise
+ * would be the product promising something it has no mechanism for.
+ */
+export const SHARE_IS_A_COPY =
+  "Ending a share removes their copy and stops updates; anything they exported first stays theirs.";
+
+/**
+ * EGRESS ANSWERS DO NOT TRAVEL WITH A SHARE (#996, R18). The copy is enriched
+ * by the RECEIVING vault under the recipient's own answers — so a sender whose
+ * captions are off does not thereby keep them off for the person they shared
+ * with, and the sheet says so rather than letting the sender assume it.
+ */
+export const SHARE_ENRICHMENT_IS_THEIRS =
+  "Their vault makes its own thumbnails, text and search for the copy, under their settings.";
+
+/**
+ * LEAVING A SHARED VAULT. A member who leaves keeps nothing of the vault
+ * itself and loses no copy already placed in their own — the two are different
+ * things, and the one question people actually ask is which.
+ */
+export const LEAVING_SHARED_VAULT =
+  "Leaving ends your access to this vault; copies already shared into your own vault stay.";
+
+/**
  * The denied-vault banner's title, said the same way by every app's chrome.
  *
  * A banner is one sentence: the state, plus one action (DESIGN.md → Copy). The

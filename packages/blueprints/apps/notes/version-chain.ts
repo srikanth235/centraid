@@ -1,14 +1,23 @@
-import { RELATIONS_SCHEME_URI } from "../_shared/concept-scheme-kit.ts";
+// A NOTE'S VERSION CHAIN IS ITS OWN OCCURRENCES (#996, ruling R20(a)).
+//
+// Walk `knowledge_note.current_revision_id` through `parent_revision_id`; each
+// occurrence names the content that became current at that moment. THE CHAIN IS
+// APPEND-ONLY: a restore appends a new head naming the body it brings back and
+// nothing between is rewritten, which is why `current` is a position (index 0)
+// and never a stored flag.
+//
+// It was a `revises` content→content link chain — a second history mechanism
+// beside the one table [#916] ruled the only one — and it keyed a version by
+// its CONTENT id, so a note that returned to a body it already held collapsed
+// two versions into one node, and two notes with identical bodies shared one
+// history. Shared by the web query handler and the phone so both seats read
+// one spelling of the walk.
+
 import type { VaultRow } from "./filing.ts";
-// THE CHAIN IS APPEND-ONLY: a restore appends a new head pointing at the body
-// it brings back and nothing between is rewritten, which is why `current` is a
-// position (index 0) and never a stored flag.
 import { decodeTextContent } from "./format.ts";
 import type { NoteVersion } from "./types.ts";
 
-const REVISES_NOTATION = "revises";
-const CONTENT_TYPE = "core.content_item";
-/** A cycle is possible (a restore points back at an older body). */
+/** A malformed chain terminates here; a well-formed one on a null parent. */
 const MAX_CHAIN_STEPS = 500;
 
 function text(row: VaultRow, key: string): string {
@@ -17,75 +26,53 @@ function text(row: VaultRow, key: string): string {
 }
 
 export interface ChainRows {
+  /** The note's current body, the answer when it has no occurrence yet. */
   headContentId: string;
-  links: readonly VaultRow[];
-  concepts: readonly VaultRow[];
-  schemes: readonly VaultRow[];
+  currentRevisionId: string | null;
+  /** `core.entity_revision` rows; foreign ones are filtered here. */
+  revisions: readonly VaultRow[];
+  /** When given, only this note's occurrences are walked. */
+  noteId?: string;
 }
 
 export interface NoteVersionChain {
   /** Head first, then each older body. */
   contentIds: readonly string[];
-  /** When the edge OUT of a content id was asserted — that version's date. */
+  /** The instant each version stopped being current — its occurrence's. */
   assertedAt: ReadonlyMap<string, string>;
 }
 
-export function revisesConceptId(rows: {
-  concepts: readonly VaultRow[];
-  schemes: readonly VaultRow[];
-}): string | null {
-  const relations = rows.schemes.find(
-    (scheme) => text(scheme, "uri") === RELATIONS_SCHEME_URI
-  );
-  if (!relations) return null;
-  const schemeId = text(relations, "scheme_id");
-  const concept = rows.concepts.find(
-    (row) =>
-      text(row, "scheme_id") === schemeId &&
-      text(row, "notation") === REVISES_NOTATION
-  );
-  return concept ? text(concept, "concept_id") || null : null;
-}
-
-/** The ids alone, so a caller can bound its content read to the chain. */
 export function noteVersionChain(rows: ChainRows): NoteVersionChain {
-  const head = rows.headContentId;
   const assertedAt = new Map<string, string>();
-  if (!head) return { contentIds: [], assertedAt };
+  if (!rows.headContentId) return { contentIds: [], assertedAt };
 
-  const relation = revisesConceptId(rows);
-  const older = new Map<string, { to: string; validFrom: string }[]>();
-  if (relation) {
-    for (const link of rows.links) {
-      if (text(link, "from_type") !== CONTENT_TYPE) continue;
-      if (text(link, "to_type") !== CONTENT_TYPE) continue;
-      if (text(link, "relation_concept_id") !== relation) continue;
-      if (link["valid_to"] != null) continue;
-      const from = text(link, "from_id");
-      const to = text(link, "to_id");
-      const validFrom = text(link, "valid_from");
-      if (!from || !to || !validFrom) continue;
-      const edges = older.get(from);
-      if (edges) edges.push({ to, validFrom });
-      else older.set(from, [{ to, validFrom }]);
-    }
-    for (const edges of older.values())
-      edges.sort((left, right) =>
-        right.validFrom.localeCompare(left.validFrom)
-      );
+  const byId = new Map<string, VaultRow>();
+  for (const revision of rows.revisions) {
+    if (text(revision, "entity_type") !== "knowledge.note") continue;
+    if (rows.noteId && text(revision, "entity_id") !== rows.noteId) continue;
+    const id = text(revision, "revision_id");
+    if (id) byId.set(id, revision);
   }
 
-  const contentIds = [head];
-  const seen = new Set([head]);
-  let at = head;
-  for (let step = 0; step < MAX_CHAIN_STEPS; step += 1) {
-    const next = older.get(at)?.[0];
-    if (!next || seen.has(next.to)) break;
-    assertedAt.set(at, next.validFrom);
-    seen.add(next.to);
-    contentIds.push(next.to);
-    at = next.to;
+  const contentIds: string[] = [];
+  const seen = new Set<string>();
+  let at = rows.currentRevisionId;
+  for (let step = 0; at && step < MAX_CHAIN_STEPS; step += 1) {
+    if (seen.has(at)) break;
+    seen.add(at);
+    const revision = byId.get(at);
+    if (!revision) break;
+    const contentId = text(revision, "content_id");
+    if (!contentId) break;
+    contentIds.push(contentId);
+    // A content id can appear twice; the date shown is that occurrence's.
+    if (!assertedAt.has(contentId))
+      assertedAt.set(contentId, text(revision, "recorded_at"));
+    at = text(revision, "parent_revision_id") || null;
   }
+  // A note minted before the wrapper carried a pointer still has one version:
+  // the body it is currently made of. Honest absence, not a hole.
+  if (contentIds.length === 0) contentIds.push(rows.headContentId);
   return { contentIds, assertedAt };
 }
 

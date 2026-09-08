@@ -97,6 +97,13 @@ export function selectPhotoMosaic(
   rows: readonly ReplicaRow[],
   gatewayBase: string | undefined,
   pinned: (scopeId: string, contentId: string) => string | undefined,
+  /**
+   * The vault the rows came out of, for a row that does not name one.
+   * A seat page row is the TABLE's columns and carries no `__centraidScopeId`
+   * (#996 wave 5); a seat holds one file, so its own vault is the scope, and
+   * an empty one addresses no blob at all.
+   */
+  fallbackScopeId = "",
   count = MOSAIC_SLOTS
 ): TilePhoto[] {
   return [...rows]
@@ -105,7 +112,7 @@ export function selectPhotoMosaic(
       const contentId = text(row, "content_id");
       const assetId = text(row, "asset_id");
       if (!contentId || !assetId) return [];
-      const scopeId = text(row, "__centraidScopeId");
+      const scopeId = text(row, "__centraidScopeId") || fallbackScopeId;
       const local = pinned(scopeId, contentId);
       if (local) return [{ id: assetId, uri: local }];
       if (!gatewayBase) return [{ id: assetId }];

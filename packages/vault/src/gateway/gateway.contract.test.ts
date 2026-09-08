@@ -1392,8 +1392,8 @@ describe("gateway", () => {
         .run(expiring!);
       db.vault
         .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
-         VALUES ('c-old', 'text/plain', 'file:///x', 'h1', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
+          `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
+         VALUES ('c-old', 'file:///x', '33112ee14ee469c3eb52fe90322ec81dd404a0093d565a6d71ce77cbc8124e3b', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
         )
         .run();
       // Tags on the doomed row (its folder filing, its star) purge with it —
@@ -1426,8 +1426,8 @@ describe("gateway", () => {
       // has passed: the asset row purges, the bytes stay (#274).
       db.vault
         .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES ('c-live', 'image/png', 'data:image/png;base64,xx', 'h2', 2, '2019-12-31T00:00:00Z')`
+          `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES ('c-live', 'data:image/png;base64,xx', 'f998fe06afa0cfbe73e0449dc2b1698309e1b5714960f027b2858312b152c275', 2, '2019-12-31T00:00:00Z')`
         )
         .run();
       db.vault
@@ -1452,26 +1452,39 @@ describe("gateway", () => {
       expect(contentStays.n).toBe(1);
     });
 
-    test("readonly device may read but never act", () => {
-      const ro = enrollDevice(
-        db,
-        boot.ownerPartyId,
-        "readonly-tablet",
-        "readonly"
-      );
+    /*
+     * ENROLLMENT IS FULL TRUST (#996, R11). This case used to enroll a
+     * "readonly" seat and prove it could read but not act — a narrowing that
+     * lived in the authority plane as a `device` principal, and no longer
+     * exists. A seat holds this vault or it does not, so what replaces it is
+     * the boundary that is left: an enrolled seat acts with the owner's reach,
+     * and revoking one TAKES ITS KEY rather than narrowing an answer about it.
+     */
+    test("an enrolled seat acts with the owner's reach until its key is taken", () => {
+      const seat = enrollDevice(db, boot.ownerPartyId, "kitchen-tablet");
       const cred: Credential = {
         kind: "device",
-        deviceId: ro.deviceId,
-        deviceKey: ro.deviceKey,
+        deviceId: seat.deviceId,
+        deviceKey: seat.deviceKey,
       };
       expect(
         gw.read(cred, { entity: "core.party" }).rows.length
       ).toBeGreaterThan(0);
-      const outcome = gw.invoke(cred, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-      });
-      expect(outcome.status).toBe("denied");
+      expect(
+        gw.invoke(cred, {
+          command: "schedule.propose_event",
+          input: proposeInput(),
+        }).status
+      ).not.toBe("denied");
+
+      db.vault
+        .prepare("DELETE FROM access_device_secret WHERE device_id = ?")
+        .run(seat.deviceId);
+      // Unknown and revoked are the same refusal because they are now the
+      // same fact.
+      expect(() => gw.read(cred, { entity: "core.party" })).toThrow(
+        /unknown caller/u
+      );
     });
   });
 

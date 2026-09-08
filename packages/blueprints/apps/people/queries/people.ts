@@ -29,6 +29,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readLiveBindings } from "./_shared.ts";
@@ -47,6 +48,7 @@ function pendingStamps(
 interface RawProfile {
   party_id: string;
   created_at: string;
+  deleted_at?: string | null;
   cadence_days: number;
   role?: string | null;
   avatar_color?: string | null;
@@ -71,6 +73,7 @@ interface RawParty {
 }
 
 interface RawTag {
+  tag_id: string;
   concept_id: string;
   target_id: string;
 }
@@ -99,17 +102,30 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
   );
   try {
     const [profiles, concepts, schemes] = await Promise.all([
-      ctx.vault.read({
-        entity: "people.profile",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "created_at", dir: "desc" },
-        limit: window + 1,
+      // THE ROSTER IS A PAGE (#996 wave 4, R8). It used to ask for `window + 1`
+      // and slice the extra off — a probe row the handler owned. The probe is
+      // the HOST's on both ends now, and `next` is what it produces: not just
+      // "there is more" but where to carry on from.
+      ctx.vault.page<RawProfile>({
+        query: {
+          name: "people.roster.profiles",
+          select:
+            "party_id, created_at, cadence_days, role, avatar_color, last_contacted_at, deleted_at",
+          from: "people_profile",
+          where: "deleted_at IS NULL",
+          order: {
+            sortColumn: "created_at",
+            pkColumn: "party_id",
+            descending: true,
+          },
+        },
+        limit: window,
       }),
-      ...conceptTaxonomyReads(ctx.vault),
+      ...conceptTaxonomyReads(ctx),
     ]);
 
-    const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
+    const conceptRows = concepts as unknown as RawConcept[];
+    const schemeRows = schemes as unknown as RawScheme[];
 
     // Lists are owner-curated SKOS concepts — small and unbounded.
     const listConcepts = conceptsInScheme(
@@ -130,9 +146,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         STARRED_NOTATION
       )?.concept_id ?? null;
 
-    const fetched = (profiles.rows ?? []) as unknown as RawProfile[];
-    const truncated = fetched.length > window;
-    const profileRows = truncated ? fetched.slice(0, window) : fetched;
+    const truncated = profiles.next !== undefined;
+    const profileRows = profiles.rows;
     const partyIds = profileRows.map((p) => p.party_id);
     if (partyIds.length === 0)
       return {
@@ -143,35 +158,44 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         links_available: true,
       };
 
-    const [parties, tags, dates, bindings] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.party",
-        where: [{ column: "party_id", op: "in", value: partyIds }],
+    const partyIn = inList("party_id", partyIds);
+    const targetIn = inList("target_id", partyIds);
+    const [partyRows, tagRows, dateRows, bindings] = await Promise.all([
+      readPages<RawParty>(ctx, {
+        name: "people.roster.parties",
+        select: "party_id, display_name",
+        from: "core_party",
+        where: partyIn.sql,
+        bind: partyIn.bind,
+        order: {
+          sortColumn: "party_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq", value: "core.party" },
-          { column: "target_id", op: "in", value: partyIds },
-        ],
+      readPages<RawTag>(ctx, {
+        name: "people.roster.tags",
+        select: "tag_id, target_type, target_id, concept_id",
+        from: "core_tag",
+        where: `target_type = ? AND ${targetIn.sql}`,
+        bind: ["core.party", ...targetIn.bind],
+        order: { sortColumn: "tag_id", pkColumn: "tag_id", descending: false },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "people.important_date",
-        where: [
-          { column: "party_id", op: "in", value: partyIds },
-          { column: "deleted_at", op: "is-null" },
-        ],
+      readPages<RawDate>(ctx, {
+        name: "people.roster.importantDates",
+        select: "date_id, party_id, label, month_day, reminder_on",
+        from: "people_important_date",
+        where: `${partyIn.sql} AND deleted_at IS NULL`,
+        bind: partyIn.bind,
+        order: {
+          sortColumn: "date_id",
+          pkColumn: "date_id",
+          descending: false,
+        },
       }),
       // One bounded read for the whole window; null means "denied", not "none".
-      readLiveBindings(ctx.vault, partyIds),
+      readLiveBindings(ctx, partyIds),
     ]);
-
-    const partyRows = (parties.rows ?? []) as unknown as RawParty[];
-    const tagRows = (tags.rows ?? []) as unknown as RawTag[];
-    const dateRows = (dates.rows ?? []) as unknown as RawDate[];
 
     const nameById = new Map<string, string>(
       partyRows.map((p) => [p.party_id, p.display_name] as const)

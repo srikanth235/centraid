@@ -3,14 +3,17 @@
 import { useMemo } from "react";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
+import { occurrenceExceptionsOf } from "@centraid/core/time";
 
-import {
-  combineReplicaQueryStates,
-  useReplicaQuery,
-} from "../../kit/hooks/useReplicaQuery";
-import type { AgendaEventModel } from "../../kit/schedule/recurrence";
+import { combineReplicaQueryStates } from "../../kit/hooks/replica-query-state";
+import { useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { expandEvent } from "../../kit/schedule/recurrence";
+import type {
+  AgendaEventModel,
+  NativeOverride,
+} from "../../kit/schedule/recurrence";
 import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
+import { AGENDA_READS } from "./agenda-queries";
 import { starredParties } from "./day-context";
 
 const value = <T>(row: ReplicaRow, key: string): T | undefined =>
@@ -19,28 +22,30 @@ const value = <T>(row: ReplicaRow, key: string): T | undefined =>
 /** One expanded occurrence, carrying the canonical row it came from. */
 export type NativeAgendaEvent = AgendaEventModel & { raw: ReplicaRow };
 
-function useAgendaEntity(entity: string) {
-  return useReplicaQuery(
-    "agenda",
-    useMemo(() => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity }), [entity])
-  );
+/** One of Agenda's eleven sets, as one page of the year-3 window. */
+function useAgendaEntity(name: keyof typeof AGENDA_READS) {
+  const read = AGENDA_READS[name];
+  return useSeatWindow("agenda", read.query, {
+    entity: read.entity,
+    rowIdColumn: read.rowIdColumn,
+    limit: MOBILE_ENTITY_READ_WINDOW,
+  });
 }
 
 export function useAgenda(rangeStart: Date, rangeEnd: Date) {
-  const events = useAgendaEntity("core.event");
-  const attendees = useAgendaEntity("schedule.attendee");
-  const eventExtensions = useAgendaEntity("schedule.event_ext");
-  const parties = useAgendaEntity("core.party");
-  const calendars = useAgendaEntity("schedule.calendar");
-  const exceptions = useAgendaEntity("schedule.recurrence_exception");
-  // The owner party — whose RSVP the owner controls.
-  const vault = useAgendaEntity("core.vault");
+  const events = useAgendaEntity("events");
+  const attendees = useAgendaEntity("attendees");
+  const eventExtensions = useAgendaEntity("eventExtensions");
+  const parties = useAgendaEntity("parties");
+  const calendars = useAgendaEntity("calendars");
+  const exceptions = useAgendaEntity("exceptions");
+  const vault = useAgendaEntity("vault");
   // Day-context layers (#834): costless facts decorating a day, never rows;
   // member's OWN rows only.
-  const tasks = useAgendaEntity("schedule.task");
-  const tags = useAgendaEntity("core.tag");
-  const concepts = useAgendaEntity("core.concept");
-  const schemes = useAgendaEntity("core.concept_scheme");
+  const tasks = useAgendaEntity("tasks");
+  const tags = useAgendaEntity("tags");
+  const concepts = useAgendaEntity("concepts");
+  const schemes = useAgendaEntity("schemes");
 
   const queryState = combineReplicaQueryStates([
     events,
@@ -85,40 +90,13 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
             rangeStart,
             rangeEnd,
             200,
-            exceptions.rows
-              .filter((exception) => value(exception, "target_id") === id)
-              .map((exception) => {
-                const raw = value<string>(exception, "override_json");
-                let override: {
-                  scope?: "occurrence" | "future";
-                  start?: string;
-                  end?: string;
-                  summary?: string;
-                  description?: string;
-                  recurrence_semantics?: "zoned" | "floating" | "all-day";
-                  calendar_id?: string;
-                } = {};
-                if (raw) {
-                  try {
-                    const parsed = JSON.parse(raw) as unknown;
-                    if (parsed && typeof parsed === "object")
-                      override = parsed as typeof override;
-                  } catch {
-                    // One bad replicated override must not blank the Agenda.
-                  }
-                }
-                return {
-                  originalStart:
-                    value<string>(exception, "original_start") ?? "",
-                  action:
-                    value<"skip" | "override">(exception, "action") ?? "skip",
-                  scope:
-                    value<"occurrence" | "future">(exception, "scope") ??
-                    override.scope ??
-                    "occurrence",
-                  ...override,
-                };
-              })
+            // THROUGH THE ONE ADAPTER (#996, ruling R21; drift ONT-25). This
+            // read `original_start`, which is not the column — so every skip
+            // matched nothing and a skipped occurrence stayed on the phone.
+            occurrenceExceptionsOf<NativeOverride>(
+              exceptions.rows as unknown as Record<string, unknown>[],
+              { seriesType: "core.event", seriesId: id }
+            )
           ).map((event): NativeAgendaEvent => ({ ...event, raw: row }));
         })
         .sort((a, b) => a.start.localeCompare(b.start)),

@@ -136,10 +136,13 @@ describe("recurrence lifecycle", () => {
       rangeTo: "2026-07-10T00:00:00.000Z",
       timeZone: "Etc/UTC",
     });
+    // THE KEY IS THE WALL CLOCK (#996, R21 / ONT-25), which is what the vault
+    // stores in `original_start_local`. Keying on the resolved instant is what
+    // made a zoned series' skips match nothing.
     const adjusted = applyRecurrenceExceptions(instances, [
-      { originalStart: "2026-07-02T09:00:00.000Z", action: "skip" },
+      { originalStart: "2026-07-02T09:00:00", action: "skip" },
       {
-        originalStart: "2026-07-03T09:00:00.000Z",
+        originalStart: "2026-07-03T09:00:00",
         action: "override",
         start: "2026-07-03T11:00:00.000Z",
       },

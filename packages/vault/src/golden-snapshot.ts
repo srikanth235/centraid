@@ -59,8 +59,14 @@ export function snapshotTables(vault: DatabaseSync): string[] {
     .prepare(
       `SELECT name FROM sqlite_master
         WHERE type = 'table'
-          AND name NOT LIKE 'sqlite_%'
-          AND name NOT LIKE '%_fts%'
+          AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+          -- The FTS shadow tables are named fts_<entity> and its five
+          -- suffixed siblings. The pattern here used to be '%_fts%', where
+          -- _ is LIKE's ONE-CHARACTER wildcard: it matches a name with a
+          -- character BEFORE "fts", which no shadow table has -- so the
+          -- exclusion excluded nothing and the manifest carried 52 index
+          -- tables as if they were corpus.
+          AND name NOT LIKE 'fts\\_%' ESCAPE '\\'
         ORDER BY name`
     )
     .all()

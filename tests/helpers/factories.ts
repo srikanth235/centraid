@@ -1,18 +1,20 @@
-import { cp, readFile, stat, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { cp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { gzipSync } from "node:zlib";
 
 import { onTestFinished } from "vitest";
 
+import type { SeatLogRowWire } from "@centraid/core/protocol";
+import { staticSeatSnapshotTransport } from "@centraid/test-kit/seat-snapshot-transport";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 import {
-  buildYear3ReplicaSnapshot,
-  YEAR3_REPLICA_ENTITIES,
-  year3PendingIntents,
+  buildYear3SeatReplica,
   year3ReplicaCacheKey,
 } from "@centraid/test-kit/year3-replica";
-import type { Year3ReplicaSourcePage } from "@centraid/test-kit/year3-replica";
+import type { Year3SeatFacts } from "@centraid/test-kit/year3-replica";
 import {
   goldenYear3Profile,
   materializeYear3Fixture,
@@ -23,21 +25,30 @@ import {
 } from "@centraid/test-kit/year3-vault";
 import type { Year3VaultProfile } from "@centraid/test-kit/year3-vault";
 import {
+  beginReplicaCommit,
   bootstrapVault,
+  buildSeatSnapshot,
   currentReplicaLogState,
+  endReplicaCommit,
   openVaultDb,
-  readReplicaRows,
-  resolveEntity,
+  readReplicaLog,
   sealAad,
   sealValue,
+  seatLogRowWire,
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 import type { OpenVaultOptions, VaultDb } from "@centraid/vault";
 
-import { SqliteIntentStore } from "../../apps/mobile/src/lib/replica/sqlite-intent-store.js";
-import { NodeSqliteDriver } from "../../packages/client/src/replica/node-sqlite-test-driver.js";
 import { intentPayloadHash } from "../../packages/client/src/replica/payload-hash.js";
-import { ReplicaSqliteStore } from "../../packages/client/src/replica/store-core.js";
+import {
+  addSeatOutboxIntent,
+  applySeatLogPage,
+  bootstrapSeatFile,
+  createSeatOutbox,
+  readSeatState,
+} from "../../packages/client/src/replica/seat/index.js";
+import { NodeSeatDriver } from "../../packages/client/src/replica/seat/node-seat-driver.js";
+import { nodeSeatStaging } from "../../packages/client/src/replica/seat/node-staging.js";
 
 const helpersDir = import.meta.dirname;
 
@@ -244,40 +255,44 @@ export async function goldenYear3Vault(): Promise<GoldenYear3Vault> {
 }
 
 export interface GoldenYear3Replica {
-  /** Directory holding `replica.db`. */
+  /** Directory holding `seat.db`. */
   readonly dir: string;
   readonly file: string;
   readonly cacheDir: string;
   readonly cacheHit: boolean;
   readonly buildMs: number;
   readonly bytes: number;
-  readonly rows: number;
+  /** Tables the seat holds — the gateway's, minus the private list. */
+  readonly tables: number;
   readonly pendingIntents: number;
-  readonly cursor: { epoch: string; seq: number };
+  /** Where the seat's applied cursor stands after the snapshot and the tail. */
+  readonly cursor: number;
+  readonly snapshotSeq: number;
+  readonly tailRows: number;
 }
 
 /**
- * What the built replica knows about itself, written beside `replica.db`.
+ * What the built seat file knows about itself, written beside `seat.db`.
  *
- * Without it a warm run has to mount the golden vault and walk 50,000 rows to
- * rediscover the row count and cursor of an artifact it already has on disk —
- * which is most of what building one costs. Part of the artifact's shape, so
- * `YEAR3_FIXTURE_VERSION` covers it.
+ * Without it a warm run has to mount the golden vault to rediscover facts
+ * about an artifact it already has on disk — which is most of what building
+ * one costs. Part of the artifact's shape, so `YEAR3_FIXTURE_VERSION` covers
+ * it.
  */
-interface GoldenReplicaMeta {
-  readonly rows: number;
-  readonly cursor: { epoch: string; seq: number };
-}
+type GoldenReplicaMeta = Year3SeatFacts;
 
 /**
- * Write the golden phone replica into `target`, walking the golden vault.
+ * Write the golden SEAT FILE into `target` (#996 wave 2).
  *
- * Built through the REAL path and nothing else: the vault's own
- * `readReplicaRows` produces the pages, `ReplicaSqliteStore.bootstrap` applies
- * them, and `SqliteIntentStore` — the phone's own outbox, whose tables live in
- * the same database — queues the intents. The in-memory build is written out
- * with `VACUUM INTO`, so the artifact on disk is a real, fully checkpointed
- * replica file rather than a copy of a live handle.
+ * Built through the REAL path and nothing else, and the path is now the seat's
+ * (R1, R4): `buildSeatSnapshot` produces the gateway's sanitised copy,
+ * `bootstrapSeatFile` stages and installs it exactly as a phone does,
+ * `applySeatLogPage` applies a tail of REAL commits made on the gateway after
+ * the snapshot, and the seat's own outbox queues the intents.
+ *
+ * THE TAIL IS NOT DECORATION. A snapshot alone proves the copy; only a tail
+ * applied on top proves the log, and the converge journey this artifact feeds
+ * is about the log.
  */
 async function buildGoldenReplicaInto(
   target: string,
@@ -285,86 +300,132 @@ async function buildGoldenReplicaInto(
 ): Promise<void> {
   const vault = await goldenYear3Vault();
   const source = openVaultDb({ dir: vault.dir, sealKey: vault.sealKey });
+  const seatFile = path.join(target, "seat.db");
+  let driver: NodeSeatDriver | undefined;
   try {
-    const state = currentReplicaLogState(source.vault);
     const vaultId = (
       source.vault.prepare("SELECT vault_id FROM core_vault LIMIT 1").get() as {
         vault_id: string;
       }
     ).vault_id;
-    const snapshot = buildYear3ReplicaSnapshot(
+    const facts = await buildYear3SeatReplica(
       {
-        vaultId,
-        schemaEpoch: String(state.schemaEpoch),
-        // The WATERMARK is the bootstrap cursor: page one pins the client's
-        // later delta to it (`replica-routes.ts`).
-        cursor: { epoch: state.watermark.epoch, seq: state.watermark.seq },
-        readRows: (entity, readOptions) =>
-          readReplicaRows(
-            source.vault,
-            entity,
-            readOptions
-          ) as unknown as Year3ReplicaSourcePage,
-        primaryKeyOf: (entity) => {
-          const ref = resolveEntity(entity, source.vault);
-          if (!ref) throw new Error(`unknown replica entity "${entity}"`);
-          const info = source.vault
-            .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
-            .all() as unknown as { name: string; pk: number }[];
-          const key = info.filter((column) => column.pk > 0);
-          if (key.length !== 1) {
-            throw new Error(
-              `golden replica needs a single-column primary key for ${entity}`
-            );
+        snapshot: (destination) => {
+          const built = buildSeatSnapshot(source.vault, destination);
+          return {
+            path: built.path,
+            seq: built.seq,
+            epoch: built.epoch,
+            schemaEpoch: built.schemaEpoch,
+            bytes: built.bytes,
+          };
+        },
+        // THE COMMITS THE SEAT TAILS. Written through the gateway's own
+        // capture, one commit each, so the log rows are the log rows a device
+        // would have received — not rows this fixture composed.
+        tail: (since) => {
+          for (const statement of [
+            `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+               VALUES ('year3-seat-tail', 'urn:year3-seat-tail', 'Seat tail', '1')`,
+            `UPDATE core_concept_scheme SET title = 'Seat tail, renamed'
+               WHERE scheme_id = 'year3-seat-tail'`,
+          ]) {
+            source.vault.exec("BEGIN IMMEDIATE");
+            const handle = beginReplicaCommit(source.vault);
+            source.vault.exec(statement);
+            endReplicaCommit(source.vault, handle);
+            source.vault.exec("COMMIT");
           }
-          return key[0]!.name;
+          const state = currentReplicaLogState(source.vault);
+          const page = readReplicaLog(source.vault, {
+            since: { epoch: state.epoch, seq: since },
+            limit: 10_000,
+          });
+          return {
+            rows: page.rows.map((row) => seatLogRowWire(row)),
+            watermark: page.watermark.seq,
+          };
+        },
+        install: async (snapshot) => {
+          const compressed = gzipSync(readFileSync(snapshot.path), {
+            level: 6,
+          });
+          await bootstrapSeatFile({
+            transport: staticSeatSnapshotTransport(compressed, snapshot),
+            staging: nodeSeatStaging({
+              directory: path.join(target, "staging"),
+              databasePath: seatFile,
+            }),
+            vaultId,
+            open: () => {
+              driver = new NodeSeatDriver(seatFile);
+              return driver;
+            },
+          });
+          const held = driver!;
+          createSeatOutbox(held);
+          return {
+            apply: (page) =>
+              applySeatLogPage(held, {
+                vaultId,
+                epoch: snapshot.epoch,
+                schemaEpoch: snapshot.schemaEpoch,
+                ddlVersion: 0,
+                floor: 0,
+                watermark: page.watermark,
+                next: page.watermark,
+                hasMore: false,
+                rows: page.rows as SeatLogRowWire[],
+              }).applied,
+            queue: (intent) => {
+              addSeatOutboxIntent(held, {
+                intentId: intent.intentId,
+                appId: intent.appId,
+                action: intent.action,
+                input: intent.input,
+                payloadHash: intent.payloadHash,
+                enqueuedAt: intent.enqueuedAt,
+              });
+            },
+            tables: () =>
+              held.all<{ n: number }>(
+                `SELECT count(*) AS n FROM sqlite_schema
+                  WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`
+              )[0]!.n,
+            cursor: () => readSeatState(held).appliedSeq,
+            close: () => {
+              held.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+              held.close();
+              driver = undefined;
+            },
+          };
         },
       },
+      path.join(target, "snapshot.db"),
       {
-        maxRows: YEAR3_DISTRIBUTIONS.replicaRows,
-        entities: YEAR3_REPLICA_ENTITIES,
+        pendingIntents,
+        seed: vault.profile.seed,
+        hashPayload: (payload) => intentPayloadHash(payload as never),
       }
     );
-    const driver = new NodeSqliteDriver();
-    const store = new ReplicaSqliteStore(driver, vaultId);
-    try {
-      store.bootstrap(snapshot as never);
-      const outbox = SqliteIntentStore.create(driver);
-      const intents = await year3PendingIntents(
-        pendingIntents,
-        (payload) => intentPayloadHash(payload as never),
-        vault.profile.seed
-      );
-      for (const intent of intents) {
-        // Sequential by construction: the outbox's `created_order` is
-        // assigned on add, and the queue's order IS the artifact.
-        // oxlint-disable-next-line no-await-in-loop
-        await outbox.add(intent as never);
-      }
-      driver.exec(
-        `VACUUM INTO '${path.join(target, "replica.db").replaceAll("'", "''")}'`
-      );
-    } finally {
-      store.close();
-    }
-    const meta: GoldenReplicaMeta = {
-      rows: snapshot.rows.length,
-      cursor: snapshot.cursor,
-    };
+    await rm(path.join(target, "snapshot.db"), { force: true });
+    await rm(path.join(target, "staging"), { recursive: true, force: true });
     await writeFile(
       path.join(target, "meta.json"),
-      `${JSON.stringify(meta)}\n`,
+      `${JSON.stringify(facts)}\n`,
       "utf8"
     );
   } finally {
+    driver?.close();
     source.close();
   }
 }
 
 /**
- * The SQLite file a phone holds after a full bootstrap of the golden vault,
- * plus `pendingIntents` queued intents in its outbox — the converge journey's
- * N (#927 journey table: 1, 10, 40).
+ * The SQLite file a seat holds after bootstrapping the golden vault — the
+ * gateway's whole sanitised file with a tail applied — plus `pendingIntents`
+ * queued intents in its outbox: the converge journey's N (#927 journey table:
+ * 1, 10, 40).
  *
  * The content address is computed BEFORE anything is opened — the replica's
  * key is the vault's key plus what makes this replica different from another
@@ -391,7 +452,7 @@ export async function goldenYear3Replica(
     replicaProfile,
     VAULT_MIGRATIONS.length
   );
-  const file = path.join(materialized.dir, "replica.db");
+  const file = path.join(materialized.dir, "seat.db");
   const meta = JSON.parse(
     await readFile(path.join(materialized.dir, "meta.json"), "utf8")
   ) as GoldenReplicaMeta;
@@ -402,8 +463,10 @@ export async function goldenYear3Replica(
     cacheHit: materialized.cacheHit,
     buildMs: performance.now() - started,
     bytes: (await stat(file)).size,
-    rows: meta.rows,
+    tables: meta.tables,
     pendingIntents,
     cursor: meta.cursor,
+    snapshotSeq: meta.snapshotSeq,
+    tailRows: meta.tailRows,
   };
 }

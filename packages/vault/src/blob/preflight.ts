@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { contentMediaTypeSql } from "../schema/representation.js";
 import type { BlobCache } from "./cache.js";
 import type { CustodyState, RemoteTier } from "./custody-types.js";
 import type { LocalBlobStore } from "./local.js";
@@ -94,11 +95,13 @@ export async function preflightBlob(
   }
   const content = deps.vault
     .prepare(
-      `SELECT content_id, byte_size, media_type FROM core_content_item
+      `SELECT content_id, byte_size,
+              ${contentMediaTypeSql("content_id")} AS media_type
+         FROM core_content_item
         WHERE sha256 = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1`
     )
     .get(sha) as
-    | { content_id: string; byte_size: number; media_type: string }
+    | { content_id: string; byte_size: number; media_type: string | null }
     | undefined;
   if (content) {
     return {
@@ -106,7 +109,7 @@ export async function preflightBlob(
       custody,
       staged: false,
       byteSize: content.byte_size,
-      mediaType: content.media_type,
+      ...(content.media_type === null ? {} : { mediaType: content.media_type }),
       contentId: content.content_id,
       remoteAvailable,
       ...(remoteError ? { remoteError } : {}),

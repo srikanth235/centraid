@@ -52,6 +52,13 @@ const PNG_BYTES = Buffer.from(
   "base64"
 );
 
+/** A generated caption hangs from the asset's REPRESENTATION (#996, OQ-9). */
+const CAPTION_OF_ASSET = `SELECT an.author_party_id, an.body_text
+     FROM knowledge_annotation an
+     JOIN core_content_representation r ON r.representation_id = an.target_id
+    WHERE an.target_type = 'core.content_representation'
+      AND r.owner_type = 'media.asset' AND r.owner_id = ?`;
+
 describe("enrich", () => {
   beforeEach(() => {
     db = openVaultDb();
@@ -208,13 +215,21 @@ describe("enrich", () => {
       ).published;
       expect(published.created).toBe(1);
 
-      // Attribution is the ENRICHER's agent party, injected server-side.
-      const annotation = db.vault
-        .prepare(
-          "SELECT author_party_id, body_text FROM knowledge_annotation WHERE target_id = ?"
-        )
-        .get(assetId) as { author_party_id: string; body_text: string };
+      // Attribution is the ENRICHER's agent party, injected server-side. The
+      // caption hangs from the asset's REPRESENTATION (#996, OQ-9), never in
+      // an owner-authored title.
+      const annotation = db.vault.prepare(CAPTION_OF_ASSET).get(assetId) as {
+        author_party_id: string;
+        body_text: string;
+      };
       expect(annotation.author_party_id).toBe(agentPartyId);
+      expect(
+        (
+          db.vault
+            .prepare("SELECT title FROM media_asset WHERE asset_id = ?")
+            .get(assetId) as { title: string | null }
+        ).title
+      ).toBeNull();
 
       const hits = gw.search(owner, {
         entity: "knowledge.annotation",
@@ -243,11 +258,9 @@ describe("enrich", () => {
         label: "photos",
         rows: upgraded,
       });
-      const after = db.vault
-        .prepare(
-          "SELECT body_text FROM knowledge_annotation WHERE target_id = ?"
-        )
-        .all(assetId) as { body_text: string }[];
+      const after = db.vault.prepare(CAPTION_OF_ASSET).all(assetId) as {
+        body_text: string;
+      }[];
       expect(after).toHaveLength(1);
       expect(after[0]!.body_text).toContain("red bucket");
     });
@@ -667,10 +680,14 @@ describe("enrich", () => {
         n: number;
       };
       expect(docCount.n).toBe(1);
-      const contentTitleUnchanged = db.vault
-        .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
-        .get(doc.content_id) as { title: string | null };
-      expect(contentTitleUnchanged.title).toBe("scan_001");
+      // Bytes have no title at all since #996 (R20(b)): there is nothing on
+      // the byte row for a rename proposal to reach past the wrapper.
+      expect(
+        db.vault
+          .prepare("PRAGMA table_info(core_content_item)")
+          .all()
+          .map((column) => (column as { name: string }).name)
+      ).not.toContain("title");
       const document = db.vault
         .prepare("SELECT title FROM core_document WHERE document_id = ?")
         .get(doc.document_id) as { title: string };
@@ -724,8 +741,10 @@ describe("enrich", () => {
         n: number;
       };
       expect(docCount.n).toBe(0);
+      // A rename proposal renames a WRAPPER (#996, R20(b)); for unwrapped
+      // bytes the wrapper is the owning asset, never the byte row.
       const item = db.vault
-        .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
+        .prepare("SELECT title FROM media_asset WHERE content_id = ?")
         .get(asset.content_id) as { title: string };
       expect(item.title).toBe("Loose scan");
       const folder = db.vault
@@ -1099,8 +1118,8 @@ describe("enrich", () => {
       db.vault
         .prepare(
           `INSERT OR IGNORE INTO core_content_item
-             (content_id, media_type, content_uri, sha256, byte_size, created_at)
-           VALUES ('pdf-content', 'application/pdf', 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
+             (content_id, content_uri, sha256, byte_size, created_at)
+           VALUES ('pdf-content', 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
         )
         .run("d".repeat(64));
       queueDeviceEnrichmentRequest(db.vault, {

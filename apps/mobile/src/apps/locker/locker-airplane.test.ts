@@ -11,7 +11,7 @@
  * on this seat goes through — is replaced by one that THROWS from every door,
  * so a read that reached for the network would fail loudly rather than quietly
  * succeeding against a test double. The read plane is a real replica database
- * seeded with the locker fixture, opened through the same mounted reader the
+ * seeded with the locker fixture, opened through the same read seam the
  * provider builds on a device.
  */
 import path from "node:path";
@@ -24,11 +24,12 @@ import {
   ARCHIVED_TITLE,
   LIVE_TITLES,
   TRASHED_TITLE,
-  VAULT_ID,
-  seedScope,
+  seedSeatScope,
 } from "../../lib/replica/locker-vault.test-fixtures";
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
-import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
+import {
+  SeatPageFixture,
+  seatOnlyReadPlane,
+} from "../../lib/replica/seat-fixture.test-fixtures";
 import {
   attachLockerReadPlane,
   lockerItems,
@@ -49,7 +50,7 @@ vi.mock(import("../../lib/gateway"), () => {
   });
 });
 
-let reader: MultiVaultReplicaReader | undefined;
+let seat: SeatPageFixture | undefined;
 
 const titles = (rows: ReadonlyArray<{ title: string }> = []): string[] =>
   rows.map((row) => row.title);
@@ -58,21 +59,15 @@ describe("Locker on a plane", () => {
   beforeEach(() => {
     const root = tempDirSync("centraid-locker-airplane-");
     const databaseName = path.join(root, "personal.db");
-    seedScope(databaseName);
-    reader = new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, "mounted.db")),
-      [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
-    );
-    attachLockerReadPlane({
-      read: reader.read.bind(reader),
-      search: reader.search.bind(reader),
-    });
+    seedSeatScope(databaseName);
+    seat = new SeatPageFixture(databaseName);
+    attachLockerReadPlane(seatOnlyReadPlane(seat.page));
   });
 
   afterEach(() => {
     attachLockerReadPlane(undefined);
-    reader?.close();
-    reader = undefined;
+    seat?.close();
+    seat = undefined;
   });
 
   test("the window lands complete, with no gateway at all", async () => {
@@ -150,8 +145,11 @@ describe("Locker on a plane", () => {
     await expect(lockerItems()).rejects.toThrow(/mounting/u);
   });
 
-  test("the secret half still refuses: a reveal needs the gateway", async () => {
+  test("the item's browsable detail still needs the gateway", async () => {
+    // The REVEAL does not any more (#996, W6-D2) — it is a local decryption
+    // behind the OS prompt, which is the whole point of airplane mode working.
+    // What still needs the radio is this: the detail read, which is metadata.
     const { lockerItem } = await import("./locker-gateway");
-    expect(() => lockerItem("s1", "item-2", "t1")).toThrow(/airplane mode/u);
+    expect(() => lockerItem("item-2")).toThrow(/airplane mode/u);
   });
 });

@@ -25,12 +25,13 @@ import {
   triageSkip,
 } from "@centraid/blueprints/apps/_shared/triage-session";
 import { photosFaceMatchedOn } from "@centraid/blueprints/apps/photos/shared-copy";
+import type { PageQuery } from "@centraid/core/page";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
 import TopSafeArea from "../../kit/components/TopSafeArea";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
@@ -52,8 +53,24 @@ import {
 import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
 import { styles } from "./FaceReview.styles";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { usePhotoTimeline } from "./timeline-source";
+
+/*
+ * THE ASSETS THIS QUEUE IS ABOUT (#996 wave 4b). It was the whole library: face
+ * review needs a face's asset, and a hundred thousand captures with no face in
+ * them were read to find a few hundred that have one. The subquery is the queue.
+ */
+const FACE_ASSETS: PageQuery = {
+  name: "phone.photos.face-assets",
+  select:
+    "asset_id, content_id, kind, title, captured_at, tz_offset_min, " +
+    "width, height",
+  from: "media_asset",
+  where:
+    "deleted_at IS NULL AND asset_id IN (SELECT asset_id FROM media_face_region)",
+  order: { sortColumn: "captured_at", pkColumn: "asset_id", descending: true },
+};
 
 export default function FaceReview({
   navigation,
@@ -63,13 +80,13 @@ export default function FaceReview({
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
 
-  const facesQuery = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
-  const partiesQuery = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
+  const facesQuery = usePhotoEntity("faceRegions");
+  const partiesQuery = usePhotoEntity("parties");
   // Metadata only — no bytes over the replica.
-  const assetsQuery = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "media.asset" }), [])
-  );
+  const assetsQuery = useSeatPages("photos", FACE_ASSETS, {
+    entity: "media.asset",
+    rowIdColumn: "asset_id",
+  });
 
   const names = useMemo(
     () =>

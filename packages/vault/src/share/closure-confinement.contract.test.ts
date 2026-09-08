@@ -32,8 +32,9 @@ function shasOf(closure: WireClosure): string[] {
   return closure.blobs.map((blob) => blob.sha256).toSorted();
 }
 
+/** Titles ride on the OWNER now, not the byte row (#996, ruling R20(b)). */
 function contentTitles(closure: WireClosure): string[] {
-  return closure.rows.contentItems.map((row) => row.title ?? "").toSorted();
+  return closure.rows.mediaAssets.map((row) => row.title ?? "").toSorted();
 }
 
 describe("[law:share-closure-confinement] a closure carries the named items' reach and nothing else", () => {
@@ -55,14 +56,10 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       shared.assetId,
     ]);
     expect(contentTitles(closure)).toStrictEqual(["Photo shared"]);
-    expect(closure.rows.derivatives.map((row) => row.content_id)).toStrictEqual(
-      [shared.contentId]
-    );
     // The bytes are the part that cannot be taken back once handed over: the
-    // manifest names this photograph's original and thumb, and no other's.
-    expect(shasOf(closure)).toStrictEqual(
-      [shared.sha256, shared.thumbSha].toSorted()
-    );
+    // manifest names this photograph's ORIGINAL and nothing else. The thumb is
+    // a derived row (#996, R10) and the audience renders its own.
+    expect(shasOf(closure)).toStrictEqual([shared.sha256]);
     for (const other of [withheld, alsoWithheld]) {
       expect(shasOf(closure)).not.toContain(other.sha256);
       expect(shasOf(closure)).not.toContain(other.thumbSha);
@@ -111,9 +108,7 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       inside.assetId,
     ]);
     expect(contentTitles(closure)).toStrictEqual(["Photo inside"]);
-    expect(shasOf(closure)).toStrictEqual(
-      [inside.sha256, inside.thumbSha].toSorted()
-    );
+    expect(shasOf(closure)).toStrictEqual([inside.sha256]);
   });
 
   test("[law:share-closure-confinement] a Docs folder carries its subtree, not a sibling folder's documents", () => {
@@ -166,8 +161,9 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       "Train tickets",
     ]);
     // …and so must its body: one content item crossed, the salary slip's did
-    // not.
-    expect(contentTitles(closure)).toStrictEqual(["Train tickets"]);
+    // not. Bytes carry no title since #996 (R20(b)), so the claim is the
+    // COUNT — one body, and it is the shared document's.
+    expect(closure.rows.contentItems).toHaveLength(1);
   });
 
   test("[law:share-closure-confinement] one unknown id refuses the whole read — no partial closure escapes", () => {

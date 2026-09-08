@@ -373,8 +373,28 @@
       ]
     },
     {
-      "name": "toggle-task",
-      "description": "Toggle a person task between open and done through people.toggle_task.",
+      "name": "complete-task",
+      "description": "Complete a person task through people.complete_task — the one completion operation Tasks and automations also call, so a repeating task gets its next occurrence and the successor keeps the person it is about.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "task_id": { "type": "string", "minLength": 1 } },
+        "required": ["task_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": ["core.link", "schedule.task"]
+    },
+    {
+      "name": "reopen-task",
+      "description": "Reopen a completed person task through people.reopen_task. Not a toggle: the outcome does not depend on a state the caller did not read.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -650,6 +670,8 @@
         "core.concept",
         "core.concept_scheme",
         "core.content_item",
+        "core.content_representation",
+        "core.content_text",
         "core.tag",
         "knowledge.note"
       ]

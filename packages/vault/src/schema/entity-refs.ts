@@ -115,7 +115,7 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
   {
     table: "share_subscription_lineage",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
-    note: "A subscription's lineage names a RESIDENT row in this vault (#929). Purge it and there is nothing left for a revoke to scrub, while a stale claim would make a later row that reuses the id look shared.",
+    note: "A subscription's lineage names a RESIDENT row in this vault (#929, re-keyed to `authority_id` by #996 R10). Purge it and there is nothing left for a revoke to scrub, while a stale claim would make a later row that reuses the id look shared.",
   },
 ];
 

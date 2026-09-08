@@ -10,7 +10,9 @@ import {
   quickAddInput,
   quickAddLandsIn,
   quickAddReady,
+  shelfDue,
 } from "./quick-add.ts";
+import { ANYTIME, INBOX } from "./shelves.ts";
 import { GROUPS } from "./view-copy.ts";
 
 // A Friday, so "this weekend" is still ahead and "next week" clears it.
@@ -57,6 +59,32 @@ describe("what quick add writes", () => {
       due_at: "2026-08-28",
       priority: 2,
     });
+  });
+
+  // W4-D3: a shelf is a FILTER, and an item created inside one belongs to it.
+  it("stamps a capture made on Today with today, chip or no chip", () => {
+    expect(quickAddInput(draft, FRIDAY, null)).toStrictEqual({
+      title: "Rinse the filter",
+      due_at: "2026-08-28",
+    });
+    expect(shelfDue(null, FRIDAY)).toBe("2026-08-28");
+  });
+
+  it("leaves every other shelf's capture undated, which is the Inbox", () => {
+    expect(quickAddInput(draft, FRIDAY, ANYTIME)).toStrictEqual({
+      title: "Rinse the filter",
+    });
+    expect(quickAddInput(draft, FRIDAY, INBOX)).toStrictEqual({
+      title: "Rinse the filter",
+    });
+    expect(shelfDue(ANYTIME, FRIDAY)).toBeNull();
+    expect(shelfDue(undefined, FRIDAY)).toBeNull();
+  });
+
+  it("keeps the member's own chip when they set one on Today", () => {
+    expect(
+      quickAddInput({ ...draft, when: "tomorrow" }, FRIDAY, null)
+    ).toStrictEqual({ title: "Rinse the filter", due_at: "2026-08-29" });
   });
 
   it("refuses an empty title without saying so twice", () => {

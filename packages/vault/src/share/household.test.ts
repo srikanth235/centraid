@@ -79,31 +79,27 @@ describe("household audience placement", () => {
     const now = nowIso();
     const originContent = origin.vault
       .prepare(
-        "SELECT media_type, content_uri, sha256, byte_size, title, language, created_at FROM core_content_item WHERE content_id = ?"
+        "SELECT content_uri, sha256, byte_size, language, created_at FROM core_content_item WHERE content_id = ?"
       )
       .get(first.contentId) as {
-      media_type: string;
       content_uri: string;
       sha256: string;
       byte_size: number;
-      title: string | null;
       language: string | null;
       created_at: string;
     };
     audience.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language,
+           (content_id, content_uri, sha256, byte_size, language,
             creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)`
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)`
       )
       .run(
         foreignContentId,
-        originContent.media_type,
         originContent.content_uri,
         originContent.sha256,
         originContent.byte_size,
-        originContent.title,
         originContent.language,
         now
       );

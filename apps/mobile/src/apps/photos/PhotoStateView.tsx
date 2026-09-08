@@ -7,11 +7,12 @@ import {
   PHOTOS_ARCHIVE_EMPTY,
   PHOTOS_EMPTY_FAVORITES,
 } from "@centraid/blueprints/apps/photos/shared-copy";
+import type { PageQuery } from "@centraid/core/page";
 
 import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { usePendingChanges } from "../../kit/replica/pending-changes";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -24,7 +25,7 @@ import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { photosPendingLine } from "./photos-pending";
 import {
   batchFavorite,
@@ -46,6 +47,19 @@ import { useSelectionDownload } from "./use-photo-download";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
+/*
+ * PURGE ORDER, AND ONLY THAT (#711, #996 wave 4b). The vault refuses to purge a
+ * source while a copy still names it, so the trash needs each trashed asset's
+ * lineage edge — two columns over the trash, not the library.
+ */
+const TRASH_LINEAGE: PageQuery = {
+  name: "phone.photos.trash-lineage",
+  select: "asset_id, source_asset_id, deleted_at",
+  from: "media_asset",
+  where: "deleted_at IS NOT NULL",
+  order: { sortColumn: "deleted_at", pkColumn: "asset_id", descending: true },
+};
+
 /**
  * `purge-asset` (#711) destroys the row NOW and hands bytes to the next storage sweep. No undo grammar — safety is the native confirm before the first write leaves the device.
  */
@@ -66,19 +80,12 @@ export default function PhotoStateView({
   const params = route.params;
   const mode = params.mode;
   // Person mode: confirmed faces, not an asset flag — same join FaceReview/PhotosCollectionsView use; one call site, kept local.
-  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const faces = usePhotoEntity("faceRegions");
   // Lineage for purge ORDER only (#711): timeline has no `source_asset_id`; vault refuses a source while a copy still names it.
-  const trashedRows = useReplicaQuery(
-    "photos",
-    useMemo(
-      () => ({
-        acceptTruncation: true,
-        entity: "media.asset",
-        where: [{ column: "deleted_at", op: "not-null" as const }],
-      }),
-      []
-    )
-  );
+  const trashedRows = useSeatPages("photos", TRASH_LINEAGE, {
+    entity: "media.asset",
+    rowIdColumn: "asset_id",
+  });
   const sourceOf = useMemo(() => {
     const map = new Map<string, string>();
     for (const row of trashedRows.rows) {

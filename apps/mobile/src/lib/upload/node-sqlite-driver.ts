@@ -7,26 +7,20 @@
 // bundles it.
 import { DatabaseSync } from "node:sqlite";
 
-import type {
-  ReplicaBindValue,
-  ReplicaSqliteDriver,
-} from "@centraid/client/replica/native";
+import type { ExpoBindValue } from "../replica/expo-sqlite-driver";
 
-export class NodeSqliteFileDriver implements ReplicaSqliteDriver {
+export class NodeSqliteFileDriver {
   private readonly db: DatabaseSync;
 
   constructor(path: string) {
     this.db = new DatabaseSync(path);
   }
 
-  run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
+  run(sql: string, bind: readonly ExpoBindValue[] = []): void {
     this.db.prepare(sql).run(...bind);
   }
 
-  all<T extends object>(
-    sql: string,
-    bind: readonly ReplicaBindValue[] = []
-  ): T[] {
+  all<T extends object>(sql: string, bind: readonly ExpoBindValue[] = []): T[] {
     return this.db.prepare(sql).all(...bind) as T[];
   }
 

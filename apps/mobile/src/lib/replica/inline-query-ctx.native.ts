@@ -27,36 +27,31 @@ import {
   runInlineQueryCore,
 } from "@centraid/client/replica/native";
 import type {
+  InlinePage,
   InlineQueryRunnable,
-  ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
 
+import type { NativeSearchRequest } from "./native-session";
+import type { NativeSeatPagePort } from "./seat-port";
 import {
   REPLICA_CAN_WRITE,
   REPLICA_SCOPE_ID,
-  REPLICA_SCOPE_IDS,
   REPLICA_SCOPE_LABEL,
-  REPLICA_SCOPE_LABELS,
-  REPLICA_WRITABLE_SCOPE_IDS,
-} from "./multi-vault-provenance";
-import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
+} from "./vault-source";
 
-/** The keys the mounted plane adds and a handler must never receive. */
+/** The keys the session stamps and a handler must never receive. */
 const SCOPE_PROVENANCE: readonly string[] = [
   REPLICA_CAN_WRITE,
   REPLICA_SCOPE_ID,
-  REPLICA_SCOPE_IDS,
   REPLICA_SCOPE_LABEL,
-  REPLICA_SCOPE_LABELS,
-  REPLICA_WRITABLE_SCOPE_IDS,
 ];
 
 /**
- * The envelope as the web seat's replica session hands it over. Which vault a
- * row came from is this seat's fact about its own mounted plane, not a column
- * of the entity, so it stops here — on the ENVELOPE, before `guardedRow` wraps
+ * The envelope as the seat's replica session hands it over. Which vault a row
+ * came from is this seat's fact about its own open file, not a column of the
+ * entity, so it stops here — on the ENVELOPE, before `guardedRow` wraps
  * the values, so the unavailable-field proxy is built over the stripped set
  * and no key is read through it to strip one.
  */
@@ -73,16 +68,47 @@ export function withoutScopeProvenance(
   };
 }
 
-/** What a handler needs from the phone: the mounted read plane, nothing else. */
+/**
+ * What a handler needs from the phone: the read plane, and — since #996 wave
+ * 4b — the SEAT's own paged read.
+ *
+ * `page` is optional for one reason and it is not compatibility: a phone that
+ * has not finished copying the vault has no seat, and `ctx.vault.page` is then
+ * the core's online-only stub, which is the same answer a browser that turned
+ * "Keep an offline copy" off gives (W4-D2, R9). It is never the old store's
+ * handle: that file is `replica_row`/`payload_json` and a handler's plain SQL
+ * over the vault's real tables cannot run on it at all.
+ */
 export interface NativeInlineQuerySession {
-  read: (
-    appId: string,
-    request: NativeReadRequest
-  ) => Promise<ReplicaReadWireResult>;
   search: (
     appId: string,
     request: NativeSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
+  page?: InlinePage;
+}
+
+// The seat's port lives in `seat-port.ts` — a type nothing should have to pull
+// this module in to name. Re-exported because callers import it from here.
+export type { NativeSeatPagePort } from "./seat-port";
+
+/**
+ * The read plane a handler actually runs on: the session's rows, the seat's
+ * pages.
+ *
+ * ONE FILE SINCE W5. The session's search and the seat's page are the SAME
+ * `vault.db`; what is composed here is not two stores but two shapes of read —
+ * a ranked window and a keyset page — which a handler reaches through one ctx.
+ * The seam stays visible at the one place a screen hands a plane over.
+ */
+export function seatReadPlane(
+  session: NativeInlineQuerySession,
+  seat: NativeSeatPagePort | undefined
+): NativeInlineQuerySession {
+  if (!seat) return session;
+  return {
+    search: (appId, request) => session.search(appId, request),
+    page: seat.page,
+  };
 }
 
 export interface NativeInlineCtxOptions {
@@ -96,7 +122,7 @@ export function buildNativeInlineCtx(
   guard: OnlineOnlyGuard
 ): unknown {
   const { session, appId, signal } = options;
-  return buildInlineCtxCore<NativeReadRequest, NativeSearchRequest>(
+  return buildInlineCtxCore<NativeSearchRequest>(
     {
       // Every row the handler sees carries the read's pending sidecar, so the
       // phone answers `readPendingOverlay(row, pendingSidecarOf(row))` exactly
@@ -107,6 +133,7 @@ export function buildNativeInlineCtx(
           sidecar
         )
       ),
+      ...(session.page ? { page: session.page } : {}),
       ...(signal ? { signal } : {}),
     },
     guard

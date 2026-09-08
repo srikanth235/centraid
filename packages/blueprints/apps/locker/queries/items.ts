@@ -21,6 +21,22 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+
+/**
+ * THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2).
+ *
+ * A statement names its columns, and NO SEALED CELL IS ON THIS LIST:
+ * `password`, `otp_seed`, `card_number`, `cvv` and `content` are absent by
+ * construction rather than stripped afterwards. Every shelf — live, archived,
+ * trash, watchtower, search — projects exactly this, so there is one place to
+ * read to know what a Locker list can carry.
+ */
+export const LOCKER_ITEM_COLUMNS =
+  "item_id, type, title, username, url, url_match_policy, notes, " +
+  "cardholder, expiry, brand, fullname, email, phone, address, network, " +
+  "connection_id, compromised, password_set_at, created_at, updated_at, " +
+  "archived_at, deleted_at, purge_at";
 
 export interface RawItem {
   item_id: string;
@@ -213,13 +229,16 @@ export async function readAliases(
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
   try {
-    const result = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "locker.item_alias",
-      where: [{ column: "item_id", op: "in", value: ids }],
+    const itemIn = inList("item_id", ids);
+    const rows = await readPages<AliasRow>(ctx, {
+      name: "locker.items.aliases",
+      select: "alias, item_id",
+      from: "locker_item_alias",
+      where: itemIn.sql,
+      bind: itemIn.bind,
+      order: { sortColumn: "alias", pkColumn: "alias", descending: false },
     });
-    for (const row of (result.rows ?? []) as unknown as AliasRow[])
-      map.set(row.item_id, row.alias);
+    for (const row of rows) map.set(row.item_id, row.alias);
   } catch {
     /* fail soft — an alias is a decoration, never the list itself */
   }
@@ -253,17 +272,30 @@ export async function readCounts(
 export async function readConceptTables(
   ctx: HandlerCtx
 ): Promise<ConceptTables> {
+  // Owner-curated and small: it is what BOUNDS the tag reads below.
   const [concepts, schemes] = await Promise.all([
-    ctx.vault.read({ acceptTruncation: true, entity: "core.concept" }),
-    ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.concept_scheme",
+    readPages<ConceptRow>(ctx, {
+      name: "locker.items.concepts",
+      select: "concept_id, scheme_id, pref_label, notation",
+      from: "core_concept",
+      order: {
+        sortColumn: "concept_id",
+        pkColumn: "concept_id",
+        descending: false,
+      },
+    }),
+    readPages<SchemeRow>(ctx, {
+      name: "locker.items.schemes",
+      select: "scheme_id, uri",
+      from: "core_concept_scheme",
+      order: {
+        sortColumn: "scheme_id",
+        pkColumn: "scheme_id",
+        descending: false,
+      },
     }),
   ]);
-  return {
-    concepts: (concepts.rows ?? []) as unknown as ConceptRow[],
-    schemes: (schemes.rows ?? []) as unknown as SchemeRow[],
-  };
+  return { concepts, schemes };
 }
 
 /** Read tags into item_id → string[] (locker-tags scheme); pass `tables` to share the read. */
@@ -275,13 +307,14 @@ export async function readTags(
   const map = new Map<string, string[]>();
   if (ids.length === 0) return map;
   const vocab = tables ?? (await readConceptTables(ctx));
-  const tags = await ctx.vault.read({
-    acceptTruncation: true,
-    entity: "core.tag",
-    where: [
-      { column: "target_type", op: "eq", value: ITEM_TYPE },
-      { column: "target_id", op: "in", value: ids },
-    ],
+  const targetIn = inList("target_id", ids);
+  const tags = await readPages<TagRow>(ctx, {
+    name: "locker.items.tags",
+    select: "tag_id, target_type, target_id, concept_id",
+    from: "core_tag",
+    where: `target_type = ? AND ${targetIn.sql}`,
+    bind: [ITEM_TYPE, ...targetIn.bind],
+    order: { sortColumn: "tag_id", pkColumn: "tag_id", descending: false },
   });
   const tagScheme = findScheme(vocab.schemes, LOCKER_TAGS_SCHEME_URI);
   if (!tagScheme) return map;
@@ -290,7 +323,7 @@ export async function readTags(
       (c) => [c.concept_id, c.pref_label] as const
     )
   );
-  for (const t of (tags.rows ?? []) as unknown as TagRow[]) {
+  for (const t of tags) {
     const label = labelByConcept.get(t.concept_id);
     if (!label) continue; // a flags-scheme star, not a tag
     if (!map.has(t.target_id)) map.set(t.target_id, []);
@@ -316,17 +349,16 @@ export async function readStarred(
     STARRED_NOTATION
   );
   if (!starredConcept) return starred;
-  const tags = await ctx.vault.read({
-    acceptTruncation: true,
-    entity: "core.tag",
-    where: [
-      { column: "concept_id", op: "eq", value: starredConcept.concept_id },
-      { column: "target_type", op: "eq", value: ITEM_TYPE },
-      { column: "target_id", op: "in", value: ids },
-    ],
+  const starredIn = inList("target_id", ids);
+  const tags = await readPages<TagRow>(ctx, {
+    name: "locker.items.starred",
+    select: "tag_id, target_type, target_id, concept_id",
+    from: "core_tag",
+    where: `concept_id = ? AND target_type = ? AND ${starredIn.sql}`,
+    bind: [starredConcept.concept_id, ITEM_TYPE, ...starredIn.bind],
+    order: { sortColumn: "tag_id", pkColumn: "tag_id", descending: false },
   });
-  for (const t of (tags.rows ?? []) as unknown as TagRow[])
-    starred.add(t.target_id);
+  for (const t of tags) starred.add(t.target_id);
   return starred;
 }
 
@@ -354,18 +386,23 @@ export default async function itemsHandler({
     // the default window without being deleted and without a purge date, so
     // the shelf is asked for explicitly rather than filtered client-side.
     const archived = input?.archived === true;
-    const res = await ctx.vault.read({
-      entity: "locker.item",
-      where: [
-        { column: "deleted_at", op: "is-null" },
-        archived
-          ? { column: "archived_at", op: "not-null" }
-          : { column: "archived_at", op: "is-null" },
-      ],
-      orderBy: { column: "updated_at", dir: "desc" },
+    const res = await ctx.vault.page<RawItem>({
+      query: {
+        name: archived ? "locker.items.archived" : "locker.items.live",
+        select: LOCKER_ITEM_COLUMNS,
+        from: "locker_item",
+        where: archived
+          ? "deleted_at IS NULL AND archived_at IS NOT NULL"
+          : "deleted_at IS NULL AND archived_at IS NULL",
+        order: {
+          sortColumn: "updated_at",
+          pkColumn: "item_id",
+          descending: true,
+        },
+      },
       limit: window,
     });
-    const rows = (res.rows ?? []) as unknown as RawItem[];
+    const rows = res.rows;
     const ids = rows.map((r) => r.item_id);
     // One shared vocabulary read + ONE watchtower unseal (#404) — not a
     // second full read and second receipted unseal.

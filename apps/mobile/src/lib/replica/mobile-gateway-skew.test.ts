@@ -43,8 +43,7 @@ const COMPLETE_CAPABILITIES = {
   backupWal: true,
   assistOAuth: true,
   automationTurns: true,
-  multiVaultReplica: true,
-  crossVaultPlacements: true,
+  seatReplica: true,
 };
 
 /**
@@ -186,7 +185,7 @@ describe("mobile ↔ gateway version skew", () => {
         judgeMobileGatewayCompatibility(
           gatewayAt(APP_MIN, APP_MAX, {
             ...COMPLETE_CAPABILITIES,
-            multiVaultReplica: false,
+            seatReplica: false,
           })
         )
       ).toBe("update-gateway");
@@ -201,14 +200,17 @@ describe("mobile ↔ gateway version skew", () => {
         judgeMobileGatewayCompatibility(
           gatewayAt(APP_MIN, APP_MAX + 2, {
             ...COMPLETE_CAPABILITIES,
-            crossVaultPlacements: false,
+            seatReplica: false,
           })
         )
       ).toBe("update-gateway");
     });
 
-    test("a gateway too old to carry the capability keys at all asks for a gateway update", () => {
-      const { multiVaultReplica: _absent, ...tooOld } = COMPLETE_CAPABILITIES;
+    test("a gateway too old to carry the seat-door key at all asks for a gateway update", () => {
+      // `seatReplica` is OPTIONAL on the wire, so its ABSENCE is a well-formed
+      // map from a gateway that predates the doors — and it must read as off,
+      // never as malformed and never as supported.
+      const { seatReplica: _absent, ...tooOld } = COMPLETE_CAPABILITIES;
       expect(
         judgeMobileGatewayCompatibility(gatewayAt(APP_MIN, APP_MAX, tooOld))
       ).toBe("update-gateway");

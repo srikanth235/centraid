@@ -27,7 +27,7 @@ describe("assistant-context", () => {
       expect(doc).toContain(
         "core_link is the ONLY cross-entity relationship fabric"
       );
-      expect(doc).toContain("vault_content_text(");
+      expect(doc).toContain("join core_content_text on content_id");
       expect(doc).toContain("## Link relations");
       expect(doc).toContain("fts_knowledge_note");
       expect(doc).toContain("CREATE TABLE core_party");

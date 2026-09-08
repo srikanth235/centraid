@@ -57,8 +57,17 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
 // app no longer has.
 type Gateway = typeof import("./locker-gateway");
 const wire = vi.hoisted(() => ({
-  auth: vi.fn<Gateway["lockerAuth"]>(),
   item: vi.fn<Gateway["lockerItem"]>(),
+  receipt: vi.fn<Gateway["lockerRevealReceipt"]>(),
+}));
+// The seat's own door over `K` (#996, W6-D2). Replaced whole for the same
+// reason the gateway door is: this suite is about the boundary's STATE
+// machine, and the keychain and WebCrypto belong to `locker-door.test`.
+type Door = typeof import("./locker-door");
+const door = vi.hoisted(() => ({
+  reveal: vi.fn<Door["revealLockerRow"]>(),
+  unlock: vi.fn<Door["unlockLockerDoor"]>(),
+  unlocked: vi.fn<() => boolean>(() => false),
 }));
 type Reads = typeof import("./locker-reads");
 const reads = vi.hoisted(() => ({
@@ -70,12 +79,28 @@ const reads = vi.hoisted(() => ({
 // real one reaches `lib/gateway`, which pulls Expo's fetch shim into a node
 // run for no benefit — this test is about the boundary, not the transport.
 vi.mock(import("./locker-gateway"), () => {
-  const door = {
-    lockerAuth: wire.auth,
+  const gateway = {
     lockerItem: wire.item,
+    lockerRevealReceipt: wire.receipt,
   };
-  return door as unknown as Gateway;
+  return gateway as unknown as Gateway;
 });
+vi.mock(import("./locker-door"), () => {
+  const seat = {
+    revealLockerRow: door.reveal,
+    unlockLockerDoor: door.unlock,
+    lockerDoorUnlocked: door.unlocked,
+  };
+  return seat as unknown as Door;
+});
+vi.mock(import("./locker-device-auth"), () => ({
+  lockLocker: () => door.unlocked.mockReturnValue(false),
+  lockerUnlocked: () => door.unlocked(),
+  removeLockerVaultKey: () => Promise.resolve(),
+}));
+vi.mock(import("../../lib/vault-links"), () => ({
+  getActiveVaultId: () => "vault-1",
+}));
 // The three window reads are the REPLICA's now (#928): the boundary asks its
 // own device, and this suite is about the boundary, not the read plane.
 vi.mock(import("./locker-reads"), () => {
@@ -92,8 +117,7 @@ vi.mock(import("./locker-reads"), () => {
 });
 
 const {
-  confirmLockerPermit,
-  askLockerPermit,
+  revealLockerField,
   loadLockerItems,
   lockNow,
   onLockerAppState,
@@ -110,36 +134,41 @@ const ROW = {
   subtitle: "me@example.test",
 };
 
+/** Unlock the way the seat does now: the OS said yes, so the door is open. */
 async function openSession(): Promise<void> {
-  wire.auth.mockResolvedValue({
-    ok: true,
-    configured: true,
-    sessionToken: "s1",
-  });
+  door.unlocked.mockReturnValue(true);
+  door.unlock.mockResolvedValue({ ok: true });
   reads.items.mockResolvedValue({ items: [ROW], truncated: false });
-  await unlockLocker("a-long-enough-passphrase");
+  await unlockLocker();
 }
 
 describe("the Locker boundary on this seat", () => {
   beforeEach(() => {
     resetLockerVault();
-    wire.auth.mockReset();
     wire.item.mockReset();
+    wire.receipt.mockReset();
+    door.reveal.mockReset();
+    door.unlock.mockReset();
+    door.unlocked.mockReset();
+    door.unlocked.mockReturnValue(false);
     reads.items.mockReset();
   });
 
-  it("boots locked, whatever the status read says about a passphrase", async () => {
-    wire.auth.mockResolvedValue({ ok: true, configured: true });
+  it("boots locked, whatever else is true", async () => {
+    door.unlocked.mockReturnValue(false);
     await openLocker();
     expect(readLockerVault().session.phase).toBe("locked");
-    expect(readLockerVault().bag.sessionToken).toBeNull();
     expect(readLockerVault().rows).toStrictEqual([]);
   });
 
-  it("puts a vault with no passphrase at the first-run gate", async () => {
-    wire.auth.mockResolvedValue({ ok: true, configured: false });
+  it("reads the shell's lock rather than asking a gateway", async () => {
+    // #996, W6-D2. There is no status read and no passphrase: "is it open" is
+    // "does this process still hold `K`", which the keychain answers locally
+    // and which works with the radio off.
+    door.unlocked.mockReturnValue(true);
+    reads.items.mockResolvedValue({ items: [ROW], truncated: false });
     await openLocker();
-    expect(readLockerVault().session.phase).toBe("setup");
+    expect(readLockerVault().session.phase).toBe("open");
   });
 
   it("opens on an unlock and reads the window", async () => {
@@ -160,21 +189,20 @@ describe("the Locker boundary on this seat", () => {
 
   it("empties every enumerated secret-bearing field on a lock", async () => {
     await openSession();
-    askLockerPermit({ itemId: "item-1", field: "password" });
-    wire.auth.mockResolvedValue({
+    readLockerVault().bag.detail = {
+      item_id: "item-1",
+      type: "login",
+      title: "Mail",
+      password: "lk1:AAAA",
+      key_id: "k-1",
+    } as never;
+    door.reveal.mockResolvedValue({
       ok: true,
-      itemToken: "t1",
-      expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      rowId: "item-1",
+      values: { password: "hunter2" },
+      receiptId: "r1",
     });
-    wire.item.mockResolvedValue({
-      item: {
-        item_id: "item-1",
-        type: "login",
-        title: "Mail",
-        password: "hunter2",
-      },
-    });
-    await confirmLockerPermit("a-long-enough-passphrase");
+    await revealLockerField({ itemId: "item-1", field: "password" });
     expect(readLockerVault().bag.revealed.password).toBe("hunter2");
 
     lockNow();
@@ -185,22 +213,81 @@ describe("the Locker boundary on this seat", () => {
     }
   });
 
-  it("spends the permit on the read it authorised", async () => {
+  it("reveals through the seat's door, and never through the gateway", async () => {
+    // #996, W6-D2: the ciphertext this seat already holds goes to the door,
+    // the door unseals it with `K`, and the gateway is asked for nothing but
+    // the receipt. A `lockerItem` call here would be the old privileged read.
     await openSession();
-    askLockerPermit({ itemId: "item-1", field: "password" });
-    wire.auth.mockResolvedValue({ ok: true, itemToken: "t1" });
-    wire.item.mockResolvedValue({
-      item: {
-        item_id: "item-1",
-        type: "login",
-        title: "Mail",
-        password: "hunter2",
-      },
+    readLockerVault().bag.detail = {
+      item_id: "item-1",
+      type: "login",
+      title: "Mail",
+      password: "lk1:AAAA",
+      key_id: "k-1",
+    } as never;
+    door.reveal.mockResolvedValue({
+      ok: true,
+      rowId: "item-1",
+      values: { password: "hunter2" },
+      receiptId: "r1",
     });
-    await confirmLockerPermit("a-long-enough-passphrase");
-    // One shot: nothing is left to point at a second field.
-    expect(readLockerVault().bag.permit).toBeNull();
-    expect(readLockerVault().bag.permitRequest).toBeNull();
+
+    await revealLockerField({ itemId: "item-1", field: "password" });
+
+    expect(door.reveal).toHaveBeenCalledOnce();
+    expect(door.reveal.mock.calls[0]?.[0]).toMatchObject({
+      vaultId: "vault-1",
+      rowId: "item-1",
+      keyId: "k-1",
+      ciphertext: { password: "lk1:AAAA" },
+    });
+    expect(wire.item).not.toHaveBeenCalled();
+    expect(readLockerVault().bag.revealed.password).toBe("hunter2");
+  });
+
+  it("falls to the lock screen when the door says locked, and reveals nothing", async () => {
+    await openSession();
+    readLockerVault().bag.detail = {
+      item_id: "item-1",
+      type: "login",
+      title: "Mail",
+      password: "lk1:AAAA",
+      key_id: "k-1",
+    } as never;
+    door.reveal.mockResolvedValue({
+      ok: false,
+      reason: "locked",
+      message: "Face ID was cancelled.",
+    });
+    door.unlocked.mockReturnValue(false);
+
+    await revealLockerField({ itemId: "item-1", field: "password" });
+
+    expect(readLockerVault().session.phase).toBe("locked");
+    expect(readLockerVault().bag.revealed).toStrictEqual({});
+  });
+
+  it("shows a stale-key refusal rather than locking", async () => {
+    // A rotation is not a lock: the member is present and the key is right,
+    // the SECRET moved on. "re-enter this secret" is the only repair.
+    await openSession();
+    readLockerVault().bag.detail = {
+      item_id: "item-1",
+      type: "login",
+      title: "Mail",
+      password: "lk1:AAAA",
+      key_id: "k-old",
+    } as never;
+    door.reveal.mockResolvedValue({
+      ok: false,
+      reason: "stale_key",
+      message: "re-enter this secret",
+    });
+
+    await revealLockerField({ itemId: "item-1", field: "password" });
+
+    expect(readLockerVault().session.phase).toBe("open");
+    expect(readLockerVault().revealError).toContain("re-enter this secret");
   });
 
   it("turns a vault refusal into a screen rather than an error", async () => {

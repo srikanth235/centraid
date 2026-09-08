@@ -141,19 +141,14 @@ describe("cache", () => {
   }
 
   /** Insert a live content item (so a derivative can FK to it). Returns its content_id. */
-  function insertContentItem(
-    db: VaultDb,
-    sha: string,
-    size: number,
-    mediaType = "image/jpeg"
-  ): string {
+  function insertContentItem(db: VaultDb, sha: string, size: number): string {
     const contentId = uuidv7();
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, ?, ?, ?, ?)`
       )
-      .run(contentId, mediaType, blobUriFor(sha), sha, size, nowIso());
+      .run(contentId, blobUriFor(sha), sha, size, nowIso());
     return contentId;
   }
 

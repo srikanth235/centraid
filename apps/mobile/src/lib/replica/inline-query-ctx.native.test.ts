@@ -1,3 +1,7 @@
+import path from "node:path";
+
+import { afterEach, describe, expect, test } from "vitest";
+
 /**
  * SPIKE PROOF (#922 wave 1, ruling (i)): the balance-parity oracle E7 wants
  * either way.
@@ -7,10 +11,12 @@
  * `app-inline.tsx` — runs unmodified against the phone's mounted replica and
  * produces the same dashboard the handler contract produces over plain rows.
  *
- * The reference side is a row-array ctx presenting exactly the surface both
- * `ctx` builders present (`{ rows, receiptId }` plus the shared `ctx.time`
- * engine), fed the identical fixture — the mounted read PLANE is what this
- * file varies, so the reference is the same handler over plain arrays.
+ The reference side USED to be a row-array ctx that re-implemented the
+ * declarative read grammar in JavaScript. That grammar is deleted (#996 wave
+ * 5): every read on this path is now a statement, and a reference that had to
+ * parse SQL to answer would be a second SQLite. So what remains is the claim
+ * the spike was actually for — the same module file, unmodified, over the
+ * phone's own copy of the vault — plus the provenance rule it guards.
  *
  * Comparing against the WEB BUILDER lives one program over, in
  * `tests/integration-mobile/tally-balance-parity.integration.test.ts`: that
@@ -20,74 +26,17 @@
  * (`tally-ledger.test-fixtures.ts`), so they are answering about the same
  * rows.
  */
-import path from "node:path";
-
-import { afterEach, describe, expect, test } from "vitest";
-
-import type { ReplicaRow } from "@centraid/client/replica/native";
+import type { Money, Valuation } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 // The one module under test, imported exactly as the web seat imports it.
 import dashboardQuery from "../../../../../packages/blueprints/apps/tally/queries/dashboard.ts";
-import type { NativeInlineQuerySession } from "./inline-query-ctx.native";
 import { runNativeInlineQuery } from "./inline-query-ctx.native";
-import { MultiVaultReplicaReader } from "./multi-vault-reader";
-import { NodeSqliteDriver } from "./node-sqlite-driver";
 import {
-  OWNER,
-  SHAPE_ID,
-  VAULT_ID,
-  seedEntities,
-  seedScope,
-} from "./tally-ledger.test-fixtures";
-
-/**
- * The reference read plane: the SAME fixture rows, filtered in JavaScript
- * rather than by the replica's compiled plan. It answers the `where`/`orderBy`/
- * `limit` grammar Tally's dashboard actually uses, and nothing else — an
- * unhandled operator throws rather than silently returning the wrong page.
- */
-function rowArraySession(): NativeInlineQuerySession {
-  const byEntity = new Map(
-    seedEntities().map((entity) => [entity.entity, entity])
-  );
-  return {
-    read: (_appId, request) => {
-      const entity = byEntity.get(request.entity);
-      let rows = [...(entity?.rows ?? [])];
-      for (const clause of request.where ?? []) {
-        const value = clause.value;
-        rows = rows.filter((row) => {
-          const held = row[clause.column] ?? null;
-          if (clause.op === "is-null") return held === null;
-          if (clause.op === "not-null") return held !== null;
-          if (clause.op === "eq") return held === value;
-          if (clause.op === "in") return (value as unknown[]).includes(held);
-          throw new Error(`unsupported operator ${clause.op}`);
-        });
-      }
-      const order = request.orderBy;
-      if (order?.dir)
-        rows.sort((left, right) => {
-          const a = String(left[order.column] ?? "");
-          const b = String(right[order.column] ?? "");
-          return order.dir === "desc" ? b.localeCompare(a) : a.localeCompare(b);
-        });
-      if (request.limit !== undefined) rows = rows.slice(0, request.limit);
-      return Promise.resolve({
-        rows: rows.map((values) => ({
-          rowId: String(values[entity!.primaryKey]),
-          values: values as ReplicaRow,
-          oversizedFields: [],
-          hasUnavailableFields: false,
-        })),
-        cursor: { epoch: "epoch-1", seq: 1 },
-        dependency: { shapeId: SHAPE_ID, entity: request.entity },
-      });
-    },
-    search: () => Promise.reject(new Error("the dashboard does not search")),
-  };
-}
+  SeatPageFixture,
+  seatOnlyReadPlane,
+} from "./seat-fixture.test-fixtures";
+import { OWNER, seedSeatScope } from "./tally-ledger.test-fixtures";
 
 /** Every `__centraid*` key anywhere in a payload — expected to be none. */
 function provenanceKeys(value: unknown): string[] {
@@ -100,29 +49,27 @@ function provenanceKeys(value: unknown): string[] {
   );
 }
 
-let open: MultiVaultReplicaReader | undefined;
+let open: SeatPageFixture | undefined;
 
-function mountedReader(): MultiVaultReplicaReader {
+/** The phone's seat, over one seeded file. */
+function seatSession(): ReturnType<typeof seatOnlyReadPlane> {
   const root = tempDirSync("centraid-inline-query-spike-");
   const databaseName = path.join(root, "personal.db");
-  seedScope(databaseName);
-  open = new MultiVaultReplicaReader(
-    new NodeSqliteDriver(path.join(root, "mounted.db")),
-    [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
-  );
-  return open;
+  seedSeatScope(databaseName);
+  open = new SeatPageFixture(databaseName);
+  return seatOnlyReadPlane(open.page);
 }
 
 interface DashboardOutput {
   me: string | null;
   currency: string;
-  friends: Array<{ party_id: string; net_minor: number }>;
+  friends: Array<{ party_id: string; balances: Money[] }>;
   groups: unknown[];
   archived_groups: unknown[];
   trash: unknown[];
   recurring: unknown[];
-  owe_total_minor: number;
-  owed_total_minor: number;
+  owe: Valuation;
+  owed: Valuation;
   expense_count: number;
   settlement_count: number;
   vaultDenied?: unknown;
@@ -134,12 +81,8 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
     open = undefined;
   });
 
-  test("Tally's dashboard handler runs on the native replica session", async () => {
-    const reader = mountedReader();
-    const session = {
-      read: reader.read.bind(reader),
-      search: reader.search.bind(reader),
-    };
+  test("Tally's dashboard handler runs on the phone's own seat", async () => {
+    const session = seatSession();
     const output = (await runNativeInlineQuery(
       { default: dashboardQuery } as never,
       { session, appId: "tally" }
@@ -152,7 +95,11 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
     expect(output.expense_count).toBe(40);
     expect(output.settlement_count).toBe(1);
     expect(output.friends).toHaveLength(3);
-    expect(output.owe_total_minor + output.owed_total_minor).toBeGreaterThan(0);
+    // The two positions carry amounts; neither is summed into the other
+    // (#996, ruling R22).
+    expect(
+      output.owe.components.length + output.owed.components.length
+    ).toBeGreaterThan(0);
     // The trashed expense is out of the balances and in the trash list.
     expect(output.trash).toHaveLength(1);
     expect(output.groups).toHaveLength(1);
@@ -160,32 +107,19 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
     expect(output.recurring).toHaveLength(1);
   });
 
-  test("replica-backed and row-array ctx produce identical output", async () => {
-    const reader = mountedReader();
-    const session = {
-      read: reader.read.bind(reader),
-      search: reader.search.bind(reader),
-    };
+  test("the payload carries none of this seat's own bookkeeping", async () => {
+    const session = seatSession();
     const native = (await runNativeInlineQuery(
       { default: dashboardQuery } as never,
       { session, appId: "tally" }
     )) as DashboardOutput;
-    const reference = (await runNativeInlineQuery(
-      { default: dashboardQuery } as never,
-      { session: rowArraySession(), appId: "tally" }
-    )) as DashboardOutput;
 
-    expect(reference.vaultDenied).toBeUndefined();
-    // BYTE FOR BYTE, not "the same once provenance is filtered out" (#922 E7,
-    // precondition (b)). The mounted plane still decorates every row with
-    // `__centraidScopeId` and its siblings — that is how a household's rows
-    // know which vault they came from — but `withoutScopeProvenance` strips
-    // them before a handler sees the row, so a handler that SPREADS a row
-    // (`recurring` does) cannot leak this seat's own bookkeeping into a
-    // payload the web seat's version of the same payload does not carry.
-    expect(native).toStrictEqual(reference);
+    // A handler that SPREADS a row — `recurring` does — must not emit the
+    // seat's provenance into a payload the web seat's version of the same
+    // payload does not carry (#922 E7, precondition (b)). On the seat the row
+    // IS the table's columns, so the rule is now a property of the read
+    // rather than of a strip, and this is what proves it stayed true.
+    expect(native.vaultDenied).toBeUndefined();
     expect(provenanceKeys(native)).toStrictEqual([]);
-    expect(native.owed_total_minor).toBe(reference.owed_total_minor);
-    expect(native.owe_total_minor).toBe(reference.owe_total_minor);
   });
 });

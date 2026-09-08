@@ -11,6 +11,7 @@
     "scopes": [
       { "schema": "media", "verbs": "read" },
       { "schema": "core", "table": "content_item", "verbs": "read" },
+      { "schema": "core", "table": "content_representation", "verbs": "read" },
       { "schema": "core", "table": "content_derivative", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
       { "schema": "core", "table": "concept", "verbs": "read" },
@@ -112,6 +113,8 @@
       "writes": [
         "core.content_derivative",
         "core.content_item",
+        "core.content_representation",
+        "core.content_text",
         "core.place",
         "media.asset",
         "media.asset_phash"

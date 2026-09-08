@@ -60,19 +60,23 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
 
 // The device database seam. `useDocs`, `applyFilters`, `sortDocuments` and
 // every copy table above them stay real.
-vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    useReplicaQuery: (_appId: string, request: { entity?: string }) => ({
-      connection: "current" as const,
-      error: undefined,
-      loading: false,
-      refresh: async () => undefined,
-      rows: replicaRows.byEntity.get(request.entity ?? "") ?? [],
-    }),
-  };
-});
+//
+// The seam moved with the reads (#996 wave 4b): a Docs read is a page over the
+// seat's own file now, so what is substituted is the walk, still keyed by the
+// entity the read declares. The rows a screen sees are unchanged.
+vi.mock(import("../../kit/hooks/useSeatPages"), () => ({
+  useSeatPages: (
+    _appId: string,
+    _query: unknown,
+    options: { entity: string }
+  ) => ({
+    connection: "current" as const,
+    error: undefined,
+    loading: false,
+    refresh: async () => undefined,
+    rows: replicaRows.byEntity.get(options.entity) ?? [],
+  }),
+}));
 
 /** A document plus the content row the drive projection joins it to. */
 function seedDocuments(rows: readonly { id: string; title: string }[]): void {
@@ -217,14 +221,14 @@ describe("Docs, on the real React Native host tree", () => {
     replicaRows.byEntity.set("share.subscription", [
       {
         __rowId: "s1",
-        shape_id: "shape-alice",
+        authority_id: "authority-alice",
         origin_vault_id: "vault-alice",
         state: "subscribed",
         subscribed_at: "2026-08-31T13:42:06.358Z",
       },
       {
         __rowId: "s2",
-        shape_id: "shape-stranger",
+        authority_id: "authority-stranger",
         origin_vault_id: "vault-stranger",
         state: "subscribed",
         subscribed_at: "2026-08-02T09:00:00.000Z",
@@ -233,7 +237,7 @@ describe("Docs, on the real React Native host tree", () => {
     replicaRows.byEntity.set("share.subscription_lineage", [
       {
         __rowId: "o1",
-        shape_id: "shape-alice",
+        authority_id: "authority-alice",
         target_type: "core.document",
         target_id: "d1",
         origin_item_id: "far-away-1",
@@ -241,7 +245,7 @@ describe("Docs, on the real React Native host tree", () => {
       },
       {
         __rowId: "o2",
-        shape_id: "shape-stranger",
+        authority_id: "authority-stranger",
         target_type: "core.document",
         target_id: "d2",
         origin_item_id: "far-away-2",

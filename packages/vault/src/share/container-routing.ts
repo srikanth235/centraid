@@ -186,6 +186,7 @@ export const CONTAINER_COMMAND_ROUTES: readonly ContainerCommandRoute[] = [
   onAsset("media.restore_asset"),
   onAsset("media.set_archived"),
   onAsset("media.set_asset_place"),
+  onAsset("media.promote_caption"),
   onAsset("media.set_favorite"),
   onAsset("media.update_asset"),
   onAsset("enrich.upsert_faces", "enrich"),

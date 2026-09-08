@@ -12,6 +12,7 @@ import {
   FOLDER_SCHEME_URI,
   ROOT_FOLDER_NOTATION,
 } from "../../_shared/concept-scheme-kit.ts";
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import driveHandler from "./drive.ts";
 
 const ORIGIN_ENTITIES = new Set([
@@ -135,7 +136,11 @@ function ctxOf({ deniedEntities = new Set<string>() } = {}) {
     const rows = ROWS[entity] ?? [];
     return { rows: where ? rows.filter((r) => matches(r, where)) : rows };
   });
-  return { ctx: { vault: { read, search: read } } as unknown as never, read };
+  const { page } = pagedFixture(ROWS, { deniedEntities });
+  return {
+    ctx: { vault: { page, read, search: read } } as unknown as never,
+    read,
+  };
 }
 
 const run = async (opts?: Parameters<typeof ctxOf>[0]) =>

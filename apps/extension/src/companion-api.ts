@@ -29,10 +29,6 @@ import type {
 } from "./types.js";
 import { COMPANION_MODULE_CATALOG } from "./types.js";
 
-interface CompanionModulesResponse {
-  modules?: Array<{ id: CompanionModule; state: ModuleStatus["state"] }>;
-}
-
 function asOrigin(raw: string): string | undefined {
   try {
     return new URL(raw).origin;
@@ -72,7 +68,7 @@ async function requireReady(): Promise<PairingState> {
 async function pair(
   ticketText: string,
   deviceName: string | undefined,
-  grantProfile: readonly CompanionModule[]
+  modules: readonly CompanionModule[]
 ): Promise<PairingState> {
   const ticket = decodePairingTicket(ticketText);
   if (!ticket) throw new Error("This is not a Centraid pairing code.");
@@ -86,7 +82,6 @@ async function pair(
     deviceName:
       deviceName?.trim() ||
       `Centraid Companion · ${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
-    grantProfile,
   });
   const vaults = normalizePairingVaults(response);
   const primary = vaults[0];
@@ -108,7 +103,7 @@ async function pair(
     vaultId: primary.vaultId,
     vaults,
     pairedAt: new Date().toISOString(),
-    grantProfile,
+    modules,
     ...(typeof response["gatewayId"] === "string"
       ? { gatewayId: response["gatewayId"] }
       : {}),
@@ -124,17 +119,31 @@ async function pair(
   return state;
 }
 
+/*
+ * WHICH MODULES THIS COMPANION USES IS THIS COMPANION'S OWN SETTING (#996,
+ * R11). It used to be an ANSWER: the gateway held `share_authority` rows,
+ * principal kind `device` over `app.surface`, and told the extension which of
+ * its modules were granted. Enrollment is full trust now — a paired seat holds
+ * the vault — so the gateway has no narrower answer to give and the selection
+ * is a local preference again. `unavailable` means the app is not installed on
+ * the paired vault, which is the one fact still worth asking the gateway for.
+ */
 export async function moduleStatuses(): Promise<ModuleStatus[]> {
-  await requireReady();
-  const response = await companionJson<CompanionModulesResponse>(
+  const pairing = await requireReady();
+  const selected = new Set<string>(pairing.modules);
+  const response = await companionJson<{ apps?: Array<{ name?: string }> }>(
     ROUTES.vaultApps
   );
-  const byId = new Map(
-    (response.modules ?? []).map((module) => [module.id, module.state])
+  const installed = new Set(
+    (response.apps ?? []).map((app) => app.name).filter(Boolean)
   );
   return COMPANION_MODULE_CATALOG.map((module) => ({
     ...module,
-    state: byId.get(module.id) ?? "unavailable",
+    state: selected.has(module.id)
+      ? installed.has(module.id)
+        ? ("granted" as const)
+        : ("unavailable" as const)
+      : ("revoked" as const),
   }));
 }
 

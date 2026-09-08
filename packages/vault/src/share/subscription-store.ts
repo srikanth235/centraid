@@ -1,7 +1,10 @@
 /*
- * The subscription seat's STORE (#929): one row per (shape, audience vault) on
- * both seats, and the shape-keyed lineage that says which rows a shape placed.
+ * The subscription seat's STORE (#929): one row per (grant, audience vault) on
+ * both seats, and the grant-keyed lineage that says which rows a grant placed.
  * Behaviour — ingest, re-projection, purge — lives in `subscription-seat.ts`.
+ *
+ * KEYED BY `authority_id` (#996, R10): the grant IS the shape, so there is no
+ * second id to mint, store and parse back.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -12,44 +15,37 @@ export interface SubscriptionCursor {
 }
 
 export interface SubscriptionRecord {
-  shapeId: string;
+  authorityId: string;
   audienceVaultId: string;
-  grantId: string;
   originVaultId: string;
   subjectType: string;
   cursor: SubscriptionCursor;
-  /** What the seat last ingested; `null` until it holds the shape. */
-  structureDigest: string | null;
   state: "subscribed" | "removed";
   detail: string | null;
 }
 
 interface SubscriptionRow {
-  shape_id: string;
+  authority_id: string;
   audience_vault_id: string;
-  grant_id: string;
   origin_vault_id: string;
   subject_type: string;
   cursor_epoch: string | null;
   cursor_seq: number;
-  structure_digest: string | null;
   state: string;
   detail: string | null;
 }
 
-const SUBSCRIPTION_COLUMNS = `shape_id, audience_vault_id, grant_id,
+const SUBSCRIPTION_COLUMNS = `authority_id, audience_vault_id,
         origin_vault_id, subject_type, cursor_epoch, cursor_seq,
-        structure_digest, state, detail`;
+        state, detail`;
 
 function toRecord(row: SubscriptionRow): SubscriptionRecord {
   return {
-    shapeId: row.shape_id,
+    authorityId: row.authority_id,
     audienceVaultId: row.audience_vault_id,
-    grantId: row.grant_id,
     originVaultId: row.origin_vault_id,
     subjectType: row.subject_type,
     cursor: { epoch: row.cursor_epoch, seq: row.cursor_seq },
-    structureDigest: row.structure_digest,
     state: row.state === "removed" ? "removed" : "subscribed",
     detail: row.detail,
   };
@@ -57,26 +53,24 @@ function toRecord(row: SubscriptionRow): SubscriptionRecord {
 
 export function readSubscription(
   db: DatabaseSync,
-  shapeId: string,
+  authorityId: string,
   audienceVaultId: string
 ): SubscriptionRecord | undefined {
   const row = db
     .prepare(
       `SELECT ${SUBSCRIPTION_COLUMNS} FROM share_subscription
-        WHERE shape_id = ? AND audience_vault_id = ?`
+        WHERE authority_id = ? AND audience_vault_id = ?`
     )
-    .get(shapeId, audienceVaultId) as SubscriptionRow | undefined;
+    .get(authorityId, audienceVaultId) as SubscriptionRow | undefined;
   return row ? toRecord(row) : undefined;
 }
 
 export interface RecordSubscriptionInput {
-  shapeId: string;
+  authorityId: string;
   audienceVaultId: string;
-  grantId: string;
   originVaultId: string;
   subjectType: string;
   cursor?: { epoch: string; seq: number };
-  structureDigest?: string | null;
   state: "subscribed" | "removed";
   now: string;
   detail?: string | null;
@@ -91,7 +85,11 @@ export function recordSubscription(
   db: DatabaseSync,
   input: RecordSubscriptionInput
 ): void {
-  const standing = readSubscription(db, input.shapeId, input.audienceVaultId);
+  const standing = readSubscription(
+    db,
+    input.authorityId,
+    input.audienceVaultId
+  );
   const seq =
     input.cursor === undefined
       ? (standing?.cursor.seq ?? 0)
@@ -100,28 +98,22 @@ export function recordSubscription(
         : input.cursor.seq;
   db.prepare(
     `INSERT INTO share_subscription
-       (shape_id, audience_vault_id, grant_id, origin_vault_id, subject_type,
-        cursor_epoch, cursor_seq, structure_digest, state, subscribed_at,
-        removed_at, detail)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (shape_id, audience_vault_id) DO UPDATE SET
+       (authority_id, audience_vault_id, origin_vault_id, subject_type,
+        cursor_epoch, cursor_seq, state, subscribed_at, removed_at, detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (authority_id, audience_vault_id) DO UPDATE SET
        cursor_epoch = excluded.cursor_epoch,
        cursor_seq = excluded.cursor_seq,
-       structure_digest = excluded.structure_digest,
        state = excluded.state,
        removed_at = excluded.removed_at,
        detail = excluded.detail`
   ).run(
-    input.shapeId,
+    input.authorityId,
     input.audienceVaultId,
-    input.grantId,
     input.originVaultId,
     input.subjectType,
     input.cursor?.epoch ?? standing?.cursor.epoch ?? null,
     seq,
-    input.structureDigest === undefined
-      ? (standing?.structureDigest ?? null)
-      : input.structureDigest,
     input.state,
     input.now,
     input.state === "removed" ? input.now : null,
@@ -130,7 +122,7 @@ export function recordSubscription(
 }
 
 export interface SubscriptionLineageRow {
-  shapeId: string;
+  authorityId: string;
   targetType: string;
   targetId: string;
   originItemId: string;
@@ -139,25 +131,25 @@ export interface SubscriptionLineageRow {
 
 export function readSubscriptionLineage(
   db: DatabaseSync,
-  shapeId: string
+  authorityId: string
 ): SubscriptionLineageRow[] {
   return (
     db
       .prepare(
-        `SELECT shape_id, target_type, target_id, origin_item_id,
+        `SELECT authority_id, target_type, target_id, origin_item_id,
                 origin_row_version
-           FROM share_subscription_lineage WHERE shape_id = ?
+           FROM share_subscription_lineage WHERE authority_id = ?
           ORDER BY target_type, target_id`
       )
-      .all(shapeId) as {
-      shape_id: string;
+      .all(authorityId) as {
+      authority_id: string;
       target_type: string;
       target_id: string;
       origin_item_id: string;
       origin_row_version: number;
     }[]
   ).map((row) => ({
-    shapeId: row.shape_id,
+    authorityId: row.authority_id,
     targetType: row.target_type,
     targetId: row.target_id,
     originItemId: row.origin_item_id,

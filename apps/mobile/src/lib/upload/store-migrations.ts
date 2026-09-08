@@ -1,12 +1,12 @@
 // Upload queue schema migrations (#419.4): ONE transaction per step with the
 // version bump; every step idempotent.
 
-import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
+import type { UploadSqliteDriver } from "../replica/expo-sqlite-driver";
 
 /** Bumped when the DDL changes. */
 export const SCHEMA_VERSION = 5;
 
-type Driver = Pick<ReplicaSqliteDriver, "exec" | "run" | "all">;
+type Driver = Pick<UploadSqliteDriver, "exec" | "run" | "all">;
 
 interface ColumnRow {
   name: string;

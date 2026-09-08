@@ -4,6 +4,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import type { BackupPolicy } from "../backup-policy.js";
+import { contentMediaTypeSql } from "../schema/representation.js";
 import type { RemoteTier } from "./custody-types.js";
 import { storeForClass } from "./custody-types.js";
 import { BINARY_DERIVATIVE_SQL } from "./derivatives.js";
@@ -70,15 +71,22 @@ export function originalMediaForSha(
 ): { mediaType: string; byteSize: number } | null {
   const row = db
     .prepare(
-      `SELECT media_type AS mediaType, byte_size AS byteSize
+      `SELECT ${contentMediaTypeSql("content_id")} AS mediaType,
+              byte_size AS byteSize
          FROM core_content_item WHERE sha256 = ?
        UNION ALL
        SELECT media_type AS mediaType, byte_size AS byteSize
          FROM blob_staging WHERE sha256 = ? AND variant IS NULL
        LIMIT 1`
     )
-    .get(sha256, sha256) as { mediaType: string; byteSize: number } | undefined;
-  return row ?? null;
+    .get(sha256, sha256) as
+    | { mediaType: string | null; byteSize: number }
+    | undefined;
+  // No owner has said what these bytes are yet — routing has no type to sort
+  // on, which is the same answer it always gave for an unknown sha (#996).
+  return row && row.mediaType !== null
+    ? { mediaType: row.mediaType, byteSize: row.byteSize }
+    : null;
 }
 
 export interface StorageClassForWriteInput {

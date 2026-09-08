@@ -1,4 +1,8 @@
-import { canonicalizeRrule, expandRecurrence } from "@centraid/core/time";
+import {
+  canonicalizeRrule,
+  expandRecurrence,
+  occurrenceSearchWindow,
+} from "@centraid/core/time";
 import type { RecurrenceSemantics } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
@@ -153,27 +157,32 @@ function eventSeries(
   };
 }
 
+/**
+ * The occurrence a SERIES-LOCAL WALL CLOCK names, or `null` when the series
+ * does not land there (#996, ruling R21; drift ONT-25). The key is not an
+ * instant, so the window comes from the shared adapter rather than from
+ * `Date.parse`, which read the key in the host's zone and found nothing for
+ * every series outside UTC.
+ */
 function occurrenceWallStart(
   ctx: HandlerCtx,
   eventId: string,
-  instant: string
+  localStart: string
 ): string | null {
   const series = eventSeries(ctx, eventId);
   if (!series.rrule) return null;
-  const at = Date.parse(instant);
-  if (Number.isNaN(at)) return null;
+  const window = occurrenceSearchWindow(localStart);
+  if (window === null) return null;
   return (
     expandRecurrence({
       rrule: series.rrule,
       start: series.dtstart,
-      rangeFrom: instant,
-      rangeTo: new Date(at + 86_400_000).toISOString(),
+      rangeFrom: window.from,
+      rangeTo: window.to,
       ...(series.startTz === null ? {} : { timeZone: series.startTz }),
       semantics: series.semantics,
-      maxInstances: 4,
-    }).find(
-      (item) => item.originalStart === instant || item.wallStart === instant
-    )?.wallStart ?? null
+      maxInstances: 16,
+    }).find((item) => item.wallStart === localStart)?.wallStart ?? null
   );
 }
 
@@ -346,11 +355,11 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   ownerSchema: "schedule",
   inputSchema: {
     type: "object",
-    required: ["event_id", "original_start", "scope", "action"],
+    required: ["event_id", "original_start_local", "scope", "action"],
     additionalProperties: false,
     properties: {
       event_id: STRING,
-      original_start: STRING,
+      original_start_local: STRING,
       scope: { type: "string", enum: ["occurrence", "future", "series"] },
       action: { type: "string", enum: ["skip", "override"] },
       dtstart: STRING,
@@ -432,7 +441,7 @@ function occurrenceOverrideJson(input: {
 function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     event_id: string;
-    original_start: string;
+    original_start_local: string;
     scope: "occurrence" | "future" | "series";
     action: "skip" | "override";
     dtstart?: string;
@@ -507,10 +516,10 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
   const wallStart = occurrenceWallStart(
     ctx,
     input.event_id,
-    input.original_start
+    input.original_start_local
   );
   if (wallStart === null)
-    throw new Error("original_start is not an occurrence of this series");
+    throw new Error("original_start_local is not an occurrence of this series");
   const override = occurrenceOverrideJson(input);
   const exceptionId = ctx.newId();
   ctx.db

@@ -37,13 +37,17 @@ export const docsPendingProjection = definePendingProjection({
                 : "Pending document",
             deleted_at: null,
           }),
+          // THE CONTENT ROW CARRIES NO TITLE (#996, R20(b)). The authored
+          // title lives on the owning row — `core.document.title` above — and
+          // `core_content_item` has neither a `title` nor a `media_type`
+          // column to put one in. It had `title` while a document and its
+          // bytes shared one, and that was the mirror the ruling deleted: two
+          // assets sharing a sha shared one caption, and a generated caption
+          // overwrote the owner's own words. What is minted here is the row
+          // the document POINTS AT, so it exists in the overlay before the
+          // gateway answers; nothing more belongs on it.
           pendingUpsert("core.content_item", contentId, {
             content_id: contentId,
-            title:
-              typeof input.title === "string"
-                ? input.title
-                : "Pending document",
-            media_type: "application/octet-stream",
           }),
         ],
       };

@@ -34,7 +34,11 @@
 // All tables STRICT; PKs are TEXT UUIDv7; timestamps are TEXT ISO-8601 UTC —
 // the core spine's conventions.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const LOCKER_DDL = `
 CREATE TABLE locker_item (
@@ -83,6 +87,7 @@ CREATE TABLE locker_item (
   password_set_at TEXT,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   -- archive (#872, GAPS §3.3 #9): "keep forever, hide from lists", the
   -- opposite end of trash's 30-day countdown. Deliberately EXCLUSIVE with
   -- deleted_at rather than orthogonal: an item is live, archived, or trashed,
@@ -144,7 +149,8 @@ CREATE TABLE locker_auth_credential (
   salt          BLOB NOT NULL,
   verifier      BLOB NOT NULL,
   created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX locker_auth_credential_kind_idx
   ON locker_auth_credential(kind);
@@ -180,6 +186,7 @@ CREATE TABLE locker_item_field (
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   CHECK (kind = 'sealed' OR value_sealed IS NULL),
   CHECK (kind <> 'sealed' OR value_text IS NULL),
   FOREIGN KEY (field_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -229,7 +236,8 @@ CREATE TABLE locker_item_passkey (
   algorithm     TEXT,
   private_key   TEXT,
   created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
 ${touchUpdatedAt("locker_item_passkey", "item_id")}
@@ -258,3 +266,74 @@ ${touchUpdatedAt("locker_item_passkey", "item_id")}
 // ciphertext, and `locker.item` and its sidecars declare
 // `revisions: { retain: 'forever' }` so the durable password history the
 // Locker promises is a declaration rather than a second table.
+
+// THE KEY PLANE (#996, ruling R13) — rung six.
+//
+// Locker's secrets stop being "plaintext the gateway holds and releases under
+// a permit" and become ciphertext under ONE vault key `K`, decryptable only on
+// a seat that has passed its own unlock boundary. The gateway never serves
+// plaintext, so the thing a seat needs from this file is not a value: it is
+// WHICH KEY the row's ciphertext is under.
+//
+// `locker_key` carries the id ONLY. No key material is ever written here —
+// `K` lives in the gateway's `keys/` directory, and the recovery kit is the
+// one artefact that carries it (R13, as corrected).
+//
+// IT IS A PRIVATE TABLE, AND `key_id` CARRIES NO FOREIGN KEY. Which key a
+// gateway currently holds, and when it retired the one before, is a fact
+// about THIS host's custody — the class `private-tables.ts` calls
+// "credential". A foreign key from `locker_item` into it would have made a
+// replicated table reference a private one, breaking the single property
+// that list exists to preserve, and it would have bought nothing: a seat
+// never asks the file which key is live. It holds `K` and its id from the
+// key door, and "may I decrypt this row" is `row.key_id === my key id` —
+// which is also how a stale-`key_id` intent is caught, on the seat before it
+// is posted and on the gateway before it is stored.
+//
+// WHY `key_id` IS A ROW COLUMN AND THE NONCE IS NOT. `locker_item` carries
+// five secret columns; one nonce column could serve only one of them, so each
+// value's fresh random 96-bit nonce rides BESIDE its ciphertext inside that
+// column's envelope (`lk1:<base64(nonce|ct|tag)>`, gateway/locker-key-plane.ts).
+// The key id is per ROW because rotation rewrites a row's secrets together, and
+// it is stored as a column as well as bound into the AAD so a ciphertext cannot
+// be replayed under a key id it was not sealed with.
+//
+// `retired_at` is what makes rotation crash-safe across two stores that share
+// no transaction: the DB says which key is live, the `keys/` directory may
+// briefly hold both, and a key file whose row is retired is the one to delete.
+export const LOCKER_KEY_DDL = `
+CREATE TABLE locker_key (
+  key_id     TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  retired_at TEXT
+) STRICT;
+-- ONE LIVE KEY, AS A SCHEMA FACT. Indexing the predicate rather than the
+-- column: SQLite treats NULLs as distinct in a unique index, so
+-- \`ON locker_key(retired_at)\` would have permitted any number of live rows.
+CREATE UNIQUE INDEX locker_key_live_idx
+  ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
+ALTER TABLE locker_item ADD COLUMN key_id TEXT;
+ALTER TABLE locker_item_field ADD COLUMN key_id TEXT;
+ALTER TABLE locker_item_passkey ADD COLUMN key_id TEXT;
+`;
+
+// THE UNLOCK CREDENTIAL GOES (#996, rulings R13 and W6-D2) — rung seven.
+//
+// `locker_auth_credential` held a scrypt-over-HMAC verifier for the passphrase
+// the gateway checked before it minted a permit. Every part of that sentence
+// is gone: the gateway does not unseal a Locker row, so there is nothing for a
+// permit to buy, and the seat proves presence to its own OS or its own
+// passphrase wrap. A verifier nothing verifies against is not dormant, it is a
+// standing offer to whoever finds the file — and the honest form of "this
+// installation has no gateway-side unlock credential" is no table.
+//
+// A RUNG, NOT A JS PASS: it must leave every EXISTING file, and nothing
+// survives it that a later restore would have to interpret. The passphrase
+// itself was never stored, so nothing recoverable is lost — a member who used
+// one unlocks with Face ID or their seat's passphrase now, and neither reads
+// this row.
+export const LOCKER_AUTH_DROP_DDL = `
+DROP TRIGGER IF EXISTS locker_auth_credential_touch_updated_at;
+DROP INDEX IF EXISTS locker_auth_credential_kind_idx;
+DROP TABLE IF EXISTS locker_auth_credential;
+`;

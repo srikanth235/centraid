@@ -2,6 +2,43 @@
 
 ## Open
 
+- **The command palette's photo target reads a `title` column the vault
+  deleted, so a photo can never be a palette hit.**
+  `packages/client/src/react/shell/routes/paletteEntitySearch.ts` and
+  `apps/mobile/src/screens/home/blueprint-search.ts` both declare the Photos
+  target as `entity: "core.content_item"` with `labels: ["title"]`, and #996
+  R20(b) removed `title` from that row — an authored title is
+  `media_asset.title` now. Both call sites drop a hit whose label is missing
+  (`if (!label) return []`), so the target matches and then discards every row.
+  Found while converting search to the seat (#996, W5-D1): the search itself
+  now works for `core.content_item`, which is what made the dead label visible.
+  The fix is a projection, not a search change — the FTS shadow already indexes
+  the owner's title as an expression over `media_asset`, so the palette needs
+  the owning asset's title on the row. Left as a finding rather than folded
+  into W5-D1: what a photo is CALLED in the palette is a product answer, and
+  the two call sites would have to agree on it.
+
+- **The letter avatar puts body ink on a hashed hue, and the People a11y test
+  was passing because the roster had no rows to fail on.** `.kit-avatar` in
+  `packages/design/src/elements/kit.css` sets `color: var(--text)` while
+  `packages/blueprints/apps/_shared/Avatar.tsx` sets `background` to a hashed
+  identity hue, so the monogram's contrast is whatever the two happen to be:
+  measured on People's roster it is **2.91:1** (`#141414` on `#8c4c61`) against
+  a 4.5:1 floor, and axe reports 233 nodes. It is not a new defect — the design
+  system already ships the paired on-colours (`--c-rose-text` and its siblings,
+  used by `contextMenu.module.css` and `automation.module.css`) and the avatar
+  is the one place that does not reach for them. What is new is that anything
+  SEES it: `accessibility.spec.ts` "People has no WCAG A/AA violations" passed
+  at `4ef887bf4` and fails at `192e08da6`, whose only relevant change is the
+  `people_profile_created_page_idx` ordering index — the roster now renders its
+  rows inside the test's window, so axe finally has avatars to measure. A test
+  that passes because the screen is empty is not evidence, which is the second
+  half of this entry. The fix is the paired token, not a new colour: `Avatar`
+  emits the `--c-<key>-text` that goes with the hue it picked, and `kit.css`
+  reads it. Left for the design owner rather than folded into #996's W5 — it is
+  a rulebook change (DESIGN.md) across every avatar in the product, and the
+  index commit only revealed it.
+
 - **A golden-corpus re-freeze cannot be read as a diff, and the freezer's own
   header says it should be.** `scripts/golden-vault/build.mjs` derives every
   corpus id from a fixed seed for exactly that reason ("a corpus seeded with
@@ -97,15 +134,6 @@
   The durable fix is to keep the invariant ("every registered table rides the
   `SELECT *` walk; here is what would break if it stopped") in the file and move
   the per-issue audit trail to the receipts that already exist.
-
-- **`evaluateReplicaRead` has no production caller on any host.**
-  `packages/client/src/replica/query.ts` still exports it, but the store compiles
-  the grammar to SQL in `read-plan.ts` and mobile's multi-vault reader composes a
-  plan; the function survives only as the oracle the pushdown parity suites
-  execute against. That is a legitimate use — an independent implementation is
-  what makes a parity proof mean anything — but it is not what the file says it
-  is, and a second implementation nobody runs drifts. Whether the proof or the
-  function should go is the open decision.
 
 - **The phone's Access history cannot narrow to one item.**
   `lockerAccess` (`apps/mobile/src/apps/locker/locker-gateway.ts`) never sends
@@ -334,6 +362,14 @@
   which makes every `.tsx` number in that file wrong in the same direction.
 
 ## Resolved
+
+- #996 — **`evaluateReplicaRead` had no production caller on any host.** It was
+  filed open while `packages/client/src/replica/query.ts` still exported it and
+  the store compiled the read grammar to SQL elsewhere, leaving a second
+  implementation nobody ran except the pushdown parity oracle. The open decision
+  — the proof or the function — was answered by deleting both with the plane
+  they belonged to: a seat runs an app handler's own statement over the vault's
+  real tables, so there is no grammar to evaluate twice.
 
 - #922 — **Two surfaces #882 added to the phone were unvirtualized.**
   `apps/mobile/src/apps/notes/NotesPlaces.tsx` kept one hand-wired `ScrollView`

@@ -12,7 +12,7 @@ export type MobileCompatibilityDisposition =
   | "reconnect";
 
 export const MOBILE_GATEWAY_UPDATE_MESSAGE =
-  "This mobile version needs the current protocol, multi-vault offline sync, and cross-vault placements.";
+  "This mobile version needs the current protocol and a gateway that serves the whole vault to this phone.";
 export const MOBILE_APP_UPDATE_MESSAGE =
   "Mobile updates are store-only — update from the App Store or Google Play.";
 export const MOBILE_GATEWAY_RECONNECT_MESSAGE =
@@ -52,13 +52,24 @@ export class MobileGatewayCompatibilityError extends Error {
   }
 }
 
+/**
+ * THE WALL GATES ON THE SEAT DOORS (#996 wave 3, review sweep F1).
+ *
+ * It used to gate on `multiVaultReplica` and `crossVaultPlacements` — two
+ * words describing the mount plane, which is deleted. A wall that names a
+ * mechanism neither end has tells a member to update a gateway for a feature
+ * that no longer exists.
+ *
+ * `seatReplica` is OPTIONAL in the capability map, and absent reads as off,
+ * which is exactly right here: a gateway that predates the doors cannot serve
+ * this build its file, and the honest answer is the update wall rather than a
+ * phone that mounts and then finds no snapshot to fetch.
+ */
 export function supportsMobileOfflineGateway(raw: unknown): boolean {
   if (raw === null || typeof raw !== "object") return false;
   const capabilities = (raw as { capabilities?: unknown }).capabilities;
   return (
-    isGatewayCapabilities(capabilities) &&
-    capabilities.multiVaultReplica === true &&
-    capabilities.crossVaultPlacements === true
+    isGatewayCapabilities(capabilities) && capabilities.seatReplica === true
   );
 }
 

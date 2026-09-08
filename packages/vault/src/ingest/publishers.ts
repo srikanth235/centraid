@@ -4,6 +4,8 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { inspectRrule } from "@centraid/core/time";
+
 import { promoteStagedBlob } from "../blob/promote.js";
 import {
   bindContactReach,
@@ -21,6 +23,7 @@ import {
   insertMediaAssetTx,
 } from "../commands/media.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
+import { setRepresentation } from "../schema/representation.js";
 import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
@@ -36,6 +39,13 @@ export interface EventPayload {
   startTz: string | null;
   rrule: string | null;
   status: string;
+}
+
+/** `'supported'` when the engine can expand the rule, `'unsupported'` when it
+ *  is kept as a record of what the provider sent (#996, R21 / ONT-31). */
+function rruleSupport(rrule: string | null): "supported" | "unsupported" {
+  if (rrule === null) return "supported";
+  return inspectRrule(rrule).ok ? "supported" : "unsupported";
 }
 
 const eventPublisher: Publisher = {
@@ -60,10 +70,11 @@ const eventPublisher: Publisher = {
     vault
       .prepare(
         `INSERT INTO core_event
-           (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
+           (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule,
+            rrule_support, status,
             location_place_id, organizer_party_id, sequence, created_at, updated_at,
             recurrence_semantics)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)`
       )
       .run(
         eventId,
@@ -74,6 +85,12 @@ const eventPublisher: Publisher = {
         p.dtend,
         p.startTz,
         p.rrule,
+        // AN UNSUPPORTED RULE IS RETAINED AND SAID SO (#996, R21 / ONT-31).
+        // A calendar's `FREQ=MONTHLY;BYSETPOS=-1` expands to the wrong dates
+        // under this engine and to nothing under the summariser; keeping the
+        // provider's text while marking it unsupported is the only answer that
+        // neither lies about the series nor throws it away.
+        rruleSupport(p.rrule),
         p.status,
         now,
         now,
@@ -88,7 +105,7 @@ const eventPublisher: Publisher = {
     vault
       .prepare(
         `UPDATE core_event SET summary = ?, description = ?, dtstart = ?, dtend = ?, start_tz = ?,
-            rrule = ?, status = ?, sequence = sequence + 1, updated_at = ?
+            rrule = ?, rrule_support = ?, status = ?, sequence = sequence + 1, updated_at = ?
           WHERE event_id = ?`
       )
       .run(
@@ -98,6 +115,7 @@ const eventPublisher: Publisher = {
         p.dtend,
         p.startTz,
         p.rrule,
+        rruleSupport(p.rrule),
         p.status,
         now,
         entityId
@@ -320,8 +338,8 @@ function textContentItem(
   vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/plain', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+         (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
@@ -433,6 +451,15 @@ const messagePublisher: Publisher = {
         body.contentId,
         p.messageId
       );
+    // THIS MESSAGE'S READING OF ITS BODY BYTES (#996, R20(b)).
+    setRepresentation(vault, uuidv7, now, {
+      contentId: body.contentId,
+      ownerType: "social.message",
+      ownerId: messageId,
+      mediaType: "text/plain",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     for (const att of p.attachments ?? []) {
       const promoted = promoteStagedBlob(
         {
@@ -442,8 +469,7 @@ const messagePublisher: Publisher = {
           wrote: (type, id) => wrote.push({ type, id }),
           creatorPartyId: senderId,
         },
-        att.stagedSha,
-        { title: att.filename }
+        att.stagedSha
       );
       const isFirst = vault
         .prepare(
@@ -464,6 +490,15 @@ const messagePublisher: Publisher = {
           isFirst.n === 0 ? 1 : 0,
           now
         );
+      // THE ATTACHMENT'S READING OF ITS BYTES (#996, R20(b)) — the imported
+      // filename is the archive's word for them, not the byte row's.
+      setRepresentation(vault, uuidv7, now, {
+        contentId: promoted.contentId,
+        ownerType: "core.attachment",
+        ownerId: attachmentId,
+        mediaType: att.mediaType,
+        interpretation: "attachment",
+      });
       wrote.push({ type: "core.attachment", id: attachmentId });
     }
     return { entityId: messageId, wrote };
@@ -483,50 +518,73 @@ export interface TransactionPayload {
   amountMinor: number;
   currency: string;
   direction: "debit" | "credit";
+  /** What the member SEES. Never what selects the account. */
   accountName: string;
+  /** The source-scoped identifier that selects it (#996, R20(c)). */
+  accountRef: string;
 }
 
+/**
+ * AN ACCOUNT IS NOT SELECTED BY ITS LABEL (#996, ruling R20(c); drift ONT-24).
+ *
+ * This matched on `(owner_party_id, name)`, so two accounts sharing a display
+ * label — "Savings" at two banks, "Current" in two years of statements — were
+ * one account, and every transaction from the second landed on the first. The
+ * key is now `external_ref`: an identifier scoped to where the rows came from,
+ * which the importer states and never infers from a string two sources happen
+ * to share. Merging two source-scoped accounts that turn out to be the same
+ * account is a cross-source MATCH — explicit, reviewable evidence the owner
+ * accepts (OQ-12) — and is deliberately not done here.
+ */
 function accountFor(
   vault: DatabaseSync,
   ownerPartyId: string,
+  ref: string,
   name: string,
   currency: string
 ): { accountId: string; created: boolean } {
   const existing = vault
     .prepare(
-      "SELECT account_id FROM core_account WHERE owner_party_id = ? AND name = ?"
+      "SELECT account_id FROM core_account WHERE owner_party_id = ? AND external_ref = ?"
     )
-    .get(ownerPartyId, name) as { account_id: string } | undefined;
+    .get(ownerPartyId, ref) as { account_id: string } | undefined;
   if (existing) return { accountId: existing.account_id, created: false };
   const accountId = uuidv7();
   vault
     .prepare(
       `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, institution_party_id, external_ref, is_asset, opened_at, closed_at)
-       VALUES (?, ?, ?, 'depository', ?, NULL, NULL, 1, NULL, NULL)`
+       VALUES (?, ?, ?, 'depository', ?, NULL, ?, 1, NULL, NULL)`
     )
-    .run(accountId, ownerPartyId, name, currency);
+    .run(accountId, ownerPartyId, name, currency, ref);
   return { accountId, created: true };
 }
 
 const transactionPublisher: Publisher = {
   entityType: "core.transaction",
-  probe(vault, payload) {
-    const p = payload as unknown as TransactionPayload;
-    const existing = vault
-      .prepare("SELECT txn_id FROM core_transaction WHERE external_id = ?")
-      .get(p.externalId) as { txn_id: string } | undefined;
-    return existing
-      ? {
-          entityId: existing.txn_id,
-          disposition: "skip",
-          note: "transaction already imported",
-        }
-      : null;
+  // NO PROBE (#996, ruling R20(c)). This used to select on
+  // `core_transaction.external_id` alone, which is the GLOBAL column the same
+  // ruling removed the `UNIQUE` from: a provider-local id is scoped to its
+  // source, and Bank A's `ref-1` is not Bank B's. The probe only ever ran when
+  // the sync map MISSED, and a miss on `(connection_id, external_id)` — the
+  // authoritative key, checked first by `stageCandidates` — means this
+  // connection has not imported this id, so the honest disposition is
+  // `create`. Matching two sources' equal reference strings is a cross-source
+  // MATCH: explicit, reviewable evidence the owner accepts, never an inference
+  // (#996, OQ-12). Idempotency of a re-import is unchanged and comes from the
+  // sync map, which is where it always came from.
+  probe() {
+    return null;
   },
   create(vault, ownerPartyId, payload) {
     const p = assertPayload<TransactionPayload>("TransactionPayload", payload);
     const wrote: PublishedWrite[] = [];
-    const account = accountFor(vault, ownerPartyId, p.accountName, p.currency);
+    const account = accountFor(
+      vault,
+      ownerPartyId,
+      p.accountRef,
+      p.accountName,
+      p.currency
+    );
     if (account.created)
       wrote.push({ type: "core.account", id: account.accountId });
     const txnId = uuidv7();
@@ -650,9 +708,9 @@ function noteContent(
   vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language,
+         (content_id, content_uri, sha256, byte_size, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/markdown', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       id,
@@ -793,6 +851,14 @@ const notePublisher: Publisher = {
          VALUES (?, ?, ?, ?, 'markdown', 0, ?, ?, NULL, NULL)`
       )
       .run(noteId, ownerPartyId, p.title, content.id, now, now);
+    setRepresentation(vault, uuidv7, now, {
+      contentId: content.id,
+      ownerType: "knowledge.note",
+      ownerId: noteId,
+      mediaType: "text/markdown",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     return {
       entityId: noteId,
       wrote: [
@@ -811,6 +877,14 @@ const notePublisher: Publisher = {
           WHERE note_id = ?`
       )
       .run(p.title, content.id, now, entityId);
+    setRepresentation(vault, uuidv7, now, {
+      contentId: content.id,
+      ownerType: "knowledge.note",
+      ownerId: entityId,
+      mediaType: "text/markdown",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     return { wrote: content.wrote };
   },
 };
@@ -893,8 +967,7 @@ const mediaAssetPublisher: Publisher = {
     const deps = { vault, now, newId: uuidv7, wrote: collect };
     const promoted = promoteStagedBlob(
       { ...deps, creatorPartyId: ownerPartyId },
-      p.stagedSha,
-      p.caption === null ? {} : { title: p.caption }
+      p.stagedSha
     );
     // Same-bytes `(1)` duplicates in one archive: second adopts, not UNIQUE-hit.
     const adopted = adoptAssetForContentTx(
@@ -913,6 +986,11 @@ const mediaAssetPublisher: Publisher = {
         assetId,
         contentId: promoted.contentId,
         kind: assetKindFor(promoted.mediaType),
+        // The archive's caption is what the OWNER typed in the source app —
+        // authored, so it lands on the asset's own title (#996, R20(b)); with
+        // no caption the archive's filename is the name they gave the file,
+        // which is what `promoteStagedBlob` used to write onto the byte row.
+        title: p.caption ?? p.filename,
         capturedAt: p.capturedAt ?? meta.captured_at ?? null,
         // Neither Takeout UTC nor zoneless EXIF states an offset.
         tzOffsetMin: null,
@@ -928,6 +1006,14 @@ const mediaAssetPublisher: Publisher = {
         exifJson: exifJsonForMeta(meta),
       });
     }
+    // THIS ASSET'S READING OF THE BYTES (#996, R20(b)).
+    setRepresentation(vault, uuidv7, now, {
+      contentId: promoted.contentId,
+      ownerType: "media.asset",
+      ownerId: assetId,
+      mediaType: p.mediaType,
+      interpretation: "original",
+    });
     applyImportedAssetFlags(deps, ownerPartyId, assetId, p);
     if (p.album !== null) {
       wrote.push(
@@ -953,11 +1039,10 @@ const mediaAssetPublisher: Publisher = {
       )
       .run(p.capturedAt, p.captureGroupId, entityId);
     if (p.caption !== null) {
+      // The owner's caption from the source archive is AUTHORED text, so it
+      // lands on the asset, not on bytes other assets may share (#996 R20(b)).
       vault
-        .prepare(
-          `UPDATE core_content_item SET title = ?
-            WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
-        )
+        .prepare(`UPDATE media_asset SET title = ? WHERE asset_id = ?`)
         .run(p.caption, entityId);
     }
     applyImportedAssetFlags(deps, ownerPartyId, entityId, p);

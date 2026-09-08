@@ -6,6 +6,7 @@
 // foreign key. Size is answered by RETENTION (schema/audit.ts,
 // `RETENTION_WINDOWS`), not by a second file.
 
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, statSync, statfsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -29,9 +30,18 @@ import {
 import { BlobTransferCoordinator } from "./blob/transfers.js";
 import { registerCosineFn, registerHammingFn } from "./enrich/similarity.js";
 import { asVaultDiskFullError } from "./errors.js";
+import {
+  ephemeralLockerKeyId,
+  foundLockerKey,
+  liveLockerKeyId,
+  lockerKeyCustody,
+  LOCKER_KEY_BYTES,
+  sweepRetiredLockerKeys,
+  vaultIdOf,
+} from "./gateway/locker-key-plane.js";
+import type { LockerKeyCustody } from "./gateway/locker-key-plane.js";
 import { initializeReplicaProtocol } from "./replica/change-log.js";
 import { repairReplicaInvocationCommits } from "./replica/invocation-commits.js";
-import { registerContentTextFn } from "./schema/fts.js";
 import type { KeyStore } from "./schema/key-store.js";
 import { migrateVault } from "./schema/migrate.js";
 import {
@@ -71,6 +81,19 @@ export interface VaultDb {
   dir: string;
   /** DEK for sealed columns (#293); outside export/backup/copy. */
   sealKey: Buffer;
+  /**
+   * `K` and its id — the Locker vault key (#996, R13), founded on first ask.
+   *
+   * A FUNCTION, not a field: `K` is keyed on the vault's own id, which lives
+   * in `core_vault` and therefore does not exist while a fresh file is being
+   * opened for `bootstrapVault` to write into. Held here so the gateway can
+   * SERVE `K` to an enrolled seat and rotate it; NEVER so the gateway can
+   * decrypt a secret on a caller's behalf. The gateway serving plaintext is
+   * the thing this plane exists to end.
+   */
+  lockerKey: () => { keyId: string; key: Buffer };
+  /** Key-file custody for `K`; `undefined` on an in-memory vault. */
+  lockerCustody: () => LockerKeyCustody | undefined;
   identitySeed: Buffer;
   keyStore?: KeyStore;
   blobs: BlobCustody;
@@ -214,7 +237,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
   // Must exist before migrations (FTS triggers).
-  registerContentTextFn(vault);
   registerHammingFn(vault);
   registerCosineFn(vault);
   migrateVault(vault);
@@ -260,6 +282,49 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
           identityKeyFileFor(dir),
           options.keyStore
         ));
+  // THE LOCKER KEY PLANE (#996, R13). Resolved LAZILY, and keyed on the
+  // vault's OWN id rather than on its directory name.
+  //
+  // Both halves of that are the same decision. `K` belongs to the VAULT: a
+  // restored, adopted or renamed directory is the same vault and must open
+  // with the same key, which a name derived from `path.basename(dir)` would
+  // have broken every time a directory moved — and the sealed-column DEK gets
+  // away with that spelling only because a vault that has never sealed may
+  // mint freely. The id lives in `core_vault`, which does not exist until
+  // `bootstrapVault` runs, so founding cannot happen at the top of this
+  // function; it happens the first time something actually asks for `K`, and
+  // by then the row is always there. An in-memory vault (tests) gets an
+  // ephemeral key and no files, exactly as `ephemeralSealKey` does.
+  const ephemeralLockerKey = randomBytes(LOCKER_KEY_BYTES);
+  let lockerResolved: { keyId: string; key: Buffer } | undefined;
+  const lockerKey = (): { keyId: string; key: Buffer } => {
+    // Re-resolve after a rotation: the cache is a memo of "which key is live",
+    // and rotation is precisely the event that makes that answer wrong. A
+    // handle that kept serving `K` after `K′` landed would hand a seat a key
+    // that opens nothing written since.
+    if (lockerResolved && liveLockerKeyId(vault) === lockerResolved.keyId)
+      return lockerResolved;
+    lockerResolved = undefined;
+    if (dir === undefined) {
+      lockerResolved = {
+        keyId: ephemeralLockerKeyId(vault),
+        key: ephemeralLockerKey,
+      };
+      return lockerResolved;
+    }
+    const custody = lockerKeyCustody(dir, vaultIdOf(vault), options.keyStore);
+    lockerResolved = foundLockerKey(vault, custody);
+    // The recovery half of rotation's two-store order: whatever the database
+    // names is live, and every other Locker key file for this vault is a
+    // leftover of an interrupted rotation.
+    sweepRetiredLockerKeys(vault, custody);
+    return lockerResolved;
+  };
+  const lockerCustody = (): LockerKeyCustody | undefined =>
+    dir === undefined
+      ? undefined
+      : lockerKeyCustody(dir, vaultIdOf(vault), options.keyStore);
+
   const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
   let cachedRemote: { key: string; tier: RemoteTier | null } | null = null;
@@ -366,6 +431,8 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     audit: vault,
     dir: dir ?? ":memory:",
     sealKey,
+    lockerKey,
+    lockerCustody,
     identitySeed,
     ...(options.keyStore ? { keyStore: options.keyStore } : {}),
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) =>

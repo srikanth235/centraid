@@ -10,6 +10,8 @@
 
 import { GRANT_LOCI } from "@centraid/blueprints/apps/_shared/grant-transport";
 import type { GrantLocus } from "@centraid/blueprints/apps/_shared/grant-transport";
+import { readPages } from "@centraid/blueprints/apps/_shared/paged-reads";
+import type { PageCursor, PageQuery } from "@centraid/core/page";
 
 export interface AccessAnswer {
   authorityId: string;
@@ -40,24 +42,27 @@ export interface AccessRequest {
   requestedAt: string;
 }
 
+/**
+ * THREE KINDS ACROSS FOUR VALUES (#996, R17). `device` left: enrollment is
+ * full trust (R11), so a seat either holds the vault or it does not, and that
+ * is the devices screen's answer rather than a standing one drawn here.
+ */
 export type AccessPrincipalKind =
   | "person"
   | "circle"
   | "harness"
-  | "device"
   | "automation";
 
 const PRINCIPAL_KINDS: readonly AccessPrincipalKind[] = [
   "person",
   "circle",
   "harness",
-  "device",
   "automation",
 ];
 
 /** Ruling V-dashboard: `person` and `circle` are ONE group — one question. */
 export interface AccessGroup {
-  id: "audiences" | "harnesses" | "devices" | "automations";
+  id: "audiences" | "harnesses" | "automations";
   title: string;
   locus: GrantLocus;
   answers: AccessAnswer[];
@@ -96,19 +101,23 @@ const GROUPS: readonly {
     locus: "local",
     kinds: ["automation"],
   },
-  {
-    id: "devices",
-    title: "Your devices",
-    locus: "boundary",
-    kinds: ["device"],
-  },
 ];
 
+/**
+ * THE SEAT'S PAGE, AND NOTHING ELSE (#996 wave 5, R8).
+ *
+ * Both seats hand this dashboard the same function: the phone's own file
+ * through `useSeatPages`, the shell's through its seat worker. The three
+ * statements below are walked to their end, because a standing answer this
+ * dashboard did not draw is an answer the member believes they never gave.
+ */
 export interface AccessReader {
-  read: (
-    appId: string,
-    request: { entity: string; limit?: number }
-  ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
+  page: <Row extends object>(request: {
+    query: PageQuery<Row>;
+    limit: number;
+    after?: PageCursor;
+    overlay?: { entity: string; rowIdColumn: string };
+  }) => Promise<{ rows: Row[]; next?: PageCursor }>;
 }
 
 /** RAW: `grant-door.ts` is not importable here, so the body is parsed
@@ -138,7 +147,43 @@ export const ACCESS_ENTITY = "share.authority";
 export const ACCESS_USE_ENTITY = "share.authority_use";
 /** What an automation has asked for and the member has not decided (#928 A4). */
 export const ACCESS_REQUEST_ENTITY = "share.authority_request";
-const ACCESS_LIMIT = 2_000;
+
+/** Every standing answer, ordered so the walk's keyset has a unique tiebreak. */
+export const ACCESS_ANSWERS: PageQuery = {
+  name: "shell.access.answers",
+  select:
+    "authority_id, principal_kind, principal_id, subject_type, subject_id, " +
+    "verb, duration, expires_at, decision, granted_at, revoked_at",
+  from: "share_authority",
+  order: {
+    sortColumn: "granted_at",
+    pkColumn: "authority_id",
+    descending: true,
+  },
+};
+
+/** One row per authority, never history: the walk is the table. */
+export const ACCESS_USES: PageQuery = {
+  name: "shell.access.uses",
+  select: "authority_id, last_used_at",
+  from: "share_authority_use",
+  order: {
+    sortColumn: "authority_id",
+    pkColumn: "authority_id",
+    descending: false,
+  },
+};
+
+export const ACCESS_REQUESTS: PageQuery = {
+  name: "shell.access.requests",
+  select: "request_id, principal_id, scopes_json, requested_at, decided_at",
+  from: "share_authority_request",
+  order: {
+    sortColumn: "requested_at",
+    pkColumn: "request_id",
+    descending: true,
+  },
+};
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -242,34 +287,6 @@ export function parseAccessAnswers(
   });
 }
 
-/** A device's subject is the whole vault, so `subject_id` is empty. */
-export const DEVICE_SUBJECT_TYPE = "core.vault";
-
-export function deviceStandings(
-  answers: readonly AccessAnswer[]
-): Map<string, AccessAnswer> {
-  const byDevice = new Map<string, AccessAnswer>();
-  for (const answer of answers) {
-    if (answer.principalKind !== "device" || !isStanding(answer)) continue;
-    if (answer.subjectType !== DEVICE_SUBJECT_TYPE) continue;
-    // A refusal outranks a grant: a device the member cut off must never read
-    // back as one that can reach in.
-    const held = byDevice.get(answer.principalId);
-    if (held && held.decision === "declined") continue;
-    byDevice.set(answer.principalId, answer);
-  }
-  return byDevice;
-}
-
-/** `undefined` is "no answer here" — never drawn as a refusal. */
-export function deviceReachLabel(
-  answer: AccessAnswer | undefined
-): string | undefined {
-  if (!answer) return undefined;
-  if (answer.decision === "declined") return "Refused at the door";
-  return answer.verb === "edit" ? "Can read and write" : "Can read";
-}
-
 function isStanding(answer: AccessAnswer): boolean {
   return answer.revokedAt === null;
 }
@@ -292,13 +309,12 @@ export async function loadAccessLens(
   reader: AccessReader,
   registry: AccessRegistryReader
 ): Promise<AccessLens> {
-  let rows: readonly { values: Record<string, unknown> }[];
+  let rows: readonly Record<string, unknown>[];
   try {
-    const result = await reader.read(ACCESS_SCOPE, {
+    rows = await readPages({ vault: reader }, ACCESS_ANSWERS, undefined, {
       entity: ACCESS_ENTITY,
-      limit: ACCESS_LIMIT,
+      rowIdColumn: "authority_id",
     });
-    rows = result.rows;
   } catch (error) {
     return {
       status: "unreadable",
@@ -314,27 +330,27 @@ export async function loadAccessLens(
   }
   // Beside the answers, never instead of them: a failed use or ask read leaves
   // "never used" and no pending question rather than blanking the dashboard.
-  const used = parseAccessUse(await sideRows(reader, ACCESS_USE_ENTITY));
+  const used = parseAccessUse(
+    await sideRows(reader, ACCESS_USES, ACCESS_USE_ENTITY, "authority_id")
+  );
   const requests = parseAccessRequests(
-    await sideRows(reader, ACCESS_REQUEST_ENTITY)
+    await sideRows(reader, ACCESS_REQUESTS, ACCESS_REQUEST_ENTITY, "request_id")
   );
-  const answers = parseAccessAnswers(
-    rows.map((row) => row.values),
-    used
-  );
+  const answers = parseAccessAnswers(rows, used);
   return { status: "ready", groups: groupAnswers(answers), loci, requests };
 }
 
 async function sideRows(
   reader: AccessReader,
-  entity: string
+  query: PageQuery,
+  entity: string,
+  rowIdColumn: string
 ): Promise<Record<string, unknown>[]> {
   try {
-    const result = await reader.read(ACCESS_SCOPE, {
+    return await readPages({ vault: reader }, query, undefined, {
       entity,
-      limit: ACCESS_LIMIT,
+      rowIdColumn,
     });
-    return result.rows.map((row) => row.values);
   } catch {
     return [];
   }

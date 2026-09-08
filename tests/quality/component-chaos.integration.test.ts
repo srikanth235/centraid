@@ -24,6 +24,8 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
+
 import { ConversationStore } from "../../packages/server/src/engine/conversation/store.js";
 import {
   completeEnrichmentLease,
@@ -335,10 +337,15 @@ function modelRuntimeDeathHoldingLease(chaos: ComponentChaosWorld): void {
   vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'application/pdf', ?, ?, 4096, ?)`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, ?, ?, 4096, ?)`
     )
-    .run("content-chaos", "vault://content-chaos", "sha-content-chaos", iso(0));
+    .run(
+      "content-chaos",
+      "vault://content-chaos",
+      fixtureSha("content-chaos"),
+      iso(0)
+    );
   queueDeviceEnrichmentRequest(vault, {
     requestId,
     entityType: "core.content_item",

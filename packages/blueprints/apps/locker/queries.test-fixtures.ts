@@ -17,6 +17,22 @@ export interface ReadCall {
   where?: Array<{ column: string; op: string; value?: unknown }>;
   orderBy?: { column: string; dir?: string };
   limit?: number;
+  /**
+   * The paged statement this call was, when it was one (#996 wave 4). A
+   * statement names the PHYSICAL table and carries its predicate as SQL, so
+   * `entity` is recovered from `<schema>_<table>` and the narrowing assertions
+   * read the text and the binds. Recording both kinds in ONE list is what lets
+   * the suites keep saying "the read for `locker.item` asked for N rows"
+   * whichever door it went through.
+   */
+  statement?: {
+    name: string;
+    select: string;
+    from: string;
+    where?: string;
+    bind?: readonly (string | number | null)[];
+    order: { sortColumn: string; pkColumn: string; descending: boolean };
+  };
 }
 
 export function ctxOf(
@@ -48,6 +64,25 @@ export function ctxOf(
     invoked,
     reveals,
     vault: {
+      page: async (request: {
+        query: NonNullable<ReadCall["statement"]>;
+        limit: number;
+      }) => {
+        const table = request.query.from.trim().split(/\s+/u)[0] ?? "";
+        const cut = table.indexOf("_");
+        const entity =
+          cut > 0 ? `${table.slice(0, cut)}.${table.slice(cut + 1)}` : table;
+        calls.push({
+          entity,
+          limit: request.limit,
+          statement: request.query,
+        });
+        // Like `read` below, the predicate is deliberately NOT applied: every
+        // narrowing claim is made against the recorded statement, so a handler
+        // that stopped filtering fails there rather than passing on an
+        // obliging mock.
+        return { rows: rowsByEntity[entity] ?? [] };
+      },
       read: async (request: ReadCall) => {
         calls.push(request);
         return { rows: rowsByEntity[request.entity] ?? [] };

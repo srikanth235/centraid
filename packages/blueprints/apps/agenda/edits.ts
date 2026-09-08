@@ -12,7 +12,7 @@ export type EditIntent = "edit" | "skip";
  * not drawn (spec: a control that cannot act is never drawn).
  */
 export function occurrenceEdit(input: {
-  event: Pick<AgEvent, "event_id" | "dtstart" | "original_start">;
+  event: Pick<AgEvent, "event_id" | "dtstart" | "original_start_local">;
   scope: EditScope;
   intent: EditIntent;
   changes?: Pick<
@@ -32,8 +32,8 @@ export function occurrenceEdit(input: {
   if (intent === "skip" && scope === "series") return null;
   return {
     event_id: event.event_id,
-    // A non-recurring row has no `original_start`; its own start IS the occurrence.
-    original_start: event.original_start ?? event.dtstart,
+    // A non-recurring row has no `original_start_local`; its own start IS the occurrence.
+    original_start_local: event.original_start_local ?? event.dtstart,
     scope,
     action: intent === "skip" ? "skip" : "override",
     ...(intent === "skip" ? {} : (input.changes ?? {})),

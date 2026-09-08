@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type { DerivativeVariant } from "../blob/derivatives.js";
+import { contentMediaTypeSql } from "../schema/representation.js";
 
 /** What a paired DEVICE may lease (browser-lane rungs only). */
 export const ENRICHMENT_CAPABILITIES = [
@@ -150,6 +151,13 @@ export function queueDeviceEnrichmentRequest(
     );
 }
 
+/**
+ * What the content IS, over on the representation (#996, ruling R20(b)):
+ * the byte row stopped carrying a media type, so the backlog sweep — which
+ * has no owner in hand — takes the oldest owner's reading of it.
+ */
+const MEDIA_TYPE_SQL = contentMediaTypeSql("content_id");
+
 // Audio has no device rung (`transcript` moved to the automation lane): a
 // recording queues no device job; its transcript comes from the gateway sweep.
 const DEVICE_DERIVATIVE_RULES: readonly {
@@ -159,12 +167,12 @@ const DEVICE_DERIVATIVE_RULES: readonly {
 }[] = [
   {
     matches: (mediaType) => mediaType.startsWith("video/"),
-    sqlPredicate: "media_type LIKE 'video/%'",
+    sqlPredicate: `${MEDIA_TYPE_SQL} LIKE 'video/%'`,
     wanted: [{ capability: "poster", variant: "poster" }],
   },
   {
     matches: (mediaType) => mediaType === "application/pdf",
-    sqlPredicate: "media_type = 'application/pdf'",
+    sqlPredicate: `${MEDIA_TYPE_SQL} = 'application/pdf'`,
     wanted: [{ capability: "pdfText", variant: "text" }],
   },
 ];
@@ -247,14 +255,18 @@ export function queueMissingDeviceEnrichmentBacklog(
   const limit = Math.max(1, Math.min(500, Math.trunc(input.limit ?? 100)));
   const rows = vault
     .prepare(
-      `SELECT content_id, sha256, media_type
+      `SELECT content_id, sha256, ${MEDIA_TYPE_SQL} AS media_type
          FROM core_content_item
         WHERE deleted_at IS NULL AND sha256 IS NOT NULL
           AND (${DEVICE_BACKLOG_SQL})
         ORDER BY content_id
         LIMIT ?`
     )
-    .all(limit) as { content_id: string; sha256: string; media_type: string }[];
+    .all(limit) as {
+    content_id: string;
+    sha256: string;
+    media_type: string;
+  }[];
   const queued: string[] = [];
   for (const row of rows) {
     queued.push(

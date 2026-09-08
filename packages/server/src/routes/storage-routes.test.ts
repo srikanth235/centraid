@@ -567,8 +567,8 @@ describe("storage-routes", () => {
     const now = new Date().toISOString();
     db.vault.exec(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('content-1', 'image/png', 'blob:sha256:${sha256}', '${sha256}', ${blob.length}, '${now}');
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('content-1', 'blob:sha256:${sha256}', '${sha256}', ${blob.length}, '${now}');
        INSERT INTO blob_custody_state (content_id, sha256, custody_state, checked_at)
        VALUES ('content-1', '${sha256}', 'local-only', '${now}');`
     );

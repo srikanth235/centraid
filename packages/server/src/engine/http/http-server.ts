@@ -6,7 +6,6 @@ import type { AddressInfo } from "node:net";
 import type { Runtime } from "../runtime.js";
 import { makeUserStoreRouteHandler } from "../stores/prefs-store.js";
 import { makeConversationRouteHandler } from "./conversation-routes.js";
-import { COMPANION_GRANTS_HEADER } from "./internal-headers.js";
 import {
   decideCors,
   hasBearerAuthIntent,
@@ -199,7 +198,6 @@ export async function startRuntimeHttpServer(
     // re-set these (#376).
     delete req.headers[AUTHED_DEVICE_HEADER];
     delete req.headers[AUTHED_PLANE_HEADER];
-    delete req.headers[COMPANION_GRANTS_HEADER];
     delete req.headers[WEB_APP_HEADER];
     const raw = (req.headers.authorization ?? "").replace(/^Bearer\s+/iu, "");
     const resolveAuthorization = (): BearerAuthorization | undefined => {

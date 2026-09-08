@@ -40,6 +40,11 @@
       },
       {
         "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attachment",
         "verbs": "read"
       },
@@ -238,7 +243,7 @@
         "type": "object",
         "properties": {
           "event_id": { "type": "string", "minLength": 1 },
-          "original_start": { "type": "string", "minLength": 1 },
+          "original_start_local": { "type": "string", "minLength": 1 },
           "scope": {
             "type": "string",
             "enum": ["occurrence", "future", "series"]
@@ -249,7 +254,7 @@
           "summary": { "type": "string" },
           "description": { "type": "string" }
         },
-        "required": ["event_id", "original_start", "scope", "action"],
+        "required": ["event_id", "original_start_local", "scope", "action"],
         "additionalProperties": false
       },
       "writes": ["core.event", "outbox.item", "schedule.recurrence_exception"]
@@ -338,7 +343,12 @@
           }
         }
       },
-      "writes": ["core.attachment", "core.content_item"]
+      "writes": [
+        "core.attachment",
+        "core.content_item",
+        "core.content_representation",
+        "core.content_text"
+      ]
     },
     {
       "name": "detach",
