@@ -31,7 +31,6 @@ describe("locker #872 surface", () => {
         schema: "locker",
         table: "item_alias",
         physical: "locker_item_alias",
-        file: "vault",
       });
     });
 
@@ -161,7 +160,7 @@ describe("locker #872 surface", () => {
           value: "never-journal-me",
         })
       );
-      const journalled = fx.db.journal
+      const journalled = fx.db.audit
         .prepare(
           "SELECT input_json FROM agent_command_invocation ORDER BY invocation_id DESC LIMIT 1"
         )

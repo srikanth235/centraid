@@ -176,13 +176,18 @@ const SITE_LAYER = `
  * `report-palette.test.mjs` recomputes every pairing off this table.
  *
  * EIGHT tone families, each meaning exactly ONE thing (issue #864): `ok`
- * passed a solid claim; `partial` a partial claim; `danger` tonight went
- * wrong; `flaky` green only on retry; `gap` no test exists; `attn` integrity;
- * `grey` evidence absent; `bug` the product is known-broken (indigo, so a
- * defect cannot share plum with a hole). `partial`/`flaky`/`gap` follow the
- * ramp's identity hues. `attn` moved off the `--seam` literal it used to
- * duplicate (at #B4441F it sat 8° from `danger`, and `--st-gap` pointed at
- * the same value, carrying pending, attention and hole at once).
+ * passed; `danger` tonight went wrong; `park` the failure has a date on it;
+ * `grey` evidence absent; `attn` degraded — over budget or outside its noise
+ * band; `partial`, `gap` and `bug` are declared and currently unpainted (see
+ * docs/design-divergences.md#the-nightly-test-report). `partial`/`park`/`gap`
+ * follow the ramp's identity hues. `attn` moved off the `--seam` literal it
+ * used to duplicate (at #B4441F it sat 8° from `danger`, and `--st-gap`
+ * pointed at the same value, carrying pending, attention and hole at once).
+ *
+ * #915 renamed the plum family from `flaky` to `park`: the four-state cell
+ * vocabulary has no "green only on retry" — a run either falsified the claim
+ * or did not — and plum is now the one hue that means "red, with an expiry
+ * and an issue against it".
  */
 const NIGHT_WATCH_RAMP = `
   ground   #FDFDFC #0E0E0E  ink    #141414 #EDEDEC  ink2   #5A5A58 #9A9A98
@@ -190,10 +195,10 @@ const NIGHT_WATCH_RAMP = `
   lineS    #EFEEEB #1B1B1A  surf   #F5F4F2 #171716  sunken #F9F8F6 #121211
   danger   #9A3B2E #E08878  attn   #8A5A12 #E5B15E  link   #2D4BA8 #9DB0F0
   ring     #4A67C8 #8098E8  ok     #3E6B45 #7FA886  grey   #8B8A87 #666664
-  partial  #175F6A #69B3BD  flaky  #6B3E8C #C39BD8  gap    #8E2F63 #E094BA  bug #3A3A8C #C2BEEA
+  partial  #175F6A #69B3BD  park   #6B3E8C #C39BD8  gap    #8E2F63 #E094BA  bug #3A3A8C #C2BEEA
   dangerbg #F7EBE8 #241614  attnbg #FAF2E2 #241D0E  okbg   #EDF2EE #151D16
   greybg   #F1F0EE #1A1A19  partialbg #E9F2F3 #0F1E20
-  flakybg  #F2ECF8 #1D1726  gapbg  #FAEBF2 #26161F  bugbg  #EEEDF8 #1A1828
+  parkbg   #F2ECF8 #1D1726  gapbg  #FAEBF2 #26161F  bugbg  #EEEDF8 #1A1828
 `;
 
 /** One theme's rungs, indented to the block that carries them. Spaces only:

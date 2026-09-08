@@ -153,6 +153,28 @@ describe("what a multi-vault pull actually obtained", () => {
     expect(pulled).toStrictEqual([]);
   });
 
+  test("pulls rows the BYTE rules refuse (#905 O)", async () => {
+    // Rows are metadata, not bytes (#905 O).
+    const home = fakeSession({ pulls: true });
+    const pulled: string[] = [];
+    const { facade } = build({
+      sessions: new Map([["home", home.session]]),
+      scopes: [scope("home")],
+      isNetworkWorkAllowed: () => Promise.resolve(false),
+      isRowSyncAllowed: () => Promise.resolve(true),
+      onScopePulled: (vaultId) => pulled.push(vaultId),
+    });
+
+    const outcome = await facade.pullScopes();
+
+    expect(outcome).toStrictEqual({
+      pulled: ["home"],
+      stalled: [],
+      policyBlocked: false,
+    });
+    expect(pulled).toStrictEqual(["home"]);
+  });
+
   test("reports per scope which sources landed and which stalled", async () => {
     const home = fakeSession({ pulls: true });
     const family = fakeSession({ pulls: false });

@@ -22,6 +22,49 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
 `;
 
 /**
+ * Answer Android's runtime media-grant dialog with a REFUSAL.
+ *
+ * `launchApp: { permissions: { all: deny } }` does not cover it. Android 14
+ * asks separately for visual media ("Select photos and videos" / "Allow all" /
+ * "Don't allow"), and that dialog belongs to `permissioncontroller`, not to the
+ * app — so a pre-denied install still gets prompted the moment Photos asks.
+ *
+ * Left unanswered it simply covers the app. Run 33469364358's screen digest
+ * caught exactly that: while `photos-permissions` spent its whole budget
+ * waiting for `photos-collections`, the screen was carrying `grant_dialog`,
+ * `permission_allow_all_button` and `permission_deny_button`. The journey named
+ * `permission-refused` had never once refused a permission; it timed out behind
+ * an unanswered system dialog and reported the app broken.
+ *
+ * TEXT, NOT `id:`. The stable handle here is `permission_deny_button`, but
+ * `scripts/lint-mobile-testids.mjs` requires every Maestro `id:` to resolve to a
+ * `TEST_IDS` entry in `apps/mobile/src`, and an OS id is not this app's
+ * vocabulary to declare — adding it there to satisfy a selector would be a lie
+ * about what the app publishes. `CONFIRM_SYSTEM_OPEN` matches iOS's system
+ * dialog on copy for the same reason.
+ *
+ * `Don.t` because the button uses a curly apostrophe (U+2019) and `.` matches
+ * either form — the convention the tally flows already use for the middle dot,
+ * since Maestro reads a text selector as a regex over the whole node text.
+ *
+ * THIS CANNOT TURN A MISSING REFUSAL INTO A PASS. The optional tap waits for a
+ * dialog that may not exist and the conditional re-tap absorbs a slow mount; if
+ * the dialog ever stops appearing both no-op, and the journey's own
+ * `photos-access-panel` and "Photos cannot reach your camera roll" assertions
+ * then fail loudly on a grant that was never refused.
+ */
+export const DENY_MEDIA_PERMISSION = `# Android's runtime media grant — see DENY_MEDIA_PERMISSION.
+- tapOn:
+    text: "Don.t allow"
+    optional: true
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+`;
+
+/**
  * Tap an animated React Native control without treating its press animation as
  * proof that navigation happened.
  *

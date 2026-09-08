@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import {
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaChanges,
   readReplicaIntentOutcome,
   withReplicaSnapshot,
@@ -13,7 +14,6 @@ import type {
 
 import {
   buildReplicaShapes,
-  REPLICA_MAX_VALUE_BYTES,
   REPLICA_PROTOCOL_VERSION,
   replicaHistoricalRowState,
   replicaRowColumns,
@@ -60,6 +60,16 @@ export interface ReplicaIntentOutcomeWire {
     expectedVersion: number;
     actualVersion: number;
   };
+  /** Who a parked write waits on, with the label from the link (#929). */
+  waitingOn?: { seat: "owner" | "origin" | "gateway"; label?: string };
+  /** ORIGIN versions an executed answer stands for (#929, G1). Additive: an
+   *  older reader ignores it and settles as it did. */
+  answeredVersions?: {
+    shapeId?: string;
+    entity: string;
+    rowId: string;
+    version: number;
+  }[];
 }
 
 export interface ReplicaChangeBatchWire {
@@ -90,22 +100,38 @@ export interface ReplicaProjectedPage {
   doorbell: ReplicaDoorbellChange[];
   shapes: ReplicaServerShape[];
   rebootstrapReason?: "shape-changed";
+  /**
+   * The `replica.intent` log entries in this window, unresolved. THE PAGE IS
+   * DEVICE-NEUTRAL (#922 A4): an intent outcome is the one part of a
+   * projection that differs between two identically-authorized devices, so it
+   * is carried as raw entries here and resolved per device by
+   * `applyReplicaIntentOutcomes`. Everything else — shapes, visibility, shaped
+   * values, doorbell — is computed once per commit and shared.
+   */
+  intentEntries: ReplicaIntentEntry[];
+}
+
+export interface ReplicaIntentEntry {
+  seq: number;
+  commitId: string;
+  entity: string;
+  rowId: string;
+  op: ReplicaChangeEntry["op"];
+  changedAt: string;
 }
 
 // These rows change what a client may retain: advancing past one as ordinary
-// data leaves a stale local shape behind.
+// data leaves a stale local shape behind. Two survive #928's AP-apps-declare,
+// because a shape is now a function of the install register and the sealed
+// registry alone: `access.app` says whether an app is installed and carries
+// the key its row ids are derived from, and `access.app_ext` carries an ext
+// band's declared sealed columns.
 //
-// The verdict below reads the ENTRY, not the row's end state: a grant that
-// went active, revoked, then active again must force a bootstrap for the
+// The verdict below reads the ENTRY, not the row's end state: an app that was
+// installed, revoked, then installed again must force a bootstrap for the
 // middle transition too. Retention compaction therefore may not fold these
-// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers exactly this set.
-export const SHAPE_CONTROL_ENTITIES = new Set([
-  "consent.app",
-  "consent.app_ext",
-  "consent.access_grant",
-  "consent.grant_scope",
-  "consent.policy",
-]);
+// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers this set.
+export const SHAPE_CONTROL_ENTITIES = new Set(["access.app", "access.app_ext"]);
 
 const WIRE_OUTCOMES = new Set([
   "parked",
@@ -124,6 +150,12 @@ function outcomeWire(
     status: outcome.status as ReplicaIntentOutcomeWire["status"],
     ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
     ...(outcome.conflict === undefined ? {} : { conflict: outcome.conflict }),
+    ...(outcome.waitingOn === undefined
+      ? {}
+      : { waitingOn: outcome.waitingOn }),
+    ...(outcome.answeredVersions === undefined
+      ? {}
+      : { answeredVersions: [...outcome.answeredVersions] }),
   };
 }
 
@@ -175,18 +207,6 @@ function oldValues(
   }
 }
 
-function activeAt(
-  row: Record<string, unknown> | undefined,
-  now: string
-): boolean {
-  return (
-    row?.status === "active" &&
-    row.revoked_at === null &&
-    (row.expires_at === null ||
-      (typeof row.expires_at === "string" && row.expires_at > now))
-  );
-}
-
 function appMatches(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
@@ -199,17 +219,9 @@ function appMatches(
   return (
     preparedStatement(
       db,
-      `SELECT 1 AS matched FROM consent_app WHERE app_id = ? AND name = ? LIMIT 1`
+      `SELECT 1 AS matched FROM access_app WHERE app_id = ? AND name = ? LIMIT 1`
     ).get(appId, access.appId) !== undefined
   );
-}
-
-function grantMatches(
-  db: DatabaseSync,
-  access: ReplicaShapeAccess,
-  row: Record<string, unknown> | undefined
-): boolean {
-  return appMatches(db, access, row?.app_id);
 }
 
 function currentRow(
@@ -218,7 +230,7 @@ function currentRow(
   key: string,
   rowId: string
 ): Record<string, unknown> | undefined {
-  // Table/key come from a closed set of consent tables, never the wire.
+  // Table/key come from a closed set of install-register tables, never the wire.
   return preparedStatement(
     db,
     `SELECT * FROM "${table}" WHERE "${key}" = ?`
@@ -228,71 +240,16 @@ function currentRow(
 function shapeControlChange(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
-  change: ReplicaChangeEntry,
-  now: string
+  change: ReplicaChangeEntry
 ): boolean {
-  const before = oldValues(change);
-  if (change.entity === "core.concept") {
-    const restriction = access.appId ? ` AND (a.app_id = ? OR a.name = ?)` : "";
-    return (
-      preparedStatement(
-        db,
-        `SELECT 1 AS matched
-             FROM consent_access_grant g
-             JOIN consent_app a ON a.app_id = g.app_id
-            WHERE g.purpose_concept_id = ? AND a.status = 'active'
-              AND g.status = 'active' AND g.revoked_at IS NULL
-              AND (g.expires_at IS NULL OR g.expires_at > ?)${restriction}
-            LIMIT 1`
-      ).get(
-        change.rowId,
-        now,
-        ...(access.appId ? [access.appId, access.appId] : [])
-      ) !== undefined
-    );
-  }
   if (!SHAPE_CONTROL_ENTITIES.has(change.entity)) return false;
-  if (change.entity === "consent.policy") {
-    const after = currentRow(db, "consent_policy", "policy_id", change.rowId);
-    return [before, after].some(
-      (row) =>
-        typeof row?.effective_from === "string" && row.effective_from <= now
-    );
-  }
-  if (change.entity === "consent.app") {
-    const after = currentRow(db, "consent_app", "app_id", change.rowId);
+  const before = oldValues(change);
+  if (change.entity === "access.app") {
+    const after = currentRow(db, "access_app", "app_id", change.rowId);
     return [before, after].some(
       (row) =>
         row?.status === "active" && appMatches(db, access, row.app_id, row.name)
     );
-  }
-  if (change.entity === "consent.access_grant") {
-    const after = currentRow(
-      db,
-      "consent_access_grant",
-      "grant_id",
-      change.rowId
-    );
-    return [before, after].some(
-      (row) => activeAt(row, now) && grantMatches(db, access, row)
-    );
-  }
-  if (change.entity === "consent.grant_scope") {
-    const after = currentRow(
-      db,
-      "consent_grant_scope",
-      "scope_id",
-      change.rowId
-    );
-    for (const grantId of new Set(
-      [before?.grant_id, after?.grant_id].filter(
-        (value): value is string => typeof value === "string"
-      )
-    )) {
-      const grant = currentRow(db, "consent_access_grant", "grant_id", grantId);
-      if (activeAt(grant, now) && grantMatches(db, access, grant)) return true;
-    }
-    return false;
   }
   let keyAppId: unknown;
   try {
@@ -364,6 +321,7 @@ export function projectReplicaPage(
     const rebootstrap = (): ReplicaProjectedPage => ({
       shapes,
       doorbell: [],
+      intentEntries: [],
       rebootstrapReason: "shape-changed",
       batch: {
         protocolVersion: REPLICA_PROTOCOL_VERSION,
@@ -375,12 +333,7 @@ export function projectReplicaPage(
         shapeIds,
       },
     });
-    const sampledNow = new Date(nowMs).toISOString();
-    if (
-      page.changes.some((change) =>
-        shapeControlChange(db, access, change, sampledNow)
-      )
-    ) {
+    if (page.changes.some((change) => shapeControlChange(db, access, change))) {
       return rebootstrap();
     }
 
@@ -391,42 +344,26 @@ export function projectReplicaPage(
         rows.set(
           key,
           reader.readRow(entity, rowId, {
-            maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+            maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
           })
         );
       }
       return rows.get(key);
     };
     const changes = new Map<string, ReplicaChangeWire>();
-    const outcomes = new Map<string, ReplicaIntentOutcomeWire>();
     const doorbell: ReplicaDoorbellChange[] = [];
+    const intentEntries: ReplicaIntentEntry[] = [];
 
     const coalesced = new Map<string, CoalescedChange>();
     for (const raw of page.changes) {
       if (raw.entity === "replica.intent") {
-        if (!access.deviceId) continue;
-        const outcome = readReplicaIntentOutcome(
-          db,
-          raw.rowId,
-          access.deviceId
-        );
-        if (!outcome || (access.appId && outcome.appId !== access.appId))
-          continue;
-        const wire = outcomeWire(outcome);
-        if (!wire) continue;
-        outcomes.set(wire.intentId, wire);
-        const outcomeShapeIds = shapes
-          .filter((shape) => shape.appId === outcome.appId)
-          .map((shape) => shape.shapeId)
-          .sort();
-        doorbell.push({
+        intentEntries.push({
           seq: raw.seq,
           commitId: raw.commitId,
           entity: raw.entity,
           rowId: raw.rowId,
           op: raw.op,
           changedAt: raw.changedAt,
-          shapeIds: outcomeShapeIds,
         });
         continue;
       }
@@ -513,16 +450,61 @@ export function projectReplicaPage(
     return {
       shapes,
       doorbell,
+      intentEntries,
       batch: {
         protocolVersion: REPLICA_PROTOCOL_VERSION,
         schemaEpoch: String(page.schemaEpoch),
         from: since,
         to: page.next,
         changes: [...changes.values()],
-        ...(outcomes.size > 0 ? { outcomes: [...outcomes.values()] } : {}),
         ...(page.hasMore ? { hasMore: true } : {}),
         shapeIds,
       },
     };
   }).value;
+}
+
+/**
+ * Resolve one device's intent outcomes onto a device-neutral page.
+ *
+ * Outcome rows are keyed by (intent, device) and only ever move forward, so
+ * they are read outside the projection's read transaction: a later read can
+ * return a newer verdict for the same intent, never an older one. A page with
+ * no intent entries — the overwhelmingly common case — is returned untouched,
+ * so sharing it across devices costs nothing.
+ */
+export function applyReplicaIntentOutcomes(
+  db: DatabaseSync,
+  page: ReplicaProjectedPage,
+  access: ReplicaShapeAccess & { deviceId?: string }
+): ReplicaProjectedPage {
+  if (page.intentEntries.length === 0 || !access.deviceId) return page;
+  const deviceId = access.deviceId;
+  const outcomes = new Map<string, ReplicaIntentOutcomeWire>();
+  const doorbell: ReplicaDoorbellChange[] = [];
+  for (const entry of page.intentEntries) {
+    const outcome = readReplicaIntentOutcome(db, entry.rowId, deviceId);
+    if (!outcome || (access.appId && outcome.appId !== access.appId)) continue;
+    const wire = outcomeWire(outcome);
+    if (!wire) continue;
+    outcomes.set(wire.intentId, wire);
+    doorbell.push({
+      seq: entry.seq,
+      commitId: entry.commitId,
+      entity: entry.entity,
+      rowId: entry.rowId,
+      op: entry.op,
+      changedAt: entry.changedAt,
+      shapeIds: page.shapes
+        .filter((shape) => shape.appId === outcome.appId)
+        .map((shape) => shape.shapeId)
+        .sort(),
+    });
+  }
+  if (outcomes.size === 0) return page;
+  return {
+    ...page,
+    doorbell: [...doorbell, ...page.doorbell],
+    batch: { ...page.batch, outcomes: [...outcomes.values()] },
+  };
 }

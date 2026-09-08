@@ -23,7 +23,7 @@ import {
   HarnessSessions,
   hydrationMessagesFromLedger,
   isHarnessKind,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   TurnPlane,
 } from "@centraid/server/engine";
 
@@ -35,7 +35,7 @@ export interface LiveDispatchOptions {
   runId: string;
   /** `<appId>/<automationId>`. */
   automationRef: string;
-  journalDbFile: string;
+  ledgerDbFile: string;
   /** Host-accounted dispatch seam. No automation may reach a harness directly. */
   runTurn: RunTurnFn;
   harness: HarnessKind;
@@ -118,7 +118,7 @@ export async function startLiveDispatch(
   const scratchDir = path.join(opts.workdir, ".automation-scratch", opts.runId);
   let scratchReady = false;
   const runsStore = new ConversationStore(
-    makeJournalDbProvider(opts.journalDbFile)
+    makeLedgerDbProvider(opts.ledgerDbFile)
   );
   const lockToken = randomUUID();
   if (!runsStore.acquireTurnLock(opts.automationRef, lockToken)) {

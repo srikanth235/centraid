@@ -8,12 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { registerEnrichCommands } from "../commands/enrich.js";
@@ -24,6 +19,7 @@ import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { readEnrichSettings, updateEnrichSettings } from "../host.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";
 import { listEnrichConsent, readEnrichConsent } from "./egress-consent.js";
@@ -76,18 +72,13 @@ describe("enrich", () => {
     });
     agentPartyId = enrolled.partyId;
     const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-    createGrant(db, {
-      granteePartyId: enrolled.partyId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [
-        { schema: "sync", verbs: "act" },
-        { schema: "core", verbs: "read+act" },
-        { schema: "media", verbs: "read" },
-        { schema: "knowledge", verbs: "read" },
-        { schema: "enrich", verbs: "act" },
-      ],
-    });
+    answerScopes(db, boot, "doc-text-extractor", [
+      { schema: "sync", verbs: "act" },
+      { schema: "core", verbs: "read+act" },
+      { schema: "media", verbs: "read" },
+      { schema: "knowledge", verbs: "read" },
+      { schema: "enrich", verbs: "act" },
+    ]);
     agent = {
       kind: "agent",
       agentId: enrolled.agentId,
@@ -101,7 +92,7 @@ describe("enrich", () => {
     command: string,
     input: Record<string, unknown>
   ) {
-    return gw.invoke(cred, { command, input, purpose: "dpv:ServiceProvision" });
+    return gw.invoke(cred, { command, input });
   }
 
   function output<T>(outcome: unknown): T {
@@ -228,7 +219,6 @@ describe("enrich", () => {
       const hits = gw.search(owner, {
         entity: "knowledge.annotation",
         query: "sandcastle",
-        purpose: "dpv:ServiceProvision",
       }) as { rows: unknown[] };
       expect(hits.rows).toHaveLength(1);
 
@@ -769,7 +759,6 @@ describe("enrich", () => {
       const hits = gw.search(owner, {
         entity: "core.document",
         query: "espresso",
-        purpose: "dpv:ServiceProvision",
       }) as { rows: unknown[] };
       expect(hits.rows).toHaveLength(1);
       invoke(agent, "core.set_extracted_text", {
@@ -960,9 +949,9 @@ describe("enrich", () => {
       });
       expect(tooSmallCap.status).toBe("too-large");
 
-      const receipts = db.journal
+      const receipts = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_receipt WHERE detail_json LIKE '%agent-content%'`
+          `SELECT count(*) AS n FROM access_receipt WHERE detail_json LIKE '%agent-content%'`
         )
         .get() as { n: number };
       expect(receipts.n).toBeGreaterThanOrEqual(4);
@@ -1064,7 +1053,6 @@ describe("enrich", () => {
         gw.search(owner, {
           entity: "knowledge.annotation",
           query: "sunset lake",
-          purpose: "dpv:ServiceProvision",
         }) as { rows: unknown[] };
       expect(miss().rows).toHaveLength(0);
       expect(miss().rows).toHaveLength(0);
@@ -1080,7 +1068,6 @@ describe("enrich", () => {
       gw.search(agent, {
         entity: "knowledge.annotation",
         query: "agent query",
-        purpose: "dpv:ServiceProvision",
       });
       expect(
         (
@@ -1107,6 +1094,15 @@ describe("enrich", () => {
     });
 
     test("a gateway backstop cannot drain a live device lease but may resume after expiry", () => {
+      // A REAL content item (#916): the request's (entity_type, entity_id) is
+      // a composite foreign key into the entity supertype.
+      db.vault
+        .prepare(
+          `INSERT OR IGNORE INTO core_content_item
+             (content_id, media_type, content_uri, sha256, byte_size, created_at)
+           VALUES ('pdf-content', 'application/pdf', 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
+        )
+        .run("d".repeat(64));
       queueDeviceEnrichmentRequest(db.vault, {
         requestId: "pdf-device-job",
         entityType: "core.content_item",
@@ -1180,7 +1176,6 @@ describe("enrich", () => {
       const read = gw.read(owner, {
         entity: "enrich.policy",
         where: [{ column: "domain", op: "eq", value: "photos" }],
-        purpose: "dpv:ServiceProvision",
       });
       expect(read.rows).toStrictEqual([
         expect.objectContaining({ domain: "photos", tier: "device" }),

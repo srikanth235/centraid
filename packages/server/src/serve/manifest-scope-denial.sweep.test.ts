@@ -11,8 +11,6 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { DEFAULT_PURPOSE } from "@centraid/vault";
-
 import {
   ALIEN_SCHEMA,
   ALIEN_TABLE,
@@ -49,14 +47,16 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       withScopes: 36,
       // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
       // reads and its seats' actual reads honest; this number only tracks them.
-      declaredScopes: 276,
+      // 278 → 277 (#916): Locker's history pane moved off the dropped
+      // `locker.item_history` onto the shared revision ledger, and the two
+      // scopes that named the dead table (`read` and `reveal`) became one
+      // `core.entity_revision` read. Nothing may reveal a revision, so the
+      // reveal scope did not move — it is gone.
+      // 277 → 279 (#928): People declares `share.authority_use` and
+      // `share.authority_request` so Settings → Access can date every answer
+      // and draw an automation's undecided ask on the same screen.
+      declaredScopes: 279,
     });
-    // Every scope-carrying manifest rides the one defaulted DPV purpose.
-    expect([
-      ...new Set(
-        MANIFESTS.filter((m) => m.scopes.length > 0).map((m) => m.purpose)
-      ),
-    ]).toStrictEqual([DEFAULT_PURPOSE]);
   });
 
   test("the negative probes really are undeclared everywhere", () => {
@@ -71,37 +71,49 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     expect(tables.has(PROBE_TABLE)).toBe(false);
   });
 
-  describe("every declared scope × verb is evaluable and allowed", () => {
+  describe("every declared scope × verb is evaluable, and read/act are allowed", () => {
     test.each(MANIFESTS.map((m) => [m.label, m] as const))(
       "%s",
       (_label, manifest) => {
         const identity = identityFor(sweep.clampedAgent, manifest.scopes);
         let allowed = 0;
+        let revealsRefused = 0;
         for (const scope of manifest.scopes) {
           const table = scope.table ?? PROBE_TABLE;
           for (const verb of verbsOf(scope.verbs)) {
             const decision = decide(identity, scope.schema, table, verb);
+            // A declared `reveal` scope is refused whatever the owner
+            // answered: reveal rides Locker's permit, never a standing answer
+            // (#873, #928). Anything else must be allowed.
+            const want = verb === "reveal" ? "deny" : "allow";
             expect(
               decision.decision,
-              `${manifest.label} declares ${scope.schema}.${table} for ${verb} but consent said ` +
+              `${manifest.label} declares ${scope.schema}.${table} for ${verb} but the plane said ` +
                 `${decision.decision === "deny" ? decision.failing : "allow"}`
-            ).toBe("allow");
+            ).toBe(want);
             if (decision.decision === "allow") allowed += 1;
+            else revealsRefused += 1;
           }
         }
         // Counted, not merely looped: a manifest whose scopes vanished must
         // say so as a number, not as a silently empty loop body.
-        expect(allowed).toBe(
-          manifest.scopes.reduce((n, s) => n + verbsOf(s.verbs).length, 0)
+        const declared = manifest.scopes.reduce(
+          (n, s) => n + verbsOf(s.verbs).length,
+          0
         );
+        const reveals = manifest.scopes.filter(
+          (s) => s.verbs === "reveal"
+        ).length;
+        expect(allowed).toBe(declared - reveals);
+        expect(revealsRefused).toBe(reveals);
       }
     );
 
     test("a declared rowFilter/fieldMask reaches the allow decision intact", () => {
       // Manifests anchoring a schema-wide read attenuate it: people and tally
-      // to their own entity type, locker (#872) `consent.receipt` to its own
+      // to their own entity type, locker (#872) `access.receipt` to its own
       // object types. That last matters most — the gateway's structural
-      // per-entity guard covers `consent.provenance` only, so here the
+      // per-entity guard covers `access.provenance` only, so here the
       // rowFilter IS the boundary.
       const anchored = MANIFESTS.filter((manifest) =>
         manifest.scopes.some((scope) => scope.rowFilter !== undefined)

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
@@ -7,12 +6,13 @@ import { describe, expect, it } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { ConversationStore } from "../conversation/store.js";
-import { makeJournalDbProvider, openJournalDb } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider, openLedgerDb } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { InsightsStore } from "./insights-store.js";
 
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = tempDirSync("centraid-insights-");
-  const ledger = makeJournalDbProvider(path.join(dir, "journal.db"));
+  const ledger = makeLedgerDbProvider(ledgerDbFileIn(dir));
   return {
     runs: new ConversationStore(ledger),
     insights: new InsightsStore(ledger),
@@ -458,9 +458,9 @@ function setupWithDb(): {
   db: DatabaseSync;
 } {
   const dir = tempDirSync("centraid-insights-digest-");
-  const dbPath = path.join(dir, "journal.db");
-  const db = openJournalDb(dbPath);
-  const ledger = makeJournalDbProvider(dbPath);
+  const dbPath = ledgerDbFileIn(dir);
+  const db = openLedgerDb(dbPath);
+  const ledger = makeLedgerDbProvider(dbPath);
   return {
     runs: new ConversationStore(ledger),
     insights: new InsightsStore(ledger),

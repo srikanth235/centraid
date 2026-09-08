@@ -6,6 +6,7 @@ export {
   openVaultDb,
   readBlobStoreSettings,
   type VaultDb,
+  type VaultWalCheckpoint,
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from "./db.js";
@@ -63,16 +64,15 @@ export {
 // they sit outside the per-vault handler path by design.
 export {
   shareItemsToVault,
-  unshareFromVault,
-  moveOutOfVault,
-  readShareOrigin,
+  moveItemsOutOfVault,
+  placeItemsInVault,
   type ShareVaultRef,
   type ShareItemsToVaultInput,
   type ShareItemsToVaultResult,
-  type UnshareFromVaultInput,
   type UnshareFromVaultResult,
-  type MoveOutOfVaultInput,
-  type ShareOriginRecord,
+  type MoveItemsOutOfVaultInput,
+  type PlaceItemsInVaultInput,
+  type PlaceItemsInVaultResult,
 } from "./share/placement.js";
 // The two halves of a share (#726): `readShareClosure` is origin-side and
 // read-only, `projectShareClosure` audience-side and opens the single
@@ -102,142 +102,73 @@ export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
+// A share is a subscription (#929): the origin composes a grant-keyed shape,
+// a transport carries it, and the audience seat ingests it through the same
+// door an authored row takes.
 export {
-  isCommonsCommandActable,
-  commonsRoutesForCommand,
-  COMMONS_COMMAND_ROUTES,
-  COMMONS_CONTAINER_KEYS,
-  type CommonsCommandRoute,
-  type CommonsContainerKey,
-  type CommonsRouteResolution,
-} from "./share/commons-routing.js";
+  composeShareShape,
+  shareShapeSizeBytes,
+  ShareShapeMaxSizeError,
+  SHARE_SHAPE_DEFAULT_MAX_SIZE_BYTES,
+  SHARE_SHAPE_FORMAT_VERSION,
+  type ComposeShareShapeInput,
+  type ShareShapeFrame,
+  type ShareShapeRowVersion,
+} from "./share/subscription-frame.js";
+export {
+  ingestShareShape,
+  purgeShareShape,
+  type IngestShareShapeResult,
+  type PurgeShareShapeResult,
+} from "./share/subscription-seat.js";
+export {
+  readSubscription,
+  readSubscriptionLineage,
+  recordSubscription,
+  type RecordSubscriptionInput,
+  type SubscriptionCursor,
+  type SubscriptionLineageRow,
+  type SubscriptionRecord,
+} from "./share/subscription-store.js";
+export {
+  judgeMemberIntent,
+  memberIntentBytes,
+  verifyMemberIntent,
+  type MemberIntentEnvelope,
+  type MemberIntentVerdict,
+} from "./share/subscription-intent.js";
+export {
+  planShareShapeIngest,
+  shareShapeStructureDigest,
+  type ShapeFieldUpdate,
+  type ShareShapePlan,
+} from "./share/subscription-delta.js";
+export {
+  isContainerCommandActable,
+  containerRoutesForCommand,
+  CONTAINER_COMMAND_ROUTES,
+  type ContainerCommandRoute,
+  type ContainerRouteResolution,
+} from "./share/container-routing.js";
+// A vault written before the subscription wave still carries the commons
+// rail; the one-shot pass turns it into standing answers and drops it (#929).
+export {
+  migrateCommonsToSubscriptions,
+  LEGACY_COMMONS_TABLES,
+  type CommonsMigrationReport,
+} from "./share/subscription-migration.js";
 export {
   bindPartyToVault,
+  ensureBoundParty,
+  partiesBoundToVault,
   revokePartyVaultBinding,
   type PartyVaultBindOutcome,
   type PartyVaultBindingRow,
   type PartyVaultRevokeOutcome,
 } from "./share/party-vault-binding.js";
-export {
-  createCommonsGrant,
-  ensureCommonsParty,
-  readCommonsGrant,
-  commonsClosure,
-  commonsClosureSizeBytes,
-  compactCommonsOperations,
-  acknowledgeCommonsSeatCursor,
-  assertCommonsWithinMax,
-  compileCommons,
-  appendCommonsOperation,
-  appendCommonsOperationInTransaction,
-  commonsGrantForCommand,
-  COMMONS_MEMBER_IDENTITY_CHANGED,
-  commonsMemberIdentityChangedReason,
-  executeCommonsCommand,
-  queueCommonsIntent,
-  settleCommonsIntent,
-  cancelCommonsIntent,
-  expireParkedCommonsIntents,
-  readCommonsIntentBasedOnSequence,
-  COMMONS_INTENT_PARK_HORIZON_MS,
-  STALE_CONTEXT_REASON_PREFIX,
-  retainCommonsItem,
-  removeCommonsFromSeat,
-  transferCommonsSteward,
-  commonsCurrentSize,
-  type CommonsCapability,
-  type CommonsDeparturePolicy,
-  type CommonsMemberInput,
-  type CommonsGrantRecord,
-  type CompiledCommonsSeat,
-  type CommonsCommandDecision,
-  type CommonsIntentStatus,
-  type ExecuteCommonsCommandInput,
-  type ExecuteCommonsCommandResult,
-} from "./share/commons.js";
-// The steward's per-intent answer (#872): approve re-enters the signed rail,
-// decline settles `denied` with the steward's own words. Neither is a second
-// write path — see the module header.
-export {
-  decideCommonsIntent,
-  type CommonsIntentDecisionResult,
-  type DecideCommonsIntentInput,
-} from "./share/commons-decide.js";
-export {
-  listCommonsGrants,
-  findCommonsGrantForContainer,
-  ensureCommonsGrant,
-  upsertCommonsMember,
-  refuseCommonsMember,
-  removeCommonsMember,
-  revokeCommonsGrant,
-  commonsSeats,
-  recompileCommonsGrants,
-  scrubCommonsSeat,
-  type CommonsMemberRecord,
-  type CommonsGrantView,
-} from "./share/commons-lifecycle.js";
-export {
-  readCommonsCursor,
-  type CommonsCursor,
-} from "./share/commons-cursor.js";
-export {
-  CommonsHistoryError,
-  isCommonsHistoryError,
-  commonsGenesisHash,
-  commonsOpHash,
-  commonsOpChainFields,
-  commonsStateDigest,
-  readCommonsChainHead,
-  readCommonsVerified,
-  verifyCommonsCheckpoint,
-  type CommonsCheckpointAttestation,
-  type CommonsHistoryFaultTag,
-  type CommonsOpChainFields,
-  type CommonsVerifiedPoint,
-} from "./share/commons-chain.js";
-export {
-  commonsIntentBytes,
-  signCommonsIntent,
-  verifyCommonsIntent,
-  type CommonsMemberSignature,
-} from "./share/commons-signature.js";
-export {
-  exportCommonsBootstrap,
-  exportCommonsSyncFrame,
-  applyCommonsBootstrap,
-  applyCommonsIncrement,
-  applyCommonsTombstone,
-  isCommonsIncrementUnusable,
-  queueCommonsInvitation,
-  createCommonsClaimInvitation,
-  claimCommonsInvitation,
-  listCommonsInvitations,
-  answerCommonsInvitation,
-  type CommonsBootstrap,
-  type CommonsIncrement,
-  type CommonsTombstone,
-  type CommonsSyncFrame,
-  type CommonsInvitationRecord,
-} from "./share/commons-bootstrap.js";
-// Command-tail replay (#750 invariant 7): catch-up proportional to what
-// changed, because the steward ships the operations rather than the rows.
-export {
-  isCommonsReplayError,
-  replicaInvocationKey,
-  type CommonsReplicaExecutor,
-  type CommonsTailBlob,
-} from "./share/commons-replay.js";
-// Replica-export recovery: a member re-founds a group whose steward is gone
-// (#731). Deliberate ceremony — see the module header.
-export {
-  recoverCommonsFromReplica,
-  readCommonsRecoveryLineage,
-  type CommonsRecoveryLineage,
-  type CommonsRecoveryRefusal,
-  type CommonsRecoveryResult,
-  type RecoverCommonsFromReplicaInput,
-} from "./share/commons-recovery.js";
+// The party↔vault binding is the whole of "where is this person reachable"
+// (#929): the commons rail that used to sit here is gone, and a share is a
+// subscription over the answer plane instead.
 // The GRANT PLANE (#825): a share is a standing grant, fulfillment is
 // per-audience-vault delivery state, and the channel is the party↔vault
 // binding read as one state. Commons stays the edit-fulfillment strategy.
@@ -245,21 +176,18 @@ export {
   audienceExists,
   createShareGrant,
   declineShare,
-  listStandingShareAuthority,
   maskedPartiesForSubject,
   readShareGrant,
   readLiveShareGrant,
   readLiveShareRefusal,
   resolveGrantAudienceParties,
-  revokeAuthorityForPrincipal,
-  revokeAuthorityOverSubject,
+  grantPlacementAuthority,
   revokeShareGrant,
   revokeShareRefusal,
   listShareGrantsForAudience,
   listShareGrantsForSubject,
   listLiveGrantsReachingParty,
   resolveAudienceParties,
-  ensureFulfillment,
   setFulfillmentState,
   readFulfillment,
   listFulfillment,
@@ -275,8 +203,23 @@ export {
   type ShareGrantRecord,
   type DeclineShareInput,
   type DeclineShareResult,
-  type RevokedAuthorityRow,
 } from "./grant/grant-store.js";
+// An automation's standing answer in the one plane (#928 A3).
+export {
+  automationAnswers,
+  automationSubjectsOf,
+  hasAnsweredEver,
+  recordAutomationAnswers,
+  revokeAutomationAnswers,
+  scopeForSubject,
+  AUTOMATION_ENTITY_SUBJECT,
+  AUTOMATION_PACK_SUBJECT,
+  type AutomationAnswer,
+  type AutomationDecision,
+  type AutomationScope,
+  type AutomationSubject,
+  type AutomationVerb,
+} from "./grant/automation-authority.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
   AUTHORITY_REGISTRY,
@@ -285,7 +228,6 @@ export {
   enforcementLocus,
   isRegisteredAuthority,
   registeredVerbs,
-  subjectRowExists,
   subjectWokenBy,
   wakeTypesForSubjectTypes,
   type AuthorityPrincipalKind,
@@ -314,34 +256,68 @@ export {
   type ShareChannel,
   type ShareChannelState,
 } from "./grant/channel.js";
-// Fulfillment: the act of keeping a grant true. View re-projects the subject
-// over the closure transport, edit routes back through the commons rail, and
-// revoke propagates a removal instead of pretending it reached the peer.
+export {
+  EGRESS_SUBJECT_TYPE,
+  egressPrincipalKind,
+  isLiveEgressAuthority,
+  listEgressAuthorities,
+  liveEgressAuthorityId,
+  liveEgressAuthorityIdsFor,
+  recordEgressAuthority,
+  revokeAllEgressAuthorities,
+  revokeEgressAuthority,
+  type EgressAuthorityKey,
+  type EgressAuthorityRecord,
+} from "./grant/egress-authority.js";
+export {
+  listCompanionSurfaces,
+  readCompanionSurfaces,
+  setCompanionSurfaces,
+} from "./grant/companion-surfaces.js";
+export {
+  closeObsoleteScopeRequest,
+  getOpenScopeRequest,
+  listOpenScopeRequests,
+  markScopeRequestDecided,
+  openScopeRequest,
+  type ScopeRequestSummary,
+} from "./grant/authority-request.js";
+// Keeping a grant true is START and STOP over a subscription (#929): the
+// origin composes a grant-keyed shape and a transport carries it, so a
+// co-hosted audience and one on another gateway take the same delivery path.
 export {
   createGrantProjectionMemory,
-  fulfillShareGrant,
-  propagateShareGrantRevocation,
-  ShareGrantMaxSizeError,
+  shareGrantShapeId,
+  startShareSubscription,
+  stopShareSubscription,
+  NOTHING_DELIVERED_DETAIL,
   type GrantProjectionMemory,
-  type FulfillShareGrantInput,
-  type GrantFulfillmentResult,
-  type GrantFulfillmentStep,
-  type GrantRemovalResult,
-  type GrantRemovalStep,
-  type PropagateShareGrantRevocationInput,
+  type ShareDeliveryOutcome,
+  type ShareRemovalOutcome,
+  type ShareShapeTransport,
+  type ShareSubscriptionResult,
+  type ShareSubscriptionStep,
+  type ShareSubscriptionStopResult,
+  type ShareSubscriptionStopStep,
+  type ShareTransportRoute,
+  type StartShareSubscriptionInput,
+  type StopShareSubscriptionInput,
 } from "./grant/fulfillment.js";
+export {
+  listPendingShareDeliveries,
+  type PendingShareDelivery,
+} from "./grant/grant-fulfillment-rows.js";
+export {
+  loopbackShareTransport,
+  loopbackShareTransports,
+  type LoopbackShareTransportInput,
+} from "./share/subscription-transport.js";
 export {
   routeShareGrantEdit,
   SHARE_GRANT_CO_CONTRIBUTION_COMMANDS,
   SHARE_GRANT_CO_CONTRIBUTION_TYPES,
   type ShareGrantEditRoute,
 } from "./grant/fulfillment-edit.js";
-export {
-  mintGrantInvitation,
-  withdrawGrantInvitations,
-  type GrantInvitation,
-  type MintGrantInvitationInput,
-} from "./grant/fulfillment-invite.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
@@ -471,7 +447,6 @@ export { jitterDelayMs } from "./timer-jitter.js";
 export {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
-  JOURNAL_MIGRATIONS,
   migrate,
   VaultSchemaAheadError,
 } from "./schema/migrate.js";
@@ -481,13 +456,30 @@ export {
   entityDeclaration,
   assertRegistryLabels,
   assertVaultRegistryLabels,
+  LOCAL_TABLES,
   VAULT_ENTITIES,
-  JOURNAL_ENTITIES,
   VAULT_TABLES,
-  JOURNAL_TABLES,
   type EntityRef,
+  type EntityLifecycle,
   type VaultEntityDeclaration,
 } from "./schema/tables.js";
+// What an entity's values may be on the JSON replica lane (#922, SB-text):
+// the declared text ceiling and the columns that are bytes, never text.
+export {
+  replicaValuePolicyOf,
+  type ReplicaValuePolicy,
+} from "./replica/value-policy.js";
+export { type VaultEntityReplicaValues } from "./schema/entity-declaration.js";
+// The two BANDS in `vault.db` beside the life data (#916): evidence and the
+// conversation ledger. Names only — a host excludes them by band from the
+// portable export, the replica and the support bundle, and the retention
+// windows say how long each keeps rows in the live file.
+export {
+  AUDIT_BAND_TABLES,
+  AUDIT_APPEND_ONLY_TABLES,
+  RETENTION_WINDOWS,
+} from "./schema/audit.js";
+export { LEDGER_BAND_TABLES } from "./schema/ledger.js";
 // The Vault Atlas mapping: table → kind → pack (#441).
 export {
   ONTOLOGY_PACKS,
@@ -582,9 +574,18 @@ export {
 export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
 // The engine-computed cascade every purge runs, exported so the
 // declared-writes gate unions it rather than have a manifest restate it.
-export { POLY_REF_REGISTRY, type PolyRefEntry } from "./schema/poly-refs.js";
 export {
-  DEFAULT_REPLICA_MAX_VALUE_BYTES,
+  ENTITY_POINTERS,
+  ENTITY_REF_EXCLUSIONS,
+  type EntityPointer,
+  type EntityRefPair,
+} from "./schema/entity-refs.js";
+export {
+  PARTY_POINTER_REGISTRY,
+  type PartyPointer,
+} from "./schema/party-pointers.js";
+export {
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaRow,
   readReplicaRows,
   withReplicaSnapshot,
@@ -633,12 +634,17 @@ export {
 } from "./replica/parked.js";
 
 export { createGateway, Gateway } from "./gateway/gateway.js";
-export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
+export { GatewayError } from "./gateway/types.js";
 export {
-  evaluateConsent,
-  type ConsentAllow,
-  type ConsentDecision,
-} from "./gateway/consent.js";
+  bumpWorkCounter,
+  gatewayWorkCounters,
+  instrumentVaultStatements,
+} from "./gateway/work-counters.js";
+export {
+  evaluateAccess,
+  type AccessAllow,
+  type AccessDecision,
+} from "./gateway/access.js";
 export {
   compileFilters,
   compileReplicaHistoricalFilters,
@@ -744,7 +750,6 @@ export {
   enrollDevice,
   enrollApp,
   enrollAgent,
-  createGrant,
   type BootstrapResult,
   type BootstrapVaultOptions,
   type ScopeSpec,
@@ -765,7 +770,6 @@ export {
   type VaultPresentation,
   lookupAppByName,
   ensureAppEnrolled,
-  listActiveGrants,
   listEnrolledApps,
   markAppRevoked,
   listInstalledApps,
@@ -773,38 +777,19 @@ export {
   type InstalledAppRow,
   lookupAgentByName,
   ensureAgentEnrolled,
-  listActiveAgentGrants,
   listEnrolledAgents,
   markAgentRevoked,
-  purposeConceptId,
   type HostBootstrap,
   type EnrolledApp,
   type EnrolledAgent,
-  type GrantSummary,
   type AppSummary,
   type AgentSummary,
 } from "./host.js";
-export {
-  writeScopeTombstones,
-  listScopeTombstones,
-  clearScopeTombstones,
-  clearAllScopeTombstones,
-  hasGrantHistory,
-  openScopeRequest,
-  closeObsoleteScopeRequest,
-  listOpenScopeRequests,
-  getOpenScopeRequest,
-  markScopeRequestDecided,
-  type ScopeTriple,
-  type ScopeRequestSummary,
-} from "./install-memory.js";
 export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 
 export { registerScheduleCommands } from "./commands/schedule.js";
 export { registerTaskCommands } from "./commands/tasks.js";
 export { registerSocialCommands } from "./commands/social.js";
-export { registerFinanceCommands } from "./commands/finance.js";
-export { registerHealthCommands } from "./commands/health.js";
 export { registerKnowledgeCommands } from "./commands/knowledge.js";
 export {
   registerAttachmentCommands,
@@ -831,7 +816,6 @@ export { registerEnrichCommands } from "./commands/enrich.js";
 export { registerOutboxCommands } from "./commands/outbox.js";
 // The ONE writer of the share half of the authority plane (#883).
 export { registerShareCommands, SHARE_COMMANDS } from "./commands/share.js";
-export { registerJudgmentCommands } from "./commands/judgment.js";
 // The Browse write trio: journalled row CRUD (#441).
 export {
   registerAtlasCommands,
@@ -929,9 +913,18 @@ export {
   encodeVector,
   decodeVector,
   cosine,
+  rankEmbeddingsWithVec,
   scanEmbeddings,
+  type RankEmbeddingsOptions,
   type SemanticHit,
 } from "./enrich/similarity.js";
+export {
+  PHOTO_EMBEDDING_TARGET_TYPE,
+  countPhotoEmbeddings,
+  rankLivePhotoEmbeddings,
+  type PhotoEmbeddingHit,
+  type PhotoRankOptions,
+} from "./enrich/photo-search.js";
 export { ENRICH_PUBLISHERS, tagNotation } from "./ingest/enrich-publishers.js";
 export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from "./schema/enrich.js";
 
@@ -996,6 +989,7 @@ export {
 export {
   importVaultExport,
   canonicalJson,
+  type ImportVaultExportOptions,
   type VaultExport,
 } from "./gateway/portability.js";
 export {
@@ -1003,16 +997,29 @@ export {
   importPortableVault,
   verifyPortableVault,
   type PortableExport,
+  type PortableExportOptions,
+  type PortableImportOptions,
   type PortableManifest,
   type PortableManifestFile,
 } from "./gateway/portable-export.js";
+
+// The portable bundle's password-wrapped seal-key custody kit (#630).
+export {
+  PORTABLE_CUSTODY_KIT_PATH,
+  custodyKitSealKey,
+  parsePortableCustodyKit,
+  wrapPortableCustodyKit,
+} from "./gateway/portable-custody.js";
+export type {
+  PortableCustodyKit,
+  WrappedPortableCustodyKit,
+} from "./gateway/portable-custody.js";
 export {
   exportIcs,
   exportVcards,
   exportTransactionsCsv,
   exportMarkdownDirectory,
 } from "./gateway/portable-adapters.js";
-export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
 export {
   backupVault,
   checkpointVault,
@@ -1120,7 +1127,7 @@ export {
 // Bounded vault-side retention and its size ladder (#659 L1/L3/L4).
 // `runVaultMaintenance` is the single hookpoint a host sweep calls;
 // `decideVaultMaintenance` is the pure policy in front of it, shaped like
-// journal-limit.ts's ladder for `journal.db`.
+// journal-limit.ts's ladder for the ledger band.
 export {
   ENTITY_REVISION_PRUNE_CAP,
   pruneExpiredEntityRevisions,

@@ -33,7 +33,6 @@ describe(readConditionCursor, () => {
     readConditionCursor({
       automationRef: "billing/invoice-watch",
       trigger: TRIGGER,
-      purpose: "dpv:Billing",
       vault: async (call) =>
         call.op === "read"
           ? { ok: true, result: { rows } }
@@ -99,21 +98,19 @@ describe(readConditionCursor, () => {
       readConditionCursor({
         automationRef: "billing/invoice-watch",
         trigger: TRIGGER,
-        purpose: "dpv:Billing",
         vault: async () => ({
           ok: false,
-          code: "VAULT_CONSENT",
+          code: "VAULT_ACCESS",
           error: "deny (receipt r1)",
         }),
         limit: 50,
         now: new Date(1_000),
       })
-    ).rejects.toThrow(/VAULT_CONSENT/u);
+    ).rejects.toThrow(/VAULT_ACCESS/u);
     await expect(
       readConditionCursor({
         automationRef: "not-a-ref",
         trigger: TRIGGER,
-        purpose: "dpv:Billing",
         vault: async () => ({ ok: true, result: { rows: [] } }),
         limit: 50,
         now: new Date(1_000),
@@ -148,7 +145,6 @@ describe(readDataCursor, () => {
     const result = await readDataCursor({
       automationRef: "studio/reconciler",
       trigger: DATA_TRIGGER,
-      purpose: "dpv:Billing",
       vault,
       limit: 50,
       now: new Date(1_000),
@@ -169,7 +165,6 @@ describe(readDataCursor, () => {
     const result = await readDataCursor({
       automationRef: "studio/reconciler",
       trigger: DATA_TRIGGER,
-      purpose: "dpv:Billing",
       vault,
       positionJson: '"p1"',
       limit: 2,
@@ -206,7 +201,6 @@ describe(readDataCursor, () => {
     const result = await readDataCursor({
       automationRef: "studio/reconciler",
       trigger: DATA_TRIGGER,
-      purpose: "dpv:Billing",
       vault,
       positionJson: '"p1"',
       limit: 50,
@@ -222,21 +216,19 @@ describe(readDataCursor, () => {
       readDataCursor({
         automationRef: "studio/reconciler",
         trigger: DATA_TRIGGER,
-        purpose: "dpv:Billing",
         vault: async () => ({
           ok: false,
-          code: "VAULT_CONSENT",
+          code: "VAULT_ACCESS",
           error: "deny (receipt r1)",
         }),
         limit: 50,
         now: new Date(1_000),
       })
-    ).rejects.toThrow(/VAULT_CONSENT/u);
+    ).rejects.toThrow(/VAULT_ACCESS/u);
     await expect(
       readDataCursor({
         automationRef: "nope",
         trigger: DATA_TRIGGER,
-        purpose: "dpv:Billing",
         vault: async () => ({
           ok: true,
           result: { changes: [], cursor: "p1" },

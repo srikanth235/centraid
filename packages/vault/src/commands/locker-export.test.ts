@@ -9,6 +9,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { VAULT_ENTITIES } from "../schema/entity-catalog.js";
+import { revisionPolicyOf } from "../schema/entity-declaration.js";
 import { lockerFixture } from "./locker-test-kit.js";
 import type { LockerFixture } from "./locker-test-kit.js";
 
@@ -30,24 +32,25 @@ describe("locker #872 surface: history, duplicate and export", () => {
           password: "a new one",
         })
       );
+      // HISTORY IS REVISIONS (#916, D2). `locker_item_history` was a second
+      // revision mechanism answering the same question as
+      // `core_entity_revision`, with its own retention, undo path and export
+      // shape. The snapshot IS the previous row, sealed cells and all, so the
+      // old password decrypts under the item's own additional data.
       const revision = fx.db.vault
         .prepare(
-          `SELECT * FROM locker_item_history
-            WHERE item_id = ? AND operation = 'edit'
+          `SELECT * FROM core_entity_revision
+            WHERE entity_type = 'locker.item' AND entity_id = ?
             ORDER BY recorded_at DESC LIMIT 1`
         )
         .get(itemId) as Record<string, unknown>;
+      const snapshot = JSON.parse(String(revision.snapshot_json)) as Record<
+        string,
+        unknown
+      >;
       expect(
-        fx.unsealCell(
-          "locker_item_history",
-          "password",
-          String(revision.revision_id),
-          revision.password
-        )
+        fx.unsealCell("locker_item", "password", itemId, snapshot.password)
       ).toBe("correct horse battery");
-      expect(JSON.parse(String(revision.changed_json))).toMatchObject({
-        password_rotated: true,
-      });
       expect(fx.itemRow(itemId).password_set_at).not.toBe(firstSetAt);
     });
 
@@ -66,24 +69,23 @@ describe("locker #872 surface: history, duplicate and export", () => {
       expect(fx.itemRow(itemId).password_set_at).toBe(setAt);
     });
 
-    test("history survives the undo window — it is not core_entity_revision", () => {
-      // The P5 revision ledger is a 10-second undo window that a sweep prunes;
-      // a password rotated last March has to still be here.
+    test("history survives the undo window — the Locker retains FOREVER", () => {
+      // The revision ledger is a 10-second undo window a sweep prunes for
+      // every other entity; a password rotated last March has to still be
+      // here. That is a DECLARATION now (#916, D2) — `locker.item` says
+      // `revisions: { retain: 'forever' }` — rather than a second table.
       const itemId = fx.addLogin();
-      fx.out(
-        fx.invoke("locker.edit_item", { item_id: itemId, password: "second" })
-      );
+      for (const password of ["second", "third"])
+        fx.out(fx.invoke("locker.edit_item", { item_id: itemId, password }));
       expect(
         fx.count(
-          "SELECT count(*) AS n FROM core_entity_revision WHERE entity_type = 'locker.item'"
-        )
-      ).toBe(0);
-      expect(
-        fx.count(
-          "SELECT count(*) AS n FROM locker_item_history WHERE item_id = ?",
+          "SELECT count(*) AS n FROM core_entity_revision WHERE entity_type = 'locker.item' AND entity_id = ?",
           itemId
         )
-      ).toBe(2);
+      ).toBeGreaterThanOrEqual(2);
+      expect(revisionPolicyOf(VAULT_ENTITIES.locker!.item!).retain).toBe(
+        "forever"
+      );
     });
   });
 
@@ -199,9 +201,9 @@ describe("locker #872 surface: history, duplicate and export", () => {
         },
       ]);
       // One receipt, naming the export and every sealed cell it opened.
-      const receipt = fx.db.journal
+      const receipt = fx.db.audit
         .prepare(
-          `SELECT detail_json FROM consent_receipt
+          `SELECT detail_json FROM access_receipt
             WHERE action = 'act locker.export' AND decision = 'allow'
             ORDER BY receipt_id DESC LIMIT 1`
         )
@@ -221,13 +223,13 @@ describe("locker #872 surface: history, duplicate and export", () => {
       // audit trail records THAT an export happened without becoming a second
       // copy of every secret in the locker.
       const journalled = [
-        ...(fx.db.journal
-          .prepare("SELECT detail_json AS text FROM consent_receipt")
+        ...(fx.db.audit
+          .prepare("SELECT detail_json AS text FROM access_receipt")
           .all() as { text: string | null }[]),
-        ...(fx.db.journal
+        ...(fx.db.audit
           .prepare("SELECT input_json AS text FROM agent_command_invocation")
           .all() as { text: string | null }[]),
-        ...(fx.db.journal
+        ...(fx.db.audit
           .prepare("SELECT summary AS text FROM agent_explanation")
           .all() as { text: string | null }[]),
         ...(fx.db.vault
@@ -292,7 +294,6 @@ describe("locker #872 surface: history, duplicate and export", () => {
         "locker_item_field",
         "locker_item_address",
         "locker_item_passkey",
-        "locker_item_history",
         "locker_item_alias",
       ]) {
         expect(

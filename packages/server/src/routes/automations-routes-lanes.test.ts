@@ -13,10 +13,11 @@ import {
   AnalyticsStore,
   ConversationStore,
   InsightsStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import { WorktreeStore } from "../worktree-store/index.js";
 import { makeAutomationsRouteHandler } from "./automations-routes.ts";
 
@@ -25,11 +26,11 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 describe("automations-routes systemLane suite", () => {
   beforeEach(async () => {
     dir = await tempDir(`auto-routes-lanes-${crypto.randomUUID()}-`);
-    const journalDbFile = path.join(dir, "journal.db");
-    const provider = makeJournalDbProvider(journalDbFile);
+    const ledgerDbFile = ledgerDbFileIn(dir);
+    const provider = makeLedgerDbProvider(ledgerDbFile);
     handler = makeAutomationsRouteHandler({
       store: new WorktreeStore({ root: path.join(dir, "code") }),
-      journalDbFile,
+      ledgerDbFile,
       analytics: new AnalyticsStore(provider),
       insights: new InsightsStore(provider),
       runAutomation: () => {},
@@ -76,7 +77,7 @@ describe("automations-routes systemLane suite", () => {
   // starve the other.
   test("systemLane splits the turns feed so a recognition flood can't starve the member lane", async () => {
     const store = new ConversationStore(
-      makeJournalDbProvider(path.join(dir, "journal.db"))
+      makeLedgerDbProvider(ledgerDbFileIn(dir))
     );
     const memberRef = "brief/brief";
     const memberConversationId = store.ensureAutomationConversation(

@@ -1,16 +1,16 @@
 // Shared fixtures for the conversation-band archival engine tests (issue
-// #438): a real journal.db on a temp file (so incremental_vacuum can reclaim
+// #438): a real vault.db on a temp file (so incremental_vacuum can reclaim
 // pages) + an in-memory content-addressed blob sink standing in for the vault
 // CAS door. Test-only module — imported by archive.test.ts / selector.test.ts,
 // never shipped.
 
 import { createHash } from "node:crypto";
-import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { openJournalDb } from "../../stores/gateway-db.js";
+import { openLedgerDb } from "../../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../../stores/ledger-db.test-fixtures.js";
 import type { BlobSink } from "./types.js";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -34,8 +34,8 @@ export class MemoryBlobSink implements BlobSink {
 
 export function openTempJournal(): { journal: DatabaseSync; dbPath: string } {
   const dir = tempDirSync("centraid-conv-archive-");
-  const dbPath = path.join(dir, "journal.db");
-  return { journal: openJournalDb(dbPath), dbPath };
+  const dbPath = ledgerDbFileIn(dir);
+  return { journal: openLedgerDb(dbPath), dbPath };
 }
 
 export function seedConversation(

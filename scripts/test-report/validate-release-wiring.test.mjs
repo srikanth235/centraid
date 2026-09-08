@@ -65,10 +65,9 @@ describe("validate-release-wiring", () => {
   test("rejects a lane dropped from the release-check aggregator", () => {
     const errors = lintFixture({
       "release.yml": (text) =>
-        text.replace(
-          "needs: [plan, desktop, gateway-npm, gateway-image, mobile, companion]",
-          "needs: [plan, desktop, gateway-npm, gateway-image, companion]"
-        ),
+        // #915 gave release-check a `require-candidate` gate and reflowed the
+        // list across lines; the sabotage drops `mobile` from wherever it sits.
+        text.replace(/^\s*mobile,$/mu, ""),
     });
     expect(errors).toContain(
       "release-check.needs is missing job mobile — that lane could fail while the release reports success"
@@ -91,9 +90,10 @@ describe("validate-release-wiring", () => {
   test("rejects an aggregator that skips when a lane fails", () => {
     const errors = lintFixture({
       "release.yml": (text) =>
+        // Drop `if: always()` from release-check, wherever the list wraps.
         text.replace(
-          "needs: [plan, desktop, gateway-npm, gateway-image, mobile, companion]\n    if: always()",
-          "needs: [plan, desktop, gateway-npm, gateway-image, mobile, companion]"
+          /^\s*if: always\(\)\n(?=\s*runs-on: ubuntu-latest\n\s*timeout-minutes)/mu,
+          ""
         ),
     });
     expect(errors).toContain(

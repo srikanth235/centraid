@@ -50,7 +50,7 @@ describe("Locker user-presence authentication", () => {
       "correct horse"
     );
     const receiptText = JSON.stringify(
-      db.journal.prepare(`SELECT * FROM consent_receipt`).all()
+      db.audit.prepare(`SELECT * FROM access_receipt`).all()
     );
     expect(receiptText).not.toContain("correct horse");
   });

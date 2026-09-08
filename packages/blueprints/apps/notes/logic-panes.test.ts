@@ -57,7 +57,7 @@ describe("search never claims an empty result it did not verify", () => {
   it("calls a DENIAL unreachable, never 'nothing matches'", async () => {
     const clock = useFakeClock();
     const app = harness({
-      read: async () => ({ vaultDenied: { code: "VAULT_CONSENT" } }),
+      read: async () => ({ vaultDenied: { code: "VAULT_ACCESS" } }),
     });
     app.logic.runSearch("oat");
     await clock.advance(150);

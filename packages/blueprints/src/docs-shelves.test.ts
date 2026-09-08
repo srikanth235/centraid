@@ -163,6 +163,7 @@ describe("docs shelves", () => {
       "Folders",
       "Recently changed",
       "Starred",
+      "Shared with you",
       "Trash",
     ]);
     // All is the app's own root, with no segment: `docs` IS All.
@@ -204,12 +205,15 @@ describe("docs shelves", () => {
   });
 
   it("claims its band destinations plus More", () => {
-    // Three, not four. The frame enforces a cap and no floor; Coming due was
-    // removed and no tab was promoted to fill the hole, because a band tab is
-    // a claim about where a member goes most.
+    // FOUR, and the fourth is earned rather than promoted to fill Coming due's
+    // hole: Shared is a destination a member arrives at from outside the app,
+    // which is the claim a band tab makes. This seat keeps Search where the
+    // phone traded it for Shared — the phone has no rail, and the two bands are
+    // deliberately not one list.
     expect(shelves.BAND_DESTINATIONS.map((d) => d.label)).toStrictEqual([
       "All",
       "Folders",
+      "Shared",
       "Search",
     ]);
   });

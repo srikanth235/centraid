@@ -19,14 +19,14 @@ import type {
 } from "@centraid/server/engine";
 import type * as TypeImport_4y0tle from "@centraid/server/engine";
 
-import { journalConversationStore } from "../journal-stores.js";
+import { ledgerConversationStore } from "../ledger-stores.js";
 import { unrefTimer } from "../lib/unref-timer.js";
 import { AUTOMATION_ANCHOR_ENTITY } from "./automation-anchor-scopes.js";
 import type { ResolvedAutomationAnchor } from "./automation-anchor-scopes.js";
 
 export interface HeadlessCompileOptions {
   runner: ConversationRunner;
-  journalDbFile: string;
+  ledgerDbFile: string;
   harnessSessionDir: string;
   dataDir: string;
   appId: string;
@@ -67,7 +67,7 @@ export interface HeadlessCompileOptions {
 }
 
 export interface RecordFailedAutomationCompileOptions {
-  journalDbFile: string;
+  ledgerDbFile: string;
   automationRef: string;
   appId: string;
   automationName: string;
@@ -134,7 +134,7 @@ function compileUsageFields(usage: UsageEvent | undefined): {
 export function recordFailedAutomationCompile(
   opts: RecordFailedAutomationCompileOptions
 ): void {
-  const store = journalConversationStore(opts.journalDbFile);
+  const store = ledgerConversationStore(opts.ledgerDbFile);
   const existing = store.getTurn(opts.runId);
   if (existing?.endedAt !== undefined) return;
   if (!existing) {
@@ -204,7 +204,7 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
           ...entities.map((match) =>
             match[2] === "*"
               ? `- ${match[0]} => the ${match[1]} entity kind (read scope granted; query it via ctx.vault, do not resolve a single row)`
-              : `- ${match[0]} => await ctx.vault.resolve({ refs: [{ type: '${match[1]}', id: '${match[2]}' }], purpose: 'dpv:ServiceProvision' })`
+              : `- ${match[0]} => await ctx.vault.resolve({ refs: [{ type: '${match[1]}', id: '${match[2]}' }] })`
           ),
         ]
       : []),
@@ -275,7 +275,6 @@ export function finalizeCompiledManifest(
     ...(scopes.length > 0
       ? {
           vault: {
-            purpose: manifest.vault?.purpose ?? "dpv:ServiceProvision",
             ...(manifest.vault?.why ? { why: manifest.vault.why } : {}),
             scopes,
           },
@@ -292,7 +291,7 @@ export function finalizeCompiledManifest(
 export async function runHeadlessAutomationCompile(
   opts: HeadlessCompileOptions
 ): Promise<void> {
-  const store = journalConversationStore(opts.journalDbFile);
+  const store = ledgerConversationStore(opts.ledgerDbFile);
   const runId =
     opts.runId ?? `${opts.automationRef}:compile:${randomUUID().slice(0, 8)}`;
   const conversationId = store.ensureAutomationConversation(

@@ -7,6 +7,7 @@ import { canonicalizeRrule } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
 import { registerScheduleOrganizeCommands } from "./schedule-organize.js";
 
@@ -18,6 +19,7 @@ const PROPOSE_EVENT: CommandDefinition = {
     required: ["summary", "dtstart", "dtend", "calendar_id"],
     additionalProperties: false,
     properties: {
+      event_id: MINTED_ID_PROPERTY,
       summary: { type: "string", minLength: 1 },
       description: { type: "string" },
       dtstart: { type: "string", minLength: 1 },
@@ -56,6 +58,7 @@ const PROPOSE_EVENT: CommandDefinition = {
     },
   },
   preconditions: [
+    mintedIdIsFree("core_event", "event_id", "event", "event_id"),
     {
       name: "calendar_exists",
       sql: "SELECT count(*) AS n FROM schedule_calendar WHERE calendar_id = :calendar_id",
@@ -120,6 +123,24 @@ const PROPOSE_EVENT: CommandDefinition = {
   handler: proposeEvent,
 };
 
+/**
+ * WHAT `dtstart` MEANS (#916, R2 / review 3.3). 'zoned' says it is a real
+ * instant expanded in `start_tz`, so both halves have to be there; an event
+ * arriving with no zone is FLOATING — a wall clock — and saying 'zoned'
+ * anyway is what the schema's CHECK now refuses. The default follows the
+ * input rather than a constant, because the caller who omits a zone is
+ * telling us which of the two this is.
+ */
+export function eventSemantics(input: {
+  recurrence_semantics?: string;
+  start_tz?: string;
+  dtstart?: string;
+}): string {
+  if (input.recurrence_semantics !== undefined)
+    return input.recurrence_semantics;
+  return input.start_tz && input.dtstart?.endsWith("Z") ? "zoned" : "floating";
+}
+
 function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     summary: string;
@@ -136,7 +157,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     conferencing_uri?: string;
     reminders?: { minutes_before: number }[];
   };
-  const eventId = ctx.newId();
+  const eventId = mintedId(ctx, "event_id");
   ctx.db
     .prepare(
       `INSERT INTO core_event
@@ -158,7 +179,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now,
       ctx.now,
       input.end_tz ?? input.start_tz ?? null,
-      input.recurrence_semantics ?? "zoned"
+      eventSemantics(input)
     );
   ctx.wrote("core.event", eventId);
   const remindersJson =
@@ -538,8 +559,10 @@ const RESTORE_EVENT: CommandDefinition = {
   preconditions: [
     {
       name: "event_trashed",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_event
-             WHERE event_id = :event_id AND deleted_at IS NOT NULL`,
+             WHERE event_id = :event_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,

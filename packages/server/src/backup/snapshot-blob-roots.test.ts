@@ -107,7 +107,6 @@ describe("snapshot-blob-roots", () => {
     const entries: ManifestEntry[] = [
       blobEntry(blobSha),
       { path: "vault.db", kind: "db", size: 10, mtimeMs: 0, chunks: [] },
-      { path: "journal.db", kind: "db", size: 10, mtimeMs: 0, chunks: [] },
     ];
     expect(blobShasFromManifestEntries(entries)).toStrictEqual([blobSha]);
   });

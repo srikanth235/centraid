@@ -60,7 +60,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/embed-web.mjs && mkdir -p dist/acp/backends/acp dist/engine/pricing dist/acp/cli && cp src/acp/backends/acp/vault-mcp-stdio-proxy.mjs dist/acp/backends/acp/ && cp src/engine/pricing/litellm-snapshot.json dist/engine/pricing/ && cp dist/acp/cli/centraid-cli.js dist/acp/cli/centraid-acp && chmod +x dist/acp/cli/centraid-acp",
     "clean": "rm -rf dist",
+    "perf:journeys": "node scripts/bench-journeys.mjs",
+    "perf:journeys:constrained": "node scripts/bench-journeys.mjs --profile constrained",
+    "perf:journeys:standard": "node scripts/bench-journeys.mjs --profile standard",
     "perf:low-end": "node scripts/bench-low-end.mjs --check",
+    "perf:low-end:standard": "CENTRAID_HARDWARE_PROFILE=standard node scripts/bench-low-end.mjs",
     "perf:runtime-probe": "node scripts/probe-runtime-sqlite.mjs",
     "probe:all-harnesses": "bun scripts/probe-all-harnesses.ts",
     "test": "vitest run",

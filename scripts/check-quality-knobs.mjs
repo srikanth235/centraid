@@ -53,25 +53,31 @@ function approved(config) {
       })
   );
 }
-const queryFile = "tests/experience-budgets/client-query-counts.json";
+// The per-screen first-paint counts are one entry of the journey ledger
+// (#927): `client/first-paint-work`, whose metrics are the screens. This gate
+// holds them tighten-only per screen and refuses a silent screen deletion,
+// which the ledger-wide ratchet alone would read as one fewer number.
+const queryFile = "tests/journeys.json";
+const FIRST_PAINT_KEY = "client/first-paint-work/year3/any";
+const screensOf = (doc) =>
+  doc?.entries?.[FIRST_PAINT_KEY]?.metrics ?? doc?.screens ?? null;
 const queryBase = baseJson(queryFile);
 const queryCurrent = currentJson(queryFile);
-if (queryBase) {
-  for (const [screen, budget] of Object.entries(queryCurrent.screens ?? {})) {
-    const prior = queryBase.screens?.[screen];
+const currentScreens = screensOf(queryCurrent) ?? {};
+const baseScreens = screensOf(queryBase);
+if (baseScreens) {
+  for (const [screen, budget] of Object.entries(currentScreens)) {
+    const prior = baseScreens[screen];
     if (!prior) continue;
-    for (const key of ["sqlStatements", "httpRequests"]) {
+    for (const key of ["maxStatements", "maxHttpRequests"]) {
       if (Number(budget[key]) > Number(prior[key]) && !approved(queryCurrent))
         errors.push(
           `${queryFile}: ${screen}.${key} widened without approvedDeviation`
         );
     }
   }
-  for (const screen of Object.keys(queryBase.screens ?? {}))
-    if (
-      !Object.hasOwn(queryCurrent.screens ?? {}, screen) &&
-      !approved(queryCurrent)
-    )
+  for (const screen of Object.keys(baseScreens))
+    if (!Object.hasOwn(currentScreens, screen) && !approved(queryCurrent))
       errors.push(`${queryFile}: screen budget ${screen} was removed`);
 }
 
@@ -120,45 +126,41 @@ if (
     `${classificationFile}: governed classifications changed without a receipt-approved deviation`
   );
 
-const matrixBase = baseJson("tests/matrix.json");
-const matrixCurrent = currentJson("tests/matrix.json");
-const matrixGovernedPayload = JSON.stringify({
-  qualities: matrixCurrent.qualities,
-  demonstratedRed: matrixCurrent.demonstratedRed,
-});
-const matrixGovernanceFingerprint = createHash("sha256")
-  .update(matrixGovernedPayload)
+// #915 replaced tests/matrix.json with tests/claims.json: the 45-gate
+// user-facing qualities panel retired into claim ROWS, each carrying its own
+// severity and the date it was last demonstrated red. The governed payload is
+// those rows — remove a claim, restate what a gate proves, or move the date it
+// was last shown to go red, and this fingerprint moves with it.
+const claimsBase = baseJson("tests/claims.json");
+const claimsCurrent = currentJson("tests/claims.json");
+const claimsGovernedPayload = JSON.stringify({ claims: claimsCurrent.claims });
+const claimsGovernanceFingerprint = createHash("sha256")
+  .update(claimsGovernedPayload)
   .digest("hex");
 if (
-  classificationCurrent.matrixGovernanceFingerprint !==
-  matrixGovernanceFingerprint
+  classificationCurrent.claimsGovernanceFingerprint !==
+  claimsGovernanceFingerprint
 )
   errors.push(
-    `${classificationFile}: stale matrixGovernanceFingerprint; qualities metadata, evidence selectors, blockers, weakest-link text, or demonstrated-red evidence changed`
+    `${classificationFile}: stale claimsGovernanceFingerprint; a claim row's owner, evidence selector, severity, or demonstrated-red date changed`
   );
 if (
-  classificationBase?.matrixGovernanceFingerprint &&
-  classificationBase.matrixGovernanceFingerprint !==
-    classificationCurrent.matrixGovernanceFingerprint &&
+  classificationBase?.claimsGovernanceFingerprint &&
+  classificationBase.claimsGovernanceFingerprint !==
+    classificationCurrent.claimsGovernanceFingerprint &&
   !approved(classificationCurrent)
 )
   errors.push(
-    `${classificationFile}: governed qualities matrix changed without a receipt-approved deviation`
+    `${classificationFile}: governed claims changed without a receipt-approved deviation`
   );
-if (matrixBase?.qualities) {
-  const prior = new Set(
-    matrixBase.qualities.flatMap((quality) =>
-      quality.gates.map((gate) => gate.id)
-    )
-  );
+if (Array.isArray(claimsBase?.claims)) {
+  const prior = new Set(claimsBase.claims.map((claim) => claim.id));
   const current = new Set(
-    matrixCurrent.qualities.flatMap((quality) =>
-      quality.gates.map((gate) => gate.id)
-    )
+    (claimsCurrent.claims ?? []).map((claim) => claim.id)
   );
   for (const id of prior) {
     if (!current.has(id))
-      errors.push(`tests/matrix.json: quality gate ${id} was removed`);
+      errors.push(`tests/claims.json: claim ${id} was removed`);
   }
 }
 

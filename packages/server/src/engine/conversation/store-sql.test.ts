@@ -3,13 +3,12 @@
  * `ConversationStore` orchestration.
  */
 
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { openJournalDb } from "../stores/gateway-db.js";
+import { openLedgerDb } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import {
   attachmentFromRaw,
   conversationFromRaw,
@@ -237,7 +236,7 @@ describe("store-sql row mappers", () => {
 describe("store-sql prepare()", () => {
   it("prepares statements that insert and read a conversation on a real journal", () => {
     const dir = tempDirSync("centraid-store-sql-");
-    const db = openJournalDb(path.join(dir, "journal.db"));
+    const db = openLedgerDb(ledgerDbFileIn(dir));
     const stmts = prepare(db);
 
     // Every statement slot is a live prepared handle.

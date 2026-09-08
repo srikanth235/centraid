@@ -115,23 +115,26 @@ export default function ScanScreen({
 
   const groups = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "tally.group" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "tally.group" }), [])
   );
   const circles = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "social.circle" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "social.circle" }), [])
   );
   const members = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "social.circle_member" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "social.circle_member" }),
+      []
+    )
   );
   const parties = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   const vault = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "core.vault" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.vault" }), [])
   );
   const activeGroupId = groupId || String(groups.rows[0]?.group_id ?? "");
   const activeCircleId = String(
@@ -322,7 +325,7 @@ export default function ScanScreen({
           return;
       } else {
         if (!receipt) throw new Error("No receipt lines were extracted.");
-        const ownerId = String(vault.rows[0]?.owner_party_id ?? "");
+        const ownerId = String(vault.rows[0]?.self_party_id ?? "");
         if (!activeGroupId || !ownerId)
           throw new Error("Create or choose a Tally group first.");
         await backupReceiptExpense(session, gatewayBase, {
@@ -522,9 +525,7 @@ export default function ScanScreen({
                                   {String(
                                     party?.display_name ??
                                       (partyId ===
-                                      String(
-                                        vault.rows[0]?.owner_party_id ?? ""
-                                      )
+                                      String(vault.rows[0]?.self_party_id ?? "")
                                         ? "You"
                                         : "Member")
                                   )}

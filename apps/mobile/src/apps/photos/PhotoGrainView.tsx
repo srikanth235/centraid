@@ -10,6 +10,7 @@ import { Image } from "expo-image";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
@@ -247,6 +248,7 @@ export default function PhotoGrainView({
 
   return (
     <FlashList
+      maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
       ref={list}
       data={rows}
       keyExtractor={(row) => row.key}

@@ -36,7 +36,6 @@ describe("People and Tally organization contracts", () => {
     return gateway.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -136,7 +135,7 @@ describe("People and Tally organization contracts", () => {
       ],
       rrule: "FREQ=MONTHLY;COUNT=3",
       anchor_start: "2026-01-15T09:00:00.000Z",
-      time_zone: "Etc/UTC",
+      tz: "Etc/UTC",
       rate_scaled: 1_200_000,
       rate_scale: 6,
       rate_source: "manual",

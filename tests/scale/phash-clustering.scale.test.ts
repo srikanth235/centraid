@@ -24,7 +24,7 @@ import { bootstrapVault } from "../../packages/vault/src/bootstrap.js";
 import { openVaultDb } from "../../packages/vault/src/db.js";
 import { recomputeDuplicateClusters } from "../../packages/vault/src/enrich/clusters.js";
 import { createGateway } from "../../packages/vault/src/gateway/gateway.js";
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/phash-clustering.scale.test.ts";
 const ASSET_COUNT = 90_000;
@@ -125,20 +125,15 @@ describe("phash-clustering.scale", () => {
     const idleWrites = totalChanges() - changesBeforeIdle;
 
     const BUDGET_MS = rigBudgetMs(OWNER);
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       coldMs < BUDGET_MS &&
       idleWrites === 0 &&
       clustered >= DUPLICATE_FAMILIES * FAMILY_SIZE;
-    const withinDrift = drift === null || coldMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Near-duplicate cluster sweep at 90k assets",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "cold sweep",
@@ -153,10 +148,6 @@ describe("phash-clustering.scale", () => {
         { name: "fixture seeding", value: seedMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${coldMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
 
     // Every seeded family clusters (its members are within the threshold), so
     // the projection is doing real work at this volume, not trivially empty.

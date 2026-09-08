@@ -10,6 +10,8 @@
 //   GET    /centraid/_vault/imports/<batchId>          the batch's rows
 //   POST   /centraid/_vault/imports/<batchId>/publish  apply the draft
 //   POST   /centraid/_vault/imports/<batchId>/discard  drop the draft
+//   GET    /centraid/_vault/imports/export               ciphertext-only bundle
+//   POST   /centraid/_vault/imports/export               body {passphrase?}
 //   GET    /centraid/_vault/imports/connections        connection health
 //   POST   /centraid/_vault/imports/connections/<id>/status  {status: paused|active}
 
@@ -130,7 +132,6 @@ export function makeImportRouteHandler(
     const method = req.method ?? "GET";
     const plane = vaults.current();
     const owner = plane.ownerCredential;
-    const purpose = "dpv:ServiceProvision";
 
     try {
       if (method === "POST" && segments.length === 0) {
@@ -149,8 +150,13 @@ export function makeImportRouteHandler(
             return sendJson(res, 400, {
               error: "portable import requires replaceFreshVault: true",
             });
+          // The bundle's seal key rides password-wrapped (#630); the
+          // passphrase is the owner's and only passes through.
           const result = importPortableVault(plane.db, data, {
             replaceBootstrap: true,
+            ...(typeof body.passphrase === "string"
+              ? { passphrase: body.passphrase }
+              : {}),
           });
           return sendJson(res, 200, { portable: true, ...result });
         }
@@ -174,11 +180,20 @@ export function makeImportRouteHandler(
       }
 
       if (
-        method === "GET" &&
+        (method === "GET" || method === "POST") &&
         segments.length === 1 &&
         segments[0] === "export"
       ) {
-        const exported = await plane.gateway.exportPortableVault(owner);
+        // POST carries the custody-kit passphrase in a body; GET stays the
+        // key-free door, and a secret must never ride in a query string.
+        const passphrase =
+          method === "POST"
+            ? String((await readJson(req)).passphrase ?? "")
+            : "";
+        const exported = await plane.gateway.exportPortableVault(
+          owner,
+          passphrase.length > 0 ? { passphrase } : {}
+        );
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/zip");
         res.setHeader("Cache-Control", "no-store");
@@ -189,6 +204,7 @@ export function makeImportRouteHandler(
         res.setHeader("Content-Length", String(exported.bytes.length));
         res.setHeader("X-Centraid-Export-Id", exported.exportId);
         res.setHeader("X-Centraid-Receipt-Id", exported.receiptId);
+        res.setHeader("X-Centraid-Export-Sealed", exported.manifest.sealed);
         res.end(exported.bytes);
         return true;
       }
@@ -198,11 +214,10 @@ export function makeImportRouteHandler(
           entity: "sync.import_batch",
           orderBy: { column: "batch_id", dir: "desc" },
           limit: 50,
-          purpose,
         }).rows;
         const connections = new Map(
           plane.gateway
-            .read(owner, { entity: "sync.connection", purpose, limit: 500 })
+            .read(owner, { entity: "sync.connection", limit: 500 })
             .rows.map((c) => [c.connection_id, c])
         );
         return sendJson(res, 200, {
@@ -235,13 +250,11 @@ export function makeImportRouteHandler(
           entity: "sync.connection",
           orderBy: { column: "connection_id", dir: "desc" },
           limit: 200,
-          purpose,
         }).rows;
         const runs = plane.gateway.read(owner, {
           entity: "sync.connection_run",
           orderBy: { column: "run_id", dir: "desc" },
           limit: 500,
-          purpose,
         }).rows;
         const latestRun = new Map<unknown, Record<string, unknown>>();
         for (const run of runs) {
@@ -285,7 +298,6 @@ export function makeImportRouteHandler(
             connection_id: segments[1],
             status: String(body.status ?? ""),
           },
-          purpose,
         });
         return sendJson(
           res,
@@ -300,7 +312,6 @@ export function makeImportRouteHandler(
           where: [{ column: "batch_id", op: "eq", value: segments[0] }],
           orderBy: { column: "seq" },
           limit: 10_000,
-          purpose,
         }).rows;
         return sendJson(res, 200, {
           rows: rows.map((r) => ({

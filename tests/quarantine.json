@@ -1,8 +1,30 @@
 {
-  "_comment": "Flake quarantine (#656 Layer 5). A test that fails nondeterministically moves HERE — it is never deleted inline and never retried-in-place until green, because both of those hide the flake instead of paying it down. A quarantined owner is excluded from the required checks, so the lane stays trustworthy, and carries an expiry: on expiry it either returns fixed or is deleted with a receipt. `bun run test:quarantine` fails on an expired, unissued, or unparseable entry, and the count is down-only under `test:ratchet`.",
+  "_comment": "THE QUARANTINE LEDGER (#915 Wave 4). One of five ledgers under tests/; it holds both halves of the same rule. `entries` are flaky TESTS (#656 Layer 5) and `lanes` are parked CI LANES (#892 Phase 3, merged here from tests/lane-quarantine.json by #915). Both are DOWN-ONLY with an expiry: a park is a deadline, never a mute, `expires` in the past is treated as no entry at all, and the count may not rise without a CHANGED approvedDeviation. `bun run test:quarantine` fails on an expired, unissued or unparseable test entry; scripts/ci/lane-health.mjs, scripts/test-report/write-evidence.mjs and scripts/ci/rolling-issue-fallback-body.mjs read `lanes`; `bun run lint:ledgers` holds the shape and the direction for both.",
   "_policy": {
     "maxDays": 30,
     "budget": 0
   },
-  "entries": []
+  "entries": [],
+  "lanes": {
+    "device-rung-android": {
+      "issue": 927,
+      "expires": "2026-10-04",
+      "why": "#927 W4 — the device rung's Android cell cannot run until CENTRAID_DEVICE_FARM_TOKEN and CENTRAID_DEVICE_FARM_PROJECT exist; the job is SKIPPED rather than failed, and `device-rung-gate` writes this lane's evidence as parked so the report shows the debt with a date instead of a silent gap. Unblocked by those two secrets plus CENTRAID_DEVICE_FARM_ANDROID_ENDPOINT, which the lease reads."
+    },
+    "device-rung-ios": {
+      "issue": 927,
+      "expires": "2026-10-04",
+      "why": "#927 W4 — the iPhone cell needs the farm secrets AND the harness taught to enumerate a physical device: tests/agent-e2e-mobile/lib/harness.mjs reads `xcrun simctl list devices`, which lists simulators only. scripts/ci/device-farm-lease.sh refuses loudly rather than leasing a device the harness could never find. Unblocked by that enumeration plus vars.CENTRAID_DEVICE_FARM_IOS."
+    },
+    "device-rung-gateway-pi": {
+      "issue": 927,
+      "expires": "2026-10-04",
+      "why": "#927 W4 — the Pi-class gateway cell runs on a self-hosted runner labelled `centraid-pi`, which no repository has registered yet. Unblocked by registering one and setting vars.CENTRAID_PI_CELL=true. Until then the constrained hardware profile is only ever measured on a cloud x64 runner with the profile pinned, which changes SQLite's durability mode and nothing about the disk underneath it."
+    },
+    "web-e2e-cross-browser": {
+      "issue": 915,
+      "expires": "2026-09-16",
+      "why": "first green on a candidate is the baseline — this lane joined test-health-report's needs in #915 Wave 0 having never run green, so its first run is a measurement, not a regression. Parked so it renders as parked rather than red until it has one green run on a candidate; the park expiring is the prompt to read the number and either promote it to a gating verdict or fix it."
+    }
+  }
 }

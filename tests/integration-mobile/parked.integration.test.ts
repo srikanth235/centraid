@@ -13,7 +13,7 @@
  * vault registry and the app's own handlers. It passes only while the product
  * really has no parking path there, and turns red the day one is added — which
  * is exactly when the cell becomes coverable here. (An `it.skip` was the first
- * shape considered; it would have needed a `tests/skips.json` entry with an
+ * shape considered; it would have needed a `tests/inventory.json#skips` entry with an
  * open issue, and there is no open issue here — the four cells are a product
  * fact, not deferred work.)
  */

@@ -12,6 +12,8 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "../blob/local.js";
 import { liveBlobShas } from "../blob/read.js";
 import { VaultShareError } from "../errors.js";
+import { grantPlacementAuthority } from "../grant/grant-authority.js";
+import { LIVE_AUTHORITY_SQL } from "../grant/grant-store.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
@@ -36,7 +38,12 @@ export interface ShareItemsToVaultInput {
   itemType: ShareableItemType;
   /** ORIGIN row ids; one closure covers the set. */
   itemIds: readonly string[];
-  /** An attribution, never a principal this vault can look up (#726). */
+  /**
+   * An attribution, never a principal this vault can look up (#726). The vault
+   * records NOTHING from it since #929: a placement is a MOVE between the
+   * owner's own vaults, so the item lands as the owner's own row with no shape
+   * to name a sender for. The give plane that passes it is #928 A6's to delete.
+   */
   sharedBy: string;
   now?: () => number;
   /**
@@ -44,13 +51,22 @@ export interface ShareItemsToVaultInput {
    * threat 8). Defaults false — only the edge plane opts in.
    */
   crossOwner?: boolean;
-}
-
-export interface UnshareFromVaultInput {
-  /** The only vault written. */
-  audience: ShareVaultRef;
-  itemType: ShareableItemType;
-  itemId: string;
+  /**
+   * The AUTHORITY this placement runs under (#916, adversarial review WEAK).
+   * `shareItemsToVault` is a library export and was gated on NOTHING: any
+   * caller holding both vault handles could place rows in someone else's vault
+   * without an answer standing anywhere.
+   *
+   * Every item must carry a LIVE, granted `share_authority` before a byte
+   * lands. Naming the principal narrows that to "and it is THIS one's" — which
+   * a caller that resolved an audience can say and a fan-out over a circle
+   * cannot, so it is optional and never a way to widen.
+   */
+  authority?: {
+    principalKind: "person" | "circle" | "harness" | "device";
+    principalId: string;
+    verb: string;
+  };
 }
 
 export interface UnshareFromVaultResult {
@@ -59,48 +75,52 @@ export interface UnshareFromVaultResult {
   orphanedShas: string[];
 }
 
-export interface MoveOutOfVaultInput {
+export interface MoveItemsOutOfVaultInput {
   source: ShareVaultRef;
   itemType: ShareableItemType;
-  itemId: string;
+  /** The whole set leaves in ONE transaction — a half-moved album is not a state. */
+  itemIds: readonly string[];
 }
 
-export interface ShareOriginRecord {
-  itemType: string;
-  itemId: string;
-  originVaultId: string;
-  originItemId: string;
-  sharedBy: string;
-  sharedAt: number;
+export interface PlaceItemsInVaultInput extends Omit<
+  ShareItemsToVaultInput,
+  "authority"
+> {
+  /** `move` releases the source after the projection commits. */
+  kind: "add" | "move";
+  /** The audience vault's own party — the principal the placement runs as. */
+  audiencePartyId: string;
+  grantedAt?: string;
 }
 
-export function readShareOrigin(
-  audience: DatabaseSync,
-  itemType: string,
-  itemId: string
-): ShareOriginRecord | undefined {
-  const row = audience
-    .prepare(
-      `SELECT origin_vault_id, origin_item_id, shared_by, shared_at
-         FROM core_share_origin WHERE item_type = ? AND item_id = ?`
-    )
-    .get(itemType, itemId) as
-    | {
-        origin_vault_id: string;
-        origin_item_id: string;
-        shared_by: string;
-        shared_at: number;
-      }
-    | undefined;
-  if (!row) return undefined;
-  return {
-    itemType,
-    itemId,
-    originVaultId: row.origin_vault_id,
-    originItemId: row.origin_item_id,
-    sharedBy: row.shared_by,
-    sharedAt: row.shared_at,
-  };
+/**
+ * A LIVE answer over every item, in the origin, before anything is placed
+ * (#916). "The audience already has it" must never be how a share happens.
+ */
+function assertPlacementAuthority(input: ShareItemsToVaultInput): void {
+  const named = input.authority;
+  const stands = input.origin.vault.prepare(
+    `SELECT count(*) AS n FROM share_authority
+      WHERE subject_type = ? AND subject_id = ?
+        AND decision = 'granted' AND ${LIVE_AUTHORITY_SQL}
+        AND (? IS NULL OR (principal_kind = ? AND principal_id = ? AND verb = ?))`
+  );
+  for (const itemId of input.itemIds) {
+    const row = stands.get(
+      input.itemType,
+      itemId,
+      named ? 1 : null,
+      named?.principalKind ?? null,
+      named?.principalId ?? null,
+      named?.verb ?? null
+    ) as { n: number };
+    if (row.n === 0)
+      throw new VaultShareError(
+        named
+          ? `no live share authority lets ${named.principalKind} ${named.principalId} ${named.verb} ${input.itemType} ${itemId}`
+          : `no live share authority stands over ${input.itemType} ${itemId}: a placement carries what the member agreed to, never the caller's word for it`
+      );
+  }
 }
 
 export interface ShareItemsToVaultResult {
@@ -108,6 +128,13 @@ export interface ShareItemsToVaultResult {
   /** One entry per requested id, in order. */
   items: ProjectedItem[];
   blobs: BlobPlacement[];
+}
+
+export interface PlaceItemsInVaultResult extends ShareItemsToVaultResult {
+  /** Ids of the projected rows in the AUDIENCE vault. */
+  targetItemIds: string[];
+  /** Non-empty only for a move: bytes the source no longer references. */
+  orphanedShas: string[];
 }
 
 /**
@@ -122,6 +149,7 @@ export function shareItemsToVault(
       "cannot share a vault into itself — sharing crosses a vault boundary"
     );
   }
+  assertPlacementAuthority(input);
   // Resolve out of the origin BEFORE touching the audience, so an unknown item
   // is refused with nothing placed anywhere.
   const closure = readShareClosure(input.origin.vault, {
@@ -141,7 +169,6 @@ export function shareItemsToVault(
   }));
 
   const projection = projectShareClosure(input.audience.vault, closure, {
-    sharedBy: input.sharedBy,
     now: input.now,
     keys:
       input.origin.sealKey && input.audience.sealKey
@@ -152,81 +179,75 @@ export function shareItemsToVault(
 }
 
 /**
- * Refuses to touch a row the audience AUTHORED (no `core_share_origin`
- * record): unshare removes placements, never someone's own data.
- */
-export function unshareFromVault(
-  input: UnshareFromVaultInput
-): UnshareFromVaultResult {
-  const audience = input.audience.vault;
-  if (!readShareOrigin(audience, input.itemType, input.itemId)) {
-    return { removed: false, orphanedShas: [] };
-  }
-  // Savepoint when a caller already owns the audience transaction (commons
-  // scrub+re-project): stays atomic, never double-opens BEGIN.
-  const nested = audience.isTransaction;
-  audience.exec(nested ? "SAVEPOINT unshare_from_vault" : "BEGIN IMMEDIATE");
-  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-  let shas: string[];
-  try {
-    replicaCommit = beginReplicaCommit(audience);
-    const removal = deleteProjectedClosure(
-      audience,
-      input.itemType,
-      input.itemId
-    );
-    audience
-      .prepare(
-        "DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?"
-      )
-      .run(input.itemType, input.itemId);
-    shas = removal.shas;
-    endReplicaCommit(audience, replicaCommit);
-    audience.exec(nested ? "RELEASE unshare_from_vault" : "COMMIT");
-  } catch (error) {
-    audience.exec(nested ? "ROLLBACK TO unshare_from_vault" : "ROLLBACK");
-    if (nested) audience.exec("RELEASE unshare_from_vault");
-    throw error;
-  }
-  // Liveness is read AFTER the commit, so a sha another row still holds is
-  // reported live rather than guessed at.
-  const live = liveBlobShas(audience);
-  return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
-}
-
-/**
  * Source side of a completed cross-vault MOVE. Unlike unshare this removes an
  * AUTHORED item: the caller must durably prove the target projection committed
  * first (the gateway placement ledger owns that ordering), and this stays
  * separate so no ordinary share path reaches authored deletion.
  */
-export function moveOutOfVault(
-  input: MoveOutOfVaultInput
+/**
+ * Source side of a completed cross-vault MOVE over a set of roots. The
+ * projection commits first; only then does this one source transaction
+ * release the complete set, so an album cannot be half-moved.
+ */
+export function moveItemsOutOfVault(
+  input: MoveItemsOutOfVaultInput
 ): UnshareFromVaultResult {
   const source = input.source.vault;
   source.exec("BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-  let shas: string[];
+  const shas: string[] = [];
+  let removedAny = false;
   try {
     replicaCommit = beginReplicaCommit(source);
-    const removal = deleteProjectedClosure(
-      source,
-      input.itemType,
-      input.itemId
-    );
-    source
-      .prepare(
-        "DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?"
-      )
-      .run(input.itemType, input.itemId);
-    shas = removal.shas;
+    for (const itemId of input.itemIds) {
+      const removal = deleteProjectedClosure(source, input.itemType, itemId);
+      shas.push(...removal.shas);
+      removedAny ||= removal.removed;
+    }
     endReplicaCommit(source, replicaCommit);
     source.exec("COMMIT");
-    if (!removal.removed) return { removed: false, orphanedShas: [] };
   } catch (error) {
     source.exec("ROLLBACK");
     throw error;
   }
+  if (!removedAny) return { removed: false, orphanedShas: [] };
   const live = liveBlobShas(source);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
+}
+
+/**
+ * SAME-OWNER PLACEMENT AS ONE CALL (#928 A7). The owner's act mints the live
+ * authority in the origin, the destination projection commits, and a move
+ * releases the source only after that commit succeeds.
+ */
+export function placeItemsInVault(
+  input: PlaceItemsInVaultInput
+): PlaceItemsInVaultResult {
+  grantPlacementAuthority(input.origin.vault, {
+    itemType: input.itemType,
+    itemIds: input.itemIds,
+    audiencePartyId: input.audiencePartyId,
+    grantedAt: input.grantedAt ?? new Date().toISOString(),
+  });
+  const projected = shareItemsToVault({
+    ...input,
+    authority: {
+      principalKind: "person",
+      principalId: input.audiencePartyId,
+      verb: "view",
+    },
+  });
+  const released =
+    input.kind === "move"
+      ? moveItemsOutOfVault({
+          source: input.origin,
+          itemType: input.itemType,
+          itemIds: input.itemIds,
+        })
+      : { removed: false, orphanedShas: [] };
+  return {
+    ...projected,
+    targetItemIds: projected.items.map((item) => item.itemId),
+    orphanedShas: released.orphanedShas,
+  };
 }

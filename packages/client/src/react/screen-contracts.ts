@@ -140,13 +140,6 @@ export interface VaultScopeDTO {
   rowFilter?: Array<{ column: string; op: string; value?: unknown }> | null;
   fieldMask?: string[] | null;
 }
-export interface VaultGrantDTO {
-  grantId: string;
-  purposeConceptId: string;
-  purpose: string | null;
-  expiresAt: string | null;
-  scopes: VaultScopeDTO[];
-}
 export interface VaultParkedDTO {
   invocationId: string;
   command: string;
@@ -161,21 +154,17 @@ export interface VaultDemoDTO {
   seedable: boolean;
 }
 export interface VaultBlockDTO {
-  purpose: string;
   why: string;
   scopes: VaultScopeDTO[];
 }
 export interface VaultData {
   vaultName: string;
-  grants: VaultGrantDTO[];
   parked: VaultParkedDTO[];
   demo?: VaultDemoDTO;
 }
 export interface VaultBridgeProps {
   block: VaultBlockDTO;
   loadData: () => Promise<VaultData | null>;
-  grant: () => Promise<void>;
-  revoke: (grantId: string) => Promise<void>;
   confirm: (invocationId: string, approve: boolean) => Promise<void>;
   demoLoad: () => Promise<void>;
   demoPurge: () => Promise<void>;
@@ -390,7 +379,6 @@ export interface AuEditorConnectorsDTO {
   mcps: string[];
   secrets: string[];
   connector: string | null;
-  vaultPurpose: string | null;
   vaultScopes: string[];
   connections?: Array<{ connectionId: string; kind: string; label: string }>;
 }

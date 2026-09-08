@@ -5,11 +5,7 @@
  */
 
 import type { GrantAudienceOption } from "./grant-plane.ts";
-import {
-  isPendingPartyId,
-  readShareCircles,
-  readShareDestinations,
-} from "./share-kit.ts";
+import { readShareCircles, readShareDestinations } from "./share-kit.ts";
 
 /** Why Share cannot even open. Stated on the control, never after the fact. */
 export const NOBODY_TO_SHARE_WITH =
@@ -19,7 +15,7 @@ export const NOBODY_TO_SHARE_WITH =
 export const ROSTER_UNREADABLE =
   "Your People list could not be read just now — try Share again in a moment.";
 
-/** `pending` is native; web carries the same fact in the id — derived when absent. */
+/** `pending` is the row's own overlay fact on both seats (#922 G2). */
 export interface GrantAudienceDestination {
   label: string;
   partyId?: string | undefined;
@@ -40,8 +36,7 @@ export function grantAudiencesFrom(
   const people = destinations.flatMap<GrantAudienceOption>((destination) => {
     const partyId = destination.partyId;
     if (!partyId) return [];
-    const pending = destination.pending ?? isPendingPartyId(partyId);
-    return pending
+    return destination.pending
       ? []
       : [{ kind: "party", id: partyId, label: destination.label }];
   });

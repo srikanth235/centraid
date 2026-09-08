@@ -7,6 +7,7 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import Tappable from "../../kit/components/Tappable";
@@ -36,6 +37,7 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { faceReviewCounts, photoLibraryCounts } from "./photos-library-counts";
 import { protectedAssetIdsFromPins } from "./photos-library-pins";
 import { styles } from "./PhotosLibrary.styles";
@@ -105,21 +107,12 @@ export default function PhotosLibrary({
   const { session } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
-  );
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
-  );
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    PHOTO_ENTITY_READS.collectionEntries
   );
   const [keptAlbums, setKeptAlbums] = useState<string[]>([]);
   const [pinsReady, setPinsReady] = useState(false);
@@ -331,6 +324,7 @@ export default function PhotosLibrary({
         album cover at once, and nesting a list inside a ScrollView would have
         done the same thing while adding a scroll conflict. */}
       <FlashList
+        maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
         data={albumRows}
         numColumns={2}
         keyExtractor={(row) => String(row.album.__rowId)}

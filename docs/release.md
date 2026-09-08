@@ -60,6 +60,7 @@ Since #557 a tag produces **one** run. `release.yml` is the only workflow that l
 
 Happy path:
 
+0. **HEAD must be a promoted candidate.** `release:prepare` refuses otherwise, before anything else runs ([#915](https://github.com/srikanth235/centraid/issues/915)).
 1. `bun run release:prepare` — asserts green (`check:pr` unless `--skip-check`), classifies D4, writes `artifacts/release-prepare.json` (includes surface matrix + secret groups).
 2. Maintainer "go ahead" **including ship set** (default: desktop, gateway-image, gateway-npm).
 3. `bun run release:publish -- --version X.Y.Z --issue N --surfaces desktop,gateway-image,gateway-npm` — requires real issue number (no `#0`); bumps monorepo + mobile native numbers via `scripts/release/sync-versions.mjs`; folds CHANGELOG; writes `artifacts/release-ship.json`; annotated tag.
@@ -77,6 +78,20 @@ Supporting scripts:
 | `bun run boot:smoke` | Structural desktop package surface |
 | `bun run web:build` / `web:smoke` | Public PWA artifact + smoke |
 
+### The candidate precondition (#915)
+
+We ship builds somebody promoted. Rung 3 (`candidate.yml`) moves the git ref `refs/candidates/latest` on every green push to `main` and appends `{sha, promotedAt}` to `test-report/candidates.json` on gh-pages (kept 200 deep); rungs 4 and 5 then test that SHA. Before this, the release SHA was implicitly "whatever `HEAD` is when `publish.mjs` runs" — nothing in the chain resolved or checked one, and a tag could be cut on a commit no deep rung had ever exercised. The release would still be green, because every release lane **builds** the tree rather than testing it.
+
+Enforced in three places, earliest first:
+
+| Where | What it checks |
+| --- | --- |
+| `bun run release:prepare` | `git rev-parse HEAD` equals `git ls-remote origin refs/candidates/latest`. Runs first, before the clean-tree and `check:pr` gates, because its remedy (wait for a promotion) takes the longest |
+| `bun run release:classify -- --require-candidate [--sha <40hex>]` | the same rule, for a caller that only classifies. Classification is a pure read of `CHANGELOG.md` and has no SHA of its own, so here it is opt-in |
+| `release.yml` job `require-candidate` | the backstop, after the tag exists: the tagged SHA is the current pointer **or** appears in the gh-pages promotion history. Both are accepted because cutting a release takes minutes while `main` keeps moving — a tag on yesterday's promoted candidate is exactly right |
+
+The escape is `--allow-uncandidated`, which passes and **prints the reason it was used** (or `(none given — say why in the receipt)`). A hatch that leaves no trace is a hatch nobody can audit. Never widen the rule to make a release green; promote the build instead.
+
 ## D3 — Changelog → GitHub release + what's-new
 
 - `CHANGELOG.md` is the reviewed source of truth ([Keep a Changelog](https://keepachangelog.com/) skeleton).
@@ -89,6 +104,7 @@ Supporting scripts:
 - [ ] `CHANGELOG.md` `[Unreleased]` moved to the new version section
 - [ ] Ship set chosen (`bun run release:matrix`); continuous surfaces not falsely listed as tag ships
 - [ ] No non-release code in the bump commit
+- [ ] **HEAD is the promoted candidate** (`refs/candidates/latest`) — `release:prepare` refuses otherwise
 - [ ] CI green on the release commit / tag base
 - [ ] Maintainer "go ahead" recorded (PR comment or chat)
 - [ ] Optional: `bun run release:verify-secrets` (enrollment status)
@@ -141,7 +157,8 @@ Do not fork process text into skills.
 | `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image |
 | `lane-release-gateway-npm.yml` | `workflow_call` | multi-OS native + pack; publish when token |
 | `lane-release-companion.yml` | `workflow_call` (`companion-v*`) | companion packages |
-| `ci.yml` | PR / main push / dispatch | **the only `pull_request` listener**; `docs`, `web-build` and every other PR gate roll up into the required `check` |
+| `ci.yml` | PR / main push / dispatch | rung 2 — **the only `pull_request` listener**; `docs`, `web-build` and every other PR gate roll up into the required `check` |
+| `candidate.yml` | main push / dispatch | rung 3 — the promotion lanes; on green its `promote` job moves `refs/candidates/latest`, publishes `test-report/candidate.json` and appends to `test-report/candidates.json`. `release.yml`'s `require-candidate` reads both |
 | `web.yml` | path-filtered main push | CF deploy when token present (PR gate is ci.yml's `web-build`) |
 | `oauth-worker.yml` | path-filtered main push | protected deploy only when explicit flag + production evidence gates pass (PR gate is ci.yml's `oauth-worker`) |
 

@@ -28,8 +28,14 @@
  * in TESTING.md's "What the machine cannot check" list, where it belongs.
  */
 
-import { glob, readFile, writeFile } from "node:fs/promises";
+import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
+
+import {
+  INVENTORY_PATH,
+  readLedgerSection,
+  writeLedgerSection,
+} from "../check-ledgers.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -164,7 +170,7 @@ export function topOffenders(files, key, limit = 5) {
 
 /**
  * Check measured counts against the committed budgets.
- * @param {{budgets?: Record<string, number>}} budgets Parsed hygiene-budgets.json.
+ * @param {{budgets?: Record<string, number>}} budgets The inventory ledger's `hygiene` section.
  * @param {{totals: Record<string, number>, files: Array<object>}} discovered Scan result.
  */
 export function validateHygieneBudgets(budgets, discovered) {
@@ -176,7 +182,7 @@ export function validateHygieneBudgets(budgets, discovered) {
     const budget = committed[key];
     if (!Number.isInteger(budget)) {
       errors.push(
-        `tests/hygiene-budgets.json has no integer budget for ${key}; seed it with the measured count (${measured})`
+        `tests/inventory.json#hygiene has no integer budget for ${key}; seed it with the measured count (${measured})`
       );
       continue;
     }
@@ -195,7 +201,7 @@ export function validateHygieneBudgets(budgets, discovered) {
   for (const key of Object.keys(committed)) {
     if (!METRIC_KEYS.includes(key)) {
       errors.push(
-        `tests/hygiene-budgets.json budgets an unknown metric ${key}; delete it or add a detector`
+        `tests/inventory.json#hygiene budgets an unknown metric ${key}; delete it or add a detector`
       );
     }
   }
@@ -222,20 +228,16 @@ export function reconcileBudgets(budgets, totals) {
 
 async function main() {
   const write = process.argv.includes("--write");
-  const budgetsPath = path.join(root, "tests/hygiene-budgets.json");
   const discovered = await discoverHygieneCounts({ root });
-  let budgets;
-  try {
-    budgets = JSON.parse(await readFile(budgetsPath, "utf8"));
-  } catch {
-    budgets = { budgets: {} };
-  }
+  const budgets = readLedgerSection(INVENTORY_PATH, "hygiene", root) ?? {
+    budgets: {},
+  };
 
   if (write) {
     const next = reconcileBudgets(budgets, discovered.totals);
-    await writeFile(budgetsPath, `${JSON.stringify(next, null, 2)}\n`);
+    writeLedgerSection(INVENTORY_PATH, "hygiene", next, root);
     console.log(
-      `hygiene: wrote budgets ${METRIC_KEYS.map((key) => `${key}=${next.budgets[key]}`).join(" ")} to tests/hygiene-budgets.json`
+      `hygiene: wrote budgets ${METRIC_KEYS.map((key) => `${key}=${next.budgets[key]}`).join(" ")} to ${INVENTORY_PATH}#hygiene`
     );
     return;
   }

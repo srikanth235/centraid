@@ -83,263 +83,229 @@ export function designSystemCss() {
 }
 
 /**
- * The report's component layer — the Night Watch frame (issue #862).
+ * The report's component layer — the Night Watch v2 frame (#915 Wave 3,
+ * superseding the register of #862).
  *
  * Read it against the palette in `report-tokens.css`: a rule here says which
- * RUNG it paints (`--nw-sunken`, `--nw-attnbg`) rather than which hue, so the
- * meaning of a colour is settled once, in the emitter, and not eleven times in
- * a selector list. Reduced motion is not honoured here — `toCss()` emits the
- * product's one global rule above, and a second one is how the two drift.
+ * RUNG it paints (`--nw-sunken`, `--nw-parkbg`) rather than which hue, so the
+ * meaning of a colour is settled once, in the emitter, and not in a selector
+ * list. It declares no colour, no face and no type scale of its own.
+ *
+ * The cell vocabulary is four words plus `n/a`: `passed`, `failed`, `parked`,
+ * `no-evidence`, `degraded`. Each has exactly one tone family and each family
+ * means exactly one thing (#864's law, applied to #915's shorter vocabulary):
+ * ok passed · danger tonight went wrong · park the failure has a date on it ·
+ * grey nothing reported · attn over budget or outside its band.
  */
 export const REPORT_CSS = `
 *{box-sizing:border-box}
-body{margin:0;padding:0 20px;background:var(--nw-ground);color:var(--nw-ink);font-family:var(--font-sans);font-size:13px;line-height:1.5}
-.page{max-width:1060px;margin:0 auto;padding:34px 0 120px}
-a{color:var(--nw-link);text-decoration:none}
-a:hover{text-decoration:underline}
+body{margin:0;background:var(--nw-ground);color:var(--nw-ink);font-family:var(--font-sans);font-size:var(--t-body-size);line-height:1.5}
+.page{position:relative;max-width:1380px;margin:0 auto;padding:28px 28px 120px;display:grid;grid-template-columns:minmax(0,1fr);gap:0 36px}
+@media(min-width:1180px){.page{grid-template-columns:minmax(0,1fr) 250px}}
+main{grid-column:1;min-width:0}
+section{margin-top:var(--sp-band);scroll-margin-top:24px}
+a{color:var(--nw-link);text-decoration:none;border-bottom:1px solid transparent}
+a:hover,a:focus-visible{border-bottom-color:currentcolor}
 button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--nw-ring);outline-offset:2px}
-.num{font-variant-numeric:var(--t-mono-numeric)}
-code,.path{font-family:var(--font-code);font-size:var(--t-mono-size)}
-.muted,small{color:var(--nw-ink3)}
-.path{color:var(--nw-ink3);line-height:1.4;overflow-wrap:anywhere}
+.mono,.sha,.num,.eyebrow,kbd,.plat,.lbl,pre,code{font-family:var(--font-code)}
+.num{font-variant-numeric:var(--t-mono-numeric);text-align:right;white-space:nowrap}
+.eyebrow{font-size:var(--t-eyebrow-size);letter-spacing:var(--t-eyebrow-tracking);text-transform:var(--t-eyebrow-transform);color:var(--nw-ink3)}
+h2{font:var(--t-display);letter-spacing:var(--t-display-tracking);margin:0 0 4px;text-wrap:balance}
+h2 .q{font-style:italic;font-weight:400;color:var(--nw-ink2)}
+h3{font-size:var(--t-band-size);font-weight:600;letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase;color:var(--nw-ink3);margin:0 0 10px}
+h4{font-size:var(--t-body-size);font-weight:600;margin:0 0 8px}
+p{max-width:var(--measure-reading);margin:0 0 10px}
+.small,small{font-size:var(--t-small-size);color:var(--nw-ink3)}
+.sub{color:var(--nw-ink2);font-size:var(--t-body-size);margin:0 0 18px;max-width:var(--measure-lede)}
 
-/* Masthead and verdict bar. The masthead's rule is full ink, not a hairline:
-   it is the only line on the page that closes the run's identity. */
-.mast{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 22px;border-bottom:1px solid var(--nw-ink);padding-bottom:18px}
-h1{font-size:26px;line-height:30px;font-weight:600;letter-spacing:-.02em;margin:0}
-.runmeta{color:var(--nw-ink3);font-size:12px}
-.verdictbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 26px;padding:16px 0;border-bottom:1px solid var(--nw-line)}
-.vword{font-size:15px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:6px 16px;border:2px solid currentcolor;color:var(--nw-ink3);background:var(--nw-greybg)}
-.verdict-shippable .vword{color:var(--nw-ok);background:var(--nw-okbg)}
-.verdict-degraded .vword{color:var(--nw-attn);background:var(--nw-attnbg)}
-.verdict-red .vword{color:var(--nw-danger);background:var(--nw-dangerbg)}
-.vstat{font-size:12px;color:var(--nw-ink2)}
-.vstat b{font-size:17px;font-weight:600;color:var(--nw-ink);margin-inline-end:4px}
-.vstat.red b{color:var(--nw-danger)}
-.vstat.grey b{color:var(--nw-ink3)}
-.delta{font-size:12px;color:var(--nw-ink2);border-inline-start:2px solid var(--nw-line);padding-inline-start:18px}
-.delta b{font-weight:600;color:var(--nw-ink)}
-.vwhy{flex-basis:100%;margin:0;font-size:12px;color:var(--nw-ink3);max-width:78ch}
-.vstat .spark{margin-inline-start:8px}
+/* Masthead + verdict lamp (S0). The masthead's rule is full ink: it is the
+   one line on the page that closes the run's identity. */
+header.mast{grid-column:1 / -1;display:grid;grid-template-columns:auto 1fr;gap:20px 28px;align-items:end;padding-bottom:22px;border-bottom:1px solid var(--nw-ink)}
+.brand{font:var(--t-display);font-size:calc(var(--t-display-size) * 1.6);line-height:1;letter-spacing:var(--t-display-tracking)}
+.mastmeta{display:flex;flex-wrap:wrap;gap:8px 22px;font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ink3);align-items:baseline}
+.mastmeta .k{color:var(--nw-ghost)}
+.mastmeta .v{color:var(--nw-ink2)}
+.verdict{grid-column:1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 24px;align-items:center;margin-top:22px;padding:22px 26px;background:var(--nw-surf);border:1px solid var(--nw-line);border-radius:10px}
+.lamp{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;background:var(--nw-greybg);border:1px solid var(--nw-grey)}
+.lamp::before{content:"";width:68px;height:68px;border-radius:50%;background:var(--nw-grey)}
+.verdict.hold .lamp{background:var(--nw-dangerbg);border-color:var(--nw-danger)}
+.verdict.hold .lamp::before{background:var(--nw-danger)}
+.verdict.hold .vword{color:var(--nw-danger)}
+.verdict.degraded .lamp{background:var(--nw-attnbg);border-color:var(--nw-attn)}
+.verdict.degraded .lamp::before{background:var(--nw-attn)}
+.verdict.degraded .vword{color:var(--nw-attn)}
+.verdict.shippable .lamp{background:var(--nw-okbg);border-color:var(--nw-ok)}
+.verdict.shippable .lamp::before{background:var(--nw-ok)}
+.verdict.shippable .vword{color:var(--nw-ok)}
+.vword{font:var(--t-display);font-size:var(--t-hero-size);line-height:1;letter-spacing:var(--t-display-tracking);margin:0}
+.vwhy{font-size:var(--t-reading-size);color:var(--nw-ink);margin:10px 0 0;max-width:var(--measure-lede)}
+.vdelta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ink3)}
+.vdelta b{color:var(--nw-ink2);font-weight:500}
 
-/* Section scaffolding: a sticky index, a label-sized heading carrying its
-   section tag, and one paragraph saying why the section exists. */
-nav.toc{display:flex;flex-wrap:wrap;gap:4px 16px;padding:12px 0;font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--nw-lineS);position:sticky;top:0;background:var(--nw-ground);z-index:5}
-nav.toc a{color:var(--nw-ink3)}
-nav.toc a:hover{color:var(--nw-link);text-decoration:none}
-h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;margin:44px 0 4px;color:var(--nw-ink)}
-h2 .tag{color:var(--nw-ghost);margin-inline-end:8px}
-.why{color:var(--nw-ink3);font-size:12px;margin:0 0 14px;max-width:78ch}
-.lede{color:var(--nw-ink3);font-size:12px;margin:0 0 8px;max-width:78ch}
-.lede.scope{border-inline-start:2px solid var(--nw-link);padding-inline-start:10px}
-.lede.attention{color:var(--nw-attn)}
-.lede.urgent{color:var(--nw-danger)}
-.lede.absent{color:var(--nw-ink3);font-style:italic}
+/* The rail: sections, the state legend, the keys. */
+.rail{display:none}
+@media(min-width:1180px){.rail{display:block;position:sticky;top:20px;align-self:start;grid-column:2;grid-row:2 / span 40}}
+.rail nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.rail nav a{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:6px;color:var(--nw-ink3);font-size:var(--t-small-size);border:0}
+.rail nav a:hover,.rail nav a:focus-visible{background:var(--nw-surf);color:var(--nw-ink)}
+.rail nav a .cnt{font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ghost)}
+.rail .box{margin-top:22px;padding:14px;border:1px solid var(--nw-line);border-radius:8px;background:var(--nw-surf)}
+.legend{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:var(--t-small-size);color:var(--nw-ink2);align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;background:var(--nw-grey)}
+.dot.d-ok{background:var(--nw-ok)}
+.dot.d-bad{background:var(--nw-danger)}
+.dot.d-park{background:var(--nw-park)}
+.dot.d-attn{background:var(--nw-attn)}
+kbd{font-family:var(--font-code);font-size:var(--t-mono-size);border:1px solid var(--nw-line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--nw-ink2)}
 
-/* §1's queue. Five columns — band, what, owner, age, action — aligned down the
-   section so a reader scans one axis at a time. The chip is bordered and
-   tinted rather than filled: it sits beside body text, and a solid block of
-   colour there would outrank the sentence it labels. */
-.queue{border:1px solid var(--nw-line)}
-.qrow{display:grid;grid-template-columns:84px 1fr 190px 70px 120px;gap:14px;padding:10px 14px;border-bottom:1px solid var(--nw-lineS);align-items:baseline}
-.qrow:last-child{border-bottom:none}
-.qrow .what{font-weight:600}
-.qrow .what small{display:block;font-weight:400;color:var(--nw-ink2)}
-.qband{display:flex;flex-direction:column;align-items:start;gap:3px}
-.qband .sev{font-size:10px;letter-spacing:.05em;color:var(--nw-ghost)}
-.qrow .age{color:var(--nw-ink3);font-size:12px}
-.qrow .act{font-size:12px}
-.chip{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 8px 2px;border-radius:var(--r-pill);border:1px solid;white-space:nowrap;justify-self:start}
-.chip.red{color:var(--nw-danger);border-color:var(--nw-danger);background:var(--nw-dangerbg)}
-.chip.newgrey{color:var(--nw-attn);border-color:var(--nw-attn);background:var(--nw-attnbg)}
-.chip.stale{color:var(--nw-ink2);border-color:var(--nw-ink3);background:var(--nw-greybg)}
-.chip.pinned{color:var(--nw-ink2);border-color:var(--nw-ghost);background:var(--nw-surf)}
+/* Pills, severities, chips. */
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-code);font-size:var(--t-mono-size);font-weight:600;letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase;padding:2px 8px;border-radius:4px;white-space:nowrap;background:var(--nw-greybg);color:var(--nw-grey)}
+.pill.passed{background:var(--nw-okbg);color:var(--nw-ok)}
+.pill.failed{background:var(--nw-dangerbg);color:var(--nw-danger)}
+.pill.parked{background:var(--nw-parkbg);color:var(--nw-park)}
+.pill.degraded{background:var(--nw-attnbg);color:var(--nw-attn)}
+.pill.no-evidence{background:var(--nw-greybg);color:var(--nw-grey)}
+.pill.na{background:transparent;color:var(--nw-ink3)}
+.pill.gating{background:var(--nw-attnbg);color:var(--nw-attn)}
+.pill.advisory{background:var(--nw-greybg);color:var(--nw-grey)}
+.sev{display:inline-grid;place-items:center;min-width:28px;height:22px;border-radius:4px;font-family:var(--font-code);font-size:var(--t-mono-size);font-weight:600;border:1px solid currentcolor}
+.sev.s1{background:var(--nw-danger);color:var(--nw-ground);border-color:var(--nw-danger)}
+.sev.s2{background:var(--nw-dangerbg);color:var(--nw-danger)}
+.sev.s3{background:var(--nw-attnbg);color:var(--nw-attn)}
+.sev.s4{background:var(--nw-greybg);color:var(--nw-ink3)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}
+.chip{font-family:var(--font-code);font-size:var(--t-mono-size);padding:4px 10px;border:1px solid var(--nw-line);border-radius:999px;background:var(--nw-surf);color:var(--nw-ink2);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--nw-attnbg);border-color:var(--nw-attn);color:var(--nw-attn)}
+.gapchip{display:inline-block;width:12px}
 
-/* The ledger register: §4, §5, §6 and §7. One row frame, one head-row
-   treatment, and a column template per section — the columns differ because
-   the registries do, but the rhythm does not. A verdict here is a WORD in its
-   tone, never a filled cell: these rows carry prose, and a tinted band behind
-   a sentence reads as a highlight rather than as a state. */
-.ledger{border:1px solid var(--nw-line)}
-.lrow{display:grid;gap:14px;padding:9px 14px;border-bottom:1px solid var(--nw-lineS);align-items:baseline}
-.lrow:last-child{border-bottom:none}
-.lrow.head{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--nw-ink3);background:var(--nw-sunken);border-bottom:1px solid var(--nw-ink)}
-.consent .lrow{grid-template-columns:170px 1fr 150px 110px 90px}
-.joins .lrow,.journeys .lrow{grid-template-columns:240px 1fr 120px 90px}
-.adv .lrow{grid-template-columns:200px 90px 90px 110px 1fr}
-.lrow small{display:block}
-.lrow .quiet{color:var(--nw-ink3);font-size:12px}
-/* A ledger verdict speaks the same families the cells do (#864): a flaky law is
-   violet here and violet in §8, an unowned layer is the gap family and not the
-   grey that means "the evidence is absent". */
-.state{font-weight:600;font-size:11.5px}
-.state.ok{color:var(--nw-ok)}
-.state.red{color:var(--nw-danger)}
-.state.warn{color:var(--nw-attn)}
-.state.flaky{color:var(--nw-flaky)}
-.state.gap{color:var(--nw-gap)}
-.state.grey{color:var(--nw-ink3);font-style:italic}
-.budget{font-size:11px;color:var(--nw-ink3);margin:14px 0 6px;max-width:100ch}
-.budget b{color:var(--nw-ink);font-weight:600}
+/* Cards and tables. */
+.card{background:var(--nw-surf);border:1px solid var(--nw-line);border-radius:10px}
+.tablewrap{overflow-x:auto;border:1px solid var(--nw-line);border-radius:10px;background:var(--nw-surf)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-small-size)}
+th,td{text-align:start;vertical-align:middle;padding:10px 12px;border-bottom:1px solid var(--nw-lineS)}
+th{position:sticky;top:0;background:var(--nw-sunken);font-family:var(--font-code);font-size:var(--t-mono-size);letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase;color:var(--nw-ink3);font-weight:500;z-index:1}
+tbody tr:last-child td{border-bottom:none}
+td .lane{font-family:var(--font-code);color:var(--nw-ink);font-weight:500}
+td .desc{display:block;font-size:var(--t-small-size);color:var(--nw-ink3);margin-top:2px}
+.sha{font-size:var(--t-mono-size);color:var(--nw-ink2);background:var(--nw-sunken);padding:1px 6px;border-radius:4px}
+.age.over{color:var(--nw-danger);font-weight:600}
+.age.ok{color:var(--nw-ink3)}
+.owner.none{color:var(--nw-danger);font-style:italic}
+.plat{font-size:var(--t-mono-size);color:var(--nw-ink3);letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase}
+tr.detail td{background:var(--nw-sunken);padding:10px 12px 14px 44px}
+.cases{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px 18px;font-family:var(--font-code);font-size:var(--t-mono-size)}
+.cases .c{display:flex;justify-content:space-between;gap:12px}
+.cases .c span:last-child{color:var(--nw-ink3)}
+tr.suite td{background:var(--nw-sunken);font-family:var(--font-code);font-size:var(--t-mono-size);letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase;color:var(--nw-ink3)}
+tr.suite td b{color:var(--nw-ink);font-weight:600;letter-spacing:normal;text-transform:none;font-family:var(--font-sans)}
+tr.suite td .sb{float:right;letter-spacing:normal;text-transform:none}
+.alarm{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border:1px solid var(--nw-line);border-radius:8px;background:var(--nw-surf);font-size:var(--t-small-size);margin-bottom:12px}
+.alarm .bell{width:10px;height:10px;border-radius:50%;background:var(--nw-ok)}
 
-/* The grid frame. A head row on the sunken rung under a full-ink rule, rows
-   hairlined, and the whole thing scrolling inside its own box so a wide axis
-   never widens the page. */
-.gridwrap{overflow-x:auto;border:1px solid var(--nw-line)}
-table.heat{border-collapse:collapse;width:100%}
-table.heat thead th{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--nw-ink3);padding:8px 10px;text-align:start;background:var(--nw-sunken);border-bottom:1px solid var(--nw-ink);white-space:nowrap}
-table.heat thead th small{display:block;font-weight:400;letter-spacing:0;text-transform:none}
-table.heat td{padding:0;border-bottom:1px solid var(--nw-lineS)}
-table.heat tbody th{padding:7px 12px;font-weight:600;text-align:start;white-space:nowrap;border-bottom:1px solid var(--nw-lineS)}
-table.heat tbody th small{font-weight:400;color:var(--nw-ink3);margin-inline-start:6px}
-table.heat tbody tr:last-child th,table.heat tbody tr:last-child td{border-bottom:none}
+/* Since-yesterday columns. */
+.changes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.changes .col{padding:14px 16px}
+.changes .col h4{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-code);font-size:var(--t-mono-size);letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase}
+.changes .col h4 .n{font:var(--t-title)}
+.changes ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.changes li{font-size:var(--t-small-size);display:flex;flex-direction:column;gap:2px}
+.changes li .lane{font-family:var(--font-code)}
+.changes li .why{color:var(--nw-ink3)}
+.changes .col.red h4{color:var(--nw-danger)}
+.changes .col.green h4{color:var(--nw-ok)}
+.changes .col.parkedcol h4{color:var(--nw-park)}
+.changes .col.expiring h4{color:var(--nw-attn)}
+.changes .empty{color:var(--nw-ghost);font-style:italic}
 
-/* The cell. A quiet tint carrying the state's WORD — never a saturated fill,
-   and never colour alone: the word is the primary carrier and the tint is the
-   second reading, so a cell stays legible to a reader who sees no hue. */
-.cell{display:block;width:100%;border:none;font:inherit;text-align:center;padding:7px 10px;cursor:pointer;background:transparent;color:var(--nw-ink2);font-size:11.5px;font-weight:600}
-.cell:hover{outline:1px solid var(--nw-ink3);outline-offset:-1px}
-.cell small{font-weight:400;margin-inline-start:5px;color:inherit}
+/* Sparklines and budget bars. */
+.spark{width:120px;height:22px;display:block}
+.spark .s-ok{fill:var(--nw-ok)}
+.spark .s-bad{fill:var(--nw-danger)}
+.spark .s-park{fill:var(--nw-park)}
+.spark .s-none{fill:var(--nw-greybg)}
+.budget{display:inline-flex;align-items:center;gap:8px;min-width:170px}
+.budget .track{flex:1;height:6px;border-radius:3px;background:var(--nw-sunken);position:relative;overflow:hidden;min-width:60px}
+.budget .fill{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--nw-ok)}
+.budget .fill.near{background:var(--nw-attn)}
+.budget .fill.over{background:var(--nw-danger)}
+.budget .lbl{font-size:var(--t-mono-size);color:var(--nw-ink3);white-space:nowrap}
+.rate.low{color:var(--nw-danger)}
 
-/* The state register — ONE HUE, ONE MEANING (#864).
-   Eight families, and a family answers exactly one question: ok (passed against
-   a solid claim), partial (passed, partial claim), danger (tonight's run went
-   wrong), flaky (unreliable, not broken), gap (no test exists), attn (the
-   report cannot vouch for its own evidence), grey (evidence absent), bug (the
-   product is known-broken — a declared defect, not a missing test). No tint
-   appears in two families, so a reader who has learned one hue has learned one
-   fact. Inside a family each state still differs by weight, slope or rule.
-   ONE cross-family collapse survives and is asserted by name in
-   report-theme.test.mjs: infra-mismatch rides the consequence tint with failed,
-   because both mean "the run went wrong tonight" and the word tells them apart.
-   Within grey, lane-did-not-run is byte-identical to stale — the legend prints
-   them as one entry — and that pair is asserted too. */
+/* The cell register — four states plus n/a, one family each. */
+.cell{display:flex;flex-direction:column;gap:2px;padding:8px;background:transparent;color:var(--nw-ink2)}
 .cell.passed{background:var(--nw-okbg);color:var(--nw-ok)}
-.cell.passed.assessment-partial{background:var(--nw-partialbg);color:var(--nw-partial)}
-.cell.failed,.cell.infra-mismatch{background:var(--nw-dangerbg);color:var(--nw-danger)}
-.cell.flaky{background:var(--nw-flakybg);color:var(--nw-flaky)}
-.cell.owner-silent{background:var(--nw-attnbg);color:var(--nw-attn);font-style:italic}
-.cell.evidence-unmatched{background:var(--nw-attnbg);color:var(--nw-attn);font-style:italic;font-weight:400}
-.cell.stale,.cell.lane-did-not-run{background:var(--nw-greybg);color:var(--nw-ink3);font-style:italic}
-.cell.missing{background:var(--nw-greybg);color:var(--nw-ink3);font-style:italic;font-weight:400}
-.cell.expected-grey{background:var(--nw-greybg);color:var(--nw-ink3);font-style:italic;border-bottom:1px dashed var(--nw-grey)}
-.cell.skipped{background:transparent;color:var(--nw-ghost);font-weight:400}
+.cell.failed{background:var(--nw-dangerbg);color:var(--nw-danger);font-weight:600}
+.cell.parked{background:var(--nw-parkbg);color:var(--nw-park)}
+.cell.degraded{background:var(--nw-attnbg);color:var(--nw-attn)}
+/* Absence is a grey TINT with the page's quiet ink on it, not the grey mark
+   rung: --nw-grey is a mark colour and reads at 3.0:1 on its own tint in
+   light, which is a word a reader has to squint at to learn that nothing
+   reported. The tint still carries the family; the ink carries the word. */
+.cell.no-evidence{background:var(--nw-greybg);color:var(--nw-ink3)}
+.cell.na{background:transparent;color:var(--nw-ink3);font-style:italic}
+.cell .st{font-family:var(--font-code);font-size:var(--t-mono-size);font-weight:600}
+.cell .ln{font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* The app-axis grids speak DECLARATION, not health, so an owned seat is neutral
-   ink on raised paper, never the green that on this page means "evidence ran and
-   passed". The other two cells are not a private alphabet: "nobody owns this
-   yet" is the SAME fact §8 calls a gap, and it takes the same paint and the same
-   word on every grid (#864) — before, the matrix painted it red and the app
-   grids painted it grey, so the page contradicted itself about whether a missing
-   test was tonight's emergency or nobody's. "n/a" is likewise one treatment. */
-.cell.axis-declared{background:var(--nw-surf);color:var(--nw-ink)}
-.cell.gap,.cell.axis-unowned{background:var(--nw-gapbg);color:var(--nw-gap);font-weight:400}
-.cell.axis-skipped{background:transparent;color:var(--nw-ghost);font-weight:400}
-.cell.axis-bug{background:var(--nw-bugbg);color:var(--nw-bug);font-weight:600}
+/* Coverage grid and promises heat grid. */
+.pgrid{display:grid;grid-template-columns:150px repeat(4,minmax(120px,1fr));border:1px solid var(--nw-line);border-radius:10px;overflow:hidden;background:var(--nw-surf);font-size:var(--t-small-size)}
+.pgrid>div{border-bottom:1px solid var(--nw-lineS);border-inline-end:1px solid var(--nw-lineS)}
+.pgrid>div:nth-child(5n){border-inline-end:none}
+.pgrid .h,.heat .h{background:var(--nw-sunken);font-family:var(--font-code);font-size:var(--t-mono-size);letter-spacing:var(--t-eyebrow-tracking);text-transform:uppercase;color:var(--nw-ink3);padding:8px}
+.pgrid .app,.heat .qn{font-weight:600;padding:8px}
+.pgrid .rung{font-family:var(--font-code);font-size:var(--t-mono-size);font-weight:600}
+.pgrid .states{display:flex;gap:3px;flex-wrap:wrap}
+.pgrid .st-box{width:14px;height:14px;border-radius:3px;background:var(--nw-sunken);display:grid;place-items:center;font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ghost)}
+.pgrid .st-box.on{background:var(--nw-okbg);color:var(--nw-ok)}
+.pgrid .foot,.heat .foot{grid-column:1 / -1;font-size:var(--t-small-size);color:var(--nw-ink3);border-bottom:none;padding:8px}
+.heatwrap{overflow-x:auto}
+.heat{display:grid;grid-template-columns:150px repeat(10,minmax(64px,1fr));border:1px solid var(--nw-line);border-radius:10px;overflow:hidden;background:var(--nw-surf);font-size:var(--t-mono-size)}
+.heat>div{border-bottom:1px solid var(--nw-lineS);border-inline-end:1px solid var(--nw-lineS);min-height:38px}
+.heat>div:nth-child(11n){border-inline-end:none}
+.verbs{display:flex;gap:6px;flex-wrap:wrap}
+.verb{font-family:var(--font-code);font-size:var(--t-mono-size);padding:2px 7px;border-radius:4px;background:var(--nw-sunken);color:var(--nw-ink2)}
+.verb.zero{color:var(--nw-danger);background:var(--nw-dangerbg)}
 
-/* The painted legend. The old keyline glossed the register in coloured TEXT
-   below one grid, which asked the reader to map a word's ink onto a cell's
-   tint — two different treatments for one state. A legend chip now carries the
-   cell's own classes, so it is the treatment rather than a description of it,
-   and it sits ABOVE every grid that uses the register instead of after one of
-   them. Only geometry is overridden here: an inline chip rather than a full
-   table cell, and no pointer, because nothing here is pressable. */
-.legend{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:11px;color:var(--nw-ink3);margin:0 0 8px;padding:0;list-style:none}
-.legend li{display:flex;align-items:baseline;gap:6px;max-width:46ch}
-.legend .cell{display:inline-block;width:auto;padding:2px 8px;cursor:default}
+/* Adversaries and trends. */
+.adv{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:900px){.adv{grid-template-columns:1fr 1fr}}
+.adv .card{padding:14px 16px}
+.adv .card.wide{grid-column:1 / -1}
+.adv .card .tablewrap{margin-top:8px}
+.bar{display:inline-block;height:6px;border-radius:3px;background:var(--nw-ok);vertical-align:middle;margin-inline-end:6px}
+.bar.low{background:var(--nw-attn)}
+.trends{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.trend{padding:14px 16px}
+.trend .t{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.trend .last.out-bad{color:var(--nw-danger)}
+.trend .last.out-ok{color:var(--nw-ok)}
+.trend svg{width:100%;height:70px;display:block}
+.trend .band{fill:var(--nw-attnbg)}
+.trend .line{fill:none;stroke:var(--nw-ink2);stroke-width:1.5}
+.trend .quart{stroke:var(--nw-line);stroke-dasharray:2 3}
+.trend .end{fill:var(--nw-attn)}
+.trend .end.out-bad{fill:var(--nw-danger)}
+.trend .end.out-ok{fill:var(--nw-ok)}
+.trend .foot{display:flex;justify-content:space-between;font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ghost);margin-top:4px}
 
-/* §1's severity bands: prose about a ladder, not the cell register. */
-.keyline{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--nw-ink3);margin:8px 0 0}
-.keyline i{font-style:normal;font-weight:600}
+/* Evidence appendix and the glossary. */
+details.app{border:1px solid var(--nw-line);border-radius:10px;background:var(--nw-surf);margin-bottom:10px}
+details.app summary{cursor:pointer;padding:12px 16px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:12px}
+details.app summary .sum{font-family:var(--font-code);font-size:var(--t-mono-size);color:var(--nw-ink3);font-weight:400}
+details.app .body{padding:0 16px 14px}
+.gloss{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px 24px;font-size:var(--t-small-size)}
+.gloss dt{font-family:var(--font-code);font-size:var(--t-mono-size);font-weight:600;color:var(--nw-ink)}
+.gloss dd{margin:2px 0 0;color:var(--nw-ink2)}
+pre{font-size:var(--t-mono-size);line-height:1.5;background:var(--nw-sunken);border:1px solid var(--nw-line);padding:12px 14px;border-radius:8px;overflow-x:auto;color:var(--nw-ink2)}
+.errors{border:1px solid var(--nw-danger);background:var(--nw-dangerbg);color:var(--nw-danger);border-radius:8px;padding:12px 16px;margin-top:18px}
+.errors ul{margin:6px 0 0;padding-inline-start:18px}
+.obs li{margin:0 0 8px}
+.obs .age{color:var(--nw-ink3);margin-inline-start:6px}
+footer{margin-top:var(--sp-band);padding-top:18px;border-top:1px solid var(--nw-line);font-size:var(--t-small-size);color:var(--nw-ink3);display:flex;flex-wrap:wrap;gap:6px 24px}
 
-/* The evidence inspector: a bottom sheet, closed until a cell is chosen.
-   It is fixed rather than in-flow because every grid on the page opens it and
-   the grids are pages apart — an in-flow panel under §8 means choosing a cell
-   in §2 scrolls the answer off screen. Nothing focuses it, nothing traps focus
-   in it, and it covers the footer only while it is open. The lift is mixed
-   from the ink rung rather than from black, so it separates the sheet from the
-   page in BOTH themes instead of vanishing into the night one. */
-#inspector{position:fixed;inset-inline:0;bottom:0;z-index:20;display:none;background:var(--nw-ground);border-top:2px solid var(--nw-ink);padding:14px 24px 18px;box-shadow:0 -6px 24px color-mix(in oklab,var(--nw-ink) 14%,transparent)}
-#inspector.open{display:block}
-#inspector .inwrap{max-width:1060px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 20px;max-height:46vh;overflow:auto}
-#inspector .kicker{color:var(--nw-ink3);font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
-#inspector h3{margin:2px 0 6px;font-size:14px;font-weight:600}
-#inspector button.close{border:1px solid var(--nw-line);border-radius:var(--r-md);background:var(--nw-surf);color:var(--nw-ink);font:inherit;font-weight:600;padding:4px 14px;cursor:pointer;align-self:start}
-.flow-list{display:grid;gap:8px}
-.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--nw-lineS)}
-.flow:last-child{border-bottom:0}
-.tier{color:var(--nw-ink3);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase}
-.result{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
-.result.passed{color:var(--nw-ok)}
-.result.failed,.result.infra-mismatch{color:var(--nw-danger)}
-.result.flaky{color:var(--nw-flaky)}
-.result.owner-silent,.result.evidence-unmatched{color:var(--nw-attn)}
-.result.skipped{color:var(--nw-ghost)}
-.result.missing,.result.stale,.result.lane-did-not-run,.result.expected-grey{color:var(--nw-ink3)}
-
-/* The detail shelf: the archive report v1 was, kept whole below the fold. */
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
-.card{border:1px solid var(--nw-line);background:var(--nw-surf);padding:14px 16px;overflow:auto}
-.card h2,.card h3{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;margin:0 0 8px;color:var(--nw-ink2)}
-.wide{grid-column:1/-1}
-.matrix-scroll{overflow-x:auto}
-.data{border-collapse:collapse;width:100%}
-.data th,.data td{text-align:start;border-bottom:1px solid var(--nw-lineS);padding:6px 8px;font-size:11.5px;vertical-align:top}
-.data th{color:var(--nw-ink3);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;background:var(--nw-sunken);border-bottom:1px solid var(--nw-ink);white-space:nowrap}
-.metric{font-weight:600}
-.metric.passed{color:var(--nw-ok)}
-.metric.failed{color:var(--nw-danger)}
-.metric.missing{color:var(--nw-ink3)}
-.metric small{margin-inline-start:4px;font-weight:400;color:var(--nw-ink3)}
-.empty{color:var(--nw-ink3);border:1px dashed var(--nw-line);padding:12px;margin:0;font-size:12px}
-.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
-.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:var(--nw-sunken);border:1px solid var(--nw-line);padding:10px 12px}
-.trend strong,.trend small{display:block}
-.trend strong{font-variant-numeric:var(--t-mono-numeric)}
-/* Sparklines. Stroke and dot are styled here, not on the SVG element: a var()
-   inside an SVG presentation attribute is not reliably resolved, so a token
-   named there would silently paint black. */
-.spark{width:96px;height:22px;vertical-align:middle}
-.spark polyline{fill:none;stroke:var(--nw-ink3);stroke-width:1.5;vector-effect:non-scaling-stroke}
-.spark circle{fill:var(--nw-ink)}
-.foot{margin-top:40px;font-size:11px;color:var(--nw-ghost)}
-
-/* The user-facing qualities panel. */
-.qualities-shell{border:1px solid var(--nw-line);background:var(--nw-surf);padding:12px 16px;margin-top:14px}
-.qualities-shell h2{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;margin:0 0 6px;color:var(--nw-ink2)}
-.quality-row{border-top:1px solid var(--nw-lineS)}
-.quality-row summary{display:grid;grid-template-columns:14px 180px minmax(0,1fr) 72px;gap:8px;align-items:center;padding:9px 0;cursor:pointer}
-.quality-row summary b{text-align:end;font-variant-numeric:var(--t-mono-numeric)}
-.quality-light{width:9px;height:9px;border-radius:var(--r-pill);background:var(--nw-grey)}
-.quality-light.passed{background:var(--nw-ok)}
-.quality-light.partial{background:var(--nw-attn)}
-.quality-light.failed{background:var(--nw-danger)}
-.quality-gates{padding:0 0 8px 20px}
-.quality-gates>div{display:grid;grid-template-columns:12px minmax(180px,.7fr) minmax(260px,1fr);gap:8px;align-items:center;padding:3px 0}
-.quality-gates code{color:var(--nw-ink3);overflow-wrap:anywhere}
-.quality-debt{color:var(--nw-ink3);font-size:11px;margin:8px 0 0}
-.dot{display:inline-block;width:7px;height:7px;border-radius:var(--r-pill);margin-inline-end:4px;background:var(--nw-grey)}
-.dot.passed{background:var(--nw-ok)}
-.dot.partial{background:var(--nw-attn)}
-.dot.failed{background:var(--nw-danger)}
-.dot.missing{background:none;border:2px solid var(--nw-grey)}
-
-@media(max-width:760px){
-.page{padding:24px 0 90px}
-.delta{border-inline-start:none;padding-inline-start:0}
-.qrow{grid-template-columns:80px 1fr}
-.qrow .own,.qrow .age,.qrow .act{display:none}
-.consent .lrow{grid-template-columns:130px 1fr 90px}
-.consent .lrow>:nth-child(3),.consent .lrow>:nth-child(4){display:none}
-.joins .lrow,.journeys .lrow{grid-template-columns:1fr 90px}
-.joins .lrow>:nth-child(2),.joins .lrow>:nth-child(3),.journeys .lrow>:nth-child(2),.journeys .lrow>:nth-child(3){display:none}
-.adv .lrow{grid-template-columns:1fr 80px 80px}
-.adv .lrow>:nth-child(4),.adv .lrow>:nth-child(5){display:none}
-.grid{grid-template-columns:1fr}
-.wide{grid-column:auto}
-#inspector .inwrap{grid-template-columns:1fr}
-.flow{grid-template-columns:1fr}
-.quality-row summary,.quality-gates>div{grid-template-columns:14px 1fr}
-.quality-row summary span:nth-of-type(2),.quality-row summary b,.quality-gates code{grid-column:2}
+@media(max-width:720px){
+.page{padding:18px 14px 80px}
+.verdict{grid-template-columns:minmax(0,1fr)}
+.lamp{display:none}
+.pgrid{grid-template-columns:110px repeat(4,minmax(90px,1fr))}
 }
 `;

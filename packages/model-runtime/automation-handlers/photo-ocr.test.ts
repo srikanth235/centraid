@@ -223,7 +223,6 @@ describe("photo-ocr handler", () => {
             ],
             confidence: 0.8,
           },
-          purpose: "dpv:ServiceProvision",
         },
       ]);
     });

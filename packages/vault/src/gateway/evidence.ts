@@ -1,21 +1,24 @@
 // S5 — Evidence: every read and every command leaves rows, allowed or
 // denied. Receipts (Kantara-style, hash-chained), provenance (W3C PROV) per
 // write, evidence + explanation per invocation. Unskippable because there is
-// no other door. All writers here append to journal.db and never UPDATE.
+// no other door. All writers here append to the audit band and never UPDATE.
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { VaultDb } from "../db.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
 import type { Citation, Identity } from "./types.js";
 
 export interface ReceiptInput {
-  grantId: string | null;
+  /**
+   * ONE ID SPACE (#928, AP-one-id-space): the `share_authority` row that
+   * answered, or NULL for an owner-direct act that needed no answer.
+   */
+  authorityId: string | null;
   invocationId: string | null;
   action: string;
   objectType: string;
   objectId: string | null;
-  /** The purpose that APPLIED — callers record the defaulted notation (#306). */
-  purpose: string | null | undefined;
   decision: "allow" | "deny";
   detail?: Record<string, unknown>;
 }
@@ -39,58 +42,147 @@ export function actingOwnerDetail(
   return ownerId === undefined ? {} : { actingOwner: ownerId };
 }
 
-/** Append a consent.receipt, chaining its hash to the previous receipt. */
-export function writeReceipt(
-  journal: DatabaseSync,
-  input: ReceiptInput
-): string {
+/**
+ * THE OWNER READING THEIR OWN VAULT IS NOT AN ACCESS EVENT (#928, #922 B1).
+ * An `allow` receipt proves that somebody exercised an authority they were
+ * given; owner-direct there is no authority and nobody to prove it against,
+ * and writing one cost a durable append, an fsync and a WAL page on EVERY
+ * read the gateway served. Denials, reveals, invocations and every act by any
+ * other principal are unaffected — same chain, same content, same count.
+ */
+export function skipsAllowReceipt(identity: Pick<Identity, "kind">): boolean {
+  return identity.kind === "owner-device";
+}
+
+/**
+ * Append an access.receipt, chaining its hash to the previous receipt.
+ *
+ * THE HASH COVERS THE WHOLE BODY (#916, review 5.3): every column the row
+ * carries is hashed, in a fixed order, so tampering with any of them —
+ * `detail_json` and `authority_id` included — is detectable.
+ *
+ * `seq` is the chain POSITION (#916, R13 / review 5.4). The head used to be
+ * found with `ORDER BY receipt_id DESC`, correct only because ids happen to be
+ * UUIDv7 and therefore happen to sort by time — an accident of the id scheme
+ * holding up the integrity of the chain. It is monotonic per file, assigned
+ * here, and the head is read by it.
+ */
+export function writeReceipt(audit: DatabaseSync, input: ReceiptInput): string {
   const receiptId = uuidv7();
   const occurredAt = nowIso();
-  const prev = journal
+  const head = audit
     .prepare(
-      "SELECT hash FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1"
+      "SELECT hash, seq FROM access_receipt ORDER BY seq DESC, receipt_id DESC LIMIT 1"
     )
-    .get() as { hash: string } | undefined;
+    .get() as { hash: string; seq: number | null } | undefined;
+  const seq = (head?.seq ?? 0) + 1;
+  const detailJson = input.detail ? JSON.stringify(input.detail) : null;
   const hash = sha256Hex(
     JSON.stringify([
-      prev?.hash ?? "",
+      head?.hash ?? "",
       receiptId,
-      input.action,
-      input.objectType,
-      input.objectId,
-      input.decision,
-      occurredAt,
-    ])
-  );
-  journal
-    .prepare(
-      `INSERT INTO consent_receipt
-         (receipt_id, grant_id, invocation_id, action, object_type, object_id, purpose_concept_id, decision, occurred_at, hash, detail_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      receiptId,
-      input.grantId,
+      seq,
+      input.authorityId,
       input.invocationId,
       input.action,
       input.objectType,
       input.objectId,
-      input.purpose ?? null,
+      input.decision,
+      occurredAt,
+      detailJson,
+    ])
+  );
+  audit
+    .prepare(
+      `INSERT INTO access_receipt
+         (receipt_id, authority_id, invocation_id, action, object_type, object_id, decision, occurred_at, hash, detail_json, seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      receiptId,
+      input.authorityId,
+      input.invocationId,
+      input.action,
+      input.objectType,
+      input.objectId,
       input.decision,
       occurredAt,
       hash,
-      input.detail ? JSON.stringify(input.detail) : null
+      detailJson,
+      seq
     );
   return receiptId;
 }
 
 /**
- * Append consent.provenance for one written row, chained per entity. Ingest
+ * Append a receipt AND stamp the answer that permitted it (#928). Every act
+ * whose authority is a `share_authority` row goes through here, so "last used"
+ * on the Access dashboard can never disagree with the receipt chain: the two
+ * are written in the same transaction from the same id. An owner-direct act
+ * carries no authority and stamps nothing — there is no answer to age.
+ *
+ * The stamp is an UPSERT of one row keyed by the authority, never a column on
+ * the answer itself: the answer is what the member SAID and stays immutable.
+ */
+export function writeAuthorityReceipt(
+  db: VaultDb,
+  input: ReceiptInput
+): string {
+  const receiptId = writeReceipt(db.audit, input);
+  if (input.authorityId !== null) {
+    db.vault
+      .prepare(
+        `INSERT INTO share_authority_use (authority_id, last_used_at)
+           VALUES (?, ?)
+         ON CONFLICT(authority_id) DO UPDATE SET last_used_at = excluded.last_used_at`
+      )
+      .run(input.authorityId, nowIso());
+  }
+  return receiptId;
+}
+
+/**
+ * Recompute a receipt's hash from the row as stored, for a verifier. The one
+ * definition of what the chain covers lives above; this is its inverse, so the
+ * two can never drift apart.
+ */
+export function receiptHash(row: {
+  prevHash: string | null;
+  receiptId: string;
+  seq: number | null;
+  authorityId: string | null;
+  invocationId: string | null;
+  action: string;
+  objectType: string;
+  objectId: string | null;
+  decision: string;
+  occurredAt: string;
+  detailJson: string | null;
+}): string {
+  return sha256Hex(
+    JSON.stringify([
+      row.prevHash ?? "",
+      row.receiptId,
+      row.seq,
+      row.authorityId,
+      row.invocationId,
+      row.action,
+      row.objectType,
+      row.objectId,
+      row.decision,
+      row.occurredAt,
+      row.detailJson,
+    ])
+  );
+}
+
+/**
+ * Append access.provenance for one written row, chained per entity. Ingest
  * passes agentKind 'import' (W3C PROV agent class) regardless of which
  * enrolled identity carried the batch in.
  */
 export function writeProvenance(
-  journal: DatabaseSync,
+  audit: DatabaseSync,
   identity: Identity,
   entityType: string,
   entityId: string,
@@ -99,14 +191,14 @@ export function writeProvenance(
   agentKind?: "owner" | "app" | "ai_agent" | "import"
 ): string {
   const provId = uuidv7();
-  const prev = journal
+  const prev = audit
     .prepare(
-      "SELECT prov_id FROM consent_provenance WHERE entity_type = ? AND entity_id = ? ORDER BY prov_id DESC LIMIT 1"
+      "SELECT prov_id FROM access_provenance WHERE entity_type = ? AND entity_id = ? ORDER BY prov_id DESC LIMIT 1"
     )
     .get(entityType, entityId) as { prov_id: string } | undefined;
-  journal
+  audit
     .prepare(
-      `INSERT INTO consent_provenance
+      `INSERT INTO access_provenance
          (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, used_json, occurred_at, prev_prov_id, signature)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
     )
@@ -126,14 +218,14 @@ export function writeProvenance(
 
 /** Append an agent.invocation_check row (pre or post, S3/S4). */
 export function writeCheck(
-  journal: DatabaseSync,
+  audit: DatabaseSync,
   invocationId: string,
   phase: "pre" | "post",
   predicate: string,
   passed: boolean,
   observed?: Record<string, unknown>
 ): void {
-  journal
+  audit
     .prepare(
       `INSERT INTO agent_invocation_check (check_id, invocation_id, phase, predicate, passed, observed_json, checked_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -151,11 +243,11 @@ export function writeCheck(
 
 /** Append agent.evidence rows for a command's citations. */
 export function writeEvidence(
-  journal: DatabaseSync,
+  audit: DatabaseSync,
   invocationId: string,
   citations: Citation[]
 ): void {
-  const stmt = journal.prepare(
+  const stmt = audit.prepare(
     `INSERT INTO agent_evidence (evidence_id, invocation_id, claim, entity_type, entity_id, prov_id, weight)
      VALUES (?, ?, ?, ?, ?, NULL, ?)`
   );
@@ -173,11 +265,11 @@ export function writeEvidence(
 
 /** Append the one agent.explanation for an invocation. */
 export function writeExplanation(
-  journal: DatabaseSync,
+  audit: DatabaseSync,
   invocationId: string,
   summary: string
 ): void {
-  journal
+  audit
     .prepare(
       `INSERT INTO agent_explanation (explanation_id, invocation_id, audience, summary, generated_at)
        VALUES (?, ?, 'owner', ?, ?)`

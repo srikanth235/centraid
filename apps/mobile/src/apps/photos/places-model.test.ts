@@ -16,6 +16,7 @@ import {
   pinSize,
   placeCardKey,
   placeCards,
+  placeCells,
   placeNameAt,
   placePoints,
   unnamedPlaceAt,
@@ -474,6 +475,37 @@ describe("the photographs that carry no place at all", () => {
   it("does not answer for the bucket's key with a real place's photographs", () => {
     expect(
       assetsAtPlace([photo("a", "place-home")], [HOME], NO_LOCATION_KEY)
+    ).toStrictEqual([]);
+  });
+});
+
+describe("collapsing place rows onto the shelf's own cells", () => {
+  it("returns one cell for rows that round together, keeping both ids", () => {
+    const cells = placeCells([TAHOE, TAHOE_CABIN, HOME]);
+    expect(cells.map((cell) => cell.key)).toStrictEqual([
+      "39.1:-120.0",
+      "37.4:-122.1",
+    ]);
+    expect(cells[0]!.placeIds).toStrictEqual(["place-tahoe", "place-cabin"]);
+  });
+
+  it("names a cell from the first row carrying a real name", () => {
+    const unnamed: PlaceRow = {
+      place_id: "place-raw",
+      name: "39.1400, -120.0300",
+      geo_lat: 39.14,
+      geo_lng: -120.03,
+    };
+    expect(placeCells([unnamed, TAHOE])[0]).toMatchObject({
+      name: "Lake Tahoe",
+      placeIds: ["place-raw", "place-tahoe"],
+    });
+    expect(placeCells([unnamed])[0]!.name).toBe(PLACE_UNNAMED);
+  });
+
+  it("drops a row with no usable coordinates rather than inventing a cell", () => {
+    expect(
+      placeCells([{ place_id: "place-nowhere", name: "Nowhere" }])
     ).toStrictEqual([]);
   });
 });

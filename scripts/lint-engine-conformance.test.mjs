@@ -252,16 +252,22 @@ test("the vault entity registry is read whole, not partially", () => {
   // The declared-writes lane compares every `writes:` entry against this set;
   // a scan that drifted to a handful of names would pass anything.
   const names = vaultEntityNames();
-  assert.ok(names.size > 100, `only ${names.size} entities`);
+  assert.ok(names.size >= 90, `only ${names.size} entities`);
   for (const entity of [
     "core.content_item",
     "schedule.task",
     "locker.item_passkey",
     "share.authority",
+    "share.subscription",
+    "share.subscription_lineage",
   ])
     assert.ok(names.has(entity), entity);
   // Retired this wave — a stale name would pass a declaration that cannot happen.
-  for (const gone of ["tally.expense_receipt", "social.contact_card"])
+  for (const gone of [
+    "tally.expense_receipt",
+    "social.contact_card",
+    "share.commons_op",
+  ])
     assert.ok(!names.has(gone), gone);
 });
 

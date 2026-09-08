@@ -1,6 +1,6 @@
 # Promotion suite budget
 
-`op-sqlite-probe` and `share-intent-in` run under `run-promoting-suite.mjs` on the two non-blocking Android lanes. The runner fails when aggregate wall time is **sixteen minutes or more**, measured from the first flow process start through the last verdict. Every journey writes an independent verdict, including after an earlier failure.
+`op-sqlite-probe` and `share-intent-in` run under the `promoting-suite` suite on the nightly Android lane. The runner fails when aggregate wall time is **sixteen minutes or more**, measured from the first flow process start through the last verdict. Every journey writes an independent verdict, including after an earlier failure.
 
 Both members pair for themselves. `op-sqlite-probe` restarts the app process mid-flow and `share-intent-in` needs a foregrounded, paired app before the intent is delivered, so `MAESTRO_REUSE_PAIRED_STATE` is never set here and the pairing cost is paid twice. That is what these two claim, not waste to be optimised away — but it is most of the number below, and any attempt to shrink this budget has to start there.
 

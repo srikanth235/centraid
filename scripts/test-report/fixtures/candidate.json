@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "sha": "0a3258e3adeadbeef0000000000000000000000",
+  "promotedAt": "2026-09-02T04:20:00Z",
+  "previousSha": "f5ca34fb6deadbeef0000000000000000000000",
+  "runId": "1",
+  "runUrl": "https://example.invalid/1",
+  "lanes": {}
+}

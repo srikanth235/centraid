@@ -15,6 +15,7 @@
 // the replica answers from this device, and the standing offline caption on
 // the drive shelves already carries that fact.
 
+import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -26,10 +27,15 @@ import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
+import type { DocsShellNavigation } from "../../navigation";
 import {
   MOBILE_SEARCH_LABEL,
   MOBILE_SEARCH_PLACEHOLDER,
   SEARCH_IDLE,
+  SEARCH_REACH_ACTION,
+  SEARCH_REACH_BODY,
+  SEARCH_REACH_EYEBROW,
+  searchReachTitle,
   searchStatus,
 } from "./docs-copy";
 import DriveList from "./DriveList";
@@ -43,6 +49,7 @@ export default function DocsSearchView({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session } = useReplica();
+  const navigation = useNavigation<DocsShellNavigation>();
   const [query, setQuery] = useState("");
   const [matchedIds, setMatchedIds] = useState<readonly string[] | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -129,7 +136,22 @@ export default function DocsSearchView({
       </View>
 
       {term.length === 0 ? (
-        <Text style={styles.idle}>{SEARCH_IDLE}</Text>
+        <View style={styles.reach}>
+          <Text style={styles.reachEyebrow}>{SEARCH_REACH_EYEBROW}</Text>
+          <Text accessibilityRole="header" style={styles.reachTitle}>
+            {searchReachTitle(active.length)}
+          </Text>
+          <Text style={styles.reachBody}>{SEARCH_REACH_BODY}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={SEARCH_REACH_ACTION}
+            onPress={() => navigation.navigate("DocsCapabilities")}
+            style={styles.reachAction}
+          >
+            <Text style={styles.reachActionLabel}>{SEARCH_REACH_ACTION}</Text>
+          </Pressable>
+          <Text style={styles.idle}>{SEARCH_IDLE}</Text>
+        </View>
       ) : refusal ? (
         <View style={styles.refusal}>
           <Text style={styles.refusalTitle}>
@@ -148,11 +170,11 @@ export default function DocsSearchView({
           offline={drive.offline}
           refresh={drive.refresh}
           empty={{ query: term }}
-          caption={
-            results.length > 0
-              ? captionFor(SEARCH, { searchUnreadable: active.length })
-              : null
-          }
+          // Said on BOTH answers, not just the hit. A miss is exactly when the
+          // member needs to know the search never looked inside anything —
+          // withholding it there leaves "nothing matches" reading as "it is
+          // not in your vault".
+          caption={captionFor(SEARCH, { searchUnreadable: active.length })}
           status={
             results.length > 0
               ? searchStatus(results.length, active.length)
@@ -197,10 +219,32 @@ const makeStyles = (colors: ThemeColors) =>
     idle: {
       ...t("body"),
       color: colors.textSoft,
-      paddingHorizontal: 18,
-      paddingTop: 8,
+      paddingTop: 4,
     },
     page: { flex: 1 },
+    reach: {
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.lg,
+      borderWidth: borders.hairline,
+      gap: 8,
+      marginHorizontal: 18,
+      padding: 16,
+    },
+    reachAction: {
+      alignSelf: "flex-start",
+      borderColor: colors.line,
+      borderRadius: radii.md,
+      borderWidth: borders.hairline,
+      justifyContent: "center",
+      marginTop: 4,
+      minHeight: 44,
+      paddingHorizontal: 18,
+    },
+    reachActionLabel: { ...t("control"), color: colors.text },
+    reachBody: { ...t("small"), color: colors.textSoft },
+    reachEyebrow: { ...t("eyebrow"), color: colors.textFaint },
+    reachTitle: { ...t("bodyStrong"), color: colors.text },
     refusal: {
       borderColor: colors.net,
       borderRadius: radii.lg,

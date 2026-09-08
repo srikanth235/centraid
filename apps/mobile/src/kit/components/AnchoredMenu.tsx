@@ -1,8 +1,11 @@
 // Anchored menu — a card hanging off the control, never a sheet (#712).
 // Kit-owned plate (`band-surface.ts`). Opaque, never glass: contrast cannot
 // depend on what was photographed. One nesting level in the same card
-// (leading ‹ row), no stacked second card. No shadow: surfaces separate by
-// edge (§G).
+// (leading ‹ row), no stacked second card. It DOES carry a shadow: DESIGN.md
+// § Depth reserves `--shadow-md` for exactly three surfaces — a dialog, a
+// sheet and a popover — and this is the third. The earlier "no shadow, surfaces
+// separate by edge" note held while the card's ground differed from the page's;
+// it opens over `bgElev` containers, where edge alone left it invisible.
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -17,7 +20,7 @@ import type { View as RNView } from "react-native";
 
 import { BAND_INSET, BAND_RADIUS } from "../band-surface";
 import { TEST_IDS } from "../test-ids";
-import { borders, spacing, t, useTheme } from "../theme";
+import { borders, popoverShadow, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
@@ -146,11 +149,14 @@ type MenuStyles = ReturnType<typeof makeStyles>;
 
 function ActionRowView({
   row,
+  reserveCheck,
   colors,
   styles,
   onChoose,
 }: {
   row: MenuActionRow;
+  /** Does any row in THIS list carry a `checked`? See `styles.slot`. */
+  reserveCheck: boolean;
   colors: ThemeColors;
   styles: MenuStyles;
   onChoose: (row: MenuActionRow) => void;
@@ -173,11 +179,16 @@ function ActionRowView({
       onPress={() => onChoose(row)}
       style={styles.row}
     >
-      <View style={styles.slot}>
-        {row.checked === true ? (
-          <Icon name="check" size={16} color={ink} />
-        ) : null}
-      </View>
+      {/* The check column exists to keep checkable rows ALIGNED. A list where
+          nothing can be checked has nothing to align, and reserving it there
+          just pushes every glyph 30px off the card's leading edge. */}
+      {reserveCheck ? (
+        <View style={styles.slot}>
+          {row.checked === true ? (
+            <Icon name="check" size={16} color={ink} />
+          ) : null}
+        </View>
+      ) : null}
       {row.icon ? <Icon name={row.icon} size={16} color={ink} /> : null}
       <Text
         style={[
@@ -198,11 +209,13 @@ function ActionRowView({
 
 function SubmenuRowView({
   row,
+  reserveCheck,
   colors,
   styles,
   onOpen,
 }: {
   row: MenuSubmenuRow;
+  reserveCheck: boolean;
   colors: ThemeColors;
   styles: MenuStyles;
   onOpen: (key: string) => void;
@@ -214,7 +227,7 @@ function SubmenuRowView({
       onPress={() => onOpen(row.key)}
       style={styles.row}
     >
-      <View style={styles.slot} />
+      {reserveCheck ? <View style={styles.slot} /> : null}
       {row.icon ? <Icon name={row.icon} size={16} color={colors.text} /> : null}
       <Text style={styles.label} numberOfLines={1}>
         {row.label}
@@ -275,6 +288,9 @@ function MenuBody({
           <ActionRowView
             key={row.key}
             row={row}
+            reserveCheck={submenu.rows.some(
+              (candidate) => candidate.checked !== undefined
+            )}
             colors={colors}
             styles={styles}
             onChoose={choose}
@@ -283,6 +299,13 @@ function MenuBody({
       </>
     );
   }
+
+  // Across ALL groups, not per group: the column is what lines the card's
+  // labels up with each other, so one checkable group makes it real for every
+  // row on the card.
+  const reserveCheck = groups.some((group) =>
+    group.rows.some((row) => !isSubmenu(row) && row.checked !== undefined)
+  );
 
   return (
     <>
@@ -296,6 +319,7 @@ function MenuBody({
               <SubmenuRowView
                 key={row.key}
                 row={row}
+                reserveCheck={reserveCheck}
                 colors={colors}
                 styles={styles}
                 onOpen={setOpenKey}
@@ -304,6 +328,7 @@ function MenuBody({
               <ActionRowView
                 key={row.key}
                 row={row}
+                reserveCheck={reserveCheck}
                 colors={colors}
                 styles={styles}
                 onChoose={choose}
@@ -330,7 +355,8 @@ export default function AnchoredMenu({
   const placement = cardPlacement(anchor, screen);
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
-      {/* No scrim: dimming claims a sheet's weight; the card is already opaque. */}
+      {/* No scrim: dimming claims a sheet's weight; the card is opaque and now
+          carries the popover rung of the elevation scale instead. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close menu"
@@ -341,20 +367,26 @@ export default function AnchoredMenu({
         // (`10%,50%` in flows/photos-viewer.mjs). `testID` reaches it directly.
         testID={TEST_IDS.shell.menuBackdrop}
       />
-      <View
-        accessibilityViewIsModal
-        accessibilityRole="menu"
-        style={[styles.card, placement]}
-        testID={TEST_IDS.shell.menuCard}
-      >
-        <ScrollView>
-          <MenuBody
-            groups={groups}
-            colors={colors}
-            styles={styles}
-            onClose={onClose}
-          />
-        </ScrollView>
+      {/* Two views, not one: the card clips its rows to the radius with
+          `overflow: hidden`, and on iOS that clips the shadow along with them.
+          The shadow therefore rides an unclipped host and the card sits inside
+          it. */}
+      <View style={[styles.cardShadow, placement]}>
+        <View
+          accessibilityViewIsModal
+          accessibilityRole="menu"
+          style={styles.card}
+          testID={TEST_IDS.shell.menuCard}
+        >
+          <ScrollView>
+            <MenuBody
+              groups={groups}
+              colors={colors}
+              styles={styles}
+              onClose={onClose}
+            />
+          </ScrollView>
+        </View>
       </View>
     </Modal>
   );
@@ -368,11 +400,20 @@ const makeStyles = (colors: ThemeColors) =>
     },
     backdrop: { ...StyleSheet.absoluteFill },
     card: {
-      backgroundColor: colors.bgElev,
+      // `bg`, not `bgElev`. In this palette the "elevated" rung is DARKER than
+      // the page (#F5F4F2 against #FDFDFC), and the containers this card opens
+      // over — a drive's row container, a shelf's panel — are themselves
+      // `bgElev`. Card and page were the same value, so the menu had no edge
+      // against what sat behind it.
+      backgroundColor: colors.bg,
       borderColor: colors.lineStrong,
       borderRadius: BAND_RADIUS,
       borderWidth: borders.hairline,
       overflow: "hidden",
+      width: "100%",
+    },
+    cardShadow: {
+      ...popoverShadow,
       position: "absolute",
       width: CARD_WIDTH,
     },

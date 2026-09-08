@@ -12,15 +12,21 @@ export interface SharedMember {
   party_id: string;
   label: string;
   capability: "read" | "read+write";
-  /** `invited` until their vault accepts; a refuser is absent entirely. */
+  /** `invited` until the subject has reached their vault. */
   status: "invited" | "current";
 }
 
-/** A commons grant over the document itself or a folder above it (#821). */
+/**
+ * A standing answer over the document itself or a folder above it (#821,
+ * #929). The audience is ONE PERSON or ONE CIRCLE — `circle_id` is null in the
+ * first case, which is why `audience` and not the id is what a reader branches
+ * on.
+ */
 export interface SharedWith {
   grant_id: string;
-  circle_id: string;
-  /** The circle's name, or the recipients' for an implicit circle. */
+  circle_id: string | null;
+  audience: "person" | "circle";
+  /** The circle's name, or the person's. */
   label: string;
   via: "document" | "folder";
   /** The folder the rail names under `via: "folder"`, else the document. */
@@ -28,6 +34,16 @@ export interface SharedWith {
   members: SharedMember[];
   member_count: number;
   pending_count: number;
+}
+
+/** Another vault delivered this (#903); nothing else says so. */
+export interface SharedFrom {
+  vault_id: string;
+  /** `null` is "cannot say who", never "nobody": no live binding names them. */
+  party_id: string | null;
+  name: string | null;
+  /** Landed here, epoch ms. */
+  at: number;
 }
 
 /** One free-form label (core.tag_item over the shared Tags scheme). */
@@ -64,6 +80,8 @@ export interface DriveDoc {
    * says "not shared" (#821).
    */
   shared_with: SharedWith[] | null;
+  /** `null` is a FACT; `shared_from_known` says if the read answered. */
+  shared_from: SharedFrom | null;
 }
 
 /**
@@ -163,6 +181,8 @@ export interface AppState {
    * "is anything set" has one home (`filtersActive`).
    */
   filters: DriveFilters;
+  /** `false` is "cannot say", which is not an empty inbox (#903). */
+  sharedFromKnown: boolean;
   sortKey: SortKey;
   sortDir: 1 | -1;
   /**

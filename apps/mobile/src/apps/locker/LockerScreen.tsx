@@ -33,6 +33,7 @@ import { Text } from "../../kit/components/NativeText";
 import { t, useTheme } from "../../kit/theme";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { LockerShellNavigation } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import { resolveLockerMoreRoute } from "./locker-band";
 import type { LockerBandDestinationKey, LockerMoreRowKey } from "./locker-band";
 import { MASKED_LABEL } from "./locker-seat-copy";
@@ -156,6 +157,10 @@ export default function LockerScreen({
 
   return (
     <View style={frame}>
+      {/* The vault lockup on every route (see `VaultBar`): which vault, which
+          gateway, and the product's two global verbs. Above the app's own
+          header, which names the ROUTE — a different question. */}
+      <VaultBar />
       <AppHeader
         title={ROUTE_TITLE[headRoute]}
         subtitle={ROUTE_STATUS[headRoute] ?? ""}

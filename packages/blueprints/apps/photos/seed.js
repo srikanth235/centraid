@@ -26,7 +26,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const PURPOSE = "dpv:ServiceProvision";
 const SAMPLE_DIR = path.join(import.meta.dirname, "sample");
 /** Pacific daylight time — the whole roll is one American trip. */
 const TZ_OFFSET_MIN = -420;
@@ -390,7 +389,6 @@ export default async function seedHandler({ input, log, ctx }) {
     const out = await ctx.vault.invoke({
       command,
       input: args,
-      purpose: PURPOSE,
     });
     if (out.status !== "executed") {
       throw new Error(`${command} ${out.status}: ${out.reason ?? "no reason"}`);

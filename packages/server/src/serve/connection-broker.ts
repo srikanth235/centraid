@@ -42,7 +42,6 @@ import {
 import { timeoutSignal } from "./fetch-timeout.js";
 import type { VaultPlane } from "./vault-plane.js";
 
-const BROKER_PURPOSE = "dpv:ServiceProvision";
 const EXPIRY_SLACK_MS = 60 * 1000;
 const TRANSIENT_RETRY_DELAY_MS = 500;
 
@@ -1000,7 +999,6 @@ export class ConnectionBroker {
           : {}),
         ...(response.expiresAt ? { expires_at: response.expiresAt } : {}),
       },
-      purpose: BROKER_PURPOSE,
     });
     if (outcome.status !== "executed") {
       throw new Error(
@@ -1053,7 +1051,6 @@ export class ConnectionBroker {
         key: "gmail_history_id",
         value: { id: historyId },
       },
-      purpose: BROKER_PURPOSE,
     });
     if (outcome.status !== "executed") {
       throw new Error("Gmail profile historyId did not persist");
@@ -1075,7 +1072,6 @@ export class ConnectionBroker {
     await plane.invoke(plane.ownerCredential, {
       command: "sync.set_connection_status",
       input: { connection_id: connectionId, status: "needs-auth", note },
-      purpose: BROKER_PURPOSE,
     });
   }
 

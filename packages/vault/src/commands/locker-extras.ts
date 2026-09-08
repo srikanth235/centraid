@@ -16,7 +16,6 @@ import {
   LOCKER_FIELD_TYPE,
   addressRows,
   fieldRows,
-  recordHistory,
   setAddresses,
   writeField,
   writePasskey,
@@ -74,7 +73,6 @@ const ARCHIVE_ITEM: CommandDefinition = {
       )
       .run({ item_id: itemId, now: ctx.now });
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
-    recordHistory(ctx, itemId, { operation: "archive", changed: {} });
     return { item_id: itemId };
   },
 };
@@ -106,7 +104,6 @@ const UNARCHIVE_ITEM: CommandDefinition = {
       )
       .run({ item_id: itemId, now: ctx.now });
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
-    recordHistory(ctx, itemId, { operation: "unarchive", changed: {} });
     return { item_id: itemId };
   },
 };
@@ -219,11 +216,6 @@ const DUPLICATE_ITEM: CommandDefinition = {
       }))
     );
     setTags(ctx, itemId, tagLabels(ctx, sourceId));
-    recordHistory(ctx, itemId, {
-      operation: "duplicate",
-      title,
-      changed: { duplicated_from: sourceId },
-    });
     ctx.cite({
       claim: `"${title}" duplicated from an existing locker item`,
       entityType: LOCKER_ITEM_TYPE,

@@ -13,7 +13,7 @@ import { describe, afterEach, expect, test } from "vitest";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type {
   ProviderEgressConsentController,
@@ -26,6 +26,7 @@ import type {
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import { HARNESSES } from "../registry.ts";
 import { runTurn } from "../runtime.ts";
 import type { HarnessKind } from "../types.ts";
@@ -89,8 +90,8 @@ describe("run-automation-dispatch suite", () => {
     model?: string
   ): Promise<LiveDispatch> {
     const workdir = await tempDir("centraid-automation-dispatch-");
-    const journalDbFile = `${workdir}/journal.db`;
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const ledgerDbFile = ledgerDbFileIn(workdir);
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     store.ensureAutomationConversation(
       "demo/nightly",
       "demo",
@@ -102,7 +103,7 @@ describe("run-automation-dispatch suite", () => {
       workdir,
       runId: "run-1",
       automationRef: "demo/nightly",
-      journalDbFile,
+      ledgerDbFile,
       runTurn,
       harness,
       providerEgressConsent: allowProviderEgress,
@@ -136,8 +137,8 @@ describe("run-automation-dispatch suite", () => {
       input.onEvent({ type: "final", text: "must not run" });
     });
     const workdir = await tempDir("centraid-automation-missing-consent-");
-    const journalDbFile = `${workdir}/journal.db`;
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const ledgerDbFile = ledgerDbFileIn(workdir);
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     store.ensureAutomationConversation(
       "demo/nightly",
       "demo",
@@ -149,7 +150,7 @@ describe("run-automation-dispatch suite", () => {
       workdir,
       runId: "run-missing-consent",
       automationRef: "demo/nightly",
-      journalDbFile,
+      ledgerDbFile,
       runTurn,
       harness: "codex",
       // Exercise the runtime guard an untyped JavaScript host would hit.
@@ -276,8 +277,8 @@ describe("run-automation-dispatch suite", () => {
       input.onEvent({ type: "final", text: "fallback answer" });
     });
     const workdir = await tempDir("centraid-automation-failover-");
-    const journalDbFile = `${workdir}/journal.db`;
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const ledgerDbFile = ledgerDbFileIn(workdir);
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     store.ensureAutomationConversation(
       "demo/nightly",
       "demo",
@@ -289,7 +290,7 @@ describe("run-automation-dispatch suite", () => {
       workdir,
       runId: "run-fallback",
       automationRef: "demo/nightly",
-      journalDbFile,
+      ledgerDbFile,
       runTurn,
       harness: "codex",
       providerEgressConsent: allowProviderEgress,
@@ -314,9 +315,9 @@ describe("run-automation-dispatch suite", () => {
 
   test("two named delegates in one fire keep independent sessions, pins, and watermarks", async () => {
     const workdir = await tempDir("centraid-automation-two-harnesses-");
-    const journalDbFile = `${workdir}/journal.db`;
+    const ledgerDbFile = ledgerDbFileIn(workdir);
     const ref = "demo/nightly";
-    const seed = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const seed = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     seed.ensureAutomationConversation(ref, "demo", "Nightly", "codex");
     for (const [index, kind, sessionId] of [
       [0, "codex", "codex-before"],
@@ -354,7 +355,7 @@ describe("run-automation-dispatch suite", () => {
       workdir,
       runId: "dual-turn",
       automationRef: ref,
-      journalDbFile,
+      ledgerDbFile,
       runTurn: injectedRunTurn,
       harness: "codex",
       providerEgressConsent: allowProviderEgress,
@@ -367,7 +368,7 @@ describe("run-automation-dispatch suite", () => {
       onLog: () => undefined,
     });
     openDispatches.push(dispatch);
-    const during = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const during = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     during.insertTurn({
       turnId: "dual-turn",
       conversationId: ref,
@@ -470,9 +471,9 @@ describe("run-automation-dispatch suite", () => {
 
   test("scheduled A→B→A reuses A and hydrates only B ledger turns", async () => {
     const workdir = await tempDir("centraid-automation-bindings-");
-    const journalDbFile = `${workdir}/journal.db`;
+    const ledgerDbFile = ledgerDbFileIn(workdir);
     const ref = "demo/nightly";
-    const seed = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const seed = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     seed.ensureAutomationConversation(ref, "demo", "Nightly", "codex");
     seed.insertTurn({
       turnId: "a-first",
@@ -501,13 +502,13 @@ describe("run-automation-dispatch suite", () => {
       workdir,
       runId: "b-turn",
       automationRef: ref,
-      journalDbFile,
+      ledgerDbFile,
       runTurn,
       harness: "claude-code",
       providerEgressConsent: allowProviderEgress,
       onLog: () => undefined,
     });
-    const duringB = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const duringB = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     duringB.insertTurn({
       turnId: "b-turn",
       conversationId: ref,
@@ -535,13 +536,13 @@ describe("run-automation-dispatch suite", () => {
       workdir,
       runId: "a-return",
       automationRef: ref,
-      journalDbFile,
+      ledgerDbFile,
       runTurn,
       harness: "codex",
       providerEgressConsent: allowProviderEgress,
       onLog: () => undefined,
     });
-    const duringA = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const duringA = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     duringA.insertTurn({
       turnId: "a-return",
       conversationId: ref,
@@ -562,7 +563,7 @@ describe("run-automation-dispatch suite", () => {
       "A first answer"
     );
     const finalStore = new ConversationStore(
-      makeJournalDbProvider(journalDbFile)
+      makeLedgerDbProvider(ledgerDbFile)
     );
     expect(finalStore.getConversation(ref)?.id).toBe(ref);
     expect(finalStore.getTurn("b-turn")?.hydrationTokens).toBeGreaterThan(0);

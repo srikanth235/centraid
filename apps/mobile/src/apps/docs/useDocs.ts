@@ -26,7 +26,7 @@ const APP_ID = "docs";
 function useDocsEntity(entity: string): ReplicaQueryState {
   return useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity }), [entity])
+    useMemo(() => ({ acceptTruncation: true, entity }), [entity])
   );
 }
 
@@ -47,11 +47,17 @@ export function useDocs(): UseDocsResult {
   const schemes = useDocsEntity("core.concept_scheme");
   // Decoration reads — never fail the drive; see header.
   const custody = useDocsEntity("blob.custody_state");
-  const grants = useDocsEntity("share.circle_grant");
+  const answers = useDocsEntity("share.authority");
   const circles = useDocsEntity("social.circle");
   const members = useDocsEntity("social.circle_member");
-  const states = useDocsEntity("share.commons_member_state");
+  const fulfillments = useDocsEntity("share.fulfillment");
   const parties = useDocsEntity("core.party");
+  // Which shapes this vault subscribes to, and which rows each one placed.
+  // Decoration on every other shelf; on Shared it IS the shelf, which is why
+  // its read has to answer separately from the outbound share join above.
+  const subscriptions = useDocsEntity("share.subscription");
+  const lineage = useDocsEntity("share.subscription_lineage");
+  const bindings = useDocsEntity("share.party_vault_binding");
 
   const queryState = combineReplicaQueryStates([
     documents,
@@ -61,7 +67,20 @@ export function useDocs(): UseDocsResult {
     schemes,
   ]);
 
-  const shareQueries = [grants, circles, members, states, parties];
+  const originQueries = [subscriptions, lineage, bindings, parties];
+  const originsDenied = originQueries.some(
+    (query) => query.error !== undefined || query.connection === "unavailable"
+  );
+  const originsLoading = originQueries.some((query) => query.loading);
+
+  const shareQueries = [
+    answers,
+    circles,
+    members,
+    fulfillments,
+    bindings,
+    parties,
+  ];
   const sharesDenied = shareQueries.some(
     (query) => query.error !== undefined || query.connection === "unavailable"
   );
@@ -80,10 +99,20 @@ export function useDocs(): UseDocsResult {
           sharesDenied || sharesLoading
             ? null
             : {
-                grants: grants.rows,
+                answers: answers.rows,
                 circles: circles.rows,
                 members: members.rows,
-                states: states.rows,
+                fulfillments: fulfillments.rows,
+                bindings: bindings.rows,
+                parties: parties.rows,
+              },
+        origins:
+          originsDenied || originsLoading
+            ? null
+            : {
+                subscriptions: subscriptions.rows,
+                lineage: lineage.rows,
+                bindings: bindings.rows,
                 parties: parties.rows,
               },
       }),
@@ -97,11 +126,16 @@ export function useDocs(): UseDocsResult {
       custody.rows,
       sharesDenied,
       sharesLoading,
-      grants.rows,
+      answers.rows,
       circles.rows,
       members.rows,
-      states.rows,
+      fulfillments.rows,
       parties.rows,
+      originsDenied,
+      originsLoading,
+      subscriptions.rows,
+      lineage.rows,
+      bindings.rows,
     ]
   );
 
@@ -115,11 +149,14 @@ export function useDocs(): UseDocsResult {
       concepts.refresh(),
       schemes.refresh(),
       custody.refresh(),
-      grants.refresh(),
+      answers.refresh(),
       circles.refresh(),
       members.refresh(),
-      states.refresh(),
+      fulfillments.refresh(),
       parties.refresh(),
+      subscriptions.refresh(),
+      lineage.refresh(),
+      bindings.refresh(),
     ]);
   };
 

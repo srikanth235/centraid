@@ -233,7 +233,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
           },
         ],
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [
             { schema: "core", table: "content_derivative", verbs: "read" },
             { schema: "core", table: "invoice", verbs: "read" },
@@ -270,7 +269,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
           { kind: "condition", entity: "core.invoice", where: "not-an-array" },
         ],
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [{ schema: "core", table: "invoice", verbs: "read" }],
         },
       }),

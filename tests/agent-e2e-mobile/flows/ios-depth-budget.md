@@ -1,12 +1,12 @@
 # iOS depth-roster budget
 
-`run-ios-depth-suite.mjs` runs six journeys on the iOS Release artifact — `pairing-canary`, `native-v0-resilience`, `locker-gate`, `cold-start`, `scroll-frames`, `photos-permissions`. The runner fails when aggregate wall time is **twenty-five minutes or more**, measured from the first flow process start through the sixth verdict.
+The `ios-depth` suite runs six journeys on the iOS Release artifact — `pairing-canary`, `native-v0-resilience`, `locker-gate`, `cold-start`, `scroll-frames`, `photos-permissions`. The runner fails when aggregate wall time is **twenty-five minutes or more**, measured from the first flow process start through the sixth verdict.
 
 `pairing-canary` runs first and short-circuits, for the same reason it does on the PR gate: it is the shared prerequisite, and on a broken one the five after it would each spend their own minutes failing on their own unrelated-looking assertion.
 
 ## Why the roster is six and not eighteen
 
-iOS is the **depth** platform, not a second copy of Android's roster ([D1](../../../docs/decisions.md#mobile-testing-890)). A macOS runner minute costs roughly ten Linux minutes, and every journey that asserts product logic over the replica is platform-independent by construction — one TypeScript source, one replica schema — so running it twice on the same night buys a second green at that multiple and nothing else. The six members each carry a claim that is a fact about **iOS**, and `run-ios-depth-suite.mjs`'s header names that fact per member, so a member whose reason stops holding can be removed by a reader rather than defended by tradition.
+iOS is the **depth** platform, not a second copy of Android's roster ([D1](../../../docs/decisions.md#mobile-testing-890)). A macOS runner minute costs roughly ten Linux minutes, and every journey that asserts product logic over the replica is platform-independent by construction — one TypeScript source, one replica schema — so running it twice on the same night buys a second green at that multiple and nothing else. The six members each carry a claim that is a fact about **iOS**, and each member's `claim` in [`roster.json`](../roster.json) names that fact, so a member whose reason stops holding can be removed by a reader rather than defended by tradition.
 
 ## Where twenty-five minutes came from
 
@@ -15,7 +15,7 @@ iOS is the **depth** platform, not a second copy of Android's roster ([D1](../..
 | Component | Minutes | Where the number comes from |
 | --- | --- | --- |
 | Fresh pairing (`pairing-canary`) | 4 | `lib/harness.mjs`: "Fresh pairing is the slowest legitimate chunk (~4 minutes on the reviewed CI runner)". |
-| `native-v0-resilience` | 5 | Its `minimumTests` floor is 13 declared checks across every cover plus a process restart — the heaviest single journey in the roster, priced at four navigation units plus the restart. |
+| `native-v0-resilience` | 5 | On iOS the flow is the Settings hop through the all-apps sheet plus a process restart — the airplane arc is Android's, and the covers-open claim is held off the device entirely ([G-device-only-gate](../../../docs/decisions.md#the-pr-gate-loop-892)). Priced at four navigation units plus the restart; its `minimumTests` floor of 13 is a floor rather than a ceiling, and the flow's declared checks still clear it. |
 | `locker-gate`, `photos-permissions` | 3 | ~1.15 each at `home-apps-budget.md`'s per-journey rate, plus `locker-gate`'s own restart. |
 | `cold-start` | 5 | Eight per-launch cold starts. On a release artifact each is a real app launch rather than a bundle fetch, which is the point of the probe and also why it is no longer the ~43-second figure the dev client produced. |
 | `scroll-frames` | 4 | Eight flings each on two surfaces, plus arming and reading the frame probe. |

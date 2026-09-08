@@ -17,7 +17,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Watches tentative calendar events (the obligations your documents produced) coming due within 14 days and briefs you (issue #299 phase 4).",
     "scopes": [
       { "schema": "core", "verbs": "read" },

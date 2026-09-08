@@ -77,49 +77,43 @@ export {
   validateCommittedWal,
   newWalGeneration,
   openWalCloser,
-  openWalPairMarker,
   openWalSegment,
+  openWalTickMarker,
   parseWalCloserKey,
-  parseWalPairMarkerKey,
   parseWalSegmentKey,
-  planCoordinatedReplay,
+  parseWalTickMarkerKey,
+  planMarkedReplay,
   planWalReplay,
   reachedPosition,
   sealWalCloser,
-  sealWalPairMarker,
   sealWalSegment,
-  WAL_CAPTURE_ORDER,
+  sealWalTickMarker,
   WAL_DB_FILES,
-  WAL_DB_NAMES,
   WAL_HEADER_BYTES,
   walDbPrefix,
   walGroupCloserKey,
   walPageSize,
-  walPairMarkerKey,
-  walPairMarkerPrefix,
-  walPairMarkerRootPrefix,
   walSalts,
   walSegmentKey,
   walSegmentPrefix,
+  walTickMarkerKey,
+  walTickMarkerPrefix,
+  walTickMarkerRootPrefix,
 } from "./wal-format.js";
 export type {
-  CoordinatedReplayResult,
+  MarkedReplayResult,
   WalDbName,
   WalGroupCloser,
-  WalPairMarker,
-  WalPairMarkerAddress,
-  WalPairPosition,
   WalReplayPlan,
   WalPrefixScan,
   WalSegmentAddress,
   WalStreamListing,
+  WalStreamPosition,
+  WalTickMarker,
+  WalTickMarkerAddress,
 } from "./wal-format.js";
 export { replayWalSegments } from "./wal-restore.js";
-export type {
-  ReplayWalOptions,
-  WalReplayDbOutcome,
-  WalReplayOutcome,
-} from "./wal-restore.js";
+export type { ReplayWalOptions, WalReplayOutcome } from "./wal-restore.js";
 
 // Crypto + keyring (FORMAT.md § Key custody, § Encryption).
 export {
@@ -191,6 +185,16 @@ export type {
   RecoveryKitDocument,
   WrappedRecoveryKitDocument,
 } from "./recovery-kit.js";
+
+// The password wrap under the kit (#439, generalised for #630): scrypt →
+// AES-256-GCM over canonical JSON. Shared so the vault's portable-export
+// custody kit is the SAME wrap, not a second copy of the crypto.
+export {
+  PASSWORD_WRAP_SCRYPT,
+  unwrapPasswordDocument,
+  wrapPasswordDocument,
+} from "./password-wrap.js";
+export type { WrappedPasswordDocument } from "./password-wrap.js";
 
 // Targeted blob re-pin (#439) — materialize specific shas from a
 // snapshot, for the adopt-time inventory reconcile.

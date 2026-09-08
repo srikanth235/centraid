@@ -48,8 +48,8 @@ describe("enrich-publishers", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'org', 'vision-agent', ?, ?, '1.4')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'org', 'vision-agent', ?, ?)`
       )
       .run(agentParty, now, now);
 

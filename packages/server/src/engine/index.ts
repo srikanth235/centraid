@@ -269,15 +269,13 @@ export {
   type PutResult,
 } from "./data/blob-store.js";
 
-// app-engine owns the conversation-ledger BAND of the vault's `journal.db`
-// (#280); `user_version` belongs to the vault package's audit-band ladder.
-// SQLite has no cross-file FKs, so `conversations.user_id` is
+// app-engine reads and writes the conversation-ledger BAND of `vault.db`
+// (#280, #916); the vault package composes its shape. `conversations.user_id`
+// names a gateway owner, which lives in another file, so it is
 // application-enforced.
 export {
-  openJournalDb,
-  makeJournalDbProvider,
-  ensureConversationLedger,
-  CONVERSATION_LEDGER_DDL,
+  openLedgerDb,
+  makeLedgerDbProvider,
   type DatabaseProvider,
 } from "./stores/gateway-db.js";
 

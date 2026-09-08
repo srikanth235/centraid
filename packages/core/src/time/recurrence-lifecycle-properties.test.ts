@@ -109,8 +109,9 @@ describe("occurrence lifecycle laws", () => {
           maxLength: 3,
         }),
         (freq, interval, days) => {
+          const byDay = freq === "WEEKLY" ? `BYDAY=${days.join(",")};` : "";
           const summary = describeRecurrence(
-            `FREQ=${freq};INTERVAL=${interval};BYDAY=${days.join(",")};UNTIL=20300105T000000Z`
+            `FREQ=${freq};INTERVAL=${interval};${byDay}UNTIL=20300105T000000Z`
           );
           expect(summary).not.toBeNull();
           expect(summary).not.toMatch(/FREQ=|BYDAY=|INTERVAL=|UNTIL=|\d{8}T/u);

@@ -52,6 +52,7 @@ import {
 import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
 import { styles } from "./FaceReview.styles";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { usePhotoTimeline } from "./timeline-source";
 
 export default function FaceReview({
@@ -62,18 +63,12 @@ export default function FaceReview({
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
 
-  const facesQuery = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
-  );
-  const partiesQuery = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
-  );
+  const facesQuery = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const partiesQuery = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
   // Metadata only — no bytes over the replica.
   const assetsQuery = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.asset" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.asset" }), [])
   );
 
   const names = useMemo(

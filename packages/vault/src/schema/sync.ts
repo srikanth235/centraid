@@ -10,10 +10,11 @@
 //   - upstream deletions never delete: `gone_upstream` is a flag the owner
 //     acts on deliberately;
 //   - ingestion is one-way: nothing here models write-back.
-//
-// Ships as its own migration step — earlier DDL versions are applied.
+
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 export const SYNC_DDL = `
-CREATE TABLE IF NOT EXISTS sync_connection (
+CREATE TABLE sync_connection (
   connection_id TEXT PRIMARY KEY,
   kind          TEXT NOT NULL,
   label         TEXT NOT NULL,
@@ -30,9 +31,10 @@ CREATE TABLE IF NOT EXISTS sync_connection (
   UNIQUE (kind, label)
 ) STRICT;
 
-CREATE TABLE IF NOT EXISTS sync_external_entity (
+CREATE TABLE sync_external_entity (
   map_id        TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
+  connection_id TEXT NOT NULL
+    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   external_id   TEXT NOT NULL,
   target_type   TEXT NOT NULL,
   target_id     TEXT NOT NULL,
@@ -40,13 +42,19 @@ CREATE TABLE IF NOT EXISTS sync_external_entity (
   first_seen_at TEXT NOT NULL,
   last_seen_at  TEXT NOT NULL,
   gone_upstream INTEGER NOT NULL CHECK (gone_upstream IN (0,1)) DEFAULT 0,
-  UNIQUE (connection_id, external_id)
+  UNIQUE (connection_id, external_id),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_sync_external_entity
   ON sync_external_entity(target_type, target_id);
 
-CREATE TABLE IF NOT EXISTS sync_import_batch (
+CREATE TABLE sync_import_batch (
   batch_id      TEXT PRIMARY KEY,
+  -- NO CASCADE, deliberately (#916, W2a): a batch is RECEIPTED HISTORY — what
+  -- was imported, when, and what it became — so removing the connection is
+  -- REFUSED while any exists rather than shredding the record of it.
+  -- \`sync.remove_connection\` says so in its denial.
   connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
   status        TEXT NOT NULL CHECK (status IN ('draft','published','discarded')),
   created_at    TEXT NOT NULL,
@@ -55,9 +63,10 @@ CREATE TABLE IF NOT EXISTS sync_import_batch (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_sync_import_batch_connection ON sync_import_batch(connection_id);
 
-CREATE TABLE IF NOT EXISTS sync_import_row (
+CREATE TABLE sync_import_row (
   row_id              TEXT PRIMARY KEY,
-  batch_id            TEXT NOT NULL REFERENCES sync_import_batch(batch_id),
+  batch_id            TEXT NOT NULL
+    REFERENCES sync_import_batch(batch_id) ON DELETE CASCADE,
   seq                 INTEGER NOT NULL,
   entity_type         TEXT NOT NULL,
   external_id         TEXT NOT NULL,
@@ -69,18 +78,20 @@ CREATE TABLE IF NOT EXISTS sync_import_row (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_sync_import_row_batch ON sync_import_row(batch_id, seq);
 
-CREATE TABLE IF NOT EXISTS sync_connection_cursor (
+CREATE TABLE sync_connection_cursor (
   cursor_id     TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
+  connection_id TEXT NOT NULL
+    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   key           TEXT NOT NULL,
   value_json    TEXT NOT NULL CHECK (json_valid(value_json)),
-  updated_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   UNIQUE (connection_id, key)
 ) STRICT;
 
-CREATE TABLE IF NOT EXISTS sync_connection_run (
+CREATE TABLE sync_connection_run (
   run_id        TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
+  connection_id TEXT NOT NULL
+    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   started_at    TEXT NOT NULL,
   finished_at   TEXT,
   status        TEXT NOT NULL CHECK (status IN ('running','ok','failed','aborted')) ,
@@ -90,6 +101,7 @@ CREATE TABLE IF NOT EXISTS sync_connection_run (
   error         TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_sync_connection_run_connection ON sync_connection_run(connection_id);
+${touchUpdatedAt("sync_connection_cursor", "cursor_id")}
 `;
 
 // Broker-owned credentials (#304, amending #290 decision 4): a
@@ -109,7 +121,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_connection_run_connection ON sync_connection
 // actionable, not a mystery — its own sidecar because notes outlive and
 // predate credentials (a missing locker secret flips needs-auth too).
 export const SYNC_CREDENTIAL_DDL = `
-CREATE TABLE IF NOT EXISTS sync_connection_credential (
+CREATE TABLE sync_connection_credential (
   connection_id    TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   cred_kind        TEXT NOT NULL CHECK (cred_kind IN ('oauth2','api_key')),
   oauth_mode       TEXT NOT NULL DEFAULT 'byo' CHECK (oauth_mode IN ('byo','assist')),
@@ -124,23 +136,17 @@ CREATE TABLE IF NOT EXISTS sync_connection_credential (
   api_key          TEXT,
   token_expires_at TEXT,
   allowed_hosts    TEXT NOT NULL CHECK (json_valid(allowed_hosts)),
-  updated_at       TEXT NOT NULL
+  -- The exchange-minted HMAC capability an Assist refresh token is redeemable
+  -- at the OAuth Worker with (#865). Sealed, re-persisted on every rotation.
+  refresh_capability TEXT,
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 
-CREATE TABLE IF NOT EXISTS sync_connection_health (
+CREATE TABLE sync_connection_health (
   connection_id TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   auth_note     TEXT,
-  updated_at    TEXT NOT NULL
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
-`;
-
-// Issue #865: Assist refresh tokens are redeemable at the OAuth Worker only
-// with the exchange-minted HMAC capability over that exact token. The gateway
-// persists the capability sealed, beside the refresh token it authenticates,
-// and re-persists it whenever Google rotates the pair. The credential table
-// above predates the column, so it ships as its own migration rung (an ALTER
-// on a fresh file would collide with a column added to the CREATE) — see the
-// ladder in schema/migrate.ts.
-export const SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL = `
-ALTER TABLE sync_connection_credential ADD COLUMN refresh_capability TEXT;
+${touchUpdatedAt("sync_connection_credential", "connection_id")}
+${touchUpdatedAt("sync_connection_health", "connection_id")}
 `;

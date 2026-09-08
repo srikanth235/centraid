@@ -4,8 +4,8 @@
 // to prevent. A raw RRULE string is never shown to a member: an unparseable
 // rule returns null and the caller falls back to showing no cadence at all.
 
-import { parseRrule } from "./recurrence.js";
-import type { ParsedRrule } from "./recurrence.js";
+import { parseRrule } from "./rrule-support.js";
+import type { ParsedRrule } from "./rrule-support.js";
 
 const DAY_NAMES = {
   SU: "Sunday",
@@ -46,13 +46,9 @@ function joinDays(days: readonly (keyof typeof DAY_NAMES)[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/**
- * BYDAY only steers WEEKLY expansion in this engine (see `stepAnchor`), so the
- * summary names days only there — describing days a rule does not observe
- * would make the sentence a lie.
- */
+/** The parser refuses BYDAY outside WEEKLY, so days imply a weekly rule. */
 function weekdays(rule: ParsedRrule): readonly (keyof typeof DAY_NAMES)[] {
-  return rule.freq === "WEEKLY" ? (rule.byDay ?? []) : [];
+  return rule.byDay ?? [];
 }
 
 function cadence(rule: ParsedRrule): string {

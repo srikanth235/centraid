@@ -7,65 +7,109 @@ import {
   selectedNativeShareMembers,
 } from "./share-targets";
 
+/** An approved link to `partyId`'s own vault, which is what makes a person
+ *  reachable at all. */
+function linkTo(partyId: string, vaultId: string, label?: string) {
+  return {
+    vaultA: "owner-vault",
+    vaultB: vaultId,
+    partyIdA: "owner",
+    partyIdB: partyId,
+    ...(label ? { labelB: label } : {}),
+    approved: true,
+    revoked: false,
+  };
+}
+
 describe(nativeShareTargets, () => {
-  test("keeps unjoined people invited and joins linked people to their vault", () => {
+  test("drops agent and animal parties — a recognition recipe is not an audience", () => {
+    // Founding a vault creates six agent parties; before this filter they led
+    // every share sheet in the product, above the actual people.
+    expect(
+      nativeShareTargets({
+        sourceVaultId: "owner-vault",
+        ownerPartyId: "owner",
+        scopes: [],
+        links: [
+          linkTo("ocr", "ocr-vault"),
+          linkTo("dog", "dog-vault"),
+          linkTo("asha", "asha-vault"),
+          linkTo("ben", "ben-vault"),
+        ],
+        parties: [
+          { party_id: "owner", kind: "person", display_name: "Priya" },
+          { party_id: "ocr", kind: "agent", display_name: "Photo OCR" },
+          { party_id: "dog", kind: "animal", display_name: "Rufus" },
+          { party_id: "asha", kind: "person", display_name: "Asha" },
+          // No kind at all: unstamped is not a refusal.
+          { party_id: "ben", display_name: "Ben" },
+        ],
+      }).map((target) => target.label)
+    ).toStrictEqual(["Asha", "Ben"]);
+  });
+
+  test("a refused party stays refused even when it carries a link", () => {
+    // The linked-only pass exists for someone the directory has no row for.
+    // It must not become a second door for a row the directory DID answer
+    // about and ruled out — that would put the six recognition recipes back
+    // in every sheet, this time nameless.
+    expect(
+      nativeShareTargets({
+        sourceVaultId: "owner-vault",
+        ownerPartyId: "owner",
+        scopes: [],
+        links: [linkTo("owner", "owner-elsewhere"), linkTo("ocr", "ocr-vault")],
+        parties: [
+          { party_id: "owner", kind: "person", display_name: "Priya" },
+          { party_id: "ocr", kind: "agent", display_name: "Photo OCR" },
+        ],
+      })
+    ).toStrictEqual([]);
+  });
+
+  test("a person with no link is not a share target", () => {
+    // A share is DELIVERED into the receiver's own vault. Someone the member
+    // typed into People has no vault to deliver to, so listing them would
+    // offer a reach the product cannot perform.
+    expect(
+      nativeShareTargets({
+        sourceVaultId: "owner-vault",
+        ownerPartyId: "owner",
+        scopes: [{ vaultId: "owner-vault", label: "My vault", canWrite: true }],
+        parties: [
+          { party_id: "owner", display_name: "Priya" },
+          { party_id: "asha", display_name: "Asha" },
+          { party_id: "ben", display_name: "Ben" },
+        ],
+        links: [linkTo("ben", "ben-vault")],
+      })
+    ).toStrictEqual([
+      { id: "ben-vault", label: "Ben", partyId: "ben", vaultId: "ben-vault" },
+    ]);
+  });
+
+  test("a vault this device has mounted is one of the member's own, not a person", () => {
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
         ownerPartyId: "owner",
         scopes: [
           { vaultId: "owner-vault", label: "My vault", canWrite: true },
-          {
-            vaultId: "owner-other-vault",
-            label: "My other vault",
-            canWrite: true,
-          },
+          { vaultId: "studio-vault", label: "Studio", canWrite: true },
         ],
-        parties: [
-          { party_id: "owner", display_name: "Priya" },
-          { party_id: "asha", display_name: "Asha" },
-          { party_id: "ben", display_name: "Ben" },
-        ],
-        links: [
-          {
-            vaultA: "owner-vault",
-            vaultB: "ben-vault",
-            partyIdA: "owner",
-            partyIdB: "ben",
-            approved: true,
-            revoked: false,
-          },
-        ],
+        parties: [{ party_id: "me-again", display_name: "Studio" }],
+        links: [linkTo("me-again", "studio-vault")],
       })
-    ).toStrictEqual([
-      { id: "party:asha", label: "Asha", partyId: "asha" },
-      {
-        id: "ben-vault",
-        label: "Ben",
-        partyId: "ben",
-        vaultId: "ben-vault",
-      },
-    ]);
+    ).toStrictEqual([]);
   });
 
-  test("a linked person with no directory entry keeps their own name, and a link with no person carries the vault's label (#750)", () => {
+  test("a linked person with no directory entry keeps their own name (#750)", () => {
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
         scopes: [],
         parties: [],
-        links: [
-          {
-            vaultA: "owner-vault",
-            vaultB: "asha-vault",
-            partyIdA: "owner",
-            partyIdB: "asha",
-            labelA: "My vault",
-            labelB: "Asha",
-            approved: true,
-            revoked: false,
-          },
-        ],
+        links: [linkTo("asha", "asha-vault", "Asha")],
       })
     ).toStrictEqual([
       {
@@ -82,16 +126,7 @@ describe(nativeShareTargets, () => {
       sourceVaultId: "owner-vault",
       scopes: [],
       parties: [],
-      links: [
-        {
-          vaultA: "owner-vault",
-          vaultB: "vlt_0123456789abcdef",
-          partyIdA: "owner",
-          partyIdB: "unnamed",
-          approved: true,
-          revoked: false,
-        },
-      ],
+      links: [linkTo("unnamed", "vlt_0123456789abcdef")],
     });
     expect(target?.label).toBe("Linked person");
     expect(target?.label).not.toContain("vlt_");
@@ -117,31 +152,10 @@ describe(nativeShareTargets, () => {
     ).toStrictEqual([]);
   });
 
-  test("submits multiple people with per-person capability and no fake invite vault", () => {
-    expect(
-      selectedNativeShareMembers(
-        [
-          { id: "party:asha", partyId: "asha", label: "Asha" },
-          {
-            id: "ben-vault",
-            partyId: "ben",
-            vaultId: "ben-vault",
-            label: "Ben",
-          },
-        ],
-        { "party:asha": "read", "ben-vault": "read+write" }
-      )
-    ).toStrictEqual([
-      { partyId: "asha", capability: "read" },
-      {
-        partyId: "ben",
-        vaultId: "ben-vault",
-        capability: "read+write",
-      },
-    ]);
-  });
-
-  test("marks an offline-queued person unselectable instead of listing them as a real identity", () => {
+  test("never lists an offline-queued person — an overlay id names nobody", () => {
+    // The outbox projects a party no vault has settled, so it can hold no
+    // link either. It falls out of the list for the same reason anyone
+    // unlinked does, rather than needing a rule of its own.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
@@ -151,39 +165,44 @@ describe(nativeShareTargets, () => {
           { party_id: "asha", display_name: "Asha" },
           { party_id: "pending:i1:party", display_name: "Nadia" },
         ],
-        links: [],
-      })
-    ).toStrictEqual([
-      { id: "party:asha", label: "Asha", partyId: "asha" },
-      {
-        id: "party:pending:i1:party",
-        label: "Nadia",
-        partyId: "pending:i1:party",
-        pending: true,
-      },
-    ]);
+        links: [linkTo("asha", "asha-vault")],
+      }).map((target) => target.partyId)
+    ).toStrictEqual(["asha"]);
   });
 
-  test("never submits a queued person's overlay id, even when a selection names one", () => {
+  test("submits multiple people with per-person capability", () => {
     expect(
       selectedNativeShareMembers(
         [
-          { id: "party:asha", partyId: "asha", label: "Asha" },
           {
-            id: "party:pending:i1:party",
-            partyId: "pending:i1:party",
-            label: "Nadia",
-            pending: true,
+            id: "asha-vault",
+            partyId: "asha",
+            vaultId: "asha-vault",
+            label: "Asha",
+          },
+          {
+            id: "ben-vault",
+            partyId: "ben",
+            vaultId: "ben-vault",
+            label: "Ben",
           },
         ],
-        { "party:asha": "read", "party:pending:i1:party": "read+write" }
+        { "asha-vault": "read", "ben-vault": "read+write" }
       )
-    ).toStrictEqual([{ partyId: "asha", capability: "read" }]);
+    ).toStrictEqual([
+      { partyId: "asha", vaultId: "asha-vault", capability: "read" },
+      { partyId: "ben", vaultId: "ben-vault", capability: "read+write" },
+    ]);
   });
 
   test("offers only Tally-backed named circles and selects their exact roster", () => {
     const targets = [
-      { id: "party:asha", partyId: "asha", label: "Asha" },
+      {
+        id: "asha-vault",
+        partyId: "asha",
+        label: "Asha",
+        vaultId: "asha-vault",
+      },
       { id: "ben-vault", partyId: "ben", label: "Ben", vaultId: "ben-vault" },
     ];
     const named = nativeNamedShareCircles({
@@ -236,7 +255,7 @@ describe(nativeShareTargets, () => {
         circleId: "trip",
         label: "Goa trip",
         members: [
-          { partyId: "asha", capability: "read" },
+          { partyId: "asha", vaultId: "asha-vault", capability: "read" },
           {
             partyId: "ben",
             vaultId: "ben-vault",
@@ -246,7 +265,7 @@ describe(nativeShareTargets, () => {
       },
     ]);
     expect(selectionsForNativeCircle(targets, named[0]!)).toStrictEqual({
-      "party:asha": "read",
+      "asha-vault": "read",
       "ben-vault": "read+write",
     });
   });

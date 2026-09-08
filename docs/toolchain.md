@@ -43,6 +43,20 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `lint:design-md` | official DESIGN.md linter over the root `DESIGN.md`: schema, `{token.refs}`, WCAG pairs, canonical section order. Errors fail; warnings are advisory |
 | `toolchain:doctor` | non-mutating Ultracite/config drift diagnosis |
 | `check:reachability` | sharing-plane export reachability (see below) |
+| `check:push` | the full push tier: 17 gate names run concurrently, with the static tier gate-stamped |
+| `check:push:static` | the branch push tier: `format:check`, `lint`, `turbo:lint`, `typecheck:affected` |
+| `governance` | the stamped entry point to `.governance/run.sh`, which is itself digest-locked |
+
+### Where the caches live
+
+Nothing a gate or a build caches belongs in the repository. Both directories default under the user's cache home and are overridable by environment, so a container, a CI runner and a laptop can each put them where they belong:
+
+| What | Default | Override | Owner |
+| --- | --- | --- | --- |
+| Gate stamps (`static`, `governance`, `governance-deferred`) | `${XDG_CACHE_HOME:-~/.cache}/centraid/gate-stamps` | `CENTRAID_GATE_STAMP_DIR`; `CENTRAID_GATE_STAMPS=0` disables stamping | `scripts/ci/gate-stamp.mjs` |
+| Turbo filesystem cache, shared by every worktree | `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo` | `TURBO_CACHE_DIR`, then `CENTRAID_TURBO_CACHE_DIR` | `scripts/ci/turbo.mjs` |
+
+Turbo's per-run summaries stay in each checkout's `.turbo/runs`, which is what `scripts/ci/turbo-cache-report.mjs` reads. Why the tiers and stamps are shaped this way: [dev-environment.md](dev-environment.md#tiers-stamps-and-one-cache-988).
 
 ## SonarCloud Autoscan
 

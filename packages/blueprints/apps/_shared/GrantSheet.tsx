@@ -25,6 +25,7 @@ import {
   grantedOutcome,
   groupContributionNote,
   nothingSharedYet,
+  notSharedWithAnyoneYet,
   reachLabel,
   reachNote,
   REGISTRY_UNREACHABLE,
@@ -37,7 +38,7 @@ import {
 } from "./grant-copy.ts";
 import { isGrantUnreachable } from "./grant-door.ts";
 import type { GrantDoor, SubjectRegistry } from "./grant-door.ts";
-import { webGrantDoor } from "./grant-gateway.ts";
+import { webGrantDoor, webLinkTicketDoor } from "./grant-gateway.ts";
 import {
   capabilitiesFor,
   channelReach,
@@ -46,6 +47,8 @@ import {
   grantOverSubject,
   grantRequestFor,
   liveGrants,
+  offersLinkTicket,
+  reachBlocksSharing,
   subjectNoun,
 } from "./grant-plane.ts";
 import type {
@@ -54,8 +57,11 @@ import type {
   GrantChannel,
   GrantRecord,
   GrantSubject,
+  LinkTicketDoor,
 } from "./grant-plane.ts";
+import { GrantSheetTicket } from "./GrantSheetTicket.tsx";
 import { KitModal } from "./KitModal.tsx";
+import { useLinkTicket } from "./link-ticket-panel.ts";
 import { Segmented } from "./Segmented.tsx";
 
 import styles from "./GrantSheet.module.css";
@@ -69,6 +75,8 @@ export interface GrantSheetProps {
   audienceId?: string;
   onStatus: (message: string) => void;
   door?: GrantDoor;
+  /** The link-ticket ceremony, injectable for the same reason `door` is. */
+  linkTicket?: LinkTicketDoor;
 }
 
 function subjectKey(subject: GrantSubject): string {
@@ -84,6 +92,11 @@ function subjectTitle(subject: GrantSubject): string {
 export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   // Once per mount: a fresh door every render would re-read on every keystroke.
   const door = useMemo(() => props.door ?? webGrantDoor(), [props.door]);
+  const ticketDoor = useMemo(
+    () => props.linkTicket ?? webLinkTicketDoor(),
+    [props.linkTicket]
+  );
+  const ticket = useLinkTicket(ticketDoor, props.open);
   // `null` = unread. Empty registry is "cannot be shared" — do not paint that early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
@@ -232,12 +245,11 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     : null;
   const rows = standing ? liveGrants(standing) : [];
   // Unknown audience gets its own sentence — "nothing shared" is a lie.
+  // Subject-first lists this subject's grants; audience-first, the audience's.
   const standingEmptyLine = audienceKnown
-    ? nothingSharedYet(
-        props.subject
-          ? subjectTitle(props.subject)
-          : (audience?.label ?? "this audience")
-      )
+    ? props.subject
+      ? notSharedWithAnyoneYet(subjectTitle(props.subject))
+      : nothingSharedYet(audience?.label ?? "this audience")
     : audienceNotKnown(audience?.label ?? "this audience");
   const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
@@ -253,6 +265,10 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     registryPending ||
     registryUnreadable ||
     notOfferable ||
+    // A person is reachable only through a live link (#903), and the command
+    // pack refuses the rest — so the sheet does not grow a control naming an
+    // act it cannot perform. The reach line above already says why.
+    reachBlocksSharing(reach) ||
     busy;
 
   const submit = async (): Promise<void> => {
@@ -431,6 +447,12 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                     </span>
                     <span className={styles.note}>{reachNote(reach)}</span>
                   </p>
+                ) : null}
+                {/* The one act that would make this share possible, offered
+                    where the refusal is said — never a control that grants.
+                    #903's rule is untouched: the submit still refuses. */}
+                {audienceKnown && offersLinkTicket(audience?.kind, reach) ? (
+                  <GrantSheetTicket panel={ticket} />
                 ) : null}
               </section>
 

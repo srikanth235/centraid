@@ -38,9 +38,17 @@
 //   - the routing — apps/mobile/src/kit/hooks/ShareIntentIngest.tsx
 
 import {
-  HOME_READY_MARKER,
   FIRST_LAUNCH_TIMEOUT_MS,
+  HOME_READY_MARKER,
   runFlow,
+  // Used by the `am start` payload below. It was MISSING until #915 Wave 2, and
+  // the flow died with `ReferenceError: shQuote is not defined` on the
+  // 2026-09-01 nightly (run 33498199941) — after its six preceding assertions
+  // had passed, so the suite classified it as a product failure. A `promoting`
+  // member that has never run is exactly where an unimported name survives:
+  // nothing at any tier evaluates the module body, and the reference sits two
+  // thirds of the way down a file nobody executes.
+  shQuote,
 } from "../lib/harness.mjs";
 
 await runFlow("share-intent-in", async (ctx) => {

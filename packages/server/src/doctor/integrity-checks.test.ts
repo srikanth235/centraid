@@ -184,7 +184,6 @@ describe("integrity check library", () => {
       const finding = checkReplicaJournalConsistency({
         vaultId,
         vault: db.vault,
-        journal: db.journal,
       });
       expect(finding.level).toBe("ok");
       expect(finding.detail).toContain("change-log consistent");
@@ -203,7 +202,6 @@ describe("integrity check library", () => {
       const finding = checkReplicaJournalConsistency({
         vaultId,
         vault: db.vault,
-        journal: db.journal,
       });
       expect(finding.level).toBe("error");
       expect(finding.detail).toContain("foreign epoch");
@@ -222,7 +220,6 @@ describe("integrity check library", () => {
       const finding = checkReplicaJournalConsistency({
         vaultId,
         vault: db.vault,
-        journal: db.journal,
       });
       expect(finding.level).toBe("error");
       expect(finding.detail).toContain("rewound");
@@ -238,7 +235,6 @@ describe("integrity check library", () => {
       const finding = checkReplicaJournalConsistency({
         vaultId,
         vault: db.vault,
-        journal: db.journal,
       });
       expect(finding.level).toBe("error");
       expect(finding.detail).toContain("still marked active");
@@ -253,7 +249,6 @@ describe("integrity check library", () => {
           {
             vaultId,
             vault: db.vault,
-            journal: db.journal,
             local: db.blobs.local,
             casRoot: path.join(dir, "blobs"),
           },
@@ -261,9 +256,9 @@ describe("integrity check library", () => {
         full: true,
       });
       expect(hasError(findings)).toBe(false);
-      // vault.db + journal.db integrity, cas-rehash, replica-journal, + 1
+      // ONE file (#916): vault.db integrity, cas-rehash, replica-journal, + 1
       // cross-vault refcount audit.
-      expect(findings).toHaveLength(5);
+      expect(findings).toHaveLength(4);
       expect(findings.map((f) => f.check)).toContain("hardlink-refcount");
     });
 
@@ -275,7 +270,6 @@ describe("integrity check library", () => {
           {
             vaultId,
             vault: db.vault,
-            journal: db.journal,
             local: db.blobs.local,
             casRoot: path.join(dir, "blobs"),
           },

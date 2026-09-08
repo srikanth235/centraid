@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import type { Manifest, ManifestEnrich } from "../manifest/manifest.js";
 import type {
   ResolveEnrichPolicy,
@@ -86,11 +87,11 @@ function cascade(
 
 describe("engine-profile selection on the fire path", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-engine-selection-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -121,7 +122,7 @@ describe("engine-profile selection on the fire path", () => {
       {
         automationRef: "photos/ocr",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         onLog: (_level, message) => logs.push(message),
         ...(options.resolveEnrichPolicy
           ? { resolveEnrichPolicy: options.resolveEnrichPolicy }

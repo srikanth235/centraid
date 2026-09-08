@@ -13,7 +13,6 @@ import type {
 
 import {
   AUTOMATION_ANCHOR_ENTITY,
-  AUTOMATION_ANCHOR_PURPOSE,
   resolveAutomationAnchors,
 } from "../lifecycle/automation-anchor-scopes.js";
 
@@ -66,7 +65,6 @@ export function pickAnchors(
     entity: AUTOMATION_ANCHOR_ENTITY,
     orderBy: { column: "created_at", dir: "desc" },
     limit: ANCHOR_SCAN_LIMIT,
-    purpose: AUTOMATION_ANCHOR_PURPOSE,
   }).rows;
   const anchors: AnchorPickerHit[] = [];
   for (const row of rows) {
@@ -117,7 +115,6 @@ export function pickEntities(
       : [...CARDED_ENTITIES]
   ).filter((k) => CARDED_ENTITIES.includes(k));
   const perKind = Math.min(Math.max(request.limit ?? 8, 1), 25);
-  const purpose = "dpv:ServiceProvision";
   const term = request.term?.trim() ?? "";
   const refs: { type: string; id: string; snippet?: string }[] = [];
   for (const kind of kinds) {
@@ -129,7 +126,6 @@ export function pickEntities(
           entity: kind,
           orderBy: { column: pk, dir: "desc" },
           limit: perKind,
-          purpose,
         });
         for (const row of result.rows)
           refs.push({ type: kind, id: String(row[pk]) });
@@ -140,7 +136,6 @@ export function pickEntities(
           entity: kind,
           query: term,
           limit: perKind,
-          purpose,
         });
         for (const row of result.rows) {
           refs.push({
@@ -162,7 +157,6 @@ export function pickEntities(
   if (bounded.length === 0) return { cards: [] };
   const resolved = gateway.resolveRefs(cred, {
     refs: bounded.map(({ type, id }) => ({ type, id })),
-    purpose,
   });
   const snippets = new Map(
     bounded.map((r) => [`${r.type}/${r.id}`, r.snippet])

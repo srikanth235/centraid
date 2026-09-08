@@ -7,18 +7,17 @@
  * out-of-band.
  */
 
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  scryptSync,
-} from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { validateKeyring } from "./crypto.js";
 import type { Keyring } from "./crypto.js";
 import type { RecoveryKitTarget } from "./engine.js";
 import { canonicalJson } from "./manifest.js";
+import {
+  unwrapPasswordDocument,
+  wrapPasswordDocument,
+} from "./password-wrap.js";
+import type { WrappedPasswordDocument } from "./password-wrap.js";
 
 /** A parsed + validated recovery kit (the shape `wrapRecoveryKit` seals). */
 export interface RecoveryKitDocument {
@@ -35,26 +34,11 @@ export interface RecoveryKitDocument {
 const KIT_KIND = "centraid-recovery-kit";
 const WRAPPED_KIT_KIND = "centraid-recovery-kit-wrapped";
 const WRAP_AAD = Buffer.from("centraid-recovery-kit-wrap-v1", "utf8");
-export const RECOVERY_KIT_SCRYPT = {
-  kdf: "scrypt" as const,
-  N: 2 ** 17,
-  r: 8,
-  p: 1,
-};
+const KIT_LABEL = "recovery kit";
+export { PASSWORD_WRAP_SCRYPT as RECOVERY_KIT_SCRYPT } from "./password-wrap.js";
 
-export interface WrappedRecoveryKitDocument {
-  version: 1;
+export interface WrappedRecoveryKitDocument extends WrappedPasswordDocument {
   kind: typeof WRAPPED_KIT_KIND;
-  createdAt: string;
-  fingerprint: string;
-  kdf: "scrypt";
-  N: number;
-  r: number;
-  p: number;
-  salt: string;
-  nonce: string;
-  tag: string;
-  ciphertext: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,25 +105,6 @@ function parsePlainRecoveryKit(
   return { version: 1, kind: KIT_KIND, createdAt, keyring, targets };
 }
 
-function isWrappedKit(value: unknown): value is Record<string, unknown> {
-  return isRecord(value) && value["kind"] === WRAPPED_KIT_KIND;
-}
-
-function deriveWrapKey(
-  passphrase: string,
-  salt: Buffer,
-  params: Pick<WrappedRecoveryKitDocument, "N" | "r" | "p">
-): Buffer {
-  if (passphrase.length === 0)
-    throw new Error("recovery kit: password is required");
-  return scryptSync(passphrase, salt, 32, {
-    N: params.N,
-    r: params.r,
-    p: params.p,
-    maxmem: 256 * 1024 * 1024,
-  });
-}
-
 /**
  * Stable capability fingerprint. Labels and createdAt are deliberately
  * excluded: cosmetic changes do not alter recovery ability.
@@ -186,25 +151,17 @@ export function wrapRecoveryKit(
   passphrase: string
 ): WrappedRecoveryKitDocument {
   const plain = parsePlainRecoveryKit(document, true);
-  const salt = randomBytes(16);
-  const nonce = randomBytes(12);
-  const key = deriveWrapKey(passphrase, salt, RECOVERY_KIT_SCRYPT);
-  const cipher = createCipheriv("aes-256-gcm", key, nonce);
-  cipher.setAAD(WRAP_AAD);
-  const ciphertext = Buffer.concat([
-    cipher.update(canonicalJson(plain), "utf8"),
-    cipher.final(),
-  ]);
   return {
-    version: 1,
+    ...wrapPasswordDocument({
+      label: KIT_LABEL,
+      kind: WRAPPED_KIT_KIND,
+      aad: WRAP_AAD,
+      createdAt: plain.createdAt,
+      fingerprint: recoveryKitFingerprint(plain),
+      plain,
+      passphrase,
+    }),
     kind: WRAPPED_KIT_KIND,
-    createdAt: plain.createdAt,
-    fingerprint: recoveryKitFingerprint(plain),
-    ...RECOVERY_KIT_SCRYPT,
-    salt: salt.toString("base64"),
-    nonce: nonce.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"),
-    ciphertext: ciphertext.toString("base64"),
   };
 }
 
@@ -219,62 +176,13 @@ export function parseRecoveryKit(
   value: unknown,
   passphrase: string
 ): RecoveryKitDocument {
-  if (!isWrappedKit(value)) {
-    throw new Error(
-      "recovery kit: expected a password-wrapped kit " +
-        `("${WRAPPED_KIT_KIND}"); unwrapped kits are not accepted`
-    );
-  }
-  for (const field of ["N", "r", "p"] as const) {
-    if (
-      typeof value[field] !== "number" ||
-      !Number.isSafeInteger(value[field])
-    ) {
-      throw new Error(`recovery kit: wrapped header has invalid "${field}"`);
-    }
-  }
-  if (value["kdf"] !== "scrypt")
-    throw new Error("recovery kit: unsupported KDF");
-  for (const field of ["salt", "nonce", "tag", "ciphertext"] as const) {
-    if (typeof value[field] !== "string") {
-      throw new Error(`recovery kit: wrapped header is missing "${field}"`);
-    }
-  }
-  if (passphrase.length === 0)
-    throw new Error("recovery kit: password is required");
-  try {
-    const salt = Buffer.from(value["salt"] as string, "base64");
-    const key = deriveWrapKey(passphrase, salt, {
-      N: value["N"] as number,
-      r: value["r"] as number,
-      p: value["p"] as number,
-    });
-    const decipher = createDecipheriv(
-      "aes-256-gcm",
-      key,
-      Buffer.from(value["nonce"] as string, "base64")
-    );
-    decipher.setAAD(WRAP_AAD);
-    decipher.setAuthTag(Buffer.from(value["tag"] as string, "base64"));
-    const plain = Buffer.concat([
-      decipher.update(Buffer.from(value["ciphertext"] as string, "base64")),
-      decipher.final(),
-    ]);
-    const parsed = parsePlainRecoveryKit(
-      JSON.parse(plain.toString("utf8")),
-      true
-    );
-    if (
-      typeof value["fingerprint"] !== "string" ||
-      recoveryKitFingerprint(parsed) !== value["fingerprint"]
-    ) {
-      throw new Error("fingerprint mismatch");
-    }
-    return parsed;
-  } catch (error) {
-    throw new Error(
-      `recovery kit: wrong password or corrupt file (${error instanceof Error ? error.message : String(error)})`,
-      { cause: error }
-    );
-  }
+  return unwrapPasswordDocument({
+    label: KIT_LABEL,
+    kind: WRAPPED_KIT_KIND,
+    aad: WRAP_AAD,
+    value,
+    passphrase,
+    parse: (plain) => parsePlainRecoveryKit(plain, true),
+    fingerprintOf: recoveryKitFingerprint,
+  });
 }

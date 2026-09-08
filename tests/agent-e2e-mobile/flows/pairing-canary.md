@@ -10,6 +10,7 @@
 
 1. `ctx.configureGateway()` — mint a ticket, clear the client, redeem it through the real ticket-only onboarding UI, complete the profile, land on Home.
 2. Assert `HOME_READY_MARKER` in a chunk of this flow's own and screenshot `paired-home`.
+3. Publish that frame to `artifacts/e2e/ui-impact/` (#905). It is the only picture of the launcher a run still produces — every journey behind the canary dies at its first tile tap — and it is what tells the two launcher-empty states apart: all tiles `unknown` draws a populated grid, all tiles `empty` routes to DayOne and draws no launcher. Publishing is not asserting, so this adds no second reason to go red; a failed copy is noted and swallowed.
 
 **Expectations:** it asserts **nothing app-specific**, on purpose. The moment the canary knows about Photos or Docs it acquires a second reason to go red, and a canary with two reasons to fail no longer answers the question it was asked. Everything below the Home marker belongs to the journey that claims it.
 

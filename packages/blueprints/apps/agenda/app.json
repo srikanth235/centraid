@@ -7,7 +7,6 @@
   "iconKey": "Calendar",
   "colorKey": "forest",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows your upcoming schedule and lets you propose, move, and respond to events.",
     "scopes": [
       {
@@ -80,6 +79,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "summary": {
             "type": "string",
             "minLength": 1

@@ -8,6 +8,7 @@ import { Directory, File } from "expo-file-system";
 import {
   nativeDirectorySize,
   replicaStorageDirectory,
+  replicaStorageDirectoryUri,
 } from "../../../modules/centraid-storage";
 import { OFFLINE_CONTENT_BUDGET_BYTES } from "../../lib/replica/offline-budgets";
 import { Store } from "../../storage";
@@ -51,12 +52,12 @@ function forgetUsedAt(keys: readonly string[]): void {
 }
 
 function storeRoot(): Directory | undefined {
-  const root = replicaStorageDirectory();
+  const root = replicaStorageDirectoryUri();
   return root ? new Directory(root, DIRECTORY_NAME) : undefined;
 }
 
 function scopeDirectory(scopeId: string): Directory | undefined {
-  const root = replicaStorageDirectory();
+  const root = replicaStorageDirectoryUri();
   if (!root) return undefined;
   return new Directory(root, DIRECTORY_NAME, encodeURIComponent(scopeId));
 }

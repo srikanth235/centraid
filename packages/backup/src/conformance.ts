@@ -228,17 +228,14 @@ export function providerConformanceCases(
             "read-write"
           );
           const gen = "ab".repeat(16);
-          const jgen = "cd".repeat(16);
           const keys = [
             `wal/vault/${gen}/00000000/000000000000-000000004128-1752480000000`,
             `wal/vault/${gen}/00000000/000000004128-000000008256-1752480060000`,
             `wal/vault/${gen}/00000000/closed-000000008256`,
             `wal/vault/${gen}/00000001/000000000000-000000004128-1752480120000`,
-            `wal/journal/${gen}/00000000/000000000000-000000004128-1752480000000`,
-            // The pair marker lives OUTSIDE the per-database prefixes — its key
-            // names BOTH generations, so it must round-trip and list under its
-            // own namespace or a restore has no coordinated cut to aim at.
-            `wal/tick/${gen}-${jgen}/1752480060000`,
+            // The tick marker lives OUTSIDE the stream prefix, so a generation
+            // sweep never takes the proof of its own tip with it.
+            `wal/tick/${gen}/1752480060000`,
           ];
           await Promise.all(keys.map((key) => rw.put(key, TEXT.encode(key))));
           const listed: string[] = [];
@@ -250,12 +247,12 @@ export function providerConformanceCases(
             "prefix list must return exactly the vault generation objects"
           );
           const markers: string[] = [];
-          for await (const obj of rw.list(`wal/tick/${gen}-${jgen}/`))
+          for await (const obj of rw.list(`wal/tick/${gen}/`))
             markers.push(obj.key);
           assert.deepEqual(
             markers,
-            [keys[5]],
-            "pair-marker prefix list must return the marker"
+            [keys[4]],
+            "tick-marker prefix list must return the marker"
           );
           const got = await rw.get(keys[1]!);
           assert.equal(new TextDecoder().decode(got), keys[1]);

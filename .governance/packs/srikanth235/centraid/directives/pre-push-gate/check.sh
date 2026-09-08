@@ -27,12 +27,22 @@ fi
 
 ZERO="0000000000000000000000000000000000000000"
 moves_a_ref=0
-while read -r _local_ref local_sha _remote_ref _remote_sha; do
+# #988 — the tier is chosen by DESTINATION. A push to `main` is the last local
+# moment before the trunk moves and pays the full gate; every other ref is a
+# branch whose PR runs `ci.yml` and `governance.yml` in full on every commit
+# (both listen on a bare `pull_request:`), so the branch tier pays only the
+# static gates — the ones whose verdict is a pure function of the tree, which is
+# also the tier the gate stamp can skip. Nothing leaves the ladder: the full
+# tier still runs, on the run that is allowed to block a merge.
+targets_main=0
+while read -r _local_ref local_sha remote_ref _remote_sha; do
     [[ -z "${local_sha:-}" ]] && continue
     # Deleting a remote branch pushes no content; there is nothing to gate.
     [[ "$local_sha" =~ ^0+$ || "$local_sha" == "$ZERO" ]] && continue
     moves_a_ref=1
-    break
+    case "${remote_ref:-}" in
+        refs/heads/main|refs/heads/master) targets_main=1 ;;
+    esac
 done
 
 if [[ $moves_a_ref -eq 0 ]]; then
@@ -64,9 +74,32 @@ export GOVERNANCE_SHELL_FULL=1
 # `check:push` is the same gates minus the four that CI recomputes
 # authoritatively anyway (full typecheck, lint:types, workflow-pins,
 # diff-coverage), run concurrently, reporting every failure in one pass.
-# ~52s, bounded by the affected tests — which is the gate that actually
-# catches breakage.
-printf "\n▶ pre-push-gate: bun run check:push (skip with SKIP_CHECK_PR=1)\n\n" >&2
+# Bounded by the affected tests — which is the gate that actually catches
+# breakage.
+#
+# #915 Wave 4 re-cut the list: 59 gate names became 17. Thirty-eight
+# sub-second contract gates collapsed into one `lint:product` bundle, seven
+# suite-hygiene ratchets moved to the weekly `hygiene.yml` lane, and
+# `check:mobile-native-state` (30.5s) dropped to rung 2, where ci.yml's
+# `mobile-smoke` job already runs it on exactly the diffs that matter. Nothing
+# left the ladder; `scripts/ci/gate-classes.json` records the class and the
+# reason for every one, and `scripts/ci/gate-classes.test.mjs` fails if a
+# hygiene gate is enforced nowhere.
+#
+# This directive also carries the other half of the rung-0 deferral (#915):
+# `.githooks/pre-push` runs `repo-hygiene` and `receipt-per-issue` — the two
+# repo-wide vendored directives `.githooks/pre-commit` now skips — immediately
+# before this check, so a push still pays for all 22 directives while a commit
+# pays 6s instead of 89s.
+# `CENTRAID_PUSH_TIER=full` forces the full tier on a branch push. It only ever
+# widens what runs, so it needs no waiver; there is deliberately no value that
+# narrows the `main` tier.
+GATE="check:push:static"
+if [[ $targets_main -eq 1 || "${CENTRAID_PUSH_TIER:-}" == "full" ]]; then
+    GATE="check:push"
+fi
+
+printf "\n▶ pre-push-gate: bun run %s (skip with SKIP_CHECK_PR=1)\n\n" "$GATE" >&2
 # Strip git's hook environment before handing control to the gate (#668).
 #
 # Git exports GIT_DIR (and friends) to its hooks. Every gate — and every test a
@@ -81,7 +114,7 @@ printf "\n▶ pre-push-gate: bun run check:push (skip with SKIP_CHECK_PR=1)\n\n"
 # has written yet.
 env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
     -u GIT_PREFIX -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-    bun run check:push \
-    || violation "check:push failed — fix the failures above, or push with SKIP_CHECK_PR=1 and let CI enforce"
+    bun run "$GATE" \
+    || violation "$GATE failed — fix the failures above, or push with SKIP_CHECK_PR=1 and let CI enforce"
 
 directive_end

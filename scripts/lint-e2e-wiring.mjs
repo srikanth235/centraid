@@ -6,7 +6,7 @@
 // Why this exists. Three separate ways a mobile journey could be committed,
 // linted, registered as evidence, and never executed:
 //
-//   1. `flows/sharing-invite.mjs` was named three times in `tests/matrix.json`
+//   1. `flows/sharing-reach.mjs` was named three times in `tests/matrix.json`
 //      as an evidence owner — an appScenarios journey, a canonical `flows[]`
 //      record with `minimumTests: 15`, and a member of the `standalone` suite —
 //      while no workflow, no suite runner and no script invoked it. The matrix
@@ -24,7 +24,7 @@
 // shipped runners — never from a hand-kept list, because a hand-kept list is
 // the thing that drifted.
 //
-// The five rules:
+// The seven rules:
 //
 //   RULE rostered        Every flow file on disk has a roster entry, and every
 //     roster entry names a file on disk. A flow that is new cannot escape by
@@ -32,7 +32,7 @@
 //
 //   RULE scheduled       A flow whose roster status is `scheduled` must be
 //     reachable from at least one declared lane. This is the rule
-//     `sharing-invite.mjs` fails today.
+//     `sharing-reach.mjs` fails today.
 //
 //   RULE exploratory     A flow whose roster status is `exploratory` must be
 //     reachable from NO lane. Exploratory means "a human drives this by hand";
@@ -48,186 +48,102 @@
 //     schedules. A matrix owner nothing schedules is a HARD FAILURE — it is the
 //     precise shape of a green report over an unexecuted claim.
 //
+//   RULE roster-valid    `roster.json` agrees with itself: every suite prices
+//     itself, every member has a row, every flow's derived `suite`/`rungs`/
+//     `platform` match the suite table, and no lane above rung 2 blocks a merge.
+//     Seven runner files used to enforce most of this by existing — a `FLOWS`
+//     literal could not name a journey that was not there. One JSON document can
+//     express every one of those mistakes, so they are checked (#915 Wave 2).
+//
+//   RULE state-variety   No app x designed-state cell may be OWNED by anything
+//     under `tests/agent-e2e-mobile/`. State variety is the Linux workhorse's
+//     (`tests/integration-mobile/`, eight apps x seven states over a real
+//     gateway and a real replica session); a simulator minute costs roughly 600
+//     Vitest seconds, so a claim that tier can falsify does not belong on a
+//     device at all. This is `$doctrine` made mechanical (#915 Wave 2).
+//
+//   RULE corpus          A launcher tile exists only for an app that EARNED the
+//     grid, so `Open <App>` is not a route until that app has rows. Two halves,
+//     both learned from #905, where twelve journeys failed at their first tap
+//     on an app that was working:
+//       (a) every `Open <App>` a flow taps names an app that ships a
+//           `seed.js` scenario, or is one the springboard promotes on an empty
+//           vault (`locker`, whose body is a state rather than a query result);
+//       (b) the shared lane preamble seeds the corpus BEFORE it hands off to
+//           Maestro. A lane is many flows sharing one pairing, and a flow's own
+//           `ensureDemo` writes only to the gateway — so a seed after that first
+//           pairing never reaches the phone. Home then reads the vault as empty,
+//           renders `DayOne` instead of `LauncherGrid`, and every tile tap fails
+//           with `Element not found` while `HOME_READY_MARKER` still reports the
+//           screen ready.
+//
 // Reachability is TRANSITIVE and derived: a lane's job block is scanned for
 // `node tests/agent-e2e-mobile/<path>` invocations (comments stripped first, so
 // prose about a retired lane cannot fake a live one), and any suite runner so
-// invoked has its own `FLOWS` array read off disk and folded in.
+// invoked has its members folded in from THE ROSTER.
+//
+// #915 Wave 2 changed where those members come from and nothing else about the
+// derivation. There used to be seven `run-*-suite.mjs` files, each carrying a
+// `const FLOWS = [ … ]` literal this linter read off disk by regex. There is now
+// one `run-roster.mjs` selected by `--rung <n> --platform <p> [--suite <s>]`,
+// plus thin shims that call `resolvePlan({ rung, platform, suite })` — and both
+// shapes are read the same way: the SELECTOR is parsed out of the invocation (or
+// out of the shim's own call), and `lib/roster.mjs` resolves it to members. The
+// flags are therefore load-bearing wiring, exactly as the seven files were: a
+// runner that picked its suite from an environment variable would make every
+// lane look identical here, which is the precise property the `promoting` and
+// `exploratory` rules depend on.
 //
 // Following lint-e2e-flows.mjs and lint-css-classes.mjs: a silent no-op is a
 // FAILURE. Zero flows discovered, zero lanes declared, or zero invocations
 // derived all fail loudly, and a self-test of the rules runs first so the
 // linter cannot rot into always-passing.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { validateRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
 import { wiringSelfTestCases } from "./lint-e2e-wiring.cases.mjs";
+import {
+  discoverFlows,
+  discoverRunners,
+  resolveReach,
+} from "./lint-e2e-wiring.reach.mjs";
+import {
+  corpusProblems,
+  discoverApps,
+  LANE_PREAMBLE,
+  SEEDER,
+  stateVarietyProblems,
+} from "./lint-e2e-wiring.rules.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_DIR = "tests/agent-e2e-mobile";
 const FLOWS_DIR = `${MOBILE_DIR}/flows`;
 const ROSTER_PATH = `${MOBILE_DIR}/roster.json`;
+/** The claims file replaces the matrix (#915 Wave 3, slice REPORT). Both are
+ *  read the same way and only one exists at a time; naming both here is what
+ *  lets the two slices land in either order without a red seam. */
+const CLAIMS_PATH = "tests/claims.json";
 const MATRIX_PATH = "tests/matrix.json";
+/** The derived `{flows:[{id,owner}]}` view slice REPORT ships when owners stop
+ *  being hand-typed. Preferred over reading the claims file directly, because a
+ *  derived view cannot disagree with what it was derived from. */
+const DERIVE_FLOWS = "scripts/test-report/derive-flows.mjs";
 
-/** Strip `#` comments from a YAML or shell source so prose cannot count as
- * wiring. A `#` inside a quoted string is not a comment, but no invocation line
- * in these files puts one there, and treating it as one would only ever make
- * this linter STRICTER (it would see fewer invocations and fail louder). */
-export function stripComments(text) {
-  return text
-    .split("\n")
-    .map((line) => {
-      const hash = line.indexOf("#");
-      return hash === -1 ? line : line.slice(0, hash);
-    })
-    .join("\n");
-}
-
-/** Every `.mjs` flow file on disk, repo-relative. Discovered, never listed. */
-export function discoverFlows(root = ROOT) {
-  return readdirSync(path.resolve(root, FLOWS_DIR))
-    .filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
-    .sort()
-    .map((name) => `${FLOWS_DIR}/${name}`);
-}
-
-/** Is `rel` a suite runner — `run-*.mjs` at the mobile directory ROOT? The
- * shape is the contract: a runner sits beside `flows/`, declares one `FLOWS`
- * array, and schedules journeys. Anything under `lib/` is machinery a lane may
- * legitimately `node`-run (the CI gateway and its readiness probe) and owes no
- * roster. */
-export function isRunnerPath(rel) {
-  return /^tests\/agent-e2e-mobile\/run-[\w.-]+\.mjs$/u.test(rel);
-}
-
-/** Every `run-*-suite.mjs` runner on disk, repo-relative. */
-export function discoverRunners(root = ROOT) {
-  return readdirSync(path.resolve(root, MOBILE_DIR))
-    .filter(
-      (name) => /^run-.*\.mjs$/u.test(name) && !name.endsWith(".test.mjs")
-    )
-    .sort()
-    .map((name) => `${MOBILE_DIR}/${name}`);
-}
-
-/**
- * The block of a workflow YAML belonging to one job key. Jobs sit at two-space
- * indent under `jobs:`; the block runs to the next two-space key. Text-level,
- * like scripts/test-report/validate-nightly-wiring.mjs, because the shipped YAML
- * is the artifact under test and a YAML parser would let a `!!merge` or an
- * anchor hide an invocation this must see.
- */
-export function jobBlock(yaml, job) {
-  const lines = yaml.split("\n");
-  const start = lines.indexOf(`  ${job}:`);
-  if (start === -1) return null;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^ {2}\S/u.test(lines[i])) return lines.slice(start, i).join("\n");
-  }
-  return lines.slice(start).join("\n");
-}
-
-const INVOKE_RE =
-  /\bnode\s+(?:--[\w-]+(?:=\S+)?\s+)*(?<target>tests\/agent-e2e-mobile\/[\w./-]+\.mjs)/gu;
-
-/** Direct `node tests/agent-e2e-mobile/*.mjs` invocations in a source chunk. */
-export function directInvocations(chunk) {
-  return [...stripComments(chunk).matchAll(INVOKE_RE)].map(
-    (m) => m.groups.target
-  );
-}
-
-/** The `FLOWS` array a suite runner declares, resolved to repo-relative paths.
- * A runner whose array this cannot read is a FAILURE at the call site, not an
- * empty result — an unreadable runner would silently unschedule its members. */
-export function runnerMembers(source, runnerRel) {
-  // LINE-ANCHORED. The unanchored form matched the prose in a runner's own
-  // header comment explaining that this linter reads its FLOWS array, took the
-  // ellipsis inside it as the body, and reported the runner as declaring an
-  // empty array — a linter defeated by a comment about itself. A declaration is
-  // always at column zero here; a mention of one never is.
-  const block = /^const FLOWS\s*=\s*\[(?<body>[\s\S]*?)\]/mu.exec(source);
-  if (!block?.groups) {
-    throw new Error(
-      `${runnerRel} declares no readable \`const FLOWS = [ … ]\` array; ` +
-        `the wiring linter cannot tell which journeys it runs. Keep the array a ` +
-        `literal of quoted file names.`
-    );
-  }
-  const names = [
-    ...block.groups.body.matchAll(/["'](?<name>[\w.-]+\.mjs)["']/gu),
-  ]
-    .map((m) => m.groups?.name)
-    .filter(Boolean);
-  if (names.length === 0) {
-    throw new Error(`${runnerRel} declares an empty FLOWS array`);
-  }
-  return names.map((name) => `${FLOWS_DIR}/${name}`);
-}
-
-/**
- * Resolve every flow each declared lane reaches, transitively through runners.
- *
- * @param lanes roster `lanes` map: id → `{ workflow, job, script?, blocking }`
- * @param readFile `(relPath) => string`
- * @returns `Map<flowRel, Set<laneId>>` plus `Map<runnerRel, Set<laneId>>`
- */
-export function resolveReach(lanes, readFile) {
-  const flowLanes = new Map();
-  const runnerLanes = new Map();
-  const add = (map, key, lane) => {
-    if (!map.has(key)) map.set(key, new Set());
-    map.get(key).add(lane);
-  };
-
-  for (const [laneId, lane] of Object.entries(lanes)) {
-    const yaml = readFile(lane.workflow);
-    const block = jobBlock(yaml, lane.job);
-    if (block == null) {
-      throw new Error(
-        `lane ${laneId} declares job "${lane.job}" in ${lane.workflow}, which has no such job key`
-      );
-    }
-    // A lane may hand its body to a committed script (the Android emulator
-    // action executes `bash apps/mobile/scripts/android-emulator-roster.sh`),
-    // in which case the invocations live there, not in the YAML. This is also
-    // why the two Android lane shapes are two scripts rather than one script
-    // with a suite switch — a script holding every branch would make every lane
-    // look like it runs every journey.
-    const chunks = [block];
-    for (const script of lane.scripts ?? []) {
-      if (!block.includes(script)) {
-        throw new Error(
-          `lane ${laneId} declares script ${script}, which its ${lane.job} job never runs`
-        );
-      }
-      chunks.push(readFile(script));
-    }
-    const seen = new Set();
-    const walk = (chunk) => {
-      for (const target of directInvocations(chunk)) {
-        if (seen.has(target)) continue;
-        seen.add(target);
-        if (target.startsWith(`${FLOWS_DIR}/`)) {
-          add(flowLanes, target, laneId);
-          continue;
-        }
-        // Only a `run-*.mjs` suite runner at the directory root schedules
-        // journeys. Everything else a lane node-runs from this tree is
-        // machinery, not a roster member — `lib/ci-gateway.mjs` and
-        // `lib/ci-gateway-ready.mjs` are the two today — and treating machinery
-        // as a runner would demand a FLOWS array it has no reason to own.
-        if (!isRunnerPath(target)) continue;
-        add(runnerLanes, target, laneId);
-        for (const member of runnerMembers(readFile(target), target)) {
-          add(flowLanes, member, laneId);
-        }
-      }
-    };
-    for (const chunk of chunks) walk(chunk);
-  }
-  return { flowLanes, runnerLanes };
-}
+export {
+  directInvocations,
+  discoverFlows,
+  discoverRunners,
+  invocationSelector,
+  isRunnerPath,
+  jobBlock,
+  resolveReach,
+  runnerMembers,
+  shimSelector,
+  stripComments,
+} from "./lint-e2e-wiring.reach.mjs";
 
 /** Every owner-ish string in matrix.json pointing under tests/agent-e2e-mobile.
  * Walked structurally rather than regexed, so a new owner-bearing block is
@@ -267,12 +183,17 @@ export function matrixMobileOwners(matrix) {
 }
 
 /** The rule engine. Pure over an injected tree so the self-test can drive it. */
-export function lintWiring({ roster, flows, runners, matrix, readFile }) {
+export function lintWiring({ roster, flows, runners, matrix, apps, readFile }) {
   const findings = [];
   const fail = (rule, message) => findings.push({ rule, message });
 
   const declared = roster.flows ?? {};
   const lanes = roster.lanes ?? {};
+
+  // RULE roster-valid — the roster held against ITSELF, before it is held
+  // against the wiring. Seven runner files used to make most of these mistakes
+  // unexpressible; one JSON document can express all of them (#915 Wave 2).
+  for (const defect of validateRoster(roster)) fail("roster-valid", defect);
 
   // RULE rostered — both directions.
   for (const flow of flows) {
@@ -297,7 +218,7 @@ export function lintWiring({ roster, flows, runners, matrix, readFile }) {
 
   let reach = { flowLanes: new Map(), runnerLanes: new Map() };
   try {
-    reach = resolveReach(lanes, readFile);
+    reach = resolveReach(lanes, readFile, roster);
   } catch (error) {
     fail("lane", error.message);
   }
@@ -372,25 +293,50 @@ export function lintWiring({ roster, flows, runners, matrix, readFile }) {
     if (!scheduled) {
       fail(
         "matrix-owner",
-        `${MATRIX_PATH} names ${owner} as evidence (${paths.slice(0, 3).join(", ")}` +
+        `the claims ledger names ${owner} as evidence (${paths.slice(0, 3).join(", ")}` +
           `${paths.length > 3 ? `, +${paths.length - 3} more` : ""}) but no lane ` +
           `schedules it. The matrix is claiming coverage from a journey that never runs.`
       );
     }
   }
 
+  // RULE state-variety — the doctrine, made mechanical.
+  for (const problem of stateVarietyProblems(matrix)) {
+    fail("state-variety", problem);
+  }
+
+  // RULE corpus — the grid is content-dependent, so the corpus is wiring too.
+  for (const problem of corpusProblems({ apps, flows, readFile })) {
+    fail("corpus", problem);
+  }
+
   return { findings, laneCount: Object.keys(lanes).length, flowLanes };
 }
+
+export {
+  corpusProblems,
+  discoverApps,
+  stateVarietyProblems,
+} from "./lint-e2e-wiring.rules.mjs";
 
 // ---- self-test: the rules, exercised on fixtures, before judging the repo.
 function selfTest() {
   // Cases live in the sibling module; the assertion stays HERE so running the
   // linter directly still exercises them. See that file for why.
-  const { flows, runners, readFile, cases } = wiringSelfTestCases({
-    MOBILE_DIR,
+  const { files, flows, runners, apps, readFile, cases } = wiringSelfTestCases({
     FLOWS_DIR,
+    LANE_PREAMBLE,
+    MOBILE_DIR,
+    SEEDER,
   });
   for (const testCase of cases) {
+    // A case may shadow individual fixture files — the corpus cases vary the
+    // lane preamble, whose ORDERING is the thing under test and cannot be
+    // expressed as a roster or a flow list.
+    const caseRead = testCase.files
+      ? (rel) =>
+          rel in testCase.files ? testCase.files[rel] : readFile(rel, files)
+      : readFile;
     const got = [
       ...new Set(
         lintWiring({
@@ -398,7 +344,8 @@ function selfTest() {
           flows: testCase.flows ?? flows,
           runners,
           matrix: testCase.matrix,
-          readFile,
+          apps: testCase.apps ?? apps,
+          readFile: caseRead,
         }).findings.map((f) => f.rule)
       ),
     ].sort();
@@ -410,6 +357,41 @@ function selfTest() {
       process.exit(1);
     }
   }
+}
+
+/**
+ * The ledger this linter holds the wiring against.
+ *
+ * Three sources, in order of how derived they are, because slice REPORT is
+ * replacing `tests/matrix.json` with `tests/claims.json` and shipping a derived
+ * `{flows:[{id,owner}]}` view alongside it (#915 Wave 3). Reading the derived
+ * view first means the owners this rule checks cannot disagree with the thing
+ * they were derived from; reading either file second means the two slices can
+ * land in either order without a red seam. A tree with NEITHER is a hard
+ * failure, not an empty read — a ledger this linter cannot find is a ledger it
+ * cannot hold anything against.
+ */
+export function readLedger(
+  readFile,
+  exists = existsSync,
+  run = runDeriveFlows
+) {
+  const derived = exists(path.resolve(ROOT, DERIVE_FLOWS)) ? run() : undefined;
+  const ledgerPath = exists(path.resolve(ROOT, CLAIMS_PATH))
+    ? CLAIMS_PATH
+    : MATRIX_PATH;
+  const ledger = JSON.parse(readFile(ledgerPath));
+  // The derived view carries owners only; the appStates layer RULE
+  // state-variety reads stays with the ledger itself.
+  return derived ? { ...ledger, flows: derived.flows ?? ledger.flows } : ledger;
+}
+
+function runDeriveFlows() {
+  const out = execFileSync(process.execPath, [DERIVE_FLOWS, "--json"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  return JSON.parse(out);
 }
 
 function main() {
@@ -429,13 +411,21 @@ function main() {
   const roster = JSON.parse(readFile(ROSTER_PATH));
   const flows = discoverFlows();
   const runners = discoverRunners();
-  const matrix = JSON.parse(readFile(MATRIX_PATH));
+  const matrix = readLedger(readFile);
+  const apps = discoverApps();
 
   // Silent-no-op guards. Each of these reads as "clean" if unchecked, and each
   // has a plausible cause: a moved directory, an emptied roster, a workflow
   // rename that leaves every job block unresolvable.
   if (flows.length === 0) {
     console.error(`\nFAIL — discovered zero flows under ${FLOWS_DIR}.\n`);
+    process.exit(1);
+  }
+  if (Object.keys(roster.suites ?? {}).length === 0) {
+    console.error(
+      `\nFAIL — ${ROSTER_PATH} declares no suites. A roster with no suites schedules ` +
+        `nothing, so every rule below would pass over an entirely dead roster.\n`
+    );
     process.exit(1);
   }
   if (Object.keys(roster.lanes ?? {}).length === 0) {
@@ -451,6 +441,7 @@ function main() {
     flows,
     runners,
     matrix,
+    apps,
     readFile,
   });
 

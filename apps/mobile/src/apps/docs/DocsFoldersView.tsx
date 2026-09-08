@@ -29,10 +29,10 @@ import EmptyBlock from "../../kit/components/EmptyBlock";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
-import { foldersStatus } from "./docs-copy";
+import { folderCount, foldersStatus, UNFILED_NOTE } from "./docs-copy";
 import DriveList from "./DriveList";
 import type { UseDocsResult } from "./useDocs";
 import { useDocsWrite } from "./useDocs";
@@ -84,7 +84,6 @@ export default function DocsFoldersView({
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.headRow}>
-        <Text style={styles.status}>{foldersStatus(drive.folders.length)}</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New folder"
@@ -146,27 +145,42 @@ export default function DocsFoldersView({
               style={[styles.row, index === 0 ? undefined : styles.rowRule]}
             >
               <Icon name="Folder" size={18} color={colors.textSoft} />
-              <Text numberOfLines={1} style={styles.rowName}>
-                {folder.name}
-              </Text>
-              <Text style={styles.rowCount}>
-                {countByFolder.get(folder.folder_id) ?? 0}
-              </Text>
+              <View style={styles.rowMain}>
+                <Text numberOfLines={1} style={styles.rowName}>
+                  {folder.name}
+                </Text>
+                {/* The count as a SENTENCE, not a right-aligned figure: a bare
+                    number beside a name reads as a badge — unread, waiting,
+                    something to act on — when it is only how many labels
+                    point here. */}
+                <Text numberOfLines={1} style={styles.rowNote}>
+                  {folderCount(countByFolder.get(folder.folder_id) ?? 0)}
+                </Text>
+              </View>
+              <Icon name="ChevronRight" size={16} color={colors.textFaint} />
             </Pressable>
           ))}
-          {/* Unfiled — a count in the count column, never a sentence on a
-              row; the caption below carries the prose (drive-copy). */}
-          <View style={[styles.row, styles.rowRule]}>
-            <Icon name="FileText" size={18} color={colors.textSoft} />
-            <Text numberOfLines={1} style={styles.rowName}>
-              Unfiled
-            </Text>
-            <Text style={styles.rowCount}>{drive.unfiledCount}</Text>
-          </View>
         </View>
       )}
 
+      {/* Unfiled stands OUTSIDE the folder container, because it is not one.
+          Drawn as a peer row it claimed to be a fifth folder — and at a few
+          thousand documents it is the largest thing on the screen, so the
+          claim is not a small one. It opens nothing: there is no "unfiled"
+          place to go to, only documents that were never labelled. */}
+      <View style={styles.unfiled}>
+        <View style={styles.rowMain}>
+          <Text style={styles.unfiledName}>Unfiled</Text>
+          <Text style={styles.rowNote}>{UNFILED_NOTE}</Text>
+        </View>
+        <Text style={styles.unfiledCount}>{drive.unfiledCount}</Text>
+      </View>
+
       <Text style={styles.caption}>{foldersCaption(drive.unfiledCount)}</Text>
+      {/* At the FOOT, where every other Docs shelf ends its standing sentence.
+          This one opened with it, and one shelf that leads with its status
+          reads as a different kind of screen from its five siblings. */}
+      <Text style={styles.status}>{foldersStatus(drive.folders.length)}</Text>
 
       {goneDocs.length > 0 ? (
         <View style={styles.goneSection}>
@@ -230,7 +244,7 @@ const makeStyles = (colors: ThemeColors) =>
     headRow: {
       alignItems: "center",
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: "flex-end",
       paddingHorizontal: 18,
       paddingVertical: 8,
     },
@@ -257,11 +271,14 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flexDirection: "row",
       gap: 12,
+      // Same rhythm as the document row, for the same reason (see DocRow).
       minHeight: 44,
       paddingHorizontal: 12,
+      paddingVertical: spacing[2],
     },
-    rowCount: { ...t("mono"), color: colors.textFaint },
-    rowName: { ...t("body"), color: colors.text, flex: 1 },
+    rowMain: { flex: 1, gap: 2, minWidth: 0 },
+    rowName: { ...t("body"), color: colors.text },
+    rowNote: { ...t("small"), color: colors.textFaint },
     rowRule: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
@@ -278,6 +295,23 @@ const makeStyles = (colors: ThemeColors) =>
     status: {
       ...t("mono"),
       color: colors.textFaint,
-      flexShrink: 1,
+      paddingHorizontal: 18,
+      paddingTop: 6,
     },
+    unfiled: {
+      alignItems: "center",
+      borderColor: colors.line,
+      borderRadius: radii.lg,
+      borderStyle: "dashed",
+      borderWidth: borders.hairline,
+      flexDirection: "row",
+      gap: 12,
+      marginHorizontal: 18,
+      marginTop: 8,
+      minHeight: 44,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    unfiledCount: { ...t("mono"), color: colors.textFaint },
+    unfiledName: { ...t("body"), color: colors.textSoft },
   });

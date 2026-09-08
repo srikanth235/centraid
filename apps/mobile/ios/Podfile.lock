@@ -3211,7 +3211,7 @@ SPEC CHECKSUMS:
   EXUpdates: 1031df0a408343d85e9d92595b102e9d65518656
   EXUpdatesInterface: 92d2aa5194b6fb93ca8ab749db75665cb28b2e60
   FBLazyVector: 3c3be9a019176b5699455f7f66c5444b78a411c6
-  hermes-engine: f6795bae85f4a8b2e50fb56afdfd156231a7d927
+  hermes-engine: b52e0e24b86627c3728144dfd641ca99aea10bc1
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8

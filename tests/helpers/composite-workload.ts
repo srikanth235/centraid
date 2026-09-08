@@ -18,8 +18,7 @@
  * command pipeline and mints a receipt).
  *
  * Stand-in, and stated plainly: the AGENT-TURN lane dispatches through the
- * real `runTurn` harness registry with a scripted `runTurn` implementation,
- * exactly as `tests/scale/harness-sessions.scale.test.ts` does. A rig that
+ * real `runTurn` harness registry with a scripted `runTurn` implementation. A rig that
  * spawned real model adapters would measure a vendor's queue, not this
  * product; the composition question this lane carries is whether turn dispatch
  * still fans out while the vault is busy, and that is answered without a model.

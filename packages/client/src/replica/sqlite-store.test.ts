@@ -34,7 +34,6 @@ describe("sqlite-store", () => {
         {
           shapeId: "shape-agenda",
           appId: "agenda",
-          purpose: "dpv:ServiceProvision",
           entities: [
             {
               entity: "core.event",
@@ -84,7 +83,6 @@ describe("sqlite-store", () => {
         {
           shapeId: "shape-photos",
           appId: "photos",
-          purpose: "dpv:ServiceProvision",
           entities: [
             {
               entity: "core.content_item",
@@ -96,7 +94,6 @@ describe("sqlite-store", () => {
         {
           shapeId: "shape-search-agenda",
           appId: "agenda",
-          purpose: "dpv:ServiceProvision",
           entities: [
             {
               entity: "core.event",
@@ -158,9 +155,11 @@ describe("sqlite-store", () => {
       db.exec(`
       CREATE TABLE replica_shape (
         shape_id TEXT PRIMARY KEY,
-        app_id TEXT NOT NULL
+        app_id TEXT NOT NULL,
+        purpose TEXT NOT NULL
       );
-      INSERT INTO replica_shape(shape_id, app_id) VALUES ('stale-shape', 'agenda');
+      INSERT INTO replica_shape(shape_id, app_id, purpose)
+        VALUES ('stale-shape', 'agenda', 'a retired shape selector');
       PRAGMA user_version = 0;
     `);
 
@@ -192,7 +191,9 @@ describe("sqlite-store", () => {
               returnValue: "resultRows",
             })
             .map((column) => (column as { name: string }).name)
-        ).toContain("purpose");
+          // The retired shape selector goes with the rebuild (#928 A1): a
+          // replica carrying it is a replica from before the one plane.
+        ).not.toContain("purpose");
       } finally {
         store.close();
       }

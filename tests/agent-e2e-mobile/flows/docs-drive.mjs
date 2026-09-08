@@ -32,10 +32,17 @@
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
 } from "../lib/harness.mjs";
+import { screenshot } from "../lib/ui-impact.mjs";
+
+/** The drive as `SeatList` draws it, published to
+ *  `artifacts/e2e/ui-impact/issue-922-mobile-drive.png` — the UI-impact
+ *  evidence for #922 E6, which put this shelf on the kit list primitive. */
+const DRIVE_FRAME = "issue-922-mobile-drive.png";
 
 /** `apps/docs/docs-copy.ts` allStatus — the All shelf's own foot sentence. A
  *  zero digit is the shape of a drive read that never reached the replica, so
@@ -65,7 +72,7 @@ await runFlow("docs-drive", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Docs.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Docs.*")}
 - extendedWaitUntil:
     visible: "${ALL_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -158,7 +165,7 @@ ${retryableTapCommands("Tahoe packing list", ALL_STATUS)}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Docs.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Docs.*")}
 # The shelf still counts the drive — titles, folders, filing and stars are
 # replica reads and owe the gateway nothing…
 - extendedWaitUntil:
@@ -205,6 +212,14 @@ ${retryableTapCommands("Open Docs.*")}
     ctx.note(
       "iOS Simulator has no Maestro airplane control, so the opens-offline half is an honest iOS gap; the projection it rests on is covered on every platform by apps/mobile/src/apps/docs/docs-projection.test.ts and offline-pin.test.ts"
     );
+  }
+
+  // PUBLISHING IS NOT ASSERTING: a failed copy is a note, never a second
+  // reason for this journey to go red.
+  try {
+    await screenshot(ctx, "docs-all-shelf", DRIVE_FRAME);
+  } catch (error) {
+    ctx.note(`drive frame not published: ${error.message}`);
   }
 
   return {

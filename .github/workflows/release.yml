@@ -90,9 +90,59 @@ permissions:
   contents: read
 
 jobs:
+  # #915 Wave 1 — WE ONLY SHIP A BUILD SOMEBODY PROMOTED. Rung 3 produces
+  # candidates; rungs 4 and 5 test them; this refuses to publish a SHA that was
+  # never one. Before it, the release SHA was implicitly "whatever HEAD is when
+  # publish.mjs runs" — a tag could be cut on a commit no deep rung had ever
+  # exercised, and nothing in the chain would have said so.
+  #
+  # Two ways to be a candidate, and both are checked because both are true: the
+  # tag is the CURRENT `refs/candidates/latest`, or it appears in the promotion
+  # history `candidate.yml` publishes to gh-pages at
+  # `test-report/candidates.json` (kept 200 deep). The second matters because
+  # cutting a release takes minutes and `main` keeps moving: a tag cut on
+  # yesterday's promoted candidate is exactly right, and requiring "equal to the
+  # newest" would refuse it.
+  #
+  # The same rule is enforced BEFORE the tag exists, by
+  # `scripts/release/prepare.mjs` (and `release:classify --require-candidate`),
+  # so the normal way to meet it is to be told at prepare time rather than to
+  # discover it from a red release run. See docs/release.md.
+  require-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Restore the promotion history (gh-pages)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: .gh-pages-candidates
+      - name: The tagged SHA must be a promoted candidate
+        env:
+          TAG_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          latest="$(git ls-remote origin refs/candidates/latest 2>/dev/null | cut -f1 || true)"
+          if [ "$latest" = "$TAG_SHA" ]; then
+            echo "$TAG_SHA is the current candidate"
+            exit 0
+          fi
+          history=.gh-pages-candidates/test-report/candidates.json
+          if [ -f "$history" ] && jq -e --arg sha "$TAG_SHA" '.candidates[]? | select(.sha == $sha)' "$history" > /dev/null; then
+            echo "$TAG_SHA was promoted on $(jq -r --arg sha "$TAG_SHA" '.candidates[] | select(.sha == $sha) | .promotedAt' "$history")"
+            exit 0
+          fi
+          echo "::error title=Not a candidate::${TAG_SHA} was never promoted by candidate.yml. Releases ship promoted builds only — cut the tag on a SHA that appears in refs/candidates/latest or in the gh-pages promotion history (test-report/candidates.json). \`bun run release:prepare\` refuses the same SHA locally and says why."
+          exit 1
+
   # Classifies what was cut, so each lane's `if:` reads as a sentence instead of
   # repeating tag-pattern matching seven times.
   plan:
+    needs: [require-candidate]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -219,7 +269,16 @@ jobs:
   # `skipped` passes (a `companion-v*` tag legitimately skips every product
   # lane); `cancelled` fails.
   release-check:
-    needs: [plan, desktop, gateway-npm, gateway-image, mobile, companion]
+    needs:
+      [
+        require-candidate,
+        plan,
+        desktop,
+        gateway-npm,
+        gateway-image,
+        mobile,
+        companion,
+      ]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -10,7 +10,6 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { LOCKER_ITEM_TYPE } from "./locker-shared.js";
 import {
   LOCKER_FIELD_TYPE,
-  LOCKER_HISTORY_TYPE,
   LOCKER_PASSKEY_TYPE,
   addressRows,
   fieldRows,
@@ -89,23 +88,43 @@ function exportItem(
         private_key: ctx.unseal(LOCKER_PASSKEY_TYPE, itemId, "private_key"),
       }
     : null;
+  // HISTORY IS REVISIONS (#916, D2). `locker_item_history` was a second
+  // revision mechanism for one retention rule; the item's pre-mutation
+  // snapshots are the same fact, and `locker.item` declares
+  // `revisions: { retain: 'forever' }` so nothing sweeps them. The snapshot's
+  // sealed cells are ciphertext under THIS row's additional data, so the
+  // previous password unseals exactly as the current one does.
   item.history = includeHistory
     ? (
         ctx.db
           .prepare(
-            `SELECT revision_id, operation, title, changed_json, recorded_at
-               FROM locker_item_history WHERE item_id = ?
+            `SELECT revision_id, operation, snapshot_json, recorded_at
+               FROM core_entity_revision
+              WHERE entity_type = ? AND entity_id = ?
               ORDER BY recorded_at DESC, revision_id DESC`
           )
-          .all(itemId) as Record<string, unknown>[]
-      ).map((revision) => ({
-        ...revision,
-        password: ctx.unseal(
-          LOCKER_HISTORY_TYPE,
-          String(revision.revision_id),
-          "password"
-        ),
-      }))
+          .all(LOCKER_ITEM_TYPE, itemId) as Record<string, unknown>[]
+      ).map((revision) => {
+        const snapshot = JSON.parse(String(revision.snapshot_json)) as Record<
+          string,
+          unknown
+        >;
+        return {
+          revision_id: revision.revision_id,
+          operation: revision.operation,
+          recorded_at: revision.recorded_at,
+          title: snapshot.title ?? null,
+          password:
+            typeof snapshot.password === "string"
+              ? ctx.unseal(
+                  LOCKER_ITEM_TYPE,
+                  itemId,
+                  "password",
+                  snapshot.password
+                )
+              : null,
+        };
+      })
     : [];
   return item;
 }
@@ -145,7 +164,6 @@ const EXPORT: CommandDefinition = {
     ...SEALED_ITEM_COLUMNS.map((column) => `${LOCKER_ITEM_TYPE}.${column}`),
     `${LOCKER_FIELD_TYPE}.value_sealed`,
     `${LOCKER_PASSKEY_TYPE}.private_key`,
-    `${LOCKER_HISTORY_TYPE}.password`,
   ],
   // The result IS the plaintext: redacted from the journal so the trail is
   // not a second copy of it.

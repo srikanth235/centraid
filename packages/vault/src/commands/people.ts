@@ -19,8 +19,6 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { ONTOLOGY_VERSION } from "../schema/migrate.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { annotate } from "./annotations.js";
 import {
   loadEntityRevision,
@@ -30,6 +28,7 @@ import {
 import { setStarred, starredExistsSql } from "./flags.js";
 import { contentItemFor } from "./knowledge.js";
 import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { registerPeopleOrganizeCommands } from "./people-organize.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
 
@@ -49,10 +48,10 @@ function actorPartyId(ctx: HandlerCtx): string {
 /** The vault owner's party id. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 /** The vault's base currency, for debts stored as minor units. */
@@ -144,11 +143,7 @@ function conceptId(
 }
 
 function assertedBy(ctx: HandlerCtx): "owner" | "app" | "agent" {
-  return ctx.identity.kind === "app"
-    ? "app"
-    : ctx.identity.kind === "agent"
-      ? "agent"
-      : "owner";
+  return ctx.identity.kind === "agent" ? "agent" : "owner";
 }
 
 /** Assert one temporal core.link and return its id. */
@@ -197,10 +192,14 @@ const PERSON_EXISTS_SQL = `
    WHERE pr.party_id = :party_id AND p.kind = 'person'
      AND pr.deleted_at IS NULL`;
 const PERSON_TRASHED_SQL = `
+  -- RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5). The trash window is a
+  -- PROMISE that the row goes; a restore after it lapsed resurrects data the
+  -- member was told had been deleted, and races the sweep for it.
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id
    WHERE pr.party_id = :party_id AND p.kind = 'person'
-     AND pr.deleted_at IS NOT NULL`;
+     AND pr.deleted_at IS NOT NULL
+     AND (pr.purge_at IS NULL OR pr.purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 const PERSON_ANY_SQL = `
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id
@@ -302,6 +301,7 @@ const ADD_PERSON: CommandDefinition = {
     required: ["display_name", "cadence_days"],
     additionalProperties: false,
     properties: {
+      party_id: MINTED_ID_PROPERTY,
       display_name: { type: "string", minLength: 1 },
       role: { type: "string" },
       // A name the member uses for this person, not the one on their
@@ -318,6 +318,7 @@ const ADD_PERSON: CommandDefinition = {
     properties: { party_id: { type: "string" } },
   },
   preconditions: [
+    mintedIdIsFree("core_party", "party_id", "person", "party_id"),
     {
       name: "list_exists_if_given",
       sql: `SELECT CASE WHEN :list_id IS NULL THEN 1 ELSE ${LIST_EXISTS_SQL} END AS n`,
@@ -349,13 +350,13 @@ function addPerson(ctx: HandlerCtx): Record<string, unknown> {
     cadence_days: number;
     list_id?: string;
   };
-  const partyId = ctx.newId();
+  const partyId = mintedId(ctx, "party_id");
   ctx.db
     .prepare(
-      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
+      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?)`
     )
-    .run(partyId, input.display_name, ctx.now, ctx.now, ONTOLOGY_VERSION);
+    .run(partyId, input.display_name, ctx.now, ctx.now);
   ctx.wrote("core.party", partyId);
   const profileId = ctx.newId();
   ctx.db
@@ -1340,17 +1341,10 @@ const ADD_RELATIONSHIP: CommandDefinition = {
           .prepare(
             `INSERT INTO core_party
                (party_id, kind, display_name, sort_name, birth_date, avatar_content_id,
-                created_at, updated_at, ontology_version)
-             VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`
+                created_at, updated_at)
+             VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?)`
           )
-          .run(
-            targetId,
-            targetKind,
-            input.name,
-            ctx.now,
-            ctx.now,
-            ONTOLOGY_VERSION
-          );
+          .run(targetId, targetKind, input.name, ctx.now, ctx.now);
         ctx.wrote("core.party", targetId);
       }
     }
@@ -1626,7 +1620,10 @@ const CREATE_LIST: CommandDefinition = {
     type: "object",
     required: ["name"],
     additionalProperties: false,
-    properties: { name: { type: "string", minLength: 1 } },
+    properties: {
+      list_id: MINTED_ID_PROPERTY,
+      name: { type: "string", minLength: 1 },
+    },
   },
   outputSchema: {
     type: "object",
@@ -1634,6 +1631,7 @@ const CREATE_LIST: CommandDefinition = {
     properties: { list_id: { type: "string" } },
   },
   preconditions: [
+    mintedIdIsFree("core_concept", "list_id", "list", "concept_id"),
     {
       // Lists keep distinct names — a receipted refusal beats two "Work"s.
       name: "name_unused",
@@ -1659,7 +1657,7 @@ const CREATE_LIST: CommandDefinition = {
   handler: (ctx) => {
     const input = ctx.input as { name: string };
     const schemeId = listSchemeId(ctx);
-    const listId = ctx.newId();
+    const listId = mintedId(ctx, "list_id");
     ctx.db
       .prepare(
         `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
@@ -1771,7 +1769,6 @@ const DELETE_LIST: CommandDefinition = {
     ctx.db
       .prepare("DELETE FROM core_concept WHERE concept_id = ?")
       .run(input.list_id);
-    cleanupPolyRefs(ctx.db, ctx.now, "core.concept", input.list_id);
     ctx.wrote("core.concept", input.list_id);
     return { list_id: input.list_id };
   },

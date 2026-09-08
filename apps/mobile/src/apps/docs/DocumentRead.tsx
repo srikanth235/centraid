@@ -14,8 +14,9 @@
 // Open elsewhere hands the file, as stored, to an app that reads the kind.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { STAGE_ACTIONS } from "@centraid/blueprints/apps/docs/document-copy";
 import {
   custodyMeta,
   fmtBytes,
@@ -24,11 +25,13 @@ import {
 } from "@centraid/blueprints/apps/docs/format";
 
 import Button from "../../kit/components/Button";
+import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
@@ -41,6 +44,7 @@ import DocsShelfHeader from "./DocsShelfHeader";
 import { factsRows, readStatus, readSurfaceFor } from "./document-read-model";
 import OfflinePinButton from "./OfflinePinButton";
 import { useDocument } from "./useDocs";
+import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
 import { useDocumentText } from "./useDocumentText";
 import { useVersionChain } from "./useVersionChain";
 
@@ -55,6 +59,11 @@ export default function DocumentRead({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { doc, loading, offline } = useDocument(documentId);
   const chain = useVersionChain(documentId);
+  // The stage carries Share; this route is where every text and unrenderable
+  // kind lands, so without it those documents had no share door at all.
+  // `null` is "the roster is not an answer yet" — no verb, not a dead one.
+  const audiences = useDocsGrantAudiences();
+  const [shareOpen, setShareOpen] = useState(false);
 
   const surface = doc ? readSurfaceFor(doc) : null;
 
@@ -67,8 +76,39 @@ export default function DocumentRead({
 
   return (
     <DocsScreen current="all">
-      <DocsShelfHeader title={doc?.title ?? "Document"} backTo="All" />
+      <DocsShelfHeader
+        title={doc?.title ?? "Document"}
+        backTo="All"
+        {...(doc && audiences
+          ? {
+              trailing: (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={STAGE_ACTIONS.share}
+                  onPress={() => setShareOpen(true)}
+                  style={styles.headAction}
+                >
+                  <Icon name="Share" size={20} color={colors.text} />
+                </Pressable>
+              ),
+            }
+          : {})}
+      />
       <ReplicaStatusBar />
+      {/* OBJECT-FIRST: this route is already about one document. */}
+      {doc && audiences ? (
+        <GrantSheet
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          audiences={audiences}
+          subject={{
+            subjectType: "core.document",
+            subjectId: doc.document_id,
+            ...(doc.title ? { label: doc.title } : {}),
+          }}
+          onStatus={postStatus}
+        />
+      ) : null}
       {loading && !doc ? (
         <SkeletonRows accessibilityLabel="Reading this document" />
       ) : doc == null ? (
@@ -83,10 +123,27 @@ export default function DocumentRead({
           doc={doc}
           versionCount={chain.chain?.versionCount ?? null}
           onEdit={() => navigation.navigate("DocumentEditor", { documentId })}
+          onVersions={() =>
+            navigation.navigate("DocumentVersions", { documentId })
+          }
+          onDetails={() =>
+            navigation.navigate("DocumentProperties", { documentId })
+          }
           styles={styles}
         />
       ) : surface === "facts" ? (
-        <FactsView doc={doc} offline={offline} styles={styles} />
+        <FactsView
+          doc={doc}
+          offline={offline}
+          versionCount={chain.chain?.versionCount ?? null}
+          onVersions={() =>
+            navigation.navigate("DocumentVersions", { documentId })
+          }
+          onDetails={() =>
+            navigation.navigate("DocumentProperties", { documentId })
+          }
+          styles={styles}
+        />
       ) : (
         // The stage hand-off is in flight; nothing to draw under it.
         <View style={styles.page} />
@@ -99,11 +156,15 @@ function ReadingView({
   doc,
   versionCount,
   onEdit,
+  onVersions,
+  onDetails,
   styles,
 }: {
   doc: MobileDriveDoc;
   versionCount: number | null;
   onEdit: () => void;
+  onVersions: () => void;
+  onDetails: () => void;
   styles: ReturnType<typeof makeStyles>;
 }): React.JSX.Element {
   const body = useDocumentText(doc);
@@ -128,6 +189,12 @@ function ReadingView({
         )}
         <Button label="Edit" onPress={onEdit} style={styles.editButton} />
         <OfflinePinButton doc={doc} />
+        <ThisDocument
+          versionCount={versionCount}
+          onVersions={onVersions}
+          onDetails={onDetails}
+          styles={styles}
+        />
         {status ? <Text style={styles.status}>{status}</Text> : null}
       </View>
     </ScrollView>
@@ -137,10 +204,16 @@ function ReadingView({
 function FactsView({
   doc,
   offline,
+  versionCount,
+  onVersions,
+  onDetails,
   styles,
 }: {
   doc: MobileDriveDoc;
   offline: boolean;
+  versionCount: number | null;
+  onVersions: () => void;
+  onDetails: () => void;
   styles: ReturnType<typeof makeStyles>;
 }): React.JSX.Element {
   const { gatewayBase, vaultId } = useReplica();
@@ -202,8 +275,90 @@ function FactsView({
         </Text>
       ) : null}
       <OfflinePinButton doc={doc} />
+      <ThisDocument
+        versionCount={versionCount}
+        onVersions={onVersions}
+        onDetails={onDetails}
+        styles={styles}
+      />
       <Text style={styles.status}>{FACTS_STATUS}</Text>
     </ScrollView>
+  );
+}
+
+/**
+ * The two ways on from an OPEN document — its history and its details.
+ *
+ * Both routes existed before this panel; neither was reachable from here. The
+ * only door was the `···` on the drive's row, so a member reading a document
+ * and wondering when it last changed had to leave it, find its row again, and
+ * open a menu. A document's own screen is where facts about that document
+ * belong.
+ *
+ * The version count is REAL or the row is silent: the chain comes off the
+ * replica's `core.link` walk, and a row that guessed "7 versions" while the
+ * walk was still running would be inventing a history.
+ */
+function ThisDocument({
+  versionCount,
+  onVersions,
+  onDetails,
+  styles,
+}: {
+  versionCount: number | null;
+  onVersions: () => void;
+  onDetails: () => void;
+  styles: ReturnType<typeof makeStyles>;
+}): React.JSX.Element {
+  return (
+    <View style={styles.thisDoc}>
+      <Text style={styles.thisDocEyebrow}>This document</Text>
+      <LinkRow
+        label="Version history"
+        note={
+          versionCount === null
+            ? "preview and restore any of them"
+            : `${versionCount} ${versionCount === 1 ? "version" : "versions"} · preview and restore any of them`
+        }
+        onPress={onVersions}
+        styles={styles}
+      />
+      <LinkRow
+        label="Details"
+        note="filing, purge date, size and custody"
+        onPress={onDetails}
+        styles={styles}
+      />
+    </View>
+  );
+}
+
+function LinkRow({
+  label,
+  note,
+  onPress,
+  styles,
+}: {
+  label: string;
+  note: string;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+}): React.JSX.Element {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${note}`}
+      onPress={onPress}
+      style={styles.linkRow}
+    >
+      <View style={styles.linkMain}>
+        <Text style={styles.linkLabel}>{label}</Text>
+        <Text style={styles.linkNote}>{note}</Text>
+      </View>
+      {/* The chevron is the row's one promise: this OPENS somewhere. */}
+      <Icon name="ChevronRight" size={16} color={colors.textFaint} />
+    </Pressable>
   );
 }
 
@@ -212,6 +367,13 @@ const makeStyles = (colors: ThemeColors) => {
   return StyleSheet.create({
     absent: { ...t("body"), color: colors.textSoft },
     bodyFaint: { ...t("body"), color: colors.textSoft, paddingTop: 12 },
+    // The row rung, so the head's one trailing control is a real target.
+    headAction: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
     byline: {
       ...t("body"),
       borderBottomColor: colors.line,
@@ -226,6 +388,33 @@ const makeStyles = (colors: ThemeColors) => {
     eyebrow: { ...t("eyebrow"), color: colors.textFaint, paddingBottom: 6 },
     factKey: { ...t("eyebrow"), color: colors.textFaint },
     factRow: { gap: 4, paddingHorizontal: 12, paddingVertical: 10 },
+    linkLabel: { ...t("body"), color: colors.text },
+    linkMain: { flex: 1, gap: 2, minWidth: 0 },
+    linkNote: { ...t("small"), color: colors.textFaint },
+    linkRow: {
+      alignItems: "center",
+      borderTopColor: colors.line,
+      borderTopWidth: borders.hairline,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 52,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+    },
+    thisDoc: {
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.lg,
+      borderWidth: borders.hairline,
+      marginTop: 16,
+      overflow: "hidden",
+    },
+    thisDocEyebrow: {
+      ...t("eyebrow"),
+      color: colors.textFaint,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
     factRule: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,

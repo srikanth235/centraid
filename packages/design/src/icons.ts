@@ -414,6 +414,15 @@ const ICON_DATA = {
     { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9H3z" },
     { d: "M12 11v5M9.5 13.5h5" },
   ],
+  // Own entry, not `Archive`: an inbox holds work that ARRIVED and is
+  // undecided, an archive holds work put away. Tasks' band names both, so
+  // one glyph would blur the two.
+  Inbox: [
+    { d: "M22 12h-6l-2 3h-4l-2-3H2" },
+    {
+      d: "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",
+    },
+  ],
   Bookmark: [{ d: "M6 4h12v17l-6-3-6 3z" }],
   Shield: [{ d: "M12 3 20 6v5c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6z" }],
   Smartphone: [

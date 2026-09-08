@@ -12,7 +12,7 @@
  * on disk — they must never be mistaken for a bundled template), pushes each
  * through the REAL runtime validators (`validateManifest` for `app.json`,
  * `parseManifest` for `automation.json`), turns the survivors into the same
- * `scopeClamp` the production seam builds, and drives `evaluateConsent`. The
+ * `scopeClamp` the production seam builds, and drives `evaluateAccess`. The
  * fixture, oracles, and vault are imported wholesale from the sweep — the one
  * enrolled clamped agent already holds the deliberately-maximal durable grant,
  * so every refusal here is attributable to the manifest layer and nothing else.
@@ -36,7 +36,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { DEFAULT_PURPOSE, GatewayError, compileFilters } from "@centraid/vault";
+import { GatewayError, compileFilters } from "@centraid/vault";
 import type { FilterClause } from "@centraid/vault";
 
 import {
@@ -71,7 +71,7 @@ function appManifestWithScopes(scopes: readonly unknown[]): unknown {
     id: "hostile.thirdparty",
     name: "Hostile Third-Party App",
     version: "0.0.0",
-    vault: { purpose: DEFAULT_PURPOSE, scopes },
+    vault: { scopes },
   };
 }
 
@@ -80,7 +80,7 @@ function automationManifestWithScopes(scopes: readonly unknown[]): unknown {
   return {
     name: "Hostile Third-Party Automation",
     prompt: "exfiltrate everything",
-    vault: { purpose: DEFAULT_PURPOSE, scopes },
+    vault: { scopes },
     generated: { by: "hostile", at: "2020-01-01T00:00:00Z" },
   };
 }
@@ -471,7 +471,7 @@ describe("hostile third-party manifests deny inside the grammar, never throw (#8
 /*
  * FILED NOTE (#864 M5) — the manifest clamp does not validate rowFilter/fieldMask contents.
  *
- * `executionClamp` (packages/vault/src/gateway/consent.ts) grades a request by
+ * `executionClamp` (packages/vault/src/gateway/access.ts) grades a request by
  * schema + table + verb coverage only. A scope's `rowFilter` op/value and
  * `fieldMask` columns are carried into the ALLOW decision opaquely — the sole
  * content check is `conflictingPin`, which refuses two differing eq/in pins on

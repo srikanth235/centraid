@@ -22,6 +22,9 @@ import GrantSheet from "./GrantSheet";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock(import("expo-clipboard"), () => ({
+  setStringAsync: () => Promise.resolve(true),
+}));
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const element = (
@@ -92,7 +95,12 @@ vi.mock(
 // so every test injects its own and stubs transport at the seam.
 vi.mock(
   import("./grant-seat"),
-  () => ({ nativeGrantDoor: () => undefined }) as never
+  () =>
+    ({
+      nativeGrantDoor: () => undefined,
+      nativeLinkTicketDoor: () => () =>
+        Promise.resolve({ ok: false, message: "no gateway in this test" }),
+    }) as never
 );
 
 vi.mock(
@@ -167,7 +175,15 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
-    forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
+    forParty: () =>
+      Promise.resolve({
+        known: true,
+        channel: { state: "live" as const, vaultId: "vault-priya" },
+        grants: [],
+      }),
     forAudience: () => Promise.resolve({ known: true, grants: [] }),
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
@@ -282,9 +298,20 @@ describe("the grant sheet, native seat", () => {
       expect(has("Can edit")).toBe(false);
     });
 
-    test("a person this vault has never reached says so", async () => {
-      await render();
+    test("a person this vault has never reached says so, and Share is not offered", async () => {
+      await render({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({ known: true, channel: null, grants: [] }),
+        }),
+      });
       expect(container?.textContent).toContain("Not reached yet");
+      expect(container?.textContent).toContain(
+        "Link their account in People to share with them."
+      );
+      // #903: the sheet does not grow a control naming an act it cannot
+      // perform — the reach line above already says what would work.
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
     });
 
     test("saying it twice is a success, not a failure", async () => {
@@ -496,13 +523,13 @@ describe("the grant sheet, native seat", () => {
       expect(container?.textContent).not.toContain("Not reached yet");
     });
 
-    test("an unaccepted invitation reads as pending, not as an error", async () => {
+    test("a link that has ended reads as its own state, not as an error", async () => {
       await render({
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
               known: true,
-              channel: { state: "invited" as const },
+              channel: { state: "severed" as const, vaultId: "vault-priya" },
               grants: [
                 standingGrant({
                   fulfillment: [
@@ -518,7 +545,66 @@ describe("the grant sheet, native seat", () => {
             }),
         }),
       });
-      expect(container?.textContent).toContain("Invitation pending");
+      expect(container?.textContent).toContain("Link ended");
+    });
+  });
+  // #929 S6 — the same claim the browser seat pins, on the seat where a member
+  // is most likely to be standing when they hit it. The refusal stays; what
+  // changes is that the act it names is offered here.
+  describe("an unlinked person is offered the link ticket inline", () => {
+    const NEVER_REACHED = {
+      forParty: () =>
+        Promise.resolve({ known: true, channel: null, grants: [] }),
+    };
+    const ticketDoor =
+      (expiresAt = new Date(Date.now() + 9 * 60_000).toISOString()) =>
+      () =>
+        Promise.resolve({
+          ok: true as const,
+          ticket: { ticket: "tkt-native", expiresAt },
+        });
+
+    test("the ticket is offered, and the share is still refused", async () => {
+      await render({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(has("Send them a link ticket")).toBe(true);
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("no ticket exists until it is asked for", async () => {
+      await render({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+      expect(container?.textContent).not.toContain("tkt-native");
+
+      await act(async () => press("Send them a link ticket").click());
+
+      expect(container?.textContent).toContain("tkt-native");
+      expect(container?.textContent).toContain("Good for 8 more minutes.");
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("a refused mint says so in the door's own words", async () => {
+      await render({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: () =>
+          Promise.resolve({ ok: false as const, message: "no gateway here" }),
+      });
+
+      await act(async () => press("Send them a link ticket").click());
+
+      expect(container?.textContent).toContain("no gateway here");
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("a linked person is offered no ticket — there is nothing to fix", async () => {
+      await render({ linkTicket: ticketDoor() });
+
+      expect(has("Send them a link ticket")).toBe(false);
     });
   });
 });

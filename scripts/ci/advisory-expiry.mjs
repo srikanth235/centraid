@@ -15,7 +15,7 @@
  * nobody is on the hook to read it, and its normal state is "there is output".
  *
  * THE RULE. A step whose NAME declares it advisory (`Advisory` or
- * `(non-blocking)`) must be registered in `tests/advisory-ledger.json` with an
+ * `(non-blocking)`) must be registered in `tests/inventory.json#advisory` with an
  * owner, an issue and a `revisitBy` date. A past date fails this gate — the
  * advisory has been advisory for as long as somebody said it should be, and the
  * next move is a decision (make it blocking, delete it, or extend the date on
@@ -35,8 +35,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { INVENTORY_PATH, readLedgerSection } from "../check-ledgers.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
-const LEDGER_PATH = path.join(root, "tests/advisory-ledger.json");
+/** The advisory register: `tests/inventory.json#advisory.steps` (#915 Wave 4). */
+const LEDGER_LABEL = "tests/inventory.json#advisory";
 const WORKFLOW_DIR = path.join(root, ".github/workflows");
 
 /** Step names that declare themselves advisory. */
@@ -65,7 +68,7 @@ export function checkAdvisories(steps, ledger, today) {
     const entry = ledger[step.id];
     if (!entry) {
       errors.push(
-        `\`${step.id}\` announces itself as advisory but has no entry in tests/advisory-ledger.json. ` +
+        `\`${step.id}\` announces itself as advisory but has no entry in ${LEDGER_LABEL}. ` +
           `A step that can never fail needs an owner, an issue and a date by which somebody decides whether it should stay one.`
       );
       continue;
@@ -116,7 +119,7 @@ function main() {
     steps.push(...advisorySteps(`.github/workflows/${name}`, source));
   }
 
-  const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
+  const ledger = readLedgerSection(INVENTORY_PATH, "advisory")?.steps ?? {};
   const errors = checkAdvisories(steps, ledger, today);
   if (errors.length) {
     for (const error of errors) console.error(`advisory-expiry: ${error}`);

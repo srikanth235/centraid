@@ -258,7 +258,6 @@ export function checkHardlinkRefcounts(
 export interface ReplicaJournalInput {
   readonly vaultId: string;
   readonly vault: DatabaseSync;
-  readonly journal: DatabaseSync;
 }
 
 /** Every violation here is a state the log's writers make unrepresentable. */
@@ -315,9 +314,9 @@ export function checkReplicaJournalConsistency(
   }
 
   try {
-    input.journal.prepare("SELECT COUNT(*) AS n FROM consent_receipt").get();
+    input.vault.prepare("SELECT COUNT(*) AS n FROM access_receipt").get();
   } catch (error) {
-    problems.push(`journal.db audit trail unreadable — ${messageOf(error)}`);
+    problems.push(`audit trail unreadable — ${messageOf(error)}`);
   }
 
   if (problems.length === 0) {
@@ -341,7 +340,6 @@ export function checkReplicaJournalConsistency(
 export interface DoctorVaultTarget {
   readonly vaultId: string;
   readonly vault: DatabaseSync;
-  readonly journal: DatabaseSync;
   readonly local: Pick<LocalBlobStore, "listSync" | "getSync">;
   readonly casRoot: string;
 }
@@ -369,10 +367,6 @@ export function runIntegrityScrub(
         label: `${vault.vaultId}/vault.db`,
         db: vault.vault,
       }),
-      checkDatabaseIntegrity({
-        label: `${vault.vaultId}/journal.db`,
-        db: vault.journal,
-      }),
       checkCasRehash({
         vaultId: vault.vaultId,
         local: vault.local,
@@ -385,7 +379,6 @@ export function runIntegrityScrub(
       checkReplicaJournalConsistency({
         vaultId: vault.vaultId,
         vault: vault.vault,
-        journal: vault.journal,
       })
     );
   }

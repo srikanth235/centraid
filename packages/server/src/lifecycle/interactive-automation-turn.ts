@@ -34,7 +34,7 @@ import type {
 } from "@centraid/server/engine";
 import type * as TypeImport_4y0tle from "@centraid/server/engine";
 
-import { journalConversationStore } from "../journal-stores.js";
+import { ledgerConversationStore } from "../ledger-stores.js";
 import { unrefTimer } from "../lib/unref-timer.js";
 import {
   automationContextPreamble,
@@ -108,7 +108,7 @@ export interface InteractiveAutomationTurnOptions {
   row: AutomationRow;
   turnId: string;
   message: string;
-  journalDbFile: string;
+  ledgerDbFile: string;
   harnessSessionDir: string;
   runner: ConversationRunner;
   harnessKind: HarnessKind;
@@ -233,7 +233,7 @@ function decodeReportedPath(reportedPath: string): string | undefined {
 export async function runInteractiveAutomationTurn(
   opts: InteractiveAutomationTurnOptions
 ): Promise<InteractiveAutomationTurnResult> {
-  const store = journalConversationStore(opts.journalDbFile);
+  const store = ledgerConversationStore(opts.ledgerDbFile);
   const ref = opts.row.ref;
   const conversationId = store.ensureAutomationConversation(
     ref,

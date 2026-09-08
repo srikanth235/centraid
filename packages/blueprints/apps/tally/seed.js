@@ -4,7 +4,6 @@
  * Balances stay derived (never stored), so the seeded ledger exercises the
  * whole projection. Demo register: `seed.demo` provenance, one-click purge.
  */
-const PURPOSE = "dpv:ServiceProvision";
 
 export default async function seedHandler({ input, log, ctx }) {
   const now = new Date(input?.now ?? Date.now()).getTime();
@@ -13,7 +12,6 @@ export default async function seedHandler({ input, log, ctx }) {
     const out = await ctx.vault.invoke({
       command,
       input: args,
-      purpose: PURPOSE,
     });
     if (out.status !== "executed") {
       throw new Error(`${command} ${out.status}: ${out.reason ?? "no reason"}`);
@@ -24,10 +22,9 @@ export default async function seedHandler({ input, log, ctx }) {
   // The owner is auto-included in every group; expenses need their party id.
   const vaultRow = await ctx.vault.read({
     entity: "core.vault",
-    purpose: PURPOSE,
     limit: 1,
   });
-  const me = vaultRow.rows?.[0]?.owner_party_id;
+  const me = vaultRow.rows?.[0]?.self_party_id;
   if (!me) throw new Error("vault has no owner party");
 
   const maya = await invoke("tally.add_friend", { name: "Maya" });

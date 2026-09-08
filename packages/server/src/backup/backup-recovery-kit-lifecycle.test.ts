@@ -62,22 +62,24 @@ describe("backup-recovery-kit-lifecycle", () => {
       health: new HealthRegistry(),
       logger: silentLogger,
       now: () => clock.now,
-      assembleEntries: ({ plane }) =>
-        Promise.resolve([
-          ...plane.walShipper!.currentBases().map((base) => ({
-            path: WAL_DB_FILES[base.db],
+      assembleEntries: ({ plane }) => {
+        const base = plane.walShipper!.currentBase()!;
+        return Promise.resolve([
+          {
+            path: WAL_DB_FILES.vault,
             kind: "db" as const,
             absolutePath: base.file,
             sha256: base.sha256,
             walGeneration: base.generation,
             baseTickMs: base.createdAtMs,
-          })),
+          },
           {
             path: "fixture.bin",
             kind: "blob" as const,
             absolutePath: fixtureFile,
           },
-        ]),
+        ]);
+      },
     });
 
     return { service, registry, vaultId: registry.defaultVaultId(), clock };

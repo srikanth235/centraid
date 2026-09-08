@@ -5,7 +5,6 @@ import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import {
   bootstrapVault,
-  createGrant,
   enrollAgent,
   enrollApp,
   enrollDevice,
@@ -14,6 +13,8 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { automationAnswers } from "../grant/automation-authority.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { uuidv7 } from "../ids.js";
 import {
   deleteReplicaIntentOutcomesForDevice,
@@ -75,11 +76,11 @@ describe("gateway", () => {
       expect(() =>
         gw.read(
           { kind: "device", deviceId: "nope", deviceKey: "nope" },
-          { entity: "core.party", purpose: "dpv:ServiceProvision" }
+          { entity: "core.party" }
         )
       ).toThrow(/unknown caller/u);
-      const receipts = db.journal
-        .prepare("SELECT count(*) AS n FROM consent_receipt")
+      const receipts = db.audit
+        .prepare("SELECT count(*) AS n FROM access_receipt")
         .get() as {
         n: number;
       };
@@ -90,105 +91,103 @@ describe("gateway", () => {
       expect(() =>
         gw.read(
           { kind: "device", deviceId: boot.deviceId, deviceKey: "wrong" },
-          { entity: "core.party", purpose: "dpv:ServiceProvision" }
+          { entity: "core.party" }
         )
       ).toThrow(/unknown caller/u);
     });
   });
 
   describe("S2 consent", () => {
-    test("owner-direct read is allowed and receipted", () => {
+    test("owner-direct read is allowed and writes NO receipt (#928, #922 B1)", () => {
+      const before = (
+        db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get() as {
+          n: number;
+        }
+      ).n;
       const result = gw.read(owner, {
         entity: "core.party",
-        purpose: "dpv:ServiceProvision",
       });
       expect(result.rows.length).toBeGreaterThan(0);
-      const receipt = db.journal
-        .prepare(
-          "SELECT decision, action, object_type, grant_id FROM consent_receipt WHERE receipt_id = ?"
-        )
-        .get(result.receiptId) as {
-        decision: string;
-        action: string;
-        object_type: string;
-        grant_id: string | null;
-      };
-      expect(receipt).toMatchObject({
-        decision: "allow",
-        action: "read",
-        object_type: "core.party",
-        grant_id: null,
-      });
+      // Nothing was exercised against the owner, so there is nothing to prove:
+      // no receipt id on the result, and not one row appended to the band.
+      expect(result.receiptId).toBeUndefined();
+      expect(
+        db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get()
+      ).toMatchObject({ n: before });
     });
 
     test("app without a grant is denied with a deny receipt", () => {
-      const app = enrollApp(db, { name: "vitals-widget" });
+      const app = enrollAgent(db, {
+        name: "vitals-widget",
+        modelRef: "test-automation",
+      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       expect(() =>
         gw.read(cred, {
           entity: "core.observation",
-          purpose: "dpv:HealthMonitoring",
         })
       ).toThrow(/deny/u);
-      const deny = db.journal
+      const deny = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_receipt WHERE decision='deny'`
+          `SELECT count(*) AS n FROM access_receipt WHERE decision='deny'`
         )
         .get() as { n: number };
       expect(deny.n).toBe(1);
     });
 
-    test("granted app reads only within scope; ungranted schema still denied", () => {
-      const app = enrollApp(db, { name: "calendar-app" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [
-          { schema: "schedule", verbs: "read" },
-          { schema: "core", table: "event", verbs: "read" },
-        ],
+    test("an answered automation reads only within its answer; an unanswered pack is denied", () => {
+      const app = enrollAgent(db, {
+        name: "calendar-app",
+        modelRef: "test-automation",
       });
+      answerScopes(db, boot, "calendar-app", [
+        { schema: "schedule", verbs: "read" },
+        { schema: "core", table: "event", verbs: "read" },
+      ]);
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
         gw.read(cred, {
           entity: "schedule.calendar",
-          purpose: "dpv:ServiceProvision",
         }).rows
       ).toHaveLength(2);
       expect(() =>
         gw.read(cred, {
           entity: "core.transaction",
-          purpose: "dpv:ServiceProvision",
         })
-      ).toThrow(/deny/u);
-      // Wrong purpose on a valid scope is also a deny (purpose limitation).
-      expect(() =>
-        gw.read(cred, { entity: "schedule.calendar", purpose: "dpv:Billing" })
       ).toThrow(/deny/u);
     });
 
-    test("row filter and field mask clamp what a grant surfaces", () => {
+    test("row filter and field mask clamp what an answer surfaces", () => {
       gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
-      const app = enrollApp(db, { name: "masked-app" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [
+      const app = enrollAgent(db, {
+        name: "masked-app",
+        modelRef: "test-automation",
+      });
+      answerScopes(db, boot, "masked-app", [
+        { schema: "core", table: "event", verbs: "read" },
+      ]);
+      const cred: Credential = {
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+        // Rows and fields come from the RUN's clamp now (#928): the owner's
+        // answer says whether, the manifest says how narrow.
+        scopeClamp: [
           {
             schema: "core",
             table: "event",
@@ -197,21 +196,12 @@ describe("gateway", () => {
             fieldMask: ["event_id", "summary"],
           },
         ],
-      });
-      const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
       };
-      // Tentative event filtered out by the grant's row filter.
-      expect(
-        gw.read(cred, { entity: "core.event", purpose: "dpv:ServiceProvision" })
-          .rows
-      ).toHaveLength(0);
+      // Tentative event filtered out by the clamp's row filter.
+      expect(gw.read(cred, { entity: "core.event" }).rows).toHaveLength(0);
       db.vault.prepare(`UPDATE core_event SET status='confirmed'`).run();
       const rows = gw.read(cred, {
         entity: "core.event",
-        purpose: "dpv:ServiceProvision",
       }).rows;
       expect(rows).toHaveLength(1);
       expect(Object.keys(rows[0] ?? {}).sort()).toStrictEqual([
@@ -231,9 +221,9 @@ describe("gateway", () => {
         onProvenanceCommitted: (entityTypes = []) => {
           const placeholders = entityTypes.map(() => "?").join(",");
           const provenanceRows = (
-            db.journal
+            db.audit
               .prepare(
-                `SELECT count(*) AS n FROM consent_provenance
+                `SELECT count(*) AS n FROM access_provenance
                 WHERE entity_type IN (${placeholders})`
               )
               .get(...entityTypes) as { n: number }
@@ -247,7 +237,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("executed");
@@ -260,7 +249,7 @@ describe("gateway", () => {
 
     test("group commit crosses exactly one vault + journal commit pair", () => {
       const vaultExec = vi.spyOn(db.vault, "exec");
-      const journalExec = vi.spyOn(db.journal, "exec");
+      const journalExec = vi.spyOn(db.audit, "exec");
       const outcomes = gw.invokeBatch(
         Array.from(
           { length: 10 },
@@ -288,7 +277,7 @@ describe("gateway", () => {
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT count(*) AS n FROM agent_command_invocation
             WHERE invocation_id LIKE 'batch-invocation-%' AND status = 'executed'`
@@ -328,18 +317,16 @@ describe("gateway", () => {
       ).toBe(0);
     });
 
-    test("an app invocation is bound to the durable intent owner device and app", () => {
+    test("a surface invocation is bound to the durable intent owner device and app", () => {
+      // A first-party app is not a principal (#928 A1): it runs on the owner's
+      // own device and NAMES itself, so an intent is still bound to the device
+      // and the app that queued it.
       const app = enrollApp(db, { name: "agenda" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read+act" }],
-      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "device",
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+        surface: app.appId,
       };
       recordReplicaIntentOutcome(db.vault, {
         intentId: "owned-intent",
@@ -354,7 +341,6 @@ describe("gateway", () => {
         gw.invoke(cred, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           intentId: "owned-intent",
           intentDeviceId: "paired-device-b",
         })
@@ -369,7 +355,6 @@ describe("gateway", () => {
         gw.invoke(cred, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           intentId: "owned-intent",
           intentDeviceId: "paired-device-a",
         })
@@ -380,7 +365,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
@@ -389,27 +373,27 @@ describe("gateway", () => {
         .prepare("SELECT status, sequence FROM core_event WHERE event_id = ?")
         .get(eventId);
       expect(event).toMatchObject({ status: "tentative", sequence: 0 });
-      const checks = db.journal
+      const checks = db.audit
         .prepare(
           "SELECT phase, passed FROM agent_invocation_check WHERE invocation_id = ?"
         )
         .all(outcome.invocationId) as { phase: string; passed: number }[];
-      expect(checks.filter((c) => c.phase === "pre")).toHaveLength(4);
+      expect(checks.filter((c) => c.phase === "pre")).toHaveLength(5);
       expect(checks.filter((c) => c.phase === "post")).toHaveLength(2);
       expect(checks.every((c) => c.passed === 1)).toBe(true);
-      const prov = db.journal
+      const prov = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_provenance WHERE entity_type='core.event' AND entity_id=?`
+          `SELECT count(*) AS n FROM access_provenance WHERE entity_type='core.event' AND entity_id=?`
         )
         .get(eventId) as { n: number };
       expect(prov.n).toBe(1);
-      const expl = db.journal
+      const expl = db.audit
         .prepare(
           "SELECT summary FROM agent_explanation WHERE invocation_id = ?"
         )
         .get(outcome.invocationId) as { summary: string };
       expect(expl.summary).toContain("schedule.propose_event");
-      const inv = db.journal
+      const inv = db.audit
         .prepare(
           "SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?"
         )
@@ -422,7 +406,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: "missing-calendar" }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       if (outcome.status !== "failed") return;
@@ -435,7 +418,7 @@ describe("gateway", () => {
         n: number;
       };
       expect(events.n).toBe(0);
-      const inv = db.journal
+      const inv = db.audit
         .prepare(
           "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
         )
@@ -443,7 +426,7 @@ describe("gateway", () => {
       expect(inv.status).toBe("failed");
       // The raw technical predicate is still recorded in the checks-table
       // audit trail, unaffected by the friendly outward message.
-      const check = db.journal
+      const check = db.audit
         .prepare(
           `SELECT predicate FROM agent_invocation_check WHERE invocation_id = ? AND passed = 0`
         )
@@ -455,7 +438,6 @@ describe("gateway", () => {
       gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
@@ -464,7 +446,6 @@ describe("gateway", () => {
           dtstart: "2026-07-03T09:10:00Z",
           dtend: "2026-07-03T09:30:00Z",
         }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       assert(outcome.status === "failed");
@@ -477,7 +458,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: { summary: "No times", calendar_id: calendarId },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       assert(outcome.status === "failed");
@@ -488,7 +468,6 @@ describe("gateway", () => {
       const proposed = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       if (proposed.status !== "executed") throw new Error("propose failed");
       const eventId = (proposed.output as { event_id: string }).event_id;
@@ -499,7 +478,6 @@ describe("gateway", () => {
           dtstart: "2026-07-03T10:00:00Z",
           dtend: "2026-07-03T10:15:00Z",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       const event = db.vault
@@ -516,7 +494,6 @@ describe("gateway", () => {
       const first = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(first.status).toBe("executed");
@@ -524,7 +501,6 @@ describe("gateway", () => {
       const replay = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(replay).toMatchObject({
@@ -544,7 +520,6 @@ describe("gateway", () => {
       const failed = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: "missing-calendar" }),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(failed).toMatchObject({ status: "failed", invocationId });
@@ -557,7 +532,6 @@ describe("gateway", () => {
             dtstart: "2026-07-03T10:00:00Z",
             dtend: "2026-07-03T10:15:00Z",
           },
-          purpose: "dpv:ServiceProvision",
           invocationId,
         })
       ).toThrow(/already bound/u);
@@ -588,7 +562,6 @@ describe("gateway", () => {
       const request = {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: "missing-calendar" }),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       } as const;
       const first = gw.invoke(owner, request);
@@ -608,7 +581,6 @@ describe("gateway", () => {
       const first = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
         intentId: "offline-intent-crash-gap",
       });
@@ -635,45 +607,53 @@ describe("gateway", () => {
           )
           .get(),
       }).toStrictEqual({ n: 0 });
-      const replicaReceipt = db.journal
+      const replicaReceipt = db.audit
         .prepare(
-          "SELECT detail_json FROM consent_receipt WHERE invocation_id = ?"
+          "SELECT detail_json FROM access_receipt WHERE invocation_id = ?"
         )
         .get(invocationId) as { detail_json: string };
       expect(JSON.parse(replicaReceipt.detail_json)).not.toHaveProperty(
         "output"
       );
 
-      // Rewind only the derived journal side to model a process dying after
-      // vault.db COMMIT and before any post-check/S5 row committed. The marker
+      // Rewind only the derived audit side to model a process dying after the
+      // vault COMMIT and before any post-check/S5 row committed. The marker
       // remains the canonical proof and carries redacted reconstruction data.
-      db.journal
+      //
+      // The band is append-only and lets rows out ONLY through the archive
+      // pass (#916), which is exactly the door a crash does not use — so the
+      // rewind opens it deliberately, and shuts it again.
+      db.audit
+        .prepare("INSERT INTO audit_archive_pass (active) VALUES (1)")
+        .run();
+      db.audit
         .prepare(
           `UPDATE agent_command_invocation
             SET status = 'checked', executed_at = NULL, receipt_id = NULL
           WHERE invocation_id = ?`
         )
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(`DELETE FROM agent_evidence WHERE invocation_id = ?`)
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(`DELETE FROM agent_explanation WHERE invocation_id = ?`)
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(
           `DELETE FROM agent_invocation_check WHERE invocation_id = ? AND phase = 'post'`
         )
         .run(invocationId);
-      db.journal
-        .prepare(`DELETE FROM consent_receipt WHERE invocation_id = ?`)
+      db.audit
+        .prepare(`DELETE FROM access_receipt WHERE invocation_id = ?`)
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(
-          `DELETE FROM consent_provenance
+          `DELETE FROM access_provenance
           WHERE json_extract(used_json, '$.invocation') = ?`
         )
         .run(invocationId);
+      db.audit.prepare("DELETE FROM audit_archive_pass").run();
       db.vault
         .prepare(
           `UPDATE replica_invocation_commit
@@ -684,7 +664,7 @@ describe("gateway", () => {
 
       // Abort late in repair. Every earlier insert must roll back with it, the
       // proof stamp must remain NULL, and replay must not claim success.
-      db.journal.exec(`
+      db.audit.exec(`
       CREATE TRIGGER fail_repair_evidence
       BEFORE INSERT ON agent_evidence
       BEGIN
@@ -695,16 +675,15 @@ describe("gateway", () => {
         gw.invoke(owner, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           invocationId,
           intentId: "offline-intent-crash-gap",
         })
       ).toThrow(/synthetic repair crash/u);
-      db.journal.exec("DROP TRIGGER fail_repair_evidence");
+      db.audit.exec("DROP TRIGGER fail_repair_evidence");
 
       const count = (table: string, where = "invocation_id = ?"): number =>
         (
-          db.journal
+          db.audit
             .prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`)
             .get(invocationId) as {
             n: number;
@@ -719,10 +698,10 @@ describe("gateway", () => {
           `invocation_id = ? AND phase = 'post'`
         ),
         provenance: count(
-          "consent_provenance",
+          "access_provenance",
           `json_extract(used_json, '$.invocation') = ?`
         ),
-        receipts: count("consent_receipt"),
+        receipts: count("access_receipt"),
         evidence: count("agent_evidence"),
         explanations: count("agent_explanation"),
       });
@@ -736,7 +715,7 @@ describe("gateway", () => {
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT status, executed_at, receipt_id
              FROM agent_command_invocation WHERE invocation_id = ?`
@@ -758,7 +737,6 @@ describe("gateway", () => {
       const replay = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
         intentId: "offline-intent-crash-gap",
       });
@@ -776,7 +754,7 @@ describe("gateway", () => {
         explanations: 1,
       });
       expect(
-        db.journal
+        db.audit
           .prepare(
             `SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -799,8 +777,8 @@ describe("gateway", () => {
 
     test("post-canonical finalization failure retries the marker without a second write", () => {
       const invocationId = "offline-intent-finalize-ambiguous";
-      db.journal.exec(`CREATE TEMP TRIGGER fail_finalization_receipt
-      BEFORE INSERT ON consent_receipt BEGIN
+      db.audit.exec(`CREATE TEMP TRIGGER fail_finalization_receipt
+      BEFORE INSERT ON access_receipt BEGIN
         SELECT RAISE(ABORT, 'synthetic post-canonical finalization failure');
       END`);
 
@@ -808,7 +786,6 @@ describe("gateway", () => {
         gw.invoke(owner, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           invocationId,
           intentId: invocationId,
         })
@@ -827,13 +804,12 @@ describe("gateway", () => {
           .get(invocationId),
       }).toStrictEqual({ journal_finalized_at: null });
 
-      db.journal.exec("DROP TRIGGER fail_finalization_receipt");
+      db.audit.exec("DROP TRIGGER fail_finalization_receipt");
       gw = createGateway(db);
       registerScheduleCommands(gw);
       const retry = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
         intentId: invocationId,
       });
@@ -849,7 +825,7 @@ describe("gateway", () => {
         n: 1,
       });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
           )
@@ -859,8 +835,8 @@ describe("gateway", () => {
 
     test("ordinary post-canonical recovery preserves receipt replay output", () => {
       const invocationId = "ordinary-finalize-ambiguous";
-      db.journal.exec(`CREATE TEMP TRIGGER fail_ordinary_finalization_receipt
-      BEFORE INSERT ON consent_receipt BEGIN
+      db.audit.exec(`CREATE TEMP TRIGGER fail_ordinary_finalization_receipt
+      BEFORE INSERT ON access_receipt BEGIN
         SELECT RAISE(ABORT, 'synthetic ordinary finalization failure');
       END`);
 
@@ -868,7 +844,6 @@ describe("gateway", () => {
         gw.invoke(owner, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           invocationId,
         })
       ).toThrow(/ordinary finalization failure/u);
@@ -893,13 +868,12 @@ describe("gateway", () => {
         receiptDetail: { output: { event_id: event.event_id } },
       });
 
-      db.journal.exec("DROP TRIGGER fail_ordinary_finalization_receipt");
+      db.audit.exec("DROP TRIGGER fail_ordinary_finalization_receipt");
       gw = createGateway(db);
       registerScheduleCommands(gw);
       const retry = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
 
@@ -932,7 +906,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(outcome.status).toBe("executed");
@@ -945,34 +918,19 @@ describe("gateway", () => {
       }).toStrictEqual({ n: 0 });
     });
 
-    test("judgment veto blocks an otherwise-valid call", () => {
-      db.vault
-        .prepare(
-          `INSERT INTO agent_judgment (judgment_id, subject_scope, rule_json, confidence, active, learned_at)
-         VALUES ('j1', 'schedule.propose_event', '{"veto_command":"schedule.propose_event"}', 1.0, 1, ?)`
-        )
-        .run(new Date().toISOString());
-      const outcome = gw.invoke(owner, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
-      });
-      expect(outcome.status).toBe("failed");
-      assert(outcome.status === "failed");
-      expect(outcome.reason).toContain("judgment");
-    });
+    // The judgment veto left with `agent.judgment` (#916, ruling ONT-06): the
+    // learn loop had a table, commands and no caller, so no correction was
+    // ever distilled into a rule and no call was ever vetoed. R08 gets a test
+    // again when it gets a producer.
   });
 
   describe("confirmation routing + revocation + sweeps", () => {
     function grantedAgent(): { cred: Credential; grantId: string } {
       const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
       const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-      const grantId = createGrant(db, {
-        granteePartyId: agent.partyId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read+act" }],
-      });
+      const grantId = answerScopes(db, boot, "assistant", [
+        { schema: "schedule", verbs: "read+act" },
+      ])[0]!;
       return {
         cred: {
           kind: "agent",
@@ -1011,7 +969,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         intentId: "offline-intent-1",
       });
       expect(parked.status).toBe("parked");
@@ -1037,8 +994,8 @@ describe("gateway", () => {
       expect(outcome.status).toBe("executed");
       expect(decisionChanges).toStrictEqual([true, false]);
       if (outcome.status !== "executed") return;
-      const receipt = db.journal
-        .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+      const receipt = db.audit
+        .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
         .get(outcome.receiptId) as { detail_json: string };
       expect(JSON.parse(receipt.detail_json).confirmation.confirmedBy).toBe(
         boot.ownerPartyId
@@ -1066,7 +1023,6 @@ describe("gateway", () => {
       const request = {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId: "offline-intent-journal-gap",
         intentId: "offline-intent-journal-gap",
       } as const;
@@ -1083,7 +1039,7 @@ describe("gateway", () => {
         invocationId: request.invocationId,
       });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             "SELECT count(*) AS n FROM agent_command_invocation WHERE invocation_id = ?"
           )
@@ -1119,16 +1075,12 @@ describe("gateway", () => {
         deviceId: assistantDevice.deviceId,
         deviceKey: assistantDevice.deviceKey,
       };
-      createGrant(db, {
-        granteePartyId: assistantAgent.partyId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read+act" }],
-      });
+      answerScopes(db, boot, "_assistant", [
+        { schema: "schedule", verbs: "read+act" },
+      ]);
       const assistantParked = gw.invoke(assistantCred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(assistantParked.status).toBe("parked");
       if (assistantParked.status !== "parked") return;
@@ -1138,7 +1090,6 @@ describe("gateway", () => {
       const automationParked = gw.invoke(automationCred, {
         command: "schedule.propose_event",
         input: proposeInput({ summary: "Automation event" }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(automationParked.status).toBe("parked");
       if (automationParked.status !== "parked") return;
@@ -1164,62 +1115,36 @@ describe("gateway", () => {
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
-      const receipt = db.journal
-        .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+      const receipt = db.audit
+        .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
         .get(outcome.receiptId) as { detail_json: string };
       expect(JSON.parse(receipt.detail_json).risk).toBe("medium");
     });
 
-    test("an omitted purpose defaults and is journaled (issue #306)", () => {
-      const { cred } = grantedAgent();
+    test("an invocation receipt names the standing answer it rode (#928)", () => {
+      const { cred, grantId } = grantedAgent();
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
-      const receipt = db.journal
-        .prepare(
-          "SELECT purpose_concept_id FROM consent_receipt WHERE receipt_id = ?"
-        )
-        .get(outcome.receiptId) as { purpose_concept_id: string | null };
-      expect(receipt.purpose_concept_id).toBe("dpv:ServiceProvision");
-      // A purposeless read rides the same default and still receipts it.
-      const read = gw.read(cred, { entity: "schedule.calendar" });
-      const readReceipt = db.journal
-        .prepare(
-          "SELECT purpose_concept_id FROM consent_receipt WHERE receipt_id = ?"
-        )
-        .get(read.receiptId) as { purpose_concept_id: string | null };
-      expect(readReceipt.purpose_concept_id).toBe("dpv:ServiceProvision");
-    });
-
-    test("consent.policy purpose rules still evaluate when a purpose IS supplied (issue #306)", () => {
-      db.vault
-        .prepare(
-          `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, residency_region, effective_from, priority)
-         VALUES (?, 'purpose', 'schedule', NULL, '{"allowed_purposes":["dpv:ServiceProvision"]}', NULL, NULL, '2020-01-01T00:00:00Z', 1)`
-        )
-        .run(uuidv7());
-      const { cred } = grantedAgent();
-      const denied = gw.invoke(cred, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-        purpose: "dpv:Billing",
-      });
-      expect(denied.status).toBe("denied");
-      assert(denied.status === "denied");
-      expect(denied.reason).toContain("policy forbids");
-      // The defaulted purpose satisfies the same policy.
-      const allowed = gw.invoke(cred, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-      });
-      expect(allowed.status).toBe("executed");
+      const receipt = db.audit
+        .prepare("SELECT authority_id FROM access_receipt WHERE receipt_id = ?")
+        .get(outcome.receiptId) as { authority_id: string | null };
+      // ONE ID SPACE: the receipt names a `share_authority` row, or NULL for
+      // an owner-direct act. There is no third thing it can be.
+      expect(receipt.authority_id).toBe(grantId);
+      expect(
+        db.vault
+          .prepare(
+            "SELECT count(*) AS n FROM share_authority WHERE authority_id = ?"
+          )
+          .get(receipt.authority_id)
+      ).toMatchObject({ n: 1 });
     });
 
     test("owner denial of a parked invocation is receipted as deny", () => {
@@ -1233,7 +1158,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       if (parked.status !== "parked") throw new Error("expected parked");
       const outcome = gw.confirm(owner, parked.invocationId, false);
@@ -1266,7 +1190,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId: intentId,
         intentId,
       });
@@ -1288,9 +1211,9 @@ describe("gateway", () => {
         )
       ).toMatchObject({ status: "sending" });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
-            `SELECT count(*) AS n FROM consent_receipt
+            `SELECT count(*) AS n FROM access_receipt
             WHERE invocation_id = ? AND decision = 'deny'`
           )
           .get(parked.invocationId),
@@ -1320,7 +1243,7 @@ describe("gateway", () => {
         n: 0,
       });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             "SELECT count(*) AS n FROM agent_explanation WHERE invocation_id = ?"
           )
@@ -1349,7 +1272,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId: intentId,
         intentId,
       });
@@ -1388,18 +1310,15 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         intentId: "offline-intent-revoked-before-confirm",
       });
       if (parked.status !== "parked") throw new Error("expected parked");
 
-      // Model a process crash after the grant row committed but before the
-      // revocation cascade removed this durable parked payload.
+      // Model a process crash after the withdrawal committed but before the
+      // cascade removed this durable parked payload.
       db.vault
         .prepare(
-          `UPDATE consent_access_grant
-            SET status = 'revoked', revoked_at = ?
-          WHERE grant_id = ?`
+          `UPDATE share_authority SET revoked_at = ? WHERE authority_id = ?`
         )
         .run(new Date().toISOString(), grantId);
 
@@ -1407,7 +1326,7 @@ describe("gateway", () => {
 
       expect(outcome).toMatchObject({
         status: "denied",
-        reason: "consent grant no longer active",
+        reason: "standing answer no longer live",
       });
       expect({
         ...db.vault.prepare("SELECT count(*) AS n FROM core_event").get(),
@@ -1423,49 +1342,54 @@ describe("gateway", () => {
         )
       ).toMatchObject({
         status: "denied",
-        reason: "consent grant no longer active",
+        reason: "standing answer no longer live",
       });
     });
 
     test("revocation cascade: agent goes dark instantly, receipts remain", () => {
-      const { cred, grantId } = grantedAgent();
+      const { cred } = grantedAgent();
       // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
         gw.read(cred, {
           entity: "schedule.calendar",
-          purpose: "dpv:ServiceProvision",
         }).rows
       ).toHaveLength(2);
-      const before = db.journal
-        .prepare("SELECT count(*) AS n FROM consent_receipt")
+      const before = db.audit
+        .prepare("SELECT count(*) AS n FROM access_receipt")
         .get() as {
         n: number;
       };
-      const result = gw.revokeGrant(owner, grantId);
-      expect(result.grantId).toBe(grantId);
+      // Withdraw every answer the automation holds: `read+act` is two rows.
+      for (const answer of automationAnswers(db.vault, "assistant"))
+        gw.revokeAuthority(owner, answer.authorityId);
       expect(() =>
         gw.read(cred, {
           entity: "schedule.calendar",
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/deny/u);
-      const after = db.journal
-        .prepare("SELECT count(*) AS n FROM consent_receipt")
+      const after = db.audit
+        .prepare("SELECT count(*) AS n FROM access_receipt")
         .get() as {
         n: number;
       };
       expect(after.n).toBeGreaterThan(before.n); // history kept, plus new receipts
     });
 
-    test("sweep expires lapsed grants and purges scheduled content", () => {
-      const app = enrollApp(db, { name: "expiring-app" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read" }],
-        expiresAt: "2020-01-01T00:00:00Z",
+    test("sweep lapses a time-boxed answer and purges scheduled content", () => {
+      enrollAgent(db, {
+        name: "expiring-app",
+        modelRef: "test-automation",
       });
+      const [expiring] = answerScopes(db, boot, "expiring-app", [
+        { schema: "schedule", verbs: "read" },
+      ]);
+      db.vault
+        .prepare(
+          `UPDATE share_authority
+              SET duration = 'until-date', expires_at = '2020-01-01T00:00:00Z'
+            WHERE authority_id = ?`
+        )
+        .run(expiring!);
       db.vault
         .prepare(
           `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
@@ -1481,7 +1405,7 @@ describe("gateway", () => {
         )
         .run(boot.concepts["anomaly"] as string);
       const result = gw.sweep(owner);
-      expect(result.grantsExpired).toBe(1);
+      expect(result.authorityRevoked).toBe(1);
       expect(result.contentPurged).toBe(1);
       const gone = db.vault
         .prepare(
@@ -1541,13 +1465,11 @@ describe("gateway", () => {
         deviceKey: ro.deviceKey,
       };
       expect(
-        gw.read(cred, { entity: "core.party", purpose: "dpv:ServiceProvision" })
-          .rows.length
+        gw.read(cred, { entity: "core.party" }).rows.length
       ).toBeGreaterThan(0);
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("denied");
     });
@@ -1570,7 +1492,6 @@ describe("gateway", () => {
     const result = gw.read(owner, {
       entity: "schedule.task",
       where: [{ column: "due_at", op: "within-next-days", value: 3 }],
-      purpose: "dpv:ServiceProvision",
     });
     expect(result.rows.map((r) => r.title)).toStrictEqual(["due tomorrow"]);
   });
@@ -1585,20 +1506,14 @@ describe("gateway", () => {
         deviceId: boot.deviceId,
         deviceKey: boot.deviceKey,
       };
-      createGrant(db, {
-        granteePartyId: agent.partyId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [
-          { schema: "schedule", verbs: "read+act" },
-          { schema: "core", table: "event", verbs: "read" },
-        ],
-      });
+      answerScopes(db, boot, "reconciler", [
+        { schema: "schedule", verbs: "read+act" },
+        { schema: "core", table: "event", verbs: "read" },
+      ]);
 
       // Bootstrap: no rows, a watermark to persist.
       const boot1 = gw.changes(agentCred, {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: null,
       });
       expect(boot1.changes).toStrictEqual([]);
@@ -1607,14 +1522,12 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: cal }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
 
       // … and the feed surfaces it exactly once.
       const pull = gw.changes(agentCred, {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: boot1.cursor,
       });
       expect(pull.changes.length).toBeGreaterThan(0);
@@ -1627,7 +1540,6 @@ describe("gateway", () => {
       expect(cursorAdvanced, `${pull.cursor} > ${boot1.cursor}`).toBe(true);
       const again = gw.changes(agentCred, {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: pull.cursor,
       });
       expect(again.changes).toStrictEqual([]);
@@ -1636,7 +1548,6 @@ describe("gateway", () => {
       expect(() =>
         gw.changes(agentCred, {
           entities: ["core.event", "core.transaction"],
-          purpose: "dpv:ServiceProvision",
           cursor: pull.cursor,
         })
       ).toThrow(/deny/u);
@@ -1646,17 +1557,11 @@ describe("gateway", () => {
       const cal = seedCalendar();
       const a = enrollAgent(db, { name: "agent-a", modelRef: "test" });
       const b = enrollAgent(db, { name: "agent-b", modelRef: "test" });
-      const purposeId = boot.concepts["dpv:ServiceProvision"] as string;
-      for (const agent of [a, b]) {
-        createGrant(db, {
-          granteePartyId: agent.partyId,
-          purposeConceptId: purposeId,
-          grantedByPartyId: boot.ownerPartyId,
-          scopes: [
-            { schema: "schedule", verbs: "read+act" },
-            { schema: "agent", table: "command_invocation", verbs: "read" },
-          ],
-        });
+      for (const name of ["agent-a", "agent-b"]) {
+        answerScopes(db, boot, name, [
+          { schema: "schedule", verbs: "read+act" },
+          { schema: "agent", table: "command_invocation", verbs: "read" },
+        ]);
       }
       const credFor = (agent: { agentId: string }): Credential => ({
         kind: "agent",
@@ -1664,6 +1569,7 @@ describe("gateway", () => {
         deviceId: boot.deviceId,
         deviceKey: boot.deviceKey,
       });
+      void b;
       // Each agent invokes once (disjoint windows — no busy conflict).
       [a, b].forEach((agent, i) => {
         const outcome = gw.invoke(credFor(agent), {
@@ -1674,13 +1580,11 @@ describe("gateway", () => {
             dtstart: `2026-08-0${i + 1}T09:00:00Z`,
             dtend: `2026-08-0${i + 1}T09:15:00Z`,
           }),
-          purpose: "dpv:ServiceProvision",
         });
         expect(outcome.status).toBe("executed");
       });
       const mine = gw.read(credFor(a), {
         entity: "agent.command_invocation",
-        purpose: "dpv:ServiceProvision",
       });
       expect(mine.rows.length).toBeGreaterThan(0);
       expect(mine.rows.every((r) => r.caller_id === a.agentId)).toBe(true);

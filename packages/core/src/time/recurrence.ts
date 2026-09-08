@@ -1,3 +1,5 @@
+import { DAY_TOKENS, parseRrule } from "./rrule-support.js";
+import type { ParsedRrule } from "./rrule-support.js";
 import {
   addWallDays,
   addWallMonths,
@@ -10,18 +12,7 @@ import {
 } from "./timezone.js";
 import type { WallTime } from "./timezone.js";
 
-const DAY_TOKENS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
-type DayToken = (typeof DAY_TOKENS)[number];
-
 export type RecurrenceSemantics = "zoned" | "floating" | "all-day";
-
-export interface ParsedRrule {
-  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
-  interval: number;
-  count?: number;
-  until?: string;
-  byDay?: DayToken[];
-}
 
 export interface ExpandRecurrenceInput {
   rrule: string;
@@ -53,74 +44,6 @@ export interface NextOccurrenceInput {
   after: string;
   timeZone?: string;
   anchor?: "scheduled" | "completion";
-}
-
-function positiveInteger(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Math.trunc(Number(value));
-  // COUNT=0 is invalid ICS. Treat non-positive
-  // bounds as a single occurrence rather than unbounded expansion.
-  if (!Number.isFinite(parsed)) return undefined;
-  return parsed > 0 ? parsed : 1;
-}
-
-/**
- * Canonical bare RRULE body (`FREQ=…`). Strips a leading `RRULE:` (Google
- * Calendar and ICS both emit the prefixed form) and collapses whitespace so
- * schedule preconditions, parseRrule, and ICS export share one shape.
- */
-export function canonicalizeRrule(value: string): string {
-  return value
-    .replace(/^\s*RRULE:/iu, "")
-    .replace(/\s+/gu, "")
-    .trim();
-}
-
-/** Prefixed RRULE line for Google/ICS writeback without double-prefixing. */
-export function rruleLine(value: string): string {
-  const bare = canonicalizeRrule(value);
-  return bare ? `RRULE:${bare}` : "";
-}
-
-export function parseRrule(value: string): ParsedRrule | null {
-  const parts = new Map<string, string>();
-  for (const segment of canonicalizeRrule(value).split(";")) {
-    const equals = segment.indexOf("=");
-    if (equals < 0) continue;
-    parts.set(
-      segment.slice(0, equals).trim().toUpperCase(),
-      segment
-        .slice(equals + 1)
-        .trim()
-        .toUpperCase()
-    );
-  }
-  const freq = parts.get("FREQ");
-  if (
-    freq !== "DAILY" &&
-    freq !== "WEEKLY" &&
-    freq !== "MONTHLY" &&
-    freq !== "YEARLY"
-  ) {
-    return null;
-  }
-  const interval = positiveInteger(parts.get("INTERVAL")) ?? 1;
-  const count = positiveInteger(parts.get("COUNT"));
-  const until = parts.get("UNTIL");
-  const byDay = parts
-    .get("BYDAY")
-    ?.split(",")
-    .map((day) => day.trim())
-    .filter((day): day is DayToken =>
-      (DAY_TOKENS as readonly string[]).includes(day)
-    );
-  return {
-    freq,
-    interval,
-    ...(count === undefined ? {} : { count }),
-    ...(until === undefined ? {} : { until }),
-    ...(byDay === undefined || byDay.length === 0 ? {} : { byDay }),
-  };
 }
 
 function parseBasicInstant(value: string): number | null {
@@ -234,6 +157,9 @@ function withinUntil(
  * Expand a recurrence using civil-time arithmetic. Zoned rules preserve their
  * wall clock through offset changes, skip DST gaps, and emit overlaps once at
  * the earlier instant.
+ *
+ * A rule this engine refuses (`inspectRrule`) expands to NO occurrences — never
+ * to a plausible series meaning something else.
  */
 export function expandRecurrence(
   input: ExpandRecurrenceInput

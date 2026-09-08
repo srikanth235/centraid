@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "apps/*/actions/*.js", "apps/*/queries/*.js"]
     },
     "typecheck": {
       "dependsOn": ["^build", "@centraid/server#build"]

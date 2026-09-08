@@ -62,6 +62,7 @@ interface LibraryAsset {
   title?: string | null;
   content_uri?: string | null;
   byte_size?: number | null;
+  favorite?: number | null;
 }
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
@@ -247,6 +248,28 @@ test("Photos imports a real photograph and its bytes stay on this machine", asyn
     );
     expect(favorited.status).toBe("executed");
 
+    // THE STAR SURVIVED LOSING ITS COLUMN (#916, ONT-star). `media_asset`
+    // carried a mirrored `favorite` column; the star is a flags-scheme tag on
+    // the asset now, the same scheme Docs, Locker and People read. The write
+    // above still speaks the action's 0/1 integer, so what has to be proved is
+    // that the READ still answers with it — the grid derives the heart from a
+    // `core.tag` row now, and a member who stars a photo must see it stay
+    // starred across a reload rather than silently losing the flag with the
+    // column. Reading through the real library projection is the whole point:
+    // a unit test on the tag row would pass even if nothing reached the grid.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await openFirstParty(page, "Photos");
+    const afterStar = await page.evaluate(() =>
+      window.centraid.read<{ assets: LibraryAsset[] }>({
+        query: "library",
+        input: {},
+      })
+    );
+    const starred = afterStar.assets.find(
+      (asset: LibraryAsset) => asset.asset_id === imported[0]!.asset_id
+    );
+    expect(starred?.favorite).toBe(1);
+
     const evidenceDir = path.join(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"
@@ -254,6 +277,12 @@ test("Photos imports a real photograph and its bytes stay on this machine", asyn
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
       path: path.join(evidenceDir, "issue-864-photos-custodian.png"),
+      fullPage: true,
+    });
+    // The #916 UI-impact frame: the starred photograph in the grid, drawn from
+    // the tag rather than the dropped column.
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-916-photos-star.png"),
       fullPage: true,
     });
   } finally {

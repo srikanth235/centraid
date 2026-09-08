@@ -102,7 +102,6 @@ import {
   discardWalFiles,
   drainWalFiles,
   pruneWalGenerations,
-  walPairKey,
 } from "./wal-uploader.js";
 
 export { type RecoveryKitState } from "./recovery-kit-state.js";
@@ -719,7 +718,7 @@ export class BackupService {
       await saveBackupState(this.gatewayDatabase, state);
       throw new Error(target.lastError);
     }
-    if (shipper.discardedStreams().length > 0 || !shipper.basesCoordinated()) {
+    if (shipper.streamDiscarded() || !shipper.baseReady()) {
       throw new Error(
         "backup: WAL generation is discarded or mid-break — retrying instead of registering a holed base"
       );
@@ -742,22 +741,15 @@ export class BackupService {
     // derives the segment key from the manifest's `keyEpoch`.
     if (shipper) {
       const pins = (target.walGenerationEpochs ??= {});
-      const bases = shipper.currentBases();
-      // Deliberately not a per-base loop: ONE roll re-bases BOTH databases (a
-      // manifest may never pair bases from two ticks).
-      const stale = bases.find(
-        (b) =>
-          pins[b.generation] !== undefined &&
-          pins[b.generation] !== keyring.active
-      );
+      const base = shipper.currentBase();
+      const stale =
+        base !== null &&
+        pins[base.generation] !== undefined &&
+        pins[base.generation] !== keyring.active;
       if (stale) {
-        shipper.rollGeneration(stale.db, "key-epoch-rotation");
-        const fresh = shipper.currentBases();
-        const unrolled = fresh.some((b) =>
-          bases.some(
-            (old) => old.db === b.db && old.generation === b.generation
-          )
-        );
+        shipper.rollGeneration("key-epoch-rotation");
+        const fresh = shipper.currentBase();
+        const unrolled = fresh?.generation === base.generation;
         if (unrolled) {
           // Busy checkpoint ⇒ an OLD generation is still live; re-pinning it
           // would seal its segments under a key its manifest doesn't name.
@@ -765,9 +757,9 @@ export class BackupService {
             "backup: the key-epoch rotation roll did not complete (busy checkpoint) — retrying later"
           );
         }
-        for (const base of fresh) pins[base.generation] = keyring.active;
-      } else {
-        for (const base of bases) pins[base.generation] ??= keyring.active;
+        pins[fresh!.generation] = keyring.active;
+      } else if (base) {
+        pins[base.generation] ??= keyring.active;
       }
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
@@ -844,8 +836,7 @@ export class BackupService {
             );
             continue;
           }
-          const db = entry.path === "vault.db" ? "vault" : "journal";
-          shipper.noteBaseRegistered(db, entry.walGeneration);
+          shipper.noteBaseRegistered(entry.walGeneration);
           if (target.walGenerationEpochs[entry.walGeneration] === undefined) {
             target.walGenerationEpochs[entry.walGeneration] = keyring.active;
             pinsDirty = true;
@@ -872,18 +863,10 @@ export class BackupService {
             }
           }
           if (target.walMarkerTips) {
-            // A pair key names BOTH generations; the tip dies with either.
-            for (const pair of Object.keys(target.walMarkerTips)) {
-              const [vaultGen, journalGen] = [
-                pair.slice(0, 32),
-                pair.slice(33),
-              ];
-              if (
-                !pruned.keptGenerations.has(vaultGen) ||
-                !pruned.keptGenerations.has(journalGen)
-              ) {
-                delete target.walMarkerTips[pair];
-              }
+            // A tip belongs to one generation and dies with it.
+            for (const generation of Object.keys(target.walMarkerTips)) {
+              if (!pruned.keptGenerations.has(generation))
+                delete target.walMarkerTips[generation];
             }
           }
           if (target.walGenerationEpochs || target.walMarkerTips) {
@@ -933,19 +916,15 @@ export class BackupService {
     // The bundle dir is kept for the next tick's ref-digest check.
   }
 
-  /** Keyed by base PAIR: a generation break must reset the floor, not carry a
+  /** Keyed by GENERATION: a generation break must reset the floor, not carry a
    *  stale one into a stream that cannot satisfy it. */
   private confirmedMarkerTip(
     shipper: NonNullable<VaultPlane["walShipper"]>,
     target: BackupTargetState
   ): number | undefined {
-    const bases = shipper.currentBases();
-    const vault = bases.find((b) => b.db === "vault");
-    const journal = bases.find((b) => b.db === "journal");
-    if (!vault || !journal) return undefined;
-    return target.walMarkerTips?.[
-      walPairKey(vault.generation, journal.generation)
-    ];
+    const base = shipper.currentBase();
+    if (!base) return undefined;
+    return target.walMarkerTips?.[base.generation];
   }
 
   /** Sticky signals live in persisted `BackupTargetState` (#411): the probe
@@ -973,7 +952,6 @@ export class BackupService {
     if (st.lastForeignCheckpoint) {
       target.walLastForeignCheckpoint = {
         atMs: st.lastForeignCheckpoint.atMs,
-        db: st.lastForeignCheckpoint.db,
         reason: st.lastForeignCheckpoint.reason,
       };
     }
@@ -1265,8 +1243,6 @@ export class BackupService {
       const problems: string[] = [];
       if (report.vault.integrity !== "ok")
         problems.push(`vault: ${report.vault.integrity}`);
-      if (report.journal.integrity !== "ok")
-        problems.push(`journal: ${report.journal.integrity}`);
       // A restore whose sealed columns cannot be opened is a placebo
       // (FORMAT.md, #439): the key must match the stamped fingerprint.
       if (report.sealKey.verdict === "missing") {
@@ -1285,11 +1261,6 @@ export class BackupService {
           `vault: ${report.vault.foreignKeyViolations} fk violation(s)`
         );
       }
-      if (report.journal.foreignKeyViolations > 0) {
-        problems.push(
-          `journal: ${report.journal.foreignKeyViolations} fk violation(s)`
-        );
-      }
       // Depth half of the drill (#842): every structural check above passes on
       // an empty spine and on rows pointing at unproducible bytes.
       const drill = runRestoreDrill({
@@ -1302,17 +1273,17 @@ export class BackupService {
       problems.push(...drillErrors(drill));
       const drillDegrades = drillWarnings(drill);
       if (result.walReplay) {
-        const { damaged, coordinatedCutMs, expectedCutMs } = result.walReplay;
+        const { damaged, cutTickMs, expectedCutMs } = result.walReplay;
         if (damaged.length > 0)
           problems.push(`${damaged.length} damaged wal object(s) skipped`);
-        else if (expectedCutMs >= 0 && coordinatedCutMs < expectedCutMs) {
+        else if (expectedCutMs >= 0 && cutTickMs < expectedCutMs) {
           // A coherent restore at an earlier instant (G6) may not be quiet:
           // falling short of the newest proved-or-acknowledged tick means
           // objects are gone, and when those objects ARE the markers this is
           // the only check that fires.
           problems.push(
-            "wal streams not restorable at their newest registered point (tick " +
-              `${expectedCutMs}); the pair could only be cut at ${coordinatedCutMs} — ` +
+            "the wal stream is not restorable at its newest registered point (tick " +
+              `${expectedCutMs}); it could only be cut at ${cutTickMs} — ` +
               "objects the provider acknowledged are missing"
           );
         }
@@ -1338,7 +1309,7 @@ export class BackupService {
         `vault ${vaultId}: restore-verify (seq ${result.seq}, ` +
         `${report.receiptsChecked} receipts cross-checked` +
         (result.walReplay
-          ? `, wal tip ${result.walReplay.perDb.vault.lastTickMs}`
+          ? `, wal tip ${result.walReplay.lastTickMs}`
           : ", /1 snapshot") +
         ")";
       if (dangling > 0 || drillDegrades.length > 0) {
@@ -1379,7 +1350,7 @@ export class BackupService {
       .planesList()
       .find((candidate) => candidate.boot.vaultId === vaultId);
     if (!plane) return undefined;
-    return spineCensus(plane.db.vault, plane.db.journal);
+    return spineCensus(plane.db.vault);
   }
 
   // ── WAL segment drain (issue #408) ───────────────────────────────────
@@ -1471,21 +1442,16 @@ export class BackupService {
       try {
         // A holed stream must break to a fresh generation BEFORE its stale
         // base could be registered: restoring one lands silently on the base.
-        // ONE roll re-bases BOTH databases, so naming either heals.
-        const discarded = shipper.discardedStreams();
-        if (discarded.length > 0) {
+        if (shipper.streamDiscarded()) {
           const rolled = shipper.rollGeneration(
-            discarded[0]!,
             "backup-enabled-after-discard",
-            {
-              captureFirst: false,
-            }
+            { captureFirst: false }
           );
           if (
-            rolled.busy.length > 0 ||
+            rolled.busy ||
             rolled.errors.length > 0 ||
-            shipper.discardedStreams().length > 0 ||
-            !shipper.basesCoordinated()
+            shipper.streamDiscarded() ||
+            !shipper.baseReady()
           ) {
             this.logger.warn(
               `backup: discarded WAL generation could not re-base cleanly; registration deferred`
@@ -1499,7 +1465,7 @@ export class BackupService {
         );
         let target = state.targets[vaultId];
         if (target?.fenced) return;
-        const needsRegistration = !target || shipper.pendingBases().length > 0;
+        const needsRegistration = !target || shipper.pendingBase() !== null;
         if (needsRegistration) {
           // Already on the chain: call the worker directly, backed off.
           const last = this.lastAutoBackupAttemptMs.get(vaultId) ?? 0;
@@ -1556,11 +1522,14 @@ export class BackupService {
               ...freshTarget.walGenerationEpochs,
               ...newPins,
             };
-            // MONOTONIC per pair: a late-landing retry of an older marker must
-            // not walk the floor backwards and re-open the window this closes.
+            // MONOTONIC per generation: a late-landing retry of an older
+            // marker must not walk the floor backwards and re-open the window
+            // this closes.
             const tips = (freshTarget.walMarkerTips ??= {});
-            for (const [pair, tickMs] of Object.entries(result.markerTips)) {
-              tips[pair] = Math.max(tips[pair] ?? -1, tickMs);
+            for (const [generation, tickMs] of Object.entries(
+              result.markerTips
+            )) {
+              tips[generation] = Math.max(tips[generation] ?? -1, tickMs);
             }
             await saveBackupState(this.gatewayDatabase, freshState);
           }
@@ -1859,13 +1828,9 @@ export class BackupService {
       );
     plane.walTick();
     const shipper = plane.walShipper;
-    if (
-      !shipper ||
-      shipper.discardedStreams().length > 0 ||
-      !shipper.basesCoordinated()
-    ) {
+    if (!shipper || shipper.streamDiscarded() || !shipper.baseReady()) {
       throw new Error(
-        `backup: cannot fence vault "${vaultId}" with an uncoordinated WAL base`
+        `backup: cannot fence vault "${vaultId}" with a discarded or mid-break WAL base`
       );
     }
     const targetInfo = await backend.provider.getTarget(target.targetId);

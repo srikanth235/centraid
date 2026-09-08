@@ -3,6 +3,16 @@
 // history and deterministic undo. It deliberately has no polymorphic foreign
 // key: an entity's history must survive its soft-delete grace window and, for
 // audit/export, may outlive the row it described.
+//
+// THE ONE REVISION MECHANISM (#916, owner decision D2). `locker_item_history`
+// was a second one — same question, different table, different retention, its
+// own undo path — and it is gone; a Locker revision is a row here with
+// `entity_type = 'locker.item'`, its old values in `snapshot_json` and its
+// sealed columns still ciphertext. How LONG revisions are kept per entity is
+// declared in the registry (`revisions: { retain }` in `entity-catalog.ts`),
+// not decided by whichever sweep happens to run.
+
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const ENTITY_REVISIONS_DDL = `
 CREATE TABLE core_entity_revision (
@@ -14,7 +24,17 @@ CREATE TABLE core_entity_revision (
   recorded_at    TEXT NOT NULL,
   undo_until     TEXT NOT NULL,
   undone_at      TEXT,
-  actor_party_id TEXT REFERENCES core_party(party_id)
+  -- ATTRIBUTION (#916, D1): the actor is who did it, and a snapshot whose
+  -- actor was purged is still the snapshot. It yields rather than blocking.
+  actor_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
+  -- The command that caused this revision (#916, D2 / review 5.2). Same file
+  -- as the audit band now, so it is a REAL key: SET NULL rather than CASCADE
+  -- because the archive pass removes old invocations and a revision outlives
+  -- the invocation record of it.
+  invocation_id  TEXT
+    REFERENCES agent_command_invocation(invocation_id) ON DELETE SET NULL,
+  updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (revision_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX core_entity_revision_entity_idx
   ON core_entity_revision(entity_type, entity_id, recorded_at DESC);
@@ -23,4 +43,7 @@ CREATE INDEX core_entity_revision_undo_idx
   WHERE undone_at IS NULL;
 CREATE INDEX core_entity_revision_actor_idx
   ON core_entity_revision(actor_party_id);
+CREATE INDEX core_entity_revision_invocation_idx
+  ON core_entity_revision(invocation_id) WHERE invocation_id IS NOT NULL;
+${touchUpdatedAt("core_entity_revision", "revision_id")}
 `;

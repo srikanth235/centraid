@@ -67,7 +67,7 @@ function sharedWithLabels(rows: readonly DriveDoc[]): string[] {
   for (const doc of rows) {
     for (const share of doc.shared_with ?? []) labels.add(share.label);
   }
-  return [...labels].toSorted((a, b) => a.localeCompare(b));
+  return [...labels].sort((a, b) => a.localeCompare(b));
 }
 
 /** `rows` is the drive's own set, not the filtered one — else choosing an

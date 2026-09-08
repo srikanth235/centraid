@@ -108,9 +108,8 @@ function world(options: { linked?: boolean } = {}): World {
   priya.vault.vault
     .prepare(
       `INSERT INTO core_party
-         (party_id, kind, display_name, sort_name, created_at, updated_at,
-          ontology_version)
-       VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+         (party_id, kind, display_name, sort_name, created_at, updated_at)
+       VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?)`
     )
     .run(raviParty, now, now);
   if (options.linked !== false)
@@ -157,7 +156,6 @@ function world(options: { linked?: boolean } = {}): World {
           gateway.invoke(ownerCredential, {
             command,
             input,
-            purpose: "dpv:ServiceProvision",
           }),
       }),
     }),
@@ -326,9 +324,12 @@ describe("routes/grants", () => {
   });
 
   test("revoking says which of the three removals actually happened", async () => {
-    // (1) Never delivered: an audience with no channel parks at an invitation,
-    // so the sentence must not imply a peer was asked to delete anything.
-    const parked = world({ linked: false });
+    // (1) Never delivered: the audience is linked — since #903 nothing else
+    // can be granted — but their vault is not mounted here, so the grant is
+    // made and never carried. The sentence must not imply a peer was asked to
+    // delete anything.
+    const parked = world();
+    parked.mounted.delete(AUDIENCE);
     const never = await call(parked, {
       method: "POST",
       url: "/centraid/_vault/grants",
@@ -497,7 +498,7 @@ describe("routes/grants", () => {
     expect(subjects.body.subjects).toContainEqual({
       subjectType: "tally.group",
       capabilities: ["view", "edit"],
-      fulfillment: { view: "closure-reprojection", edit: "commons-routing" },
+      fulfillment: { view: "closure-reprojection", edit: "replica-intent" },
     });
 
     const anonymous = await call(house, {

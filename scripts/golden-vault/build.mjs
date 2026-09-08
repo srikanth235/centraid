@@ -64,9 +64,9 @@ const FROZEN_NOW = "2026-01-01T00:00:00.000Z";
 /**
  * Write the corpus. Deliberately narrow and deliberately CORE: the tables a
  * migration is most likely to touch and a member would most miss — identity,
- * the concept vocabulary, documents, notes, links between them, and the
- * consent journal. A broader corpus is not a better gate; a corpus nobody can
- * read the diff of is a worse one.
+ * the concept vocabulary, documents, notes and the links between them. A
+ * broader corpus is not a better gate; a corpus nobody can read the diff of is
+ * a worse one.
  */
 async function seedCorpus(db, nextId) {
   const { bootstrapVault } = await import(
@@ -192,14 +192,12 @@ async function main() {
     // corpus that is still sitting in `-wal` (this vault opens with
     // `wal_autocheckpoint = 0` on purpose, for the WAL shipper).
     db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     // A freshly migrated vault is mostly EMPTY PAGES — the full schema plus the
     // FTS tables allocate ~5.6 MB for ~185 rows of corpus, which is both over
     // the 5 MB `repo-hygiene` tracked-file limit and a wildly misleading diff.
     // VACUUM rewrites the file at its actual occupancy. It is safe to run here
     // and only here: this is a vault nothing else has open.
     db.vault.exec("VACUUM");
-    db.journal.exec("VACUUM");
     manifest = {
       label: args.label,
       frozenAt: FROZEN_NOW,
@@ -221,12 +219,12 @@ async function main() {
   // ~100 KB. `packages/vault/src/golden-vault.test.ts` inflates into a temp dir
   // before opening, which it would have to do anyway: opening the frozen file in
   // place would let a migration rewrite the corpus it is meant to be checking.
-  for (const file of ["vault.db", "journal.db"]) {
-    writeFileSync(
-      path.join(dest, `${file}.gz`),
-      gzipSync(readFileSync(path.join(work, file)), { level: 9 })
-    );
-  }
+  // ONE FILE (#916): the audit band and the conversation ledger are bands of
+  // vault.db, so there is one artifact to freeze.
+  writeFileSync(
+    path.join(dest, "vault.db.gz"),
+    gzipSync(readFileSync(path.join(work, "vault.db")), { level: 9 })
+  );
   writeFileSync(
     path.join(dest, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`

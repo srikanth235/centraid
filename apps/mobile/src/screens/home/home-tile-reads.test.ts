@@ -31,7 +31,6 @@ const SHAPES = [
   {
     shapeId: "photos-default",
     appId: "photos",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "media.asset",
@@ -50,7 +49,6 @@ const SHAPES = [
   {
     shapeId: "docs-default",
     appId: "docs",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.document",
@@ -76,7 +74,6 @@ const SHAPES = [
   {
     shapeId: "notes-default",
     appId: "notes",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "knowledge.note",
@@ -95,7 +92,6 @@ const SHAPES = [
   {
     shapeId: "tasks-default",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",
@@ -248,7 +244,17 @@ function pageReads(driver: RecordingDriver): Array<{
   sql: string;
   rows: number;
 }> {
-  return driver.reads.filter((read) => read.sql.includes("AS verdict"));
+  // The ORDER GUARD CENSUS is its own statement since #922 C3, and it also
+  // selects over the union; the PAGE is the one that orders and limits.
+  return driver.reads.filter(
+    (read) => read.sql.includes("AS verdict") && read.sql.includes("LIMIT ?")
+  );
+}
+
+function censusReads(driver: RecordingDriver): string[] {
+  return driver.reads
+    .map((read) => read.sql)
+    .filter((sql) => sql.includes("order_straddle"));
 }
 
 function onePage(driver: RecordingDriver): { sql: string; rows: number } {
@@ -292,16 +298,25 @@ describe("Home tile reads", () => {
     expect(paged.sql).toContain(
       `ORDER BY (verdict = 0) ASC, json_extract(payload_json, '$.${tile.column}') DESC`
     );
-    // The refusal guards ride the same pass: the order column has to be
-    // type-uniform and disclosed across EVERY attached vault, not merely on
-    // the page, and that is a window column rather than a second statement.
-    expect(paged.sql).toContain("order_oversized");
-    expect(paged.sql).toContain("order_straddle");
+    // The refusal guards still span EVERY attached vault, but they ride their
+    // OWN statement (#922 C3): as `OVER ()` window columns on this one they
+    // forced SQLite to materialize the whole union before returning a row, so
+    // neither the limit nor an index could bound the work.
+    expect(paged.sql).not.toContain("OVER ()");
+    const census = censusReads(driver);
+    expect(census).toHaveLength(1);
+    expect(census[0]).toContain("order_oversized");
+    expect(census[0]).toContain("order_straddle");
+    expect(census[0]).toContain("UNION ALL");
     // One arm per attached vault, one page across their union.
     expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    // The page is the answer: nothing is fetched only to be discarded.
-    expect(paged.rows).toBe(tile.limit);
+    // The page is the answer, plus ONE probe row and no more: the statement
+    // over-fetches by exactly one so a filled window can be told apart from a
+    // set that merely ends there, and that row is dropped before the caller
+    // sees it (#922 0a). Anything beyond `limit + 1` would be fetched only to
+    // be discarded.
+    expect(paged.rows).toBe(tile.limit + 1);
 
     expect(page.rows).toHaveLength(tile.limit);
     // Four scopes share one day sequence, so the global newest `limit` rows
@@ -320,7 +335,8 @@ describe("Home tile reads", () => {
 
     const paged = onePage(driver);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    expect(paged.rows).toBe(HOME_TILE_LIMITS.tasks);
+    // `limit + 1`: the one probe row that makes truncation visible (#922 0a).
+    expect(paged.rows).toBe(HOME_TILE_LIMITS.tasks + 1);
     expect(page.rows).toHaveLength(HOME_TILE_LIMITS.tasks);
     reader.close();
   });

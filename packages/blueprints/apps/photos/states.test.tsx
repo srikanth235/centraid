@@ -24,7 +24,7 @@
 // pins that a pending answer FREEZES the verbs rather than re-firing them, and
 // that `Skip`, which writes nothing, stays live.
 //
-// Nothing below hand-writes an overlay field: `decoratePendingMutation` over
+// Nothing below hand-writes an overlay field: `pendingOverlayRow` over
 // `pendingUpsert` is the one law that stamps them, exactly as the shell's
 // outbox does, so a change to the field names fails here rather than passing
 // against a stale transcription.
@@ -39,7 +39,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
-  decoratePendingMutation,
+  pendingOverlayRow,
   pendingUpsert,
 } from "../_shared/pending-overlay.ts";
 import type {
@@ -84,8 +84,7 @@ function decorate(
   values: Record<string, PendingProjectionValue>,
   intent: PendingIntentPresentationInput
 ): Record<string, PendingProjectionValue> {
-  return decoratePendingMutation(pendingUpsert(entity, rowId, values), intent)
-    .values;
+  return pendingOverlayRow(pendingUpsert(entity, rowId, values), intent);
 }
 
 function pendingAsset(intent: PendingIntentPresentationInput): Asset {

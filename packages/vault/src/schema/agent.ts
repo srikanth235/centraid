@@ -1,8 +1,12 @@
 // Agent plane DDL — schema `agent` from duaility-ontology.html §03.
-// Model half (vault.db): command, capability, correction, judgment. Enrolled
-// autonomous principals live beside the other callers in `consent_agent`.
-// Audit half (journal.db): command_invocation, invocation_check, evidence,
-// explanation — see journal.ts.
+// Model half: the command register and the capability register. Enrolled
+// autonomous principals live beside the other callers in `access_agent`.
+// The audit half — command_invocation, invocation_check, evidence,
+// explanation — is the append-only audit band; see `audit.ts`.
+//
+// No `agent_correction`/`agent_judgment` (#916, ruling ONT-06): the learn loop
+// they were the store for was never built, and a store with no producer is a
+// promise, not a model.
 
 export const AGENT_DDL = `
 CREATE TABLE agent_command (
@@ -21,35 +25,11 @@ CREATE TABLE agent_command (
 CREATE TABLE agent_capability (
   capability_id         TEXT PRIMARY KEY,
   schema_name           TEXT NOT NULL,
-  verb                  TEXT NOT NULL CHECK (verb IN ('discover','query','reason','act','verify','explain','learn')),
+  verb                  TEXT NOT NULL CHECK (verb IN ('discover','query','reason','act','verify','explain')),
   command_id            TEXT REFERENCES agent_command(command_id),
   description           TEXT NOT NULL,
   requires_confirmation INTEGER NOT NULL CHECK (requires_confirmation IN (0,1))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_capability_command ON agent_capability(command_id);
 
-CREATE TABLE agent_correction (
-  correction_id         TEXT PRIMARY KEY,
-  invocation_id         TEXT, -- → agent.command_invocation (journal.db); gateway-enforced
-  corrected_by_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  target_type           TEXT NOT NULL,
-  target_id             TEXT NOT NULL,
-  before_json           TEXT CHECK (before_json IS NULL OR json_valid(before_json)),
-  after_json            TEXT NOT NULL CHECK (json_valid(after_json)),
-  reason                TEXT,
-  created_at            TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS idx_correction_corrected_by_party ON agent_correction(corrected_by_party_id);
-
-CREATE TABLE agent_judgment (
-  judgment_id                TEXT PRIMARY KEY,
-  derived_from_correction_id TEXT REFERENCES agent_correction(correction_id),
-  subject_scope              TEXT NOT NULL,
-  rule_json                  TEXT NOT NULL CHECK (json_valid(rule_json)),
-  confidence                 REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
-  active                     INTEGER NOT NULL CHECK (active IN (0,1)),
-  learned_at                 TEXT NOT NULL,
-  expires_at                 TEXT
-) STRICT;
-CREATE INDEX IF NOT EXISTS idx_judgment_derived_from_correction ON agent_judgment(derived_from_correction_id);
 `;

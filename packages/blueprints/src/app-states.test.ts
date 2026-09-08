@@ -70,8 +70,12 @@ describe("app.json#states", () => {
       const claims = [
         ...(states?.designed ?? []),
         ...(states?.excluded ?? []).map((entry) => entry.state),
-      ].toSorted();
-      expect(claims).toStrictEqual([...CANONICAL_DESIGNED_STATES].toSorted());
+      ].toSorted((left, right) => left.localeCompare(right));
+      expect(claims).toStrictEqual(
+        [...CANONICAL_DESIGNED_STATES].toSorted((left, right) =>
+          left.localeCompare(right)
+        )
+      );
     }
   );
 

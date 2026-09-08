@@ -239,42 +239,61 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
 });
 
 describe("renderSummaryMarkdown", () => {
-  test("renders health table and report marker", () => {
+  test("renders the verdict, the blockers and the report marker", () => {
     const md = renderSummaryMarkdown(
       {
-        passed: 10,
-        failed: 1,
-        cellsFailed: 2,
-        cellsMissing: 3,
-        unhandledErrors: 1,
-        unhandledErrorMessages: ["write EPIPE"],
-        coverageBelowFloor: ["packages/server/**"],
+        schema: 1,
+        verdict: "HOLD",
+        why: "One S1 blocker: mobile-e2e-ios failed on locker-gate.",
+        flip: "fix or park mobile-e2e-ios → DEGRADED",
+        blockers: [
+          {
+            severity: "S1",
+            lane: "mobile-e2e-ios",
+            case: "locker-gate",
+            ageHours: 6,
+            owner: null,
+          },
+        ],
+        deltas: {
+          passed: 10,
+          failed: 1,
+          degraded: 0,
+          noEvidence: 2,
+          newRed: 1,
+          newGreen: 2,
+        },
+        parks: [
+          { lane: "mobile-e2e-android", until: "2026-09-16", issue: 870 },
+        ],
+        candidate: "0a3258e3a",
         validationErrorCount: 0,
-        generatedAt: "2026-07-19T00:00:00.000Z",
+        generatedAt: "2026-09-02T00:00:00.000Z",
       },
       {
         reportUrl: "https://example.test/report/",
         runUrl: "https://example.test/run/1",
       }
     );
-    expect(md).toContain("needs attention");
-    expect(md).toContain("| Evidence failed | 1 |");
+    expect(md).toContain("## Night Watch — HOLD");
+    expect(md).toContain("| Lanes failed | 1 |");
+    expect(md).toContain("| Lanes parked | 1 |");
+    expect(md).toContain("mobile-e2e-ios");
+    expect(md).toContain("fix or park");
     expect(md).toContain("https://example.test/report/");
     expect(md).toContain(REPORT_COMMENT_MARKER);
-    expect(md).toContain("write EPIPE");
   });
 
-  test("marks ok when all signals clean", () => {
+  test("a night recorded before #915 reads UNKNOWN rather than as an all-clear", () => {
+    // The durable series carries summaries written by the previous generator.
+    // None of them has a verdict, and rendering that as "ok" would be the
+    // silent all-clear the whole report exists to make impossible.
     const md = renderSummaryMarkdown({
       passed: 5,
-      failed: 0,
-      cellsFailed: 0,
-      cellsMissing: 1,
-      unhandledErrors: 0,
-      coverageBelowFloor: [],
-      validationErrorCount: 0,
+      generatedAt: "2026-07-19T00:00:00.000Z",
     });
-    expect(md).toContain("**Status:** ok");
+    expect(md).toContain("## Night Watch — UNKNOWN");
+    expect(md).toContain("| Lanes passed | 0 |");
   });
 });
 

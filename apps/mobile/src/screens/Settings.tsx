@@ -139,7 +139,7 @@ function tunnelStatusLabel(status: TunnelStatus | undefined): string {
 
 export default function SettingsScreen({
   navigation,
-}: SettingsScreenProps<"Settings">): React.JSX.Element {
+}: SettingsScreenProps<"SettingsHome">): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -395,7 +395,7 @@ export default function SettingsScreen({
             testID={TEST_IDS.settings.sharingRow}
           >
             <Icon name="Share" size={18} color={colors.textSoft} />
-            <Text style={styles.rowLabel}>People, links and shared vaults</Text>
+            <Text style={styles.rowLabel}>People you are linked with</Text>
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
         </SettingsSection>

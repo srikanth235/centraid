@@ -17,7 +17,6 @@ import { formatCurrencyMinor } from "@centraid/client/capture";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
-import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { expandEvent } from "../../kit/schedule/recurrence";
 import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
@@ -29,6 +28,7 @@ import {
   idFilter,
 } from "./home-tile-reads";
 import {
+  combineTileStatus,
   countUpcoming,
   monthStartDate,
   openTasks,
@@ -40,29 +40,12 @@ import {
   selectTaskRows,
   sumMinor,
 } from "./tile-model";
-import type { AgendaOccurrence, TileData, TileStatus } from "./tile-model";
+import type { AgendaOccurrence, TileData } from "./tile-model";
 
 const AGENDA_HORIZON_DAYS = 30;
 const AGENDA_COUNT_DAYS = 7;
 
 const BODY_LOOKUP_ROWS = 12;
-
-/** `unavailable` and a failed read stay `unknown` — neither is evidence the
- *  app is empty, and only a settled empty read may claim first-run. */
-function combineStatus(
-  states: readonly ReplicaQueryState[],
-  hasContent: boolean
-): TileStatus {
-  if (hasContent) return "content";
-  if (states.some((state) => state.loading)) return "loading";
-  if (
-    states.some(
-      (state) => state.connection === "unavailable" || state.error !== undefined
-    )
-  )
-    return "unknown";
-  return "empty";
-}
 
 function capped(rows: readonly unknown[], limit: number): boolean {
   return rows.length >= limit;
@@ -154,7 +137,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     );
     tiles.set("photos", {
       appId: "photos",
-      status: combineStatus([photos], mosaic.length > 0),
+      status: combineTileStatus([photos], mosaic.length > 0),
       count: photos.rows.length,
       countCapped: capped(photos.rows, HOME_TILE_LIMITS.photos),
       countLabel: "photos",
@@ -164,7 +147,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     const docRows = selectDocRows(documents.rows, docContents.rows);
     tiles.set("docs", {
       appId: "docs",
-      status: combineStatus([documents, docContents], docRows.length > 0),
+      status: combineTileStatus([documents, docContents], docRows.length > 0),
       count: documents.rows.length,
       countCapped: capped(documents.rows, HOME_TILE_LIMITS.documents),
       countLabel: "documents",
@@ -174,7 +157,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     const note = selectNoteExcerpt(notes.rows, noteContents.rows);
     tiles.set("notes", {
       appId: "notes",
-      status: combineStatus([notes, noteContents], note !== undefined),
+      status: combineTileStatus([notes, noteContents], note !== undefined),
       count: notes.rows.length,
       countCapped: capped(notes.rows, HOME_TILE_LIMITS.notes),
       countLabel: "notes",
@@ -194,7 +177,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     const next = selectNextEvent(occurrences, now, formatEventTime);
     tiles.set("agenda", {
       appId: "agenda",
-      status: combineStatus([events, exceptions], next !== undefined),
+      status: combineTileStatus([events, exceptions], next !== undefined),
       count: countUpcoming(occurrences, now, AGENDA_COUNT_DAYS),
       countLabel: "next 7 days",
       body: {
@@ -214,7 +197,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     ).length;
     tiles.set("people", {
       appId: "people",
-      status: combineStatus([profiles, parties], faces.length > 0),
+      status: combineTileStatus([profiles, parties], faces.length > 0),
       count: peopleTotal,
       countCapped: capped(profiles.rows, HOME_TILE_LIMITS.profiles),
       countLabel: "people",
@@ -228,7 +211,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     const taskRows = selectTaskRows(tasks.rows);
     tiles.set("tasks", {
       appId: "tasks",
-      status: combineStatus([tasks], taskRows.length > 0),
+      status: combineTileStatus([tasks], taskRows.length > 0),
       count: openTasks(tasks.rows).length,
       countCapped: capped(tasks.rows, HOME_TILE_LIMITS.tasks),
       countLabel: "open",
@@ -237,7 +220,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
 
     tiles.set("tally", {
       appId: "tally",
-      status: combineStatus([expenses, vault], expenses.rows.length > 0),
+      status: combineTileStatus([expenses, vault], expenses.rows.length > 0),
       count: expenses.rows.length,
       countCapped: capped(expenses.rows, HOME_TILE_LIMITS.expenses),
       countLabel: "this month",

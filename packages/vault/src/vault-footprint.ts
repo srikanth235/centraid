@@ -7,21 +7,22 @@
 import type { DatabaseSync } from "node:sqlite";
 
 /**
- * A TOTAL, never a per-FILE constant (#659). `mmapBytes` is address space the
- * OS reclaims; `cacheBytes` is real allocation, the one that matters.
+ * A per-VAULT total (#659). One vault is ONE file since #916, so the total and
+ * the file's share are the same number — the type stays a budget because the
+ * HOST divides across mounted vaults, which is where the sum still grows.
+ * `mmapBytes` is address space the OS reclaims; `cacheBytes` is real
+ * allocation, the one that matters.
  */
 export interface VaultFootprintBudget {
   mmapBytes: number;
   cacheBytes: number;
 }
 
-const VAULT_DB_FILES = 2;
-
 /** Chosen so an unset `footprint` reproduces the per-file pragmas exactly. */
 export const DEFAULT_VAULT_FOOTPRINT: VaultFootprintBudget = Object.freeze({
-  mmapBytes: VAULT_DB_FILES * 64 * 1024 * 1024,
-  // 16,000 KiB per file — the literal `-16000` this replaced, not 16 MiB.
-  cacheBytes: VAULT_DB_FILES * 16_000 * 1024,
+  mmapBytes: 64 * 1024 * 1024,
+  // 16,000 KiB — the literal `-16000` this replaced, not 16 MiB.
+  cacheBytes: 16_000 * 1024,
 });
 
 /** Overshooting by a few hundred KiB beats a cache SQLite thrashes on. */
@@ -41,9 +42,9 @@ function fileFootprintOf(
   if (mmapBytes < 0 || cacheBytes < 0)
     throw new Error("vault footprint budget must not be negative");
   return {
-    mmapBytes: Math.floor(mmapBytes / VAULT_DB_FILES),
+    mmapBytes: Math.floor(mmapBytes),
     cacheKib: Math.floor(
-      Math.max(cacheBytes / VAULT_DB_FILES, MIN_VAULT_FILE_CACHE_BYTES) / 1024
+      Math.max(cacheBytes, MIN_VAULT_FILE_CACHE_BYTES) / 1024
     ),
   };
 }
@@ -55,9 +56,10 @@ export interface AppliedVaultFootprint {
 
 /**
  * THE one owner of division policy (#659). Callers pass the per-VAULT total
- * once per handle; the return is the per-FILE share applied. Dividing at open
- * alone leaves the sum linear in vault count, so a host re-divides across
- * every open plane when the set changes — that is what keeps the total flat.
+ * once per handle; the return is what was applied. Applying at open alone
+ * leaves the sum linear in vault count, so a host re-divides its ceiling
+ * across every open vault when the mounted set changes — that is what keeps
+ * the total flat.
  */
 export function applyVaultFootprint(
   db: DatabaseSync,

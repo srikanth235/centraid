@@ -33,7 +33,11 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  AWAIT_LAUNCHER,
+  FIRST_LAUNCH_TIMEOUT_MS,
+  runFlow,
+} from "../lib/harness.mjs";
 
 await runFlow("tasks-board", async (ctx) => {
   await ctx.ensureDemo("tasks");
@@ -47,7 +51,7 @@ await runFlow("tasks-board", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Tasks.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Tasks.*")}
 # The overdue group's own verb. "Today" and "Overdue" are bare group labels and
 # are deliberately not the arrival marker — this handle is on a group
 # todayGroups() flagged for attention, which is the overdue group alone, and

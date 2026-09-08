@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit #190 — one ConversationStore class; its SQL and row mappers already live in store-sql.ts and schema.ts
 /*
  * The per-vault conversation ledger + automation KV, in the vault's
- * `journal.db`. A conversation binds to its vault at creation, and app scoping
+ * `vault.db`. A conversation binds to its vault at creation, and app scoping
  * is the `app_id` COLUMN, not a file (#280). The `DatabaseProvider` may resolve
  * "the ACTIVE vault", so the store re-prepares when the handle changes.
  * Runtime-owned: never reachable from the handler `db` proxy or `vault_sql`.

@@ -8,20 +8,23 @@ const read = (relative: string): string =>
 
 describe("production Assistant companion wiring", () => {
   const sheet = read("./AssistantCompanionSheet.tsx");
+  // The lockup — and with it the New chat entry — moved out of the springboard
+  // when every app gained a header (`VaultBar`). One provider owns the route
+  // now, which is the thing this test actually cares about.
   const home = read("../../screens/Home.tsx");
+  const chrome = read("../../screens/home/VaultChrome.tsx");
   const app = read("../../../App.tsx");
 
   it("routes every existing app-bar New chat entry to the global companion", () => {
-    const entries = [...home.matchAll(/onNewChat=\{\(\) => [^}]+\}/gu)].map(
-      (match) => match[0]
+    // Exactly one place routes New chat, product-wide.
+    expect(chrome).toContain(
+      'openNewChat: () => navigation.navigate("Assistant")'
     );
-    expect(entries).toStrictEqual([
-      'onNewChat={() => navigation.navigate("Assistant")}',
-    ]);
+    expect([...home.matchAll(/onNewChat=\{[^}]+\}/gu)]).toStrictEqual([]);
     expect(app).toMatch(
       /name="Assistant"[\s\S]*component=\{AssistantScreen\}[\s\S]*presentation: "transparentModal"/u
     );
-    expect(home).not.toContain('navigate("AssistantFull")');
+    expect(chrome).not.toContain('navigate("AssistantFull")');
   });
 
   it("uses removable previous-page context in the real sent turn", () => {

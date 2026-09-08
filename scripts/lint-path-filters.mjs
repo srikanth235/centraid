@@ -13,7 +13,7 @@
  * primary surface merged unexercised. This is the check that would have caught
  * it, and the one that catches the next one.
  *
- * TWO SUB-CHECKS.
+ * THREE SUB-CHECKS.
  *
  *   claimed     every workspace directory (`packages/*`, `apps/*`) and every
  *               tracked top-level directory is named by at least one filter, or
@@ -25,6 +25,16 @@
  *               already shows the wear — `packages/server/**` appeared five
  *               times and `packages/core/**` twice inside the `gateway` filter —
  *               which is exactly the state in which a real omission is invisible.
+ *   escape      every read of a filter output carries the `all` fallback. A
+ *               `workflow_dispatch` run has no diff, so `changes` SKIPS the
+ *               paths-filter step and every output is the empty string; `all` is
+ *               what turns the lanes back on. `client-e2e` threaded it into its
+ *               `if:` but not into its two `with:` inputs — the only reads in the
+ *               file outside an `if:` — so the caller started, handed the lane
+ *               `web: false, desktop: false`, and both inner jobs skipped. A
+ *               manual full run on `main` exercised nothing and reported green.
+ *               That is the `skipped`-counts-as-PASS hazard again, one level
+ *               down, and reached through the very control meant to defeat it.
  *
  * Offline, no YAML dependency (the same line-scanning convention as
  * `lint-workflow-pins.mjs`), ~30 ms.
@@ -80,6 +90,63 @@ export function duplicateGlobs(filters) {
         );
       }
     }
+  }
+  return problems;
+}
+
+const OUTPUT_REF = /needs\.changes\.outputs\.(?<name>[\w-]+)/gu;
+
+/**
+ * Split the workflow into the units a condition can occupy: one line, or a whole
+ * block scalar (`if: >`, `filters: |`) folded back into one string under the
+ * line number of its key.
+ *
+ * A per-line scan would read the fallback half of a folded `if:` as absent, so
+ * the alternative was to ban folded conditions outright — but `publish-report`
+ * has one for length alone, with no filter output in it. Joining the block costs
+ * a few lines and refuses nothing that is fine.
+ */
+function scannableUnits(source) {
+  const lines = source.split("\n");
+  const units = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const opener = /^(?<indent>\s*)[\w-]+:\s*[>|][-+]?\s*$/u.exec(lines[index]);
+    if (!opener) {
+      units.push({ line: index + 1, text: lines[index] });
+      continue;
+    }
+    const keyIndent = opener.groups.indent.length;
+    const body = [];
+    let cursor = index + 1;
+    for (; cursor < lines.length; cursor += 1) {
+      const next = lines[cursor];
+      if (next.trim() !== "" && next.search(/\S/u) <= keyIndent) break;
+      body.push(next);
+    }
+    units.push({ line: index + 1, text: `${lines[index]} ${body.join(" ")}` });
+    index = cursor - 1;
+  }
+  return units;
+}
+
+/**
+ * Reads of a `changes` output that do not carry the `all` fallback.
+ *
+ * Deliberately blind to WHICH construct does the reading: the bug this exists
+ * for was in a `with:`, and every previous reading of this table had assumed
+ * `if:` was the only place an output could be consumed.
+ */
+export function escapeHatchProblems(source) {
+  const problems = [];
+  for (const { line, text } of scannableUnits(source)) {
+    const names = [...text.matchAll(OUTPUT_REF)].map(
+      (match) => match.groups.name
+    );
+    if (names.length === 0 || names.includes("all")) continue;
+    const named = [...new Set(names)].map((name) => `\`${name}\``).join(", ");
+    problems.push(
+      `ci.yml:${line} reads ${named} without \`|| needs.changes.outputs.all == 'true'\`. A \`workflow_dispatch\` run skips the paths-filter step, so that output is the empty string and the lane reports \`skipped\` — which \`check\` counts as a PASS. The one control that forces a full run would leave this lane unexercised and green.`
+    );
   }
   return problems;
 }
@@ -181,7 +248,10 @@ function main() {
     .filter(Boolean);
   const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
 
-  const errors = lintPathFilters(filters, tracked, ledger);
+  const errors = [
+    ...lintPathFilters(filters, tracked, ledger),
+    ...escapeHatchProblems(source),
+  ];
   if (errors.length) {
     for (const error of errors) console.error(`path-filters: ${error}`);
     console.error(`path-filters: ${errors.length} problem(s)`);
@@ -189,7 +259,7 @@ function main() {
     return;
   }
   console.log(
-    `path-filters: ${Object.keys(filters).length} filter(s) cover every workspace and top-level path (${Object.keys(ledger.alwaysOn ?? {}).length} ledgered as always-on)`
+    `path-filters: ${Object.keys(filters).length} filter(s) cover every workspace and top-level path (${Object.keys(ledger.alwaysOn ?? {}).length} ledgered as always-on), and every read of one carries the \`all\` fallback`
   );
 }
 

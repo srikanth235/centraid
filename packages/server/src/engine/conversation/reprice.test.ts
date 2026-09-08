@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.js";
 import { ConversationHistoryStore } from "./history.js";
 import { repriceLedger } from "./reprice.js";
@@ -31,14 +32,14 @@ describe(repriceLedger, () => {
 
   beforeEach(() => {
     dir = freshVaultDir();
-    const journal = makeJournalDbProvider(path.join(dir, "journal.db"));
+    const journal = makeLedgerDbProvider(ledgerDbFileIn(dir));
     db = journal();
     const workspace: WorkspaceProvider = () => ({
       vaultId: "vault-test",
       ownerPartyId: OWNER,
       appsDir: path.join(dir, "apps"),
       journal,
-      journalDbFile: path.join(dir, "journal.db"),
+      ledgerDbFile: ledgerDbFileIn(dir),
       harnessSessionDir: path.join(dir, "harness-sessions"),
     });
     store = new ConversationHistoryStore(workspace);

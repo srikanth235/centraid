@@ -210,4 +210,36 @@ describe(NativeMultiplexChangeFeed, () => {
     await settle();
     expect([...storage.values.keys()]).toStrictEqual([]);
   });
+  test("reports the gateway going silent, so a still-connected phone is told", async () => {
+    // THE REGRESSION THIS PINS (#903): killing a gateway moves no radio, so
+    // the feed is the only thing that can notice.
+    const outcomes: boolean[] = [];
+    let answer = true;
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      storage: memoryStorage(),
+      minReconnectMs: 60_000,
+      maxReconnectMs: 60_000,
+      streamFetch: async () => {
+        if (!answer) throw new Error("connection refused");
+        return new Response("", {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }) as never;
+      },
+      onStreamOutcome: (reachable) => outcomes.push(reachable),
+    });
+    const personal = feed.scope("personal");
+    personal.subscribe(() => undefined);
+    personal.setActive(true);
+    await settle();
+    expect(outcomes).toStrictEqual([true]);
+
+    answer = false;
+    personal.setActive(false);
+    personal.setActive(true);
+    await settle();
+    expect(outcomes.at(-1)).toBe(false);
+    feed.close();
+  });
 });

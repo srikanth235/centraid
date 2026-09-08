@@ -22,8 +22,14 @@
  * waits on real time.
  */
 
-import { glob, readFile, writeFile } from "node:fs/promises";
+import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
+
+import {
+  INVENTORY_PATH,
+  readLedgerSection,
+  writeLedgerSection,
+} from "../check-ledgers.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -163,7 +169,7 @@ export function validateSleepInventory(inventory, sites) {
     const inventoried = entries[file];
     if (!Number.isInteger(inventoried)) {
       errors.push(
-        `uninventoried fixed sleep(s): ${file} has ${count} site(s) not in tests/sleep-inventory.json — ${REMEDY}, or inventory them`
+        `uninventoried fixed sleep(s): ${file} has ${count} site(s) not in tests/inventory.json#sleeps — ${REMEDY}, or inventory them`
       );
     } else if (count > inventoried) {
       errors.push(
@@ -187,7 +193,7 @@ export function validateSleepInventory(inventory, sites) {
   const measured = totalSites(sites);
   const budget = inventory?._budget;
   if (!Number.isInteger(budget)) {
-    errors.push("tests/sleep-inventory.json has no integer _budget");
+    errors.push("tests/inventory.json#sleeps has no integer _budget");
   } else if (measured > budget) {
     errors.push(
       `fixed-sleep budget exceeded: ${measured} sites against a budget of ${budget} (+${measured - budget}). The budget is down-only — ${REMEDY}. Top offenders: ${topOffenders(sites).join(", ")}`
@@ -216,19 +222,16 @@ export function reconcileInventory(inventory, sites) {
 
 async function main() {
   const write = process.argv.includes("--write");
-  const inventoryPath = path.join(root, "tests/sleep-inventory.json");
   const sites = await discoverSleepSites({ root });
-  let inventory;
-  try {
-    inventory = JSON.parse(await readFile(inventoryPath, "utf8"));
-  } catch {
-    inventory = { _budget: totalSites(sites), sites: {} };
-  }
+  const inventory = readLedgerSection(INVENTORY_PATH, "sleeps", root) ?? {
+    _budget: totalSites(sites),
+    sites: {},
+  };
   if (write) {
     const next = reconcileInventory(inventory, sites);
-    await writeFile(inventoryPath, `${JSON.stringify(next, null, 2)}\n`);
+    writeLedgerSection(INVENTORY_PATH, "sleeps", next, root);
     console.log(
-      `sleeps: wrote ${totalSites(sites)} sites in ${Object.keys(sites).length} files (budget ${next._budget}) to tests/sleep-inventory.json`
+      `sleeps: wrote ${totalSites(sites)} sites in ${Object.keys(sites).length} files (budget ${next._budget}) to ${INVENTORY_PATH}#sleeps`
     );
     return;
   }

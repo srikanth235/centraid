@@ -24,6 +24,13 @@ const BUSY_TIMEOUT_MS = 5000;
 export class OpSqliteDriver implements ReplicaSqliteDriver {
   private constructor(private readonly db: DB) {}
 
+  /**
+   * The one seat that must SAY it: two live handles per file (see the note
+   * above `BUSY_TIMEOUT_MS`), so the locking rules this driver's busy timeout
+   * assumes have to be the rollback journal's and not WAL's.
+   */
+  readonly journalMode = "DELETE" as const;
+
   static open(options: { name: string; location?: string }): OpSqliteDriver {
     try {
       const db = open({
@@ -54,6 +61,26 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
   ): T[] {
     try {
       return this.db.executeSync(sql, bind as ReplicaBindValue[]).rows as T[];
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
+  }
+
+  /**
+   * A whole write batch on op-sqlite's OWN thread, in one transaction (#922
+   * E1). This is what keeps a first-launch bootstrap page from freezing the
+   * app: the JS thread hands the statements over and is free until they land.
+   */
+  async runBatchAsync(
+    statements: readonly { sql: string; bind: readonly ReplicaBindValue[] }[]
+  ): Promise<void> {
+    try {
+      await this.db.executeBatch(
+        statements.map((statement) => [
+          statement.sql,
+          statement.bind as ReplicaBindValue[],
+        ])
+      );
     } catch (error) {
       throw asReplicaStorageError(error);
     }

@@ -46,7 +46,12 @@ function stubHost(): void {
             { subjectType: "core.document", capabilities: ["view", "edit"] },
           ],
         }),
-      forParty: () => Promise.resolve({ channel: null, grants: [] }),
+      // Linked, because since #903 that is the only person a grant can name.
+      forParty: () =>
+        Promise.resolve({
+          channel: { state: "live", vaultId: "vault-priya" },
+          grants: [],
+        }),
       forAudience: () => Promise.resolve({ grants: [] }),
       forSubject: () => Promise.resolve({ grants: [] }),
       create: (request: GrantCreateRequest) => {
@@ -124,7 +129,7 @@ describe("an album shares through the one grant kit", () => {
     expect(button("Can edit")).toBeUndefined();
     expect(container.textContent).toContain("Cornwall 2024");
     expect(container.textContent).toContain(
-      "Nothing shared with Cornwall 2024 yet."
+      "Cornwall 2024 is not shared with anyone yet."
     );
 
     await press("Share");

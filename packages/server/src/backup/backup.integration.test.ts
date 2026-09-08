@@ -1,4 +1,4 @@
-import crypto, { randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
@@ -18,6 +18,7 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   currentReplicaLogState,
+  recordEgressAuthority,
   sealAad,
   unsealValue,
   updateBackupPolicy,
@@ -28,6 +29,7 @@ import { daemonKeyStore } from "../cli/key-store.js";
 import { daemonLayoutFor } from "../cli/paths.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { HealthRegistry } from "../serve/health-registry.js";
+import { runWithVaultContext } from "../serve/vault-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
@@ -101,16 +103,17 @@ describe("backup", () => {
       },
     });
     const itemId = staged["item_id"] as string;
-    const grantId = crypto.randomUUID();
+    const grantId = recordEgressAuthority(plane.db.vault, {
+      actorId: "owner",
+      actorKind: "owner",
+      verb: "gmail.send",
+      target: "ravi@example.com",
+      grantedBy: plane.boot.ownerPartyId,
+      now: new Date().toISOString(),
+    });
     plane.db.vault
       .prepare(
-        `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`
-      )
-      .run(grantId, new Date().toISOString());
-    plane.db.vault
-      .prepare(
-        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`
+        `UPDATE outbox_item SET status = 'approved', decided_at = ?, authority_id = ? WHERE item_id = ?`
       )
       .run(new Date().toISOString(), grantId, itemId);
     return { itemId, grantId };
@@ -334,9 +337,9 @@ describe("backup", () => {
     // #630 P1/P5: receipt graph (expense, OCR, lines, allocations, attach) must survive.
     const ownerPartyId = (
       h.plane.db.vault
-        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-        .get() as { owner_party_id: string }
-    ).owner_party_id;
+        .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+        .get() as { self_party_id: string }
+    ).self_party_id;
     const receiptGroupId = invoke(h.plane, "tally.create_group", {
       name: "Backup receipt",
       icon: "🧾",
@@ -429,7 +432,6 @@ describe("backup", () => {
     );
     const [result] = jsonLines(out) as [{ seq: number; entries: string[] }];
     expect(result.entries).toContain("vault.db");
-    expect(result.entries).toContain("journal.db");
     expect(result.entries).toContain("apps.bundle");
     expect(result.entries).not.toContain("seal.key");
     expect(existsSync(path.join(destDir, "RESTORE_QUARANTINE.json"))).toBe(
@@ -448,10 +450,6 @@ describe("backup", () => {
     await fs.copyFile(
       path.join(destDir, "vault.db"),
       path.join(adoptedDir, "vault.db")
-    );
-    await fs.copyFile(
-      path.join(destDir, "journal.db"),
-      path.join(adoptedDir, "journal.db")
     );
     await fs.cp(path.join(destDir, "blobs"), path.join(adoptedDir, "blobs"), {
       recursive: true,
@@ -499,19 +497,26 @@ describe("backup", () => {
       expect(plane.quarantine).not.toBeNull();
       expect(plane.quarantine?.outboxParked).toBeGreaterThanOrEqual(1);
       const outboxRow = plane.db.vault
-        .prepare("SELECT status, grant_id FROM outbox_item WHERE item_id = ?")
+        .prepare(
+          "SELECT status, authority_id FROM outbox_item WHERE item_id = ?"
+        )
         .get(h.seeded.outboxItemId) as {
         status: string;
-        grant_id: string | null;
+        authority_id: string | null;
       };
       expect(outboxRow.status).toBe("pending");
-      expect(outboxRow.grant_id).toBeNull();
+      expect(outboxRow.authority_id).toBeNull();
 
-      const rows = plane.sqlAsOwner(
-        "SELECT title FROM schedule_task ORDER BY title"
-      ).rows as Array<{
-        title: string;
-      }>;
+      const rows = runWithVaultContext(
+        {
+          vaultId: plane.boot.vaultId,
+          ownerId: plane.boot.ownerPartyId,
+          ownsVault: true,
+        },
+        () =>
+          plane.sqlAsAssistant("SELECT title FROM schedule_task ORDER BY title")
+            .rows
+      ) as Array<{ title: string }>;
       const titles = rows.map((r) => r.title);
       for (const t of h.seeded.taskTitles) expect(titles).toContain(t);
 

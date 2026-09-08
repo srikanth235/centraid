@@ -3,7 +3,7 @@
  * Flake quarantine gate (#656 Layer 5).
  *
  * The protocol this enforces: a test that fails nondeterministically is moved
- * to `tests/quarantine.json` with an issue and an expiry date, and excluded
+ * to `tests/quarantine.json#entries` with an issue and an expiry date, and excluded
  * from the required checks until then. It is never deleted inline (that loses
  * the coverage silently) and never retried-in-place until green (that converts
  * a real defect into latency). On expiry it returns fixed or is deleted with a
@@ -38,7 +38,7 @@ export function parseDay(value) {
  * `nowMs` is a parameter rather than a `Date.now()` call so the gate's own
  * tests can prove the expiry boundary instead of asserting around it.
  *
- * @param {unknown} document Parsed `tests/quarantine.json`.
+ * @param {unknown} document Parsed `tests/quarantine.json` (tests in `entries`, lane parks in `lanes` since #915 Wave 4).
  * @param {number} nowMs Wall-clock reference.
  * @returns {{ errors: string[], entries: object[] }} Violations and entries.
  */

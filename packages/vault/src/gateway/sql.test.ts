@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { bootstrapVault, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
 import { registerLinkCommands } from "../commands/links.js";
@@ -25,8 +25,6 @@ let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
-
-const PURPOSE = "dpv:ServiceProvision";
 
 function setup(dir?: string): void {
   db = openVaultDb(dir ? { dir } : {});
@@ -84,9 +82,9 @@ describe("sql", () => {
       expect(result.rows.map((r) => r.display_name)).toContain("Priya");
       expect(result.columns).toStrictEqual(["display_name"]);
       expect(result.receiptId).toBeTruthy();
-      const receipt = db.journal
+      const receipt = db.audit
         .prepare(
-          `SELECT decision, object_type FROM consent_receipt WHERE receipt_id = ?`
+          `SELECT decision, object_type FROM access_receipt WHERE receipt_id = ?`
         )
         .get(result.receiptId) as { decision: string; object_type: string };
       // node:sqlite hands back null-prototype rows; spreading compares the column
@@ -132,16 +130,20 @@ describe("sql", () => {
     });
 
     test("only the owner-device credential may call it (receipted deny)", () => {
-      const app = enrollApp(db, { name: "snoop" });
+      const app = enrollAgent(db, {
+        name: "snoop",
+        modelRef: "test-automation",
+      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       expect(() => gw.sql(cred, { sql: "SELECT 1" })).toThrow(/owner/u);
-      const deny = db.journal
+      const deny = db.audit
         .prepare(
-          `SELECT decision FROM consent_receipt WHERE object_type = 'vault.sql' ORDER BY receipt_id DESC LIMIT 1`
+          `SELECT decision FROM access_receipt WHERE object_type = 'vault.sql' ORDER BY receipt_id DESC LIMIT 1`
         )
         .get() as { decision: string };
       expect(deny.decision).toBe("deny");
@@ -168,7 +170,6 @@ describe("sql", () => {
           title: "Money things",
           body_text: "the quarterly budget plan",
         },
-        purpose: PURPOSE,
       });
       expect(outcome.status).toBe("executed");
       const result = gw.sql(owner, {

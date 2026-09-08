@@ -13,20 +13,20 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { releaseContentIfUnreferenced } from "./media.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { recordRevision } from "./revisions.js";
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 const MEDIA_TYPE: Record<string, string> = {
@@ -79,6 +79,7 @@ const CREATE_NOTE: CommandDefinition = {
     required: ["title", "body_text"],
     additionalProperties: false,
     properties: {
+      note_id: MINTED_ID_PROPERTY,
       title: { type: "string", minLength: 1 },
       body_text: { type: "string", minLength: 1 },
       format: { type: "string", enum: ["markdown", "html", "plain"] },
@@ -94,6 +95,7 @@ const CREATE_NOTE: CommandDefinition = {
     },
   },
   preconditions: [
+    mintedIdIsFree("knowledge_note", "note_id", "note", "note_id"),
     {
       // Filing is optional; a named notebook must exist. Optional inputs
       // bind as NULL, so an unfiled create passes trivially.
@@ -138,7 +140,7 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
   };
   const format = input.format ?? "plain";
   const contentId = contentItemFor(ctx, input.body_text, format);
-  const noteId = ctx.newId();
+  const noteId = mintedId(ctx, "note_id");
   ctx.db
     .prepare(
       `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at)
@@ -371,6 +373,7 @@ const CREATE_NOTEBOOK: CommandDefinition = {
     required: ["name"],
     additionalProperties: false,
     properties: {
+      notebook_id: MINTED_ID_PROPERTY,
       name: { type: "string", minLength: 1 },
       parent_notebook_id: { type: "string", minLength: 1 },
     },
@@ -381,6 +384,12 @@ const CREATE_NOTEBOOK: CommandDefinition = {
     properties: { notebook_id: { type: "string" } },
   },
   preconditions: [
+    mintedIdIsFree(
+      "core_collection",
+      "notebook_id",
+      "notebook",
+      "collection_id"
+    ),
     {
       name: "parent_exists_if_given",
       sql: `SELECT CASE WHEN :parent_notebook_id IS NULL THEN 1
@@ -418,7 +427,7 @@ const CREATE_NOTEBOOK: CommandDefinition = {
 
 function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { name: string; parent_notebook_id?: string };
-  const notebookId = ctx.newId();
+  const notebookId = mintedId(ctx, "notebook_id");
   ctx.db
     .prepare(
       // sort_order is sibling-scoped; IS (not =) so NULL parents group too.
@@ -575,7 +584,6 @@ function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM core_collection WHERE collection_id = ?")
     .run(input.notebook_id);
-  cleanupPolyRefs(ctx.db, ctx.now, "core.collection", input.notebook_id);
   ctx.wrote("core.collection", input.notebook_id);
   ctx.cite({
     claim: `notebook ${input.notebook_id} deleted; ${filed.n} member notes unfiled, none destroyed`,
@@ -689,8 +697,10 @@ const RESTORE_NOTE: CommandDefinition = {
   preconditions: [
     {
       name: "note_in_trash",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM knowledge_note
-             WHERE note_id = :note_id AND deleted_at IS NOT NULL`,
+             WHERE note_id = :note_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,

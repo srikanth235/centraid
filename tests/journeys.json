@@ -1,0 +1,1803 @@
+{
+  "approvedDeviation": "#927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`. ratchet-floors.mjs reads this file as a whole (no `section`), so the waiver has to sit at the root — `entries.approvedDeviation` is the journey-ledger's own copy of the same note, which `lint:journey-ledger` requires on a re-key. Every number is carried across byte-identical; only the address moves. #927 RIG DIET deletes the thirty rigs under `rigs` that cited no entry here, with their budgetMs/budgetsMs numbers (maintainer approval 2026-09-05, recorded in receipts/issue-927-perf-infra.md). The SAME rationale sits on `rigs.approvedDeviation`, which is where `scripts/check-ledgers.mjs` reads a section waiver; `scripts/test-report/ratchet-floors.mjs` loads this file whole and sees only a root note, so the two readers need the note in both places and neither copy waives anything the other does not. No surviving rig's ceiling moves.",
+  "_comment": "THE JOURNEY LEDGER (#927). ONE ledger, keyed `surface / journey / volume / hardware`. It replaces tests/experience-budgets/{web,desktop,mobile,gateway,client-query-counts}.json, tests/budgets.json#qualityRigs and tests/budgets.json#experience: a ceiling stated without the volume and the hardware it was measured on is not a budget, and four files keyed by surface alone could not say so. Every entry names the SPANS it is measured from (packages/core/src/protocol/trace.ts) and the CONSUMERS that assert it, so a ceiling with no reader and a reader with no ceiling are both visible here. Read through tests/helpers/journeys.ts (TypeScript) or scripts/lib/journey-ledger.mjs (scripts); nothing parses this file by hand. Ratcheted tighten-only as a PERF_BUDGET_SOURCE (scripts/test-report/ratchet-floors.mjs): `max*`/`ceiling*` fall freely and widening one needs an `approvedDeviation`; `min*` may only rise. A leading underscore is invisible to the ratchet, which is how an intended-but-unobserved ceiling is parked without gating vacuously. RE-KEYING an entry (a journey measured at a new volume, say) renames its flattened numbers, which the ratchet reads as a removal plus an addition — i.e. a widen: carry the same numbers across and add an `approvedDeviation` saying what moved and why.",
+  "_statusVocabulary": {
+    "measured": "A real run on the stated date and hardware produced `_provenance.observed*`; the ceiling is that value plus the stated headroom.",
+    "projected": "Arithmetic on a measured number from a different volume or surface. `_basis` names what it extrapolates from. Never presented as observed.",
+    "unmeasured": "NO NUMBER. The ceiling key is absent and nothing gates. `probe` names the rig that will fill it.",
+    "_intended": "A ceiling that is known but not yet observable on this hardware, parked under a leading underscore so it documents intent without gating.",
+    "bound": "A CATASTROPHE BOUND, not observed+headroom: a value above which the experience is broken on any hardware and needs no measurement to assert. It gates, but it is not a measurement, and the real target is parked beside it under a leading underscore until a run produces a distribution. `_provenance.note` must argue the bound."
+  },
+  "hardware": {
+    "ci-linux-x64-4c": "GitHub-hosted ubuntu-latest, 4 vCPU / 16 GB, and the 4-core/15 GB development containers that match it. Contended: a p95 here is not a quiet-host p95.",
+    "dev-darwin-arm64": "Apple-silicon development host, NVMe. Faster than any CI runner; a ceiling seeded here carries extra headroom and says so.",
+    "ci-ios-sim": "iOS simulator on a macOS runner, release-configuration build with the Hermes bundle embedded.",
+    "ci-android-emu": "Android emulator on a linux runner, release-configuration build.",
+    "device-android-low-end": "A leased low-end Android phone on the device farm (#927 W4). The only hardware whose mobile numbers may be promoted out of `_intended*`: an emulator has neither a phone's thermal envelope nor its flash, so a millisecond measured on `ci-android-emu` bounds the experience from below and can never become a ceiling.",
+    "device-iphone": "A leased iPhone on the device farm (#927 W4). Same rule as the Android cell: `ci-ios-sim` shares the host's CPU and disk, so its numbers are a lower bound, not a budget.",
+    "pi-arm64-4c": "A Pi-class self-hosted runner (4 arm64 cores, SD/USB flash) carrying the `centraid-pi` label — the machine the `constrained` hardware profile is NAMED for (#927 W4). Every number under that profile before this rung was taken on a cloud x64 runner with the profile pinned, which changes SQLite's durability mode and nothing about the disk underneath it, so a row here and a row on `ci-linux-x64-4c-constrained` must never be averaged together.",
+    "any": "Hardware-independent — a build artifact weighed on disk, or a count of statements the product issues.",
+    "ci-linux-x64-4c-standard": "The same runner as `ci-linux-x64-4c`, with CENTRAID_HARDWARE_PROFILE=standard pinned: SQLite `synchronous=FULL`, the desktop-class durability setting. The gateway resolves the profile at boot, so a number is only comparable to another taken under the SAME profile.",
+    "ci-linux-x64-4c-constrained": "The same runner with CENTRAID_HARDWARE_PROFILE=constrained: SQLite `synchronous=NORMAL`, the phone/low-end setting. Every gateway journey is stated under BOTH profiles because the durability mode is the single biggest lever on a write path and one number would hide which side of it moved."
+  },
+  "volumes": {
+    "year3": "The golden year-3 artifact: ~27,600 domain rows (5,000 parties, 10,000 photos, 200 conversations x 12 turns, 1,000 notes, 1,096 events, 12 grantees, 365 receipt days). packages/test-kit/src/year3-vault.ts.",
+    "year3-photos": "90,000 photo assets, 3,000 near-duplicate families — the Photos library profile.",
+    "year3-replica": "50,000 replica rows on a phone (docs/mobile-offline.md).",
+    "year3-household": "5 mounted vaults = 10 SQLite handles on one gateway.",
+    "year3-10gib": "10 GiB of CAS bytes across 4 MiB objects + 95,640 FK-checked rows.",
+    "empty": "A FRESH VAULT. A bundle or transport ratchet only: it cannot catch an O(vault-size) regression, and an entry that stays here is an admission, not a budget.",
+    "build-artifact": "Bytes on disk after a build; independent of vault size.",
+    "none": "Nothing vault-sized is involved.",
+    "seeded-demo": "Every bundled app's own demo seed written through the gateway's write path, plus a stated number of Atlas `core.place` rows (the count is in each entry's provenance). NOT year-3, and the only rows still stated at it are the `gateway/*` bench journeys. The web e2e harness left it for `year3` in #927 W4, once `@centraid/test-kit` gained a `dist` build and `node --experimental-strip-types` could load the year-3 generator. It is a real volume through the real write path, and it is the volume the gateway numbers below are stated at.",
+    "mock-gateway": "The desktop e2e fixture: a mock gateway, one app, a fresh userData directory. NOT year-3, and the harness cannot be pointed at the golden artifact from this container — Electron does not launch on a display-less runner, so the rig is landed and the number stays parked.",
+    "device-fixture": "Whatever the CI gateway fixture seeded onto the simulator's device replica. NOT the declared year-3 50,000 replica rows / 90,000 photo assets: reaching those needs a device run, which this container has none of.",
+    "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost."
+  },
+  "journeys": {
+    "cold-open": "Process start to the first screen the owner can act on.",
+    "warm-switch": "An already-running app to another app's first usable screen.",
+    "own-echo": "The owner's own input to its first visible effect on the device that made it.",
+    "peer-echo": "A change made on one of the owner's devices to its visible effect on another.",
+    "converge": "Reconnect after being away to the screen telling the truth again, with N pending intents.",
+    "share": "Granting or revoking a share to the grantee's view reflecting it.",
+    "search": "Query submitted to results on screen.",
+    "scroll": "Frames delivered while flinging a long list.",
+    "first-bootstrap": "A new device from pairing to a fully mirrored replica.",
+    "app-weight": "Not a journey — shipped bytes. Kept here so one ledger holds every ceiling.",
+    "core-route": "Not a journey — the per-route p95 of the gateway's own core routes.",
+    "backup": "Not a journey — the wall clock of taking one snapshot of the vault.",
+    "restore": "Not a journey — backup restore wall clock.",
+    "integrity-check": "Not a journey — post-restore FK/integrity verification.",
+    "footprint": "Not a journey — host memory reserved per mounted vault.",
+    "composite-load": "Not a journey — throughput degradation when every lane runs at once.",
+    "soak": "Not a journey — growth over a long-lived process.",
+    "stress-recovery": "Not a journey — the first ordinary request after the knee.",
+    "photo-sweep": "Not a journey — the perceptual-hash sweep over the library.",
+    "first-paint-work": "Not a journey — the WORK a screen's first paint costs, in the product's own counters.",
+    "read-cost": "Not a journey — what one gateway READ costs in bytes it writes: audit band and write-ahead log."
+  },
+  "entries": {
+    "approvedDeviation": "#927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness.",
+    "web/own-echo/none/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "own-echo",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["client.send", "gateway.turn.dispatch"],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sendToFirstToken": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY. Needs a deterministic stub runner in apps/web/tests/e2e/server.ts that emits a first token on a fixed delay, so the measurement is the client's dead time and not the provider's."
+        }
+      }
+    },
+    "web/app-weight/build-artifact/any": {
+      "surface": "web",
+      "journey": "app-weight",
+      "volume": "build-artifact",
+      "hardware": "any",
+      "spans": [],
+      "consumers": ["scripts/perf/app-weight.mjs --surface web"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "appWeight": {
+          "status": "measured",
+          "probe": "scripts/perf/app-weight.mjs --surface web (weighs apps/web/dist produced by `bun run web:build`), run in CI after the web build",
+          "maxTotalBytes": 8730000,
+          "maxLargestChunkBytes": 2200000,
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64 worktree, `bun run --cwd apps/web build` (vite build + precompress)",
+            "observedShippedBytes": 8083152,
+            "observedShippedFiles": 86,
+            "observedLargestChunkBytes": 1995618,
+            "observedLargestChunk": "centraid-worker-iroh.wasm",
+            "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface web --report` (#781, closing the #587 D21 web gap; re-measured and TIGHTENED by #883 C5). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what the build ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (17.6 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. THE DOUBLE-SHIPPED IROH WASM IS FIXED: the 1,995,618 B binding had two inclusion paths — the page's wasm-bindgen ESM resolving new URL('centraid_web_iroh_bg.wasm', import.meta.url) into a hashed assets/ copy, and scripts/build-iroh-worker.mjs copying the same bytes to public/centraid-worker-iroh.wasm for the CLASSIC service worker, which cannot import ESM. The worker's copy has to keep its unhashed, _headers-pinned path, so the centraid-iroh-wasm-single-copy plugin in apps/web/vite.config.ts rewrites the bindings' default to that same ?v=-stamped URL and the assets/ copy stops being emitted; public/sw.js now treats that path as an immutable shell entry, so a visit that uses both the page transport and the worker pays the 2 MB once. Measured on this host the same day: 10,074,585 B across 87 files before, 8,083,152 B across 86 files after. maxTotalBytes ratcheted 11,010,048 -> 8,730,000 (observed + ~8%). maxLargestChunkBytes is UNCHANGED at 2,200,000 deliberately: the largest single file is still that same 1,995,618 B binary — de-duplication removed a COPY, not weight from the copy that remains — so the existing observed+10% ceiling is still the honest one, and tightening it here would claim a win that did not happen. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.10 MB, sqlite3.wasm 865 kB; pdf.worker is the next real cut.",
+            "headroom": "observed + ~8% total; largest chunk + ~10% (mirrors the desktop/mobile seeds)"
+          }
+        }
+      }
+    },
+    "desktop/own-echo/none/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "own-echo",
+      "volume": "none",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["client.send", "gateway.turn.dispatch"],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sendToFirstToken": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY. Needs the mock gateway in apps/desktop/tests/e2e/fixtures.ts to serve a fixed-delay SSE turn so the number is the shell's dead time, not a provider's."
+        }
+      }
+    },
+    "desktop/scroll/none/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "scroll",
+      "volume": "none",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["client.frame"],
+      "consumers": ["tests/agent-e2e-mobile/flows/scroll-frames.mjs"],
+      "_folded_into": "mobile/scroll/device-fixture/ci-ios-sim",
+      "_folded_why": "The frame-drop ceiling has ONE owner: the phone. Chromium exposes no per-frame drop counter to Playwright without a CDP trace, so a desktop number would be the trace's, not the shell's. `mobile/scroll` carries the bound and `scroll-frames.mjs` is the probe that reads it; this row stays so the grid has no hole and names that probe as its reader rather than pretending to one of its own.",
+      "tolerancePercent": 20,
+      "metrics": {
+        "maxDroppedFramePercent": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY. Chromium exposes no per-frame drop counter to Playwright without a CDP trace; the mobile surface owns the frame-drop ceiling (see mobile.json)."
+        }
+      }
+    },
+    "desktop/converge/none/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "converge",
+      "volume": "none",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["replica.resume", "replica.apply"],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "reconnectToFresh": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY. Wants a mock-gateway pause/resume in the desktop e2e harness plus a client-side 'data is fresh' signal to observe.",
+          "_note": "#883 C1 measured the same verb on the two surfaces where a probe was cheap — the gateway's side over real HTTP (60 ms, gateway.json) and the phone's client-side resume term (6.3-8.4 s, mobile.json) — and deliberately did NOT flip this entry. The mobile probe drives createNativeReplicaSession, which owns its store, pull loop and change apply in-process; the desktop shell's equivalent is ReplicaShellSession over a coordinator that runs the sqlite-wasm store in a Worker, and packages/client/src/replica/shell-session.test.ts fakes that coordinator wholesale. A probe against the fake would time the mock, not the resume. Landing a number here needs either the real worker-backed coordinator under jsdom or the desktop e2e harness above — neither is a cheap add, and a plausible number with no run behind it is the failure `unmeasured` exists to prevent."
+        }
+      }
+    },
+    "desktop/app-weight/build-artifact/any": {
+      "surface": "desktop",
+      "journey": "app-weight",
+      "volume": "build-artifact",
+      "hardware": "any",
+      "spans": [],
+      "consumers": ["scripts/perf/app-weight.mjs --surface desktop"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "appWeight": {
+          "status": "measured",
+          "probe": "scripts/perf/app-weight.mjs --surface desktop (weighs apps/desktop/dist/renderer), run in CI after the desktop build",
+          "maxTotalBytes": 6291456,
+          "maxLargestChunkBytes": 1500000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64, worktree `vite build` output of apps/desktop",
+            "observedShippedBytes": 5827344,
+            "observedShippedFiles": 33,
+            "observedLargestChunkBytes": 1333046,
+            "observedLargestChunk": "react-boot.js",
+            "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
+            "headroom": "observed + 8%"
+          }
+        }
+      }
+    },
+    "mobile/warm-switch/none/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "warm-switch",
+      "volume": "none",
+      "hardware": "ci-ios-sim",
+      "spans": ["client.interaction"],
+      "consumers": ["tests/agent-e2e-mobile/flows/home-loads.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "tapToVisualResponse": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY. Same instrumentation blocker as the frame-drop ceiling: Maestro's tap→assert round trip includes its own polling interval (~hundreds of ms), which swamps the signal being measured."
+        }
+      }
+    },
+    "mobile/own-echo/none/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "own-echo",
+      "volume": "none",
+      "hardware": "ci-ios-sim",
+      "spans": ["client.send", "gateway.turn.dispatch"],
+      "consumers": ["tests/agent-e2e-mobile/lib/fixed-delay-agent.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sendToFirstToken": {
+          "status": "unmeasured",
+          "probe": "RIG EXISTS, NO NUMBER YET — and the distinction is the point. The blocker named here until #890 was that the CI gateway had no model provider at all, so no turn could start and nothing could be timed. That is fixed: tests/agent-e2e-mobile/lib/fixed-delay-agent.mjs is a minimal ACP agent that streams its first token after a KNOWN delay, tests/agent-e2e-mobile/lib/ci-gateway.mjs configures it as the Assistant's provider through the registry's `acp` custom-agent kind, and tests/integration-mobile/assistant-provider.integration.test.ts proves that wiring resolves to a launch plan spawning it (importing the prefs the gateway writes rather than a copy, so the two cannot drift). What is still missing is a DEVICE RUN: the flow that taps send and waits for first paint, on hardware this change had none of. Until that runs, `status` stays `unmeasured` — a rig is not a measurement, and promoting this to `measured` on the strength of wiring is the exact move this budget file exists to prevent. When the flow lands, the number to record is `observed − CENTRAID_STUB_FIRST_TOKEN_DELAY_MS` (default 250), which is the dead time this repo owns: the app's send path, the Iroh hop, gateway turn dispatch and the renderer reaching first paint. The gateway-side lower bound on the same interval is already measured in tests/experience-budgets/gateway.json (#842) and excludes every one of those spans."
+        }
+      }
+    },
+    "mobile/converge/year3-replica/ci-linux-x64-4c": {
+      "surface": "mobile",
+      "journey": "converge",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["replica.resume", "replica.apply", "replica.read"],
+      "consumers": ["tests/scale/mobile-reconnect-to-fresh.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "reconnectToFresh": {
+          "status": "measured",
+          "probe": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/mobile-reconnect-to-fresh.scale.test.ts (also `bun run test:scale`) — the nightly scale lane rather than the package suite, because this gates on WALL CLOCK and `bun run test` drives 29 turbo tasks across four threads: under that contention the probe read 3,292 ms against this 1,800 ms ceiling while reading 482 ms alone, so the lane's `fileParallelism: false` forked pool is what makes the number mean anything. It drives the production createNativeReplicaSession: bootstrap, AppState 'background' (feed deactivated), server state advances unseen, AppState 'active', then polls the read a Photos/Docs screen issues until every missed change is on the page. The clock starts on the AppState transition and stops when the SCREEN'S read is fresh, not when the delta lands in SQLite.",
+          "ceilingMs": 1800,
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64 development container, Node SQLite driver under the production native session",
+            "observedMs": 555,
+            "observedSpreadMs": "503 / 509 / 510 / 555 over four consecutive runs",
+            "note": "RE-MEASURED AFTER PUSHDOWN (#883 C3/D1) and tightened from 20,000 ms. The previous entry measured 6,324-8,382 ms and said in as many words that the screen read was the shrinker: every read materialised all 50,000 rows, JSON.parsed each payload and filtered/sorted in JavaScript before the 200-row limit applied. The compiled read plan made that read one SQL statement, and the same probe now resumes to a fresh screen in ~0.5 s — a 15x fall with no change to what is measured. Scope is UNCHANGED and this ceiling must not be read as the whole interval. INCLUDED: the AppState transition, change-feed reactivation, the delta pull loop, applying 200 missed changes, and the 200-row newest-first screen read that has to return them. EXCLUDED: real network RTT (the gateway is an in-process fetch double - the gateway's side of the same interval is measured over real HTTP at 60 ms by tests/scale/replica-reconnect.scale.test.ts, see gateway.json), device flash I/O (node:sqlite in memory here, op-sqlite on flash there), and React render. So this is still a LOWER BOUND on what the owner feels. The ceiling is ~3.2x the slowest of four samples because a shared CI runner is materially slower than this host and four samples cannot bound its jitter; TIGHTEN further once ~10 nightly samples exist.",
+            "headroom": "~3.2x slowest observed (four samples, single host)"
+          }
+        }
+      }
+    },
+    "mobile/search/year3-replica/dev-darwin-arm64": {
+      "surface": "mobile",
+      "journey": "search",
+      "volume": "year3-replica",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["replica.read", "replica.search"],
+      "consumers": ["apps/mobile/src/lib/replica/multi-vault-reader.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "mountedReplicaReadWithOutbox": {
+          "status": "measured",
+          "probe": "CENTRAID_PERF_EVIDENCE=1 bun run --cwd apps/mobile test -- src/lib/replica/multi-vault-reader.test.ts — production MultiVaultReplicaReader performs a 5,000-row ordered read and federated FTS search while enumerating and composing the durable SQLite outboxes",
+          "maxColdMs": 1000,
+          "maxSearchMs": 100,
+          "_provenance": {
+            "at": "2026-08-11",
+            "host": "macOS 26.2 arm64 development host, Node SQLite driver over the production reader/query plan",
+            "observedColdMs": 778.4,
+            "observedSearchMs": 4.5,
+            "observedProjectionBytes": 22622208,
+            "note": "MEASURED. The fixture includes the outbox volume in both timed requests; the read plan fetches the bounded canonical page plus only mutation-addressed canonical row ids.",
+            "headroom": "cold observed + 28%; search ceiling retained from the existing product budget"
+          }
+        }
+      }
+    },
+    "mobile/app-weight/build-artifact/any": {
+      "surface": "mobile",
+      "journey": "app-weight",
+      "volume": "build-artifact",
+      "hardware": "any",
+      "spans": [],
+      "consumers": ["scripts/perf/app-weight.mjs --surface mobile"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "appWeight": {
+          "status": "measured",
+          "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
+          "maxTotalBytes": 12582912,
+          "maxLargestChunkBytes": 8220000,
+          "_provenance": {
+            "at": "2026-09-05",
+            "host": "GitHub-hosted ubuntu-latest, `bun run --cwd apps/mobile ci:bundle` in ci.yml mobile-smoke (expo export, both platforms, release Hermes bytecode)",
+            "observedIosShippedBytes": 8293552,
+            "observedAndroidShippedBytes": 8313794,
+            "observedLargestChunkBytes": 8168314,
+            "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
+            "note": "MEASURED on the CI artifact this consumer weighs. A 2026-07-31 darwin worktree export observed a 6,355,198 B chunk and the close pass tightened the ceiling to 6,355,198 \u00d7 1.08 = 6,863,614; CI's Hermes chunk is 8,147,138 B (iOS) / 8,168,314 B (Android), so that observation was not this job's artifact. The ceiling stays at the previous 8,220,000 B, which still clears 8,168,314. Tightening it to the CI observation + 8% would be 8,821,779 and is a widen vs the number already on main \u2014 not taken here.",
+            "headroom": "8,220,000 against CI largest chunk 8,168,314 (0.6%); 12 MiB total against 8,313,794 shipped (51%)"
+          }
+        }
+      }
+    },
+    "gateway/converge/year3-replica/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.resume"],
+      "consumers": ["tests/scale/replica-reconnect.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "reconnectToFresh": {
+          "status": "measured",
+          "probe": "tests/scale/replica-reconnect.scale.test.ts — times the reconnect REQUEST to the frame that carries every missed change. IN the span: connection setup, cursor parse, shape rebuild, and the projection of the missed delta. OUT of it: how long the owner was away, which is unbounded and is not the gateway's to own. Page ONE's watermark is used as the resume cursor because that is what the bootstrap continuation token pins the client's later delta to.",
+          "ceilingMs": 250,
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process serve() gateway over loopback HTTP",
+            "runs": 3,
+            "observedReconnectToFreshMs": [60.3, 58.3, 68.7],
+            "observedBootstrapWalkMs": [1355, 1608, 2679],
+            "observedSeedMs": [2920, 2885, 3168],
+            "note": "MEASURED, and what it replaces is NO NUMBER AT ALL — this entry was `unmeasured` with `probe: \"NONE TODAY\"` because nothing in the repo timed the change-stream resume path. It does now: at the declared year-3 volume a returning device is fresh again in ~60 ms. The first `change` frame WAS the fresh frame in all three runs — 25 missed commits fit inside one page (the route's default limit is 1,000 changes), so first-frame and fully-caught-up are the same instant here and the rig publishes both. THE HONEST CAVEAT: 25 offline commits is a realistic phone-in-a-pocket gap, not a fortnight away; a client whose backlog exceeds one page walks several pages and pays per page. The rig fences the common case and would catch the regression that matters — a resume that starts scanning the vault instead of the change log.",
+            "headroom": "~3.6x the worst observed (68.7 ms). Sized against the shared-container measurement on purpose, in the same grammar as the other entries here; tighten-only, so re-seed it downward once the nightly scale lane has a real distribution."
+          }
+        }
+      }
+    },
+    "gateway/warm-switch/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "warm-switch",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.request"],
+      "consumers": [
+        "tests/perf/gateway-request.perf.test.ts",
+        "tests/perf/gateway-request-volume.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "requestToFirstByte": {
+          "status": "measured",
+          "probe": "tests/perf/gateway-request.perf.test.ts (empty-vault floor) + tests/perf/gateway-request-volume.perf.test.ts (year-3-shaped vault). Both assert this ceiling, so one number now fences the transport regression AND the scale regression.",
+          "ceilingP95Ms": 120,
+          "_provenance": {
+            "at": "2026-07-19",
+            "host": "darwin arm64, gateway in a forked child (tests/perf/fixtures/gateway-idle-server.mjs)",
+            "observedP95Ms": 40,
+            "note": "Pre-existing measurement, restated here in owner terms and NOT re-derived. Ceiling is ~3x observed. The volume is EMPTY — this number says nothing about a year-3 vault, and the honest reading is that it fences a transport regression, not a scale one. packages/server/benchmarks/low-end-budgets.json holds the matching machine-cost ceiling (requestP99Ms 250) for the low-end host profile. `_provenanceAtVolume` below is the half this note said was missing.",
+            "headroom": "~3x observed"
+          },
+          "_provenanceAtVolume": {
+            "at": "2026-08-28",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; gateway IN PROCESS (the seed has to reach the vault it serves), so these are a floor relative to the forked-child lane",
+            "runs": 3,
+            "observedAppsP95Ms": [33.9, 26.2, 29.2],
+            "observedSeededDomainRows": 25007,
+            "note": "MEASURED at volume, and the finding is that the CORE ROUTES ARE VOLUME-INSENSITIVE: /centraid/_apps answers in 26-34 ms p95 over a 25,007-row vault, against 40 ms p95 on an empty vault in the older forked-child lane — inside the run-to-run spread of the two hosts, not a scale signal. That is the honest, and mildly boring, answer to the question the empty-vault caveat kept parked: this route does not read domain rows, so it cannot degrade with them. What the same rig also publishes, UNGATED, is the lane that does: one windowed replica bootstrap page (window=200) over the same vault costs 152-185 ms p95. Volume shows up on the routes that read rows, and the budget now says which is which instead of implying the whole surface was fenced.",
+            "headroom": "none added — the ceiling stays at ~3x the WORST of the two lanes (the 40 ms empty-vault observation). Tightening it to ~3x the volume observation would fence the forked-child lane's own host noise rather than a regression, and this file is tighten-only, so a ceiling that has to come back up is a ceiling that needs an approvedDeviation."
+          }
+        }
+      }
+    },
+    "gateway/core-route/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "core-route",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.request"],
+      "consumers": [
+        "tests/perf/gateway-request.perf.test.ts",
+        "tests/perf/gateway-request-volume.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "coreRouteP95Ms": {
+          "status": "measured",
+          "probe": "tests/perf/gateway-request.perf.test.ts (empty-vault floor) + tests/perf/gateway-request-volume.perf.test.ts (year-3-shaped vault)",
+          "gatewayInfo": 120,
+          "apps": 120,
+          "health": 120,
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process gateway over a 25,007-row vault",
+            "runs": 3,
+            "observedGatewayInfoP95Ms": [8.7, 22.1, 34.1],
+            "observedAppsP95Ms": [33.9, 26.2, 29.2],
+            "observedHealthP95Ms": [13.1, 9.9, 8.5],
+            "note": "MEASURED at volume — before this the entry carried three ceilings and no provenance at all, derived from an empty-vault run on another host. All three routes stay under 35 ms p95 on a year-3-shaped vault; the spread between runs (8.7-34.1 ms on the same route) is container contention, which is why the ceilings are not tightened toward the observation. Keeping one ceiling per identity rather than three different ones is deliberate: these are the three routes a client hits before it can show anything, and a differentiated ceiling would encode today's implementation rather than the owner's experience.",
+            "headroom": "~3.5x the worst observed at volume (34.1 ms) and ~3x the empty-vault observation (40 ms) the older lane still asserts against. Tighten-only."
+          }
+        }
+      }
+    },
+    "gateway/cold-open/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "cold-open",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.boot"],
+      "consumers": [
+        "tests/perf/gateway-request.perf.test.ts",
+        "tests/perf/gateway-request-volume.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "gatewayColdStartMs": {
+          "status": "measured",
+          "probe": "tests/perf/gateway-request.perf.test.ts (empty-vault fork) + tests/perf/gateway-request-volume.perf.test.ts (reopen of the seeded directory)",
+          "ceilingMs": 5000,
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2",
+            "runs": 3,
+            "observedSeededReopenMs": [809, 548, 805],
+            "note": "MEASURED on a SEEDED vault, which is the question this key exists to answer: does a full vault make the gateway slower to open? Reopening a 25,007-row vault from disk — mounting the plane, installing the bundled apps, re-arming the services — takes 0.55-0.81 s. The empty-vault fork lane measures process spawn plus the same boot and carries the same ceiling; neither observation is close to it, and the ceiling is deliberately left generous because a cold start also pays for whatever the host's page cache does not have. Tighten-only.",
+            "headroom": "~6x the worst seeded reopen (809 ms). The in-process reopen skips node process spawn, which the forked-child lane pays for; the ceiling covers both."
+          }
+        }
+      }
+    },
+    "gateway/restore/year3-10gib/dev-darwin-arm64": {
+      "surface": "gateway",
+      "journey": "restore",
+      "volume": "year3-10gib",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["vault.restore"],
+      "consumers": ["tests/scale/restore-10gib.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "year3RestoreSeconds": {
+          "status": "measured",
+          "probe": "tests/scale/restore-10gib.scale.test.ts (opt-in: CENTRAID_SCALE_RESTORE_GIB=10, own nightly job)",
+          "ceilingSeconds": 180,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64 (local NVMe), LocalBackupProvider",
+            "observedRestoreSeconds": 55.4,
+            "observedSnapshotSeconds": 152.4,
+            "note": "MEASURED — this replaces a guess. Before #659 the largest restore the repo had ever executed was ~160 MiB, and the year-3 restore time was unmeasured. A 10 GiB vault comes back in 55 s on local NVMe. CI disks and a network provider are materially slower, hence a ceiling of ~3x observed. NOTE the asymmetry: taking the snapshot costs 152 s, nearly 3x the restore — chunking + AEAD on the way in is the expensive direction.",
+            "headroom": "~3.2x observed (local-disk measurement, CI/network provider will be slower)"
+          }
+        }
+      }
+    },
+    "gateway/integrity-check/year3-10gib/dev-darwin-arm64": {
+      "surface": "gateway",
+      "journey": "integrity-check",
+      "volume": "year3-10gib",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["vault.integrity"],
+      "consumers": ["tests/scale/restore-10gib.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "restoreForeignKeyCheckMs": {
+          "status": "measured",
+          "probe": "tests/scale/restore-10gib.scale.test.ts — timed alone on a freshly opened connection so neither pragma warms the other's page cache",
+          "ceilingMs": 2000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64",
+            "observedForeignKeyCheckMs": 21.2,
+            "observedIntegrityCheckMs": 784.9,
+            "note": "MEASURED, and the answer is reassuring: foreign_key_check — the O(rows) full-table walk that packages/backup/src/wal-restore.ts runs inside every restore, and the suspected year-3 cliff — costs 21 ms at year-3 row volume. integrity_check is 37x more expensive at 785 ms, and BOTH together are ~1.5% of the 55 s restore. The honesty check in the restore path is not the thing to optimise. Ceiling is generous on purpose: it fences a genuine cliff (a missing parent index turning the walk quadratic), not runner jitter."
+          }
+        }
+      }
+    },
+    "gateway/footprint/year3-household/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "footprint",
+      "volume": "year3-household",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["vault.open"],
+      "consumers": ["tests/scale/multi-vault-footprint.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "fiveVaultFootprint": {
+          "status": "measured",
+          "probe": "tests/scale/multi-vault-footprint.scale.test.ts",
+          "maxSummedPageCacheBytes": 32768000,
+          "maxSummedMmapBytes": 134217728,
+          "minPerFileCacheBytes": 524288,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64",
+            "observedSummedPageCacheBytes": 32768000,
+            "observedSummedMmapBytes": 134217720,
+            "observedSmallestPerFileCacheBytes": 3276800,
+            "observedPageCacheIfStillPerFile": 163840000,
+            "observedRssPerAdditionalVaultBytes": 10104832,
+            "note": "MEASURED. The reservations are now FLAT in vault count: five vaults under one host budget reserve 32,768,000 B of page cache — exactly one default vault's worth — where the pre-#659 per-file constants would have reserved 163,840,000 B, a 5x reduction. Every one of the 10 handles still gets 3.28 MB, well above the 512 KiB floor. THE CAVEAT THAT MATTERS: reservations are not residency. Each additional mounted vault still costs ~10.1 MB of RSS at idle (connection state + bootstrap DDL, not the page cache, which SQLite fills lazily), so resident memory is still linear in vault count even though the budget is not. Measured on idle, freshly bootstrapped vaults that were never read — treat 10.1 MB as a floor.",
+            "headroom": "none — the ceilings ARE the host totals (DEFAULT_VAULT_FOOTPRINT), not observed + slack"
+          }
+        }
+      }
+    },
+    "gateway/composite-load/empty/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "composite-load",
+      "volume": "empty",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["atlas.ref-search", "gateway.request"],
+      "consumers": ["tests/scale/composite-load.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "compositeLoadFactor": {
+          "status": "measured",
+          "probe": "tests/scale/composite-load.scale.test.ts",
+          "ceilingThroughputFactor": 2,
+          "ceilingWorstLaneP95Ms": 3500,
+          "_provenance": {
+            "at": "2026-08-21",
+            "host": "linux x64, 4 vCPU Intel Xeon @ 2.10 GHz, 15.7 GiB RAM, shared dev container under sibling agent load; node v22.22.2; WORKER_MAX_CONCURRENT resolves to 2 because isConstrainedWorkerHost() classifies a 4-core host as constrained",
+            "runs": 4,
+            "observedThroughputFactors": [0.75, 1, 1.05, 0.86],
+            "observedWorstLaneP95Ms": [828.1, 917.3, 1147.5, 1048.2],
+            "observedWorstLaneIdentity": "write (Notes create-note — journalled command + receipt, through an app-engine worker)",
+            "observedPerLaneLatencyFactors": "sync x1.21-2.85, search x2.25-3.36, write x3.19-5.22, blob x8.10-10.74, browse x26.73-65.65",
+            "note": "MEASURED, and what it replaces is NO NUMBER AT ALL — before this rig every perf/scale rig in the repo measured one dimension against an otherwise idle gateway. The headline is reassuring: running the whole household together costs about the same WALL CLOCK as running the lanes one after another (0.75-1.05x), so the gateway is genuinely overlapping work rather than serializing behind one lock. THE FINDING THAT IS NOT reassuring is the per-lane spread: the cheapest lane (Atlas ref-search, ~5 ms solo) degrades 27-66x under composition, to 217-361 ms. That is the app-engine worker spawns (create-note and search each spawn a capped worker thread, and this host admits only 2 at once) taking the CPU away from an in-gateway read. It is a fairness observation, not a refusal or a correctness failure — every op completed and nothing was shed. Per-lane latency ratios are therefore PUBLISHED BY THE RIG BUT NOT GATED: a ratio over a ~5 ms denominator fences scheduler noise, and a gate that flakes is a gate that gets widened.",
+            "headroom": "ceilingThroughputFactor ~1.9x the worst observed (1.05); ceilingWorstLaneP95Ms ~3x the worst observed (1147.5 ms). Both sized against the CONTENDED measurements on purpose — a shared CI runner IS the contended case. Tighten-only: re-seed from a real distribution once the nightly lane has one."
+          }
+        },
+        "refSearchUnderComposition": {
+          "status": "measured",
+          "probe": "tests/scale/composite-load.scale.test.ts — the `browse` lane's composite p95, asserted in the rig body. Named separately from `compositeLoadFactor.ceilingWorstLaneP95Ms` because that ceiling only ever fences whichever lane happens to be slowest (the write lane, today), so a ref-search regression could double before the worst-lane gate noticed.",
+          "ceilingP95Ms": 1000,
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process serve() gateway, empty vault, eight bundled apps",
+            "runs": 3,
+            "observedBrowseP95CompositeMs": [228.4, 282, 333.4],
+            "observedBrowseP95SoloMs": [4.9, 19.9, 21.5],
+            "note": "MEASURED after #883 C2 correlated the blob egress reference CTE (packages/vault/src/blob/read.ts): the revision-chain predicate used to seed its recursive walk from `SELECT current_content_id FROM core_document` — the whole library — on every byte request, and now walks from the requested page toward the document head through rung 7's core_link endpoint indexes. This entry is the ref-search half of that composition asked for by #883 C2 item 4; the read lane is fenced here rather than only through the worst-lane ceiling.",
+            "headroom": "~3x the worst of three observations on a contended shared container, the convention the neighbouring entries use. Tighten-only."
+          },
+          "_remeasured": {
+            "at": "2026-09-03",
+            "by": "#922 B2/B3 — blueprint handlers precompiled and handler workers reused across clean runs",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process serve() gateway, empty vault, eight bundled apps",
+            "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/composite-load.scale.test.ts",
+            "runs": 3,
+            "observedBrowseP95CompositeMs": [291.6, 293.0, 300.1],
+            "observedBrowseP95SoloMs": [5.3, 5.4, 6.3],
+            "observedWorstLaneP95Ms": [646.7, 721.3, 754.3],
+            "note": "The ceiling is UNCHANGED at 1000 ms. Ref-search under composition did not move (291.6-300.1 ms against the 2026-08-28 band of 228.4-333.4 ms) — this lane is starved by the CPU the other lanes take, and B2/B3 make each app-engine worker cheaper without making the write lane stop competing for the core. What DID move is the lane doing the taking: the worst lane (Notes create-note) fell from an observed 828.1-1147.5 ms to 646.7-754.3 ms on the same rig. `compositeLoadFactor.ceilingWorstLaneP95Ms` (3500) is therefore loose against the new distribution and is a candidate tightening, left to the umbrella's budget pass rather than moved here."
+          }
+        }
+      }
+    },
+    "gateway/soak/empty/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "soak",
+      "volume": "empty",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.request"],
+      "consumers": ["tests/scale/long-run-soak.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "soakDegradation": {
+          "status": "measured",
+          "probe": "tests/scale/long-run-soak.scale.test.ts (CENTRAID_SOAK_MINUTES; defaults to 0.75 so the rig always runs on the nightly scale lane, weekly lane sets hours)",
+          "declaredSoakMinutes": 10,
+          "ceilingLatencyCreepFactor": 3,
+          "ceilingRssGrowthBytesPerCycle": 65536,
+          "ceilingOpenDescriptors": 256,
+          "ceilingDescriptorGrowth": 96,
+          "_provenance": {
+            "at": "2026-08-21",
+            "host": "linux x64, 4 vCPU Intel Xeon @ 2.10 GHz, 15.7 GiB RAM, shared dev container under sibling agent load; node v22.22.2",
+            "runs": "one 10-minute run (483 cycles, 7,245 ops) plus one 0.75-minute run (41 cycles, 615 ops)",
+            "observedLatencyCreepFactor": [1.52, 1.7],
+            "observedRssSlopeBytesPerCycle": [20399, 1192991],
+            "observedRssMiB": "375.7 -> 455.7 over the 10-minute run",
+            "observedHeapSlopeBytesPerCycle": -135447,
+            "observedArrayBufferSlopeBytesPerCycle": -20080,
+            "observedMaxOpenDescriptors": [83, 85],
+            "observedDescriptorSpread": [24, 26],
+            "observedGatewaySqliteSlopeBytesPerCycle": 115687,
+            "note": "MEASURED, and the shape matters more than any single number. RSS slope is 20.4 kB/cycle over 10 minutes against 1.19 MB/cycle over 45 seconds — a 58x DROP as the run lengthens, which is what warm-up amortizing looks like and NOT what a leak looks like; a leak's per-cycle slope is flat or rising. heapUsed and arrayBuffers both trend NEGATIVE over the long run (GC reclaiming), and open descriptors are bounded (peak 83, spread 24) across 7,245 ops. TWO HONEST CAVEATS. (1) declaredSoakMinutes is 10 because ten minutes is the longest run these ceilings were actually derived from — a genuine multi-day soak has never been executed (see the blocked-external note on #842 W3.4); the weekly lane's multi-hour setting is what turns these into a real distribution. (2) The latency-creep axis is CONFOUNDED BY THE WORKLOAD: every cycle adds three notes and three CAS objects, and the Notes library query the cycle runs reads back the whole notebook, so part of the 1.52x is the vault legitimately getting bigger rather than the gateway getting slower. It is kept because a step change in it is still worth seeing, and the ceiling is sized to allow the workload's own accumulation. A leak-only latency axis needs a fixed-size-corpus cycle and is not yet built. gatewaySqliteSlopeBytesPerCycle (116 kB/cycle, 36 MB -> 158 MB over the run) is PUBLISHED BUT NOT GATED for the same reason — the DB is supposed to grow when the workload writes; a bloat gate needs a bytes-per-committed-write normalisation this rig does not yet compute.",
+            "headroom": "latency creep ~2x the worst observed (1.70); RSS slope ~3.2x the 10-minute observation (a 45-second run is warm-up-dominated and would breach it, which is exactly why the growth ceilings only assert at or above declaredSoakMinutes); descriptors ~3x peak and ~4x spread. Tighten-only."
+          }
+        }
+      }
+    },
+    "gateway/stress-recovery/empty/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "stress-recovery",
+      "volume": "empty",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.request"],
+      "consumers": ["tests/scale/stress-to-failure.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "stressRecovery": {
+          "status": "measured",
+          "probe": "tests/scale/stress-to-failure.scale.test.ts",
+          "ceilingRecoveryMs": 1000,
+          "_provenance": {
+            "at": "2026-08-21",
+            "host": "linux x64, 4 vCPU Intel Xeon @ 2.10 GHz, 15.7 GiB RAM, shared dev container under sibling agent load; node v22.22.2; WORKER_MAX_CONCURRENT resolves to 2 because isConstrainedWorkerHost() classifies a 4-core host as constrained",
+            "runs": 4,
+            "observedRecoveryMs": [172, 175, 187, 274],
+            "observedKneeConcurrency": 32,
+            "observedAdmittedAtKnee": 18,
+            "note": "MEASURED. THE KNEE IS EXACTLY WHERE THE CODE SAYS IT SHOULD BE, and that is the finding: 18 requests are admitted and every one beyond that is refused with `503 GATEWAY_BUSY`, which is WORKER_MAX_CONCURRENT (2 on this constrained host) + WORKER_MAX_QUEUE (16) from packages/server/src/engine/handlers/worker-admission.ts. It was identical across all four runs. On a standard host the resolver gives 8 + 16 = 24, so the knee moves one rung but the shape does not. The failure mode is clean in every dimension the rig checks: no untyped refusal, no status outside 429/503, no dropped connection, `PRAGMA integrity_check` ok, and the vault holds EXACTLY as many notes as there were 2xx responses (18 of 64 in the write storm) — a refused write leaves nothing behind. Recovery is immediate: the very next request after the load drops returns 200 in ~0.2 s, so the gateway does not stay wedged behind the surge.",
+            "headroom": "~3.6x the worst observed (274 ms). Sized against the contended container measurement; tighten-only."
+          }
+        }
+      }
+    },
+    "gateway/photo-sweep/year3-photos/dev-darwin-arm64": {
+      "surface": "gateway",
+      "journey": "photo-sweep",
+      "volume": "year3-photos",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["photos.phash.sweep"],
+      "consumers": ["tests/scale/phash-clustering.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "perceptualHashSweepAtYear3": {
+          "status": "measured",
+          "probe": "tests/scale/phash-clustering.scale.test.ts",
+          "ceilingMs": 30000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64",
+            "observedColdSweepMs": 9000,
+            "observedIdleSweepMs": 145,
+            "note": "MEASURED by the #659 vault agent on a real run; cited, not re-derived. This is the audit's worst find (an hourly O(n^2) clustering pass) now bounded at the declared year-3 photo volume. It is a background sweep, so the owner-facing symptom is battery and a hot fan rather than a stalled screen — but at O(n^2) it was a stalled gateway."
+          }
+        }
+      }
+    },
+    "gateway/search/year3-photos/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "search",
+      "volume": "year3-photos",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["photos.semantic.search"],
+      "consumers": ["tests/scale/photo-similarity.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "photoSemanticSearchAtYear3": {
+          "status": "measured",
+          "probe": "tests/scale/photo-similarity.scale.test.ts — ranks the SAME library through BOTH shipping engines (sqlite-vec's vec_distance_cosine and the vault's vault_cosine scalar) and asserts they agree on the top hit before it consults a ceiling. IN the span: the embedding scan, the ranking, the trashed-asset filter over the candidate window, and the wire mapping. OUT of it: embedding the owner's QUERY text, which is the `embed-text` automation's time and not the search's.",
+          "ceilingMs": 750,
+          "ceilingRssDeltaBytes": 134217728,
+          "ceilingEventLoopBlockMs": 750,
+          "_ruling": "docs/decisions.md Q12 — the vector engine for photo similarity is decided by this rig's numbers, not by a preference. The SQL sqlite-vec floor ranks 90,000 embeddings in 166-243 ms, comfortably inside an interactive ceiling, so a `vec0` ANN index is NOT adopted: it has not been earned. The day either engine goes red here, it has been.",
+          "_provenance": {
+            "at": "2026-08-28",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; sqlite-vec v0.1.9 loaded through the gateway's loadExtensions seam",
+            "note": "MEASURED, four implementations against one 90,000 x 512 fixture, isolated from the searchPhotosByText wrapper so the numbers compare like with like. BEFORE — one-stage vec ranking that JOINed media_asset for every embedding: 204.1 / 204.7 ms. AFTER — two-stage vec ranking that joins only the 500-candidate window: 175.3 / 166.6 ms. BEFORE — the unbounded JS scan this wave deleted (every row read into JS, one object each, a 90,000-element Array.sort, then slice 20): 1,059.2 / 1,037.7 ms at +57.5 MiB RSS on the pass that paid for it. AFTER — the same exact cosine computed inside SQLite through vault_cosine with ORDER BY ... LIMIT: 1,010.4 / 934.4 ms at +2.6 / +4.3 MiB, while returning 500 candidates rather than 20. The fallback's TIME is unchanged within noise and this record says so rather than claiming a speedup: both are dominated by 90,000 x 512 float multiplications, which is the work an exact cosine is. What changed is what gets MATERIALISED. Through the full searchPhotosByText wrapper the rig measures 229-243 ms (vec) and 1,204-1,208 ms (fallback); the wrapper adds an index-count and, on the fallback, the per-candidate trashed-asset probes.",
+            "headroom": "~3x the worst observed for each engine, the same convention the neighbouring entries use for a single contended-host measurement. Tighten-only.",
+            "rssCaveat": "ceilingRssDeltaBytes is COARSE ON PURPOSE. RSS delta across one synchronous call measures GC scheduling as much as allocation — the same fallback search measured +2.6 MiB, +4.3 MiB and +66 MiB on different runs, and the vec engine measures +0 MiB because it allocates nothing in JS. 128 MiB is a `does not materialise the library` bound (the 90,000 x 2 KiB vectors are 184 MiB), not a tight budget. Read the wall clock for cost."
+          },
+          "ceilingFallbackMs": 3600,
+          "ceilingFallbackEventLoopBlockMs": 3600
+        }
+      }
+    },
+    "client/first-paint-work/year3/any": {
+      "surface": "client",
+      "journey": "first-paint-work",
+      "volume": "year3",
+      "hardware": "any",
+      "spans": ["gateway.statements"],
+      "consumers": ["tests/quality/first-paint-query-counts.test.ts"],
+      "tolerancePercent": 0,
+      "_approvedDeviation": "None outstanding. The Atlas budget no longer needs one: #873 batches the census row counts into one compound SELECT per file (atlas-graph.ts countRowsBatched), so registering a table costs a COUNT(*) scan but never a first-paint statement, and the measured baseline drops 147 -> 13. That retires the deviation chain (#731 128 -> 138, #807 138 -> 140) that raised this budget once per registered table; the knob is tighten-only (tests/claims.json P2) and 13 is the measured number.",
+      "_instrumentNote": "INSTRUMENT CHANGED, so these integers are NOT comparable to the ones this file held before #927. The old numbers counted PREPARES of SELECT/WITH/PRAGMA seen by a monkey-patch over `DatabaseSync.prepare` inside the test; these count statement EXECUTIONS reported by the product's own counter (`gatewayWorkCounters`, packages/vault/src/gateway/work-counters.ts) — the same instrument the merge-rung counter gate reads, so a screen and the gate can no longer disagree about what a statement is. Old -> new on the same fixture: photos-grid 68 -> 76, notifications 8 -> 7, atlas 13 -> 7, assistant 22 -> 5. Atlas and Assistant read handles the gateway never wrapped, so the probe now instruments each screen's own handle rather than reporting zero. WHAT THIS INSTRUMENT CAN AND CANNOT SEE, recorded with #883 C1 against the #873 ruling in docs/decisions.md (\"Performance and Rust byte plane\"). Since the Atlas census batched its per-table COUNT(*) calls into one compound SELECT per database file, registering a table costs a SCAN and never a STATEMENT — so a statement count no longer proxies per-table scan cost. These budgets still catch what they were built for: a screen that starts issuing N+1 round trips on first paint. What they can no longer see is growth in the registry, which they used to track by accident; a screen whose scanned bytes double while its statement count holds at 13 reads as unchanged here. The successor instrument for that trend is wall-clock or scanned-table, NOT a re-raised statement count — raising these numbers back would restore the coupling #873 removed rather than restore the signal. Read the same caution wherever a statement count is published as a mechanism witness beside a wall clock rather than gated on its own.",
+      "metrics": {
+        "photos-grid": {
+          "status": "measured",
+          "probe": "tests/quality/first-paint-query-counts.test.ts",
+          "maxStatements": 76,
+          "maxHttpRequests": 1,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedStatements": 76,
+            "observedHttpRequests": 1,
+            "headroom": "NONE, deliberately. The count is deterministic on a fixed fixture, so observed IS the ceiling and one extra statement on this screen's first paint fails on the first run — the same discipline as the merge-rung counter gate."
+          },
+          "maxWallClockMs": 2000,
+          "_wallClockNote": "#922 D4 — the count and the clock, together. A statement COUNT cannot see the screen whose single statement is the expensive one: since the Atlas census batched its per-table COUNT(*) calls, registering a table costs a SCAN and never a statement, so a first paint whose scanned bytes double reads as unchanged here. The wall clock is the second instrument that can see it. It is a catastrophe fence, not a p95: the paired candidate/PR run is what compares two trees."
+        },
+        "notifications": {
+          "status": "measured",
+          "probe": "tests/quality/first-paint-query-counts.test.ts",
+          "maxStatements": 7,
+          "maxHttpRequests": 3,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedStatements": 7,
+            "observedHttpRequests": 3,
+            "headroom": "NONE, deliberately. The count is deterministic on a fixed fixture, so observed IS the ceiling and one extra statement on this screen's first paint fails on the first run — the same discipline as the merge-rung counter gate."
+          }
+        },
+        "atlas": {
+          "status": "measured",
+          "probe": "tests/quality/first-paint-query-counts.test.ts",
+          "maxStatements": 7,
+          "maxHttpRequests": 2,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedStatements": 7,
+            "observedHttpRequests": 2,
+            "headroom": "NONE, deliberately. The count is deterministic on a fixed fixture, so observed IS the ceiling and one extra statement on this screen's first paint fails on the first run — the same discipline as the merge-rung counter gate."
+          }
+        },
+        "assistant": {
+          "status": "measured",
+          "probe": "tests/quality/first-paint-query-counts.test.ts",
+          "maxStatements": 5,
+          "maxHttpRequests": 1,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedStatements": 5,
+            "observedHttpRequests": 1,
+            "headroom": "NONE, deliberately. The count is deterministic on a fixed fixture, so observed IS the ceiling and one extra statement on this screen's first paint fails on the first run — the same discipline as the merge-rung counter gate."
+          }
+        }
+      }
+    },
+    "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "first-bootstrap",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.bootstrap"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "bootstrapPageMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "pairedSample": "journeys.bootstrapPage.durationMs",
+          "ceilingMs": 600,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 129.3,
+            "note": "One windowed bootstrap page over a 500-row fill, 1,436 rows / 726 kB. The CEILING is a catastrophe fence; the gate that matters is the PAIRED verdict, which compares this number against the candidate's own on the same runner in the same run.",
+            "headroom": "~4.6x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/read-cost/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "read-cost",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.read", "vault.audit.append"],
+      "consumers": ["tests/scale/large-vault.scale.test.ts"],
+      "tolerancePercent": 10,
+      "metrics": {
+        "auditBandPerRead": {
+          "status": "measured",
+          "probe": "tests/scale/large-vault.scale.test.ts — 500 gateway reads on the mounted golden year-3 vault, band growth divided by reads",
+          "maxBytes": 450,
+          "_provenance": {
+            "at": "2026-09-03",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedBytes": 360.4,
+            "note": "A GATEWAY READ IS A WRITER: every read appends its receipt to the audit band. Was a GAUGE with no ceiling; #927 makes it a gated number, because an unbudgeted byte-per-read is exactly the cost that grows without anyone noticing — a client that only ever looks pays it forever. Ceiling is observed + ~25%: the receipt's size is a function of the entity name and purpose string, so it moves in steps when a purpose is renamed, not continuously.",
+            "headroom": "observed + ~25%"
+          }
+        },
+        "walBytesPerRead": {
+          "status": "measured",
+          "probe": "tests/scale/large-vault.scale.test.ts — WAL file growth over the same 500 reads",
+          "maxBytes": 65536,
+          "_provenance": {
+            "at": "2026-09-03",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedBytes": 46490,
+            "note": "45.4 KiB of write-ahead log per READ — one commit's worth of dirty pages for a 360-byte receipt, and the WAL never shrinks on its own. Projected at the rate this container sustained, 43-128 GB/h under a client that only looks. Gated at 64 KiB (observed + ~41%, one page-cluster of headroom) so a change that starts dirtying a second page per read fails rather than being rediscovered.",
+            "headroom": "observed + ~41%, sized to one page cluster"
+          }
+        }
+      }
+    },
+    "web/cold-open/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "cold-open",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.boot", "web.first-paint"],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "largestContentfulPaint": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals — LCP / INP / CLS on a cold shell load'",
+          "ceilingMs": 1200,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "observedMs": 524,
+            "observedSpreadMs": "484 / 516 / 524 over three consecutive runs at year-3 volume (296 / 420 / 476 at seeded-demo, before the harness moved)",
+            "note": "RE-KEYED from `seeded-demo` to `year3` (#927 W4) and re-measured there; the ceiling is CARRIED ACROSS unchanged. The volume moved because `@centraid/test-kit` gained a `dist` build, so `apps/web/tests/e2e/server.ts` can seed the golden daily-path profile through the shared generator instead of eight demo routes and 2,000 Atlas rows. Year-3 costs this shell ~80 ms of LCP, which is the whole point of stating a ceiling at a volume. 1200 stays ~2.3x the slowest year-3 sample, not the Core Web Vitals 2500 ms threshold: shipping the standard threshold would gate at five times what this shell actually costs, which passes vacuously.",
+            "headroom": "~2.3x slowest observed (three samples at year-3, single host)"
+          }
+        },
+        "cumulativeLayoutShift": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals (LCP/INP/CLS) on a cold shell load'",
+          "maxScore": 0.1,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194; re-observed at year-3 volume",
+            "observedScore": 0,
+            "note": "MEASURED and HARD-GATED — the one vital this harness produces honestly, and the only one of the three currently asserted. Observed 0 (no unexpected layout shift on the cold connect screen). The ceiling is the Core Web Vitals 'good' threshold rather than observed+headroom, because a 0 + headroom ceiling would be 0 and any first honest shift would red the lane; 0.1 is the point at which a user notices.",
+            "headroom": "standard-derived (0.1 threshold vs observed 0)"
+          }
+        },
+        "coldOpenToUsable": {
+          "status": "unmeasured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts",
+          "_note": "Still no number. LCP is now measured and is the closest honest proxy; 'first usable screen' needs a marker the shell does not emit, and inventing one from `loadEventEnd` would measure the document lifecycle rather than the owner's wait."
+        }
+      }
+    },
+    "web/warm-switch/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "warm-switch",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.interaction"],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "interactionToNextPaint": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the keypress-driven INP capture on the cold screen",
+          "ceilingMs": 120,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "observedMs": 24,
+            "observedSpreadMs": "24 / 24 / 24 over three consecutive runs at year-3 volume, unchanged from the same three at seeded-demo (32 on the empty harness)",
+            "note": "RE-KEYED from `seeded-demo` to `year3` (#927 W4) and re-measured there; the ceiling is CARRIED ACROSS unchanged. The keypress the probe drives is on the cold connect screen and touches no vault row, which is why year-3 moves it by nothing — an INP that had moved with volume would have been the finding. Ceiling is the Core Web Vitals 'good' threshold halved — 120 ms rather than 200 — because observed is 24 ms and a 200 ms ceiling on a 24 ms interaction would not notice an eightfold regression.",
+            "headroom": "5x observed; deliberately tighter than the 200 ms standard"
+          }
+        },
+        "tapToVisualResponse": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the warm tap\u2192usable-screen probe: the palette is already open, the click on the app row starts the clock, and the clock stops when the app is TAKEABLE — `inline-app-view` visible, the `Loading Tasks…` fallback gone, and `window.centraid` installed. Attach is reported beside it on the same run.",
+          "ceilingMs": 600,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "runs": 7,
+            "observedMs": 433,
+            "observedSpreadMs": "433 / 394 / 396 / 408 / 408 / 397 / 413 over seven consecutive runs; the ceiling is set off the worst of them. Attach alone, same runs: 128 / 90 / 97 / 100 / 107 / 91 / 108.",
+            "note": "CARRIED PAST ATTACH TO A USABLE SCREEN (#922 E3). The earlier entry stopped at attach and said why: the replica re-bootstrapped in a loop on `main` as well as on that branch, so the app’s host bridge and its first read could not be reached in this container. That loop is fixed — an overlapping change batch is no longer called a `cursor-gap`, a failed session open no longer leaks the OPFS worker it opened, and the bootstrap’s convergence replay drains to the head the gateway reports instead of waiting for a live vault to fall quiet — so this number now fences the whole interval a member feels: route mount and chunk, replica scope, first read, first paint. It remains the web seat’s half of the desktop `warm-switch` tapToVisualResponse, which is measured on dev-darwin-arm64 because Electron does not launch on a display-less runner.",
+            "headroom": "1.4x the worst observed. The ceiling is UNCHANGED at 600 ms while the interval it fences grew from attach-only to usable, so the headroom fell from ~3x; tightening it is a later ratchet, widening it needs a ruling."
+          }
+        }
+      }
+    },
+    "gateway/own-echo/none/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": ["scripts/perf/send-to-first-token.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sendToFirstToken": {
+          "status": "measured",
+          "probe": "scripts/perf/send-to-first-token.mjs — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
+          "ceilingP95Ms": 400,
+          "_provenance": {
+            "at": "2026-08-21",
+            "host": "linux x64, 4 cpus, shared container under concurrent sibling load (load average 3.3-4.5 of 4 during the noisiest runs); @centraid/server consumed from its built dist",
+            "observedP95Ms": 123,
+            "observedMedianMs": 69.5,
+            "observedMinMs": 38.4,
+            "observedMaxMs": 197.9,
+            "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: registry-dispatch throughput against a stubbed runTurn never spawns a harness, never speaks ACP, and could not see this interval. The stub is fake-acp-harness.mjs, the ACP backend suite's fixture; the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
+            "headroom": "~3.3x worst observed p95 (~2x the worst single sample), in the same grammar as requestToFirstByte above. Sized against the CONTENDED measurement on purpose, because a shared CI runner IS the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression, and a gate that flakes is a gate that gets widened. The ratchet is tighten-only, so this can only come DOWN — re-seed it from a real distribution on the lane that runs it."
+          }
+        }
+      }
+    },
+    "gateway/own-echo/seeded-demo/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 700,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 147.9,
+            "note": "One replica intent per HTTP round trip — the offline drain's unit of work. Paired against the candidate rather than against a nightly median.",
+            "headroom": "~4.7x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/seeded-demo/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 300,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 61.2,
+            "note": "Commit written on one device to the frame landing on another: the p50 over 5 commits at one subscriber. The N=10 level is published by the same run and fenced by the converge entry.",
+            "headroom": "~4.9x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/seeded-demo/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 400,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 70.8,
+            "note": "Ten concurrent replica subscribers, well under SSE_MAX_SUBSCRIBERS (32). Per-commit p50 to the LAST subscriber, so it is the slowest device's convergence, not the luckiest.",
+            "headroom": "~5.6x observed, single host"
+          }
+        }
+      }
+    },
+    "desktop/cold-open/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "cold-open",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.main.boot", "desktop.renderer.usable"],
+      "consumers": [
+        "apps/desktop/tests/e2e/launch-time.spec.ts",
+        "tests/perf/desktop-launch.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "coldOpenToUsable": {
+          "status": "measured",
+          "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — REAL Electron launch (_electron.launch → firstWindow → Home library visible), nightly desktop-e2e job. Publishes artifacts/perf-input/desktop-launch-report.json, gated by tests/perf/desktop-launch.perf.test.ts.",
+          "ceilingMs": 12000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64, worktree build, Playwright _electron.launch",
+            "observedMs": 4540,
+            "breakdown": "process → first window 4494 ms; first window → usable Home 46 ms",
+            "note": "MEASURED, ONE SAMPLE, and NOT re-run since #883 C5 cut the term below — this 4540 ms stands as the last real Electron launch on the record, so the ceiling stays where it is until a fresh launch-time.spec.ts artifact justifies moving it. The headline finding: 99% of the 4.5 s a vault owner waits is MAIN-PROCESS boot before any window exists — the renderer reaches a usable Home 46 ms after it appears. That main-process term has NO continuous instrument: the `desktop-cold` import-graph rig was deleted under #927 as citing no entry here, so a main-process import regression is now visible only in this Playwright ceiling. #883 C1 measured the term at 752-855 ms across 1,001 modules on a linux x64 container. #883 C5 then attacked the graph itself: three main-process modules were pulling the entire @centraid/server barrel (900 modules, ~770 ms of cold import on its own) — gateway-paths.ts for one path resolver, detached-gateway.ts for one HMAC helper, and embedded-gateway.ts for serve(). The first two now import narrow @centraid/server subpath exports; embedded-gateway.js became a DYNAMIC import inside local-gateway.ts's startEmbedded, which a production launch never reaches (the embedded gateway is selected by CENTRAID_EMBEDDED_GATEWAY=1, for tests — production spawns a DETACHED gateway child). On the same contended container the measured import cost fell from 952-1105 ms / 1,003 modules to 396-431 ms / 430-431 modules, and the main entry's full direct dependency set from 1,034 modules / 815 ms to 461 / 365 ms. What is left is dominated by the @centraid/vault barrel (296 modules) that gateway-secrets.ts needs for KeyStore. None of this covers Electron's own runtime start, V8 snapshot restore or window creation, which is why this Playwright ceiling remains the cold-start budget and why the ~450 ms of import cost removed is a floor on, not a measure of, what a vault owner will feel. TIGHTEN this ceiling once ~10 nightly launch samples exist. The sustained-drift gate (30 samples, 1.5x) is what actually catches a slow walk.",
+            "headroom": "~2.6x observed (single-sample, cross-host)"
+          }
+        }
+      }
+    },
+    "desktop/warm-switch/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "warm-switch",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.appview.attach"],
+      "consumers": [
+        "apps/desktop/tests/e2e/launch-time.spec.ts",
+        "tests/perf/desktop-launch.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "tapToVisualResponse": {
+          "status": "measured",
+          "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — click an app tile → the app view attaches.",
+          "ceilingMs": 6000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64, same run as coldOpenToUsable",
+            "observedMs": 2066,
+            "note": "MEASURED, ONE SAMPLE. Two seconds from clicking a tile to the app view attaching is a long time to look at an unchanged screen, and nothing measured it before. The number includes the app-view mount and its first gateway round trips against the mock gateway. Ceiling ~3x observed, single-sample; tighten on real distribution.",
+            "headroom": "~3x observed (single-sample, cross-host)"
+          }
+        }
+      }
+    },
+    "mobile/cold-open/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "cold-open",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.boot", "native.home-ready"],
+      "consumers": ["tests/agent-e2e-mobile/flows/cold-start.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "coldOpenToUsable": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/cold-start.mjs — PER-LAUNCH cold start (stopApp → launchApp → Home ready marker), 8 launches, reports median and p95. Runs on the nightly mobile-e2e-ios / mobile-e2e-android jobs and on the run-probes-suite path of the per-merge canary.",
+          "_note": "This flow reports PER-LAUNCH statistics: a repeat block timed as one wall-clock total hides a single 10 s launch inside the sum and is unreadable as an experience. No ceilingMs on first land: an on-device number from a CI simulator has no distribution yet, so the flow gates on the trailing-median drift budget (>1.5x sustained) from its own 30-sample history. The replica volume is also not year-3 yet — docs/mobile-offline.md's 90k figure is an explicitly labelled PROJECTION, not a run. #890 W1 changed WHAT this measures: the lane now installs a release-configuration build with the Hermes bundle embedded, so a launch is a real app start rather than a dev-client bundle fetch from Metro. Every sample recorded before that change was taken against a __DEV__ build and is not comparable — the drift history starts again here."
+        }
+      }
+    },
+    "mobile/scroll/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "scroll",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["client.frame"],
+      "consumers": ["tests/agent-e2e-mobile/flows/scroll-frames.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "maxDroppedFramePercent": {
+          "status": "bound",
+          "probe": "tests/agent-e2e-mobile/flows/scroll-frames.mjs — arms apps/mobile's sampler with openLink centraid://perf-frames?ms=6000, confirms testID perf-frame-sampling, flings 8x, then reads testID perf-frame-report and parses `dropped=<number>%`. Contract pinned by apps/mobile/src/lib/perf/frame-sampler.test.ts.",
+          "maxPercent": 50,
+          "_intendedMaxPercent": 5,
+          "_provenance": {
+            "attempted": "not yet — needs a booted simulator; pending the rebuilt nightly mobile-e2e-ios / mobile-e2e-android jobs and the per-merge mobile-canary lane. #890 W1 is what makes a run possible at all: the sampler was __DEV__-only, so before it the probe could only ever have measured a development build. It is now compiled into a PERF-FLAVORED RELEASE behind EXPO_PUBLIC_CENTRAID_FRAME_PROBE (apps/mobile/src/kit/perf/FrameProbe.tsx), which the device lanes set on the bundling step and a store build never sets.",
+            "note": "maxPercent 50 is a CATASTROPHE bound, NOT observed + headroom, and is labelled so deliberately. Above 50% the list is running at half the display's refresh rate or worse, which is broken on any device and needs no measurement to assert. The real target is 5% (`_intendedMaxPercent`, underscore-prefixed so it is invisible to the ratchet); it is promoted to `maxPercent` only when a real device run against the release artifact produces a distribution, and the 30-sample/1.5x drift gate is what catches a slow walk in the meantime.",
+            "denominatorCaveat": "`dropped` has a PER-DEVICE denominator. The sampler derives the display's true refresh rate from the 10th-percentile inter-frame interval and snaps to 120/90/60/30 Hz, so the flow records `targetHz` beside every percentage. A comparison that drops it reads 60 fps on a 120 Hz ProMotion device as flawless when half the frames are missing.",
+            "scopeCaveat": "JS THREAD ONLY. The sampler counts requestAnimationFrame callbacks, so jank originating on the UI/native thread (a Reanimated worklet, a native image decode) is invisible to it. This is a real frame-drop number for the JS thread, not a compositor-level guarantee."
+          }
+        }
+      }
+    },
+    "web/peer-echo/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "peer-echo",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.replica.apply"],
+      "consumers": ["apps/web/tests/e2e/offline-reconnect.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/share/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "share",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.grant"],
+      "consumers": ["apps/web/tests/e2e/docs-grant.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/search/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "search",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.search"],
+      "consumers": ["apps/web/tests/e2e/offline-search.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/scroll/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "scroll",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.frame"],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/first-bootstrap/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "first-bootstrap",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.replica.bootstrap"],
+      "consumers": ["apps/web/tests/e2e/pwa-offline-journey.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/converge/year3/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "converge",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.replica.resume"],
+      "consumers": ["apps/web/tests/e2e/offline-reconnect.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "desktop/peer-echo/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "peer-echo",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.replica.apply"],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "desktop/share/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "share",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.grant"],
+      "consumers": ["apps/desktop/tests/e2e/household.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "desktop/search/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "search",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.search"],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "desktop/first-bootstrap/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "first-bootstrap",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.replica.bootstrap"],
+      "consumers": ["apps/desktop/tests/e2e/onboarding-home.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "mobile/peer-echo/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "peer-echo",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.replica.apply"],
+      "consumers": ["tests/agent-e2e-mobile/flows/pairing-canary.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "mobile/share/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "share",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.grant"],
+      "consumers": ["tests/agent-e2e-mobile/flows/sharing-reach.mjs"],
+      "_folded_into": "mobile/share/shared-album/ci-ios-sim",
+      "_folded_why": "Superseded by `mobile/share/shared-album/ci-ios-sim`, which states the same journey at the volume its measured gateway twin uses. `device-fixture` is the generic phone seed and says nothing about how much is shared; both rows name the same probe.",
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "mobile/search/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "search",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.search"],
+      "consumers": ["tests/agent-e2e-mobile/flows/photos-search.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "mobile/first-bootstrap/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "first-bootstrap",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.replica.bootstrap"],
+      "consumers": ["tests/agent-e2e-mobile/flows/pairing-canary.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "gateway/scroll/none/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "scroll",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.request"],
+      "consumers": ["tests/perf/gateway-request.perf.test.ts"],
+      "_folded_into": "gateway/warm-switch/year3/ci-linux-x64-4c",
+      "_folded_why": "Scrolling is a client journey; the gateway's only half of it is the paged read, and `gateway/warm-switch` already fences that with `requestToFirstByte` measured by the same rig named here. A second ceiling over the same statement would be two numbers for one fact.",
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "Scrolling is a client-side journey; the gateway's half is the paged read, which `gateway/warm-switch` already fences. Kept so the nine-journey grid has no silent hole."
+        }
+      }
+    },
+    "gateway/share/shared-album/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "share",
+      "volume": "shared-album",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["vault.grant.create", "vault.grant.fulfill", "vault.read"],
+      "consumers": ["tests/scale/share-journey.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "grantToVisible": {
+          "status": "measured",
+          "probe": "tests/scale/share-journey.scale.test.ts — createShareGrant, startShareSubscription, then the AUDIENCE vault's own read",
+          "ceilingMs": 750,
+          "_beforeFor": "#929 wave 1(c). This is the BEFORE number against the sharing engine as it stood: two vaults CO-HOSTED under one gateway root, so no transport is inside the interval. #929's AFTER is _afterProvenance below, beside this row rather than over it, and a cross-gateway number is its own metric rather than folded into this one.",
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 212.1,
+            "observedSpreadMs": "133.1 / 212.1 / 244.4 over three consecutive runs",
+            "breakdown": "grant written 1.9-4.0 ms, grant FULFILLED 130.8-240.0 ms, grantee's own read 0.3-0.4 ms",
+            "note": "BEFORE number. Fulfillment is 98% of the interval and the only term that scales with the size of the share: writing the standing grant and the grantee's read are both under 4 ms at 200 photos. Ceiling is ~3x the slowest of three samples on a contended container, the same convention every single-host measurement here uses.",
+            "headroom": "~3x slowest observed (three samples, single host)"
+          },
+          "_afterProvenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents (load average 4.1-5.6 across the three runs)",
+            "observedMs": 232.2,
+            "observedSpreadMs": "220.2 / 232.2 / 234.2 over three consecutive runs",
+            "breakdown": "grant written 1.7-4.2 ms, subscription STARTED 218.2-230.1 ms, grantee's own read 0.4 ms",
+            "note": "AFTER number (#929). The same rig, the same key, the same interval: only the delivery term changed, from projecting a fulfillment to composing the grant's shape once and carrying it over the loopback transport (startShareSubscription). Delivery is still 98% of the interval and still the only term that scales with the share. THE HOST IS SHARED, and the before number's own note says so: the same rig read 216-237 ms at load average 7.4 and 267-495 ms at 15-16 on the day it was taken, so the 212.1 -> 232.2 ms difference is SMALLER than the spread contention alone produces. Read it as a direction — a subscription pays for a shape (one size check, one structure digest, one lineage row per projected row) where fulfillment paid for a projection — not as a verdict. The ceiling is NOT re-seeded: tighten-only, and three samples on a contended host are not a distribution.",
+            "headroom": "unchanged at 750 ms, ~3.2x the slowest after-sample"
+          }
+        },
+        "grantToVisibleCrossGateway": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY — packages/server/src/serve/share-subscription-peer.test.ts proves the six subject types travel the peer plane, and times nothing",
+          "_intendedCeilingMs": null,
+          "_reason": "A cross-gateway share needs two gateway processes and a real tunnel. On this container the peer plane is a loopback dial inside one process, so a number taken here would measure the harness rather than the transport, and a fabricated one is worse than an admitted hole. The metric is declared so the gap is visible; the rig it needs is two data dirs and a tunnel."
+        }
+      }
+    },
+    "mobile/own-echo/year3-replica/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "own-echo",
+      "volume": "year3-replica",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.replica.apply", "client.interaction"],
+      "consumers": ["tests/agent-e2e-mobile/flows/notes-library.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "writeToVisualResponse": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/notes-library.mjs \u2014 drives a write and its own echo on a simulator; the year-3 replica behind it is @centraid/test-kit's goldenYear3Replica",
+          "_intendedCeilingMs": null,
+          "_reason": "NO PHONE IN THIS CONTAINER, and the existing `mobile/own-echo/none/ci-ios-sim` row is the EMPTY-replica case \u2014 the whole point of #922's replica reads is what an own echo costs when the store is full, which no `none` volume can say. Declared at `year3-replica` so the gap is a row rather than an absence; the number needs the device rung on a macOS runner."
+        }
+      }
+    },
+    "mobile/warm-switch/year3-replica/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "warm-switch",
+      "volume": "year3-replica",
+      "hardware": "ci-ios-sim",
+      "spans": ["client.interaction", "native.replica.read"],
+      "consumers": ["tests/agent-e2e-mobile/flows/home-loads.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "tapToVisualResponse": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/home-loads.mjs \u2014 app-to-app switch on a simulator over a year-3 replica",
+          "_intendedCeilingMs": null,
+          "_reason": "Same reason as the own-echo row beside it: no phone here, and the `none`-volume twin measures a switch with nothing to read. #922 E-lane's wins are read-path wins, so a warm switch stated at an empty replica cannot show one. No #922 ceiling is tightened on this row \u2014 a win with no measurement is not a win."
+        }
+      }
+    },
+    "gateway/backup/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "backup",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["backup.snapshot"],
+      "consumers": ["tests/perf/backup-restore.perf.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "snapshotToDurable": {
+          "status": "measured",
+          "probe": "tests/perf/backup-restore.perf.test.ts \u2014 createSnapshot over the golden year-3 vault into a LocalBackupProvider",
+          "ceilingMs": 3200,
+          "_provenance": {
+            "at": "2026-09-05",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
+            "observedMs": 1056.3,
+            "observedSpreadMs": "998.7 / 1050.2 / 1056.3 over three consecutive runs",
+            "note": "MEASURED. The golden year-3 vault is 105,603,072 B of vault.db (the ROW axis; tests/scale/restore-10gib.scale.test.ts keeps the 10 GiB BYTE axis under `year3-10gib`). Successor to four rigs the #927 rig diet deleted for citing no ledger entry. The work-counter delta over both calls is ZERO and that zero is the real gate \u2014 neither path opens the vault through the instrumented statement layer, so a backup that started reading rows to decide what to copy fails on the first run.",
+            "headroom": "~3x slowest observed (three samples, single contended host)"
+          }
+        }
+      }
+    },
+    "gateway/restore/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "restore",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["backup.restore"],
+      "consumers": ["tests/perf/backup-restore.perf.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "snapshotToUsableVault": {
+          "status": "measured",
+          "probe": "tests/perf/backup-restore.perf.test.ts \u2014 restoreSnapshot of that snapshot into a fresh directory, integrity pragmas included",
+          "ceilingMs": 5200,
+          "_provenance": {
+            "at": "2026-09-05",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
+            "observedMs": 1712.3,
+            "observedSpreadMs": "1640.4 / 1678.7 / 1712.3 over three consecutive runs",
+            "note": "MEASURED, at the ROW axis. `gateway/restore/year3-10gib/dev-darwin-arm64` is the BYTE axis and is not superseded: the two fence different terms \u2014 that one the copy, this one the per-row integrity work a year-3 shaped file pays. Restore costs ~1.6x its own backup here.",
+            "headroom": "~3x slowest observed (three samples, single contended host)"
+          }
+        }
+      }
+    },
+    "mobile/share/shared-album/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "share",
+      "volume": "shared-album",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.grant", "vault.grant.create", "vault.grant.fulfill"],
+      "consumers": ["tests/agent-e2e-mobile/flows/sharing-reach.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "grantToVisible": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/sharing-reach.mjs \u2014 drives the share sheet on a simulator; the audience-side read it would time needs the shared-album seed of gateway/share/shared-album/ci-linux-x64-4c behind it",
+          "_intendedCeilingMs": null,
+          "_reason": "NO PHONE IN THIS CONTAINER, and the device rung is where this number lives: tests/agent-e2e-mobile drives an iOS simulator on a macOS runner. The gateway twin of this row (gateway/share/shared-album/ci-linux-x64-4c) is measured and carries the engine term; what is missing here is only the phone's own paint, which cannot be honestly estimated from a linux container. Declared so the hole is visible rather than absent."
+        }
+      }
+    },
+    "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "first-bootstrap",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.replica.bootstrap"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "bootstrapPageMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "pairedSample": "journeys.bootstrapPage.durationMs",
+          "ceilingMs": 340,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 112.9,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "first-bootstrap",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.replica.bootstrap"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "bootstrapPageMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "pairedSample": "journeys.bootstrapPage.durationMs",
+          "ceilingMs": 450,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 149.2,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/own-echo/seeded-demo/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 340,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 112.6,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/own-echo/seeded-demo/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 520,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 173.6,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/seeded-demo/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 200,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 66.1,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/seeded-demo/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 240,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 79.6,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/seeded-demo/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 200,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 65.9,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/seeded-demo/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 250,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 83.2,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    }
+  },
+  "rigs": {
+    "approvedDeviation": "#927 RIG DIET removes the thirty rigs that cited no entry in this ledger, and their budgetMs/budgetsMs numbers with them (maintainer approval 2026-09-05, recorded in receipts/issue-927-perf-infra.md). Every number deleted here belonged to a rig deleted in the same change set: a rig fencing no journey was fencing a machine cost with no vault owner above it. NO SURVIVING RIG'S CEILING MOVES. `tests/scale/large-vault` (now cited) and `tests/perf/work-counters` (it times nothing) were excluded from the diet and keep their rows. This key is reserved rather than a rig path — see scripts/test-report/journey-rigs.mjs.",
+    "tests/perf/backup-restore.perf.test.ts": {
+      "lane": "perf",
+      "volume": "The golden year-3 vault (packages/test-kit, ~27,600 domain rows / 105,603,072 B vault.db) \u2014 one snapshot and one restore, work-counted rather than sampled",
+      "_noBudgetMs": "Deliberate. The ceilings this rig asserts are `snapshotToDurable` and `snapshotToUsableVault` on the two ledger entries it feeds; an absolute duration ceiling here would fence the golden-vault copy, which is setup. The work-counter delta (zero statements) is the gate.",
+      "entries": [
+        "gateway/backup/year3/ci-linux-x64-4c",
+        "gateway/restore/year3/ci-linux-x64-4c"
+      ]
+    },
+    "tests/perf/desktop-launch.perf.test.ts": {
+      "lane": "perf",
+      "volume": "1 REAL Electron cold launch (mock gateway, 1 app, fresh userData — an EMPTY vault, not year-3); measured by apps/desktop/tests/e2e/launch-time.spec.ts and consumed here as an artifact",
+      "_noBudgetMs": "Deliberate. A cold Electron launch on a shared CI runner has no distribution yet; the gate is the 30-sample/1.5x drift budget. An absolute ceiling lands in tests/experience-budgets/desktop.json once ~10 green nightlies justify one.",
+      "entries": [
+        "desktop/cold-open/mock-gateway/dev-darwin-arm64",
+        "desktop/warm-switch/mock-gateway/dev-darwin-arm64"
+      ]
+    },
+    "tests/perf/gateway-request-volume.perf.test.ts": {
+      "lane": "perf",
+      "volume": "A YEAR-3-SHAPED vault seeded through packages/test-kit's seedYear3Vault — 5,000 core_party, 10,000 photos (one core_content_item + one media_asset each), 200 conversations x 12 turns, plus the sealed-locker and parked-action axes: ~27,600 domain rows and the replica change log their inserts produced. Then 30 serial GETs per core route (p95), one windowed replica bootstrap page lane, and one cold reopen of the SEEDED vault directory. A bounded approximation of the declared year-3 table (90,000 photo assets / ~22,000 turns) that a 60 s perf lane can build honestly (#883 C1)",
+      "_noBudgetMs": "Deliberate. The ceilings this rig asserts are `coreRouteP95Ms` and `gatewayColdStartMs` in tests/experience-budgets/gateway.json — the SAME entries the empty-vault forked-child lane (tests/perf/gateway-request.perf.test.ts) asserts, so the pair now fences both the transport floor and the volume case against one number. A separate absolute duration ceiling here would fence the seed, which is setup rather than measurement.",
+      "entries": [
+        "gateway/warm-switch/year3/ci-linux-x64-4c",
+        "gateway/core-route/year3/ci-linux-x64-4c",
+        "gateway/cold-open/year3/ci-linux-x64-4c"
+      ]
+    },
+    "tests/perf/gateway-request.perf.test.ts": {
+      "lane": "perf",
+      "volume": "60 gateway GETs (p95) + a 5 s idle-CPU window",
+      "entries": [
+        "gateway/warm-switch/year3/ci-linux-x64-4c",
+        "gateway/core-route/year3/ci-linux-x64-4c",
+        "gateway/cold-open/year3/ci-linux-x64-4c"
+      ]
+    },
+    "tests/perf/work-counters.perf.test.ts": {
+      "lane": "perf",
+      "volume": "The golden year-3 artifact (packages/test-kit, ~27,600 domain rows) — one fixed workload per hot path, counted rather than timed",
+      "_gateNote": "#927 P2. This rig has NO sample history and must not grow one: it compares the integers the product counts about itself (scripts/ci/work-counters.expected.json), and two runs on the same code give the same integers on any host. It times nothing, so no ledger entry cites it — `entries: []` here is the honest answer, not an omission.",
+      "_noBudgetMs": "Deliberate — nothing here is timed.",
+      "entries": []
+    },
+    "tests/scale/large-vault.scale.test.ts": {
+      "lane": "scale",
+      "volume": "10,000 photos + 5,000 contacts + 1,000 notes, then daily-use queries",
+      "entries": ["gateway/read-cost/year3/ci-linux-x64-4c"]
+    },
+    "tests/scale/phash-clustering.scale.test.ts": {
+      "lane": "scale",
+      "volume": "90,000 photo assets, 3,000 near-duplicate families — cold sweep + idle sweep",
+      "budgetMs": 30000,
+      "entries": ["gateway/photo-sweep/year3-photos/dev-darwin-arm64"]
+    },
+    "tests/scale/multi-vault-footprint.scale.test.ts": {
+      "lane": "scale",
+      "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Personal auto-founded per #603, plus one shared or personal vault per additional member) under ONE host footprint budget",
+      "_noBudgetMs": "Not a duration rig. The ceilings are the host footprint totals themselves, read from DEFAULT_VAULT_FOOTPRINT, and the drift series is summed page cache in bytes rather than wall clock.",
+      "entries": ["gateway/footprint/year3-household/ci-linux-x64-4c"]
+    },
+    "tests/scale/composite-load.scale.test.ts": {
+      "lane": "scale",
+      "volume": "20 ops on each of five HTTP lanes (windowed replica bootstrap, Notes search, Notes create-note, 64 KiB blob staging, Atlas ref-search) at 2 in flight, run once one-lane-at-a-time and once all together, plus 128 harness turn dispatches and a 200-automation missed-window scan during the together phase — one real serve() gateway, empty vault, eight bundled apps",
+      "_noBudgetMs": "Deliberate. The ceilings are a RATIO and an absolute worst-lane p95, not a rig duration: `compositeLoadFactor` in tests/experience-budgets/gateway.json (ceilingThroughputFactor 2, ceilingWorstLaneP95Ms 3500), both asserted in the rig body and both tighten-only there. Total wall clock was 4.3-10.2 s across five 2026-08-21 runs on a contended 4-vCPU container — a 2.4x spread that is host contention, so an absolute duration ceiling here would fence the runner, not the product. The 30-sample/1.5x drift gate is the duration gate.",
+      "entries": [
+        "gateway/composite-load/empty/ci-linux-x64-4c",
+        "gateway/composite-load/empty/ci-linux-x64-4c"
+      ]
+    },
+    "tests/scale/stress-to-failure.scale.test.ts": {
+      "lane": "scale",
+      "volume": "concurrency ladder 1/2/4/8/16/32/64/128 against the app-handler plane (255 requests) plus a 64-wide concurrent create-note write storm, then one recovery request and isolated integrity_check / foreign_key_check on the vault",
+      "_noBudgetMs": "Deliberate — this rig deliberately runs PAST the knee, so its wall clock is dominated by how long the admission queue holds refused work (WORKER_MAX_QUEUE_WAIT_MS is 10 s). What it gates is the SHAPE of the failure: typed refusals only, 429/503 only, no dropped connections, notes committed == 2xx responses exactly, integrity ok, and recovery inside stressRecovery.ceilingRecoveryMs (1000 ms) in tests/experience-budgets/gateway.json. Ladder duration is fenced by the 30-sample/1.5x drift gate.",
+      "entries": ["gateway/stress-recovery/empty/ci-linux-x64-4c"]
+    },
+    "tests/scale/long-run-soak.scale.test.ts": {
+      "lane": "scale",
+      "volume": "one long-lived serve() gateway looped for CENTRAID_SOAK_MINUTES (default 0.75 on the nightly lane = 22-54 cycles / 330-810 ops; the weekly lane sets hours). Each cycle is 3 ops on each of five lanes; samples RSS/heap/external/arrayBuffers, open descriptors, total gateway SQLite bytes and per-cycle wall clock",
+      "_noBudgetMs": "Deliberate — the rig's duration is an INPUT (CENTRAID_SOAK_MINUTES), so a wall-clock ceiling on it would be circular. The ceilings are the growth ceilings in `soakDegradation` (tests/experience-budgets/gateway.json) and the recorded drift series is the latency-creep FACTOR (last third / first third of post-warm-up cycles), not a duration.",
+      "entries": ["gateway/soak/empty/ci-linux-x64-4c"]
+    },
+    "tests/scale/restore-10gib.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 10 GiB of CAS bytes (CENTRAID_SCALE_RESTORE_GIB, default 10) across 4 MiB objects + 5,000 core_party rows + one content row per object — backup, restore, then foreign_key_check and integrity_check timed in ISOLATION on the restored vault.db",
+      "_noBudgetMs": "Deliberate. Restore duration at this size has never been observed on CI hardware; inventing an absolute ceiling would be the guess this rig exists to replace. Gated by the 30-sample/1.5x drift budget once a distribution exists. The rig SKIPS unless CENTRAID_SCALE_RESTORE_GIB is set, so it cannot slow the normal nightly scale job or the PR lane.",
+      "entries": [
+        "gateway/restore/year3-10gib/dev-darwin-arm64",
+        "gateway/integrity-check/year3-10gib/dev-darwin-arm64"
+      ]
+    },
+    "tests/scale/photo-similarity.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 90,000 media assets each with one 512-float `embed-image` embedding (184 MB of float32 vectors), 8 planted near-matches, then one 20-hit semantic search through EACH shipping ranker (#883 C2, the measurement docs/decisions.md ruling Q12 defers the vector-engine choice to)",
+      "_noBudgetMs": "Deliberate. The ceilings are PER ENGINE and per resource, not per rig — `photoSemanticSearchAtYear3` in tests/experience-budgets/gateway.json (ceilingMs, ceilingRssDeltaBytes, ceilingEventLoopBlockMs), each asserted in the rig body for both rankers — because one rig duration would be dominated by seeding 90,000 rows and would say nothing about which engine regressed. The 30-sample/1.5x drift gate is the duration gate.",
+      "entries": ["gateway/search/year3-photos/ci-linux-x64-4c"]
+    },
+    "tests/scale/replica-reconnect.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 50,000 replica rows walked by a windowed HTTP bootstrap, a live change stream attached and then dropped, 25 commits written while the client is away, and the stale cursor resumed — reconnect-to-first-correct-frame (#883 C1, the probe tests/experience-budgets/gateway.json#reconnectToFresh asked for)",
+      "_noBudgetMs": "Deliberate. The rig's own wall clock is dominated by seeding 50,000 rows and walking them through the bootstrap route — work that is SETUP for the measurement, not the measurement. What it gates is `reconnectToFresh.ceilingMs` in tests/experience-budgets/gateway.json (asserted in the rig body, tighten-only there), and the recorded drift series is the reconnect interval itself rather than the rig duration.",
+      "entries": ["gateway/converge/year3-replica/ci-linux-x64-4c"]
+    },
+    "tests/scale/mobile-reconnect-to-fresh.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 50,000 mobile replica rows read through the native SQLite session, with 25 missed changes replayed after a background/foreground transition",
+      "_noBudgetMs": "Deliberate. The rig measures the client-side resume interval against `reconnectToFresh.ceilingMs` in tests/experience-budgets/mobile.json; setup and fixture construction are not the user-facing interval, and the 30-sample/1.5x drift gate tracks that interval once nightly history exists.",
+      "entries": ["mobile/converge/year3-replica/ci-linux-x64-4c"]
+    },
+    "tests/scale/mobile-screen-reads.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: two mounted mobile vaults with 5,000 people and 5,000 agenda rows per vault, validating full-window screen reads and constant statement count",
+      "entries": []
+    },
+    "tests/agent-e2e-mobile/flows/cold-start.mjs": {
+      "lane": "scale",
+      "volume": "8 per-launch on-device cold starts against an EMPTY device replica (year-3 is 50,000 replica rows — see tests/experience-budgets/README.md)",
+      "_noBudgetMs": "Deliberate. Simulator launch times have no distribution yet; the 30-sample/1.5x drift gate is the only gate until one exists.",
+      "entries": ["mobile/cold-open/device-fixture/ci-ios-sim"]
+    },
+    "tests/agent-e2e-mobile/flows/scroll-frames.mjs": {
+      "lane": "scale",
+      "volume": "8 flings each on the Photos grid and the People directory, holding whatever the CI gateway fixture seeded (year-3 is 90,000 photo assets / 5,000 contacts). The flow publishes `people rows observed` — a real lower bound it can see — rather than guessing the seeded total.",
+      "_noBudgetMs": "Not a duration rig. It measures dropped-frame PERCENT via apps/mobile's rAF sampler (arm with centraid://perf-frames, read testID perf-frame-report); the ceiling lives in tests/experience-budgets/mobile.json and the drift series is the worst dropped-frame percentage across the two surfaces. NOTE the denominator is per-device — targetHz is recorded beside every percentage — and the sampler sees the JS thread only.",
+      "entries": ["mobile/scroll/device-fixture/ci-ios-sim"]
+    },
+    "tests/scale/share-journey.scale.test.ts": {
+      "lane": "scale",
+      "volume": "One 200-photo album granted from one vault to another, both mounted under one gateway root",
+      "entries": ["gateway/share/shared-album/ci-linux-x64-4c"]
+    }
+  }
+}

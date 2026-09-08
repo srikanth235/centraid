@@ -12,8 +12,8 @@ export interface VaultWorkspace {
   appsDir: string;
   /** Same file as the vault's audit stream; the ledger band is ensured before the handle is handed out. */
   journal: DatabaseProvider;
-  journalDbFile: string;
-  /** Derived cache OUTSIDE the vault dir — `journal.db` is the authoritative ledger. */
+  ledgerDbFile: string;
+  /** Derived cache OUTSIDE the vault dir — `vault.db` is the authoritative ledger. */
   harnessSessionDir: string;
 }
 

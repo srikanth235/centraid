@@ -7,7 +7,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
   defaultRunId,
-  qualityRegressionBudget,
   recordQualityResult,
   writeFlowVerdict,
 } from "./harness.mjs";
@@ -31,31 +30,6 @@ describe("defaultRunId", () => {
     const a = defaultRunId();
     const b = defaultRunId();
     expect(a).not.toBe(b);
-  });
-});
-
-describe("qualityRegressionBudget", () => {
-  test("waits for ten durable observations before enabling the budget", async () => {
-    const repoRoot = await makeRunDir();
-    expect(
-      await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
-    ).toBeNull();
-    await Array.from({ length: 10 }, (_, index) => index + 1).reduce(
-      async (previous, value) => {
-        await previous;
-        await recordQualityResult(repoRoot, {
-          lane: "scale",
-          owner: "mobile-volume",
-          name: "volume",
-          status: "passed",
-          measurements: [{ name: "wall clock", value, unit: "ms" }],
-        });
-      },
-      Promise.resolve()
-    );
-    expect(
-      await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
-    ).toBe(16.5);
   });
 });
 
@@ -293,15 +267,28 @@ describe("platform-keyed evidence (#781)", () => {
         },
         Promise.resolve()
       );
-      expect(
-        await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
-      ).toBe(16.5);
-      // The other platform has no samples: its budget stays "no opinion yet",
-      // not a budget computed over the sibling platform's history.
+      // The evidence file is PER PLATFORM: an iOS series and an Android series
+      // never interleave, which is what keeps a cross-platform sample out of
+      // any comparison drawn from them.
+      const ios = JSON.parse(
+        await readFile(
+          path.join(repoRoot, "artifacts", "scale", "mobile-volume-ios.json"),
+          "utf8"
+        )
+      );
+      expect(ios.history).toHaveLength(10);
       vi.stubEnv("MAESTRO_PLATFORM", "android");
-      expect(
-        await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
-      ).toBeNull();
+      await expect(
+        readFile(
+          path.join(
+            repoRoot,
+            "artifacts",
+            "scale",
+            "mobile-volume-android.json"
+          ),
+          "utf8"
+        )
+      ).rejects.toThrow();
     } finally {
       vi.unstubAllEnvs();
     }

@@ -17,9 +17,10 @@ import type { AtlasRelationsTabProps } from "./AtlasRelationsTab.js";
 // share one payload and one set of selectors — and neither file grows unwieldy.
 
 // ── Sample payload ────────────────────────────────────────────────────────
-// A slice of the real vault graph: core_party at the hub, a health/observation
-// chain (the readout example), a self-referencing concept, one ghost edge, and
-// the genuinely-disconnected locker/sync island.
+// A slice of the real vault graph: core_party at the hub, the
+// media_asset → core_content_item → core_party chain (the readout example), a
+// self-referencing concept, one ghost edge, and the genuinely-disconnected
+// locker/sync island.
 export const node = (
   physical: string,
   pack: string,
@@ -72,28 +73,28 @@ export function makeGraph(
       friendly: "People",
       blurb: "Everyone your vault knows about.",
     }),
-    node("core_observation", "core", "ontology", {
-      friendly: "Observations",
-      blurb: "Point-in-time readings and notes.",
+    node("core_content_item", "core", "ontology", {
+      friendly: "Content items",
+      blurb: "The stored bytes behind every photo, note and document.",
     }),
     node("core_concept", "core", "ontology", { selfRef: true }),
-    node("health_vital", "health", "ontology", { friendly: "Vitals" }),
+    node("media_asset", "media", "ontology", { friendly: "Photos" }),
     node("knowledge_note", "knowledge", "ontology"),
-    node("consent_device", "consent", "machinery"), // reachable machinery → renders
+    node("access_device", "consent", "machinery"), // reachable machinery → renders
     node("locker_item", "locker", "ontology"),
     node("locker_item_alias", "locker", "ontology"),
     node("sync_connection", "sync", "machinery"),
   ];
   const fkEdges: AtlasFkEdge[] = [
-    edge("health_vital", "observation_id", "core_observation", {
+    edge("media_asset", "content_id", "core_content_item", {
       childRows: 41230,
       fill: 41230,
     }),
-    edge("core_observation", "subject_party_id", "core_party", {
+    edge("core_content_item", "creator_party_id", "core_party", {
       childRows: 44902,
       fill: 44902,
     }),
-    edge("core_observation", "device_id", "consent_device", {
+    edge("core_content_item", "origin_device_id", "access_device", {
       notnull: false,
       childRows: 44902,
       fill: 44000,
@@ -149,7 +150,7 @@ export function makeGraph(
         relationConceptId: "concept-depicts",
         relationLabel: "depicts",
         fromType: "core.party",
-        toType: "core_observation",
+        toType: "core_content_item",
         count: 4,
       },
     ],

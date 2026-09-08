@@ -66,7 +66,7 @@ describe("multi-writer", () => {
         { intentId: payload.intentId, status: "executed" },
       ]);
       await expect(reopenedTab.list()).resolves.toStrictEqual([]);
-      await expect(reopenedTab.overlayMutations()).resolves.toStrictEqual([]);
+      expect((await reopenedTab.overlay()).mutations).toStrictEqual([]);
     });
 
     test("two tabs cannot reuse one canonical id for divergent payloads", async () => {
@@ -99,16 +99,19 @@ describe("multi-writer", () => {
       const reopened = new IntentQueue(reopenedStore, {
         idFactory: () => "shared-tab-retry",
       });
-      await expect(reopened.overlayMutations()).resolves.toMatchObject([
+      const reopenedOverlay = await reopened.overlay();
+      expect(reopenedOverlay.mutations).toMatchObject([
         {
           rowId: "task-1",
-          values: {
-            __centraid_pending_key: payload.intentId,
-            __centraid_pending_status: "denied",
-            __centraid_pending_reason: "Owner declined this change.",
-          },
+          values: { __centraid_pending_key: payload.intentId },
         },
       ]);
+      expect(reopenedOverlay.sidecar).toMatchObject({
+        [payload.intentId]: {
+          status: "denied",
+          reason: "Owner declined this change.",
+        },
+      });
 
       await expect(reopened.retry(payload.intentId)).resolves.toMatchObject({
         intentId: "shared-tab-retry",

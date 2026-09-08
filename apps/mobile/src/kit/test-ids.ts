@@ -75,10 +75,10 @@ export const TEST_IDS = Object.freeze({
     sharingRow: "settings-sharing-row",
   }),
 
-  /** Settings → Sharing: the seat that REDEEMS an invitation. */
+  /** Settings → Sharing: who this vault is linked to, and the link ceremony. */
   sharing: Object.freeze({
-    redeem: "sharing-redeem",
-    redeemField: "sharing-redeem-field",
+    screen: "sharing-screen",
+    people: "sharing-people",
   }),
 
   photos: Object.freeze({
@@ -152,6 +152,8 @@ export const TEST_IDS = Object.freeze({
 
   tally: Object.freeze({
     band: "tally-band",
+    /** The composer's commit; it and the title share a label (#905). */
+    addCommit: "tally-add-commit",
     /** The group's own life-act that mints an invitation. */
     shareVerb: "tally-share-verb",
   }),

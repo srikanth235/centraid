@@ -25,11 +25,11 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { writeExtractedText } from "./enrich.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { recordRevision } from "./revisions.js";
 
 /** Soft-deleted documents linger this long before the lifecycle sweep purges. */
@@ -46,10 +46,10 @@ export const DOCUMENT_TARGET_TYPE = "core.document";
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 function purgeAt(now: string): string {
@@ -135,6 +135,7 @@ const ADD_DOCUMENT: CommandDefinition = {
     required: ["title"],
     additionalProperties: false,
     properties: {
+      document_id: MINTED_ID_PROPERTY,
       /** Small inline bytes. Exactly one of data_uri / staged_sha (#296). */
       data_uri: { type: "string", minLength: 6 },
       /** Staged bytes: claim what POST /_vault/blobs hashed into the CAS. */
@@ -154,6 +155,7 @@ const ADD_DOCUMENT: CommandDefinition = {
     },
   },
   preconditions: [
+    mintedIdIsFree("core_document", "document_id", "document", "document_id"),
     {
       name: "exactly_one_source",
       sql: "SELECT ((:data_uri IS NOT NULL) + (:staged_sha IS NOT NULL)) AS n",
@@ -239,7 +241,7 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
   const contentId = minted.contentId;
   ctx.wrote("core.content_item", contentId);
-  const documentId = ctx.newId();
+  const documentId = mintedId(ctx, "document_id");
   ctx.db
     .prepare(
       `INSERT INTO core_document (document_id, title, current_content_id, created_at, updated_at, deleted_at, purge_at)
@@ -457,8 +459,10 @@ const RESTORE_DOCUMENT: CommandDefinition = {
   preconditions: [
     {
       name: "document_in_trash",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_document
-             WHERE document_id = :document_id AND deleted_at IS NOT NULL`,
+             WHERE document_id = :document_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,
@@ -943,6 +947,7 @@ const CREATE_FOLDER: CommandDefinition = {
     required: ["name"],
     additionalProperties: false,
     properties: {
+      folder_id: MINTED_ID_PROPERTY,
       name: { type: "string", minLength: 1 },
       parent_folder_id: { type: "string", minLength: 1 },
     },
@@ -953,6 +958,7 @@ const CREATE_FOLDER: CommandDefinition = {
     properties: { folder_id: { type: "string" } },
   },
   preconditions: [
+    mintedIdIsFree("core_concept", "folder_id", "folder", "concept_id"),
     {
       name: "parent_exists_if_given",
       sql: `SELECT CASE WHEN :parent_folder_id IS NULL THEN 1
@@ -997,7 +1003,7 @@ function createFolder(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { name: string; parent_folder_id?: string };
   const schemeId = folderSchemeId(ctx);
   const parentId = input.parent_folder_id ?? rootFolderId(ctx);
-  const folderId = ctx.newId();
+  const folderId = mintedId(ctx, "folder_id");
   ctx.db
     .prepare(
       `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
@@ -1115,7 +1121,6 @@ function deleteFolder(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM core_concept WHERE concept_id = ?")
     .run(input.folder_id);
-  cleanupPolyRefs(ctx.db, ctx.now, "core.concept", input.folder_id);
   ctx.wrote("core.concept", input.folder_id);
   return { folder_id: input.folder_id };
 }

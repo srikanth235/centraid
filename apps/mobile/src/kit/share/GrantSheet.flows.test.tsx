@@ -20,6 +20,9 @@ import GrantSheet from "./GrantSheet";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock(import("expo-clipboard"), () => ({
+  setStringAsync: () => Promise.resolve(true),
+}));
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const element = (
@@ -90,7 +93,12 @@ vi.mock(
 // so every test injects its own and stubs transport at the seam.
 vi.mock(
   import("./grant-seat"),
-  () => ({ nativeGrantDoor: () => undefined }) as never
+  () =>
+    ({
+      nativeGrantDoor: () => undefined,
+      nativeLinkTicketDoor: () => () =>
+        Promise.resolve({ ok: false, message: "no gateway in this test" }),
+    }) as never
 );
 
 vi.mock(
@@ -159,7 +167,15 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
-    forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
+    forParty: () =>
+      Promise.resolve({
+        known: true,
+        channel: { state: "live" as const, vaultId: "vault-priya" },
+        grants: [],
+      }),
     forAudience: () => Promise.resolve({ known: true, grants: [] }),
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),

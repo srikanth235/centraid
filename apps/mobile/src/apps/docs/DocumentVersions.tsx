@@ -6,7 +6,7 @@
 // walks them. What the sample shows and this seat cannot say is absent and
 // SAID to be absent:
 //   * WHO made each version (`you` / `Docs` / `a machine`) is a
-//     consent.provenance fact the replica does not carry → one sentence under
+//     access.provenance fact the replica does not carry → one sentence under
 //     the list (`VERSIONS_WHO_WITHHELD`), no invented actors.
 //   * NO DIFF IS MOCKED — this seat cannot render a real one, so none is
 //     drawn. Each entry shows its own facts (kind, size, when asserted).

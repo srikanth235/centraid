@@ -3,11 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  JOURNAL_ENTITIES,
-  VAULT_ENTITIES,
-  VAULT_TABLES,
-} from "./entity-catalog.js";
+import { VAULT_ENTITIES, VAULT_TABLES } from "./entity-catalog.js";
 import type {
   EntityRegistry,
   VaultEntityDeclaration,
@@ -15,12 +11,12 @@ import type {
 import { parseExtLogical } from "./ext.js";
 
 export {
-  JOURNAL_ENTITIES,
-  JOURNAL_TABLES,
   VAULT_ENTITIES,
   VAULT_TABLES,
+  type EntityLifecycle,
   type VaultEntityDeclaration,
 } from "./entity-catalog.js";
+export { LOCAL_TABLES } from "./local-tables.js";
 
 /**
  * The member-facing name (and, for ontology kinds, the blurb) of a registered
@@ -34,10 +30,7 @@ export function entityDeclaration(
   if (dot <= 0) return undefined;
   const schema = logical.slice(0, dot);
   const table = logical.slice(dot + 1);
-  return (
-    declaredIn(VAULT_ENTITIES, schema, table) ??
-    declaredIn(JOURNAL_ENTITIES, schema, table)
-  );
+  return declaredIn(VAULT_ENTITIES, schema, table);
 }
 
 /**
@@ -68,7 +61,7 @@ function declaredIn(
  */
 export function assertRegistryLabels(
   registry: EntityRegistry,
-  file: "vault" | "journal"
+  file = "vault"
 ): void {
   for (const [schema, entities] of Object.entries(registry)) {
     const seen = new Map<string, string>();
@@ -106,17 +99,27 @@ let labelsChecked = false;
 export function assertVaultRegistryLabels(): void {
   if (labelsChecked) return;
   assertRegistryLabels(VAULT_ENTITIES, "vault");
-  assertRegistryLabels(JOURNAL_ENTITIES, "journal");
   labelsChecked = true;
 }
+
+/**
+ * The audit band's readable streams, by logical name. Names only: the band's
+ * shape is `schema/audit.ts`'s, and nothing here may enumerate it.
+ */
+const AUDIT_BAND_ENTITIES: ReadonlySet<string> = new Set([
+  "access.provenance",
+  "access.receipt",
+  "agent.command_invocation",
+  "agent.invocation_check",
+  "agent.evidence",
+  "agent.explanation",
+]);
 
 export interface EntityRef {
   schema: string;
   table: string;
   /** Physical SQLite table name, e.g. `core_party`. */
   physical: string;
-  /** Which file holds it. */
-  file: "vault" | "journal";
 }
 
 /**
@@ -125,7 +128,7 @@ export interface EntityRef {
  *
  * Ext-band names (`ext.<appId>.<table>`, draft twin `extdraft.…`) resolve
  * only when the caller passes its vault handle — the dynamic half lives in
- * `consent_app_ext`. Both bands report the consent schema `ext.<appId>`:
+ * `access_app_ext`. Both bands report the consent schema `ext.<appId>`:
  * the draft copy is the same data class under the same grant.
  */
 export function resolveEntity(
@@ -137,17 +140,23 @@ export function resolveEntity(
   const schema = logical.slice(0, dot);
   const table = logical.slice(dot + 1);
   if (declaredIn(VAULT_ENTITIES, schema, table)) {
-    return { schema, table, physical: `${schema}_${table}`, file: "vault" };
+    return { schema, table, physical: `${schema}_${table}` };
   }
-  if (declaredIn(JOURNAL_ENTITIES, schema, table)) {
-    return { schema, table, physical: `${schema}_${table}`, file: "journal" };
+  // The AUDIT band RESOLVES but is not ENUMERATED (#916). It is excluded from
+  // the registry so the export walk and the replica change log leave it alone
+  // — it is this vault's evidence, not the member's data to copy — but a grant
+  // may still name `access.provenance`, and the activity read is exactly that
+  // read. Excluding it from the walk and refusing to resolve it are two
+  // different decisions; only the first is the band's.
+  if (AUDIT_BAND_ENTITIES.has(logical)) {
+    return { schema, table, physical: `${schema}_${table}` };
   }
   const ext = parseExtLogical(logical);
   if (ext && vault) {
     try {
       const row = vault
         .prepare(
-          `SELECT physical FROM consent_app_ext WHERE app_id = ? AND band = ? AND table_name = ?`
+          `SELECT physical FROM access_app_ext WHERE app_id = ? AND band = ? AND table_name = ?`
         )
         .get(ext.appId, ext.band, ext.table) as
         | { physical: string }
@@ -157,7 +166,6 @@ export function resolveEntity(
           schema: `ext.${ext.appId}`,
           table: ext.table,
           physical: row.physical,
-          file: "vault",
         };
       }
     } catch {
@@ -180,7 +188,7 @@ export function listVaultEntities(vault?: DatabaseSync): string[] {
   try {
     const rows = vault
       .prepare(
-        `SELECT app_id, table_name FROM consent_app_ext WHERE band = 'live' ORDER BY app_id, table_name`
+        `SELECT app_id, table_name FROM access_app_ext WHERE band = 'live' ORDER BY app_id, table_name`
       )
       .all() as { app_id: string; table_name: string }[];
     return [

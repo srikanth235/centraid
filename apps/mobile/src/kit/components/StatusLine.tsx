@@ -2,6 +2,7 @@ import React, { useMemo, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BAND_HEIGHT } from "../band-surface";
 import { borders, radii, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
@@ -23,6 +24,20 @@ const count = (n: number): string => n.toLocaleString();
  * stacking a new element per message, and goes quiet again when the note is
  * cleared or times out. That is the whole toast→status-line contract: one
  * mounted host, reused, never a spinner.
+ *
+ * It sits ABOVE the bottom band, never on it. This host is mounted at the app
+ * root, outside the navigator, so it cannot ask which screen is showing — but
+ * every screen in this product anchors something to the bottom edge: an app's
+ * band, the frame's band, or the floating `HomeKey` on the screens that have
+ * neither. An opaque bar at `bottom: 0` therefore covered a navigation control
+ * on ALL of them, hiding the band's labels and swallowing taps aimed at them.
+ * A note carrying an action never expires (`postStatus` sets no timer for one),
+ * so that cover could stand indefinitely.
+ *
+ * `BAND_HEIGHT` is the reservation because it is the tallest of the three; the
+ * `HomeKey` screens gain a little clearance they do not need, which costs
+ * nothing and is the honest trade for not plumbing band presence through eight
+ * app bands and the frame to a host that renders at the root.
  */
 export default function StatusLine(): React.JSX.Element | null {
   const note = useSyncExternalStore(subscribeStatus, readStatus, readStatus);
@@ -44,7 +59,7 @@ export default function StatusLine(): React.JSX.Element | null {
       <View
         accessibilityLiveRegion="polite"
         accessibilityRole="text"
-        style={[styles.host, { paddingBottom: Math.max(insets.bottom, 10) }]}
+        style={[styles.host, { bottom: BAND_HEIGHT + insets.bottom }]}
       >
         <View style={[styles.dot, { backgroundColor: colors.textFaint }]} />
         <Text style={styles.text} numberOfLines={1}>
@@ -101,14 +116,18 @@ const makeStyles = (colors: ThemeColors) =>
     host: {
       alignItems: "center",
       backgroundColor: colors.bg,
+      // Hairlines on BOTH edges: the line no longer meets the screen's bottom,
+      // so a single top rule would leave it grounded on nothing (§G — surfaces
+      // separate by edge, never by shadow).
+      borderBottomColor: colors.line,
+      borderBottomWidth: borders.hairline,
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
-      bottom: 0,
       flexDirection: "row",
       left: 0,
       minHeight: 32,
       paddingHorizontal: 14,
-      paddingTop: 8,
+      paddingVertical: 8,
       position: "absolute",
       right: 0,
     },

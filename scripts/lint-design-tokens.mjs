@@ -9,14 +9,10 @@
 //
 // Run with `--write` to rewrite the budget from the current tree (the only
 // sanctioned way to record a decrease).
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+
+import { readLedgerSection, writeLedgerSection } from "./check-ledgers.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const TARGETS = [
@@ -26,7 +22,11 @@ const TARGETS = [
   "apps/web/src",
   "apps/extension/static",
 ];
-const BUDGET_FILE = path.join(ROOT, "tests/design-token-css-budget.json");
+// The CSS debt ledger is `tests/budgets.json#designTokenCss.budgets` since
+// #915 Wave 4, and it is still deliberately EMPTY — see docs/traps/design-tokens.md.
+const BUDGET_FILE = path.join(ROOT, "tests/budgets.json");
+const BUDGET_SECTION = "designTokenCss";
+const BUDGET_SECTION_PATH = "tests/budgets.json";
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 
 export const METRICS = [
@@ -218,7 +218,7 @@ export function compareBudget(actual, budget) {
           `${file}: ${metric} fell ${limit} → ${found}; tighten ${path.relative(
             ROOT,
             BUDGET_FILE
-          )}`
+          )}#${BUDGET_SECTION}`
         );
     }
   }
@@ -273,13 +273,17 @@ function main() {
         .sort()
         .map((file) => [file, actual[file]])
     );
-    writeFileSync(BUDGET_FILE, `${JSON.stringify(sorted, null, 2)}\n`);
+    writeLedgerSection(BUDGET_SECTION_PATH, BUDGET_SECTION, {
+      ...readLedgerSection(BUDGET_SECTION_PATH, BUDGET_SECTION),
+      budgets: sorted,
+    });
     console.log(
       `ok   design-token-css — budget rewritten: ${formatTotals(actual)}`
     );
     return;
   }
-  const budget = JSON.parse(readFileSync(BUDGET_FILE, "utf8"));
+  const budget =
+    readLedgerSection(BUDGET_SECTION_PATH, BUDGET_SECTION)?.budgets ?? {};
   const findings = compareBudget(actual, budget);
   if (findings.length > 0) {
     console.error(

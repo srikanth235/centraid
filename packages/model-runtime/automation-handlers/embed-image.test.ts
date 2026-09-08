@@ -128,7 +128,6 @@ describe("embed-image handler", () => {
             vector: VECTOR,
             capability: "embed-image",
           },
-          purpose: "dpv:ServiceProvision",
         },
       ]);
       expect(harness.contentRequests).toStrictEqual([
@@ -136,7 +135,6 @@ describe("embed-image handler", () => {
           contentId: "c-a1",
           variant: "preview",
           maxBytes: 4 * 1024 * 1024,
-          purpose: "dpv:ServiceProvision",
         },
       ]);
     });

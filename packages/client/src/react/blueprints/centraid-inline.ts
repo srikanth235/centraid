@@ -1,5 +1,10 @@
-import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/party-kind";
+import {
+  projectPendingWrite,
+  pendingRowIntentId,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 // governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
 import type {
   InlineAppModule,
@@ -28,6 +33,7 @@ import {
   VAULT_HEADER,
 } from "../../gateway-client-core.js";
 import type { GatewayAuth } from "../../gateway-client-core.js";
+import { mintGatewayLinkTicket } from "../../gateway-client-links.js";
 // Types only — erased at build, so declaring the import doors below never pulls
 // the staged-import transport onto the eager shell graph (see `lazyVaultImports`).
 import type {
@@ -35,10 +41,12 @@ import type {
   VaultImportRow,
 } from "../../gateway-client-vault-imports.js";
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
-import type { ReplicaInvalidation } from "../../replica/types.js";
+import { postStatus } from "../../status-channel.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
 import type { GrantBridge } from "./grant-seat.js";
+import { collapseInlineChanges } from "./inline-change-batch.js";
+import type { InlineChangeDetail } from "./inline-change-batch.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
 import {
@@ -66,15 +74,6 @@ interface InlineCommonsResident {
 interface InlineCommonsShareResult extends Record<string, unknown> {
   grantId: string;
   claims: Array<{ partyId: string; claimToken: string }>;
-}
-
-interface InlineChangeDetail {
-  tables?: string[];
-  source?: string;
-  intentId?: string;
-  intentState?: string;
-  ts?: number;
-  scope?: string;
 }
 
 export type InlineScopeSession = Pick<
@@ -144,6 +143,12 @@ export interface InlineShareTarget {
   partyId: string;
   label: string;
   vaultId?: string;
+  /**
+   * The person's row is still queued. Read off the row's overlay, never off
+   * the shape of the id (#922 G2): a minted id IS the row's real id, so only
+   * the overlay knows whether the origin has seen it yet.
+   */
+  pending?: boolean;
 }
 
 export interface InlineShareCircle {
@@ -286,6 +291,8 @@ export interface InlineCentraidClient {
   }) => Promise<{ retained: boolean; grantIds: string[] }>;
   links: () => Promise<InlineLinkDestination[]>;
   grants: GrantBridge;
+  /** One-time peer link ticket for THIS shell's own vault (#929 S6). */
+  linkTicket: () => Promise<{ ticket: string; expiresAt: string }>;
   describe: () => Promise<unknown>;
   onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
   blobUrl: (pathname: string, scope?: string) => Promise<string | null>;
@@ -294,6 +301,12 @@ export interface InlineCentraidClient {
   stageDerivative: typeof stageDerivative;
 }
 
+/**
+ * `UNBOUNDED_READ` is deliberately NOT here (#922 0a). Falling back online for
+ * an undeclared window would answer the refused read from the gateway — capped
+ * at the same 1,000 rows, over the network, and just as silently. The refusal
+ * is a bug in the calling query, so it reaches the app.
+ */
 const FALLBACK_CODES = new Set([
   "ONLINE_ONLY",
   "REPLICA_UNAVAILABLE",
@@ -322,7 +335,23 @@ async function gatewayRead(
     },
     body: JSON.stringify({ input }),
   });
-  return readJson<unknown>(res, `read ${query}`);
+  const answer = await readJson<unknown>(res, `read ${query}`);
+  // The ONLINE FALLBACK is a seat too (#922 0a). The gateway bounds its reads
+  // on the same default, so an answer that came back short must say so here
+  // rather than only inside the handler that saw `ReadResult.truncated`. The
+  // signal rides the query's own answer: a handler that forwards it gets the
+  // line for free, and one that does not is silent exactly as before — which
+  // is why the aggregation on the app-query response is filed, not faked.
+  if (answer && typeof answer === "object") {
+    const carried = answer as { truncated?: unknown; appliedLimit?: unknown };
+    if (
+      carried.truncated === true &&
+      typeof carried.appliedLimit === "number"
+    ) {
+      postStatus(truncatedListNotice(carried.appliedLimit));
+    }
+  }
+  return answer;
 }
 
 /** Never hands its payload to a replica session: sealed input must not queue. */
@@ -344,36 +373,6 @@ async function gatewayAction(
     ...(signal ? { signal } : {}),
   });
   return readJson(response, `write ${action}`);
-}
-
-/** Wildcard the coordinator emits for bootstrap, commit, purge or scope
- *  teardown: "everything here may have moved". Never a table name. */
-const EVERYTHING = "*";
-
-/**
- * One invalidation as the page-side change event. `tables` carries the actual
- * entity, so an app whose declared list omits it does not re-derive; the
- * wildcard must collapse to the EMPTY list, which `onDataChange` fires on
- * unconditionally, because `["*"]` would match nobody (#883).
- */
-function toChangeDetail(
-  invalidation: ReplicaInvalidation,
-  scope: string
-): InlineChangeDetail {
-  const named =
-    invalidation.entity && invalidation.entity !== EVERYTHING
-      ? [invalidation.entity]
-      : [];
-  return {
-    tables: named,
-    source: invalidation.source,
-    ...(invalidation.intentId ? { intentId: invalidation.intentId } : {}),
-    ...(invalidation.intentState
-      ? { intentState: invalidation.intentState }
-      : {}),
-    ts: Date.now(),
-    ...(scope ? { scope } : {}),
-  };
 }
 
 function errorDetail(error: unknown): { code?: string; message: string } {
@@ -401,7 +400,7 @@ async function loadShareTargets(
       .catch(() => undefined),
     loadLinkDestinations(ownVaultId),
   ]);
-  const ownerPartyId = vaultResult?.rows[0]?.values["owner_party_id"];
+  const ownerPartyId = vaultResult?.rows[0]?.values["self_party_id"];
   const linkedByParty = new Map(
     links.map((link) => [link.partyId, link.vaultId])
   );
@@ -413,7 +412,8 @@ async function loadShareTargets(
       typeof partyId !== "string" ||
       partyId === ownerPartyId ||
       typeof displayName !== "string" ||
-      !displayName.trim()
+      !displayName.trim() ||
+      !isAddressablePartyKind(row.values["kind"])
     )
       continue;
     const vaultId = linkedByParty.get(partyId);
@@ -421,6 +421,9 @@ async function loadShareTargets(
       partyId,
       label: displayName,
       ...(vaultId ? { vaultId } : {}),
+      // Queued-ness is the row's one pending column; the facts behind it are
+      // not needed to refuse a destination that is not real yet (#922 G3).
+      ...(pendingRowIntentId(row.values) ? { pending: true } : {}),
     });
   }
   for (const link of links) {
@@ -436,7 +439,7 @@ async function loadShareTargets(
 
 const QUICK_ADD_CADENCE_DAYS = 30;
 
-/** Only an `executed` intent has a real identity: queued/parked are still waiting, denied/expired/cancelled never happened, and a `pending:` id names nobody. */
+/** Only an `executed` intent has a real identity: queued/parked are still waiting, denied/expired/cancelled never happened. */
 export function settledPartyIdFromOutcome(outcome: unknown): string {
   const settled = outcome as {
     status?: unknown;
@@ -447,7 +450,7 @@ export function settledPartyIdFromOutcome(outcome: unknown): string {
       `Adding a person did not complete (${String(settled?.status ?? "no outcome")}).`
     );
   const partyId = settled.output?.party_id;
-  if (typeof partyId !== "string" || !partyId || partyId.startsWith("pending:"))
+  if (typeof partyId !== "string" || !partyId)
     throw new Error("Adding a person did not return a settled identity.");
   return partyId;
 }
@@ -471,7 +474,7 @@ async function loadShareCircles(
       .read("people", { entity: "core.vault", limit: 1 })
       .catch(() => undefined),
   ]);
-  const ownerPartyId = vault?.rows[0]?.values["owner_party_id"];
+  const ownerPartyId = vault?.rows[0]?.values["self_party_id"];
   if (typeof ownerPartyId !== "string") return [];
   const ownedCircles = new Set(
     (circles?.rows ?? []).flatMap((row) => {
@@ -686,9 +689,11 @@ export function createInlineCentraidClient(
     binding: InlineScopeBinding
   ): (() => void) =>
     binding.session.subscribe(appId, undefined, (invalidations) =>
-      invalidations.forEach((invalidation) =>
-        cb(toChangeDetail(invalidation, binding.scope.id))
-      )
+      collapseInlineChanges(
+        invalidations,
+        binding.scope.id,
+        Date.now()
+      ).forEach((detail) => cb(detail))
     );
 
   const readIn = async <T>(
@@ -792,7 +797,9 @@ export function createInlineCentraidClient(
       });
       const result = await binding.session.write(appId, {
         action: opts.action,
-        input: (opts.input ?? {}) as never,
+        // The ids the projection minted ride the write (#922 G2), so the
+        // origin creates the very row the seat is already showing.
+        input: { ...opts.input, ...projected.input } as never,
         intentId,
         ...(projected.optimistic.length > 0
           ? { optimistic: projected.optimistic }
@@ -1056,6 +1063,12 @@ export function createInlineCentraidClient(
     },
 
     grants: lazyGrantBridge(auth),
+
+    // The shell's OWN vault mints, never the caller's: a blueprint app asking
+    // for a ticket must not be able to choose which vault it links (#929 S6).
+    linkTicket() {
+      return mintGatewayLinkTicket(primary.scope.id);
+    },
 
     describe() {
       return Promise.resolve({ commands: [] });

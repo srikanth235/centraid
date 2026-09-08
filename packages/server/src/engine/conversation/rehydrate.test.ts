@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 // Lazy read-only rehydration of archived conversations (#438).
-// Real journal.db on a temp file + an in-memory content-addressed blob sink
+// Real vault.db on a temp file + an in-memory content-addressed blob sink
 // standing in for the vault CAS door, shared by the archival engine (writer)
 // and the history store's `archiveBlobReader` (reader). No SQL is mocked.
 import { mkdirSync } from "node:fs";
@@ -13,8 +13,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
 import type { DatabaseProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.js";
 import { runConversationArchival } from "./archive/index.js";
 import type { BlobSink } from "./archive/types.js";
@@ -57,7 +58,7 @@ function workspaceFor(
     ownerPartyId: USER,
     appsDir: path.join(dir, "apps"),
     journal: provider,
-    journalDbFile: path.join(dir, "journal.db"),
+    ledgerDbFile: ledgerDbFileIn(dir),
     harnessSessionDir: path.join(dir, "harness-sessions"),
   });
 }
@@ -144,7 +145,7 @@ interface Fixture {
 
 function fixture(): Fixture {
   const dir = freshVaultDir();
-  const provider = makeJournalDbProvider(path.join(dir, "journal.db"));
+  const provider = makeLedgerDbProvider(ledgerDbFileIn(dir));
   const sink = new MemoryBlobSink();
   const reads: string[] = [];
   const reader: ArchiveBlobReader = async (sha) => {

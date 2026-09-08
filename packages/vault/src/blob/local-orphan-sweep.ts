@@ -13,7 +13,8 @@ import { liveBlobShasCached } from "./read.js";
 
 export interface LocalOrphanSweepTarget {
   vault: DatabaseSync;
-  journal: DatabaseSync;
+  /** The audit band — same file as `vault` (#916); named for what it holds. */
+  audit: DatabaseSync;
   blobs: {
     local: Pick<LocalBlobStore, "listSync">;
     deleteLocalSync: (sha: string) => void;
@@ -42,8 +43,8 @@ export function sweepLocalOrphans(
   const now = options.now ?? Date.now();
   // Read-only and shared (#659): other roots are consulted beside it.
   const live = liveBlobShasCached(db.vault);
-  const archived = archivedSegmentShas(db.journal);
-  const conversation = conversationArchiveShas(db.journal);
+  const archived = archivedSegmentShas(db.audit);
+  const conversation = conversationArchiveShas(db.audit);
   const isClaimed = (sha: string): boolean =>
     live.has(sha) ||
     archived.has(sha) ||

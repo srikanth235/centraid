@@ -31,7 +31,9 @@ export const DEVICE_TRUST_SCALAR_SQL = `(
     FROM share_authority a
    WHERE a.principal_kind = 'device' AND a.principal_id = %DEVICE%
      AND a.subject_type = '${DEVICE_SUBJECT_TYPE}'
-     AND a.subject_id = '${DEVICE_SUBJECT_ID}' AND a.revoked_at IS NULL
+     AND a.subject_id = '${DEVICE_SUBJECT_ID}'
+     AND a.revoked_at IS NULL
+     AND (a.expires_at IS NULL OR a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
    ORDER BY CASE a.decision WHEN 'declined' THEN 0 ELSE 1 END, a.granted_at
    LIMIT 1)`;
 
@@ -48,6 +50,7 @@ export function readDeviceTrust(
       `SELECT verb, decision FROM share_authority
         WHERE principal_kind = 'device' AND principal_id = ?
           AND subject_type = ? AND subject_id = ? AND revoked_at IS NULL
+          AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         ORDER BY CASE decision WHEN 'declined' THEN 0 ELSE 1 END, granted_at`
     )
     .get(deviceId, DEVICE_SUBJECT_TYPE, DEVICE_SUBJECT_ID) as

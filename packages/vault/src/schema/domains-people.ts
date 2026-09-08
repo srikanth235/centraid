@@ -36,15 +36,14 @@
 
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-// The profile's own columns, as the baseline rung creates them. Held in a
-// constant rather than inlined because the cadence-floor rebuild below has to
-// re-create this table with EXACTLY this shape: a table rebuild that drifts
-// from the baseline would silently drop whatever column the baseline grew and
-// the rebuild forgot. One text, two rungs, no drift.
 const PEOPLE_PROFILE_COLUMNS = `
   profile_id        TEXT PRIMARY KEY,
   party_id          TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
   role              TEXT,
+  -- The owner's short name for this person (#883, ruling O-contact): the
+  -- retired \`social.contact_card\` held it, and reachability moved to
+  -- \`social.contact_channel\` while the display facts landed here.
+  nickname          TEXT,
   avatar_color      TEXT,
   -- 0 means "never" — cadence disabled (issue #821). Some people the owner
   -- keeps are people they never want nagged about, and the floor of 1 day had
@@ -62,18 +61,18 @@ const PEOPLE_PROFILE_COLUMNS = `
   last_contacted_at TEXT,
   met               TEXT,
   created_at        TEXT NOT NULL,
-  updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}`;
-
-// The trash pair the lifecycle rung ALTERs on (below), spelled as column
-// definitions so the rebuild can create them in one statement. ALTER TABLE ADD
-// COLUMN appends, so this order is also the on-disk order a baseline vault has.
-const PEOPLE_PROFILE_LIFECYCLE_COLUMNS = `
+  updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- Trash (#630 P5): trashing the profile hides the person from the People
+  -- projection while the canonical party, its links and its Tally
+  -- participation stay, so restore is lossless until the sweep purges.
   deleted_at        TEXT,
-  purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)`;
+  purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  FOREIGN KEY (profile_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE`;
 
 export const PEOPLE_DDL = `
 CREATE TABLE people_profile (${PEOPLE_PROFILE_COLUMNS}
 ) STRICT;
+CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
 
 CREATE TABLE people_important_date (
   date_id     TEXT PRIMARY KEY,
@@ -86,66 +85,13 @@ CREATE TABLE people_important_date (
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   -- Trash pair + guard (issue #441 A4).
   deleted_at  TEXT,
-  purge_at    TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
+  purge_at    TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  FOREIGN KEY (date_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_important_date_party ON people_important_date(party_id);
+CREATE INDEX IF NOT EXISTS people_important_date_purge_idx
+  ON people_important_date(purge_at) WHERE purge_at IS NOT NULL;
 
 ${touchUpdatedAt("people_profile", "profile_id")}
 ${touchUpdatedAt("people_important_date", "date_id")}
-`;
-
-// #630 P5: people become reversible without deleting their canonical party.
-// The profile is the People-app membership row, so trashing it hides the person
-// from that projection while preserving shared links, Tally participation, and
-// every dependent fact for lossless restore. After the grace window the sweep
-// erases the party itself (#864).
-export const PEOPLE_PROFILE_LIFECYCLE_DDL = `
-ALTER TABLE people_profile ADD COLUMN deleted_at TEXT;
-ALTER TABLE people_profile ADD COLUMN purge_at TEXT
-  CHECK (purge_at IS NULL OR deleted_at IS NOT NULL);
-CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
-`;
-
-// Issue #821, rung two: relax `cadence_days` from `> 0` to `>= 0` for vaults
-// that ALREADY EXIST. Editing the baseline text above only reaches vaults
-// created after the edit — `migrate()` applies rungs past `PRAGMA
-// user_version`, so a file stamped v1 keeps the CHECK it was born with, and
-// `people.set_cadence {cadence_days: 0}` would pass both JSON schemas and then
-// throw at SQLite. SQLite cannot alter a CHECK in place, so this is the
-// standard table rebuild (SQLite docs, "Making Other Kinds Of Table Schema
-// Changes"): create the replacement, copy every column, drop the old table,
-// rename, then restore the index and the touch trigger the drop took with it.
-//
-// The rebuild is written against the CURRENT full shape (profile columns +
-// trash pair), so it is correct in both directions: it is what upgrades a v1
-// file, and it is a faithful no-op re-creation on a fresh file that just ran
-// the baseline rung and already has `>= 0`.
-//
-// Foreign keys: SQLite's 12-step procedure wants `foreign_keys=off` around the
-// rebuild, but that pragma is a NO-OP inside a transaction and every rung runs
-// inside one (see `migrate()`). `defer_foreign_keys` is the in-transaction
-// equivalent SQLite documents for exactly this: constraint enforcement moves to
-// COMMIT, so the intermediate DROP/RENAME cannot trip a check, and any real
-// violation still aborts the rung's COMMIT (which rolls the whole rung back)
-// rather than being waved through. It resets itself at the end of the
-// transaction, so nothing leaks into the opened handle. Nothing currently
-// REFERENCES people_profile, so the drop has no children to orphan; the
-// table's own FK to core_party is re-declared verbatim and the copied rows
-// point at the same parents.
-export const PEOPLE_PROFILE_CADENCE_FLOOR_DDL = `
-PRAGMA defer_foreign_keys = ON;
-CREATE TABLE people_profile_new (${PEOPLE_PROFILE_COLUMNS},
-${PEOPLE_PROFILE_LIFECYCLE_COLUMNS}
-) STRICT;
-INSERT INTO people_profile_new
-  (profile_id, party_id, role, avatar_color, cadence_days, last_contacted_at,
-   met, created_at, updated_at, deleted_at, purge_at)
-SELECT
-  profile_id, party_id, role, avatar_color, cadence_days, last_contacted_at,
-  met, created_at, updated_at, deleted_at, purge_at
-FROM people_profile;
-DROP TABLE people_profile;
-ALTER TABLE people_profile_new RENAME TO people_profile;
-CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
-${touchUpdatedAt("people_profile", "profile_id")}
 `;

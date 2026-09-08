@@ -136,6 +136,19 @@ describe("Photos' grant entry, phone seat", () => {
     rows.value = {
       "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
     };
+    // The link is the whole address (#903): a People row without one names
+    // nobody a grant could reach, so the roster needs both halves.
+    links.answer = () =>
+      Promise.resolve([
+        {
+          vaultA: "vault-own",
+          vaultB: "vault-asha",
+          partyIdB: "party-asha",
+          labelB: "Asha Rao",
+          approved: true,
+          revoked: false,
+        },
+      ]);
     const { said, opened, named } = await press();
     expect(said).toStrictEqual([]);
     expect(opened).toBe(true);
@@ -169,16 +182,19 @@ describe("Photos' grant entry, phone seat", () => {
     expect(opened).toBe(false);
   });
 
-  it("still opens on the People rows when only the links read fell over", async () => {
-    // A failed links read is not a reason to withhold the people this member
-    // added: it only becomes an unreadable roster when nobody else answered.
+  it("People rows do not rescue a failed links read — they are not an address", async () => {
+    // This used to open on the People rows alone, on the reading that a link
+    // was one way to reach somebody among several. Since #903 it is the ONLY
+    // way, so a broken links read leaves no target to name and the sheet must
+    // say the roster is unreadable rather than draw a person it cannot reach.
     links.answer = () => Promise.reject(new Error("gateway gone"));
     rows.value = {
       "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
     };
     const { said, opened, named } = await press();
-    expect(said).toStrictEqual([]);
-    expect(opened).toBe(true);
-    expect(named.map((option) => option.label)).toStrictEqual(["Asha Rao"]);
+    expect(said).toStrictEqual([ROSTER_UNREADABLE]);
+    expect(said).not.toContain(NOBODY_TO_SHARE_WITH);
+    expect(opened).toBe(false);
+    expect(named).toStrictEqual([]);
   });
 });

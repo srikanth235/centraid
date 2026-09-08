@@ -165,7 +165,7 @@ test("compareBudget rejects increases, stale debt, and untightened decreases", (
     ),
     [
       "new.css: rawHex increased 0 → 1",
-      "lower.css: rawHex fell 2 → 1; tighten tests/design-token-css-budget.json",
+      "lower.css: rawHex fell 2 → 1; tighten tests/budgets.json#designTokenCss",
       "gone.css: stale budget entry (file removed or moved)",
     ]
   );

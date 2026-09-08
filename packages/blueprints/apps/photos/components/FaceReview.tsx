@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { faceCropStyle } from "../../_shared/face-crop.ts";
-import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import { pendingRowIntentId } from "../../_shared/pending-overlay.ts";
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import {
   openTriage,
@@ -274,9 +274,9 @@ export function FaceReview({
   const { position, total } = progress;
   const firstSeen = formatFirstSeen(current.firstSeenAt);
   const proposedName = current.person_name;
-  const pending = Boolean(
-    readPendingOverlay(current as unknown as Record<string, unknown>)
-  );
+  const pending =
+    pendingRowIntentId(current as unknown as Record<string, unknown>) !==
+    undefined;
   const unavailableReason =
     people.length === 0 ? "No one else is named in your library yet" : null;
 

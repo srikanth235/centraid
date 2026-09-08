@@ -2,42 +2,30 @@ import { describe, expect, it } from "vitest";
 
 import { companionModuleState } from "./companion-grants.js";
 
-describe("Companion module grant state", () => {
-  it("goes dark when the required scope is revoked despite another active grant", () => {
-    const selected = new Set(["locker"]);
-    const unrelatedOnly = {
-      grants: [
-        { scopes: [{ schema: "locker", table: "item", verbs: "read" }] },
-      ],
-    };
-    expect(companionModuleState(selected, "locker", unrelatedOnly)).toBe(
-      "parked"
+describe("Companion module state", () => {
+  it("goes dark the moment the owner drops the module from the profile", () => {
+    // The companion set is the owner's answer about this seat; an app being
+    // installed here never overrides it.
+    expect(companionModuleState(new Set(), "locker", true)).toBe("revoked");
+    expect(companionModuleState(new Set(["notes"]), "notes", true)).toBe(
+      "granted"
     );
   });
 
-  it("accepts the exact reveal grant and schema-wide combined verbs", () => {
-    expect(
-      companionModuleState(new Set(["locker"]), "locker", {
-        grants: [
-          { scopes: [{ schema: "locker", table: "item", verbs: "reveal" }] },
-        ],
-      })
-    ).toBe("granted");
-    expect(
-      companionModuleState(new Set(["people"]), "people", {
-        grants: [
-          { scopes: [{ schema: "people", table: null, verbs: "read+act" }] },
-        ],
-      })
-    ).toBe("granted");
-  });
-
-  it("distinguishes profile revocation from an unavailable app", () => {
-    expect(companionModuleState(new Set(), "notes", { grants: [] })).toBe(
-      "revoked"
-    );
-    expect(companionModuleState(new Set(["notes"]), "notes", undefined)).toBe(
+  it("distinguishes profile revocation from an app that is not installed", () => {
+    expect(companionModuleState(new Set(), "notes", false)).toBe("revoked");
+    expect(companionModuleState(new Set(["notes"]), "notes", false)).toBe(
       "unavailable"
     );
+  });
+
+  it("a selected module whose app IS installed is granted — a first-party app never parks (#928)", () => {
+    // `parked` left this vocabulary with the app grant plane: an app is not a
+    // principal, so "installed but not yet answered for" cannot occur.
+    for (const module of ["locker", "tasks", "docs", "agenda"] as const) {
+      expect(companionModuleState(new Set([module]), module, true)).toBe(
+        "granted"
+      );
+    }
   });
 });

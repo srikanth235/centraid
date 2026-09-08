@@ -30,16 +30,27 @@ export const tasksPendingProjection = definePendingProjection({
     "save-section": ["save-section"],
   },
   actions: {
+    // #922 G2: the id the seat mints IS the row's id. It rides the write, the
+    // origin honours it, and a child filed against it offline lands pointing
+    // at the row the member is already looking at.
     add: ({ input, intentId }) => {
-      const taskId = stablePendingRowId(intentId, "task");
-      return [
-        pendingUpsert("schedule.task", taskId, {
-          task_id: taskId,
-          status: "needs-action",
-          completed_at: null,
-          ...pendingInputValues(input, TASK_FIELDS),
-        }),
-      ];
+      // An id the write already carries is REUSED, never re-minted: a revision
+      // of a queued add must keep the row it already showed (#922 G2).
+      const taskId =
+        typeof input.task_id === "string" && input.task_id.length > 0
+          ? input.task_id
+          : stablePendingRowId(intentId, "task");
+      return {
+        input: { task_id: taskId },
+        optimistic: [
+          pendingUpsert("schedule.task", taskId, {
+            task_id: taskId,
+            status: "needs-action",
+            completed_at: null,
+            ...pendingInputValues(input, TASK_FIELDS),
+          }),
+        ],
+      };
     },
     "set-status": ({ input }) =>
       pendingPatch("schedule.task", input.task_id, input, ["status"]),
@@ -55,26 +66,37 @@ export const tasksPendingProjection = definePendingProjection({
         typeof input.project_id === "string"
           ? input.project_id
           : stablePendingRowId(intentId, "project");
-      return [
-        pendingUpsert("schedule.project", projectId, {
-          project_id: projectId,
-          archived_at: null,
-          sort_order: 0,
-          ...pendingInputValues(input, ["name", "area", "color", "sort_order"]),
-        }),
-      ];
+      return {
+        input: { project_id: projectId },
+        optimistic: [
+          pendingUpsert("schedule.project", projectId, {
+            project_id: projectId,
+            archived_at: null,
+            sort_order: 0,
+            ...pendingInputValues(input, [
+              "name",
+              "area",
+              "color",
+              "sort_order",
+            ]),
+          }),
+        ],
+      };
     },
     "save-section": ({ input, intentId }) => {
       const sectionId =
         typeof input.section_id === "string"
           ? input.section_id
           : stablePendingRowId(intentId, "section");
-      return [
-        pendingUpsert("schedule.section", sectionId, {
-          section_id: sectionId,
-          ...pendingInputValues(input, ["project_id", "name", "sort_order"]),
-        }),
-      ];
+      return {
+        input: { section_id: sectionId },
+        optimistic: [
+          pendingUpsert("schedule.section", sectionId, {
+            section_id: sectionId,
+            ...pendingInputValues(input, ["project_id", "name", "sort_order"]),
+          }),
+        ],
+      };
     },
     "organize-task": ({ input }) =>
       pendingPatch("schedule.task", input.task_id, input, TASK_FIELDS),

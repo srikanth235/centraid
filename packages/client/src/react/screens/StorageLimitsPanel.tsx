@@ -168,12 +168,14 @@ function LimitControl({
   );
 }
 
+/** ONE file (#916): the ledger band's size IS the vault file's size, which is
+ *  the figure the archival duty compares against the limit. */
 function ledgerBytes(report: LocalUsageReportDTO | null): number | null {
   if (!report) return null;
   let total = 0;
   for (const vault of report.vaults) {
     for (const component of vault.components) {
-      if (component.component === "ledger") total += component.bytes;
+      if (component.component === "vault-db") total += component.bytes;
     }
   }
   return total;

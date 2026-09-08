@@ -61,6 +61,10 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[3],
     },
     page: { flex: 1, paddingHorizontal: pageMargin },
+    // The screen ROOT, which `TopSafeArea` does not fill on its own: it
+    // renders a bare `View`, so a root styled only with a colour collapses
+    // to nothing and takes `page` (and every row under it) with it.
+    safe: { flex: 1 },
     // The ticket token is read aloud to another machine — it is data, not
     // prose, so it takes the numeric register and wraps rather than truncates.
     ticket: { ...t("mono"), color: colors.text },

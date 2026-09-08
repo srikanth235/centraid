@@ -28,8 +28,9 @@ describe("parked", () => {
       invocationId: "inv-1",
       intentId: "intent-1",
       identity: {
-        kind: "app",
+        kind: "owner-device",
         callerId: "app-1",
+        surface: "app-1",
         provAgentKind: "app",
         partyId: null,
         mayAct: true,
@@ -37,7 +38,6 @@ describe("parked", () => {
       request: {
         command: "locker.send_secret",
         input: { password: "never-plaintext-at-rest" },
-        purpose: "dpv:ServiceProvision",
         invocationId: "inv-1",
       },
       grantId: "grant-1",
@@ -61,12 +61,13 @@ describe("parked", () => {
     expect(readDurableParkedPayload(db, "inv-1")).toBeUndefined();
   });
 
-  test("grant revocation drops every durable parked payload on that grant", () => {
+  test("withdrawing an answer drops every durable parked payload on it", () => {
     db = openVaultDb();
     const base = {
       identity: {
-        kind: "app" as const,
+        kind: "owner-device" as const,
         callerId: "app-1",
+        surface: "app-1",
         provAgentKind: "app" as const,
         partyId: null,
         mayAct: true,
@@ -102,8 +103,9 @@ describe("parked", () => {
       invocationId: "inv-1",
       intentId: "intent-1",
       identity: {
-        kind: "app",
+        kind: "owner-device",
         callerId: "app-1",
+        surface: "app-1",
         provAgentKind: "app",
         partyId: null,
         mayAct: true,

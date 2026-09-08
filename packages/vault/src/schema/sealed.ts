@@ -68,13 +68,15 @@ export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   //  - `item_history.password` is a PREVIOUS password. A rotated secret is
   //    still a secret, and history that stored it in the clear would make the
   //    reveal boundary a thing the current row has and the old ones do not.
+  //  - the previous password rides in a `core_entity_revision` snapshot of the
+  //    item row, still ciphertext under that row's additional data — there is
+  //    no `locker.item_history` cell to declare (#916, D2).
   //  - `item_passkey.private_key` is the key material; the passkey's rp id,
   //    user handle and creation date are metadata and stay plain, which is
   //    what lets the item pane show the slot without unsealing anything.
   // Nothing else on these tables is sealed: labels, sections, addresses and
   // match policies are the browsable half Locker's whole premise rests on.
   "locker.item_field": ["value_sealed"],
-  "locker.item_history": ["password"],
   "locker.item_passkey": ["private_key"],
   // Broker-owned credentials (#304): tokens live on the connection's
   // credential sidecar so the gateway broker can inject them; every read
@@ -115,7 +117,7 @@ export const SEALED_LEAK_SURFACES = [
 /**
  * Sealed columns of a logical entity ([] for everything unsealed). Canonical
  * entities resolve from the static registry above; ext-band entities (issue
- * #298 item 9) resolve their declared `sealed` list from `consent_app_ext`
+ * #298 item 9) resolve their declared `sealed` list from `access_app_ext`
  * when a vault handle is supplied — so a third-party app's sealed column
  * reaches the exact same chokepoints (seal sweep, read placeholder, reveal
  * gate) as `locker.item.password`.
@@ -146,7 +148,7 @@ function extSealedColumns(
   try {
     const row = vault
       .prepare(
-        `SELECT spec_json FROM consent_app_ext WHERE app_id = ? AND band = ? AND table_name = ?`
+        `SELECT spec_json FROM access_app_ext WHERE app_id = ? AND band = ? AND table_name = ?`
       )
       .get(appId, band, table) as { spec_json: string } | undefined;
     if (!row) return [];

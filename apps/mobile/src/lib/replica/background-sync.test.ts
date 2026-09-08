@@ -121,6 +121,7 @@ vi.mock(import("react-native") as Promise<unknown>, () => ({
 }));
 vi.mock(import("../../../modules/centraid-storage"), () => ({
   replicaStorageDirectory: () => "/replica",
+  replicaStorageDirectoryUri: () => "file:///replica",
 }));
 vi.mock(import("../../kit/replica/replica-mount") as Promise<unknown>, () => ({
   deleteReplicaDatabaseFamily: () => undefined,

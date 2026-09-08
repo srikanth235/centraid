@@ -16,6 +16,9 @@ import { isLinkApproved, partyIdForLinkedVault } from "./vault-link-row.js";
 export type LinkBindingState =
   | "bound"
   | "conflict"
+  /** R9 (#916): the link named this vault or its own party — a member is not
+   *  their own peer, and the binding is refused rather than written. */
+  | "self"
   | "revoked"
   | "absent"
   | "pending"

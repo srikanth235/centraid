@@ -44,15 +44,20 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.content_item",
     "social.circle",
     "social.circle_member",
-    "share.circle_grant",
-    "share.commons_member_state",
+    "share.authority",
+    "share.fulfillment",
     "core.party",
     "core.link",
     "core.tag",
     "core.concept",
     "core.concept_scheme",
-    "consent.provenance",
+    "access.provenance",
     "blob.custody_state",
+    // The Shared shelf: which shapes placed a row here, and whose vault served
+    // them (#929).
+    "share.subscription",
+    "share.subscription_lineage",
+    "share.party_vault_binding",
   ],
   locker: [
     "locker.item",
@@ -63,10 +68,12 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "locker.item_field",
     "locker.item_address",
     "locker.item_passkey",
-    "locker.item_history",
+    // The item pane's history section reads the shared revision ledger; the
+    // per-app `locker.item_history` table is gone (#916).
+    "core.entity_revision",
     "core.attachment",
     "core.content_item",
-    "consent.receipt",
+    "access.receipt",
   ],
   notes: [
     "core.content_item",
@@ -103,7 +110,10 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "share.party_vault_binding",
     // V-dashboard: Settings → Access reads the authority plane through People.
     "share.authority",
-    "share.commons_invitation",
+    // #928: when each answer was last exercised, and what an automation has
+    // asked for that the member has not decided — drawn on the same screen.
+    "share.authority_request",
+    "share.authority_use",
     "core.entity_revision",
   ],
   photos: [

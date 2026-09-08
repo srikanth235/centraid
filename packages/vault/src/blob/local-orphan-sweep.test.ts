@@ -10,10 +10,12 @@ import {
   casPath,
   closeOpenVaults,
   household,
+  placementAuthority,
   reclaimOrphans,
   seedPhoto,
+  unplaceProjection,
 } from "../share/placement-fixture.js";
-import { shareItemsToVault, unshareFromVault } from "../share/placement.js";
+import { shareItemsToVault } from "../share/placement.js";
 import { sweepLocalOrphans } from "./local-orphan-sweep.js";
 
 describe("local-orphan-sweep suite", () => {
@@ -31,12 +33,9 @@ describe("local-orphan-sweep suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
-    unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: shared.items[0]!.itemId,
-    });
+    unplaceProjection(audience, "media.asset", shared.items[0]!.itemId);
 
     // First sight tombstones, never deletes — the grace clock starts here.
     const first = sweepLocalOrphans(audience, {
@@ -182,6 +181,7 @@ describe("local-orphan-sweep suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
     const sharedIno = statSync(casPath(audience, photo.sha256)).ino;
 

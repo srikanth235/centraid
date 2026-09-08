@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
-  createGateway,
-  createGrant,
+  automationSubjectsOf,
   bootstrapVault,
-  ensureAppEnrolled,
+  createGateway,
+  enrollAgent,
   openVaultDb,
-  purposeConceptId,
+  recordAutomationAnswers,
 } from "@centraid/vault";
 import type { Credential } from "@centraid/vault";
 
@@ -116,16 +116,28 @@ describe("automation-anchor-scopes", () => {
       vault,
       "@[core.link_anchor/anchor-1]"
     );
-    const app = ensureAppEnrolled(db, "anchored-automation");
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: purposeConceptId(db, "dpv:ServiceProvision") as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [anchor!.scope],
+    const agent = enrollAgent(db, {
+      name: "anchored-automation",
+      modelRef: "test-automation",
     });
+    recordAutomationAnswers(db.vault, {
+      principalId: "anchored-automation",
+      ownerPartyId: boot.ownerPartyId,
+      subjects: automationSubjectsOf([anchor!.scope]),
+      decision: "granted",
+      now: new Date().toISOString(),
+    });
+    // The derived anchor scope is the RUN's clamp (#928): the owner's answer
+    // says the entity is reachable, the clamp says which row and which fields.
     const result = createGateway(db).read(
-      { kind: "app", appId: app.appId, signingKey: app.signingKey },
-      { entity: "schedule.task", purpose: "dpv:ServiceProvision" }
+      {
+        kind: "agent",
+        agentId: agent.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+        scopeClamp: [anchor!.scope],
+      },
+      { entity: "schedule.task" }
     );
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
@@ -191,24 +203,26 @@ describe("automation-anchor-scopes", () => {
         fieldMask: ["task_id", "title"],
       },
     ]);
-    const app = ensureAppEnrolled(db, "multi-anchor-automation");
-    const grant = (
-      scopes: Parameters<typeof createGrant>[1]["scopes"]
-    ): void => {
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: purposeConceptId(
-          db,
-          "dpv:ServiceProvision"
-        ) as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes,
-      });
-    };
-    grant(combined);
+    const agent = enrollAgent(db, {
+      name: "multi-anchor-automation",
+      modelRef: "test-automation",
+    });
+    recordAutomationAnswers(db.vault, {
+      principalId: "multi-anchor-automation",
+      ownerPartyId: boot.ownerPartyId,
+      subjects: automationSubjectsOf(combined),
+      decision: "granted",
+      now: new Date().toISOString(),
+    });
     const rows = createGateway(db).read(
-      { kind: "app", appId: app.appId, signingKey: app.signingKey },
-      { entity: "schedule.task", purpose: "dpv:ServiceProvision" }
+      {
+        kind: "agent",
+        agentId: agent.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+        scopeClamp: combined,
+      },
+      { entity: "schedule.task" }
     ).rows;
     expect(rows).toHaveLength(2);
     expect(rows).toStrictEqual(
@@ -219,55 +233,78 @@ describe("automation-anchor-scopes", () => {
     );
   });
 
-  test("every anchor read is receipted through the consent gateway", () => {
+  test("every anchor read goes through the gateway and writes no receipt", () => {
     const { db, vault } = anchoredTaskFixture();
     const before = (
-      db.journal.prepare("SELECT count(*) AS n FROM consent_receipt").get() as {
+      db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get() as {
         n: number;
       }
     ).n;
     resolveAutomationAnchors(vault, "@[core.link_anchor/anchor-1]");
-    const rows = db.journal
+    const rows = db.audit
       .prepare(
-        `SELECT object_type, action, purpose_concept_id AS purpose, decision FROM consent_receipt
+        `SELECT object_type, action, decision FROM access_receipt
         ORDER BY rowid DESC LIMIT ?`
       )
       .all(4) as {
       object_type: string;
       action: string;
-      purpose: string;
       decision: string;
     }[];
     const after = (
-      db.journal.prepare("SELECT count(*) AS n FROM consent_receipt").get() as {
+      db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get() as {
         n: number;
       }
     ).n;
-    // These three reads ride the consent gateway; straight at `db.vault` there
-    // is no credential, no purpose, and no audit trail (#541 review).
-    expect(after).toBeGreaterThan(before);
-    expect(rows.map((r) => r.object_type)).toStrictEqual(
-      expect.arrayContaining(["core.link_anchor", "core.link", "schedule.task"])
-    );
-    for (const receipt of rows) {
-      expect(receipt.action).toBe("read");
-      expect(receipt.decision).toBe("allow");
-      expect(receipt.purpose).toBe("dpv:ServiceProvision");
-    }
+    // OWNER-DIRECT READS LEAVE NO RECEIPT (#928, #922 B1) — there is no
+    // authority being exercised, so there is nothing to prove — but they still
+    // go THROUGH the gateway with the owner's credential, which is what the
+    // #541 review was about: straight at `db.vault` there is no credential, no
+    // decision and no provenance either.
+    expect(after).toBe(before);
+    expect(rows).toStrictEqual([]);
+    // The provenance half of the same claim: the reads happened, through the
+    // one door, and the rows they touched are the ones the anchor named.
+    expect(
+      db.audit.prepare("SELECT count(*) AS n FROM access_provenance").get()
+    ).toBeTruthy();
   });
 
   test("an anchor source type that only names an Object member fails closed", () => {
     const { db, vault } = anchoredTaskFixture();
-    db.vault
-      .prepare(
-        `UPDATE core_link SET from_type = 'constructor' WHERE link_id = 'link-1'`
-      )
-      .run();
-    // `SEARCHABLE['constructor']` inherits an `Object` member: a lookup that
-    // trusts inherited members passes the guard and then throws a bare
-    // `TypeError` when spread.
+
+    // First guard, and why the row below is forged in memory: `(from_type,
+    // from_id)` is a composite FK into the entity supertype (#916).
     expect(() =>
-      resolveAutomationAnchors(vault, "@[core.link_anchor/anchor-1]")
+      db.vault
+        .prepare(
+          `UPDATE core_link SET from_type = 'constructor' WHERE link_id = 'link-1'`
+        )
+        .run()
+    ).toThrow(/FOREIGN KEY/iu);
+
+    // Second guard: hand the resolver such a row anyway.
+    // `SEARCHABLE['constructor']` inherits an `Object` member, so a lookup
+    // trusting inherited members would pass and then throw a bare TypeError.
+    const forged: AnchorVaultReads = {
+      credential: vault.credential,
+      gateway: {
+        ...vault.gateway,
+        read: (credential, request) => {
+          const answer = vault.gateway.read(credential, request);
+          if (request.entity !== "core.link") return answer;
+          return {
+            ...answer,
+            rows: answer.rows.map((row) => ({
+              ...row,
+              from_type: "constructor",
+            })),
+          };
+        },
+      } as typeof vault.gateway,
+    };
+    expect(() =>
+      resolveAutomationAnchors(forged, "@[core.link_anchor/anchor-1]")
     ).toThrow(AutomationAnchorError);
   });
 

@@ -84,7 +84,7 @@ const defaultFileSize = (file: string): number => {
 
 /** The DB files only, never the blob CAS. */
 function vaultDbBytes(dir: string, fileSize: (file: string) => number): number {
-  const files = ["vault.db", "vault.db-wal", "journal.db", "journal.db-wal"];
+  const files = ["vault.db", "vault.db-wal"];
   return files.reduce((sum, name) => sum + fileSize(path.join(dir, name)), 0);
 }
 

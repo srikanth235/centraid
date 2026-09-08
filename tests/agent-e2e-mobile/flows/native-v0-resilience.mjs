@@ -6,6 +6,7 @@ import {
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -41,101 +42,48 @@ const QUEUED_REASON = ".*on a device, not in the vault yet.*";
  *  placeholders, which is what an empty RN `TextInput` publishes as its text. */
 const DESCRIPTION_PLACEHOLDER = "Dinner at the Ship";
 const AMOUNT_PLACEHOLDER = "0.00";
+/**
+ * THE ROUTE TO TALLY, used at all three places this flow opens it.
+ *
+ * Not the Home grid: the tile counts expenses `spent_on >= monthStart` and says
+ * "spent this month", while `seed.js` dates the demo expenses 4 and 6 days ago,
+ * so for the first week of any month Tally is a FIRST MOVE ("Log a shared
+ * expense") rather than "Open Tally, …" and a grid tap finds nothing. The
+ * all-apps sheet lists every app unconditionally, labelled `Open <name>,
+ * <count>` by `AllAppsSheet.tsx` whatever the tile status — including offline,
+ * where the count degrades but the label still matches (#905).
+ */
+const OPEN_TALLY = `- tapOn:
+    id: "home-band-more"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "home-all-apps"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Open Tally.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
+${retryableTapCommands("Open Tally.*")}`;
+
 /** `seed.js` — the one group the Tally demo scenario creates. */
 const DEMO_GROUP = "Tahoe Trip";
 
-// The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
-// "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
-// covers opened from Home's launcher tiles; Settings is a PLACE, reached from
-// the band's More tab through the all-apps sheet (see the `settings` entry
-// below for what that replaced). Each destination is asserted on copy unique to
-// the screen it opens, never on the tile label that remains visible on Home
-// (issue #483, enforced by scripts/lint-e2e-flows.mjs).
-// Covers dismiss with a native swipe-down gesture that Maestro cannot drive
-// reliably, so each surface is entered from a fresh launch of the app rather
-// than by navigating back — React Navigation state is not persisted, so every
-// launch lands on Home.
-//
-// EVERY MARKER BELOW IS TRACED TO THE STRING THE COVER ACTUALLY PUBLISHES, and
-// each one is the arrival marker its own app's journey already uses, so the two
-// cannot disagree about what "the cover opened" means. The v17 rebuilds moved
-// several of them: the pre-rebuild list keyed on `Search photos`,
-// `Add document or folder`, `Create event`, `New task title`, `Person name`,
-// `Search notes`, a Tally subtitle and a Locker subtitle — of which only the
-// Notes one still existed anywhere, and that one on the WEB seat's frame rather
-// than on this cover. A marker that matches nothing is a step that is red for a
-// reason unrelated to its claim, which is the other half of what issue #483 is
-// about.
-const SURFACES = [
-  // The Photos band's second destination (`photos-band.ts`), which every Photos
-  // surface draws and Home draws none of. `photos-library.mjs`'s own arrival
-  // marker. The pre-rebuild `Search photos.*` keyed on the search field's
-  // placeholder, now "Search photographs, people, places, albums" — and that
-  // field lives on the Search destination, not on the one a cover opens to.
-  { marker: "Collections", open: "Open Photos.*", name: "photos" },
-  // The All shelf's own foot sentence (`apps/docs/docs-copy.ts` allStatus), and
-  // `docs-drive.mjs`'s arrival marker. The digit is part of it: a drive read
-  // that never reached the replica has a shape, and this assertion can see it.
-  {
-    marker: "[0-9,]+ · press and hold a row for quick actions",
-    open: "Open Docs.*",
-    name: "docs",
-  },
-  // `AgendaHome.tsx`'s header action, and `agenda-week.mjs`'s arrival marker.
-  { marker: "Go to today", open: "Open Agenda.*", name: "agenda" },
-  // The capture field at the foot of `TasksHome.tsx`, which is drawn on every
-  // Tasks destination (`view-copy.ts` QUICK_ADD.touchPlaceholder is
-  // "What is it? Name it for Friday"). The tail is taken rather than the whole
-  // sentence: a `?` is neither a valid YAML double-quoted escape nor a literal
-  // in a regex, and the tail is unique on its own.
-  {
-    marker: ".*Name it for Friday",
-    open: "Open Tasks.*",
-    name: "tasks",
-  },
-  // The People band's second destination (`people-band.ts` TOUCH_TITLE). The
-  // roster itself has two honest shapes — a first run and a filled list — so a
-  // marker inside the body would assert one vault's contents, not an arrival.
-  { marker: "Touch", open: "Open People.*", name: "people" },
-  // `NotesHome.tsx`'s own control, and `notes-library.mjs`'s arrival marker.
-  { marker: "New note", open: "Open Notes.*", name: "notes" },
-  // Tally and Locker were rebuilt from the v17 handoff (#872), and both covers
-  // now carry the design's per-route ambient sentence in the app bar instead of
-  // a fixed subtitle. These two markers are those sentences, and they are the
-  // same ones `tally-derived.mjs` and `locker-gate.mjs` assert on arrival.
-  { marker: BALANCES_STATUS, open: "Open Tally.*", name: "tally" },
-  {
-    marker: "Nothing is browsable until there is a passphrase",
-    open: "Open Locker.*",
-    name: "locker",
-  },
-  // SETTINGS IS A PLACE NOW, AND THE PATH THIS FLOW USED IS GONE.
-  //
-  // Until #890 W2 this entry reached Settings through a vault drawer:
-  // `Open vault menu` → wait for `GO TO` → tap `.*Settings`. NONE of those three
-  // strings exists anywhere in `apps/mobile/src` any more — the v17 shell ships
-  // no drawer at all. `screens/home/AllAppsSheet.tsx` says so at the handle it
-  // replaced them with: "Settings is reached from HERE, not from a drawer".
-  // The failure was LOUD rather than silent — `retryableTapCommands` opens with
-  // a non-optional `tapOn`, and a `tapOn` whose selector matches nothing is an
-  // error, not a no-op — but it was still a step red for a reason unrelated to
-  // its claim, which is the other half of issue #483. DO NOT "RESTORE" THE
-  // DRAWER PATH: there is nothing to restore it to.
-  //
-  // The route now is the band's More tab → the all-apps sheet → the Settings
-  // place row, and all three carry handles (`home-band-more`, `home-all-apps`,
-  // `home-place-<place id>`), so none of the hops keys on copy. Settings is the
-  // LAST row of the sheet's places half, below all eight apps, so it is
-  // scrolled to at full visibility rather than tapped where it is only
-  // partially on screen — Maestro matches an element the sheet has clipped
-  // (README "A passing step is not a working step").
-  //
-  // "Desktop link" is three scroll pages down inside Settings; "APPEARANCE" is
-  // the first section heading it publishes and nothing else in the app renders
-  // it, so it proves arrival without a scroll.
-  {
-    marker: "APPEARANCE",
-    openCommands: `- tapOn:
+/**
+ * THE SETTINGS PLACE, used once per platform below.
+ *
+ * Settings is not a cover: it is a PLACE, reached from the band's More tab
+ * through the all-apps sheet (`screens/home/AllAppsSheet.tsx`: "Settings is
+ * reached from HERE, not from a drawer"). Every hop is taken by handle, and the
+ * row is the last of the sheet's places half, so it is scrolled to at FULL
+ * visibility — Maestro matches an element the sheet has clipped (README, "A
+ * passing step is not a working step"). "APPEARANCE" is the first section
+ * heading Settings publishes and nothing else in the app renders it, so it
+ * proves arrival without a scroll.
+ */
+const OPEN_SETTINGS = `- tapOn:
     id: "home-band-more"
     retryTapIfNoChange: true
 - extendedWaitUntil:
@@ -154,10 +102,9 @@ const SURFACES = [
 - extendedWaitUntil:
     visible:
       id: "settings-screen"
-    timeout: 20000`,
-    name: "settings",
-  },
-];
+    timeout: 20000
+- assertVisible: "APPEARANCE"
+- takeScreenshot: native-settings`;
 
 await runFlow("native-v0-resilience", async (ctx) => {
   // The airplane journey below opens ONE GROUP'S LEDGER before it disconnects,
@@ -169,32 +116,14 @@ await runFlow("native-v0-resilience", async (ctx) => {
   await ctx.ensureDemo("tally");
   await ctx.configureGateway();
 
-  const visitNext = async (index) => {
-    const surface = SURFACES[index];
-    if (surface === undefined) return;
-    const openCommands =
-      surface.openCommands ?? retryableTapCommands(surface.open);
-    await ctx.run(
-      `appId: ${ctx.state.appId}
----
-- stopApp
-- launchApp:
-    clearState: false
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openCommands}
-- extendedWaitUntil:
-    visible: "${surface.marker}"
-    timeout: 20000
-- takeScreenshot: native-${surface.name}
-`,
-      surface.name
-    );
-    ctx.note(`${surface.name}: opened from Home, "${surface.marker}" rendered`);
-    return visitNext(index + 1);
-  };
-  await visitNext(0);
+  // NO COVER TOUR HERE (#905). "Every cover opens" is not a device-only claim:
+  // `apps/mobile/src/screens/Home.test.tsx` generates a sweep from
+  // `app-conformance.json` that proves every tile opens its cover, and each
+  // cover has its own device journey on the per-merge canary. Per E-device-only
+  // and `flows/pr-gate-budget.md` remedy 3, the claim lives at those tiers and
+  // this flow keeps only what the device alone can show: the gate's one
+  // airplane-mode journey, Settings through the all-apps sheet, and a process
+  // restart.
 
   // Maestro's real airplane-mode control is Android-only. This is the device
   // journey for #738: the write goes through the mounted UI, the OS process is
@@ -227,17 +156,24 @@ ${openCommands}
   // is what the journey is actually about.
   if (ctx.state.platform === "android") {
     const airplaneExpense = `Airplane expense ${ctx.state.runId}`;
+    // The arc's own reconnect is the radio restore whenever it is reached; the
+    // `finally` below is the cleanup for every path that never got there.
+    let radioRestored = false;
     try {
       await ctx.run(
         `appId: ${ctx.state.appId}
 ---
+# Settings comes first, off the Home this chunk inherits: configureGateway
+# leaves the app on Home, so the place costs no launch of its own here. The
+# stopApp/launchApp below is what returns to Home for the Tally arc.
+${OPEN_SETTINGS}
 - stopApp
 - launchApp:
     clearState: false
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${OPEN_TALLY}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 20000
@@ -263,7 +199,19 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     visible: "${GROUP_HERO_SUB}"
     timeout: 20000
 - setAirplaneMode: enabled
-# The ledger section's own verb, on the group that is already on screen.
+# The ledger section's own verb (TallyGroupScreen.tsx, the Section act), and it
+# is UNDER THE FOLD: the group route draws the hero, Settle up / Simplify, then
+# the whole MEMBERS list before the ledger, so on a Pixel 6 the four demo
+# members push this act off screen. tapOn does not scroll, so it failed
+# outright against a screen that was drawing the control perfectly well —
+# the same shape as the springboard tiles above (#905). Scrolled at full
+# visibility for the same reason: Maestro matches an element the fold clipped.
+- scrollUntilVisible:
+    element:
+      text: "Add expense"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
 ${retryableTapCommands("Add expense", GROUP_HERO_SUB)}
 - extendedWaitUntil:
     visible: "${ADD_STATUS}"
@@ -281,10 +229,64 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - hideKeyboard
 # THE FOOT NAMES WHERE THE WRITE LANDS BEFORE THE COMMIT, not after it — and
 # offline that sentence is the whole promise this journey then goes and checks.
+#
+# Scrolled to first, because the composer is longer than a Pixel 6: What was
+# it, How much, Paid by, Group, Category and When all precede the foot, and the
+# digest of the run that found this ends at "Yesterday" with the foot and the
+# commit button below it. Third instance of the same shape in this flow (#905).
+- scrollUntilVisible:
+    element:
+      text: "Lands in ${DEMO_GROUP}.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
 - assertVisible: "Lands in ${DEMO_GROUP} . queued on this device until the gateway answers"
+# The commit sits BELOW the foot and is the ScrollView's last child
+# (TallyAddScreen.tsx), so scrolling the foot to full visibility leaves the
+# button itself still under the edge — which is how the tap below failed on run
+# 33553387446 with the assertion above it passing. One more scroll pins to the
+# bottom, where the two adjacent last elements are both on screen; it cannot
+# overshoot, there being nothing after the button to scroll to.
+- scroll
+# BY HANDLE, NOT BY COPY. "Add expense" is the commit's label AND the screen's
+# own title, so a text tap needs a positional anchor to say which it meant —
+# and on run 33559959847 that tap reported COMPLETED while the app stayed on the
+# composer with no refusal drawn, which is what an ambiguous match looks like.
+# tally-add-commit names the control itself (#905).
 - tapOn:
-    text: "Add expense"
-    below: "Lands in ${DEMO_GROUP}.*"
+    id: "tally-add-commit"
+    retryTapIfNoChange: true
+# ARRIVAL, NOT THE NEXT TAP — AND LONGER THAN THE GATEWAY'S OWN DEADLINE.
+#
+# The composer sets hideBand (TallyAddScreen), so the band cannot exist until
+# commit has resolved and called goBack(); asserting the group screen instead of
+# tapping the band is what turned "the Waiting tab is missing" into the true
+# statement, which is that the composer never left.
+#
+# It never left because this wait was in a dead heat with the product's own
+# timeout. Offline the write goes to the local tunnel, which keeps ACCEPTING
+# after its peer is gone (docs/traps/unreachable-vault.md), so it cannot settle
+# until GATEWAY_REPLY_DEADLINE_MS elapses — and that constant is 20_000, exactly
+# what this wait used to be. Run 33567489343 tapped the commit at 22:56:18 and
+# failed here at 22:56:38, to the second. The write was queueing as the flow
+# gave up on it.
+#
+# THE BAND IS THE MARKER, because hideBand is the whole difference. The group
+# hero's sentence was the first choice and it is only true ONLINE: the hero
+# states a DERIVED balance, and offline that figure cannot be read, so the
+# route draws its title, MEMBERS and LEDGER without it. Run 33573882728 proves
+# the point from the other side — the digest at that failure is the group
+# ledger, seeded expenses and all, so the commit HAD landed and the flow was
+# asserting a sentence the offline screen never owed it.
+#
+# The band cannot be on the composer (hideBand) and is always on the group
+# route, online or off, so it says exactly one thing: the composer left. 60s
+# because the write settles behind a gateway deadline; extendedWaitUntil
+# returns on arrival, so the ceiling costs nothing when it settles sooner.
+- extendedWaitUntil:
+    visible:
+      id: "tally-band"
+    timeout: 60000
 # Waiting is the band's fourth place and the one surface that reads the durable
 # outbox rather than the gateway. Its key is contrib — the label "Waiting" is
 # copy shelves.ts owns, the key is the contract.
@@ -303,7 +305,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${OPEN_TALLY}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
@@ -328,28 +330,25 @@ ${retryableTapCommands("Open Tally.*")}
       );
 
       // ─── The radio comes back (#890 W4) ───────────────────────────────────
-      // Restoring the network is its own chunk so the app is FOREGROUNDED and
-      // on Waiting when the radio returns — the state a member is in when a
-      // train leaves a tunnel. `native-session.ts` flushes the outbox on
-      // AppState changes and on every session open, so the relaunch below is
-      // what makes the drain deterministic rather than a race against backoff.
+      // Restoring the network is this chunk's FIRST command, ahead of the
+      // stopApp, so the app is still foregrounded and on Waiting when the radio
+      // returns — the state a member is in when a train leaves a tunnel. It was
+      // a chunk of its own until #905 measured 11s of bare JVM start for one
+      // directive (`flows/pr-gate-budget.md` remedy 1). `native-session.ts`
+      // flushes the outbox on AppState changes and on every session open, so
+      // the relaunch below is what makes the drain deterministic rather than a
+      // race against retry backoff.
       await ctx.run(
         `appId: ${ctx.state.appId}
 ---
 - setAirplaneMode: disabled
-`,
-        "airplane-reconnect"
-      );
-      await ctx.run(
-        `appId: ${ctx.state.appId}
----
 - stopApp
 - launchApp:
     clearState: false
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${OPEN_TALLY}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
@@ -375,19 +374,35 @@ ${retryableTapCommands("Open Tally.*")}
 `,
         "airplane-settled-after-reconnect"
       );
+      radioRestored = true;
       ctx.note(
         "Android: with the radio restored the queued expense left the outbox on its own — Waiting drew its empty in-flight section and no queued reason"
       );
     } finally {
-      await ctx.run(
-        `appId: ${ctx.state.appId}
+      // A FAILURE ANYWHERE EARLIER LEAVES THE EMULATOR ONLINE — that is the
+      // invariant, and it is the only thing this chunk is for. Skipped once the
+      // settled chunk has already restored the radio, because a second
+      // `maestro test` for a directive that is a no-op costs 10s of JVM start
+      // on every green run (#905, `flows/pr-gate-budget.md` remedy 1).
+      if (!radioRestored)
+        await ctx.run(
+          `appId: ${ctx.state.appId}
 ---
 - setAirplaneMode: disabled
 `,
-        "restore-network"
-      );
+          "restore-network"
+        );
     }
   } else {
+    // No airplane chunk on this side, so the Settings hop is its own chunk here
+    // — the claim holds on both platforms.
+    await ctx.run(
+      `appId: ${ctx.state.appId}
+---
+${OPEN_SETTINGS}
+`,
+      "settings-place"
+    );
     ctx.note(
       "iOS Simulator has no Maestro airplane control, so the offline write → process death → reconnect → settled round trip is an honest iOS gap; the store/read half of the same contract is covered on every platform by apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx"
     );
@@ -405,18 +420,24 @@ ${retryableTapCommands("Open Tally.*")}
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the offline write → process restart → reconnect → settled round trip."
+    "Settings opened from the all-apps sheet and the shell survived a process restart; Android also completed the offline write → process restart → reconnect → settled round trip."
   );
 
   // UI-impact evidence for #799: with the WebView app cover retired, Home's
   // launcher is the all-native surface — publish the post-restart Home frame
   // where the desktop journeys publish theirs.
   const uiImpactDir = "artifacts/e2e/ui-impact";
+  // `takeScreenshot: <name>` LANDS AS `<name>.png`, WITH NO STEP PREFIX.
+  // harness.mjs runs every chunk with `cwd = state.screenshotsDir`, and the
+  // `NN-` prefix it mints belongs to the chunk's flow YAML and debug dir, not
+  // to the frame; `--debug-output` only relocates Maestro's OWN per-step
+  // captures. So a `-after-force-kill.png` suffix could never match, and run
+  // 33582899886 failed here with every assertion of the arc already green.
+  // The directory is still read rather than the file joined blind, so an
+  // absent frame says so instead of surfacing as a copy's ENOENT.
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const home = frames.find((frame) =>
-      frame.endsWith("-after-force-kill.png")
-    );
+    const home = frames.find((frame) => frame === "after-force-kill.png");
     if (home === undefined)
       throw new Error("after-force-kill Home frame was not captured");
     await mkdir(uiImpactDir, { recursive: true });
@@ -428,7 +449,6 @@ ${retryableTapCommands("Open Tally.*")}
   await screenshot();
   return {
     pass: true,
-    notes:
-      "all eight native blueprint covers, Settings via the all-apps sheet, and process-restart smoke passed",
+    notes: "Settings via the all-apps sheet and process-restart smoke passed",
   };
 });

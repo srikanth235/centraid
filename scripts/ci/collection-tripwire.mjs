@@ -6,7 +6,7 @@
  * `test()`. Vitest reports it as one failed file carrying a message and an
  * EMPTY `assertionResults` array — a shape that no other gate in this repo
  * reads. That matters because every counting gate here counts what ran:
- * `tests/matrix.json` minimum-test floors, the skip budget, the quarantine
+ * `tests/claims.json` minimum-test floors, the skip budget, the quarantine
  * ledger, and the coverage floors all see a smaller universe rather than a
  * violated one. The suite becomes silently absent instead of red.
  *

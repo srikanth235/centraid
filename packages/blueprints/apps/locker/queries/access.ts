@@ -1,12 +1,17 @@
 /**
- * Access history (README-Locker §1). ONLINE-ONLY: `consent.receipt` lives in
- * journal.db, not the replica, so `ctx.vault.authenticate` marks the run
+ * Access history (README-Locker §1). ONLINE-ONLY: `access.receipt` lives in
+ * the vault's audit band, not the replica, so `ctx.vault.authenticate` marks the run
  * ONLINE_ONLY and the gateway serves it. Never catch that — a flattened
  * ONLINE_ONLY draws an empty history as none.
  *
- * THE ROW FILTER IS THE BOUNDARY: `provenanceScopeFailure` guards
- * `consent.provenance` only, so app.json's rowFilter on `object_type` is all
- * that holds this grant to Locker's own receipts.
+ * TWO WALLS, AND THE QUERY IS THE INNER ONE (#928). Locker holds no grant to
+ * be held to: it runs on the owner's own device credential, and the reach of
+ * that call is its own `app.json` manifest, carried per call as the gateway's
+ * execution clamp — so the declared rowFilter on `object_type` still refuses
+ * a receipt that is not Locker's. The `where` below names the same two types
+ * in SQL, so the page is filtered before the window is applied rather than
+ * after: without it a busy vault's newest 200 receipts could be entirely
+ * someone else's and the clamp would hand this screen an empty history.
  */
 
 const LOCKER_ITEM_TYPE = "locker.item";
@@ -52,7 +57,6 @@ export default async function accessHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(
     Math.max(Number(input?.limit) || DEFAULT_WINDOW, 20),
     MAX_WINDOW
@@ -71,7 +75,7 @@ export default async function accessHandler({
     }
     const itemId = String(input?.item_id ?? "");
     const result = await ctx.vault.read({
-      entity: "consent.receipt",
+      entity: "access.receipt",
       where: [
         {
           column: "object_type",
@@ -84,7 +88,6 @@ export default async function accessHandler({
       ],
       orderBy: { column: "occurred_at", dir: "desc" },
       limit: window,
-      purpose,
     });
     const rows = (result.rows ?? []) as unknown as ReceiptRow[];
     const entries = rows

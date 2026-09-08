@@ -5,14 +5,12 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { resolveEntity } from "../schema/tables.js";
-import { evaluateConsent } from "./consent.js";
-import { writeReceipt } from "./evidence.js";
+import { evaluateAccess } from "./access.js";
+import { skipsAllowReceipt, writeReceipt } from "./evidence.js";
 import type { Identity } from "./types.js";
 
 export interface RefRequest {
   refs: { type: string; id: string }[];
-  /** Declared DPV purpose, e.g. `dpv:ServiceProvision`. */
-  purpose: string;
 }
 
 export interface RefCard {
@@ -28,7 +26,8 @@ export interface RefCard {
 
 export interface ResolveResult {
   cards: RefCard[];
-  receiptId: string;
+  /** Absent on an owner-direct resolve — see `ReadResult.receiptId`. */
+  receiptId?: string;
 }
 
 /** Refs render in lists, not bulk exports. */
@@ -106,8 +105,7 @@ function linkedAndVisible(
   vault: DatabaseSync,
   identity: Identity,
   type: string,
-  id: string,
-  purpose: string
+  id: string
 ): boolean {
   const others = vault
     .prepare(
@@ -121,22 +119,21 @@ function linkedAndVisible(
   for (const other of others) {
     const ref = resolveEntity(other.t, vault);
     if (!ref) continue;
-    const consent = evaluateConsent(
+    const access = evaluateAccess(
       vault,
       identity,
       ref.schema,
       ref.table,
-      "read",
-      purpose
+      "read"
     );
-    if (consent.decision === "allow") return true;
+    if (access.decision === "allow") return true;
   }
   return false;
 }
 
 function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   const ref = resolveEntity(type, vault);
-  if (!ref || ref.file !== "vault") {
+  if (!ref) {
     return {
       type,
       id,
@@ -212,7 +209,7 @@ export function resolveRefCards(
       continue;
     }
     const ref = resolveEntity(type, vault);
-    if (!ref || ref.file !== "vault") {
+    if (!ref) {
       cards.push({
         type,
         id,
@@ -223,17 +220,16 @@ export function resolveRefCards(
       });
       continue;
     }
-    const direct = evaluateConsent(
+    const direct = evaluateAccess(
       vault,
       identity,
       ref.schema,
       ref.table,
-      "read",
-      request.purpose
+      "read"
     );
     const allowed =
       direct.decision === "allow" ||
-      linkedAndVisible(vault, identity, type, id, request.purpose);
+      linkedAndVisible(vault, identity, type, id);
     if (!allowed) {
       cards.push({
         type,
@@ -247,18 +243,19 @@ export function resolveRefCards(
     }
     cards.push(cardFor(vault, type, id));
   }
-  const receiptId = writeReceipt(journal, {
-    grantId: null,
-    invocationId: null,
-    action: "read resolve_refs",
-    objectType: "core.link",
-    objectId: null,
-    purpose: request.purpose,
-    decision: "allow",
-    detail: {
-      refs: refs.map((r) => `${r.type}/${r.id}`),
-      denied: cards.filter((c) => c.status === "denied").length,
-    },
-  });
-  return { cards, receiptId };
+  const receiptId = skipsAllowReceipt(identity)
+    ? undefined
+    : writeReceipt(journal, {
+        authorityId: null,
+        invocationId: null,
+        action: "read resolve_refs",
+        objectType: "core.link",
+        objectId: null,
+        decision: "allow",
+        detail: {
+          refs: refs.map((r) => `${r.type}/${r.id}`),
+          denied: cards.filter((c) => c.status === "denied").length,
+        },
+      });
+  return { cards, ...(receiptId === undefined ? {} : { receiptId }) };
 }

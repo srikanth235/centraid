@@ -44,7 +44,7 @@ interface VaultOutcome {
   message?: string;
   invocationId?: string;
   receiptId?: string;
-  /** Machine code on a denial/error path (e.g. `VAULT_CONSENT`). */
+  /** Machine code on a denial/error path (e.g. `VAULT_ACCESS`). */
   code?: string;
 }
 
@@ -64,13 +64,23 @@ interface VaultReadRequest {
   where?: VaultWhere[];
   orderBy?: { column: string; dir?: "asc" | "desc" };
   limit?: number;
-  purpose: string;
+  /**
+   * "Give me the default window and tell me when it fills" (#922 0a). A read
+   * declaring neither `limit` nor this is REFUSED at the inline seat's
+   * boundary: the default cap is a bound a caller may take, never one the
+   * engine applies behind their back.
+   */
+  acceptTruncation?: boolean;
 }
 
 /** `ctx.vault.read` result: the projected rows plus the read's receipt id. */
 interface VaultReadResult {
   rows: Record<string, unknown>[];
   receiptId?: string;
+  /** Set only when the window cut rows off (#922 0a); absent means it did not. */
+  truncated?: boolean;
+  /** The window `rows` was produced under. */
+  appliedLimit?: number;
 }
 
 /** Full-text search over a text-indexed entity (each row carries `_snippet`). */
@@ -79,7 +89,6 @@ interface VaultSearchRequest {
   query: string;
   where?: VaultWhere[];
   limit?: number;
-  purpose: string;
 }
 
 interface VaultSearchResult {
@@ -87,17 +96,23 @@ interface VaultSearchResult {
   receiptId?: string;
 }
 
-/** Typed-command invocation: `{command, input, purpose}` → `VaultOutcome`. */
+/** Typed-command invocation: `{command, input}` → `VaultOutcome`. */
 interface VaultInvokeRequest {
   command: string;
   input?: Record<string, unknown>;
-  purpose: string;
+  /**
+   * This invocation DECORATES the answer; the answer stands without it. A seat
+   * with no gateway behind it (a replica seat running the handler locally)
+   * settles it as `{status: "failed"}` instead of refusing the whole run, so
+   * the caller's existing `status !== "executed"` branch is the offline
+   * branch too. The gateway ignores the field and executes as always.
+   */
+  optional?: boolean;
 }
 
 /** The card resolver (#272): (type, id) refs → renderable cards. */
 interface VaultResolveRequest {
   refs: Array<{ type: string; id: string }>;
-  purpose: string;
 }
 
 interface VaultResolveResult {
@@ -114,8 +129,8 @@ interface VaultApi {
   read: (request: VaultReadRequest) => Promise<VaultReadResult>;
   search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
   invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;
-  /** Query a registered app view, clamped to this app's grants. */
-  query: (view: string, purpose: string) => Promise<unknown>;
+  /** Query a registered app view, clamped to this app's declared manifest. */
+  query: (view: string) => Promise<unknown>;
   /** Commands discoverable by this app (name, schema, risk, confirmation). */
   describe: () => Promise<unknown>;
   /** This app's own invocations awaiting owner confirmation. */
@@ -574,6 +589,8 @@ interface CentraidClient {
     }) => Promise<unknown>;
     revoke: (grantId: string) => Promise<unknown>;
   };
+  /** Mint a one-time peer link ticket for this shell's own vault (#929 S6). */
+  linkTicket?: () => Promise<unknown>;
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;

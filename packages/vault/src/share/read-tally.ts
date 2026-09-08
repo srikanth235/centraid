@@ -55,6 +55,17 @@ export function readTallyGroup(
   );
   const settlements = rows(origin, "tally_settlement", "group_id", itemId);
   const recurring = rows(origin, "tally_recurring_expense", "group_id", itemId);
+  // The recurring split is ROWS (#916, D3): the template's shares travel as
+  // their own rows, so the audience's identity mapping can reach the party ids
+  // in them at all.
+  const recurringSplits = recurring.flatMap(
+    (template) =>
+      origin
+        .prepare(
+          `SELECT * FROM tally_recurring_expense_split WHERE template_id = ?`
+        )
+        .all(String(template.template_id)) as WireRow[]
+  );
   const exceptions = recurring.flatMap(
     (template) =>
       origin
@@ -109,6 +120,7 @@ export function readTallyGroup(
         String(row.to_party),
       ]),
       ...recurring.map((row) => String(row.paid_by)),
+      ...recurringSplits.map((row) => String(row.party_id)),
       ...lineAllocations.map((row) => String(row.party_id)),
     ]),
     expenses,
@@ -116,6 +128,7 @@ export function readTallyGroup(
     payers,
     settlements,
     recurring,
+    recurringSplits,
     exceptions,
     receipts,
     lineItems,

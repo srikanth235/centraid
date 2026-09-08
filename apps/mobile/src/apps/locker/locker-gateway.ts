@@ -1,12 +1,13 @@
-// THE ONLY DOOR THIS SEAT HAS INTO LOCKER, and it is the gateway's — never
-// the replica's.
+// THE SECRET HALF'S ONLY DOOR, and it is the gateway's — never the replica's.
 //
-// Every read here is an RPC to the app's own query handlers. Nothing touches
-// `MobileReplicaSession.read` and nothing is cached in SQLite: a passphrase, a
-// memory-session token, a one-shot permit and a revealed field are the four
-// things this seat must never hand a durable store (docs/mobile-offline.md,
-// "Locker is stricter than the ordinary replica plane"). The metadata writes —
-// star, tags, trash, restore — DO go through the replica's pending path, in
+// A passphrase, a memory-session token, a one-shot permit and a revealed field
+// are the four things this seat must never hand a durable store
+// (docs/mobile-offline.md, "Locker is stricter than the ordinary replica
+// plane"), so every call here is a direct online request with no queue behind
+// it. The browsable half does NOT come through this file: the list, the
+// shelves and the search are the app grant's to read and run against this
+// device's own replica in `locker-reads.ts` (#928). The metadata writes —
+// star, tags, trash, restore — go through the replica's pending path, in
 // `locker-writes.ts`.
 //
 // The staged-import plane belongs in this file for the same promise: an import
@@ -20,10 +21,8 @@ import type {
 } from "@centraid/blueprints/apps/locker/import-model";
 import type {
   AuthPayload,
-  ItemsPayload,
   LockerAccessEntry,
   LockerDetail,
-  LockerRow,
 } from "@centraid/blueprints/apps/locker/types";
 
 import {
@@ -32,26 +31,7 @@ import {
   fetchJson,
   requireGatewayBase,
 } from "../../lib/gateway";
-
-/** The query's own default window; 2,000 is its ceiling. */
-export const ITEMS_WINDOW = 300;
-export const ITEMS_WINDOW_MAX = 2000;
-
-/** One page more, capped at the query's own ceiling. */
-export function nextWindow(current: number): number {
-  return Math.min(ITEMS_WINDOW_MAX, current + ITEMS_WINDOW);
-}
-
-/** A vault refusal, as every query reports it. */
-export interface VaultDenial {
-  code?: string;
-  message?: string;
-}
-
-export interface RowsPayload {
-  items?: LockerRow[];
-  vaultDenied?: VaultDenial | null;
-}
+import type { VaultDenial } from "./locker-reads";
 
 export interface ItemPayload {
   item?: LockerDetail | null;
@@ -85,17 +65,6 @@ export function lockerAuth(request: AuthRequest): Promise<AuthPayload> {
   } as Record<string, unknown>);
 }
 
-/** The bounded window of secret-free rows. */
-export function lockerItems(
-  sessionToken: string,
-  limit: number = ITEMS_WINDOW
-): Promise<ItemsPayload> {
-  return appQuery<ItemsPayload>("locker", "items", {
-    auth_session: sessionToken,
-    limit,
-  });
-}
-
 /** The ONE secret-bearing read, and it takes a one-shot item token. */
 export function lockerItem(
   sessionToken: string,
@@ -107,17 +76,6 @@ export function lockerItem(
     item_id: itemId,
     item_token: itemToken,
   });
-}
-
-/** Titles, usernames and addresses. Matching happens server-side over fields
- *  the payload never returns; notes and secret values are not among them. */
-export function lockerSearch(term: string): Promise<RowsPayload> {
-  return appQuery<RowsPayload>("locker", "search", { term });
-}
-
-/** Trashed rows with their purge dates — the same secret-free shape. */
-export function lockerTrash(): Promise<RowsPayload> {
-  return appQuery<RowsPayload>("locker", "trash", {});
 }
 
 /** The query's own default receipts window, and the number `accessWindowCopy`

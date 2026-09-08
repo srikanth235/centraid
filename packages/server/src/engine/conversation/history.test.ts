@@ -11,8 +11,9 @@ import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
 import type { DatabaseProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.js";
 import { ConversationHistoryStore, deriveTitle } from "./history.js";
 import type { RecordTurnInput } from "./history.js";
@@ -22,7 +23,7 @@ import { ConversationStore } from "./store.js";
 const TEST_USER_ID = "test-user-uuid-0000";
 
 // Chat is app-scoped by the `app_id` column inside ONE per-vault
-// `journal.db` (#280). Tests build a workspace over a temp vault dir.
+// `vault.db` (#280). Tests build a workspace over a temp vault dir.
 const APP = "todos";
 
 function plainRows<T extends object>(rows: T[]): T[] {
@@ -45,7 +46,7 @@ const providersByDir = new Map<string, DatabaseProvider>();
 function journalFor(dir: string): DatabaseProvider {
   let provider = providersByDir.get(dir);
   if (!provider) {
-    provider = makeJournalDbProvider(path.join(dir, "journal.db"));
+    provider = makeLedgerDbProvider(ledgerDbFileIn(dir));
     providersByDir.set(dir, provider);
   }
   return provider;
@@ -61,7 +62,7 @@ function workspaceFor(
     ownerPartyId,
     appsDir: path.join(dir, "apps"),
     journal: journalFor(dir),
-    journalDbFile: path.join(dir, "journal.db"),
+    ledgerDbFile: ledgerDbFileIn(dir),
     harnessSessionDir: path.join(dir, "harness-sessions"),
   });
 }
@@ -995,7 +996,7 @@ describe(ConversationHistoryStore, () => {
  * Two axes, ONE law: a conversation is visible only to the (app, user) pair
  * that created it — `listSessions` never leaks a neighbour's row and
  * `getSession` never resolves a foreign id. The app axis partitions one store
- * across app ids; the user axis partitions one vault's `journal.db` across
+ * across app ids; the user axis partitions one vault's `vault.db` across
  * owner identities. The body is identical, so it runs from a table instead of
  * two hand-copied blocks that could drift apart.
  */
@@ -1011,7 +1012,7 @@ interface ScopeSide {
 interface ScopeAxis {
   /** Axis name (used in the test title). */
   name: string;
-  /** Both sides address the SAME journal.db — isolation is a query law, not a file boundary. */
+  /** Both sides address the SAME vault.db — isolation is a query law, not a file boundary. */
   make: () => { a: ScopeSide; b: ScopeSide };
   /** Axis-specific stamp every row handed to a side must carry, when the axis has one. */
   expectStamp?: (side: "a" | "b", rows: ListedSession[]) => void;
@@ -1077,7 +1078,7 @@ describe("ConversationHistoryStore scoping", () => {
 });
 
 describe("ConversationHistoryStore per-user scoping", () => {
-  // Two stores on the same vault's journal.db, different owner identities.
+  // Two stores on the same vault's vault.db, different owner identities.
   function pair(): {
     alice: ConversationHistoryStore;
     bob: ConversationHistoryStore;

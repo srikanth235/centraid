@@ -98,7 +98,7 @@ describe("declaredOpenIssues", () => {
 
 describe("validateOpenCitations", () => {
   const sources = {
-    "tests/matrix.json": {
+    "tests/claims.json": {
       gaps: { "extension.offline": { trackingIssue: 42 } },
     },
   };
@@ -124,7 +124,7 @@ describe("validateOpenCitations", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("#42");
     expect(errors[0]).toContain(
-      "tests/matrix.json.gaps.extension.offline.trackingIssue"
+      "tests/claims.json.gaps.extension.offline.trackingIssue"
     );
     expect(errors[0]).toContain("re-home it to the successor umbrella");
   });
@@ -202,9 +202,9 @@ describe("reportCitationErrors", () => {
   test("lists every stale citation, sorted, one error each", () => {
     const errors = reportCitationErrors({
       citations: new Map([
-        [790, ["tests/skips.json.sites.b.issue"]],
-        [781, ["tests/matrix.json.notes.web.compat"]],
-        [864, ["tests/matrix.json.gaps.x.trackingIssue"]],
+        [790, ["tests/inventory.json.skips.sites.b.issue"]],
+        [781, ["tests/claims.json.notes.web.compat"]],
+        [864, ["tests/claims.json.gaps.x.trackingIssue"]],
       ]),
       declaredOpen: [],
       states: new Map([

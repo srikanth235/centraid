@@ -44,7 +44,7 @@ export interface AutomationThreadLoadResult {
 }
 
 // One enrolled agent identity per fire, keyed by the owning APP FOLDER
-// (`row.ownerApp` → `consent_agent.enrollment_key`), never the row id. Also
+// (`row.ownerApp` → `access_agent.enrollment_key`), never the row id. Also
 // require `actorKind`/`callerKind === 'agent'`, or a same-named app leaks in.
 export function filterConsentForAutomation(
   agentId: string | undefined,

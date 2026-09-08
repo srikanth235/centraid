@@ -35,7 +35,7 @@ describe("hardware-profile", () => {
       sqliteSynchronous: "FULL",
       workerMaxConcurrent: 2,
       workerMaxOldGenerationMb: 128,
-      workerPoolSize: 0,
+      workerPoolSize: 1,
       replicationConcurrency: 1,
       vaultMountStrategy: "eager",
       vaultSweepIntervalMs: 7_200_000,
@@ -105,7 +105,7 @@ describe("hardware-profile", () => {
       resourceMode: "conserve",
       sqliteSynchronous: "NORMAL",
       workerMaxConcurrent: 2,
-      workerPoolSize: 0,
+      workerPoolSize: 1,
       replicationConcurrency: 1,
     });
     expect(formatHardwareProfileDetail(profile)).toContain("mode=Conserve");
@@ -156,7 +156,9 @@ describe("hardware-profile", () => {
     expect(performance.workerMaxConcurrent).toBeGreaterThan(
       balanced.workerMaxConcurrent
     );
-    expect(performance.workerPoolSize).toBeGreaterThan(balanced.workerPoolSize);
+    // NOT graded by mode (#922 B3): the warm-pool size has one source, and it
+    // knows only "constrained" from "not". Both of these are standard.
+    expect(performance.workerPoolSize).toBe(balanced.workerPoolSize);
     expect(performance.replicationConcurrency).toBeGreaterThan(
       balanced.replicationConcurrency
     );
@@ -203,7 +205,7 @@ describe("hardware-profile", () => {
       resolved: {
         workerMaxConcurrent: 2,
         workerMaxOldGenerationMb: 128,
-        workerPoolSize: 0,
+        workerPoolSize: 1,
         replicationConcurrency: 1,
         sqliteSynchronous: "NORMAL",
         vaultSweepIntervalMs: 7_200_000,
@@ -242,7 +244,7 @@ describe("hardware-profile", () => {
       resolved: {
         workerMaxConcurrent: 12,
         workerMaxOldGenerationMb: 384,
-        workerPoolSize: 4,
+        workerPoolSize: 2,
         replicationConcurrency: 4,
         sqliteSynchronous: "FULL",
         vaultSweepIntervalMs: 3_600_000,

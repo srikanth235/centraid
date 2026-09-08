@@ -15,7 +15,13 @@ export function columnNames(db: DatabaseSync, table: string): string[] {
   ).map((column) => column.name);
 }
 
-/** Domain tables that carry `updated_at` plus a touch trigger (#883 O-updated). */
+/**
+ * The tables ruling O-updated named (#883) — the ones a member could edit and
+ * watch the stamp stand still. NOT the whole set any more: #916's ruling
+ * ONT-08 declares a lifecycle per entity and widened `updated_at` to every
+ * mutable ontology table, and `schema/lifecycle.test.ts` is the closure over
+ * that. This list stays as the rung-seven landing it asserts.
+ */
 export const EDITABLE_DOMAIN_TABLES = [
   "core_document",
   "core_event",

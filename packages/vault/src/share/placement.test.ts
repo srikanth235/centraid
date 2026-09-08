@@ -16,13 +16,10 @@ import {
   casPath,
   closeOpenVaults,
   household,
+  placementAuthority,
   seedPhoto,
 } from "./placement-fixture.js";
-import {
-  moveOutOfVault,
-  readShareOrigin,
-  shareItemsToVault,
-} from "./placement.js";
+import { moveItemsOutOfVault, shareItemsToVault } from "./placement.js";
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);
@@ -46,6 +43,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
       now: () => 1_700_000_000_000,
     });
 
@@ -53,7 +51,7 @@ describe("placement suite", () => {
     // touches the owner's vault.
     const projected = audience.vault
       .prepare(
-        `SELECT a.asset_id, a.kind, a.favorite, a.width, a.place_id, a.camera_device_id,
+        `SELECT a.asset_id, a.kind, a.width, a.place_id, a.camera_device_id,
               c.title, c.sha256, c.creator_party_id, c.origin_device_id
          FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
         WHERE a.asset_id = ?`
@@ -62,7 +60,15 @@ describe("placement suite", () => {
     expect(projected.kind).toBe("photo");
     expect(projected.title).toBe("Photo a");
     expect(projected.sha256).toBe(photo.sha256);
-    expect(projected.favorite).toBe(1);
+    // THE STAR DOES NOT TRAVEL (#916): it is one `starred` flags tag, and a
+    // tag is the ORIGIN member's judgment about their own copy.
+    expect(
+      audience.vault
+        .prepare(
+          "SELECT count(*) AS n FROM core_tag WHERE target_type = 'media.asset' AND target_id = ?"
+        )
+        .get(result.items[0]!.itemId)
+    ).toMatchObject({ n: 0 });
     expect(projected.width).toBe(800);
     // Cross-vault FK columns are projected NULL — the origin's party/device
     // graph never crosses the boundary.
@@ -85,17 +91,15 @@ describe("placement suite", () => {
       photo.thumbBytes
     );
 
-    // Provenance: where it came from, and who placed it.
+    // A PLACEMENT CLAIMS NOTHING (#929): it is a move between the owner's own
+    // vaults, so no shape claims the row and the seat records no lineage.
     expect(
-      readShareOrigin(audience.vault, "media.asset", result.items[0]!.itemId)
-    ).toStrictEqual({
-      itemType: "media.asset",
-      itemId: result.items[0]!.itemId,
-      originVaultId: "vault-priya",
-      originItemId: photo.assetId,
-      sharedBy: "member-priya",
-      sharedAt: 1_700_000_000_000,
-    });
+      plainSqliteRow(
+        audience.vault
+          .prepare("SELECT COUNT(*) AS n FROM share_subscription_lineage")
+          .get()
+      )
+    ).toStrictEqual({ n: 0 });
 
     // The origin is byte-for-byte where it was — sharing only READS there.
     expect(
@@ -108,7 +112,7 @@ describe("placement suite", () => {
     expect(
       plainSqliteRow(
         origin.vault
-          .prepare("SELECT COUNT(*) AS n FROM core_share_origin")
+          .prepare("SELECT COUNT(*) AS n FROM share_subscription_lineage")
           .get()
       )
     ).toStrictEqual({
@@ -128,6 +132,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(result.items[0]!.itemId).toBe(photo.assetId);
@@ -157,6 +162,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
@@ -185,6 +191,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["copied", "copied"]);
@@ -230,6 +237,7 @@ describe("placement suite", () => {
         itemType: "media.asset",
         itemIds: [photo.assetId],
         sharedBy: member,
+        authority: placementAuthority(origin, "media.asset", [photo.assetId]),
         now: () => at,
       });
 
@@ -267,14 +275,6 @@ describe("placement suite", () => {
     ).toStrictEqual({
       n: 1,
     });
-    // The FIRST placement is the record — a later sharer does not rewrite it.
-    const provenance = readShareOrigin(
-      audience.vault,
-      "media.asset",
-      first.items[0]!.itemId
-    )!;
-    expect(provenance.sharedBy).toBe("member-priya");
-    expect(provenance.sharedAt).toBe(1_000);
     // Re-sharing never re-places bytes it already has.
     expect(bySid.blobs.map((b) => b.mode)).toStrictEqual([
       "present",
@@ -303,6 +303,7 @@ describe("placement suite", () => {
       itemType: "core.document",
       itemIds: [documentId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "core.document", [documentId]),
     });
     expect(
       plainSqliteRow(
@@ -322,10 +323,10 @@ describe("placement suite", () => {
       sha256: content.sha256,
     });
 
-    const moved = moveOutOfVault({
+    const moved = moveItemsOutOfVault({
       source: origin,
       itemType: "core.document",
-      itemId: documentId,
+      itemIds: [documentId],
     });
     expect(moved.removed).toBe(true);
     expect(

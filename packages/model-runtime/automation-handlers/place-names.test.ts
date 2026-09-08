@@ -60,7 +60,6 @@ describe("place-names handler", () => {
             source: SOURCE,
             snapshot: SNAPSHOT,
           },
-          purpose: "dpv:ServiceProvision",
         },
       ]);
       expect(result.output).toStrictEqual({
@@ -108,7 +107,6 @@ describe("place-names handler", () => {
         {
           command: "media.set_place_gazetteer",
           input: { place_id: "p1", source: SOURCE, snapshot: SNAPSHOT },
-          purpose: "dpv:ServiceProvision",
         },
       ]);
       expect(result.output).toMatchObject({ named: 0, none: 1 });

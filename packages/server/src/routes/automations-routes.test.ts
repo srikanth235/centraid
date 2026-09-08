@@ -15,10 +15,11 @@ import {
   AnalyticsStore,
   ConversationStore,
   InsightsStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import { WorktreeStore } from "../worktree-store/index.js";
 import { makeAutomationsRouteHandler } from "./automations-routes.ts";
 import { SseSubscriberCap } from "./sse-cap.ts";
@@ -31,14 +32,14 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 describe("automations-routes suite", () => {
   beforeEach(async () => {
     dir = await tempDir(`auto-routes-${crypto.randomUUID()}-`);
-    const journalDbFile = path.join(dir, "journal.db");
-    const provider = makeJournalDbProvider(journalDbFile);
+    const ledgerDbFile = ledgerDbFileIn(dir);
+    const provider = makeLedgerDbProvider(ledgerDbFile);
     analytics = new AnalyticsStore(provider);
     insights = new InsightsStore(provider);
     fired = [];
     handler = makeAutomationsRouteHandler({
       store: new WorktreeStore({ root: path.join(dir, "code") }),
-      journalDbFile,
+      ledgerDbFile,
       analytics,
       insights,
       runAutomation: (input) => fired.push(input),
@@ -126,7 +127,7 @@ describe("automations-routes suite", () => {
     }> = [];
     handler = makeAutomationsRouteHandler({
       store: new WorktreeStore({ root: path.join(dir, "code") }),
-      journalDbFile: path.join(dir, "journal.db"),
+      ledgerDbFile: ledgerDbFileIn(dir),
       analytics,
       insights,
       runAutomation: (input) => fired.push(input),
@@ -190,7 +191,7 @@ describe("automations-routes suite", () => {
   // (started, not ended) as a running record or a slow run is invisible.
   test("GET turns includes an in-flight fire in both thread and global feeds", async () => {
     const store = new ConversationStore(
-      makeJournalDbProvider(path.join(dir, "journal.db"))
+      makeLedgerDbProvider(ledgerDbFileIn(dir))
     );
     const ref = "brief/brief";
     const conversationId = store.ensureAutomationConversation(
@@ -263,7 +264,7 @@ describe("automations-routes suite", () => {
 
   test("recognition turns carry a distinct system history lane", async () => {
     const store = new ConversationStore(
-      makeJournalDbProvider(path.join(dir, "journal.db"))
+      makeLedgerDbProvider(ledgerDbFileIn(dir))
     );
     const ref = "photo-ocr/photo-ocr";
     const conversationId = store.ensureAutomationConversation(
@@ -302,7 +303,7 @@ describe("automations-routes suite", () => {
 
   test("turn/items returns native item fields and legacy run/node routes are gone", async () => {
     const store = new ConversationStore(
-      makeJournalDbProvider(path.join(dir, "journal.db"))
+      makeLedgerDbProvider(ledgerDbFileIn(dir))
     );
     const conversationId = store.ensureAutomationConversation(
       "brief/native",
@@ -491,7 +492,7 @@ describe("automations-routes suite", () => {
     let released: (() => void) | undefined;
     const capped = makeAutomationsRouteHandler({
       store,
-      journalDbFile: path.join(dir, "journal.db"),
+      ledgerDbFile: ledgerDbFileIn(dir),
       analytics,
       insights,
       runAutomation: (input) => fired.push(input),
@@ -526,7 +527,7 @@ describe("automations-routes suite", () => {
     const cap = new SseSubscriberCap(2);
     const capped = makeAutomationsRouteHandler({
       store: new WorktreeStore({ root: path.join(dir, "code") }),
-      journalDbFile: path.join(dir, "journal.db"),
+      ledgerDbFile: ledgerDbFileIn(dir),
       analytics,
       insights,
       runAutomation: (input) => fired.push(input),

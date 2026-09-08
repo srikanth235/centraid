@@ -21,7 +21,6 @@
     "label": "personal"
   },
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads released email messages (thread, recipients, body text) and stages each as an outbox artifact for your decision. Holds no send capability of its own — external writes are the outbox executor's, behind your approval.",
     "scopes": [
       { "schema": "social", "verbs": "read" },

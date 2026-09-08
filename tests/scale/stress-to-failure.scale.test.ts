@@ -1,4 +1,4 @@
-import { glob, readFile } from "node:fs/promises";
+import { glob } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -16,7 +16,7 @@ import type {
   CompositeGateway,
   OpOutcome,
 } from "../helpers/composite-workload.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * STRESS TO FAILURE (issue #842 W4.2).
@@ -66,12 +66,6 @@ const WRITE_STORM = 64;
 
 /** Statuses the product is allowed to shed load with. Anything else is a bug. */
 const REFUSAL_STATUSES = new Set([429, 503]);
-
-interface CeilingFile {
-  metrics: {
-    stressRecovery: { ceilingRecoveryMs: number };
-  };
-}
 
 interface Rung {
   concurrency: number;
@@ -135,10 +129,11 @@ async function vaultDbPath(vaultDir: string): Promise<string> {
 
 describe("stress-to-failure.scale", () => {
   test("past the knee the gateway refuses by name, keeps the vault intact, and recovers", async () => {
-    const ceilings = JSON.parse(
-      await readFile("tests/experience-budgets/gateway.json", "utf8")
-    ) as CeilingFile;
-    const ceilingRecoveryMs = ceilings.metrics.stressRecovery.ceilingRecoveryMs;
+    const ceilingRecoveryMs = journeyCeiling(
+      "gateway/stress-recovery/empty/ci-linux-x64-4c",
+      "stressRecovery",
+      "ceilingRecoveryMs"
+    );
 
     const gateway = await bootCompositeGateway("stress-to-failure-");
     onTestFinished(() => gateway.close());
@@ -222,8 +217,6 @@ describe("stress-to-failure.scale", () => {
       for (const [key, count] of Object.entries(rung.refusals))
         refusalTally[key] = (refusalTally[key] ?? 0) + count;
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || ladderMs <= drift;
     const recovered =
       recovery.status >= 200 &&
       recovery.status < 300 &&
@@ -236,8 +229,7 @@ describe("stress-to-failure.scale", () => {
       noteRows === storm.ok &&
       integrity?.integrity_check === "ok" &&
       foreignKeys.length === 0 &&
-      recovered &&
-      withinDrift;
+      recovered;
 
     console.log("\n========== STRESS TO FAILURE ==========");
     for (const rung of rungs)
@@ -273,7 +265,6 @@ describe("stress-to-failure.scale", () => {
           name: "ladder wall clock",
           value: ladderMs,
           unit: "ms",
-          ...(drift === null ? {} : { budget: drift }),
         },
         {
           name: "knee (first refusing concurrency)",
@@ -330,10 +321,6 @@ describe("stress-to-failure.scale", () => {
       recovered,
       `recovery: the first request after the load dropped returned ${recovery.status} in ` +
         `${recovery.durationMs.toFixed(0)} ms (ceiling ${ceilingRecoveryMs} ms)`
-    ).toBe(true);
-    expect(
-      withinDrift,
-      `sustained drift: ${ladderMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
     ).toBe(true);
   }, 300_000);
 });

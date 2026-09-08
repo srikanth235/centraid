@@ -6,18 +6,27 @@ export {
 export { describeRecurrence } from "./recurrence-summary.js";
 export {
   applyRecurrenceExceptions,
-  canonicalizeRrule,
   expandRecurrence,
   nextOccurrence,
-  parseRrule,
-  rruleLine,
   shiftTemporal,
   type ExpandRecurrenceInput,
-  type ParsedRrule,
   type RecurrenceException,
   type RecurrenceInstance,
   type RecurrenceSemantics,
 } from "./recurrence.js";
+export {
+  assertSupportedRrule,
+  canonicalizeRrule,
+  inspectRrule,
+  parseRrule,
+  rruleLine,
+  rruleRefusalMessage,
+  UnsupportedRruleError,
+  type ParsedRrule,
+  type RruleRefusal,
+  type RruleSupport,
+  type UnsupportedRrulePart,
+} from "./rrule-support.js";
 export {
   addWallDays,
   addWallMonths,

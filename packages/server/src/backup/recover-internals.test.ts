@@ -79,49 +79,50 @@ describe("recover-internals", () => {
     expect(provider.listSnapshots).toBeTypeOf("function");
   });
 
-  test("recoveredAsOfMs uses coordinated cut when present else snapshot time", () => {
+  test("recoveredAsOfMs uses the marked cut when present else snapshot time", () => {
     const row = snapshot({ createdAt: 1_000 });
     const withCut = {
-      coordinatedCutMs: 1_234,
+      cutTickMs: 1_234,
       expectedCutMs: 1_234,
       newestMarkerTickMs: 1_234,
+      truncated: false,
       damaged: [],
-      perDb: {},
     } as unknown as WalReplayOutcome;
     expect(recoveredAsOfMs(withCut, row)).toBe(1_234);
     const baseOnly = {
-      coordinatedCutMs: -1,
+      cutTickMs: -1,
       expectedCutMs: -1,
       newestMarkerTickMs: -1,
+      truncated: false,
       damaged: [],
-      perDb: {},
     } as unknown as WalReplayOutcome;
     expect(recoveredAsOfMs(baseOnly, row)).toBe(1_000_000);
   });
 
-  test("walReplayTruncated is true when coordinated cut is short of the expected tip", () => {
-    const truncated = {
-      coordinatedCutMs: 100,
+  test("walReplayTruncated is true when the cut is short of the expected tip", () => {
+    const shortOfTip = {
+      cutTickMs: 100,
       expectedCutMs: 200,
       newestMarkerTickMs: 200,
+      truncated: false,
       damaged: [],
-      perDb: { vault: { truncated: false }, journal: { truncated: false } },
     } as unknown as WalReplayOutcome;
-    expect(walReplayTruncated(truncated)).toBe(true);
-    const perDb = {
-      coordinatedCutMs: 200,
+    expect(walReplayTruncated(shortOfTip)).toBe(true);
+    // …and when the replay itself says so, however the ticks line up.
+    const selfReported = {
+      cutTickMs: 200,
       expectedCutMs: 200,
       newestMarkerTickMs: 200,
+      truncated: true,
       damaged: [],
-      perDb: { vault: { truncated: true }, journal: { truncated: false } },
     } as unknown as WalReplayOutcome;
-    expect(walReplayTruncated(perDb)).toBe(true);
+    expect(walReplayTruncated(selfReported)).toBe(true);
     const ok = {
-      coordinatedCutMs: 200,
+      cutTickMs: 200,
       expectedCutMs: 200,
       newestMarkerTickMs: 200,
+      truncated: false,
       damaged: [],
-      perDb: { vault: { truncated: false }, journal: { truncated: false } },
     } as unknown as WalReplayOutcome;
     expect(walReplayTruncated(ok)).toBe(false);
   });
@@ -129,7 +130,7 @@ describe("recover-internals", () => {
   test("currentVersions reports gateway + ontology ceilings", () => {
     const versions = currentVersions();
     expect(versions.gatewayVersion.length).toBeGreaterThan(0);
-    expect(versions.ontologyVersion).toBe("1.4");
+    expect(versions.ontologyVersion).toBe("1.0");
     expect(Number(versions.vaultUserVersion)).toBeGreaterThan(0);
   });
 });

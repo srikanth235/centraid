@@ -3,8 +3,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { closeOpenVaults, household } from "./placement-fixture.js";
-import { shareItemsToVault, unshareFromVault } from "./placement.js";
+import {
+  closeOpenVaults,
+  household,
+  placementAuthority,
+  unplaceProjection,
+} from "./placement-fixture.js";
+import { shareItemsToVault } from "./placement.js";
 
 describe("Docs folder placement", () => {
   afterEach(closeOpenVaults);
@@ -22,7 +27,6 @@ describe("Docs folder placement", () => {
       gateway.invoke(owner, {
         command,
         input,
-        purpose: "dpv:ServiceProvision",
       });
     const createFolder = (name: string, parent?: string): string => {
       const outcome = invoke("core.create_folder", {
@@ -54,6 +58,7 @@ describe("Docs folder placement", () => {
       itemType: "docs.folder",
       itemIds: [trip],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "docs.folder", [trip]),
     });
     expect(shared.items[0]!.itemId).toBe(trip);
     expect(
@@ -80,6 +85,7 @@ describe("Docs folder placement", () => {
       itemType: "docs.folder",
       itemIds: [trip],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "docs.folder", [trip]),
     });
     expect(
       audience.vault
@@ -89,13 +95,7 @@ describe("Docs folder placement", () => {
         .get(later)
     ).toMatchObject({ n: 1 });
 
-    expect(
-      unshareFromVault({
-        audience,
-        itemType: "docs.folder",
-        itemId: trip,
-      }).removed
-    ).toBe(true);
+    expect(unplaceProjection(audience, "docs.folder", trip).removed).toBe(true);
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM core_document").get()
     ).toMatchObject({ n: 0 });

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import groupHandler from "./group.ts";
 
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
-  "core.vault": [{ owner_party_id: "party-owner", base_currency: "USD" }],
+  "core.vault": [{ self_party_id: "party-owner", base_currency: "USD" }],
   "tally.friend": [{ party_id: "party-current" }],
   "tally.group": [
     { group_id: "group-trip", circle_id: "circle-trip", icon: "✈️" },

@@ -45,15 +45,34 @@
   color: var(--text-soft);
 }
 
-/* "Not yet, and not wrong" — an invitation nobody has accepted is neither an
+/* "Not yet, and not wrong" — a person nobody has linked yet is neither an
    error nor a delivery, and `--seam` is the one role that says so. */
-.reachState[data-reach="invited"],
 .reachState[data-reach="never-reached"] {
   color: var(--seam);
 }
 
 .reachState[data-reach="severed"] {
   color: var(--net);
+}
+
+/* The link-ticket panel (#929 S6): an offer under the reach line, not a second
+   step. It sits inside the "Who" section so the ticket is read as the fix for
+   the sentence directly above it. */
+.ticket {
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: start;
+  margin-top: var(--sp-2);
+}
+
+.ticketCode {
+  font: var(--t-mono);
+  color: var(--text);
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-2);
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 
 .standing {

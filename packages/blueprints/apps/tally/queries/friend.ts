@@ -66,10 +66,9 @@ function netParts(
 }
 
 export default async function friendHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const pid = String(input?.party_id ?? "");
   try {
-    const data = await loadTally(ctx, purpose);
+    const data = await loadTally(ctx);
     if (!data.people.has(pid) || pid === data.me) {
       return { me: data.me, currency: data.currency, friend: null, ledger: [] };
     }

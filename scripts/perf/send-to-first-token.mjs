@@ -1,13 +1,10 @@
 /**
  * Gateway send → first token dead-time probe (issue #842 W0.5).
  *
- * `sendToFirstToken` is the single most-felt latency in the product, and until
- * now `tests/experience-budgets/gateway.json` carried it as `unmeasured` with
- * the honest note that no rig existed: every path in
- * `tests/perf/harness-turn.perf.test.ts` measures DISPATCH throughput (2,000
- * registry dispatches against a stubbed `runTurn`), which never spawns a
- * harness, never speaks ACP, and therefore cannot see the interval this
- * budget is about.
+ * `sendToFirstToken` is the single most-felt latency in the product. A
+ * dispatch-throughput measurement cannot stand in for it: driving the registry
+ * against a stubbed `runTurn` never spawns a harness and never speaks ACP, so
+ * it cannot see the interval this budget is about.
  *
  * WHAT THIS MEASURES, EXACTLY — read this before trusting the number:
  *
@@ -33,7 +30,7 @@
  * perceived interval. The remaining span is named in the budget entry's
  * `probe` field so nobody reads this as the complete answer.
  *
- * The ceiling lives in `tests/experience-budgets/gateway.json` and is
+ * The ceiling lives in `tests/journeys.json` and is
  * tighten-only via `PERF_BUDGET_SOURCES`
  * (`scripts/test-report/ratchet-floors.mjs`), so widening it is a reviewed
  * edit with a recorded `approvedDeviation`, never a quiet one.
@@ -43,12 +40,13 @@
  *   node scripts/perf/send-to-first-token.mjs --report    # print, never fail
  *   node scripts/perf/send-to-first-token.mjs --samples 40 --warmup 5
  */
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { journeyMetric } from "../lib/journey-ledger.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
-const BUDGET_PATH = path.join(root, "tests/experience-budgets/gateway.json");
 const HARNESS_PATH = path.join(
   root,
   "packages/server/src/acp/backends/acp/fake-acp-harness.mjs"
@@ -115,14 +113,14 @@ export function compareToCeiling(p95Ms, metric) {
     return {
       ok: false,
       message:
-        "send-to-first-token: tests/experience-budgets/gateway.json has no positive `sendToFirstToken.ceilingP95Ms`. A probe that runs against no ceiling is not a gate — seed one from a real run (see this file's header) rather than deleting the step.",
+        "send-to-first-token: tests/journeys.json gateway/own-echo has no positive `sendToFirstToken.ceilingP95Ms`. A probe that runs against no ceiling is not a gate — seed one from a real run (see this file's header) rather than deleting the step.",
     };
   return {
     ok: p95Ms <= ceiling,
     message:
       p95Ms <= ceiling
         ? `send-to-first-token: p95 ${p95Ms.toFixed(1)}ms of ${ceiling}ms ceiling`
-        : `send-to-first-token: p95 ${p95Ms.toFixed(1)}ms exceeds the ${ceiling}ms ceiling. Find what was added between the send and the first token, or widen \`ceilingP95Ms\` in tests/experience-budgets/gateway.json with an \`approvedDeviation\` saying what the extra dead time buys.`,
+        : `send-to-first-token: p95 ${p95Ms.toFixed(1)}ms exceeds the ${ceiling}ms ceiling. Find what was added between the send and the first token, or widen \`ceilingP95Ms\` on gateway/own-echo in tests/journeys.json with an \`approvedDeviation\` saying what the extra dead time buys.`,
   };
 }
 
@@ -176,8 +174,7 @@ async function main() {
   );
 
   // Both passes are STRICTLY SERIAL, and the reduce-over-a-promise-chain
-  // idiom (the same one tests/perf/harness-turn.perf.test.ts uses) is how
-  // that is expressed without an await inside a loop. Serial is the
+  // idiom is how that is expressed without an await inside a loop. Serial is the
   // measurement, not an oversight: N harness processes spawned at once on a
   // 4-cpu host would measure contention between the samples rather than the
   // gateway's dead time, which is the one thing this probe exists to see.
@@ -205,10 +202,9 @@ async function main() {
     return 0;
   }
 
-  const budget = JSON.parse(await readFile(BUDGET_PATH, "utf8"));
   const verdict = compareToCeiling(
     stats.p95Ms,
-    budget?.metrics?.sendToFirstToken
+    journeyMetric("gateway/own-echo/none/ci-linux-x64-4c", "sendToFirstToken")
   );
   console.log(line);
   console[verdict.ok ? "log" : "error"](verdict.message);

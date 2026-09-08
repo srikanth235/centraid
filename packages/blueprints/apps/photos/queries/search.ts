@@ -16,7 +16,6 @@ interface RawHit {
 interface RawAsset {
   asset_id: string;
   content_id: string;
-  favorite?: unknown;
   captured_at?: string | null;
   place_id?: string | null;
 }
@@ -43,7 +42,6 @@ interface RawCollection {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { assets: [] };
   try {
@@ -51,7 +49,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       entity: "core.content_item",
       query: term,
       limit: 300,
-      purpose,
     });
     const contentIds = [
       ...new Set(
@@ -69,7 +66,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 300,
-      purpose,
     });
     const assetsRaw = (liveAssets.rows ?? []) as unknown as RawAsset[];
     if (assetsRaw.length === 0) return { assets: [] };
@@ -77,28 +73,31 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const assetIds = assetsRaw.map((a) => a.asset_id);
     const [contents, entries, albums, places, joins] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.content_item",
         where: [{ column: "content_id", op: "in", value: contentIds }],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.collection_entry",
         where: [
           { column: "target_type", op: "eq", value: "media.asset" },
           { column: "target_id", op: "in", value: assetIds },
         ],
-        purpose,
       }),
-      ctx.vault.read({ entity: "core.collection", purpose }),
-      readPlaces({ ctx, purpose }),
-      readAssetJoins({ ctx, purpose, assetIds, contentIds }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.collection",
+      }),
+      readPlaces({ ctx }),
+      readAssetJoins({ ctx, assetIds, contentIds }),
     ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as RawContent[]).map(
         (c) => [c.content_id, c] as const
       )
     );
-    const { tagsByAsset, custodyByContent } = joins;
+    const { tagsByAsset, favoriteAssets, custodyByContent } = joins;
 
     const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map(
       (c) => ({
@@ -140,7 +139,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         const { src, thumb, preview, poster } = srcOf(content);
         return {
           ...asset,
-          favorite: asset.favorite ? 1 : 0,
+          favorite: favoriteAssets.has(asset.asset_id) ? 1 : 0,
           content_uri: src,
           thumb_uri: thumb,
           preview_uri: preview,
@@ -166,7 +165,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     return { assets };
   } catch (error) {
     const e = error as { code?: string; message?: string };
-    if (e.code === "VAULT_CONSENT") {
+    if (e.code === "VAULT_ACCESS") {
       return { assets: [], vaultDenied: { code: e.code, message: e.message } };
     }
     return { assets: [], error: String(e.message ?? error) };

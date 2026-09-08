@@ -165,9 +165,8 @@ function linkSeat(world: JoinWorld, seat: Seat): string {
   const db = world.origin.plane.db.vault;
   db.prepare(
     `INSERT INTO core_party
-       (party_id, kind, display_name, sort_name, created_at, updated_at,
-        ontology_version)
-     VALUES (?, 'person', ?, ?, ?, ?, '1.4')`
+       (party_id, kind, display_name, sort_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?, ?)`
   ).run(partyId, seat.label, seat.label, now, now);
   db.prepare(
     `INSERT INTO share_party_vault_binding
@@ -393,9 +392,10 @@ describe("protocol join lane", () => {
       ).n;
     const before = taskCount();
 
-    origin.plane.enrollApp("planner");
-    origin.plane.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    // AN APP DECLARES; IT IS NOT GRANTED (#928 A1): the install path records
+    // the manifest the bridge is held to, which is what the mount pass does
+    // for every app on every boot.
+    origin.plane.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     // Confirm-gated: tier 3/4 routing parks for EVERY non-owner caller.
@@ -411,7 +411,6 @@ describe("protocol join lane", () => {
       payload: {
         command: "schedule.add_task",
         input: { title: "call the plumber" },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(invoked.ok).toBe(true);

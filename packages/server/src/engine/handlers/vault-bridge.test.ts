@@ -33,7 +33,6 @@ async function makeVaultApp(codeRoot: string, appId: string): Promise<void> {
     ],
     queries: [{ name: "agenda", input: { type: "object" } }],
     vault: {
-      purpose: "dpv:ServiceProvision",
       why: "Reads the calendar to plan the day.",
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     },
@@ -44,7 +43,6 @@ async function makeVaultApp(codeRoot: string, appId: string): Promise<void> {
        const invoke = (ordinal) => ctx.vault.invoke({
          command: 'schedule.propose_event',
          input: { summary: body?.summary },
-         purpose: 'dpv:ServiceProvision',
          invocationId: 'handler-selected-' + ordinal,
        });
        const outcome = await invoke('first');
@@ -57,7 +55,7 @@ async function makeVaultApp(codeRoot: string, appId: string): Promise<void> {
     path.join(dir, "queries", "agenda.js"),
     `export default async ({ ctx }) => {
        try {
-         return await ctx.vault.read({ entity: 'core.event', purpose: 'dpv:ServiceProvision' });
+         return await ctx.vault.read({ entity: 'core.event' });
        } catch (err) {
          return { deniedCode: err.code, message: err.message };
        }
@@ -194,7 +192,7 @@ describe("ctx.vault worker channel", () => {
       codeDirOverride: async (appId) => path.join(codeRoot, appId),
       vaultFor: () => async () => ({
         ok: false,
-        code: "VAULT_CONSENT",
+        code: "VAULT_ACCESS",
         error: "deny (receipt r123): no active grant covers schedule read",
       }),
     });
@@ -205,7 +203,7 @@ describe("ctx.vault worker channel", () => {
     });
     expect(out.isError).toBe(false);
     expect(out.structuredContent).toMatchObject({
-      deniedCode: "VAULT_CONSENT",
+      deniedCode: "VAULT_ACCESS",
     });
     expect((out.structuredContent as { message: string }).message).toContain(
       "receipt r123"
@@ -244,13 +242,11 @@ describe("manifest vault block", () => {
       JSON.stringify({
         ...base,
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [{ schema: "schedule", verbs: "read" }],
         },
       })
     );
     expect(manifest.vault).toStrictEqual({
-      purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read" }],
     });
   });
@@ -261,16 +257,13 @@ describe("manifest vault block", () => {
         JSON.stringify({
           ...base,
           vault: {
-            purpose: "p",
             scopes: [{ schema: "schedule", verbs: "write" }],
           },
         })
       )
     ).toThrow(ManifestError);
     expect(() =>
-      parseManifest(
-        JSON.stringify({ ...base, vault: { purpose: "p", scopes: [] } })
-      )
+      parseManifest(JSON.stringify({ ...base, vault: { scopes: [] } }))
     ).toThrow(ManifestError);
   });
 
@@ -293,7 +286,6 @@ describe("manifest vault block", () => {
         JSON.stringify({
           ...base,
           vault: {
-            purpose: "dpv:ServiceProvision",
             why: "plans the day",
             scopes: [{ schema: "schedule", verbs: "read+act" }],
           },

@@ -206,7 +206,10 @@ export default function DataScreen({
   const browse = state.kind === "ready" ? state.browse : undefined;
 
   return (
-    <TopSafeArea edges={["top"]} style={{ backgroundColor: colors.bg }}>
+    <TopSafeArea
+      edges={["top"]}
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+    >
       <View style={styles.page}>
         <View style={styles.head}>
           {/* No verbs at all: see the file header. */}

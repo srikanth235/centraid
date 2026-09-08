@@ -1,4 +1,4 @@
-# governance: allow-toolchain-config issue #890 — the quarterly alarm test, the
+# governance: allow-toolchain-config issue #890 — the weekly alarm test, the
 # one lane in this repo whose PASS condition is a red suite.
 name: mobile-alarm-test
 
@@ -15,15 +15,27 @@ name: mobile-alarm-test
 # apps/mobile/src/kit/e2e-alarm.ts) and requires the PR-gate suite to FAIL.
 # A GREEN SUITE HERE FAILS THE JOB — that is the alarm not sounding.
 #
-# Quarterly, not nightly: the mutation is a whole extra native build, the answer
-# changes only when the suite's selectors change, and the PR gate already runs
-# the same five journeys every day against the unmutated build. Dispatchable, so
-# a wave that rewrites selectors — as #890 W2 did — can ask the question
-# immediately instead of waiting for the quarter.
+# WEEKLY since #915 Wave 2, from quarterly. The issue's open decision 4 reads
+# "monthly now, weekly once the roster is single-sourced", and Wave 2 IS that
+# single-sourcing: the members of every suite are `tests/agent-e2e-mobile/roster.json`
+# rows rather than seven `const FLOWS` literals, so one edit to one file now
+# changes what this lane mutates against. The cost of asking more often fell for
+# the same reason the answer got easier to invalidate — which is the whole
+# argument for the shorter cadence, not the calendar.
+#
+# Sunday 03:00 UTC, deliberately BEFORE the 04:00 slot: the alarm asks whether
+# the suite can go red at all, and an answer that arrives after the weekly lanes
+# have already reported is an answer about last week's evidence.
+#
+# It is still not nightly. The mutation is a whole extra native build, the answer
+# changes only when the suite's selectors change, and the PR gate runs the same
+# journeys every day against the unmutated build. Dispatchable, so a wave that
+# rewrites selectors — as #890 W2 and #915 Wave 2 both did — can ask the question
+# immediately instead of waiting for Sunday.
 on:
   schedule:
-    # 03:00 UTC on the 1st of Jan/Apr/Jul/Oct.
-    - cron: "0 3 1 1,4,7,10 *"
+    # Sunday 03:00 UTC.
+    - cron: "0 3 * * 0"
   workflow_dispatch:
 
 concurrency:
@@ -39,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
@@ -75,9 +89,28 @@ jobs:
       # restored cache would install the UNMUTATED app and the suite would pass,
       # which this job reads as "the alarm did not sound" and fails on. That
       # would be a correct verdict about the wrong artifact — the worst kind.
+      #
+      # AND DELIBERATELY NO GRADLE/NATIVE CACHE EITHER, unlike the three lanes
+      # that share `android-gradle-v2-*` (#916). It would work — the mutation is
+      # an `EXPO_PUBLIC_*` value inlined at bundle time, and
+      # `android-emulator-install.sh` forces the bundle task with `--rerun`, so a
+      # warm native directory could not carry the unmutated JS. It is refused
+      # anyway: this is the one lane whose pass condition is a red suite, it runs
+      # weekly inside a 90-minute budget with nothing waiting on it, and a cold
+      # compile is the cheapest possible answer to "could the mutation have been
+      # cached away?". It also saves nothing, so it cannot thrash the shared
+      # entries the other three lanes trade.
+      #
+      # Restore-then-save, for the reason already written above the apk and
+      # gradle caches and not applied to this one: `actions/cache` declares
+      # `post-if: success()`, so on a red lane the snapshot never saves and every
+      # run pays the ~2-minute create — the warm path stays unreachable until the
+      # greenness the cache exists to help deliver. `Post AVD cache` reported
+      # `skipped` on every red run while `Create AVD + snapshot` ran on every one,
+      # which is that same fact stated twice in the logs.
       - name: AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -97,7 +130,15 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
-      - name: Run the critical five against a build with Home blanked
+      - name: Save the AVD snapshot
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Run the rung-2 gate suite against a build with Home blanked
         id: mutated
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -135,7 +176,7 @@ jobs:
           outcome='${{ steps.mutated.outcome }}'
           echo "suite outcome against the mutated build: $outcome"
           if [ "$outcome" = "success" ]; then
-            echo "::error::THE ALARM DID NOT SOUND. The critical five passed against a build whose Home surface renders nothing. Whatever those five flows are observing, it is not the product. Read the run artifacts before trusting any recent green: this is the #474/#478/#483 failure shape, and it is the reason this lane exists."
+            echo "::error::THE ALARM DID NOT SOUND. The rung-2 `pr-gate` suite passed against a build whose Home surface renders nothing. Whatever those journeys are observing, it is not the product. Read the run artifacts before trusting any recent green: this is the #474/#478/#483 failure shape, and it is the reason this lane exists."
             exit 1
           fi
           echo "The suite failed against the mutated build, which is the pass condition."
@@ -146,6 +187,24 @@ jobs:
           path: tests/agent-e2e-mobile/runs/
           retention-days: 30
           if-no-files-found: ignore
+      # #915 Wave 3 — the lane's verdict, and note that it is the INVERTED one:
+      # `job.status` is success exactly when the alarm sounded, because the step
+      # above reds the job when the suite passed against the blanked build. The
+      # report therefore renders "the mobile suite can still go red" rather than
+      # "the mobile suite passed".
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane alarm --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities journey --surfaces mobile-native
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mobile-alarm-test-evidence
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: warn
       - name: File a tracking issue when the alarm fails to sound
         if: failure()
         env:
@@ -153,4 +212,4 @@ jobs:
         run: |
           node scripts/ci/file-tracking-issue.mjs \
             --title "[mobile-alarm-test] the mobile suite did not notice a blanked Home" \
-            --body "The quarterly alarm test built the app with EXPO_PUBLIC_CENTRAID_E2E_ALARM=home — Home renders nothing — and the critical five passed anyway. Every recent green on the PR gate, the canary and the nightly is suspect until this is explained: a suite that cannot be shown to go red is not evidence. Evidence: the mobile-alarm-test-runs artifact on run ${{ github.run_id }}. Do not silence this lane."
+            --body "The weekly alarm test built the app with EXPO_PUBLIC_CENTRAID_E2E_ALARM=home — Home renders nothing — and the rung-2 `pr-gate` suite passed anyway. Every recent green on the PR gate, the canary and the nightly is suspect until this is explained: a suite that cannot be shown to go red is not evidence. Evidence: the mobile-alarm-test-runs artifact on run ${{ github.run_id }}. Do not silence this lane."

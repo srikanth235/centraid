@@ -23,7 +23,7 @@ import { materializeSnapshotBlobs } from "./materialize.js";
 const sha256 = (bytes: Buffer): string =>
   createHash("sha256").update(bytes).digest("hex");
 
-/** A minimal but VALID snapshot source: a real base pair plus content-addressed
+/** A minimal but VALID snapshot source: a real base plus content-addressed
  *  blobs at `blobs/sha256/<fan>/<sha>` (the layout the reconcile re-pins into). */
 async function buildSource(
   sourceDir: string,
@@ -44,10 +44,7 @@ async function buildSource(
       baseTickMs: 1_752_480_000_000,
     };
   };
-  const entries: SourceEntry[] = [
-    await dbEntry("vault.db", "11".repeat(16)),
-    await dbEntry("journal.db", "22".repeat(16)),
-  ];
+  const entries: SourceEntry[] = [await dbEntry("vault.db", "11".repeat(16))];
   const blobEntries = await Promise.all(
     blobs.map(async (bytes) => {
       const sha = sha256(bytes);

@@ -5,37 +5,47 @@
 // replica imports beyond the provenance readers (docs-projection.test.ts).
 
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
-import { canRender, typeMeta } from "@centraid/blueprints/apps/docs/format";
+import {
+  canRender,
+  fmtBytes,
+  fmtDate,
+  typeMeta,
+} from "@centraid/blueprints/apps/docs/format";
 import type {
   DocTag,
   DriveDoc,
   Folder,
-  SharedMember,
-  SharedWith,
   SortKey,
 } from "@centraid/blueprints/apps/docs/types";
 import { rowStateMark } from "@centraid/blueprints/apps/docs/view-copy";
 import type { RowStateMark } from "@centraid/blueprints/apps/docs/view-copy";
 
 import { rowCanWrite, rowScopeLabels } from "../../kit/replica/row-provenance";
+import {
+  DOCUMENT_TARGET_TYPE,
+  FLAGS_SCHEME_URI,
+  FOLDER_SCHEME_URI,
+  num,
+  str,
+  TAGS_SCHEME_URI,
+} from "./docs-projection-rows";
+import type { EntityRow } from "./docs-projection-rows";
+import { originsByDocument, sharesByDocument } from "./docs-projection-shares";
+import type {
+  OriginEntityRows,
+  ShareEntityRows,
+} from "./docs-projection-shares";
 
-/** One replica row, as `useReplicaQuery` hands it over. */
-export type EntityRow = Readonly<Record<string, unknown>>;
-
-const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-const TAGS_SCHEME_URI = "centraid:tags:v1";
-const DOCUMENT_TARGET_TYPE = "core.document";
-const FOLDER_CONTAINER_TYPE = "docs.folder";
-
-const str = (row: EntityRow, key: string): string | null => {
-  const value = row[key];
-  return typeof value === "string" ? value : null;
-};
-const num = (row: EntityRow, key: string): number | null => {
-  const value = row[key];
-  return typeof value === "number" ? value : null;
-};
+// The sharing half lives next door (`docs-projection-shares.ts`) but is one
+// projection to every caller, so its names are re-exported here rather than
+// making each importer know which half a type came from.
+export {
+  originsByDocument,
+  sharesByDocument,
+  type OriginEntityRows,
+  type ShareEntityRows,
+} from "./docs-projection-shares";
+export { type EntityRow } from "./docs-projection-rows";
 
 /** A drive row plus the phone-only facts: a folder tag pointing at a gone
  *  concept (§4.3), and the DOCUMENT row's provenance/pending stamps (#880). */
@@ -56,14 +66,10 @@ export interface DriveEntityRows {
   /** `null` when any share read was denied/failed — every row then carries
    *  `shared_with: null`, as the web query ships too. */
   shares: ShareEntityRows | null;
-}
-
-export interface ShareEntityRows {
-  grants: readonly EntityRow[];
-  circles: readonly EntityRow[];
-  members: readonly EntityRow[];
-  states: readonly EntityRow[];
-  parties: readonly EntityRow[];
+  /** `null` when the placement-origin read was denied/failed. Distinct from
+   *  an empty list: the Shared shelf must never draw "nothing was shared with
+   *  you" over a read that never answered. */
+  origins: OriginEntityRows | null;
 }
 
 export interface DriveProjection {
@@ -72,6 +78,9 @@ export interface DriveProjection {
   rootFolderId: string | null;
   /** Active (untrashed) documents at the drive's top level — Unfiled. */
   unfiledCount: number;
+  /** Whether the placement-origin read ANSWERED. False means the Shared shelf
+   *  knows nothing, which is not the same as knowing the set is empty. */
+  sharedFromKnown: boolean;
 }
 
 /**
@@ -198,6 +207,8 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
           folderByDoc,
           folderConcepts,
         });
+  const originByDoc =
+    rows.origins === null ? null : originsByDocument(rows.origins);
 
   const documents: MobileDriveDoc[] = rows.documents
     .flatMap((doc) => {
@@ -226,6 +237,7 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
           custody_state: custodyByContent.get(contentId) ?? null,
           shared_with:
             sharesByDoc === null ? null : (sharesByDoc.get(id) ?? []),
+          shared_from: originByDoc?.get(id) ?? null,
           folderGone: folderConcept === null && orphanTagDocs.has(id),
           canWrite: rowCanWrite(doc),
           scopeLabels: rowScopeLabels(doc),
@@ -239,169 +251,17 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
     (doc) => !doc.trashed && doc.folder_id === null && !doc.folderGone
   ).length;
 
-  return { documents, folders, rootFolderId, unfiledCount };
+  return {
+    documents,
+    folders,
+    rootFolderId,
+    unfiledCount,
+    sharedFromKnown: originByDoc !== null,
+  };
 }
 
 // Shares — the same bounded join `queries/_shared.ts` runs gateway-side.
 // `null` never leaves this function.
-
-function folderChain(
-  conceptId: string | null,
-  parentOf: Map<string, string | null>
-): string[] {
-  const chain: string[] = [];
-  let at = conceptId ?? undefined;
-  while (at && !chain.includes(at) && chain.length < 64) {
-    chain.push(at);
-    at = parentOf.get(at) ?? undefined;
-  }
-  return chain;
-}
-
-function shareLabel(
-  implicit: boolean,
-  circleName: string | null,
-  memberLabels: readonly string[]
-): string {
-  if (!implicit && circleName) return circleName;
-  if (memberLabels.length === 0) return circleName ?? "a circle";
-  const shown = memberLabels.slice(0, 2).join(" and ");
-  const rest = memberLabels.length - 2;
-  return rest > 0 ? `${shown} +${rest}` : shown;
-}
-
-export function sharesByDocument(
-  rows: ShareEntityRows,
-  {
-    documentIds,
-    folderByDoc,
-    folderConcepts,
-  }: {
-    documentIds: readonly string[];
-    folderByDoc: ReadonlyMap<string, string>;
-    folderConcepts: readonly EntityRow[];
-  }
-): Map<string, SharedWith[]> {
-  const parentOf = new Map<string, string | null>(
-    folderConcepts.flatMap((concept) => {
-      const id = str(concept, "concept_id");
-      return id ? [[id, str(concept, "broader_concept_id")] as const] : [];
-    })
-  );
-  const chainByDoc = new Map(
-    documentIds.map(
-      (id) => [id, folderChain(folderByDoc.get(id) ?? null, parentOf)] as const
-    )
-  );
-
-  const grants = rows.grants.filter(
-    (grant) =>
-      str(grant, "plane") === "commons" &&
-      str(grant, "revoked_at") === null &&
-      (str(grant, "container_type") === DOCUMENT_TARGET_TYPE ||
-        str(grant, "container_type") === FOLDER_CONTAINER_TYPE)
-  );
-  if (grants.length === 0) return new Map();
-
-  const circleById = new Map(
-    rows.circles.flatMap((circle) => {
-      const id = str(circle, "circle_id");
-      return id ? [[id, circle] as const] : [];
-    })
-  );
-  const membersByCircle = new Map<string, EntityRow[]>();
-  for (const member of rows.members) {
-    const circleId = str(member, "circle_id");
-    if (!circleId) continue;
-    const list = membersByCircle.get(circleId);
-    if (list) list.push(member);
-    else membersByCircle.set(circleId, [member]);
-  }
-  const statusByGrantParty = new Map(
-    rows.states.flatMap((state) => {
-      const grantId = str(state, "grant_id");
-      const partyId = str(state, "party_id");
-      const status = str(state, "status");
-      return grantId && partyId && status
-        ? [[`${grantId} ${partyId}`, status] as const]
-        : [];
-    })
-  );
-  const nameByParty = new Map(
-    rows.parties.flatMap((party) => {
-      const id = str(party, "party_id");
-      return id ? [[id, str(party, "display_name")] as const] : [];
-    })
-  );
-
-  const entryByGrant = new Map<string, SharedWith>();
-  for (const grant of grants) {
-    const grantId = str(grant, "grant_id");
-    const circleId = str(grant, "circle_id");
-    const containerId = str(grant, "container_id");
-    if (!grantId || !circleId || !containerId) continue;
-    const roster: SharedMember[] = (membersByCircle.get(circleId) ?? [])
-      .flatMap((member) => {
-        const partyId = str(member, "party_id");
-        if (!partyId) return [];
-        const status =
-          statusByGrantParty.get(`${grantId} ${partyId}`) ?? "invited";
-        if (status === "refused") return [];
-        const capability = str(member, "capability");
-        return [
-          {
-            party_id: partyId,
-            label: nameByParty.get(partyId) ?? "Someone",
-            capability: capability === "read+write" ? "read+write" : "read",
-            status: status === "current" ? "current" : "invited",
-          } satisfies SharedMember,
-        ];
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-    const circle = circleById.get(circleId);
-    entryByGrant.set(grantId, {
-      grant_id: grantId,
-      circle_id: circleId,
-      label: shareLabel(
-        Number(grant["implicit_circle"] ?? 0) === 1,
-        circle ? str(circle, "name") : null,
-        roster.map((member) => member.label)
-      ),
-      via:
-        str(grant, "container_type") === DOCUMENT_TARGET_TYPE
-          ? "document"
-          : "folder",
-      container_id: containerId,
-      members: roster,
-      member_count: roster.length,
-      pending_count: roster.filter((member) => member.status === "invited")
-        .length,
-    });
-  }
-
-  const byDocument = new Map<string, SharedWith[]>();
-  for (const documentId of documentIds) {
-    const chain = chainByDoc.get(documentId) ?? [];
-    const entries = grants
-      .flatMap((grant) => {
-        const grantId = str(grant, "grant_id");
-        const entry = grantId ? entryByGrant.get(grantId) : undefined;
-        if (!entry) return [];
-        const reaches =
-          entry.via === "document"
-            ? entry.container_id === documentId
-            : chain.includes(entry.container_id);
-        return reaches ? [entry] : [];
-      })
-      .sort(
-        (a, b) =>
-          (a.via === "document" ? 0 : 1) - (b.via === "document" ? 0 : 1) ||
-          a.label.localeCompare(b.label)
-      );
-    if (entries.length > 0) byDocument.set(documentId, entries);
-  }
-  return byDocument;
-}
 
 // The row's one state slot (§4.1) — the shared ladder, fed with phone facts.
 
@@ -443,6 +303,57 @@ export function docRowState(
     bytesOnDevice: bytesOnDevice(doc),
     deviceOnly: doc.custody_state === "local-only",
   });
+}
+
+/** The row's second line, split so the state rung can keep its own colour. */
+export interface RowMeta {
+  /** The state slot's TEXT rung, leading the line; `null` when there is none. */
+  lead: string | null;
+  /** That rung is consequential (`--net`) and must not be drawn as chrome. */
+  leadNet: boolean;
+  /** Kind, size and date — the facts, in the handoff's order. */
+  rest: string;
+}
+
+/**
+ * The row's SECOND LINE — the kind, the size and the date.
+ *
+ * The v12 handoff withheld these on the phone as COLUMNS ("a 390px canvas
+ * cannot carry five columns and a title"), and the row carried that forward as
+ * a blanket absence. The reasoning does not survive the shape actually drawn
+ * here: a stacked sub-line is not a column. Without it every row is a bare
+ * title, which is precisely how a drive of a few thousand documents stops
+ * being readable — two documents named alike become indistinguishable without
+ * opening one, and a kind this seat cannot render announces itself only after
+ * the tap that fails.
+ *
+ * The state slot's TEXT rung LEADS this line instead of holding a column of
+ * its own: "cannot be shown" is a fact about the document and belongs beside
+ * its kind, and folding it in returns that width to the title. GLYPH rungs
+ * (the device mark) stay on the trailing edge — a glyph is not prose and
+ * cannot join a sentence. The ladder still yields at most one mark, so the
+ * row still shows at most one state.
+ */
+export function docRowMeta(
+  doc: Pick<
+    DriveDoc,
+    "media_type" | "title" | "byte_size" | "updated_at" | "created_at"
+  >,
+  mark: RowStateMark | null
+): RowMeta {
+  const parts = [typeMeta(doc.media_type, doc.title).name];
+  // `fmtBytes` answers an em dash where the replica has no byte count. A dash
+  // sitting between two real facts reads as a value, so the segment is dropped
+  // rather than printed as an absence nobody asked about.
+  const size = fmtBytes(doc.byte_size);
+  if (size !== "—") parts.push(size);
+  const date = fmtDate(doc.updated_at || doc.created_at);
+  if (date) parts.push(date);
+  return {
+    lead: mark?.kind === "text" ? mark.text : null,
+    leadNet: mark?.kind === "text" && mark.net === true,
+    rest: parts.join(" · "),
+  };
 }
 
 // Sort (§4.1's remembered orders)

@@ -25,18 +25,13 @@ import { openVaultRegistry } from "./vault-registry.js";
 describe("vault-plane WAL ownership + durability", () => {
   const fixture = usePlaneFixture();
 
-  test("fresh bootstrap checkpoints both WALs before the shipper attaches", async () => {
+  test("fresh bootstrap checkpoints the WAL before the shipper attaches", async () => {
     const dir = await tempDir("fresh-bootstrap-wal-");
     fixture.openPlane(dir);
-    await Promise.all(
-      ["vault.db-wal", "journal.db-wal"].map(async (name) => {
-        const size = await fs
-          .stat(path.join(dir, name))
-          .then((stat) => stat.size)
-          .catch(() => 0);
-        expect(size, name).toBeLessThanOrEqual(32 * 1024);
-      })
-    );
+    // ONE FILE (#916): one database, one WAL. No `.catch(() => 0)` — that
+    // would let a missing file pass as a checkpointed one.
+    const size = (await fs.stat(path.join(dir, "vault.db-wal"))).size;
+    expect(size).toBeLessThanOrEqual(32 * 1024);
   });
 
   test("a protector-backed gateway reopens real sealed rows while a copied data dir cannot", async () => {
@@ -63,7 +58,6 @@ describe("vault-plane WAL ownership + durability", () => {
         password: "protector-backed-secret",
         url: "https://example.com",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(added.status).toBe("executed");
     const itemId = (added as { output: { item_id: string } }).output.item_id;
@@ -85,7 +79,6 @@ describe("vault-plane WAL ownership + durability", () => {
         entity: "locker.item",
         entityId: itemId,
         columns: ["password"],
-        purpose: "dpv:ServiceProvision",
       }).values
     ).toStrictEqual({ password: "protector-backed-secret" });
     registry.stop();
@@ -140,7 +133,7 @@ describe("vault-plane WAL ownership + durability", () => {
     const tick = vi.spyOn(shipper, "tick");
     const close = vi.spyOn(shipper, "close");
     const autocheckpointPages = () =>
-      [plane.db.vault, plane.db.journal].map((db) => {
+      [plane.db.vault, plane.db.audit].map((db) => {
         const row = db.prepare("PRAGMA wal_autocheckpoint").get() as Record<
           string,
           number
@@ -213,7 +206,7 @@ describe("vault-plane WAL ownership + durability", () => {
       n: 10,
     });
     expect({
-      ...plane.db.journal
+      ...plane.db.audit
         .prepare(
           `SELECT count(*) AS n FROM agent_command_invocation
           WHERE invocation_id LIKE 'queue-real-%' AND status = 'executed'`
@@ -226,8 +219,8 @@ describe("vault-plane WAL ownership + durability", () => {
     const dir = await tempDir();
     const plane = fixture.openPlane(dir);
     const calendarId = seedCalendar(plane);
-    plane.db.journal.exec(`CREATE TEMP TRIGGER fail_one_queued_receipt
-    BEFORE INSERT ON consent_receipt
+    plane.db.audit.exec(`CREATE TEMP TRIGGER fail_one_queued_receipt
+    BEFORE INSERT ON access_receipt
     WHEN NEW.invocation_id = 'queue-fail'
     BEGIN
       SELECT RAISE(ABORT, 'synthetic queued journal failure');
@@ -286,7 +279,7 @@ describe("vault-plane WAL ownership + durability", () => {
       { invocation_id: "queue-fail", journal_finalized_at: null },
     ]);
     expect(
-      plane.db.journal
+      plane.db.audit
         .prepare(
           `SELECT invocation_id FROM agent_command_invocation
           WHERE invocation_id LIKE 'queue-ok-%' AND status = 'executed'
@@ -300,7 +293,7 @@ describe("vault-plane WAL ownership + durability", () => {
     ]);
   });
 
-  test("the plane survives a restart: same identity, grants intact, ctx.vault still works", async () => {
+  test("the plane survives a restart: same identity, install register intact, ctx.vault still works", async () => {
     const dir = await tempDir();
     const first = fixture.openPlaneWith({
       bootstrap: true,
@@ -310,8 +303,7 @@ describe("vault-plane WAL ownership + durability", () => {
     expect(first.boot.fresh).toBe(true);
     // Enroll with a medium ceiling so the reopened plane executes directly.
     ensureAppEnrolled(first.db, "planner", { riskCeiling: "medium" });
-    first.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    first.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     const calendarId = seedCalendar(first);
@@ -325,7 +317,14 @@ describe("vault-plane WAL ownership + durability", () => {
     const apps = second.listApps();
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({ name: "planner" });
-    expect(apps[0]?.grants).toHaveLength(1);
+    // A DECLARATION IS NOT DURABLE STATE (#928 A1): an app's reach is its
+    // build-time manifest, which the mount pass re-reads from `app.json` on
+    // every boot. The reopened plane records it exactly as mounting would;
+    // without that the bridge reaches nothing, which is the fail-closed
+    // direction the install register is meant to have.
+    second.recordAppInstall("planner", {
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
 
     const outcome = await second.bridgeFor("planner")({
       op: "invoke",
@@ -337,7 +336,6 @@ describe("vault-plane WAL ownership + durability", () => {
           dtend: "2026-07-05T09:30:00Z",
           calendar_id: calendarId,
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(outcome.ok).toBe(true);

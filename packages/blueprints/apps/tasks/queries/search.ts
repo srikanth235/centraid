@@ -43,7 +43,6 @@ interface DecoratedAttachment {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { tasks: [] };
   try {
@@ -51,7 +50,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       entity: "schedule.task",
       query: term,
       limit: 100,
-      purpose,
     });
     const hits = (matches.rows ?? []) as unknown as RawSearchTask[];
     if (hits.length === 0) return { tasks: [] };
@@ -59,12 +57,12 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // Attachments only for the matched tasks — the join stays as narrow as
     // the match set, never a whole-table pull.
     const attachments = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.attachment",
       where: [
         { column: "target_type", op: "eq", value: "schedule.task" },
         { column: "target_id", op: "in", value: taskIds },
       ],
-      purpose,
     });
     const attachmentRows = (attachments.rows ??
       []) as unknown as RawAttachment[];
@@ -72,9 +70,9 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] };
     const contentRows = (contents.rows ?? []) as unknown as RawContent[];

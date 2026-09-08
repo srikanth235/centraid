@@ -3,10 +3,8 @@ import type { EnrichDomain } from "../../../enrich-policy.js";
 import {
   appSettings,
   appSettingWrite,
-  approveVaultGrant,
   confirmVaultParked,
   readAutomationTurn,
-  revokeVaultGrant,
   vaultApps,
   vaultDemoLoad,
   vaultDemoPurge,
@@ -79,9 +77,8 @@ export function manifestVaultBlock(
   const vault = (raw as { vault?: unknown }).vault;
   if (!vault || typeof vault !== "object") return null;
   const v = vault as Record<string, unknown>;
-  if (typeof v.purpose !== "string" || !Array.isArray(v.scopes)) return null;
+  if (!Array.isArray(v.scopes)) return null;
   return {
-    purpose: v.purpose,
     why: typeof v.why === "string" ? v.why : "",
     scopes: v.scopes as VaultScope[],
   };
@@ -163,12 +160,6 @@ export function buildVaultProps(
       confirmVaultParked({ approve, invocationId }).then(() => undefined),
     demoLoad: () => vaultDemoLoad(appId).then(() => undefined),
     demoPurge: () => vaultDemoPurge(appId).then(() => undefined),
-    grant: () =>
-      approveVaultGrant({
-        appId,
-        purpose: block.purpose,
-        scopes: block.scopes,
-      }).then(() => undefined),
     loadData: async () => {
       const s = await vaultStatus().catch(() => undefined);
       if (!s) return null;
@@ -183,14 +174,12 @@ export function buildVaultProps(
       const enrolledAppId = apps.find((a) => a.name === appId)?.appId;
       return {
         demo: demoApps.find((d) => d.appId === appId),
-        grants: apps.find((a) => a.name === appId)?.grants ?? [],
         parked: allParked.filter(
           (p) => p.callerKind === "app" && p.callerId === enrolledAppId
         ),
         vaultName: s.name,
       };
     },
-    revoke: (grantId) => revokeVaultGrant({ grantId }).then(() => undefined),
     ...(cbs.onAccessChanged ? { onAccessChanged: cbs.onAccessChanged } : {}),
     ...(cbs.onParkedCount ? { onParkedCount: cbs.onParkedCount } : {}),
     ...(cbs.showToast ? { showToast: cbs.showToast } : {}),

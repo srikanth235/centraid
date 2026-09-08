@@ -7,12 +7,16 @@ export interface ShareDestination {
   label: string;
   partyId?: string;
   vaultId?: string;
+  /** The row is still queued; the overlay says so, never the id (#922 G2). */
+  pending?: boolean;
 }
 
 export interface ShareTarget {
   partyId: string;
   label: string;
   vaultId?: string;
+  /** The person's row is still queued; the overlay says so, not the id. */
+  pending?: boolean;
 }
 
 export interface ShareCircle {
@@ -35,7 +39,7 @@ export function selectedShareMembers(
   return destinations.flatMap((destination) => {
     const capability = selections[destination.id];
     if (!capability) return [];
-    if (destination.partyId && isPendingPartyId(destination.partyId)) return [];
+    if (destination.pending) return [];
     return [
       {
         ...(destination.partyId ? { partyId: destination.partyId } : {}),
@@ -110,35 +114,9 @@ export function peopleDestinations(
         label: person.label,
         partyId: person.partyId,
         ...(person.vaultId ? { vaultId: person.vaultId } : {}),
+        ...(person.pending ? { pending: true } : {}),
       },
     ];
-  });
-}
-
-/** Names nobody until a vault settles it. */
-export function isPendingPartyId(partyId: string): boolean {
-  return partyId.startsWith("pending:");
-}
-
-/** Id shape must match `peopleDestinations` or a reload doubles the row. */
-export function quickAddedDestination(
-  partyId: string,
-  label: string
-): ShareDestination {
-  return { id: `party:${partyId}`, label, partyId };
-}
-
-/** Loose on purpose: rosters spell names out; typists don't. */
-export function nearNameMatches(
-  destinations: readonly ShareDestination[],
-  name: string
-): ShareDestination[] {
-  const needle = name.trim().toLowerCase();
-  if (!needle) return [];
-  return destinations.filter((destination) => {
-    const label = destination.label.trim().toLowerCase();
-    if (!label) return false;
-    return label.includes(needle) || needle.includes(label);
   });
 }
 

@@ -43,7 +43,8 @@ interface VaultScope {
 interface AppJson {
   id: string;
   vault: {
-    purpose: string;
+    /** Absent on every manifest since #928 retired the DPV vocabulary. */
+    purpose?: string;
     scopes: VaultScope[];
   };
   actions?: ManifestHandler[];
@@ -267,7 +268,7 @@ function scopedSeededCtx(manifest: AppJson) {
                 ? [
                     {
                       vault_id: "seed-vault",
-                      owner_party_id: "seed-owner",
+                      self_party_id: "seed-owner",
                       base_currency: "USD",
                     },
                   ]

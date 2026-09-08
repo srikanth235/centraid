@@ -17,7 +17,7 @@ Zero runtime dependencies — Node builtins only (`node:crypto` webcrypto, `node
 - **`crypto.ts`** — AES-256-GCM object encryption, HKDF-SHA256 per-vault key derivation, keyed chunk ids, and keyring (epoch) custody.
 - **`manifest.ts`** — canonical-JSON manifest build/seal/open/verify.
 - **`engine.ts`** — provider-agnostic `createSnapshot` / `restoreSnapshot` / `verifySnapshot` / `wrapRecoveryKit`.
-- **`wal-format.ts`** / **`wal-restore.ts`** — authenticated WAL segment, closer and pair-marker codecs; rolling SQLite checksum validation; and coordinated two-database PITR replay.
+- **`wal-format.ts`** / **`wal-restore.ts`** — authenticated WAL segment, closer and tick-marker codecs; rolling SQLite checksum validation; and marker-proved PITR replay of the one vault database.
 - **`local-provider.ts`** — a full `BackupProvider` backed by the local filesystem (`purgeAuthTier: 'api-key'` — the local disk IS the user's own custody). Doubles as this package's conformance reference implementation.
 - **`remote-provider.ts`** — the HTTP+S3 client side of the protocol (`purgeAuthTier: 'interactive'`, enforced server-side).
 - **`conformance.ts`** — `providerConformanceCases()`, the grading suite any `BackupProvider` (this package's own or a third party's) is run against.

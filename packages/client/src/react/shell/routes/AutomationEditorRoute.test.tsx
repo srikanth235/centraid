@@ -179,7 +179,7 @@ describe("AutomationEditorRoute", () => {
         name: "Daily",
         modelRef: "gpt-5",
         enrolledAt: "2026-07-28T00:00:00.000Z",
-        grants: [],
+        answers: [],
       },
     ]);
     api.listOutboxGrants.mockReset().mockResolvedValue([]);
@@ -335,7 +335,6 @@ describe("AutomationEditorRoute", () => {
         connector: null,
         mcps: [],
         secrets: [],
-        vaultPurpose: null,
         vaultScopes: [],
       },
       instructions: "Run daily.",
@@ -469,7 +468,6 @@ describe("AutomationEditorRoute", () => {
           connector: null,
           mcps: [],
           secrets: [],
-          vaultPurpose: null,
           vaultScopes: [],
         },
         instructions: "Template instructions",

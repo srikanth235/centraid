@@ -2,8 +2,8 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   walGroupCloserKey,
-  walPairMarkerKey,
   walSegmentKey,
+  walTickMarkerKey,
 } from "@centraid/backup";
 import type { SnapshotRow } from "@centraid/backup";
 
@@ -15,7 +15,6 @@ import {
 } from "./backup-reconciliation.js";
 
 const GEN = "a".repeat(32);
-const JOURNAL_GEN = "b".repeat(32);
 const PRESENT = "1".repeat(64);
 const MISSING = "2".repeat(64);
 const ORPHAN = "3".repeat(64);
@@ -119,7 +118,7 @@ describe("backup-reconciliation", () => {
   test("a contiguous WAL inventory through its closer is clean", () => {
     const keys = [
       walSegmentKey({
-        db: "journal",
+        db: "vault",
         generation: GEN,
         group: 0,
         startOffset: 0,
@@ -127,7 +126,7 @@ describe("backup-reconciliation", () => {
         tickMs: 1,
       }),
       walGroupCloserKey({
-        db: "journal",
+        db: "vault",
         generation: GEN,
         group: 0,
         endOffset: 100,
@@ -147,11 +146,7 @@ describe("backup-reconciliation", () => {
         endOffset: 100,
         tickMs: day,
       }),
-      walPairMarkerKey({
-        vaultGeneration: GEN,
-        journalGeneration: JOURNAL_GEN,
-        tickMs: 3 * day,
-      }),
+      walTickMarkerKey({ generation: GEN, tickMs: 3 * day }),
       walSegmentKey({
         db: "vault",
         generation: "c".repeat(32),
@@ -161,9 +156,7 @@ describe("backup-reconciliation", () => {
         tickMs: 10 * day,
       }),
     ];
-    expect(
-      walCoverageFromInventory(keys, new Set([GEN, JOURNAL_GEN]))
-    ).toStrictEqual({
+    expect(walCoverageFromInventory(keys, new Set([GEN]))).toStrictEqual({
       earliestTickMs: day,
       latestTickMs: 3 * day,
       spanDays: 2,

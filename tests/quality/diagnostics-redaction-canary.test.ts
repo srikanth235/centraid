@@ -29,8 +29,6 @@ import { createHash } from "node:crypto";
 
 import { afterAll, describe, expect, test } from "vitest";
 
-import { ensureConversationLedger } from "@centraid/server/engine";
-
 import { AnomalyLedger } from "../../packages/server/src/serve/anomaly-ledger.js";
 import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
 import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
@@ -108,11 +106,9 @@ async function buildRig(): Promise<Rig> {
     enableWalShipper: false,
   });
   const db = plane.db;
-  ensureConversationLedger(db.journal);
   seedYear3Vault(
     {
       vault: db.vault,
-      journal: db.journal,
       // The canary does not need real sealing to test the BUNDLE: the
       // sentinels must be absent from the bundle whether the column is
       // sealed at rest or not. Storing them in the clear is the stronger
@@ -128,7 +124,7 @@ async function buildRig(): Promise<Rig> {
   // vault would hold them.
   db.vault
     .prepare(
-      "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version) VALUES (?, 'person', ?, ?, ?, 'v0')"
+      "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES (?, 'person', ?, ?, ?)"
     )
     .run(
       "w8-canary-person",

@@ -14,7 +14,6 @@ import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 interface RawAsset {
   asset_id: string;
   content_id: string;
-  favorite?: unknown;
   captured_at?: string | null;
   place_id?: string | null;
   purge_at?: string | null;
@@ -48,7 +47,6 @@ interface RawMemory {
 }
 
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   const before =
     typeof input?.before === "string" && input.before !== ""
@@ -68,7 +66,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           where: liveWhere,
           orderBy: { column: "captured_at", dir: "desc" },
           limit: window,
-          purpose,
         }),
         // A ~30-day shelf the sweep keeps short: 200 needs no knob.
         ctx.vault.read({
@@ -76,13 +73,15 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           where: [{ column: "deleted_at", op: "not-null" }],
           orderBy: { column: "deleted_at", dir: "desc" },
           limit: 200,
-          purpose,
         }),
-        ctx.vault.read({ entity: "core.collection", purpose }),
-        readPlaces({ ctx, purpose }),
+        ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.collection",
+        }),
+        readPlaces({ ctx }),
         before
           ? { rows: [] }
-          : ctx.vault.read({ entity: "media.memory", limit: 200, purpose }),
+          : ctx.vault.read({ entity: "media.memory", limit: 200 }),
       ]);
 
     // Joins stay `in`-bounded: only the windowed photos' bytes travel.
@@ -98,29 +97,28 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const [entries, contents, joins, memoryMembers] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.collection_entry",
             where: [
               { column: "target_type", op: "eq", value: "media.asset" },
               { column: "target_id", op: "in", value: assetIds },
             ],
-            purpose,
           })
         : { rows: [] },
       contentIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] },
-      readAssetJoins({ ctx, purpose, assetIds, contentIds }),
+      readAssetJoins({ ctx, assetIds, contentIds }),
       memoryIds.length > 0
         ? ctx.vault.read({
             entity: "media.memory_member",
             where: [{ column: "memory_id", op: "in", value: memoryIds }],
             orderBy: { column: "ordinal", dir: "asc" },
             limit: 4000,
-            purpose,
           })
         : { rows: [] },
     ]);
@@ -130,7 +128,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         (c) => [c.content_id, c] as const
       )
     );
-    const { tagsByAsset, custodyByContent } = joins;
+    const { tagsByAsset, favoriteAssets, custodyByContent } = joins;
 
     const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map(
       (c) => ({
@@ -169,7 +167,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       const { src, thumb, preview, poster } = srcOf(content);
       return {
         ...asset,
-        favorite: asset.favorite ? 1 : 0,
+        favorite: favoriteAssets.has(asset.asset_id) ? 1 : 0,
         content_uri: src,
         thumb_uri: thumb,
         preview_uri: preview,
@@ -239,7 +237,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     };
     // Only a consent deny is "ask the owner"; every other failure is ours.
     const e = error as { code?: string; message?: string };
-    if (e.code === "VAULT_CONSENT") {
+    if (e.code === "VAULT_ACCESS") {
       return { ...empty, vaultDenied: { code: e.code, message: e.message } };
     }
     return { ...empty, error: String(e.message ?? error) };

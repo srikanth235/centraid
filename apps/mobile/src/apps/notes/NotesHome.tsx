@@ -15,6 +15,7 @@ import { Alert, Pressable, RefreshControl, View } from "react-native";
 
 import {
   pendingChangeLabel,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
@@ -61,6 +62,7 @@ import {
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -116,7 +118,7 @@ function NoteRow({
 }): React.JSX.Element {
   const { colors } = useTheme();
   const shown = promote({ title: note.title, body: note.body });
-  const overlay = readPendingOverlay(note.raw);
+  const overlay = readPendingOverlay(note.raw, pendingSidecarOf(note.raw));
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <Pressable
@@ -408,6 +410,7 @@ export default function NotesHome({
       />
       {state.connection !== "unavailable" && !state.error ? (
         <FlashList
+          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
           data={visible}
           keyExtractor={(note) => note.id}
           contentContainerStyle={styles.list}

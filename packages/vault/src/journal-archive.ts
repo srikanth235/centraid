@@ -1,5 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit (#367) one coherent archival engine — the eligibility closure, segment builder, hash-chained manifest writer, and its verifier are one integrity unit; splitting the chain-hash writer from its verifier invites drift
-// Journal archival (#367 §E2): seal rows past the window into CAS; keep the manifest. Two streams match FK topology (provenance chain; invocation↔receipt cluster under deferred FKs).
+// Audit archival (#367 §E2, one file since #916): seal rows past the window
+// into CAS; keep the manifest. Two streams match FK topology (provenance
+// chain; invocation↔receipt cluster under deferred FKs), and the same run
+// prunes the LEDGER band behind its own custody latch.
 // NEEDS-WIRING (#367): nothing calls `runJournalArchival` automatically. Window-gated AND call-gated.
 
 import type { DatabaseSync } from "node:sqlite";
@@ -8,9 +11,21 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { sha256OfBytes } from "./blob/store.js";
 import type { VaultDb } from "./db.js";
 import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
+import { RETENTION_WINDOWS } from "./schema/audit.js";
 
-/** Rows older than this are eligible for archival, unless overridden. */
-export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = 90;
+/**
+ * Rows older than this are eligible for archival, unless overridden.
+ *
+ * DECLARED IN THE SCHEMA, NOT HERE (#916). Both bands now live in `vault.db`
+ * and the window that governs each is part of what the band IS, so the numbers
+ * come from `RETENTION_WINDOWS` — a retention window that lives in whichever
+ * sweep happens to run is not a policy.
+ */
+export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = RETENTION_WINDOWS.audit.days;
+
+/** The ledger band's own window: conversation turns are pruned behind their
+ *  archive's custody latch, never on the audit band's schedule. */
+export const DEFAULT_LEDGER_PRUNE_WINDOW_DAYS = RETENTION_WINDOWS.ledger.days;
 
 /** Cap per run (#659 L2) — without it a first archival is an unbounded memory spike. */
 export const DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS = 5_000;
@@ -35,8 +50,10 @@ export interface JournalArchiveManifestRow {
 }
 
 export interface JournalArchivalOptions {
-  /** Rows fully older than this many days from `now` are eligible. Default 90. */
+  /** Audit rows fully older than this many days from `now` are eligible. */
   windowDays?: number;
+  /** Ledger rows behind a durable archive older than this are pruned. */
+  ledgerWindowDays?: number;
   now?: string;
   /** Default `DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`. */
   maxRowsPerRun?: number;
@@ -52,6 +69,20 @@ export interface JournalArchivalResult {
    * run again rather than wait for the next daily gate.
    */
   capped: boolean;
+  /** The ledger band's half of the same run (#916). */
+  ledger: LedgerPruneResult;
+}
+
+export interface LedgerPruneResult {
+  /** `conversation_archive` rows whose raw turns were dropped this run. */
+  segmentsPruned: number;
+  turnsPruned: number;
+  /**
+   * Archives past the window this run did NOT prune, because the segment they
+   * name is not in the local CAS. The latch is the point: a conversation's raw
+   * rows go only once its archive is provably durable.
+   */
+  heldForCustody: number;
 }
 
 export interface ArchivedSegmentRows {
@@ -179,7 +210,7 @@ function computeEligibleCluster(
   }>(
     journal,
     (p) =>
-      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt
+      `SELECT receipt_id, invocation_id, occurred_at FROM access_receipt
         WHERE invocation_id IS NOT NULL AND invocation_id IN (${p})`,
     candidateIds
   );
@@ -199,7 +230,7 @@ function computeEligibleCluster(
   }>(
     journal,
     (p) =>
-      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt
+      `SELECT receipt_id, invocation_id, occurred_at FROM access_receipt
         WHERE receipt_id IN (${p})`,
     receiptIdList
   );
@@ -298,10 +329,10 @@ function selectProvenanceCandidates(
 ): Row[] {
   return journal
     .prepare(
-      `SELECT * FROM consent_provenance p
+      `SELECT * FROM access_provenance p
         WHERE p.occurred_at < ?
           AND NOT EXISTS (
-            SELECT 1 FROM consent_provenance c
+            SELECT 1 FROM access_provenance c
              WHERE c.prev_prov_id = p.prov_id AND c.occurred_at >= ?
           )
         ORDER BY p.occurred_at, p.prov_id
@@ -347,7 +378,7 @@ function buildProvenanceSegment(rows: Row[]): SegmentBuild | null {
   const bytes = gzipJson({
     version: SEGMENT_VERSION,
     stream: "provenance",
-    rows: { consent_provenance: rows },
+    rows: { access_provenance: rows },
   });
   const ids = rows.map((r) => r.prov_id as string).sort();
   const times = rows.map((r) => r.occurred_at as string).sort();
@@ -363,7 +394,7 @@ function buildProvenanceSegment(rows: Row[]): SegmentBuild | null {
 
 interface ClusterTables {
   agent_command_invocation: Row[];
-  consent_receipt: Row[];
+  access_receipt: Row[];
   agent_invocation_check: Row[];
   agent_evidence: Row[];
   agent_explanation: Row[];
@@ -398,7 +429,7 @@ function lastManifestChain(
 ): { manifestId: string; chainHash: string } | undefined {
   const row = journal
     .prepare(
-      `SELECT manifest_id, chain_hash FROM journal_archive_manifest ORDER BY rowid DESC LIMIT 1`
+      `SELECT manifest_id, chain_hash FROM audit_archive_manifest ORDER BY rowid DESC LIMIT 1`
     )
     .get() as { manifest_id: string; chain_hash: string } | undefined;
   return row
@@ -450,7 +481,7 @@ function insertManifest(
   });
   journal
     .prepare(
-      `INSERT INTO journal_archive_manifest
+      `INSERT INTO audit_archive_manifest
          (manifest_id, stream, from_id, to_id, from_time, to_time, row_count, segment_sha256, segment_bytes, prev_manifest_id, chain_hash, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
@@ -492,7 +523,7 @@ function reclaimModeOf(journal: DatabaseSync): "incremental" | "none" {
 }
 
 /**
- * Reclaim the pages the deletes freed. `journal.db` is opened with
+ * Reclaim the pages the deletes freed. `vault.db` is opened with
  * `PRAGMA auto_vacuum = INCREMENTAL` (#438), so `incremental_vacuum` returns
  * the freelist to the OS without rewriting the file. Open-time setup converts
  * any pre-#438 file first; archival never falls back to a whole-file `VACUUM`.
@@ -517,7 +548,7 @@ function reclaimSpace(journal: DatabaseSync): {
 export function archivedSegmentShas(journal: DatabaseSync): Set<string> {
   const shas = new Set<string>();
   const rows = journal
-    .prepare(`SELECT segment_sha256 FROM journal_archive_manifest`)
+    .prepare(`SELECT segment_sha256 FROM audit_archive_manifest`)
     .all() as {
     segment_sha256: string;
   }[];
@@ -544,7 +575,7 @@ export function runJournalArchival(
     throw new Error("journal archival maxRowsPerRun must be a positive count");
   const now = options.now ?? nowIso();
   const cutoff = daysBeforeIso(now, windowDays);
-  const journal = db.journal;
+  const journal = db.audit;
 
   // Phase 1 — eligibility. Reads only; no lock held past each query.
   const cluster = computeEligibleCluster(journal, cutoff, maxRows);
@@ -557,12 +588,9 @@ export function runJournalArchival(
             "invocation_id",
             [...cluster.invocationIds]
           ),
-          consent_receipt: selectByIds(
-            journal,
-            "consent_receipt",
-            "receipt_id",
-            [...cluster.receiptIds]
-          ),
+          access_receipt: selectByIds(journal, "access_receipt", "receipt_id", [
+            ...cluster.receiptIds,
+          ]),
           agent_invocation_check: selectByIds(
             journal,
             "agent_invocation_check",
@@ -599,11 +627,22 @@ export function runJournalArchival(
   const clusterSeg = clusterTables ? buildClusterSegment(clusterTables) : null;
 
   if (!provSeg && !clusterSeg) {
+    const ledgerOnly = pruneLedgerBand(db, {
+      cutoff: daysBeforeIso(
+        now,
+        options.ledgerWindowDays ?? DEFAULT_LEDGER_PRUNE_WINDOW_DAYS
+      ),
+      now,
+    });
     return {
       manifests: [],
       rowsArchived: 0,
-      reclaim: { mode: reclaimModeOf(journal), ranVacuum: false },
+      reclaim:
+        ledgerOnly.turnsPruned > 0
+          ? reclaimSpace(journal)
+          : { mode: reclaimModeOf(journal), ranVacuum: false },
       capped,
+      ledger: ledgerOnly,
     };
   }
 
@@ -618,11 +657,21 @@ export function runJournalArchival(
   const manifests: JournalArchiveManifestRow[] = [];
   let rowsArchived = 0;
 
+  let ledger: LedgerPruneResult = {
+    segmentsPruned: 0,
+    turnsPruned: 0,
+    heldForCustody: 0,
+  };
   journal.exec("BEGIN");
   try {
     // Deferred FK checking is what makes the invocation⇄receipt mutual
     // reference deletable at all — see the module header.
     journal.exec("PRAGMA defer_foreign_keys = ON");
+    // THE ARCHIVE PASS'S DOOR (#916). Every audit table refuses DELETE unless
+    // a row stands in `audit_archive_pass`, so the one legitimate deleter
+    // opens it here, inside the transaction, and closes it before COMMIT — a
+    // pass that threw rolls the door shut with everything else.
+    journal.prepare("INSERT INTO audit_archive_pass (active) VALUES (1)").run();
 
     if (provSeg && provIngest) {
       manifests.push(
@@ -636,7 +685,7 @@ export function runJournalArchival(
       rowsArchived += provSeg.rowCount;
       deleteByIds(
         journal,
-        "consent_provenance",
+        "access_provenance",
         "prov_id",
         provRows.map((r) => r.prov_id as string)
       );
@@ -674,9 +723,9 @@ export function runJournalArchival(
       // The mutual pair — order is free under defer_foreign_keys.
       deleteByIds(
         journal,
-        "consent_receipt",
+        "access_receipt",
         "receipt_id",
-        clusterTables.consent_receipt.map((r) => r.receipt_id as string)
+        clusterTables.access_receipt.map((r) => r.receipt_id as string)
       );
       deleteByIds(
         journal,
@@ -687,14 +736,81 @@ export function runJournalArchival(
         )
       );
     }
+    journal.prepare("DELETE FROM audit_archive_pass WHERE active = 1").run();
     journal.exec("COMMIT");
   } catch (error) {
     journal.exec("ROLLBACK");
     throw error;
   }
 
+  ledger = pruneLedgerBand(db, {
+    cutoff: daysBeforeIso(
+      now,
+      options.ledgerWindowDays ?? DEFAULT_LEDGER_PRUNE_WINDOW_DAYS
+    ),
+    now,
+  });
+
   const reclaim = reclaimSpace(journal);
-  return { manifests, rowsArchived, reclaim, capped };
+  return { manifests, rowsArchived, reclaim, capped, ledger };
+}
+
+/**
+ * The LEDGER band's half of the same duty (#916). Conversation turns are bulky
+ * and short-lived where audit rows are small and long-lived, so the two bands
+ * keep different windows — but they share one file and one pass, because two
+ * schedules over one file is two chances to forget.
+ *
+ * A CUSTODY LATCH, not a window (schema/audit.ts): the raw rows for a range go
+ * only when `conversation_archive` names a segment that is actually in this
+ * vault's content store. An archive row whose bytes are not here yet is HELD
+ * and counted, never silently dropped — the alternative is deleting the only
+ * copy of a member's conversation.
+ */
+function pruneLedgerBand(
+  db: VaultDb,
+  args: { cutoff: string; now: string }
+): LedgerPruneResult {
+  const cutoffMs = Date.parse(args.cutoff);
+  const due = db.audit
+    .prepare(
+      `SELECT id, conversation_id, seq_from, seq_to, segment_sha256
+         FROM conversation_archive
+        WHERE pruned_at IS NULL AND to_time <= ?
+        ORDER BY to_time`
+    )
+    .all(cutoffMs) as {
+    id: string;
+    conversation_id: string;
+    seq_from: number;
+    seq_to: number;
+    segment_sha256: string;
+  }[];
+  let segmentsPruned = 0;
+  let turnsPruned = 0;
+  let heldForCustody = 0;
+  const stampPruned = db.audit.prepare(
+    "UPDATE conversation_archive SET pruned_at = ? WHERE id = ?"
+  );
+  const dropTurns = db.audit.prepare(
+    `DELETE FROM turns WHERE conversation_id = ? AND seq BETWEEN ? AND ?`
+  );
+  for (const row of due) {
+    if (!db.blobs.local.hasSync(row.segment_sha256)) {
+      heldForCustody += 1;
+      continue;
+    }
+    // `items` and `attachments` cascade from the turn.
+    const dropped = dropTurns.run(
+      row.conversation_id,
+      row.seq_from,
+      row.seq_to
+    );
+    turnsPruned += Number(dropped.changes);
+    stampPruned.run(Date.parse(args.now), row.id);
+    segmentsPruned += 1;
+  }
+  return { segmentsPruned, turnsPruned, heldForCustody };
 }
 
 function rowToManifest(row: Row): JournalArchiveManifestRow {
@@ -719,7 +835,7 @@ export function findArchiveManifest(
   manifestId: string
 ): JournalArchiveManifestRow | undefined {
   const row = journal
-    .prepare(`SELECT * FROM journal_archive_manifest WHERE manifest_id = ?`)
+    .prepare(`SELECT * FROM audit_archive_manifest WHERE manifest_id = ?`)
     .get(manifestId) as Row | undefined;
   return row ? rowToManifest(row) : undefined;
 }
@@ -733,11 +849,11 @@ export function listArchiveManifests(
     stream
       ? journal
           .prepare(
-            `SELECT * FROM journal_archive_manifest WHERE stream = ? ORDER BY rowid`
+            `SELECT * FROM audit_archive_manifest WHERE stream = ? ORDER BY rowid`
           )
           .all(stream)
       : journal
-          .prepare(`SELECT * FROM journal_archive_manifest ORDER BY rowid`)
+          .prepare(`SELECT * FROM audit_archive_manifest ORDER BY rowid`)
           .all()
   ) as Row[];
   return rows.map(rowToManifest);
@@ -785,7 +901,7 @@ export function verifyArchivedSegment(
     }
   }
   const prev = manifest.prevManifestId
-    ? findArchiveManifest(db.journal, manifest.prevManifestId)
+    ? findArchiveManifest(db.audit, manifest.prevManifestId)
     : undefined;
   const expectedChainHash = computeChainHash({
     prevChainHash: prev?.chainHash ?? "",

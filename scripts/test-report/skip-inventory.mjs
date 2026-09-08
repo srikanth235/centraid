@@ -5,7 +5,8 @@
  * a runtime `t.skip()`, or a `CENTRAID_*` / `CLAWGNITION_*` env gate — is a
  * quality claim the author gets to make by hand. So it is the one thing agents
  * are still allowed to declare, and the price of declaring it is an inventory
- * entry in `tests/skips.json` citing an open tracking issue and a reason.
+ * entry in `tests/inventory.json#skips` citing an open tracking issue, a
+ * reason, and a date by which the hole is closed or re-argued (#915 Wave 4).
  *
  * Two mechanical consequences:
  *   - an UNINVENTORIED skip fails `check:pr` (it cannot be added quietly), and
@@ -17,10 +18,21 @@
  * the key survives the line drift that any edit above it would cause.
  */
 
-import { glob, readFile, writeFile } from "node:fs/promises";
+import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  INVENTORY_PATH,
+  readLedgerSection,
+  writeLedgerSection,
+} from "../check-ledgers.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
+
+// The deadline a newly inventoried skip carries when nothing more specific is
+// known (#915 Wave 4). Every hole in the suite now has a date by which it is
+// closed or re-argued; `lint:ledgers` fails on a past one.
+const DEFAULT_EXPIRY = "2026-12-01";
 
 /**
  * Ordered detectors; the first match on a line wins so one line yields exactly
@@ -140,7 +152,7 @@ export function validateSkipInventory(
     const entry = entries[site.key];
     if (!entry) {
       errors.push(
-        `uninventoried skip ${site.key} (line ${site.line}, ${site.kind}): add it to tests/skips.json with an issue and a reason, or delete the skip`
+        `uninventoried skip ${site.key} (line ${site.line}, ${site.kind}): add it to tests/inventory.json#skips with an issue, a reason and an expires date, or delete the skip`
       );
       continue;
     }
@@ -185,7 +197,7 @@ export function validateSkipInventory(
 
   const budget = inventory?._budget;
   if (!Number.isInteger(budget)) {
-    errors.push("tests/skips.json has no integer _budget");
+    errors.push("tests/inventory.json#skips has no integer _budget");
   } else if (sites.length > budget) {
     errors.push(
       `skip budget exceeded: ${sites.length} skips against a budget of ${budget}. The budget is down-only — delete a skip instead of raising it.`
@@ -216,6 +228,10 @@ export function reconcileInventory(inventory, sites) {
       snippet: site.snippet,
       issue: entry.issue ?? null,
       reason: entry.reason ?? "",
+      // The deadline #915 Wave 4 gave every inventory exception. `--write`
+      // carries it through rather than reseeding it, so a re-scan never
+      // silently extends a hole's life.
+      expires: entry.expires ?? DEFAULT_EXPIRY,
     };
   }
   const budget = Number.isInteger(inventory?._budget)
@@ -226,24 +242,21 @@ export function reconcileInventory(inventory, sites) {
 
 async function main() {
   const write = process.argv.includes("--write");
-  const inventoryPath = path.join(root, "tests/skips.json");
   const sites = await discoverSkipSites({ root });
-  let inventory;
-  try {
-    inventory = JSON.parse(await readFile(inventoryPath, "utf8"));
-  } catch {
-    inventory = { _budget: sites.length, sites: {} };
-  }
+  const inventory = readLedgerSection(INVENTORY_PATH, "skips", root) ?? {
+    _budget: sites.length,
+    sites: {},
+  };
   if (write) {
     const next = reconcileInventory(inventory, sites);
-    await writeFile(inventoryPath, `${JSON.stringify(next, null, 2)}\n`);
+    writeLedgerSection(INVENTORY_PATH, "skips", next, root);
     console.log(
-      `skips: wrote ${sites.length} sites (budget ${next._budget}) to tests/skips.json`
+      `skips: wrote ${sites.length} sites (budget ${next._budget}) to ${INVENTORY_PATH}#skips`
     );
     return;
   }
   const matrix = JSON.parse(
-    await readFile(path.join(root, "tests/matrix.json"), "utf8")
+    await readFile(path.join(root, "tests/claims.json"), "utf8")
   );
   const { errors, warnings, count } = validateSkipInventory(inventory, sites, {
     trackingIssues: matrix.trackingIssues,

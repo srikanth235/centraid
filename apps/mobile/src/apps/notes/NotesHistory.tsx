@@ -6,7 +6,7 @@
 // and the status line above the list says so in the blueprint's own words.
 
 import React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import type { VaultRow } from "@centraid/blueprints/apps/notes/filing";
 import { ageLabel } from "@centraid/blueprints/apps/notes/format";
@@ -16,7 +16,9 @@ import {
   historyStatus,
 } from "@centraid/blueprints/apps/notes/view-copy";
 
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text } from "../../kit/components/NativeText";
+import SeatList from "../../kit/components/SeatList";
 import { useTheme } from "../../kit/theme";
 import type { NativeNote } from "./notes-model";
 import { styles } from "./NotesHome.styles";
@@ -57,16 +59,24 @@ export default function NotesHistory({
     );
   }
 
+  // A note's chain has no bound: every save appends, and the head is newest, so
+  // the whole history mounted at once is exactly the shape #922 E6 windowed on
+  // the other five seats. The status line is the list's HEADER, not chrome
+  // above it — a second scroller around a virtualised list measures nothing.
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
-        {historyStatus(versions.length)}
-      </Text>
-      {versions.map((version) => (
-        <View
-          key={version.content_id}
-          style={[styles.row, { borderBottomColor: colors.line }]}
-        >
+    <SeatList
+      accessibilityLabel="Version history"
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={versions}
+      keyOf={(version) => version.content_id}
+      contentContainerStyle={styles.list}
+      header={
+        <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
+          {historyStatus(versions.length)}
+        </Text>
+      }
+      renderRow={(version) => (
+        <View style={[styles.row, { borderBottomColor: colors.line }]}>
           <View style={styles.rowOpen}>
             <Text style={[styles.rowName, { color: colors.text }]}>
               {ageLabel(version.asserted_at) || version.asserted_at}
@@ -95,7 +105,7 @@ export default function NotesHistory({
             </Pressable>
           )}
         </View>
-      ))}
-    </ScrollView>
+      )}
+    />
   );
 }

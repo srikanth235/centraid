@@ -5,6 +5,10 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import {
+  journeyCeiling,
+  optionalJourneyCeiling,
+} from "../../../../tests/helpers/journeys.js";
 import { SERVICE_WORKER_VERSION } from "../../src/sw-version.js";
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
@@ -736,7 +740,7 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
 // ─── Test D — WEB VITALS (#659) ─────
 // Observers must install via addInitScript, BEFORE the document runs: one
 // attached after paint sees a truncated timeline (`buffered: true` covers LCP,
-// not `event`). Ceilings: tests/experience-budgets/web.json.
+// not `event`). Ceilings: tests/journeys.json, web/cold-open and web/warm-switch.
 
 const VITALS_REPORT_PATH = path.resolve(
   here,
@@ -848,42 +852,111 @@ async function readVitals(page: Page): Promise<VitalsCapture> {
         .getEntriesByType("paint")
         .map((entry) => `${entry.name}=${Math.round(entry.startTime)}`)
         .join(","),
+      // Both attribute a null: a hidden document emits no paint timing, and an
+      // empty body means the shell never rendered rather than never painted.
+      visibility: document.visibilityState,
+      bodyText: (document.body.textContent ?? "").slice(0, 400),
     };
   })) as VitalsCapture;
 }
 
+/**
+ * FORCE ONE PRESENTED FRAME (#922 F5).
+ *
+ * PaintTiming stamps `first-contentful-paint` when a frame carrying that
+ * content is PRESENTED, and largest-contentful-paint has no candidate before
+ * it. A headless shell driving no display presents nothing on its own, so this
+ * probe could sit for its whole run on a fully rendered screen with
+ * `first-paint` alone on the timeline and report `LCP: n/a` — the "missing
+ * first-contentful-paint" that the journey ledger parked its
+ * LCP ceiling behind. It is neither a webfont nor an unresolved transition:
+ * animation frames and forced layout reads are not enough either, because they
+ * never reach presentation. A capture does, which is the whole reason this
+ * screenshot is taken and thrown away.
+ *
+ * It must run BEFORE the interaction below: Chromium stops reporting
+ * largest-contentful-paint at the first input, so interacting ahead of the
+ * first presented frame costs the LCP number this probe exists to produce.
+ */
+async function flushPaint(page: Page): Promise<void> {
+  await page.screenshot({ timeout: 15_000 });
+}
+
 test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => {
-  const budgets = JSON.parse(
-    await fs.readFile(
-      path.resolve(here, "../../../..", "tests/experience-budgets/web.json"),
-      "utf8"
-    )
-  ) as {
-    metrics: {
-      largestContentfulPaint: {
-        ceilingMs?: number;
-        _intendedCeilingMs?: number;
-      };
-      interactionToNextPaint: {
-        ceilingMs?: number;
-        _intendedCeilingMs?: number;
-      };
-      cumulativeLayoutShift: { maxScore: number };
-    };
-  };
+  const COLD_OPEN_KEY = "web/cold-open/year3/ci-linux-x64-4c";
+  const INTERACTION_KEY = "web/warm-switch/year3/ci-linux-x64-4c";
+  const lcpCeilingMs =
+    optionalJourneyCeiling(
+      COLD_OPEN_KEY,
+      "largestContentfulPaint",
+      "ceilingMs"
+    ) ??
+    optionalJourneyCeiling(
+      COLD_OPEN_KEY,
+      "largestContentfulPaint",
+      "_intendedCeilingMs"
+    );
+  const inpCeilingMs =
+    optionalJourneyCeiling(
+      INTERACTION_KEY,
+      "interactionToNextPaint",
+      "ceilingMs"
+    ) ??
+    optionalJourneyCeiling(
+      INTERACTION_KEY,
+      "interactionToNextPaint",
+      "_intendedCeilingMs"
+    );
+  const clsCeiling = journeyCeiling(
+    COLD_OPEN_KEY,
+    "cumulativeLayoutShift",
+    "maxScore"
+  );
 
   await installVitalsObservers(page);
 
   await page.goto("/");
   await waitForShellBundle(page);
 
+  await flushPaint(page);
+
+  // The candidate must be DELIVERED to the observer before the interaction
+  // below. Chromium stops reporting largest-contentful-paint at the first
+  // input, and an entry still queued at that moment is dropped rather than
+  // handed over late — which is why the first run of this fix reported a
+  // `first-contentful-paint` on the timeline and `LCP: n/a` beside it. Giving
+  // up here is not a failure: a run that produced no candidate lands in the
+  // `lcpMs === null` branch below, which annotates and does not assert.
+  const lcpDelivered = await page
+    .waitForFunction(
+      () =>
+        (
+          globalThis as unknown as {
+            __centraidVitals?: { lcpMs: number | null };
+          }
+        ).__centraidVitals?.lcpMs !== null,
+      undefined,
+      { timeout: 10_000 }
+    )
+    .then(
+      () => true,
+      () => false
+    );
+
   // INP is undefined without an interaction, and "INP: null, passed" is the
-  // vacuous green this rig exists to prevent.
-  const anyButton = page.locator("button:visible").first();
-  const clicked = await anyButton.click({ timeout: 15_000 }).then(
-    () => true,
-    () => false
-  );
+  // vacuous green this rig exists to prevent. The interaction is the
+  // pairing-ticket field, because it is the only control the cold connect
+  // screen offers that is ENABLED: "Continue" stays disabled until a ticket is
+  // pasted, so `button:visible` spent its whole 15 s actionability timeout and
+  // left `interactionDriven: false`. A pointer press plus a keystroke is what
+  // Chromium hands an `interactionId`, which is what event-timing reports.
+  const ticketField = page.getByLabel("Pairing ticket");
+  const interact = async (): Promise<boolean> => {
+    await ticketField.click({ timeout: 15_000 });
+    await ticketField.press("c");
+    return true;
+  };
+  const clicked = await interact().catch(() => false);
   // Event-timing entries arrive on the frame after the interaction.
   await page.evaluate(
     () =>
@@ -897,24 +970,22 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     capturedAt: new Date().toISOString(),
     harness: { apiUrl: API_URL, appId: APP_ID },
     // A ceiling with no stated volume is not a budget
-    // (tests/experience-budgets/README.md).
-    volume: "empty (web-e2e fixture vault, loopback, headless Chromium)",
+    // (tests/journeys.json `volumes`).
+    volume:
+      "year3 (tests/journeys.json): the golden daily-path profile from @centraid/test-kit's year-3 generator, then every bundled app's demo seed through the gateway's own write path",
     interactionDriven: clicked,
+    lcpDelivered,
     vitals,
   };
   await fs.mkdir(path.dirname(VITALS_REPORT_PATH), { recursive: true });
   await fs.writeFile(VITALS_REPORT_PATH, JSON.stringify(report, null, 2));
 
   console.log("\n================ WEB VITALS SUMMARY ==================");
+  console.log(`LCP: ${vitals.lcpMs ?? "n/a"} ms   (ceiling ${lcpCeilingMs})`);
   console.log(
-    `LCP: ${vitals.lcpMs ?? "n/a"} ms   (ceiling ${budgets.metrics.largestContentfulPaint.ceilingMs})`
+    `INP: ${vitals.inpMs ?? "n/a"} ms   (ceiling ${inpCeilingMs}, interaction driven: ${clicked})`
   );
-  console.log(
-    `INP: ${vitals.inpMs ?? "n/a"} ms   (ceiling ${budgets.metrics.interactionToNextPaint.ceilingMs}, interaction driven: ${clicked})`
-  );
-  console.log(
-    `CLS: ${vitals.clsScore}          (ceiling ${budgets.metrics.cumulativeLayoutShift.maxScore})`
-  );
+  console.log(`CLS: ${vitals.clsScore}          (ceiling ${clsCeiling})`);
   console.log(
     `DCL: ${vitals.domContentLoadedMs ?? "n/a"} ms   load: ${vitals.loadEventMs ?? "n/a"} ms`
   );
@@ -933,7 +1004,7 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
 
   // CLS is the one vital this harness measures honestly — a HARD gate.
   expect(vitals.clsScore, "cumulative layout shift").toBeLessThanOrEqual(
-    budgets.metrics.cumulativeLayoutShift.maxScore
+    clsCeiling
   );
 
   // Assert when the browser produced them, annotate when it did not: the
@@ -944,17 +1015,14 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     test.info().annotations.push({
       type: "perf-note",
       description:
-        `no largest-contentful-paint entry (paint timeline: [${vitals.paintEntries}]). ` +
-        `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
+        `no largest-contentful-paint entry (paint timeline: [${vitals.paintEntries}], ` +
+        `candidate delivered: ${lcpDelivered}, visibility: ${vitals.visibility}). ` +
+        `LCP not asserted this run; tests/journeys.json keeps it unmeasured.`,
     });
   } else {
-    // Live ceiling first; the parked intended one until web.json is re-seeded.
-    const lcpCeiling =
-      budgets.metrics.largestContentfulPaint.ceilingMs ??
-      budgets.metrics.largestContentfulPaint._intendedCeilingMs;
-    expect(lcpCeiling, "LCP ceiling configured").toEqual(expect.any(Number));
+    expect(lcpCeilingMs, "LCP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.lcpMs, "largest contentful paint").toBeLessThanOrEqual(
-      lcpCeiling
+      lcpCeilingMs
     );
   }
   if (vitals.inpMs === null) {
@@ -963,12 +1031,91 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
       description: `no event-timing entry recorded (interaction driven: ${clicked}); INP not asserted this run`,
     });
   } else {
-    const inpCeiling =
-      budgets.metrics.interactionToNextPaint.ceilingMs ??
-      budgets.metrics.interactionToNextPaint._intendedCeilingMs;
-    expect(inpCeiling, "INP ceiling configured").toEqual(expect.any(Number));
+    expect(inpCeilingMs, "INP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.inpMs, "interaction to next paint").toBeLessThanOrEqual(
-      inpCeiling
+      inpCeilingMs
     );
   }
+});
+
+/**
+ * TAP TO A USABLE APP SCREEN, THE WARM SWITCH (#922 C6, #922 E3).
+ *
+ * The ledger's `desktop/warm-switch` entry measures "click an app tile → the
+ * app view attaches", and it is measured on a host this container has not got:
+ * Electron does not launch without a display. This is that interval on the
+ * seat that DOES run here, carried past attach to the screen the member can
+ * act on: the app's own loading fallback is gone and its host bridge is
+ * installed, so the replica scope, the first read and the app's first paint
+ * are all inside the number. Attach is still reported beside it, because it is
+ * the half the desktop entry's `desktop.appview.attach` span fences.
+ *
+ * WARM, not cold: the scope the first open left behind is still inside its
+ * grace, so this is the switch a member makes all day, and the number moves
+ * when that grace stops covering it.
+ */
+const TAP_EVIDENCE = path.resolve(
+  here,
+  "../../../../artifacts/e2e/ui-impact/issue-922-web-warm-switch-app-view.png"
+);
+
+/** Going home tears the bridge down as well as the view, so the warm switch
+ *  that follows really re-installs one rather than finding the old one up. */
+async function goHomeFromAttached(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(page.getByTestId("inline-app-view")).toBeHidden();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.centraid)))
+    .toBe(false);
+}
+
+interface WarmSwitchSpan {
+  /** Click → the app view is in the tree. The desktop entry's half. */
+  attachMs: number;
+  /** Click → the app is drawn and takeable: no fallback, bridge installed. */
+  usableMs: number;
+}
+
+async function attachAppAndMeasure(page: Page): Promise<WarmSwitchSpan> {
+  await openPalette(page);
+  // Settle if the timeline will: this measures an INTERVAL, not bytes, so a
+  // timeline that never goes count-stable is noise to absorb rather than a
+  // failure.
+  await settleResourceTimeline(page, 5_000).catch(() => undefined);
+  const started = Date.now();
+  await pickAppFromPalette(page);
+  await expect(page.getByTestId("inline-app-view")).toBeVisible();
+  const attachMs = Date.now() - started;
+  await expect(
+    page.getByText(`Loading ${APP_NAME}…`, { exact: true })
+  ).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.centraid)))
+    .toBe(true);
+  return { attachMs, usableMs: Date.now() - started };
+}
+
+test("warm switch — tap to a usable app screen", async ({ page }) => {
+  const KEY = "web/warm-switch/seeded-demo/ci-linux-x64-4c";
+  const ceilingMs = journeyCeiling(KEY, "tapToVisualResponse", "ceilingMs");
+
+  await page.goto("/");
+  await waitForShellBundle(page);
+  await establishSession(page);
+
+  await attachAppAndMeasure(page);
+  await goHomeFromAttached(page);
+  const warm = await attachAppAndMeasure(page);
+
+  await fs.mkdir(path.dirname(TAP_EVIDENCE), { recursive: true });
+  await page.screenshot({ path: TAP_EVIDENCE, timeout: 15_000 });
+
+  console.log(
+    `\nwarm switch tap→usable app screen: ${warm.usableMs} ms ` +
+      `(attach ${warm.attachMs} ms, ceiling ${ceilingMs} ms)\n`
+  );
+  expect(warm.usableMs, "tap to a usable app screen").toBeLessThanOrEqual(
+    ceilingMs
+  );
 });

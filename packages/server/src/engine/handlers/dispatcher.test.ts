@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import nodeFs from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 // The dispatcher after #286 phase 2: declared-handler routing ONLY.
 // What must hold: manifest lookup + Ajv validation + worker hand-off work;
 // `_sql` and every other underscore name is just an unknown handler now;
@@ -43,6 +44,24 @@ const MANIFEST = {
   ],
 };
 
+/** `fs.promises` is one live object, so the dispatcher's `stat` is countable
+ *  by replacing the method on it — an ESM namespace import is not spyable. */
+function countStats(): { calls: () => number; restore: () => void } {
+  const target = nodeFs.promises as unknown as Record<string, unknown>;
+  const real = target.stat as (...args: unknown[]) => unknown;
+  let calls = 0;
+  target.stat = (...args: unknown[]) => {
+    calls += 1;
+    return real.apply(target, args);
+  };
+  return {
+    calls: () => calls,
+    restore: () => {
+      target.stat = real;
+    },
+  };
+}
+
 describe("dispatcher", () => {
   beforeEach(async () => {
     appsDir = await tempDir("centraid-dispatch-");
@@ -70,9 +89,26 @@ describe("dispatcher", () => {
   });
 
   describe("TypeScript handlers", () => {
-    it("prefers a .ts handler over a .js of the same name", async () => {
-      // Both files exist for the declared `add_note`; the dispatcher probes
-      // `.ts` first, so the TS handler must be the one that runs.
+    it("prefers a precompiled .js over the .ts source of the same name", async () => {
+      // Both files exist for the declared `add_note`. A first-party app ships
+      // the compiled sibling (#922 B2), so THAT is what runs: the TS source is
+      // what nobody compiled, and only that path boots the loader hook.
+      await writeFile(
+        path.join(codeDir, "actions", "add_note.ts"),
+        `interface Body { title: string }\n` +
+          `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: 'TS:' + body.title } });`
+      );
+      const out = await dispatcher.write({
+        app: "demo",
+        action: "add_note",
+        input: { title: "x" },
+      });
+      expect(out.isError).toBe(false);
+      expect(out.structuredContent).toStrictEqual({ added: "x" });
+    });
+
+    it("falls back to the .ts source when nothing precompiled it", async () => {
+      await rm(path.join(codeDir, "actions", "add_note.js"));
       await writeFile(
         path.join(codeDir, "actions", "add_note.ts"),
         `interface Body { title: string }\n` +
@@ -87,7 +123,39 @@ describe("dispatcher", () => {
       expect(out.structuredContent).toStrictEqual({ added: "TS:x" });
     });
 
+    it("does not stat the manifest or the handler on every dispatch", async () => {
+      // App code changes when a version is published, not per request, so the
+      // mtime check is coalesced instead of paid per invocation (#922 B2).
+      const counted = countStats();
+      try {
+        await dispatcher.read({ app: "demo", query: "list_notes" });
+        const afterFirst = counted.calls();
+        expect(afterFirst).toBeGreaterThan(0);
+        await dispatcher.read({ app: "demo", query: "list_notes" });
+        await dispatcher.read({ app: "demo", query: "list_notes" });
+        expect(counted.calls()).toBe(afterFirst);
+      } finally {
+        counted.restore();
+      }
+    });
+
+    it("invalidate() drops the resolved handler as well as the manifest", async () => {
+      await dispatcher.read({ app: "demo", query: "list_notes" });
+      dispatcher.invalidate(codeDir);
+      const counted = countStats();
+      try {
+        await dispatcher.read({ app: "demo", query: "list_notes" });
+        expect(counted.calls()).toBeGreaterThan(0);
+      } finally {
+        counted.restore();
+      }
+    });
+
     it("dispatches a .ts action and a .ts query, each with a relative .ts sibling import", async () => {
+      // Nothing precompiled these, which is what puts them on the TS-loader
+      // path: the compiled sibling would win otherwise (#922 B2).
+      await rm(path.join(codeDir, "actions", "add_note.js"));
+      await rm(path.join(codeDir, "queries", "list_notes.js"));
       await writeFile(
         path.join(codeDir, "actions", "helper.ts"),
         `export function shout(s: string): string { return s.toUpperCase(); }`

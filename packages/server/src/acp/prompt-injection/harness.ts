@@ -1,17 +1,19 @@
 /*
- * Prompt-injection corpus harness (#842). Boundary is the gateway grant, not
+ * Prompt-injection corpus harness (#842). Boundary is the owner's standing
+ * answer in the gateway, not
  * model compliance: real ACP turn (`runAcpTurn` / `fake-acp-harness.mjs` via
- * `test-fixtures.ts`) against a one-grant vault; fake harness plays the duped
+ * `test-fixtures.ts`) against a one-answer vault; fake harness plays the duped
  * agent. Assert structural enums only — never id, timestamp, or order;
  * `vi.useFakeTimers()` would wedge the real subprocess I/O.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   ProviderEgressConsentStore,
 } from "@centraid/server/engine";
 import type { RunTurnFn } from "@centraid/server/engine";
@@ -19,9 +21,10 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   bootstrapVault,
   createGateway,
-  createGrant,
+  automationSubjectsOf,
   enrollAgent,
   enrollDevice,
+  recordAutomationAnswers,
   openVaultDb,
   registerLockerCommands,
   registerPeopleCommands,
@@ -33,8 +36,6 @@ import { startLiveDispatch } from "../automation/run-automation-live-dispatch.js
 import { runFake, vaultToolContext } from "../backends/acp/test-fixtures.js";
 import type { HarnessKind } from "../types.js";
 import { runVaultInvokeTool, runVaultSqlTool } from "../vault-sql-tool.js";
-
-const PURPOSE = "dpv:ServiceProvision";
 
 export interface Payload {
   id: string;
@@ -97,14 +98,15 @@ export function buildScenario(): Scenario {
 
   const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
   const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-  createGrant(db, {
-    granteePartyId: agent.partyId,
-    purposeConceptId: boot.concepts[PURPOSE] as string,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes: [
+  recordAutomationAnswers(db.vault, {
+    principalId: "assistant",
+    ownerPartyId: boot.ownerPartyId,
+    subjects: automationSubjectsOf([
       { schema: "schedule", verbs: "read+act" },
       { schema: "locker", verbs: "read+act" },
-    ],
+    ]),
+    decision: "granted",
+    now: new Date().toISOString(),
   });
   const agentCred: Credential = {
     kind: "agent",
@@ -126,7 +128,6 @@ export function buildScenario(): Scenario {
       gw.invoke(agentCred, {
         command: call.command,
         input: call.input,
-        purpose: PURPOSE,
       }),
   });
 
@@ -208,7 +209,6 @@ export async function applyAttempt(
     try {
       const result = scenario.gw.read(scenario.agentCred, {
         entity: attempt.entity,
-        purpose: PURPOSE,
       });
       return { kind: "allowed", rowCount: result.rows.length };
     } catch (error) {
@@ -228,14 +228,17 @@ export async function applyAttempt(
 async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   const kind = provider as HarnessKind;
   const workdir = await tempDir("acp-inject-egress-");
-  const journalDbFile = `${workdir}/journal.db`;
+  // ONE FILE (#916): the ledger is a band of a migrated `vault.db`, so the
+  // harness mints one rather than pointing a store at a bare path.
+  openVaultDb({ dir: workdir }).close({ skipOptimize: true });
+  const ledgerDbFile = path.join(workdir, "vault.db");
   const automationRef = "demo/nightly";
-  const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+  const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
   store.ensureAutomationConversation(automationRef, "demo", "Nightly", "codex");
   store.close();
   // Ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
-    makeJournalDbProvider(journalDbFile),
+    makeLedgerDbProvider(ledgerDbFile),
     (member) => member === "codex"
   );
   const before = consent.has(automationRef, kind, "automations");
@@ -248,7 +251,7 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
     workdir,
     runId: "run-inject",
     automationRef,
-    journalDbFile,
+    ledgerDbFile,
     runTurn,
     harness: kind,
     providerEgressConsent: consent,

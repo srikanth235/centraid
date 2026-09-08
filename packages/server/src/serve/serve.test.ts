@@ -203,8 +203,7 @@ describe("serve scenarios", () => {
     expect(body.logs.count).toBeTypeOf("number");
     expect(Array.isArray(body.logs.groups)).toBe(true);
     expect(body.redaction.level).toBe("standard");
-    // The auto-founded personal vault is mounted, sized off
-    // vault.db/journal.db.
+    // The auto-founded personal vault is mounted, sized off vault.db.
     expect(body.storage).toHaveLength(1);
     expect(body.storage[0]!.vaultDbBytes).toBeTypeOf("number");
     // The vault is identified by a salted hash, correlatable inside this one

@@ -4,8 +4,25 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { PENDING_OVERLAY_FIELDS } from "./pending-overlay.ts";
+import {
+  PENDING_OVERLAY_FIELDS,
+  attachPendingSidecar,
+} from "./pending-overlay.ts";
+import type { PendingOverlayFacts } from "./pending-overlay.ts";
 import { PendingWriteActions } from "./PendingWriteActions.tsx";
+
+/** A row as a read hands it over: the ONE pending column, plus the read's
+ *  sidecar carried with it (#922 G3). */
+function pendingRow(
+  intentId: string,
+  facts: PendingOverlayFacts,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return attachPendingSidecar(
+    { [PENDING_OVERLAY_FIELDS.key]: intentId, ...extra },
+    { [intentId]: facts }
+  );
+}
 
 describe(PendingWriteActions, () => {
   let root: ReturnType<typeof createRoot> | undefined;
@@ -26,12 +43,11 @@ describe(PendingWriteActions, () => {
     await act(async () => {
       root?.render(
         createElement(PendingWriteActions, {
-          row: {
-            [PENDING_OVERLAY_FIELDS.key]: "intent-parked",
-            [PENDING_OVERLAY_FIELDS.action]: "add",
-            [PENDING_OVERLAY_FIELDS.status]: "parked",
-            [PENDING_OVERLAY_FIELDS.reason]: "Owner review required.",
-          },
+          row: pendingRow("intent-parked", {
+            action: "add",
+            status: "parked",
+            reason: "Owner review required.",
+          }),
         })
       );
     });
@@ -49,17 +65,14 @@ describe(PendingWriteActions, () => {
     document.body.append(container);
     root = createRoot(container);
     const queued = {
-      [PENDING_OVERLAY_FIELDS.key]: "intent-stuck",
-      [PENDING_OVERLAY_FIELDS.action]: "rename",
-      [PENDING_OVERLAY_FIELDS.status]: "queued",
-      [PENDING_OVERLAY_FIELDS.enqueuedAt]: new Date(
-        Date.now() - 12 * 60_000
-      ).toISOString(),
+      action: "rename",
+      status: "queued" as const,
+      enqueuedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
     };
     await act(async () => {
       root?.render(
         createElement(PendingWriteActions, {
-          row: { ...queued, [PENDING_OVERLAY_FIELDS.attempts]: 3 },
+          row: pendingRow("intent-stuck", { ...queued, attempts: 3 }),
         })
       );
     });
@@ -69,7 +82,7 @@ describe(PendingWriteActions, () => {
     await act(async () => {
       root?.render(
         createElement(PendingWriteActions, {
-          row: { ...queued, [PENDING_OVERLAY_FIELDS.attempts]: 0 },
+          row: pendingRow("intent-stuck", { ...queued, attempts: 0 }),
         })
       );
     });
@@ -94,15 +107,17 @@ describe(PendingWriteActions, () => {
     await act(async () => {
       root?.render(
         createElement(PendingWriteActions, {
-          row: {
-            [PENDING_OVERLAY_FIELDS.key]: "intent-conflict",
-            [PENDING_OVERLAY_FIELDS.action]: "edit",
-            [PENDING_OVERLAY_FIELDS.status]: "conflict",
-            [PENDING_OVERLAY_FIELDS.reason]: "Row changed.",
-            [PENDING_OVERLAY_FIELDS.expectedVersion]: 4,
-            [PENDING_OVERLAY_FIELDS.actualVersion]: 5,
-            __centraidScopeId: "family-vault",
-          },
+          row: pendingRow(
+            "intent-conflict",
+            {
+              action: "edit",
+              status: "conflict",
+              reason: "Row changed.",
+              expectedVersion: 4,
+              actualVersion: 5,
+            },
+            { __centraidScopeId: "family-vault" }
+          ),
           onEdit,
         })
       );

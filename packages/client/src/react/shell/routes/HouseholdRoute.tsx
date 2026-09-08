@@ -2,19 +2,13 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
-  answerCommonsInvitation,
-  claimCommonsInvitation,
   approveGatewayLink,
   createGatewayDeviceTicket,
   getGatewayDeviceWorkStatus,
   listGatewayDevices,
-  listGatewayEdges,
   listGatewayLinks,
   listGatewayOwners,
-  listCommonsInvitations,
-  listCommonsRecovery,
   proposeGatewayLink,
-  recoverCommons,
   renameGatewayDevice,
   revokeGatewayDevice,
   setGatewayDeviceCompute,
@@ -133,12 +127,6 @@ export default function HouseholdRoute({
           loadLinks: listGatewayLinks,
           onProposeLink: proposeGatewayLink,
           onApproveLink: approveGatewayLink,
-          loadEdges: listGatewayEdges,
-          loadCommonsInvitations: listCommonsInvitations,
-          onClaimCommonsInvitation: claimCommonsInvitation,
-          onAnswerCommonsInvitation: answerCommonsInvitation,
-          loadCommonsRecovery: listCommonsRecovery,
-          onRecoverCommons: recoverCommons,
         }}
       />
     </>

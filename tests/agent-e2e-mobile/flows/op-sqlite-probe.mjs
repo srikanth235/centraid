@@ -64,6 +64,7 @@
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -85,7 +86,7 @@ await runFlow("op-sqlite-probe", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Notes.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -150,7 +151,7 @@ ${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Notes.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { VaultBridge, VaultCall } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import type { Manifest } from "../manifest/manifest.js";
 import { runFire } from "./fire.js";
 import type { DispatchSurface } from "./fire.js";
@@ -76,9 +77,9 @@ describe("runFire + ctx.vault", () => {
       "filer",
       manifest(),
       `export default async ({ ctx }) => {
-         const rows = await ctx.vault.read({ entity: 'schedule.task', purpose: 'dpv:ServiceProvision' });
-         const one = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'a' }, purpose: 'dpv:ServiceProvision' });
-         const two = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'b' }, purpose: 'dpv:ServiceProvision' });
+         const rows = await ctx.vault.read({ entity: 'schedule.task' });
+         const one = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'a' } });
+         const two = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'b' } });
          return { output: { rows, one, two } };
        };`
     );
@@ -105,7 +106,7 @@ describe("runFire + ctx.vault", () => {
           automationRef: "notes/filer",
           runId: "run-fixed",
           appsDir: dataDir,
-          journalDbFile: path.join(dataDir, "journal.db"),
+          ledgerDbFile: ledgerDbFileIn(dataDir),
           codeAppsDir: appsDir,
           vaultFor: (appId) => {
             bridgeApps.push(appId);
@@ -151,7 +152,7 @@ describe("runFire + ctx.vault", () => {
       manifest(),
       `export default async ({ ctx }) => {
          try {
-           await ctx.vault.read({ entity: 'core.party', purpose: 'dpv:ServiceProvision' });
+           await ctx.vault.read({ entity: 'core.party' });
            return { output: { reached: true } };
          } catch (err) {
            return { output: { code: err.code, message: String(err.message) } };
@@ -162,7 +163,7 @@ describe("runFire + ctx.vault", () => {
       {
         automationRef: "notes/blind",
         appsDir,
-        journalDbFile: path.join(appsDir, "journal.db"),
+        ledgerDbFile: ledgerDbFileIn(appsDir),
       },
       { openDispatch: stubDispatch }
     );
@@ -178,7 +179,7 @@ describe("runFire + ctx.vault", () => {
       manifest(),
       `export default async ({ ctx }) => {
          try {
-           await ctx.vault.invoke({ command: 'social.send_message', input: {}, purpose: 'dpv:Billing' });
+           await ctx.vault.invoke({ command: 'social.send_message', input: {} });
            return { output: 'unexpected allow' };
          } catch (err) {
            return { output: { code: err.code } };
@@ -187,19 +188,19 @@ describe("runFire + ctx.vault", () => {
     );
     const deny: VaultBridge = async () => ({
       ok: false,
-      code: "VAULT_CONSENT",
+      code: "VAULT_ACCESS",
       error: "deny (receipt r9): no active grant",
     });
     const { outcome } = await runFire(
       {
         automationRef: "notes/denied",
         appsDir,
-        journalDbFile: path.join(appsDir, "journal.db"),
+        ledgerDbFile: ledgerDbFileIn(appsDir),
         vaultFor: () => deny,
       },
       { openDispatch: stubDispatch }
     );
     expect(outcome.ok).toBe(true);
-    expect(outcome.output).toMatchObject({ code: "VAULT_CONSENT" });
+    expect(outcome.output).toMatchObject({ code: "VAULT_ACCESS" });
   });
 });

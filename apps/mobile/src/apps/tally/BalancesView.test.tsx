@@ -86,7 +86,7 @@ function view(
   return mountBlock(
     <BalancesView
       data={data}
-      notice={{ lastReadAt: null, pending: 0, state }}
+      notice={{ pending: 0, state }}
       onAddExpense={noop}
       onAddFriend={noop}
       onNewGroup={noop}
@@ -161,7 +161,7 @@ describe("the person rows", () => {
     const { container, unmount } = mountBlock(
       <BalancesView
         data={dashboard()}
-        notice={{ lastReadAt: null, pending: 0, state: "ready" }}
+        notice={{ pending: 0, state: "ready" }}
         onAddExpense={noop}
         onAddFriend={noop}
         onNewGroup={noop}

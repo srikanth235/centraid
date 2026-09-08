@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "candidate": "0a3258e3adeadbeef0000000000000000000000",
+  "startedAt": "2026-09-02T06:00:00Z",
+  "finishedAt": "2026-09-02T06:40:00Z",
+  "budgetMs": 3600000,
+  "durationMs": 0,
+  "cases": [
+    {
+      "id": "home-loads",
+      "verdict": "skipped",
+      "durationMs": 0,
+      "attempts": 1
+    }
+  ],
+  "parked": {
+    "until": "2026-09-16",
+    "issue": 870
+  },
+  "tags": {
+    "qualities": ["journey"],
+    "surfaces": ["mobile-native"]
+  },
+  "lane": "mobile-e2e-android",
+  "rung": 4,
+  "platform": "android",
+  "verdict": "parked"
+}

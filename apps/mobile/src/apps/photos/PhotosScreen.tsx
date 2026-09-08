@@ -30,6 +30,7 @@ import { Text } from "../../kit/components/NativeText";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosShellNavigation } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import { resolveMoreRowRoute } from "./photos-band";
 import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
 import PhotosBand from "./PhotosBand";
@@ -90,6 +91,9 @@ export default function PhotosScreen({
         { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
+      {/* The vault lockup on every route (see `VaultBar`): which vault, which
+          gateway, and the product's two global verbs. */}
+      <VaultBar />
       {/* Content ends ABOVE the bar STRUCTURALLY (§G): a `flex:1` slot over a
           `flex:none` bar, never padding, which clears only the content's end. */}
       <View style={styles.body}>{children}</View>

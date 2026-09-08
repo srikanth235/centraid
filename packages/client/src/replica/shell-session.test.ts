@@ -1,9 +1,10 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
+import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type {
@@ -52,7 +53,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-todos",
       appId: "todos",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "core.task",
@@ -64,7 +64,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-notes",
       appId: "notes",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "core.note",
@@ -76,7 +75,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-tasks",
       appId: "tasks",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "schedule.task",
@@ -88,7 +86,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-todos-billing",
       appId: "todos",
-      purpose: "dpv:Billing",
       entities: [
         {
           entity: "core.task",
@@ -440,21 +437,30 @@ describe("shell-session", () => {
         schemaEpoch: "schema",
       });
       expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
-      await session.read("todos", { entity: "core.task" });
+      await session.read("todos", {
+        entity: "core.task",
+        shapeId: "shape-todos",
+      });
       expect(coordinator.readWire).toHaveBeenCalledWith({
         shapeId: "shape-todos",
         entity: "core.task",
       });
+      // ONE APP, ONE SHAPE IS THE DEFAULT (#928 A1), but a catalog that holds
+      // two for one entity is still resolvable — by NAMING one. The retired
+      // `purpose` selector chose between them implicitly; the shape id says it.
       await session.read("todos", {
         entity: "core.task",
-        purpose: "dpv:Billing",
+        shapeId: "shape-todos-billing",
       });
       expect(coordinator.readWire).toHaveBeenLastCalledWith({
         shapeId: "shape-todos-billing",
         entity: "core.task",
-        purpose: "dpv:Billing",
       });
-      await session.search("todos", { entity: "core.task", query: "local" });
+      await session.search("todos", {
+        entity: "core.task",
+        query: "local",
+        shapeId: "shape-todos",
+      });
       expect(coordinator.searchWire).toHaveBeenCalledWith({
         shapeId: "shape-todos",
         entity: "core.task",
@@ -617,7 +623,7 @@ describe("shell-session", () => {
               entity: "core.task",
               rowId: "task-1",
               values: { cost: 42 },
-              purpose: "dpv:Billing",
+              shapeId: "shape-todos-billing",
             },
           ],
         })
@@ -722,7 +728,7 @@ describe("shell-session", () => {
           action: "complete",
           input: {
             task_id: "task-1",
-            title: "pending:ordinary:content",
+            title: stablePendingRowId("ordinary", "content"),
           },
         })
       ).resolves.toMatchObject({ status: "queued" });
@@ -730,7 +736,7 @@ describe("shell-session", () => {
         expect.objectContaining({
           input: {
             task_id: "task-1",
-            title: "pending:ordinary:content",
+            title: stablePendingRowId("ordinary", "content"),
           },
         })
       );
@@ -757,7 +763,7 @@ describe("shell-session", () => {
         session.write("tasks", {
           action: "add",
           input: {
-            project_id: "pending:intent-project:project",
+            project_id: stablePendingRowId("intent-project", "project"),
             title: "Child of a pending project",
           },
         })
@@ -768,7 +774,7 @@ describe("shell-session", () => {
           appId: "tasks",
           action: "add",
           input: {
-            project_id: "pending:intent-project:project",
+            project_id: stablePendingRowId("intent-project", "project"),
             title: "Child of a pending project",
           },
         })
@@ -788,7 +794,17 @@ describe("shell-session", () => {
       const reviseIntent = vi
         .fn<NonNullable<ShellReplicaCoordinator["reviseIntent"]>>()
         .mockResolvedValue(replacement);
-      const coordinator = fakeCoordinator({ reviseIntent });
+      // #922 G2: the session asks the OUTBOX which queued intent minted the
+      // row this edit names — the id no longer spells it.
+      const coordinator = fakeCoordinator({
+        reviseIntent,
+        pendingIntentForInput: vi
+          .fn<NonNullable<ShellReplicaCoordinator["pendingIntentForInput"]>>()
+          .mockResolvedValue({
+            intentId: "intent-tally-original",
+            expectedActions: ["add-expense", "add-receipt-expense"],
+          }),
+      });
       const session = new ReplicaShellSession(
         { baseUrl: "https://gateway.example", vaultId: "vault" },
         coordinator,
@@ -800,7 +816,7 @@ describe("shell-session", () => {
         schemaEpoch: "s",
       });
       const revision = {
-        expense_id: "pending:intent-tally-original:expense",
+        expense_id: stablePendingRowId("intent-tally-original", "expense"),
         description: "Edited lunch",
         amount_minor: 1_250,
         paid_by: "owner",
@@ -916,6 +932,7 @@ describe("shell-session", () => {
             entity: "core.task",
             rowId: "task-1",
             values: { task_id: "task-1", title: "Offline edit" },
+            shapeId: "shape-todos",
           },
         ],
       });

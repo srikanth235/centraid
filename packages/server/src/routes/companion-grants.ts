@@ -1,3 +1,8 @@
+// The surfaces a Companion device can be confined to. WHICH ones a given
+// device holds is not here and is not JSON on an enrollment: it is a set of
+// `share_authority` rows in the vault, principal `device` over subject type
+// `app.surface` (#928 A6), projected to the gateway for the pre-open request
+// path by `serve/companion-access.ts`.
 export const COMPANION_MODULES = [
   "locker",
   "tasks",
@@ -8,59 +13,21 @@ export const COMPANION_MODULES = [
 ] as const;
 
 export type CompanionModule = (typeof COMPANION_MODULES)[number];
-export type CompanionModuleState =
-  | "granted"
-  | "parked"
-  | "revoked"
-  | "unavailable";
+/**
+ * `parked` LEFT this vocabulary with the app grant plane (#928 A1). A
+ * first-party app is not a principal: it does not wait for an answer, so
+ * "installed but not yet granted" is a state that can no longer occur. What
+ * remains are the two facts the companion seat actually has — whether the
+ * owner selected the module, and whether its app is installed here.
+ */
+export type CompanionModuleState = "granted" | "revoked" | "unavailable";
 
-interface GrantLike {
-  readonly scopes: readonly {
-    readonly schema: string;
-    readonly table: string | null;
-    readonly verbs: string;
-  }[];
-}
-
-interface AppLike {
-  readonly grants: readonly GrantLike[];
-}
-
-interface RequiredScope {
-  readonly schema: string;
-  readonly table?: string;
-  readonly verb: string;
-}
-
-const REQUIRED_SCOPE: Readonly<Record<CompanionModule, RequiredScope>> = {
-  locker: { schema: "locker", table: "item", verb: "reveal" },
-  tasks: { schema: "schedule", table: "add_task", verb: "act" },
-  notes: { schema: "knowledge", table: "create_note", verb: "act" },
-  docs: { schema: "core", table: "add_document", verb: "act" },
-  agenda: { schema: "schedule", verb: "act" },
-  people: { schema: "people", verb: "act" },
-};
-
-function grantsScope(app: AppLike, required: RequiredScope): boolean {
-  return app.grants.some((grant) =>
-    grant.scopes.some(
-      (scope) =>
-        scope.schema === required.schema &&
-        (scope.table === null ||
-          required.table === undefined ||
-          scope.table === required.table) &&
-        scope.verbs.split("+").includes(required.verb)
-    )
-  );
-}
-
-/** A module goes dark as soon as its own required owner grant is absent. */
+/** A module goes dark as soon as the owner drops it from the companion set. */
 export function companionModuleState(
   selected: ReadonlySet<string>,
   module: CompanionModule,
-  app: AppLike | undefined
+  installed: boolean
 ): CompanionModuleState {
   if (!selected.has(module)) return "revoked";
-  if (!app) return "unavailable";
-  return grantsScope(app, REQUIRED_SCOPE[module]) ? "granted" : "parked";
+  return installed ? "granted" : "unavailable";
 }

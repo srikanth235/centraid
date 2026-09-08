@@ -32,8 +32,12 @@ const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_
 const DERIVATIVE_COLUMNS = `derivative_id, content_id, variant, sha256, media_type,
        byte_size, text_content, created_at`;
 
+// The STAR does not travel (#916). It was a `favorite` column on the asset and
+// rode the closure like any other field; it is now one `starred` flags tag,
+// and a tag is the ORIGIN member's judgment about their own copy. An audience
+// receives the photograph, not the sender's opinion of it.
 const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_min,
-       capture_group_id, width, height, duration_s, exif_json, favorite,
+       capture_group_id, width, height, duration_s, exif_json,
        archived_at, deleted_at, purge_at`;
 
 const COLLECTION_ENTRY_TYPES = new Set<ShareableItemType>([

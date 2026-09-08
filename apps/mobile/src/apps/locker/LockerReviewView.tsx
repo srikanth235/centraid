@@ -50,7 +50,6 @@ export interface LockerReviewViewProps {
   rows: readonly LockerRowData[];
   state: LockerScreenState;
   pending: number;
-  lastReadAt: string | null;
   onOpen: (row: LockerRowData) => void;
 }
 
@@ -91,11 +90,7 @@ export default function LockerReviewView(
 
   const head = (
     <View>
-      <LockerNotice
-        state={props.state}
-        pending={props.pending}
-        lastReadAt={props.lastReadAt}
-      />
+      <LockerNotice state={props.state} pending={props.pending} />
 
       {register.allClear ? (
         <View style={styles.block}>

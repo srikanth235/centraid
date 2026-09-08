@@ -28,6 +28,23 @@ on:
           - fuzz
           - join
           - compat
+      # #915 Wave 0 — WHICH SHA THIS NIGHT IS ABOUT. Empty means "the promoted
+      # candidate"; a value overrides it, which is how you re-run a night
+      # against one specific build without moving any pointer.
+      ref:
+        description: "Candidate ref or SHA to test (default: the promoted candidate)"
+        required: false
+        default: ""
+        type: string
+      # #915 Wave 0 — a ONE-SHOT migration switch, off by default. It closes the
+      # legacy `[nightly] e2e lane red — tracking` issues into the per-lane
+      # rolling issues that replace them. Dispatch-only and opt-in: a workflow
+      # that closes issues on a schedule is a worse habit than the one it fixes.
+      close-legacy-tracking:
+        description: "Close the open '[nightly] e2e lane red — tracking' issues into the per-lane issues"
+        required: false
+        default: false
+        type: boolean
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -40,7 +57,39 @@ permissions:
   issues: write
 
 jobs:
+  # #915 Wave 0 — THE NIGHT IS ABOUT A BUILD, NOT ABOUT A CLOCK. Every checkout
+  # below takes `ref: ${{ needs.resolve-candidate.outputs.sha }}`, so a red lane
+  # is a statement about a SHA rung 3 already decided was worth handing to a
+  # device — instead of about whatever `main` happened to point at when the
+  # 06:00 cron fired. Thirty consecutive red nights (2026-08-03 → 09-01) is what
+  # the old arrangement produced, and none of them could distinguish a product
+  # regression from a dependency merge four hours earlier.
+  #
+  # The fallback chain, and which one fired, is printed to the step summary by
+  # scripts/ci/resolve-candidate.mjs: dispatch input → `refs/candidates/latest`
+  # → the last green `ci.yml` run on main → this workflow's own SHA. The third
+  # is an interim for the days between this landing and the first promotion, and
+  # it announces itself as the weaker claim it is.
+  resolve-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+      source: ${{ steps.candidate.outputs.source }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the candidate under test
+        id: candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/ci/resolve-candidate.mjs \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.event.inputs.ref }}" \
+            --fallback-sha "${{ github.sha }}"
+
   desktop-e2e:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'desktop'
     runs-on: ubuntu-latest
@@ -51,7 +100,12 @@ jobs:
     # first; when it does fire, the job is cancelled and all evidence is lost.
     timeout-minutes: 35
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -110,8 +164,22 @@ jobs:
           name: nightly-evidence-desktop
           path: artifacts/
           retention-days: 7
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane desktop-e2e --rung 4 --platform desktop --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness --surfaces desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-desktop-e2e
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
 
   web-e2e:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'web'
     runs-on: ubuntu-latest
@@ -119,7 +187,12 @@ jobs:
     # 10m against ~1m of healthy tests; setup is ~7m.
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -141,23 +214,42 @@ jobs:
           path: artifacts/
           retention-days: 7
 
-  # #842 W5.1 — the same web journeys on the two engines the base image does not
-  # ship. WebKit's service-worker lifecycle and Cache-Storage quota, and Gecko's
-  # divergence from Blink, are the whole point: a PWA that only works on Chromium
-  # is not a PWA. The projects are declared in playwright.config.ts but appended
-  # only when CENTRAID_WEB_CROSS_BROWSER=1, so the default `bun run e2e` stays
-  # Chromium-only and does not fail on a missing browser download.
-  #
-  # DELIBERATELY NOT in test-health-report's needs: this lane has never run, so
-  # its first green run is the measurement, not a regression baseline. Promote it
-  # into the report (and the nightly tracking issue) once it has one.
+      # #842 W5.1 — the same web journeys on the two engines the base image does not
+      # ship. WebKit's service-worker lifecycle and Cache-Storage quota, and Gecko's
+      # divergence from Blink, are the whole point: a PWA that only works on Chromium
+      # is not a PWA. The projects are declared in playwright.config.ts but appended
+      # only when CENTRAID_WEB_CROSS_BROWSER=1, so the default `bun run e2e` stays
+      # Chromium-only and does not fail on a missing browser download.
+      #
+      # DELIBERATELY NOT in test-health-report's needs: this lane has never run, so
+      # its first green run is the measurement, not a regression baseline. Promote it
+      # into the report (and the nightly tracking issue) once it has one.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane web-e2e --rung 4 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness --surfaces web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-web-e2e
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   web-e2e-cross-browser:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'web'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -180,8 +272,22 @@ jobs:
           name: web-e2e-cross-browser-traces
           path: apps/web/test-results/
           retention-days: 7
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane web-e2e-cross-browser --rung 4 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,journey --surfaces web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-web-e2e-cross-browser
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
 
   mobile-e2e-ios:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
     # macos-15 defaults to Xcode 16.4 and only ships up to 26.3. Expo SDK 57's
@@ -196,7 +302,12 @@ jobs:
     # when the home-apps suite (10-minute aggregate ceiling) joined the run.
     timeout-minutes: 105
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
         # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
@@ -264,21 +375,24 @@ jobs:
           # hash and hard-fails on an empty digest (no constant false-hit key).
           fp="$(node scripts/native-fingerprint.mjs ios)"
           test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
-          # #892 Phase 0 — the same stale-JS defect the Android lanes had. This
-          # lane builds `--configuration Release`, so the Hermes bundle is
-          # EMBEDDED in the .app and `@expo/fingerprint`'s deliberate blindness to
-          # `src/**` means a JS-only night would have reinstalled the previous
-          # night's JS and called the depth roster green against it.
-          js="$(node scripts/js-bundle-fingerprint.mjs)"
-          test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
+          # #915 Wave 2 — NATIVE ONLY. The key carried a `js` component from
+          # #892 Phase 0, because `--configuration Release` EMBEDS the Hermes
+          # bundle and `@expo/fingerprint` is deliberately blind to `src/**`, so
+          # a JS-only night would otherwise have reinstalled the previous night's
+          # JavaScript and called the depth roster green against it. The remedy
+          # is no longer "rebuild": apps/mobile/scripts/ios-simulator-install.sh
+          # INJECTS this SHA's bundle into the banked shell and refuses to
+          # install one whose stamp disagrees, so the staleness the component
+          # guarded against is now caught by an assertion rather than paid for
+          # with a thirty-two-minute compile.
           # Toolchain captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's
           # exit status, so a broken xcodebuild would silently weaken the key
           # instead of failing the step.
           xcode="$(xcodebuild -version)"
           sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
           xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
-          echo "hash=xc${xc:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
-          echo "iOS fingerprints: fp=$fp js=$js toolchain(xc)=$xc"
+          echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "iOS fingerprints: fp=$fp toolchain(xc)=$xc"
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
@@ -345,12 +459,12 @@ jobs:
       # binary it built. That is safe because the key is content-addressed: the
       # artifact is the product of those inputs whether or not a later Maestro
       # flow passed.
-      - name: Restore the built iOS app
+      - name: Restore the built iOS shell
         id: ios_app
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e
-          key: ios-release-${{ runner.os }}-${{ steps.native.outputs.hash }}
+          key: ios-shell-${{ runner.os }}-${{ steps.native.outputs.hash }}
       # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
       # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
       # `pod install` entirely — and `pod install` is the ONLY thing that runs
@@ -359,83 +473,63 @@ jobs:
       # framework and a compiled source of that pod, so skipping the fetch breaks
       # the native build outright. It would not even fail on the first run: the
       # cache is empty then. It would fail on the second native change, which is
-      # exactly the path a pods cache exists to serve.
-      - name: Build and install the mobile release app
-        id: ios_build
-        if: steps.ios_app.outputs.cache-hit != 'true'
-        working-directory: apps/mobile
+      # exactly the path a pods cache exists to serve. It is also why the
+      # `hermesc` the injection path below needs is banked beside the `.app`
+      # rather than restored with the Pods that built it.
+      #
+      # ONE STEP REPLACES THREE (#915 Wave 2). "Build and install", "Save" and
+      # "Install the cached app" were three mutually exclusive branches spelled
+      # as workflow `if:` conditions, which is a branch no test can reach. The
+      # decision now lives in apps/mobile/scripts/ios-shell-cache.mjs, which has
+      # a unit suite, and the shipped preamble is the same file the rung-3
+      # `mobile-ios-smoke` lane sources: BUILD when no shell is banked for this
+      # native fingerprint, INJECT this SHA's bundle into a banked shell whose
+      # JavaScript is stale, INSTALL when it is already current. It also runs
+      # `prepare.mjs` and seeds the demo corpus BEFORE anything pairs, which is
+      # the #870 fix carried to the second platform — so this job no longer runs
+      # `prepare.mjs` itself.
+      - name: Install the mobile release app
+        id: ios_shell
         env:
-          # #890 W1 — the perf-flavored release. `scroll-frames` and `cold-start`
-          # were measuring a __DEV__ Hermes build, and the frame sampler only
-          # existed under __DEV__ at all, so the probes could not have run
-          # against the artifact even in principle. This flag is inlined into the
-          # embedded bundle at export time, so the sampler ships in a build that
-          # is otherwise a member's build.
-          EXPO_PUBLIC_CENTRAID_FRAME_PROBE: "1"
-        run: |
-          set -euo pipefail
-          # `--configure Release` is the whole #890 W1 change on this platform:
-          # a Release-configuration simulator build with the Hermes bundle
-          # EMBEDDED, so no bundler is involved at launch. `--no-bundler` then
-          # only stops the CLI opening one it would not need.
-          bunx expo run:ios --configuration Release --device "$SIMULATOR_UDID" --no-bundler
-          # Copy the product out of derived data into the cached location. Fail
-          # hard if it cannot be found: caching an empty directory would turn
-          # every later run into a silent no-install.
-          app="$(find ios/build ~/Library/Developer/Xcode/DerivedData \
-            -maxdepth 8 -type d -name 'Centraid.app' -path '*-iphonesimulator*' -print -quit 2>/dev/null || true)"
-          test -n "$app" || { echo "::error::built Centraid.app not found"; exit 1; }
-          rm -rf ~/.cache/centraid-mobile-e2e
-          mkdir -p ~/.cache/centraid-mobile-e2e
-          # -R preserves the bundle's symlinks/permissions.
-          cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
-          # Signals the save step below that there is a real bundle to bank.
-          echo 'built=true' >> "$GITHUB_OUTPUT"
+          IOS_CACHE_HIT: ${{ steps.ios_app.outputs.cache-hit }}
+          CENTRAID_MOBILE_BUILD: release
+        run: bash apps/mobile/scripts/ios-simulator-install.sh
       # Banked even when a later step fails — see the note on the restore step.
       # Guarded on the build having actually run and produced a bundle, so a
       # cache-hit run does not re-save what it just restored, and a run that
       # died before the build cannot cache an empty directory.
-      - name: Save the built iOS app
-        if: always() && steps.ios_build.outputs.built == 'true'
+      - name: Save the built iOS shell
+        if: always() && steps.ios_shell.outputs.built == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e
-          key: ios-release-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      - name: Install the cached mobile release app
-        if: steps.ios_app.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
-          test -d "$app" || { echo "::error::cached Centraid.app missing"; exit 1; }
-          # Prove the cached bundle is the app the flows actually drive. The
-          # Maestro harness launches by bundle id, so a mismatch here would fail
-          # obscurely at flow time instead of loudly right now.
-          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
-          test "$bundle_id" = 'dev.centraid.mobile' \
-            || { echo "::error::cached app bundle id is '$bundle_id', expected dev.centraid.mobile"; exit 1; }
-          test -x "$app/Centraid" || { echo "::error::cached app has no executable"; exit 1; }
-          xcrun simctl install "$SIMULATOR_UDID" "$app"
-          # Confirm the simulator agrees the app is installed and resolvable.
-          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
+          key: ios-shell-${{ runner.os }}-${{ steps.native.outputs.hash }}
       # #890 W1 — NO METRO. The step that started `expo start --dev-client` and
       # waited on `/status` is gone with the dev client itself: a Release build
       # carries its own Hermes bundle, so there is nothing for a bundler to
       # serve. Everything that existed only to make the dev harness testable —
       # the bundle prewarm, the dev-launcher `openLink`, the developer-menu
       # explainer sheet — went with it.
-      - run: node scripts/test-report/prepare.mjs
       # #890 W4 — iOS is the DEPTH platform, not a second copy of the roster.
       # Android gates PRs and runs the full roster nightly (D1); duplicating all
       # of it here would spend macOS minutes — roughly ten times a Linux minute —
       # re-proving claims Android already proved that same night. What this lane
-      # owns is the set of claims only iOS can carry, enumerated with their
-      # reasons in run-ios-depth-suite.mjs.
+      # owns is the set of claims only iOS can carry: `--rung 4 --platform ios`
+      # resolves through tests/agent-e2e-mobile/roster.json to the `ios-depth`
+      # suite, whose members each name the iOS fact that earns their place
+      # (flows/ios-depth-budget.md).
+      #
+      # THE FLAGS ARE THE WIRING (#915 Wave 2). They sit on the invocation line
+      # because scripts/lint-e2e-wiring.mjs derives what this lane schedules by
+      # reading it; a runner that picked its suite from an environment variable
+      # would make every lane look identical to the gate whose whole job is
+      # telling a blocking lane from a nightly one.
       - name: Run the iOS depth roster on the release artifact
         env:
           MAESTRO_PLATFORM: ios
           CENTRAID_MOBILE_BUILD: release
           CENTRAID_MOBILE_LANE: nightly-ios
-        run: node tests/agent-e2e-mobile/run-ios-depth-suite.mjs
+        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform ios
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -460,12 +554,36 @@ jobs:
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-nightly-ios
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
 
-  # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
-  # iOS. Flake budget:
-  # one retry at the flow harness; job failure still reds nightly. Metro and the
-  # paired gateway must be up before Maestro.
+      # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
+      # iOS. Flake budget:
+      # one retry at the flow harness; job failure still reds nightly. Metro and the
+      # paired gateway must be up before Maestro.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mobile-e2e-ios --rung 4 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-mobile-e2e-ios
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   mobile-e2e-android:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
     runs-on: ubuntu-latest
@@ -475,7 +593,12 @@ jobs:
     # Raised from 90 when #781 added the three experience probes to this lane.
     timeout-minutes: 120
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -559,24 +682,43 @@ jobs:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
       # #890 W1 — the OTHER half of build-once-run-many, and the one place
-      # `restore-keys` is correct. A partial match here restores a warm gradle
-      # BUILD DIRECTORY, not an artifact: gradle re-checks every task's inputs
-      # against the current tree, so a JS-only change re-runs only the bundle and
-      # packaging tasks (the "repackage into the cached native shell" case) and a
-      # native change rebuilds what it must. Nothing stale can survive a
-      # task-input check — which is exactly why restore-keys is refused on the
-      # apk cache above and correct on this one.
-      - name: Restore the Android gradle build directory
+      # `restore-keys` is correct. A partial match here restores warm gradle and
+      # native BUILD DIRECTORIES, not an artifact: gradle re-checks every task's
+      # declared inputs against the current tree, so a task whose inputs moved
+      # re-runs and a native change rebuilds what it must — which is exactly why
+      # restore-keys is refused on the apk cache above and correct on this one.
+      # The one task whose declared inputs do not cover everything that changes
+      # it is the JS bundle, and `apps/mobile/scripts/android-emulator-install.sh`
+      # forces it with `--rerun` rather than trusting it.
+      #
+      # #916 — the path list and the `v2` key namespace are shared verbatim with
+      # `ci.yml`'s `mobile-device-gate` and `candidate.yml`'s
+      # `mobile-canary-android`, restore and save alike; all three moved in one
+      # change, because a lane that saves a shape another lane does not restore
+      # is worse than no cache. Why these paths and not the old two (gradle's
+      # build cache is now on; the autolinked libraries build under
+      # `node_modules/<lib>/android`; `apps/mobile/android/.gradle` has to travel
+      # with the build directories or gradle deletes them as unvouched-for stale
+      # output) is written once, above the matching step in `ci.yml`.
+      - name: Restore the Android gradle and native build directories
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ needs.resolve-candidate.outputs.sha }}
           restore-keys: |
-            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-${{ runner.os }}-
+            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v2-${{ runner.os }}-
       # AVD snapshot caching — the reactivecircus best practice. The first run
       # boots a clean emulator once and banks a booted-state snapshot; every
       # later run resumes from it in seconds instead of a ~40s cold boot. It also
@@ -585,9 +727,16 @@ jobs:
       # already settled. The key pins every AVD-shaping input — bump the trailing
       # -vN to invalidate after an emulator/image bump. Distinct from the apk
       # cache (different key, different path); both can hit independently.
+      # Restore-then-save, for the reason already written above the apk and
+      # gradle caches and not applied to this one: `actions/cache` declares
+      # `post-if: success()`, so on a red lane the snapshot never saves and every
+      # run pays the ~2-minute create — the warm path stays unreachable until the
+      # greenness the cache exists to help deliver. `Post AVD cache` reported
+      # `skipped` on every red run while `Create AVD + snapshot` ran on every one,
+      # which is that same fact stated twice in the logs.
       - name: AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -610,6 +759,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
+      - name: Save the AVD snapshot
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
       - name: Set up Android SDK + emulator
         id: emu
         # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
@@ -665,20 +822,36 @@ jobs:
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      # Bank the warm gradle build directory too, so tomorrow's nightly and the
-      # next PR gate both restore it. Unguarded `if: always()`: unlike the apk,
-      # a build directory is worth banking even from a run that never produced
-      # an installable artifact — the compiled native tasks inside it are still
-      # valid inputs for the next run.
-      - name: Save the Android gradle build directory
-        if: always()
+      # Bank the warm gradle and native directories too, so tomorrow's nightly
+      # and the next PR gate both restore them. Still `if: always()` — unlike the
+      # apk, a build directory is worth banking from a run that never produced an
+      # installable artifact, because the compiled native tasks inside it are
+      # valid inputs for the next run whatever the roster went on to say. But
+      # #916 adds the other half of that sentence: the run has to have COMPILED
+      # something. `gradle_ran=true` is written by `android-emulator-install.sh`
+      # as soon as it commits to a gradle invocation, so a build that died in the
+      # C compiler still banks its warm `.cxx`, while a run that restored the apk
+      # and never invoked gradle no longer banks a barren directory over a warm
+      # one — the shadowing recorded in
+      # receipts/issue-905-client-e2e-escape-hatch.md, which is why the cache
+      # could not self-correct.
+      - name: Save the Android gradle and native build directories
+        if: always() && steps.emu.outputs.gradle_ran == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ needs.resolve-candidate.outputs.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -692,16 +865,321 @@ jobs:
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-nightly-android
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
 
-  # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
-  # one failure still leaves evidence from the others for the health report.
+      # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
+      # one failure still leaves evidence from the others for the health report.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mobile-e2e-android --rung 4 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-mobile-e2e-android
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+  # ─── THE DEVICE RUNG (#927 W4) ──────────────────────────────────────────────
+  #
+  # Rung 5's row in `tests/agent-e2e-mobile/roster.json` said, for a year, "no
+  # mobile device suite sits here today; the row exists so a suite that earns
+  # one has somewhere to go". Every mobile number this repo has is therefore an
+  # EMULATOR number: swiftshader software rendering on a 4-vCPU Linux runner, or
+  # a simulator sharing a macOS host's CPU. Neither has a phone's thermal
+  # envelope, a phone's flash, or a phone's GPU, so no dropped-frame percentage
+  # and no cold-start millisecond measured on them may be promoted to an
+  # absolute ceiling — which is why every mobile row in `tests/journeys.json`
+  # carries `_intended*` and gates on nothing.
+  #
+  # This is the rung that can change that: one LOW-END Android, one iPhone, and
+  # one Pi-class cell running the gateway itself.
+  #
+  # HOW IT IS ALLOWED TO BE ABSENT. The two phone cells need a device farm, and
+  # the Pi cell needs a self-hosted runner. Neither exists on a fork, and neither
+  # existed when this landed. A lane that goes RED because a secret is missing
+  # teaches everyone to ignore it, so the gate below resolves what is available
+  # and the cells are SKIPPED — never failed — when it is not. `device-rung-gate`
+  # itself always runs and writes each absent cell's evidence as `parked`, so the
+  # report shows the debt with its date rather than a silent gap
+  # (docs/traps/lane-evidence.md: a park is a date on the debt, never a mute).
+  device-rung-gate:
+    needs: [resolve-candidate]
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      farm: ${{ steps.resolve.outputs.farm }}
+      pi: ${{ steps.resolve.outputs.pi }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      # `secrets` is not readable from a job-level `if:`, which is the whole
+      # reason this job exists rather than an expression on each cell.
+      - id: resolve
+        env:
+          FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+          FARM_PROJECT: ${{ secrets.CENTRAID_DEVICE_FARM_PROJECT }}
+          PI_CELL: ${{ vars.CENTRAID_PI_CELL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${FARM_TOKEN:-}" ] && [ -n "${FARM_PROJECT:-}" ]; then
+            echo "farm=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "farm=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::device farm secrets absent — the phone cells are parked, not failed"
+          fi
+          if [ "${PI_CELL:-}" = "true" ]; then
+            echo "pi=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pi=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no self-hosted Pi cell registered — the gateway cell is parked, not failed"
+          fi
+      # An absent cell still owes the report a row. `--verdict parked` names the
+      # entry in tests/quarantine.json#lanes that says what unblocks it.
+      - name: Write lane evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          write() {
+            node scripts/test-report/write-evidence.mjs --lane "$1" --rung 5 --platform "$2" \
+              --verdict parked --started-at "$(date -u +%FT%TZ)" --budget-ms "$3" \
+              --candidate ${{ needs.resolve-candidate.outputs.sha }} \
+              --qualities journey,performance --surfaces mobile-native
+          }
+          if [ "${{ steps.resolve.outputs.farm }}" != "true" ]; then
+            write device-rung-android android 3600000
+            write device-rung-ios ios 3600000
+          fi
+          if [ "${{ steps.resolve.outputs.pi }}" != "true" ]; then
+            node scripts/test-report/write-evidence.mjs --lane device-rung-gateway-pi --rung 5 \
+              --platform any --verdict parked --started-at "$(date -u +%FT%TZ)" --budget-ms 3600000 \
+              --candidate ${{ needs.resolve-candidate.outputs.sha }} \
+              --qualities performance --surfaces gateway
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-gate
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ONE LOW-END ANDROID. Low-end on purpose: the phone that struggles is the one
+  # whose numbers are worth a ceiling, and a flagship would only re-measure what
+  # the emulator already over-reports. The device is leased from the farm and
+  # reached over `adb connect`, so the repo's own harness drives it exactly as it
+  # drives an emulator — `run-roster.mjs` discovers it through `adb devices` like
+  # any other target, and no second driver exists to disagree with the first.
+  device-rung-android:
+    needs: [resolve-candidate, device-rung-gate]
+    if: needs.device-rung-gate.outputs.farm == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - uses: ./.github/actions/setup
+      - name: Install Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - run: bun run turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # THE VOLUME IS THE DEMO CORPUS, AND THAT IS THIS RUNG'S FIRST DEBT. A
+      # cold-start or frame number taken over a hundred rows says nothing about
+      # a year-3 library, and the golden phone replica — `goldenYear3Replica()`
+      # in `tests/helpers/factories.ts` — is the fixture every other rig mounts.
+      # Nothing seeds a gateway from it yet, so no lane can hand a phone one.
+      # `@centraid/test-kit` now ships a `dist` build (#927), which is what
+      # unblocks writing that seeder from a plain-Node harness; until it exists
+      # every number this rung produces is at demo volume and its ledger row
+      # says so.
+      - name: Seed the lane's demo corpus
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+      - name: Lease a low-end Android from the farm
+        id: lease
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+          CENTRAID_DEVICE_FARM_PROJECT: ${{ secrets.CENTRAID_DEVICE_FARM_PROJECT }}
+          CENTRAID_DEVICE_FARM_ANDROID_MODEL: ${{ vars.CENTRAID_DEVICE_FARM_ANDROID_MODEL }}
+        run: bash scripts/ci/device-farm-lease.sh android
+      - name: Run the device rung
+        env:
+          CENTRAID_MOBILE_BUILD: release
+          MAESTRO_PLATFORM: android
+        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform android
+      - name: Release the leased device
+        if: always()
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+        run: bash scripts/ci/device-farm-lease.sh release
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane device-rung-android --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-android
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ONE iPhone. The farm's macOS session is what makes it reachable at all: a
+  # Linux runner cannot talk to a physical iPhone, and `xcrun simctl` — which is
+  # what the harness enumerates today — lists simulators only. Closing that is
+  # the first thing the first real run has to do; until the secrets exist this
+  # cell is parked and says so.
+  device-rung-ios:
+    needs: [resolve-candidate, device-rung-gate]
+    # Its own switch: enabling the farm for Android must not turn the iPhone
+    # cell red on the day the harness still cannot enumerate a physical device.
+    if: needs.device-rung-gate.outputs.farm == 'true' && vars.CENTRAID_DEVICE_FARM_IOS == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - uses: ./.github/actions/setup
+      - name: Install Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - run: bun run turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # Demo volume, for the reason the Android cell states above.
+      - name: Seed the lane's demo corpus
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+      - name: Lease an iPhone from the farm
+        id: lease
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+          CENTRAID_DEVICE_FARM_PROJECT: ${{ secrets.CENTRAID_DEVICE_FARM_PROJECT }}
+          CENTRAID_DEVICE_FARM_IOS_MODEL: ${{ vars.CENTRAID_DEVICE_FARM_IOS_MODEL }}
+        run: bash scripts/ci/device-farm-lease.sh ios
+      - name: Run the device rung
+        env:
+          CENTRAID_MOBILE_BUILD: release
+          MAESTRO_PLATFORM: ios
+        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform ios
+      - name: Release the leased device
+        if: always()
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+        run: bash scripts/ci/device-farm-lease.sh release
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane device-rung-ios --rung 5 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-ios
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # THE PI-CLASS GATEWAY CELL. The vault owner's gateway is a machine in their
+  # home, and the constrained hardware profile exists because of it — but every
+  # number under that profile so far was measured on a 4-vCPU cloud runner
+  # pretending. This cell runs the same constrained-profile rig on the hardware
+  # the profile is named for, so `ci-linux-x64-4c-constrained` and `pi-arm64-4c`
+  # can finally be told apart. Self-hosted, so it exists only where somebody
+  # registered a runner with the `centraid-pi` label.
+  device-rung-gateway-pi:
+    needs: [resolve-candidate, device-rung-gate]
+    if: needs.device-rung-gate.outputs.pi == 'true'
+    runs-on: [self-hosted, linux, arm64, centraid-pi]
+    timeout-minutes: 120
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - uses: ./.github/actions/setup
+      - run: bun run build
+      # The same rig `candidate.yml` runs on a cloud runner, here on the machine
+      # the constrained profile describes. Its ledger rows are keyed by hardware
+      # (`tests/journeys.json#hardware`), so the two never average together.
+      - name: Constrained-profile wall clock on Pi-class hardware
+        env:
+          CENTRAID_HARDWARE_PROFILE: constrained
+          CENTRAID_JOURNEY_HARDWARE: pi-arm64-4c
+        run: bun run test:perf:pr
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane device-rung-gateway-pi --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-pi
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
   pairing-lifecycle:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -721,14 +1199,33 @@ jobs:
           path: tests/agent-e2e-pairing/runs/
           retention-days: 7
           if-no-files-found: ignore
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane pairing-lifecycle --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,security --surfaces tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-pairing-lifecycle
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
 
   pairing-ticket-hygiene:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -748,14 +1245,33 @@ jobs:
           path: tests/agent-e2e-pairing/runs/
           retention-days: 7
           if-no-files-found: ignore
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane pairing-ticket-hygiene --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security,contracts --surfaces tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-pairing-ticket-hygiene
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
 
   pairing-cross-network-relay:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -779,16 +1295,35 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # #532 — Stryker mutation lane (nightly, all seeds). Per-PR runs affected
-  # seeds only via ci.yml mutation-pr. Floors ratcheted via
-  # tests/mutation-floors.json + test:ratchet; per-PR enforces measured floors.
+      # #532 — Stryker mutation lane (nightly, all seeds). Per-PR runs affected
+      # seeds only via ci.yml mutation-pr. Floors ratcheted via
+      # tests/floors.json#mutation + test:ratchet; per-PR enforces measured floors.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane pairing-cross-network-relay --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,offline --surfaces tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-pairing-cross-network-relay
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   mutation-testing:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'mutation'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -809,25 +1344,39 @@ jobs:
           path: artifacts/
           retention-days: 14
 
-  # #892 Phase 3 — LANE HEALTH, AND THE CHRONIC-RED RULE.
-  #
-  # Two decisions this repo has been making on memory. The promotion rule
-  # ("a nightly-only area that burns us twice moves to the PR lane",
-  # lane-client-e2e.yml) counts nothing; and its inverse — a REQUIRED lane whose
-  # first attempt fails on clean code — is worse and was unwritten, because a
-  # re-run habit devalues all nineteen lanes at once. This job measures
-  # first-attempt pass rate per lane over the last 40 completed `main` runs and
-  # puts the table on the run page.
-  #
-  # The chronic-red half is the enforcement: a lane red on main for more than
-  # three days fails this job unless it carries an UNEXPIRED entry in
-  # tests/lane-quarantine.json — the same declared/attributed/expiring discipline
-  # tests/quarantine.json has applied to tests since #545, extended to lanes,
-  # which had no equivalent and so simply stayed red.
-  #
-  # Nightly rather than per-PR because it reads api.github.com, and the PR loop
-  # must not acquire a dependency on it (the rule test:citations already follows).
+      # #892 Phase 3 — LANE HEALTH, AND THE CHRONIC-RED RULE.
+      #
+      # Two decisions this repo has been making on memory. The promotion rule
+      # ("a nightly-only area that burns us twice moves to the PR lane",
+      # lane-client-e2e.yml) counts nothing; and its inverse — a REQUIRED lane whose
+      # first attempt fails on clean code — is worse and was unwritten, because a
+      # re-run habit devalues all nineteen lanes at once. This job measures
+      # first-attempt pass rate per lane over the last 40 completed `main` runs and
+      # puts the table on the run page.
+      #
+      # The chronic-red half is the enforcement: a lane red on main for more than
+      # three days fails this job unless it carries an UNEXPIRED entry in
+      # tests/quarantine.json#lanes — the same declared/attributed/expiring discipline
+      # tests/quarantine.json has applied to tests since #545, extended to lanes,
+      # which had no equivalent and so simply stayed red.
+      #
+      # Nightly rather than per-PR because it reads api.github.com, and the PR loop
+      # must not acquire a dependency on it (the rule test:citations already follows).
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mutation-testing --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities correctness --surfaces vault-core,gateway,app-engine
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-mutation-testing
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   lane-health:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report'
     runs-on: ubuntu-latest
@@ -836,17 +1385,30 @@ jobs:
       contents: read
       issues: write
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           install: "false"
-      - name: Measure first-attempt pass rate and red streaks
+      # #915 — THIS COPY SCORES RUNG 2. `candidate.yml` runs the same script with
+      # `--workflow candidate.yml --rung 3 --escape-workflow ci.yml`, which is
+      # where the promote/park rules live. Splitting them by rung is deliberate:
+      # the demote rule is a statement about the MERGE GATE and is measured over
+      # `ci.yml`, and measuring it over candidate runs would compare a lane
+      # against a population it does not belong to.
+      - name: Measure first-attempt pass rate, red streaks, and the rung-2 rules
         id: lanes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node scripts/ci/lane-health.mjs \
             --repo "${{ github.repository }}" \
+            --workflow ci.yml \
+            --rung 2 \
             --runs 40 \
             --chronic-red-days 3 \
             --out artifacts/lane-health/summary.json
@@ -872,7 +1434,7 @@ jobs:
           other lane at the same time. Two ways out, both deliberate:
 
           1. Fix it.
-          2. Park it in \`tests/lane-quarantine.json\` **with an expiry** and this
+          2. Park it in \`tests/quarantine.json#lanes\` **with an expiry** and this
              issue number. An entry with no \`expires\`, or one whose date has
              passed, is treated as no entry at all.
 
@@ -886,32 +1448,51 @@ jobs:
             --label tech-debt \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-  # #892 Phase 2 — DATA SAFETY OVER TIME FINALLY HAS A LANE.
-  #
-  # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs` has existed since
-  # #842 W5.4. It asserts, in as many words, "upgrade did not preserve the old
-  # vault's data" — the #1 risk for a local-first sovereign vault — and it was
-  # referenced by NO WORKFLOW. Its sibling `released-binary-skew.mjs` was in the
-  # same position: version skew is proved in this repo as range arithmetic
-  # (`mobile-gateway-skew.test.ts`) and never as two real binaries talking.
-  #
-  # Both are written to skip-with-citation rather than fabricate a pass, so this
-  # job is green and LOUD from its first run: with no published release the
-  # runners emit their `blocked-external` reasons as warnings and exit 0. What
-  # changes tonight is that the citation is on a run page instead of in a file
-  # nobody executes, and the day a release exists the lanes start driving real
-  # binaries with no further wiring.
-  #
-  # `--json` on `gh release view` rather than parsing HTML, and a `|| true` so a
-  # repo with no releases at all resolves to empty instead of failing the job:
-  # "there is no previous release" is the state the runners are built to report.
+      # #892 Phase 2 — DATA SAFETY OVER TIME FINALLY HAS A LANE.
+      #
+      # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs` has existed since
+      # #842 W5.4. It asserts, in as many words, "upgrade did not preserve the old
+      # vault's data" — the #1 risk for a local-first sovereign vault — and it was
+      # referenced by NO WORKFLOW. Its sibling `released-binary-skew.mjs` was in the
+      # same position: version skew is proved in this repo as range arithmetic
+      # (`mobile-gateway-skew.test.ts`) and never as two real binaries talking.
+      #
+      # Both are written to skip-with-citation rather than fabricate a pass, so this
+      # job is green and LOUD from its first run: with no published release the
+      # runners emit their `blocked-external` reasons as warnings and exit 0. What
+      # changes tonight is that the citation is on a run page instead of in a file
+      # nobody executes, and the day a release exists the lanes start driving real
+      # binaries with no further wiring.
+      #
+      # `--json` on `gh release view` rather than parsing HTML, and a `|| true` so a
+      # repo with no releases at all resolves to empty instead of failing the job:
+      # "there is no previous release" is the state the runners are built to report.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane lane-health --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities contracts --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-lane-health
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   compat-upgrade-and-skew:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'compat'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -962,23 +1543,42 @@ jobs:
           path: artifacts/
           retention-days: 14
 
-  # #839 G10 — mutation-based fuzzing of the parsers that eat bytes somebody
-  # else chose: the gateway handshake, the tunnel wire, the CBSF blob
-  # directory, WAL object keys, and the two FTS MATCH compilers. No fuzzing
-  # dependency exists in this repo and none may be added, so the engine is
-  # `scripts/fuzz/` itself: a seeded PRNG, a mutation table, and per-target
-  # invariants. Its own job (restore-year3 pattern) because a full lane is
-  # millions of executions that must not compete with the 30-minute
-  # quality-performance-scale budget, and because it must never touch the PR
-  # lane — the PR-path guard is `test:fuzz:replay`, which replays only the
-  # committed crashers and finishes in a second.
+      # #839 G10 — mutation-based fuzzing of the parsers that eat bytes somebody
+      # else chose: the gateway handshake, the tunnel wire, the CBSF blob
+      # directory, WAL object keys, and the two FTS MATCH compilers. No fuzzing
+      # dependency exists in this repo and none may be added, so the engine is
+      # `scripts/fuzz/` itself: a seeded PRNG, a mutation table, and per-target
+      # invariants. Its own job (restore-year3 pattern) because a full lane is
+      # millions of executions that must not compete with the 30-minute
+      # quality-performance-scale budget, and because it must never touch the PR
+      # lane — the PR-path guard is `test:fuzz:replay`, which replays only the
+      # committed crashers and finishes in a second.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane compat-upgrade-and-skew --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,durability --surfaces gateway,vault-core
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-compat-upgrade-and-skew
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   fuzz-parsers:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'fuzz'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -1005,18 +1605,37 @@ jobs:
           path: artifacts/
           retention-days: 14
 
-  # #842 W2.4 — dynamic scan of the BOOTED gateway, as opposed to the static
-  # route-security enumeration the PR lane already runs. Nightly rather than
-  # per-PR because it boots a real server, and it needs `bun run build` for the
-  # same reason the fuzz lane does: it drives packages/server/dist and
-  # packages/core/dist, and reads the ROUTES table rather than a hardcoded list.
+      # #842 W2.4 — dynamic scan of the BOOTED gateway, as opposed to the static
+      # route-security enumeration the PR lane already runs. Nightly rather than
+      # per-PR because it boots a real server, and it needs `bun run build` for the
+      # same reason the fuzz lane does: it drives packages/server/dist and
+      # packages/core/dist, and reads the ROUTES table rather than a hardcoded list.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane fuzz-parsers --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security,correctness --surfaces gateway,vault-core
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-fuzz-parsers
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   dast-scan:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'dast'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -1036,11 +1655,24 @@ jobs:
           path: artifacts/
           retention-days: 14
 
-  # #587 C1 — performance and scale are an independent parallel lane. New
-  # rigs cannot consume the report job's 35-minute budget or prevent coverage
-  # and report rendering from starting when this lane is red.
+      # #587 C1 — performance and scale are an independent parallel lane. New
+      # rigs cannot consume the report job's 35-minute budget or prevent coverage
+      # and report rendering from starting when this lane is red.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane dast-scan --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-dast-scan
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   quality-performance-scale:
-    needs: [web-e2e, desktop-e2e]
+    needs: [resolve-candidate, web-e2e, desktop-e2e]
     if: >
       always() && (
         github.event_name != 'workflow_dispatch' ||
@@ -1050,7 +1682,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -1070,23 +1707,36 @@ jobs:
         with:
           name: nightly-evidence-desktop
           path: artifacts
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # PERF HISTORY IS NOT CACHE (#927). The 30-sample drift budget every rig
+      # consumes (tests/helpers/rig-budgets.ts) reads artifacts/<lane>/<slug>.json,
+      # and a series a runner may evict at any time is a gate that silently
+      # stops gating. The series is published to gh-pages beside the candidate
+      # record by the report job below and restored from there here, so it is
+      # append-only and auditable rather than best-effort.
+      - name: Restore durable rig history (gh-pages)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: |
-            artifacts/perf
-            artifacts/scale
-            artifacts/year3-cache
-          key: quality-history-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: quality-history-${{ runner.os }}-
-      - run: sudo apt-get update && sudo apt-get install -y strace
+          ref: gh-pages
+          path: .gh-pages-quality
+      - name: Stage durable rig history
+        run: |
+          mkdir -p artifacts/perf artifacts/scale
+          for lane in perf scale; do
+            src=".gh-pages-quality/test-report/nightly/quality-history/$lane"
+            if [ -d "$src" ]; then
+              cp "$src"/*.json "artifacts/$lane/" 2>/dev/null || true
+            else
+              echo "::warning::no durable $lane rig history on gh-pages yet; drift budgets start with no opinion"
+            fi
+          done
+          rm -rf .gh-pages-quality
       - run: bun run build
       - id: perf
         continue-on-error: true
         run: bun run test:perf
       - id: scale
         continue-on-error: true
-        env:
-          CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: bun run test:scale
       # #842 W3.1/W3.2 — the seeded chaos lanes run on every PR in `cover` mode
       # (every fault exactly once, ~18 s). Here they run in `sample` mode, so
@@ -1114,27 +1764,39 @@ jobs:
             exit 1
           fi
 
-  # #659 S3 — year-3 restore. Backup honesty is a product promise and the
-  # restore time at 10 GiB was a guess until this job ran it. Its own job
-  # because 10 GiB of chunk + AEAD + restore does not fit the 30-minute
-  # quality-performance-scale budget, and it must never touch the PR lane.
+      # #659 S3 — year-3 restore. Backup honesty is a product promise and the
+      # restore time at 10 GiB was a guess until this job ran it. Its own job
+      # because 10 GiB of chunk + AEAD + restore does not fit the 30-minute
+      # quality-performance-scale budget, and it must never touch the PR lane.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane quality-performance-scale --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance,scalability --surfaces gateway,vault-core
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-quality-performance-scale
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   restore-year3:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            artifacts/scale
-            artifacts/year3-cache
-          key: quality-history-restore-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: quality-history-restore-${{ runner.os }}-
       - run: bun run build
       # ~25 GiB of scratch is needed for the source vault, the provider store
       # and the restore destination. A runner that cannot spare it fails here
@@ -1144,7 +1806,6 @@ jobs:
       - name: Restore a 10 GiB year-3 vault
         env:
           CENTRAID_SCALE_RESTORE_GIB: "10"
-          CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -1153,28 +1814,47 @@ jobs:
           path: artifacts/
           retention-days: 14
 
-  # #839 G11/G12 — the protocol JOIN lane. Every other suite that exercises two
-  # vaults talking to each other calls the vault package directly; nothing puts
-  # N seats on ONE gateway and makes them speak the real wire. This job runs
-  # `packages/server/src/serve/protocol-join-lane.test.ts` at WIDTH
-  # (CENTRAID_JOIN_SEATS), where each case boots a real `serve()` daemon, mounts
-  # N vaults, and opens one iroh tunnel client per seat.
-  #
-  # Its own job (restore-year3 pattern) for three reasons: N real iroh endpoints
-  # per case must not compete with the 30-minute quality-performance-scale
-  # budget protected by #587 C1; a correctness rig has no volume/duration
-  # descriptor, so tests/scale + quality-rig-budgets.json would mis-file it; and
-  # real QUIC transport is the one dependency here that can be environment
-  # sensitive, so a red join lane must not be able to mask coverage and report
-  # rendering. The suite still runs on the PR path at its 3-seat floor — this
-  # job widens it, it does not own it.
+      # #839 G11/G12 — the protocol JOIN lane. Every other suite that exercises two
+      # vaults talking to each other calls the vault package directly; nothing puts
+      # N seats on ONE gateway and makes them speak the real wire. This job runs
+      # `packages/server/src/serve/protocol-join-lane.test.ts` at WIDTH
+      # (CENTRAID_JOIN_SEATS), where each case boots a real `serve()` daemon, mounts
+      # N vaults, and opens one iroh tunnel client per seat.
+      #
+      # Its own job (restore-year3 pattern) for three reasons: N real iroh endpoints
+      # per case must not compete with the 30-minute quality-performance-scale
+      # budget protected by #587 C1; a correctness rig has no volume/duration
+      # descriptor, so tests/scale + quality-rig-budgets.json would mis-file it; and
+      # real QUIC transport is the one dependency here that can be environment
+      # sensitive, so a red join lane must not be able to mask coverage and report
+      # rendering. The suite still runs on the PR path at its 3-seat floor — this
+      # job widens it, it does not own it.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane restore-year3 --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities durability,scalability --surfaces backup-restore,vault-core
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-restore-year3
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
   protocol-join:
+    needs: [resolve-candidate]
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'join'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -1195,12 +1875,34 @@ jobs:
           name: nightly-evidence-join
           path: artifacts/
           retention-days: 14
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane protocol-join --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities contracts,compat --surfaces gateway,replica-sync
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-protocol-join
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
 
   test-health-report:
-    needs:
-      [
+    needs: [
+        resolve-candidate,
         desktop-e2e,
         web-e2e,
+        # #915 Wave 0 — PROMOTED INTO THE REPORT, PARKED UNTIL IT HAS A BASELINE.
+        # This lane had never run, so its first green run is the measurement
+        # rather than a regression — which is why it was excluded. Excluding it
+        # meant WebKit and Gecko had no cell at all, and "no cell" is exactly the
+        # silence the zero-grey contract forbids. It is in the report now and
+        # listed in tests/quarantine.json#lanes with a 2026-09-16 expiry, so it
+        # renders as PARKED rather than red until it has one green run on a
+        # candidate. The park expiring is the prompt to read the number.
+        web-e2e-cross-browser,
         mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
@@ -1225,6 +1927,9 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -1249,7 +1954,8 @@ jobs:
         continue-on-error: true
         run: bun run coverage
       # Durable trend source: the append-only summary series committed to
-      # gh-pages. Unlike the quality-history cache above it is never evicted.
+      # gh-pages, the same store the rig drift series rides in (#927). Nothing
+      # perf-related is kept in an actions cache, which a runner may evict.
       - name: Restore durable report history (gh-pages)
         if: always()
         continue-on-error: true
@@ -1257,16 +1963,40 @@ jobs:
         with:
           ref: gh-pages
           path: .gh-pages-history
-      - name: Stage durable report history
+      # #915 — THREE THINGS COME OFF gh-pages, NOT ONE. The report is a pure
+      # function of (this night's evidence, the candidate record, LAST night's
+      # evidence), so every delta it draws is candidate-to-candidate rather than
+      # clock-to-clock. Each is staged best-effort and its absence is a warning
+      # rather than a failure: the first run after this lands has no previous
+      # night to compare against, and a report that refuses to render is worse
+      # than one that says "no previous night".
+      - name: Stage durable report history, the candidate, and last night
         if: always()
         run: |
-          mkdir -p artifacts/report-history
+          mkdir -p artifacts/report-history artifacts/evidence-previous
           if [ -d .gh-pages-history/test-report/history ]; then
             if ! cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ 2>/dev/null; then
               echo "::warning::report history copy produced no files (empty or missing history dir)"
             fi
           else
             echo "::warning::no durable report history on gh-pages yet; trend series starts empty"
+          fi
+          # The candidate record `candidate.yml` publishes on every promotion.
+          if [ -f .gh-pages-history/test-report/candidate.json ]; then
+            cp .gh-pages-history/test-report/candidate.json artifacts/candidate.json
+            echo "candidate under test: $(jq -r .sha artifacts/candidate.json)"
+          else
+            echo "::warning::no test-report/candidate.json on gh-pages yet; the report has no promotion record to cite"
+          fi
+          # Last night's immutable evidence copy — the newest dated slot that is
+          # not this run. `sort` over `<date>-<runId>` slugs is chronological
+          # because the date leads.
+          previous="$(ls -1 .gh-pages-history/test-report/nightly/runs 2>/dev/null | sort | tail -1 || true)"
+          if [ -n "$previous" ] && [ -d ".gh-pages-history/test-report/nightly/runs/$previous/evidence" ]; then
+            cp -R ".gh-pages-history/test-report/nightly/runs/$previous/evidence/." artifacts/evidence-previous/
+            echo "previous night: $previous"
+          else
+            echo "::warning::no previous night's evidence on gh-pages; tonight's deltas start empty"
           fi
           rm -rf .gh-pages-history
       # Job conclusions for honesty: a red needs.* job cannot yield silent
@@ -1293,6 +2023,19 @@ jobs:
             echo "::error::Nightly coverage lane failed — see step above"
             exit 1
           fi
+      # The rig drift series rides INSIDE the report tree, so publish-nightly-report
+      # persists it to gh-pages beside the candidate record with no second
+      # publisher and no cache (#927). Consumed by the quality job's
+      # "Stage durable rig history" step on the next night.
+      - name: Stage rig history into the report tree
+        if: always()
+        run: |
+          mkdir -p dist/test-report/quality-history/perf dist/test-report/quality-history/scale
+          for lane in perf scale; do
+            if [ -d "artifacts/$lane" ]; then
+              cp "artifacts/$lane"/*.json "dist/test-report/quality-history/$lane/" 2>/dev/null || true
+            fi
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1332,7 +2075,7 @@ jobs:
   # missing" tracking issue below (#496 review). The `Require report HTML`
   # step remains the real guard for a job that died before writing output.
   publish-nightly-report:
-    needs: [test-health-report]
+    needs: [resolve-candidate, test-health-report]
     if: >
       always() && needs.test-health-report.result != 'cancelled' && needs.test-health-report.result != 'skipped' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -1352,6 +2095,9 @@ jobs:
       url: ${{ steps.slot.outputs.url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - name: Download nightly report
         id: download_report
         continue-on-error: true
@@ -1457,106 +2203,134 @@ jobs:
           echo "::error::nightly report HTML missing — nothing was published"
           exit 1
 
-  # #496 E3 — single tracking issue when a *scheduled* nightly goes red.
-  # Soft SLA (documented in TESTING.md): open/update issue with run + report links.
-  nightly-failure-issue:
+  # #915 Wave 0 — ONE ROLLING ISSUE PER LANE, REWRITTEN IN PLACE.
+  #
+  # What this replaces: `nightly-failure-issue`, which commented on a single
+  # `[nightly] e2e lane red — tracking` issue every morning. Thirteen of those
+  # were opened and closed as noise, because an issue that says "something was
+  # red last night" every night for a month is a cadence, not a signal — and its
+  # `### Job results` block was a HAND-MAINTAINED list of ten `needs.<job>.result`
+  # lines that covered neither `fuzz-parsers` nor `dast-scan` nor four others,
+  # so the one part a reader would act on was also the part most likely to be
+  # stale. This iterates `toJSON(needs)` with jq instead: a lane added to `needs:`
+  # is covered automatically, which is the #557 lesson applied to the body as
+  # well as to the `if:`.
+  #
+  # One issue per lane, updated (never commented, never re-created), so
+  # `[nightly] lane red — mobile-e2e-ios` is a thing you can open, read as the
+  # lane's CURRENT condition, and close when the lane is green. The body comes
+  # from the report's attention-queue model when the report rendered, and from a
+  # smaller always-available fallback when it did not — an alerting path must not
+  # throw on the day the report itself is the red lane.
+  nightly-lane-issues:
     needs:
       [
+        resolve-candidate,
+        compat-upgrade-and-skew,
+        dast-scan,
         desktop-e2e,
-        web-e2e,
-        mobile-e2e-ios,
+        fuzz-parsers,
+        lane-health,
         mobile-e2e-android,
+        mobile-e2e-ios,
+        mutation-testing,
+        pairing-cross-network-relay,
         pairing-lifecycle,
         pairing-ticket-hygiene,
-        pairing-cross-network-relay,
-        mutation-testing,
-        fuzz-parsers,
-        dast-scan,
-        compat-upgrade-and-skew,
-        lane-health,
+        protocol-join,
         quality-performance-scale,
         restore-year3,
-        protocol-join,
         test-health-report,
+        web-e2e,
+        web-e2e-cross-browser,
       ]
-    # #557 — `cancelled` counts as red. A runner that dies or a job aborted
-    # mid-flight leaves the nightly red in the UI; the old per-job
-    # `== 'failure'` list filed nothing for it. `needs.*.result` also means a
-    # job added to `needs:` is covered automatically, instead of silently
-    # falling outside a hand-maintained list.
     if: >
       always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
         contains(join(needs.*.result, ','), 'cancelled')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       issues: write
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Download report summary for cell-level delta
+        with:
+          # #915 — the CANDIDATE, not the tip. See the resolve-candidate job.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - name: Download report summary for the per-lane bodies
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: nightly-test-health-report
           path: dist/test-report
-      - name: Prepare cell-level delta
-        run: node scripts/ci/report-cell-delta.mjs --summary dist/test-report/summary.json --output /tmp/cell-delta.md
       - name: Resolve this run's immutable report slot
         id: slug
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
-      - name: Open or update nightly red tracking issue
+      - name: Open or update one rolling issue per red lane
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # /test-report/nightly/ is a MUTABLE alias: tomorrow's run overwrites
           # it, so an issue citing only that link silently starts describing a
-          # different run. prepare-pages-site.mjs archives every publish to an
-          # immutable runs/<slug>/ slot (kept 30 deep); cite that as primary.
+          # different run. Cite the immutable dated slot as primary.
           REPORT_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/runs/${{ steps.slug.outputs.slug }}/
-          LATEST_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
+          CANDIDATE_SHA: ${{ needs.resolve-candidate.outputs.sha }}
         run: |
           set -euo pipefail
-          cat > /tmp/nightly-red.md <<EOF
-          ## Nightly e2e failure
-
-          A **scheduled** nightly run failed. Soft SLA (#496 / TESTING.md): respond within **24h** or before the next scheduled run.
-
-          | Signal | Link |
-          | --- | --- |
-          | Actions run | ${RUN_URL} |
-          | Report for **this** run (immutable) | ${REPORT_URL} |
-          | Newest nightly (moves every night) | ${LATEST_URL} |
-          | Job Summary | open the run → Summary |
-
-          The dated link is archived for the 30 most recent publishes; after that
-          its HTML is pruned and the run stays in \`test-report/history/index.json\`.
-
-          ### Job results
-          - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
-          - web-e2e: \`${{ needs.web-e2e.result }}\`
-          - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
-          - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
-          - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
-          - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
-          - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
-          - mutation-testing: \`${{ needs.mutation-testing.result }}\`
-          - quality-performance-scale: \`${{ needs.quality-performance-scale.result }}\`
-          - test-health-report: \`${{ needs.test-health-report.result }}\`
-
-          ### Cell-level delta
-          EOF
-          cat /tmp/cell-delta.md >> /tmp/nightly-red.md
-          cat >> /tmp/nightly-red.md <<EOF
-          _Auto-filed by e2e.yml \`nightly-failure-issue\`. Prefer updating this issue over opening duplicates._
-          EOF
-          node scripts/ci/file-tracking-issue.mjs \
-            --title '[nightly] e2e lane red — tracking' \
-            --search '[nightly] e2e lane red' \
-            --body-file /tmp/nightly-red.md \
-            --label tech-debt \
-            --run-url "$RUN_URL"
+          printf '%s\n' "$NEEDS_JSON" > /tmp/needs.json
+          jq -r 'to_entries[]
+                 | select(.key != "resolve-candidate")
+                 | select(.value.result != "success" and .value.result != "skipped")
+                 | .key' /tmp/needs.json > /tmp/red-lanes.txt
+          if [ ! -s /tmp/red-lanes.txt ]; then
+            echo "no red lane to file — the workflow was red for another reason"
+            exit 0
+          fi
+          while read -r lane; do
+            [ -n "$lane" ] || continue
+            result="$(jq -r --arg lane "$lane" '.[$lane].result' /tmp/needs.json)"
+            # The report's own renderer first: the issue body and the page's
+            # attention queue are then the same model, so they cannot disagree.
+            if [ -f scripts/test-report/rolling-issue-body.mjs ] && [ -f dist/test-report/summary.json ]; then
+              node scripts/test-report/rolling-issue-body.mjs \
+                --lane "$lane" --summary dist/test-report/summary.json > /tmp/rolling-body.md || \
+              node scripts/ci/rolling-issue-fallback-body.mjs \
+                --lane "$lane" --rung 4 --result "$result" --run-url "$RUN_URL" --out /tmp/rolling-body.md
+            else
+              node scripts/ci/rolling-issue-fallback-body.mjs \
+                --lane "$lane" --rung 4 --result "$result" --run-url "$RUN_URL" --out /tmp/rolling-body.md
+            fi
+            {
+              printf '\n| Candidate under test | `%s` |\n' "$CANDIDATE_SHA"
+              printf '| Report for this run (immutable) | %s |\n' "$REPORT_URL"
+            } >> /tmp/rolling-body.md
+            node scripts/ci/file-tracking-issue.mjs --update \
+              --title "[nightly] lane red — ${lane}" \
+              --search "[nightly] lane red — ${lane}" \
+              --body-file /tmp/rolling-body.md \
+              --label tech-debt \
+              --run-url "$RUN_URL"
+          done < /tmp/red-lanes.txt
+      # ONE-SHOT, DISPATCH-ONLY. The thirteen `[nightly] e2e lane red — tracking`
+      # issues the old job produced are closed into the per-lane issues that
+      # replace them, by a human choosing to run it — not automatically, because
+      # a workflow that closes issues on a schedule is the same mistake in the
+      # other direction.
+      - name: Close the legacy tracking issues into the per-lane ones
+        if: github.event_name == 'workflow_dispatch' && inputs.close-legacy-tracking
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh issue list --search 'in:title "[nightly] e2e lane red — tracking"' \
+            --state open --limit 100 --json number,title \
+            --jq '.[] | select(.title == "[nightly] e2e lane red — tracking") | .number' > /tmp/legacy.txt
+          while read -r number; do
+            [ -n "$number" ] || continue
+            gh issue close "$number" --comment "Superseded by #915: the nightly now keeps ONE ROLLING ISSUE PER LANE, titled \`[nightly] lane red — <lane>\`, whose body is rewritten every night with that lane's current condition. A daily issue about \"something was red\" is a cadence, not a signal; a per-lane issue you can open, read and close is one. Search \`in:title \"[nightly] lane red\"\` for the replacements."
+          done < /tmp/legacy.txt

@@ -22,7 +22,10 @@ import { FlatList, Pressable, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
-import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
@@ -46,6 +49,7 @@ import {
   leadLabel,
 } from "../../lib/birthday-notifications";
 import type { AgendaScreenProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import type { AgendaBandDestinationKey } from "./agenda-band";
 import { groupEventsByLocalDay } from "./agenda-days";
 import AgendaBand from "./AgendaBand";
@@ -285,6 +289,9 @@ export default function AgendaHome({
     // There is one page for the shell and every app in it — no per-app surface
     // tone (docs/traps/design-tokens.md).
     <View style={[styles.frame, { backgroundColor: colors.bg }]}>
+      {/* The vault lockup on every route (see `VaultBar`). This surface hosts
+          its own band rather than a shared frame, so it mounts the bar. */}
+      <VaultBar />
       <TopSafeArea style={styles.body}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
@@ -562,9 +569,8 @@ function AgendaEventCard({
   colors: ThemeColors;
   onOpen: (event: NativeAgendaEvent) => void;
 }): React.JSX.Element {
-  const pending = readPendingOverlay(
-    event.raw as unknown as Record<string, unknown>
-  );
+  const eventRow = event.raw as unknown as Record<string, unknown>;
+  const pending = readPendingOverlay(eventRow, pendingSidecarOf(eventRow));
   const heldCancel =
     pending?.action === "cancel-event" &&
     (pending.status === "queued" ||

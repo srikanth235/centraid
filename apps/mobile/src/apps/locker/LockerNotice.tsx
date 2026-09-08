@@ -10,13 +10,12 @@
 // which is `SkeletonRows` and the caller's job, because a notice saying "still
 // reading" tells a member nothing they cannot see.
 //
-// The `--net` border is spent on exactly one state: denied. Offline, stale,
-// pending, parked and conflict are facts about a delay, not about a refusal.
+// The `--net` border is spent on exactly one state: denied. Offline, pending,
+// parked and conflict are facts about a delay, not about a refusal.
 
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { clockAt } from "@centraid/blueprints/apps/locker/format";
 import {
   CONFLICT_NOTICE,
   OFFLINE_NOTICE,
@@ -24,7 +23,6 @@ import {
   PARKED_NOTICE,
   REAUTH_NOTICE,
   pendingNotice,
-  staleNotice,
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import { Text } from "../../kit/components/NativeText";
@@ -37,8 +35,6 @@ export interface LockerNoticeProps {
   /** How many metadata writes are still on this device. Never a secret. */
   pending: number;
   waiting?: string | null;
-  /** When the window last landed, for the stale sentence's clock. */
-  lastReadAt: string | null;
 }
 
 /** The sentence one state carries, or nothing where the state is not a notice
@@ -47,9 +43,6 @@ export function lockerNoticeText(props: LockerNoticeProps): string | null {
   if (props.state === "offline") return OFFLINE_NOTICE;
   if (props.state === "pending")
     return props.waiting ?? pendingNotice(props.pending);
-  if (props.state === "stale") {
-    return props.lastReadAt ? staleNotice(clockAt(props.lastReadAt)) : null;
-  }
   if (props.state === "conflict") return CONFLICT_NOTICE;
   if (props.state === "parked") return props.waiting ?? PARKED_NOTICE;
   if (props.state === "reauth") return REAUTH_NOTICE;

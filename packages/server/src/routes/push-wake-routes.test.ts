@@ -437,6 +437,48 @@ describe("push-wake-routes", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
+  test("PushWakeRelay reads three entities per idle tick and receipts none", async () => {
+    // #916 routed the reminder scan through the gateway, so this timer is a
+    // WRITER: every read appends an access.receipt. It used to ask twice for
+    // the same two entities — `computeDueReminders` then `nextReminderFireAt`,
+    // same instant, same rows — and commit all five receipts separately, which
+    // is what pushed idle disk writes past their budget. One scan, one commit.
+    const clock = useFakeClock();
+    const { plane, enrollments, database, vaults } = await wakeFixture();
+    enrollments.enroll({
+      endpointId: "receipt-phone",
+      label: "Receipt phone",
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
+    });
+    const send = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 200 })
+    );
+    const relay = new PushWakeRelay(vaults, enrollments, database, send);
+    relays.push(relay);
+    const receipts = (): number =>
+      (
+        plane.db.vault
+          .prepare(
+            "SELECT COUNT(*) AS n FROM access_receipt WHERE action = 'read'"
+          )
+          .get() as { n: number }
+      ).n;
+
+    relay.start(); // attach() arms the first scan synchronously
+    const afterFirstScan = receipts();
+    notifyReplicaCommit(plane.db.vault);
+    await clock.advance(10_000);
+    await flushMicrotasks();
+
+    // OWNER-DIRECT SCANS COST NO AUDIT WRITE (#928, #922 B1). The three reads
+    // (schedule.task, schedule.event_ext, tally.recurring_expense) happen —
+    // the relay's whole job — and leave the band untouched, which is the
+    // point: an idle tick used to pay three fsyncs to prove nothing.
+    expect(receipts() - afterFirstScan).toBe(0);
+    expect(plane.db.vault.isTransaction).toBe(false);
+  });
+
   test("PushWakeRelay stop clears due-arm debounce so closed vaults do not throw", async () => {
     const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();

@@ -7,7 +7,6 @@
   "iconKey": "Camera",
   "colorKey": "amber",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows your photo library and albums, and lets you upload, caption and organize.",
     "scopes": [
       { "schema": "media", "verbs": "read" },
@@ -120,7 +119,7 @@
     },
     {
       "name": "update-asset",
-      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item; favorite and archived live on the asset — archiving hides a photo from the timeline without trashing it).",
+      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item, the star is a flags-scheme tag on the asset rather than a column of its own, and archived lives on the asset — archiving hides a photo from the timeline without trashing it).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -234,6 +233,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "album_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "title": { "type": "string", "minLength": 1 }
         },
         "required": ["title"],

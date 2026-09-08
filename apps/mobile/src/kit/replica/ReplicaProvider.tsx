@@ -42,7 +42,10 @@ import {
 } from "../../lib/replica/placement-transport";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
-import { nativeSyncAllowed } from "../../lib/upload/native-policy";
+import {
+  nativeRowSyncAllowed,
+  nativeSyncAllowed,
+} from "../../lib/upload/native-policy";
 import {
   LAST_BASE,
   LAST_GATEWAY,
@@ -73,8 +76,13 @@ import {
   refreshCachedScopes,
   removeCachedScope,
   resolveIdentity,
+  startCompatibilityWall,
 } from "./replica-mount";
-import { loadRevokedNotices, settledReachability } from "./replica-status";
+import {
+  attemptedReachability,
+  loadRevokedNotices,
+  settledReachability,
+} from "./replica-status";
 
 export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
@@ -218,11 +226,8 @@ export function ReplicaProvider({
               }
             : await resolveIdentity(activeRef.current);
         if (cancelled) return;
-        // One `/info` read raises the wall and settles the flags, not one per surface.
-        let features = await requireMobileOfflineGateway({
-          baseUrl: identity.auth.baseUrl,
-          online: identity.online,
-        });
+        // Started beside the mount, never ahead of it — the function says why.
+        const wall = startCompatibilityWall(identity);
         const storageLocation = replicaStorageDirectory();
         const scopes = await mountedScopes(identity, storageLocation);
         // BEFORE any stamp or cursor is read. A restored container carries the
@@ -249,6 +254,11 @@ export function ReplicaProvider({
         if (identity.online) sendEventualWork(identity.auth.baseUrl);
         if (cancelled) return;
         let connected = identity.online;
+        // Reports, never decides (docs/traps/unreachable-vault.md).
+        const noteGatewayOutcome = (reachable: boolean): void => {
+          if (cancelled || reachable === connected) return;
+          reachabilityWork?.signal();
+        };
         const sessions = new Map<string, NativeReplicaSession>();
         // Kept per vault, not just until the session takes over: a revoked
         // scope's file cannot be deleted while its handle is still open, and
@@ -294,6 +304,7 @@ export function ReplicaProvider({
             gatewayId: identity.gatewayId,
           },
           storage: AsyncStorage,
+          onStreamOutcome: noteGatewayOutcome,
           onScopeUpdated: updateScopeFreshness,
           onScopeRevoked: (vaultId) => {
             revokedScopeIds.add(vaultId);
@@ -348,16 +359,18 @@ export function ReplicaProvider({
               appState: AppState,
               isConnected: () => connected,
               isNetworkWorkAllowed: nativeSyncAllowed,
+              isRowSyncAllowed: nativeRowSyncAllowed,
               bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
               progressiveBootstrap: true,
-              // A vault the member does not steward is one a queued write may
-              // have to wait for somebody at, so its pending rows carry a
-              // steward label from admission (`steward-label.ts`). `personal`
+              // A vault the member does not own is one a queued write may have
+              // to wait for somebody at, so its pending rows carry the
+              // waiting-on label from admission (`waiting-on.ts`). `personal`
               // is the founding marker; an older cache omits it and reads as
               // their own, which is the answer that promises nothing.
-              ...(scope.personal === false ? { steward: {} } : {}),
+              ...(scope.personal === false ? { origin: {} } : {}),
               onBootstrapProgress: (progress) =>
                 bootstrap.report(scope, progress),
+              onGatewayOutcome: noteGatewayOutcome,
               // Out of room parks this scope's feed; the phone, not the vault,
               // is what ran out, so one paused scope raises the state for all.
               onStorageFull: () =>
@@ -394,6 +407,7 @@ export function ReplicaProvider({
           createId: nativeReplicaIdFactory,
           isConnected: () => connected,
           isNetworkWorkAllowed: nativeSyncAllowed,
+          isRowSyncAllowed: nativeRowSyncAllowed,
           onScopePulled: updateScopeFreshness,
           onScopeRevoked: revoked.note,
           reclaimRevokedReplica,
@@ -404,6 +418,9 @@ export function ReplicaProvider({
           await facade.close();
           return;
         }
+        // Read now the local replica is open: it refuses a mount, never disk.
+        const mounted = facade;
+        let features = await wall(() => mounted.close());
         // Durable coverage, read at mount and after every pull. Without it a
         // relaunch after a kill mid-backfill renders a truncated library with
         // nothing saying so: the in-process bootstrap that would have reported
@@ -431,6 +448,10 @@ export function ReplicaProvider({
             : undefined;
           if (cancelled) return;
           connected = liveBase !== undefined;
+          if (!liveBase)
+            console.error(
+              `[centraid] replica: no gateway base — device=${deviceOnline}`
+            );
           if (liveBase) {
             currentBase = liveBase;
             Store.set(LAST_BASE, liveBase);
@@ -469,15 +490,15 @@ export function ReplicaProvider({
             ...value,
             ...(liveBase ? { gatewayBase: liveBase } : {}),
             ...(features ? { features } : {}),
-            online: connected,
+            online: value.online === true && connected,
             // The one pass that runs whatever the radio said: re-read the
             // pause so a resume from the storage screen clears the state.
             storageFull: facade?.storageFull === true,
-            reachability: deviceOnline
-              ? liveBase
-                ? "syncing"
-                : "gateway-asleep"
-              : "device-offline",
+            reachability: attemptedReachability(
+              deviceOnline,
+              liveBase !== undefined,
+              value.online === true
+            ),
           }));
           if (liveBase) {
             const outcome = await facade?.pullScopes().catch(() => undefined);
@@ -490,6 +511,11 @@ export function ReplicaProvider({
             // data that was never fetched.
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome !== undefined && !policyBlocked;
+            connected = landed || policyBlocked;
+            if (!landed)
+              console.error(
+                `[centraid] replica: scopes pull did not land — blocked=${policyBlocked}`
+              );
             await refreshCoverage();
             publish((value) => ({
               ...value,

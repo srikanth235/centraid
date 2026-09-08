@@ -18,6 +18,11 @@
 // below the Home marker belongs to the journey that claims it.
 
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import { screenshot } from "../lib/ui-impact.mjs";
+
+/** The one mobile frame that survives a red suite (#905), published under
+ *  `artifacts/e2e/ui-impact/` beside every other seat's. */
+const HOME_FRAME = "issue-905-mobile-paired-home.png";
 
 // The claim: a broken prerequisite is known in single-digit minutes, not after
 // the fan-out. This is asserted on the flow's own wall clock AFTER the fact —
@@ -48,6 +53,30 @@ await runFlow("pairing-canary", async (ctx) => {
 `,
     "canary-home"
   );
+
+  // ─── The paired-Home frame, published (#905) ─────────────────────────────
+  //
+  // The canary is the only flow that currently REACHES Home — every journey
+  // behind it dies at its first tile tap — so its frame is the only picture of
+  // the launcher any run still produces. That picture is also the one artifact
+  // that tells the two launcher-empty states apart: every tile `unknown` draws
+  // a populated grid since #905, while every tile `empty` routes to DayOne and
+  // draws no launcher at all. From the Maestro log the two are identical.
+  //
+  // PUBLISHING IS NOT ASSERTING, which is what keeps the doctrine above
+  // intact — no app-specific claim, and no second reason to go red. A failed
+  // copy is noted and swallowed: the canary's verdict is about pairing, and
+  // the suite behind it must not fall over a file copy.
+  try {
+    // The frame is `paired-home.png`, unprefixed: harness.mjs runs every chunk
+    // with `cwd = screenshotsDir`, and the `NN-` prefix it mints belongs to the
+    // chunk, not to the frame. A `-paired-home.png` suffix never matched, so
+    // the swallowed note below fired on every run and this frame was never
+    // published (#905).
+    await screenshot(ctx, "paired-home", HOME_FRAME);
+  } catch (error) {
+    ctx.note(`paired-home frame not published: ${error.message}`);
+  }
 
   const elapsedMs = Date.now() - startedAt;
   ctx.note(`prerequisites proven in ${Math.ceil(elapsedMs / 1000)}s`);

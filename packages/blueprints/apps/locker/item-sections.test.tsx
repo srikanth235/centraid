@@ -14,7 +14,6 @@ import { ItemScreen } from "./components/Item.tsx";
 import {
   PASSKEY_KEY_FIELD,
   degradationCopy,
-  historyPasswordKey,
   passwordAge,
   sealedFieldKey,
   sectionsOf,
@@ -24,7 +23,6 @@ import { isPasswordStale } from "./format.ts";
 import {
   ARCHIVE,
   ATTACHMENTS_NOTE,
-  HISTORY_PASSWORD_LABEL,
   HISTORY_PASSWORD_PRESENT,
   PASSKEY_KEY_HELD,
   UNARCHIVE,
@@ -87,18 +85,19 @@ const DETAIL: LockerDetail = {
       byte_size: 20_480,
     },
   ],
+  // What `queries/item-sidecars` makes of a `core_entity_revision` snapshot
+  // (#916, D2): an operation, the column names that changed, and a time.
   history: [
     {
       revision_id: "rev2",
-      operation: "edit",
+      operation: "update",
       changed: { password: true },
       recorded_at: "2025-12-01T09:00:00Z",
-      has_previous_password: true,
     },
     {
       revision_id: "rev1",
-      operation: "create",
-      changed: {},
+      operation: "update",
+      changed: { username: true },
       recorded_at: "2025-01-01T09:00:00Z",
     },
   ],
@@ -199,8 +198,8 @@ describe("custom fields draw in their own sections", () => {
     expect(markup).toContain("r3c0very-c0de");
     expect(markup).toContain("the receipt is already written");
     expect(markup).toContain(">Conceal<");
-    // AND ONLY THAT ROW. One permit, one field: the passkey's key material and
-    // the retained password beside it are still dot runs.
+    // AND ONLY THAT ROW. One permit, one field: the passkey's key material
+    // beside it is still a dot run.
     expect(markup).toContain(SEALED_RUN);
   });
 
@@ -285,44 +284,57 @@ describe("history names what changed, and never what it changed from", () => {
   test("the operation, the columns and the time — newest first", () => {
     const markup = item();
     const history = markup.slice(markup.indexOf("History"));
-    expect(history).toContain("edit");
+    expect(history).toContain("update");
     expect(history).toContain("password");
+    expect(history).toContain("username");
     expect(history.indexOf("2025-12-01")).toBeLessThan(
       history.indexOf("2025-01-01")
     );
   });
 
-  test("a retained previous password is PRESENT, and now has its own verbs", () => {
-    const markup = item();
-    expect(markup).toContain(HISTORY_PASSWORD_PRESENT);
-    // The revision is metadata; the password it kept is a sealed row of its
-    // own, beneath it, so a `Reveal` never sits next to a timestamp.
-    const history = markup.slice(markup.indexOf("History"));
-    expect(history).toContain(HISTORY_PASSWORD_LABEL);
-    expect(history).toContain(">Reveal<");
-    expect(history).toContain(">Copy<");
+  /*
+   * THE CAPABILITY THAT WENT (#916, D2). `locker_item_history` kept the
+   * password an item was rotated away from in a sealed cell of its own, and
+   * this pane offered it behind the item's permit. The table is gone; a
+   * revision is a `core_entity_revision` snapshot no reveal reaches. The row
+   * that used to carry `Reveal` and `Copy` is now the rotation itself — the
+   * time it happened, and a sentence saying where the old value still lives.
+   */
+  test("a rotation is named, and the old value is placed rather than offered", () => {
+    const history = item().slice(item().indexOf("History"));
+    expect(history).toContain(HISTORY_PASSWORD_PRESENT);
+    expect(HISTORY_PASSWORD_PRESENT).toContain("export");
+    // The rotation's own timestamp is what the row carries where a value used
+    // to be.
+    expect(history).toContain("2025-12-01");
+    expect(history).not.toContain(">Reveal<");
+    expect(history).not.toContain(">Copy<");
+    expect(history).not.toContain(">Conceal<");
   });
 
-  test("the permit is minted against the REVISION, and only a retaining one", () => {
-    expect(sidecarAskOf(historyPasswordKey("rev2"), DETAIL)).toStrictEqual({
-      target: {
-        entity: "locker.item_history",
-        entityId: "rev2",
-        column: "password",
-      },
-      label: HISTORY_PASSWORD_LABEL,
+  test("a revision that left the password alone says nothing about one", () => {
+    const markup = item({
+      history: [
+        {
+          revision_id: "rev1",
+          operation: "update",
+          changed: { username: true },
+          recorded_at: "2025-01-01T09:00:00Z",
+        },
+      ],
     });
-    // `rev1` kept nothing — there is no row to spend a permit on.
-    expect(sidecarAskOf(historyPasswordKey("rev1"), DETAIL)).toBeNull();
+    expect(markup).not.toContain(HISTORY_PASSWORD_PRESENT);
   });
 
-  test("a revealed previous password is on its row, and never in the read", () => {
-    const markup = item({}, open(historyPasswordKey("rev2"), "0ld-passw0rd"));
-    expect(markup).toContain("0ld-passw0rd");
-    expect(markup).toContain(">Conceal<");
-    // The payload the pane was given still carries presence and nothing else.
-    expect(DETAIL.history?.[0]?.has_previous_password).toBe(true);
-    expect(item()).not.toContain("0ld-passw0rd");
+  test("no revision is an address a permit can be minted for", () => {
+    // The dead entity's key shape, and every other guess at one: an unknown
+    // field resolves to null rather than to a target nobody could spend.
+    for (const key of ["history:rev2", "history:rev1", "history:"])
+      expect(sidecarAskOf(key, DETAIL)).toBeNull();
+    // And nothing the pane can ask for names it.
+    expect(
+      JSON.stringify(sidecarAskOf(sealedFieldKey("f1"), DETAIL))
+    ).not.toContain("item_history");
   });
 
   test("the password's AGE is read off the item's own clock", () => {

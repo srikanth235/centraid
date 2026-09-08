@@ -2,6 +2,33 @@
 
 ## Open
 
+- **A golden-corpus re-freeze cannot be read as a diff, and the freezer's own
+  header says it should be.** `scripts/golden-vault/build.mjs` derives every
+  corpus id from a fixed seed for exactly that reason ("a corpus seeded with
+  `Date.now()` and random uuids re-freezes differently every run, so its diff is
+  unreadable and nobody can tell a re-freeze from a rewrite"), but the rows it
+  seeds hang off `bootstrapVault`, which mints real clock-based uuidv7s and
+  stamps real timestamps. So the owner party, the device, the vault row and all
+  nineteen seeded concepts change identity on every freeze: re-freezing the #916
+  corpus to answer the audit's F2 moved 350 of `manifest.json`'s lines, of which
+  three were the shape fix and the rest were fresh ids. Not fixed with F2
+  because making bootstrap deterministic means threading a seeded id source and
+  a fixed clock through `bootstrapVault` itself — a change to production code
+  for a test artefact's sake, which wants its own decision.
+
+- **`refreshEntityTriggers` refreshes a missing trigger, never a changed one.**
+  `packages/vault/src/schema/entity.ts` returns early when the kind count and
+  the trigger count already match the registry, and writes with `CREATE TRIGGER
+  IF NOT EXISTS`, so an existing vault opened by a build whose trigger BODY has
+  changed keeps the old body. The wave's own fix is the case in point: the
+  cross-kind guard added for audit F1 reaches a file created before it only
+  through a re-freeze or a fresh vault. It is not a v0 field problem — there are
+  no files in the field — and the new schema assertion in `golden-vault.test.ts`
+  makes the drift fail loudly rather than pass quietly. Fixing it properly means
+  comparing each stored `sqlite_master.sql` against the text the generator would
+  write and rewriting the mismatches, which is a change to what every vault open
+  does and belongs with whoever owns open-path cost.
+
 - **Ten web e2e specs still carry a hand-copied connected-session bootstrap.**
   `apps/web/tests/e2e/connect.ts` (#892) now owns that bootstrap, and
   `accessibility`, `pwa-offline-journey` and `web-pwa` import it. The other ten
@@ -80,36 +107,6 @@
   is, and a second implementation nobody runs drifts. Whether the proof or the
   function should go is the open decision.
 
-- **An ordered replica page cannot use an index while its refusal guards ride
-  the same statement.** `planComposedReplicaRead` puts one
-  `max(CASE ... END) OVER ()` column in the select list per order guard, and a
-  window function over an unbounded frame must see every row before the first
-  one is emitted — so an ordered read materialises the whole entity whatever the
-  ORDER BY key is made of. Measured on the 2026-08-29 development container
-  against the 50,000-row year-3 corpus
-  (`tests/scale/browser-replica-query.fixture.ts`), through `store.read`:
-  103 ms for the filtered newest-first page, 174 ms unfiltered. Adding an index
-  over the exact ORDER BY expression and changing nothing else moves those to
-  103 ms and 171 ms — no effect, because the plan never reaches the index.
-  Removing the guards (and, for the filtered read, the `(verdict = 0) ASC` tier
-  that leads the sort) moves them to **2.2 ms and 0.4 ms** on the same index.
-  So the ~50-400x lives behind the guards, not behind the extraction. A guard
-  restructure is the lever, and it is a correctness change, not a storage one:
-  a set-wide census answers "does any kept row hold an unorderable value", and
-  making it cheap means either a second statement over the same filtered set
-  (measured 65 ms) or widening the question to the whole entity (measured 24 ms)
-  — a new divergence, since the refusal would then fire on rows the filter
-  excluded. Found while auditing #883's D1 clause, and not taken there because
-  the clause it disproves is a storage clause.
-
-- **Two surfaces #882 added to the phone are unvirtualized.**
-  `apps/mobile/src/apps/notes/NotesPlaces.tsx` and `NotesHistory.tsx` render
-  through a `ScrollView` with `.map()` rather than a `FlatList`, and neither is
-  pinned by `scripts/accessibility-contract.test.mjs`. Found by the independent
-  audit on #882, not a regression of any existing contract (these files are new),
-  and the fix is the same shape the Tasks board already uses. Locker's Access
-  history was the third; #883 C4 windowed it with Locker's other list surfaces
-  and pinned all of them in the contract.
 - **The phone's Access history cannot narrow to one item.**
   `lockerAccess` (`apps/mobile/src/apps/locker/locker-gateway.ts`) never sends
   `item_id`, so the phone always reads the newest receipts across every item
@@ -218,7 +215,7 @@
   variable, not trust the host; (2)
   `packages/server/src/serve/gateway-db-lock.integration.test.ts` shells out
   to the `sqlite3` CLI, absent here — a candidate for the new
-  `tests/env-red.json` inventory (guard on CLI presence) or a rewrite against
+  `tests/inventory.json#envRed` inventory (guard on CLI presence) or a rewrite against
   `node:sqlite`. Both still red in this container at #883's close, and both
   paths are restated here because the packages they used to name
   (`agent-runtime`, `gateway`) no longer exist.
@@ -328,7 +325,7 @@
   is red on the default branch cannot distinguish a regression from the standing
   state, so every branch inherits the failure and every author must decide
   whether to absorb it. #890 absorbed those eighteen into its pin raise, with the
-  reason stated at the number in `tests/comment-density-ratchet.json`, rather
+  reason stated at the number in `tests/inventory.json#commentDensity`, rather
   than leave its own branch red for something it did not cause. That absorption
   is a workaround, not the fix. Two things want settling on their own: how a pin
   file drifts out of agreement with the tree on `main` at all (a `--write` that
@@ -337,6 +334,37 @@
   which makes every `.tsx` number in that file wrong in the same direction.
 
 ## Resolved
+
+- #922 — **Two surfaces #882 added to the phone were unvirtualized.**
+  `apps/mobile/src/apps/notes/NotesPlaces.tsx` kept one hand-wired `ScrollView`
+  + `.map()` (the More sheet) beside three `SeatList`s, and
+  `NotesHistory.tsx` — a note's whole version chain, which grows by one row per
+  save and has no bound — was a `ScrollView` + `.map()` throughout. Both now
+  draw through `SeatList`, the seat's one virtualised list (#922 E6), with
+  `NEWEST_FIRST_ANCHORING` stated at the call site as that primitive requires,
+  and `NotesHistory.tsx` joins the pinned files in
+  `scripts/accessibility-contract.test.mjs` so a swap back to a bare `.map()`
+  cannot pass. The per-file pin already named `NotesPlaces.tsx`, which is why
+  its remaining `.map()` had to be found by reading rather than by the gate —
+  a pin that matches one tag in a file says nothing about the rest of it.
+
+- #922 — **An ordered replica page could not use an index while its refusal
+  guards rode the same statement.** `planComposedReplicaRead` put one
+  `max(CASE ... END) OVER ()` column in the select list per order guard, and a
+  window function over an unbounded frame must see every row before the first
+  one is emitted, so an ordered read materialised the whole entity whatever the
+  ORDER BY key was made of; an index over the exact ORDER BY expression changed
+  nothing, because the plan never reached it. C3 replaced the aggregate with
+  **index seeks**: `censusClass(column)` is a fixed 0-5 ladder, each guard asks
+  `class >= N ORDER BY class ASC LIMIT 1` against a `replica_row_cen_*`
+  expression index, and `orderGuards` emits classes rather than SQL. Still one
+  statement per read; the plan is the difference. On the 50,000-row fixture an
+  ordered read taken after a write went **37.9 ms to 1.03 ms**, and a one-row
+  write batch went 0.36 ms to 0.55 ms for the extra b-tree. The rule the fix
+  now depends on is that the index expression and the probe expression are
+  spelled identically — [docs/traps/expression-index-spelling.md](docs/traps/expression-index-spelling.md),
+  asserted on the query plan by
+  `packages/client/src/replica/order-census.test.ts`.
 
 - #890 — **The mobile upload allowlist accepted percent-encoded traversal,
   backslash traversal, and embedded credentials.** Filed here rather than under

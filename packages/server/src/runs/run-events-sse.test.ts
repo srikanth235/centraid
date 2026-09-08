@@ -15,11 +15,12 @@ import {
   ConversationStore,
   AnalyticsStore,
   InsightsStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type { AutomationTurnStreamEvent } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import { makeAutomationsRouteHandler } from "../routes/automations-routes.ts";
 import { WorktreeStore } from "../worktree-store/index.js";
 import { RunEventBus } from "./run-event-bus.ts";
@@ -31,11 +32,9 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
 const APP = "brief";
 
-/** Open the vault ledger the route reads (one journal.db, #280). */
+/** Open the vault ledger the route reads (one vault.db, #280). */
 function ledger(): ConversationStore {
-  return new ConversationStore(
-    makeJournalDbProvider(path.join(dir, "journal.db"))
-  );
+  return new ConversationStore(makeLedgerDbProvider(ledgerDbFileIn(dir)));
 }
 
 /** Seed one automation fire turn under its stable conversation. */
@@ -58,13 +57,13 @@ describe("run-events-sse", () => {
   beforeEach(async () => {
     dir = await tempDir(`run-sse-${crypto.randomUUID()}-`);
     await fs.mkdir(path.join(dir, "apps", APP), { recursive: true });
-    const journalDbFile = path.join(dir, "journal.db");
-    const provider = makeJournalDbProvider(journalDbFile);
+    const ledgerDbFile = ledgerDbFileIn(dir);
+    const provider = makeLedgerDbProvider(ledgerDbFile);
     analytics = new AnalyticsStore(provider);
     bus = new RunEventBus();
     handler = makeAutomationsRouteHandler({
       store: new WorktreeStore({ root: path.join(dir, "code") }),
-      journalDbFile,
+      ledgerDbFile,
       analytics,
       insights: new InsightsStore(provider),
       runAutomation: () => undefined,

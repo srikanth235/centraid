@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBandOwner } from "../../kit/band/band-owner";
 import { useTheme } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import { resolveDocsMoreRoute } from "./docs-band";
 import type { DocsBandDestinationKey, DocsMoreRowKey } from "./docs-band";
 import DocsBand from "./DocsBand";
@@ -43,14 +44,17 @@ export default function DocsScreen({
 
   const onMoreRow = (key: DocsMoreRowKey): void => {
     setMoreOpen(false);
+    // Coming due and Search are DocsHome DESTINATIONS, not screens
+    // (docs-band.ts: why Search gave up its band slot).
+    if (key === "due" || key === "search") {
+      navigation.popTo("DocsHome", { destination: key });
+      return;
+    }
     // Literal screen name per call: navigate's tuple overloads need one.
     const screen = resolveDocsMoreRoute(key);
     switch (screen) {
       case "DocsRecent":
         navigation.navigate("DocsRecent");
-        break;
-      case "DocsStarred":
-        navigation.navigate("DocsStarred");
         break;
       case "DocsTrash":
         navigation.navigate("DocsTrash");
@@ -81,6 +85,12 @@ export default function DocsScreen({
 
   return (
     <View style={frame}>
+      {/* Which vault, and whether its gateway is reachable — `VaultHeader`
+          calls these "the two facts true on EVERY route", but only the
+          springboard drew them, so inside an app both were lost along with the
+          product's two global verbs. Above the body, never inside it: frame
+          chrome does not scroll away. */}
+      <VaultBar />
       {/* Body flex:1 above the band flex:none (§G, via Photos). */}
       <View style={styles.body}>{children}</View>
 

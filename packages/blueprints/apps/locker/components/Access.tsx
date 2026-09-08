@@ -1,7 +1,7 @@
 // ACCESS HISTORY (README-Locker §1 `locker/access`, §2 "Receipts").
 //
 // An audit surface never invents a row: every line comes out of
-// `consent.receipt`. No VALUE is shown — a reveal names the columns it opened
+// `access.receipt`. No VALUE is shown — a reveal names the columns it opened
 // and stops. No REFUSAL is hidden — a denial lists like an allowance. Receipts
 // live in the journal, which the browser replica does not carry, so this read
 // is online-only and the screen names the fact it is missing.

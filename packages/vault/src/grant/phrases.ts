@@ -65,7 +65,7 @@ export function grantPhrase(input: {
     reason:
       firstDetail(behind) ??
       (behind.every((row) => row.state === "awaiting_channel")
-        ? "there is no way to reach them yet; the ask is recorded"
+        ? "the link to their vault has ended; nothing new can be delivered"
         : "it is being carried over"),
   };
 }
@@ -99,6 +99,21 @@ export function unregisteredVerbCopy(input: {
   if (input.offered.length === 0)
     return `${input.subjectType} is not something this vault can share; nothing here could keep that promise true`;
   return `${input.subjectType} can be shared for ${input.offered.join(" or ")}, not for ${input.verb}; nothing here could keep that promise true`;
+}
+
+/**
+ * The one way to reach a person is a linked account (#903). Two ways to lack
+ * one, and they are different facts to a member: never linked, or linked and
+ * severed. Both refuse the grant, because a standing answer nothing can carry
+ * is not an answer — but only one of them is news.
+ */
+export function unlinkedAudienceCopy(input: {
+  displayName: string;
+  severed: boolean;
+}): string {
+  if (input.severed)
+    return `the link to ${input.displayName}'s vault has ended, so there is nowhere to deliver this; link again in People first`;
+  return `${input.displayName} has no linked account, and a share is delivered into their vault — link them in People first`;
 }
 
 export function verbConflictCopy(input: {

@@ -1,6 +1,8 @@
 import {
   definePendingProjection,
+  pendingDelete,
   pendingPatch,
+  pendingTombstone,
 } from "../_shared/pending-overlay.js";
 
 const ONLINE_ONLY_SECRET = {
@@ -27,9 +29,11 @@ export const lockerPendingProjection = definePendingProjection({
     "set-field": ONLINE_ONLY_SECRET,
     "set-passkey": ONLINE_ONLY_SECRET,
     export: ONLINE_ONLY_SECRET,
-    "trash-item": pendingItemAction,
+    // `locker.trash_item` sets `deleted_at`, `purge_item` removes the row.
+    // Both must leave the list at once; a patch left the item sitting there.
+    "trash-item": ({ input }) => pendingTombstone("locker.item", input.item_id),
     "restore-item": pendingItemAction,
-    "purge-item": pendingItemAction,
+    "purge-item": ({ input }) => pendingDelete("locker.item", input.item_id),
     "star-item": pendingItemAction,
     "unstar-item": pendingItemAction,
     "archive-item": pendingItemAction,
@@ -37,7 +41,8 @@ export const lockerPendingProjection = definePendingProjection({
     // A duplicate mints a NEW id the vault chooses, so there is no row to
     // patch optimistically — it queues without an overlay.
     "duplicate-item": pendingItemAction,
-    "remove-field": pendingItemAction,
+    "remove-field": ({ input }) =>
+      pendingDelete("locker.item_field", input.field_id),
     "set-addresses": pendingItemAction,
     "clear-passkey": pendingItemAction,
   },

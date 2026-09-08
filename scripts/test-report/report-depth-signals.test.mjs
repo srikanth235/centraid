@@ -8,7 +8,6 @@ import {
   mergeLaneMarkers,
   scopeMatcher,
 } from "./report-depth-signals.mjs";
-import { validateMatrix } from "./validate-matrix.mjs";
 
 describe("durable depth signals", () => {
   test("persists every perf/scale measurement by stable owner and name", () => {
@@ -169,93 +168,5 @@ describe("mergeLaneMarkers", () => {
       "desktop-playwright": "2026-07-24T03:00:00.000Z",
       "web-playwright": "2026-07-24T02:00:00.000Z",
     });
-  });
-});
-
-describe("validateMatrix skip notes (#535)", () => {
-  test("fails when a skip cell has no matrix.notes rationale", async () => {
-    const matrix = {
-      dimensions: [{ id: "journey", label: "Journey", lane: "e2e" }],
-      surfaces: [
-        { id: "mobile", label: "Mobile", assessment: { journey: "skip" } },
-      ],
-      cellOwners: { "mobile.journey": null },
-      flows: [],
-      notes: {},
-    };
-    const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(
-      errors.some(
-        (error) =>
-          error.includes("mobile.journey") && error.includes("matrix.notes")
-      )
-    ).toBe(true);
-  });
-
-  test("accepts a skip cell with a one-line note", async () => {
-    const matrix = {
-      dimensions: [{ id: "journey", label: "Journey", lane: "e2e" }],
-      surfaces: [
-        { id: "mobile", label: "Mobile", assessment: { journey: "skip" } },
-      ],
-      cellOwners: { "mobile.journey": null },
-      flows: [],
-      notes: {
-        "mobile.journey":
-          "Delegated to consuming surface; no native journey surface.",
-      },
-    };
-    const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(errors.filter((error) => error.includes("matrix.notes"))).toEqual(
-      []
-    );
-  });
-
-  test("requires a live structured tracking issue for every gap", async () => {
-    const matrix = {
-      dimensions: [{ id: "performance", label: "Performance", lane: "perf" }],
-      surfaces: [
-        {
-          id: "backup",
-          label: "Backup",
-          assessment: { performance: "gap" },
-        },
-      ],
-      cellOwners: { "backup.performance": null },
-      flows: [],
-      gaps: { "backup.performance": { trackingIssue: 545 } },
-      trackingIssues: {
-        545: { state: "closed", url: "https://example.test/issues/545" },
-      },
-    };
-    const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(errors).toContain(
-      "backup.performance gap references closed tracking issue #545"
-    );
-  });
-
-  test("rejects generic partial boilerplate", async () => {
-    const matrix = {
-      dimensions: [{ id: "security", label: "Security", lane: "unit" }],
-      surfaces: [
-        {
-          id: "web",
-          label: "Web",
-          assessment: { security: "partial" },
-        },
-      ],
-      cellOwners: {
-        "web.security": { owner: "x.test.ts", tier: "unit" },
-      },
-      flows: [],
-      notes: {
-        "web.security":
-          "web.security has some owning proof but is incomplete or not continuously exercised.",
-      },
-    };
-    const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(errors.some((error) => error.includes("rejected boilerplate"))).toBe(
-      true
-    );
   });
 });

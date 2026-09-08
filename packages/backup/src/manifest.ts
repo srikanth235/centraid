@@ -30,11 +30,8 @@ export interface ManifestEntry {
   sha256?: string;
   /** /1, `db` only: restore replays `wal/{db}/{walGeneration}/` on it. */
   walGeneration?: string;
-  /**
-   * /1, `db` only: the tick this base was cloned at. The two `db` entries MUST
-   * be EQUAL; a mismatched pair is never registered or restored, since a newer
-   * journal base holds receipts for rows the restore may lack.
-   */
+  /** /1, `db` only: the tick this base was cloned at — the instant every
+   * replayed segment layers on. */
   baseTickMs?: number;
   /**
    * /1, `db` only: a FLOOR on what the store owes us. A restore that cannot
@@ -85,9 +82,8 @@ export interface SnapshotRegistryIdentity {
   objectCount: number;
 }
 
-export interface SnapshotBasePair {
-  vault: ManifestEntry;
-  journal: ManifestEntry;
+export interface SnapshotBase {
+  entry: ManifestEntry;
   baseTickMs: number;
   walTipTickMs?: number;
 }
@@ -312,9 +308,7 @@ export function assertManifestMatchesRegistry(
   }
 }
 
-export function validateSnapshotBasePair(
-  entries: ManifestEntry[]
-): SnapshotBasePair {
+export function validateSnapshotBase(entries: ManifestEntry[]): SnapshotBase {
   const paths = new Set<string>();
   for (const entry of entries) {
     if (paths.has(entry.path))
@@ -322,56 +316,37 @@ export function validateSnapshotBasePair(
     paths.add(entry.path);
   }
   const dbEntries = entries.filter((entry) => entry.kind === "db");
-  const vault = dbEntries.filter((entry) => entry.path === "vault.db");
-  const journal = dbEntries.filter((entry) => entry.path === "journal.db");
-  if (dbEntries.length !== 2 || vault.length !== 1 || journal.length !== 1) {
+  // The vault is the ONE database a snapshot carries; a second `db` entry is a
+  // producer from another protocol, never something to restore beside it.
+  if (dbEntries.length !== 1 || dbEntries[0]!.path !== "vault.db") {
+    throw new Error("manifest /1: exactly one vault.db entry is required");
+  }
+  const entry = dbEntries[0]!;
+  if (typeof entry.sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(entry.sha256))
+    throw new Error(`manifest /1: ${entry.path} is missing a valid sha256`);
+  if (
+    typeof entry.walGeneration !== "string" ||
+    !/^[0-9a-f]{32}$/u.test(entry.walGeneration)
+  ) {
     throw new Error(
-      "manifest /1: exactly one vault.db and one journal.db entry are required"
+      `manifest /1: ${entry.path} is missing a valid WAL generation`
     );
   }
-  const [vaultEntry] = vault;
-  const [journalEntry] = journal;
-  for (const entry of [vaultEntry!, journalEntry!]) {
-    if (
-      typeof entry.sha256 !== "string" ||
-      !/^[0-9a-f]{64}$/u.test(entry.sha256)
-    ) {
-      throw new Error(`manifest /1: ${entry.path} is missing a valid sha256`);
-    }
-    if (
-      typeof entry.walGeneration !== "string" ||
-      !/^[0-9a-f]{32}$/u.test(entry.walGeneration)
-    ) {
-      throw new Error(
-        `manifest /1: ${entry.path} is missing a valid WAL generation`
-      );
-    }
-    if (!Number.isSafeInteger(entry.baseTickMs) || entry.baseTickMs! < 0) {
-      throw new Error(
-        `manifest /1: ${entry.path} is missing a valid base tick`
-      );
-    }
-    if (
-      entry.walTipTickMs !== undefined &&
-      (!Number.isSafeInteger(entry.walTipTickMs) ||
-        entry.walTipTickMs < entry.baseTickMs!)
-    ) {
-      throw new Error(`manifest /1: ${entry.path} has an invalid WAL tip`);
-    }
-  }
-  if (vaultEntry!.baseTickMs !== journalEntry!.baseTickMs) {
-    throw new Error("manifest /1: database bases are from DIFFERENT ticks");
-  }
-  if (vaultEntry!.walTipTickMs !== journalEntry!.walTipTickMs) {
-    throw new Error("manifest /1: database WAL tips do not match");
+  if (!Number.isSafeInteger(entry.baseTickMs) || entry.baseTickMs! < 0)
+    throw new Error(`manifest /1: ${entry.path} is missing a valid base tick`);
+  if (
+    entry.walTipTickMs !== undefined &&
+    (!Number.isSafeInteger(entry.walTipTickMs) ||
+      entry.walTipTickMs < entry.baseTickMs!)
+  ) {
+    throw new Error(`manifest /1: ${entry.path} has an invalid WAL tip`);
   }
   return {
-    vault: vaultEntry!,
-    journal: journalEntry!,
-    baseTickMs: vaultEntry!.baseTickMs!,
-    ...(vaultEntry!.walTipTickMs === undefined
+    entry,
+    baseTickMs: entry.baseTickMs!,
+    ...(entry.walTipTickMs === undefined
       ? {}
-      : { walTipTickMs: vaultEntry!.walTipTickMs }),
+      : { walTipTickMs: entry.walTipTickMs }),
   };
 }
 

@@ -72,7 +72,7 @@ export function categoryTotals(
       label: CATEGORY_LABEL.get(key) ?? key,
       total_minor,
     }))
-    .toSorted((left, right) => right.total_minor - left.total_minor)
+    .sort((left, right) => right.total_minor - left.total_minor)
     .slice(0, take);
 }
 

@@ -72,8 +72,8 @@ describe("vault-routes.atlas", () => {
     const now = new Date().toISOString();
     plane.db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, ?, ?, '1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'person', ?, ?, ?)`
       )
       .run(id, name, now, now);
   }
@@ -89,16 +89,14 @@ describe("vault-routes.atlas", () => {
       packs: Array<{
         pack: string;
         packKind: string;
-        file: string;
         rows: number;
         tables: unknown[];
       }>;
       totals: { rows: number; kinds: number; populatedKinds: number };
     };
     expect(["dbstat", "estimate"]).toContain(body.method);
-    const core = body.packs.find(
-      (p) => p.pack === "core" && p.file === "vault"
-    );
+    // ONE FILE (#916): a pack no longer names which database it lives in.
+    const core = body.packs.find((p) => p.pack === "core");
     expect(core?.rows).toBeGreaterThanOrEqual(1);
     // Ontology packs sort ahead of machinery.
     const firstMachinery = body.packs.findIndex(
@@ -195,9 +193,9 @@ describe("vault-routes.atlas", () => {
   test("GET /atlas/pulse buckets journal provenance writes over the window", async () => {
     const { base, plane } = await setup();
     const now = new Date().toISOString();
-    plane.db.journal
+    plane.db.audit
       .prepare(
-        `INSERT INTO consent_provenance (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, occurred_at)
+        `INSERT INTO access_provenance (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, occurred_at)
        VALUES ('pv1','core.party','p1','create','owner','owner',?)`
       )
       .run(now);

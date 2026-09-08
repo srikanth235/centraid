@@ -14,6 +14,10 @@ import type { Gateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 import { readLiveShareGrant, readShareGrant } from "../grant/grant-store.js";
 import { uuidv7 } from "../ids.js";
+import {
+  bindPartyToVault,
+  revokePartyVaultBinding,
+} from "../share/party-vault-binding.js";
 import { registerShareCommands } from "./share.js";
 
 let db: VaultDb;
@@ -24,7 +28,7 @@ let ravi: string;
 let documentId: string;
 
 interface ReceiptRow {
-  grant_id: string | null;
+  authority_id: string | null;
   action: string;
   object_type: string;
   object_id: string | null;
@@ -33,10 +37,10 @@ interface ReceiptRow {
 }
 
 function receiptsFor(grantId: string): ReceiptRow[] {
-  return db.journal
+  return db.audit
     .prepare(
-      `SELECT grant_id, action, object_type, object_id, decision, detail_json
-         FROM consent_receipt WHERE grant_id = ? ORDER BY receipt_id`
+      `SELECT authority_id, action, object_type, object_id, decision, detail_json
+         FROM access_receipt WHERE authority_id = ? ORDER BY receipt_id`
     )
     .all(grantId) as unknown as ReceiptRow[];
 }
@@ -56,12 +60,20 @@ describe("commands/share", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
          VALUES (?, 'person', 'Ravi', 'Ravi', '2026-01-01T00:00:00.000Z',
-                 '2026-01-01T00:00:00.000Z', '1.4')`
+                 '2026-01-01T00:00:00.000Z')`
       )
       .run(ravi);
+    // A person is grantable only through a live link (#903), so every grant
+    // below needs one; the refusals at the end of this file are what happens
+    // without it.
+    bindPartyToVault(db.vault, {
+      partyId: ravi,
+      vaultId: "vault-ravi",
+      linkedAt: "2026-01-01T00:00:00.000Z",
+      displayName: "Ravi",
+    });
     documentId = uuidv7();
   });
 
@@ -72,7 +84,6 @@ describe("commands/share", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -106,7 +117,7 @@ describe("commands/share", () => {
         .get("share.grant") as { command_id: string }
     ).command_id;
     expect(
-      db.journal
+      db.audit
         .prepare(
           `SELECT count(*) AS n FROM agent_command_invocation
             WHERE command_id = ? AND status = 'executed'`
@@ -114,7 +125,7 @@ describe("commands/share", () => {
         .get(commandId)
     ).toMatchObject({ n: 1 });
 
-    // ONE receipt stream, every entry naming `grant_id` (ruling V-receipts).
+    // ONE receipt stream, every entry naming `authority_id` (V-receipts, #928).
     const receipts = receiptsFor(grantId);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
@@ -246,5 +257,48 @@ describe("commands/share", () => {
     expect((absent as { output: { outcome: string } }).output.outcome).toBe(
       "absent"
     );
+  });
+
+  // The channel gate (#903). Sharing no longer opens a way to someone: the
+  // People link ceremony is the only thing that does, so a grant naming an
+  // unreachable person is refused HERE rather than left standing as a promise
+  // no fulfillment pass could keep.
+  test("a grant to a person with no linked account is refused, and names the act that would fix it", () => {
+    const uma = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
+         VALUES (?, 'person', 'Uma', 'Uma', '2026-01-01T00:00:00.000Z',
+                 '2026-01-01T00:00:00.000Z')`
+      )
+      .run(uma);
+
+    const refused = grant({ audience_id: uma }) as {
+      status: string;
+      reason?: string;
+    };
+    expect(refused.status).toBe("failed");
+    expect(refused.reason).toContain("Uma has no linked account");
+    // Refused means REFUSED: no row stands, so nothing later reads it back as
+    // an answer the member gave.
+    expect(
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM share_authority WHERE principal_id = ?`
+        )
+        .get(uma)
+    ).toMatchObject({ n: 0 });
+  });
+
+  test("a grant to a person whose link has ended says the link ended, not that they were never linked", () => {
+    revokePartyVaultBinding(db.vault, {
+      partyId: ravi,
+      vaultId: "vault-ravi",
+      revokedAt: "2026-02-01T00:00:00.000Z",
+    });
+    const refused = grant() as { status: string; reason?: string };
+    expect(refused.status).toBe("failed");
+    expect(refused.reason).toContain("the link to Ravi's vault has ended");
   });
 });

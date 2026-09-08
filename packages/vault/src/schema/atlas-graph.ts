@@ -188,9 +188,7 @@ function notNullColumns(vault: DatabaseSync, physical: string): Set<string> {
  * hand-listed; the "star not mesh" caption numbers are all derived.
  */
 export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
-  // Vault-file tables only — the FK graph is one file (journal FKs are
-  // cross-file and gateway-enforced, invisible to PRAGMA anyway).
-  const vaultEntries = atlasTables().filter((e) => e.file === "vault");
+  const vaultEntries = atlasTables();
   const byPhysical = new Map<string, AtlasTableEntry>(
     vaultEntries.map((e) => [e.physical, e])
   );
@@ -220,6 +218,12 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
     const notNull = notNullColumns(vault, entry.physical);
     const childRows = countRows(vault, entry.physical);
     for (const fk of fks) {
+      // The entity supertype is machinery, not a kind: every ontology table
+      // has a key into `core_entity` since #916's rung ten, and drawing 65
+      // edges into a table that is not a node would put the whole ontology on
+      // one ring around a mechanism. The Atlas maps the canonical model, so an
+      // FK whose parent is not a registered entity is not an edge of it.
+      if (!byPhysical.has(fk.table)) continue;
       const isNotNull = notNull.has(fk.from);
       // fill: NOT NULL columns are fully filled by definition (== child
       // rowcount); nullable columns need the COUNT WHERE ... IS NOT NULL.
@@ -342,7 +346,7 @@ export interface AtlasPulseDay {
 }
 
 export interface AtlasPulseSeries {
-  /** The entity type as stored in consent_provenance (logical `schema.table`). */
+  /** The entity type as stored in access_provenance (logical `schema.table`). */
   entityType: string;
   /** Physical name when the entity type resolves to a registered table. */
   physical: string | null;
@@ -360,9 +364,9 @@ export interface AtlasPulsePayload {
   windowDays: number;
   /**
    * The pulse queries only LIVE provenance rows. Old rows may have been
-   * moved to `journal_archive_manifest` segments (#367) and are NOT
-   * counted here — a 30-day window rarely reaches the archival horizon, but
-   * the flag lets the UI say "live journal only" honestly.
+   * moved to `audit_archive_manifest` segments (#367) and are NOT counted
+   * here — a 30-day window rarely reaches the archival horizon, but the flag
+   * lets the UI say "live audit band only" honestly.
    */
   live: true;
   series: AtlasPulseSeries[];
@@ -376,10 +380,11 @@ interface PulseRow {
 
 /**
  * 30-day per-table write pulse (#441 B1 sparklines / B4 item 4),
- * derived from journal.db `consent_provenance` grouped by entity_type × day.
+ * derived from the audit band's `access_provenance`, grouped by
+ * entity_type × day.
  */
 export function atlasPulse(
-  journal: DatabaseSync,
+  vault: DatabaseSync,
   options: { windowDays?: number; now?: Date } = {}
 ): AtlasPulsePayload {
   const windowDays = options.windowDays ?? ATLAS_PULSE_WINDOW_DAYS;
@@ -387,12 +392,12 @@ export function atlasPulse(
   const cutoff = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
   const since = cutoff.toISOString().slice(0, 10);
 
-  const rows = journal
+  const rows = vault
     .prepare(
       `SELECT entity_type            AS entityType,
               substr(occurred_at, 1, 10) AS day,
               COUNT(*)               AS count
-         FROM consent_provenance
+         FROM access_provenance
         WHERE occurred_at >= ?
         GROUP BY entity_type, day
         ORDER BY entity_type, day`

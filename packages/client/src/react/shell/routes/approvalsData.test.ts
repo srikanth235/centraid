@@ -186,7 +186,6 @@ describe(buildScopeRequestRow, () => {
       requestId: "r1",
       plane: "app",
       appId: "invoicer",
-      purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "core", verbs: "read" },
         { schema: "schedule", table: "task", verbs: "act" },
@@ -238,12 +237,12 @@ describe(humanizeActivityLabel, () => {
     ).toBe("Sync remove connection");
     expect(
       humanizeActivityLabel(
-        "act consent.app_ext_draft_drop",
+        "act access.app_ext_draft_drop",
         "deny",
         "agent.command",
         null
       )
-    ).toBe("Consent app ext draft drop");
+    ).toBe("Access app ext draft drop");
   });
 });
 

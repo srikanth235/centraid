@@ -1,8 +1,14 @@
-import { canonicalizeRrule } from "@centraid/core/time";
+import { canonicalizeRrule, expandRecurrence } from "@centraid/core/time";
+import type { RecurrenceSemantics } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
+import {
+  ORGANIZE_TASK,
+  SAVE_PROJECT,
+  SAVE_SECTION,
+} from "./schedule-projects.js";
 
 const STRING = { type: "string", minLength: 1 } as const;
 
@@ -107,6 +113,108 @@ const EDIT_EVENT: CommandDefinition = {
   handler: editEvent,
 };
 
+/**
+ * THE OCCURRENCE'S OWN IDENTITY IS ITS WALL CLOCK (#916, R5 / review 3.1 /
+ * adversarial BUG-3).
+ *
+ * An exception used to be keyed on the RESOLVED UTC instant, which is a
+ * function of the series' anchor and zone rather than of the occurrence — so
+ * an edit that moved the series orphaned every skip on it and the removed
+ * occurrences came back. And the write took any instant at all: `1999-01-01`
+ * landed as an exception on a 2026 series and simply never matched.
+ */
+function eventSeries(
+  ctx: HandlerCtx,
+  eventId: string
+): {
+  rrule: string | null;
+  dtstart: string;
+  startTz: string | null;
+  semantics: RecurrenceSemantics;
+} {
+  const row = ctx.db
+    .prepare(
+      "SELECT rrule, dtstart, start_tz, recurrence_semantics FROM core_event WHERE event_id = ?"
+    )
+    .get(eventId) as
+    | {
+        rrule: string | null;
+        dtstart: string;
+        start_tz: string | null;
+        recurrence_semantics: string | null;
+      }
+    | undefined;
+  if (!row) throw new Error(`no event ${eventId}`);
+  return {
+    rrule: row.rrule,
+    dtstart: row.dtstart,
+    startTz: row.start_tz,
+    semantics: (row.recurrence_semantics ?? "zoned") as RecurrenceSemantics,
+  };
+}
+
+function occurrenceWallStart(
+  ctx: HandlerCtx,
+  eventId: string,
+  instant: string
+): string | null {
+  const series = eventSeries(ctx, eventId);
+  if (!series.rrule) return null;
+  const at = Date.parse(instant);
+  if (Number.isNaN(at)) return null;
+  return (
+    expandRecurrence({
+      rrule: series.rrule,
+      start: series.dtstart,
+      rangeFrom: instant,
+      rangeTo: new Date(at + 86_400_000).toISOString(),
+      ...(series.startTz === null ? {} : { timeZone: series.startTz }),
+      semantics: series.semantics,
+      maxInstances: 4,
+    }).find(
+      (item) => item.originalStart === instant || item.wallStart === instant
+    )?.wallStart ?? null
+  );
+}
+
+/** Exceptions whose wall clock no longer lands on an occurrence of the series
+ *  as it now stands. */
+function strandedExceptions(ctx: HandlerCtx, eventId: string): number {
+  const rows = ctx.db
+    .prepare(
+      `SELECT original_start_local FROM schedule_recurrence_exception
+        WHERE target_type = 'core.event' AND target_id = ? AND scope = 'occurrence'`
+    )
+    .all(eventId) as { original_start_local: string }[];
+  if (rows.length === 0) return 0;
+  const series = eventSeries(ctx, eventId);
+  if (!series.rrule) return rows.length;
+  const stamps = rows.map((row) => row.original_start_local).sort();
+  const live = new Set(
+    expandRecurrence({
+      rrule: series.rrule,
+      start: series.dtstart,
+      rangeFrom: stamps[0] as string,
+      rangeTo: new Date(
+        Date.parse(stamps.at(-1) as string) + 86_400_000
+      ).toISOString(),
+      ...(series.startTz === null ? {} : { timeZone: series.startTz }),
+      semantics: series.semantics,
+      maxInstances: 1000,
+    }).map((item) => item.wallStart)
+  );
+  return stamps.filter((stamp) => !live.has(stamp)).length;
+}
+
+/** Refuse a series edit that would leave its exceptions matching nothing. */
+function assertNoStrandedExceptions(ctx: HandlerCtx, eventId: string): void {
+  const stranded = strandedExceptions(ctx, eventId);
+  if (stranded > 0)
+    throw new Error(
+      `this change to the series leaves ${stranded} occurrence exception(s) matching nothing: remove or re-anchor them first`
+    );
+}
+
 function editEvent(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as unknown as EventEditInput;
   const previous = ctx.db
@@ -143,10 +251,25 @@ function editEvent(ctx: HandlerCtx): Record<string, unknown> {
   const sequence = previous.sequence + 1;
   sets.push("sequence = ?", "updated_at = ?");
   values.push(sequence, ctx.now, input.event_id);
+  if (input.clear_rrule) {
+    // Dropping the rule leaves every exception on it excepting nothing
+    // (#916, adversarial BUG-3).
+    const orphaned = ctx.db
+      .prepare(
+        `SELECT count(*) AS n FROM schedule_recurrence_exception
+          WHERE target_type = 'core.event' AND target_id = ?`
+      )
+      .get(input.event_id) as { n: number };
+    if (orphaned.n > 0)
+      throw new Error(
+        `this event has ${orphaned.n} occurrence exception(s): remove them before dropping its recurrence`
+      );
+  }
   ctx.db
     .prepare(`UPDATE core_event SET ${sets.join(", ")} WHERE event_id = ?`)
     .run(...values);
   ctx.wrote("core.event", input.event_id);
+  assertNoStrandedExceptions(ctx, input.event_id);
 
   updateEventExtension(ctx, input);
   replaceAttendees(ctx, input);
@@ -363,6 +486,7 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
         )
         .run(...updates.map(([, value]) => value), ctx.now, input.event_id);
       ctx.wrote("core.event", input.event_id);
+      assertNoStrandedExceptions(ctx, input.event_id);
       queueProviderWriteback(
         ctx,
         "core.event",
@@ -380,22 +504,31 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
     }
     return { event_id: input.event_id, scope: input.scope };
   }
+  const wallStart = occurrenceWallStart(
+    ctx,
+    input.event_id,
+    input.original_start
+  );
+  if (wallStart === null)
+    throw new Error("original_start is not an occurrence of this series");
   const override = occurrenceOverrideJson(input);
   const exceptionId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO schedule_recurrence_exception
-        (exception_id, target_type, target_id, original_start, scope, action,
+        (exception_id, target_type, target_id, original_start_local,
+         recurrence_semantics, scope, action,
          override_json, created_at, updated_at)
-       VALUES (?, 'core.event', ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(target_type, target_id, original_start, scope) DO UPDATE SET
+       VALUES (?, 'core.event', ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(target_type, target_id, original_start_local, scope) DO UPDATE SET
          action = excluded.action, override_json = excluded.override_json,
          updated_at = excluded.updated_at`
     )
     .run(
       exceptionId,
       input.event_id,
-      input.original_start,
+      wallStart,
+      eventSeries(ctx, input.event_id).semantics,
       input.scope,
       input.action,
       override,
@@ -404,203 +537,6 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
     );
   ctx.wrote("schedule.recurrence_exception", exceptionId);
   return { event_id: input.event_id, scope: input.scope };
-}
-
-const SAVE_PROJECT: CommandDefinition = {
-  name: "schedule.save_project",
-  ownerSchema: "schedule",
-  inputSchema: {
-    type: "object",
-    required: ["name"],
-    additionalProperties: false,
-    properties: {
-      project_id: STRING,
-      name: STRING,
-      area: { type: "string" },
-      color: { type: "string" },
-      sort_order: { type: "integer" },
-    },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["project_id"],
-    properties: { project_id: STRING },
-  },
-  preconditions: [],
-  postconditions: [],
-  idempotency: "idempotent",
-  risk: "low",
-  handler: saveProject,
-};
-
-function saveProject(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as {
-    project_id?: string;
-    name: string;
-    area?: string;
-    color?: string;
-    sort_order?: number;
-  };
-  const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string };
-  const projectId = input.project_id ?? ctx.newId();
-  ctx.db
-    .prepare(
-      `INSERT INTO schedule_project
-        (project_id, owner_party_id, name, area, color, sort_order,
-         archived_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
-       ON CONFLICT(project_id) DO UPDATE SET name = excluded.name,
-         area = excluded.area, color = excluded.color,
-         sort_order = excluded.sort_order, updated_at = excluded.updated_at`
-    )
-    .run(
-      projectId,
-      owner.owner_party_id,
-      input.name,
-      input.area ?? null,
-      input.color ?? null,
-      input.sort_order ?? 0,
-      ctx.now,
-      ctx.now
-    );
-  ctx.wrote("schedule.project", projectId);
-  return { project_id: projectId };
-}
-
-const SAVE_SECTION: CommandDefinition = {
-  name: "schedule.save_section",
-  ownerSchema: "schedule",
-  inputSchema: {
-    type: "object",
-    required: ["project_id", "name"],
-    additionalProperties: false,
-    properties: {
-      section_id: STRING,
-      project_id: STRING,
-      name: STRING,
-      sort_order: { type: "integer" },
-    },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["section_id"],
-    properties: { section_id: STRING },
-  },
-  preconditions: [],
-  postconditions: [],
-  idempotency: "idempotent",
-  risk: "low",
-  handler: saveSection,
-};
-
-function saveSection(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as {
-    section_id?: string;
-    project_id: string;
-    name: string;
-    sort_order?: number;
-  };
-  const sectionId = input.section_id ?? ctx.newId();
-  ctx.db
-    .prepare(
-      `INSERT INTO schedule_section
-        (section_id, project_id, name, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(section_id) DO UPDATE SET project_id = excluded.project_id,
-         name = excluded.name, sort_order = excluded.sort_order,
-         updated_at = excluded.updated_at`
-    )
-    .run(
-      sectionId,
-      input.project_id,
-      input.name,
-      input.sort_order ?? 0,
-      ctx.now,
-      ctx.now
-    );
-  ctx.wrote("schedule.section", sectionId);
-  return { section_id: sectionId };
-}
-
-const ORGANIZE_TASK: CommandDefinition = {
-  name: "schedule.organize_task",
-  ownerSchema: "schedule",
-  inputSchema: {
-    type: "object",
-    required: ["task_id", "sort_order"],
-    additionalProperties: false,
-    properties: {
-      task_id: STRING,
-      project_id: STRING,
-      section_id: STRING,
-      clear_project: { type: "boolean", const: true },
-      clear_section: { type: "boolean", const: true },
-      sort_order: { type: "integer" },
-      recurrence_anchor: {
-        type: "string",
-        enum: ["scheduled", "completion"],
-      },
-      recurrence_tz: STRING,
-    },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["task_id"],
-    properties: { task_id: STRING },
-  },
-  preconditions: [],
-  postconditions: [],
-  idempotency: "idempotent",
-  risk: "low",
-  handler: organizeTask,
-};
-
-function organizeTask(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as {
-    task_id: string;
-    project_id?: string;
-    section_id?: string;
-    clear_project?: boolean;
-    clear_section?: boolean;
-    sort_order: number;
-    recurrence_anchor?: string;
-    recurrence_tz?: string;
-  };
-  // Placement columns are COALESCE'd: omitting project_id/section_id leaves
-  // the current filing in place. Explicit clear_* flags are the only NULL path
-  // so agents can retune recurrence without unfiling into Notifications.
-  const clearProject = input.clear_project === true;
-  const clearSection = clearProject || input.clear_section === true;
-  ctx.db
-    .prepare(
-      `UPDATE schedule_task
-          SET project_id = CASE
-                WHEN ? THEN NULL
-                ELSE COALESCE(?, project_id)
-              END,
-              section_id = CASE
-                WHEN ? THEN NULL
-                ELSE COALESCE(?, section_id)
-              END,
-              sort_order = ?,
-              recurrence_anchor = COALESCE(?, recurrence_anchor),
-              recurrence_tz = COALESCE(?, recurrence_tz)
-        WHERE task_id = ?`
-    )
-    .run(
-      clearProject ? 1 : 0,
-      input.project_id ?? null,
-      clearSection ? 1 : 0,
-      input.section_id ?? null,
-      input.sort_order,
-      input.recurrence_anchor ?? null,
-      input.recurrence_tz ?? null,
-      input.task_id
-    );
-  ctx.wrote("schedule.task", input.task_id);
-  return { task_id: input.task_id };
 }
 
 export function registerScheduleOrganizeCommands(gateway: Gateway): void {

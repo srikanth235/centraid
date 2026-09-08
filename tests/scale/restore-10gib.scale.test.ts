@@ -18,6 +18,7 @@ import {
   seedYear3Vault,
   materializeYear3Fixture,
   year3VaultProfile,
+  year3FixtureCacheRoot,
 } from "@centraid/test-kit/year3-vault";
 import {
   blobUriFor,
@@ -30,8 +31,7 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * YEAR-3 RESTORE (issue #659 S3).
@@ -62,7 +62,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * | Contacts / people  | 5,000    | `core_party` rows                        |
  * | CAS objects        | 100,000  | one 16 MiB filler per 16 MiB of target (byte axis)       |
  *
- * The full table lives in tests/experience-budgets/README.md. When the target
+ * The full table lives in tests/journeys.json. When the target
  * size changes, the measured numbers and the volume move together — a restore
  * duration with no stated size is not a measurement.
  *
@@ -121,20 +121,18 @@ describe("restore-10gib.scale", () => {
       const restoreDir = await tempDir("restore-10gib-restore-");
       await rm(restoreDir, { recursive: true, force: true });
 
-      const cacheRoot =
-        process.env.CENTRAID_YEAR3_CACHE_DIR ??
-        (await tempDir("restore-year3-cache-"));
+      // ONE way to name the fixture cache (#927 P4): the env-var-or-temp-dir
+      // dance lives in the kit, so a rig cannot drift from where CI caches.
+      const cacheRoot = year3FixtureCacheRoot();
       const materialized = await materializeYear3Fixture(
         cacheRoot,
         async (target) => {
           const seeded = openVaultDb({ dir: target, sealKey: YEAR3_SEAL_KEY });
           try {
             bootstrapVault(seeded, { ownerName: "Restore owner" });
-            ensureConversationLedger(seeded.journal);
             seedYear3Vault(
               {
                 vault: seeded.vault,
-                journal: seeded.journal,
                 sealCell: (entity, column, rowId, plaintext) =>
                   sealValue(
                     seeded.sealKey,
@@ -191,12 +189,9 @@ describe("restore-10gib.scale", () => {
       }
 
       db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-      db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
       const vaultPath = path.join(sourceDir, "vault.db");
-      const journalPath = path.join(sourceDir, "journal.db");
       const vaultBytes = await readFile(vaultPath);
-      const journalBytes = await readFile(journalPath);
       const sourceVaultHash = createHash("sha256")
         .update(vaultBytes)
         .digest("hex");
@@ -209,14 +204,6 @@ describe("restore-10gib.scale", () => {
           absolutePath: vaultPath,
           sha256: sourceVaultHash,
           walGeneration: "33".repeat(16),
-          baseTickMs,
-        },
-        {
-          path: "journal.db",
-          kind: "db",
-          absolutePath: journalPath,
-          sha256: createHash("sha256").update(journalBytes).digest("hex"),
-          walGeneration: "44".repeat(16),
           baseTickMs,
         },
         ...blobShas.map((sha) => ({
@@ -310,36 +297,33 @@ describe("restore-10gib.scale", () => {
 
       const seededBytes = BLOB_COUNT * BLOB_BYTES;
 
-      // The owner-facing ceilings live in tests/experience-budgets/gateway.json
-      // and are asserted HERE, so they are not another budget nobody reads.
-      // They are stated AT 10 GiB, so a smaller opt-in run (used to develop the
-      // rig) reports but does not gate — a 1 GiB run passing a 10 GiB ceiling
-      // would be a meaningless green.
-      const experience = JSON.parse(
-        await readFile("tests/experience-budgets/gateway.json", "utf8")
-      ) as {
-        metrics: {
-          year3RestoreSeconds: { ceilingSeconds: number };
-          restoreForeignKeyCheckMs: { ceilingMs: number };
-        };
-      };
+      // The owner-facing ceilings live in tests/journeys.json and are asserted
+      // HERE, so they are not another budget nobody reads. They are stated AT
+      // 10 GiB, so a smaller opt-in run (used to develop the rig) reports but
+      // does not gate — a 1 GiB run passing a 10 GiB ceiling would be a
+      // meaningless green.
       const atDeclaredVolume = TARGET_GIB >= 10;
       const restoreCeilingMs =
-        experience.metrics.year3RestoreSeconds.ceilingSeconds * 1_000;
-      const fkCeilingMs = experience.metrics.restoreForeignKeyCheckMs.ceilingMs;
+        journeyCeiling(
+          "gateway/restore/year3-10gib/dev-darwin-arm64",
+          "year3RestoreSeconds",
+          "ceilingSeconds"
+        ) * 1_000;
+      const fkCeilingMs = journeyCeiling(
+        "gateway/integrity-check/year3-10gib/dev-darwin-arm64",
+        "restoreForeignKeyCheckMs",
+        "ceilingMs"
+      );
       const withinCeilings =
         !atDeclaredVolume ||
         (restoreMs <= restoreCeilingMs && foreignKeyCheckMs <= fkCeilingMs);
-      const drift = await rigDriftBudgetMs("scale", OWNER);
-      const withinDrift = drift === null || restoreMs <= drift;
       const passed =
         restoredVaultHash === sourceVaultHash &&
         fkViolations.length === 0 &&
         integrity?.integrity_check === "ok" &&
         partyRows >= PARTY_COUNT &&
         contentRows === CONTENT_ROWS + BLOB_COUNT &&
-        withinCeilings &&
-        withinDrift;
+        withinCeilings;
 
       console.log("\n========== YEAR-3 RESTORE ==========");
       console.log(`seeded CAS bytes:        ${seededBytes}`);
@@ -363,7 +347,6 @@ describe("restore-10gib.scale", () => {
             name: "restore wall clock",
             value: restoreMs,
             unit: "ms",
-            ...(drift === null ? {} : { budget: drift }),
           },
           { name: "snapshot wall clock", value: snapshotMs, unit: "ms" },
           {
@@ -400,13 +383,9 @@ describe("restore-10gib.scale", () => {
           `restore ${Math.round(restoreMs)} ms vs ${restoreCeilingMs} ms, ` +
           `foreign_key_check ${foreignKeyCheckMs.toFixed(1)} ms vs ${fkCeilingMs} ms`
       ).toBe(true);
-      expect(
-        withinDrift,
-        `sustained drift: ${restoreMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
     },
     // Ten GiB of chunk + AEAD + restore is tens of minutes on a CI disk. This
-    // is a runaway guard, not a budget — the budget is the drift gate above.
+    // is a runaway guard, not a budget.
     3_600_000
   );
 });

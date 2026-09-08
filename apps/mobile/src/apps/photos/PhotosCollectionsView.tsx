@@ -9,8 +9,6 @@ import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-import { readableName } from "@centraid/blueprints/apps/photos/place-map";
-import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
@@ -22,13 +20,14 @@ import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import CollectionShelfBody from "./CollectionShelfBody";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { buildCollectionSections } from "./photos-collections";
 import type {
   CollectionSection,
   CollectionSectionKey,
   CollectionTile,
 } from "./photos-collections";
-import { placeCardKey } from "./places-model";
+import { placeCells } from "./places-model";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -191,28 +190,16 @@ export default function PhotosCollectionsView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { assets } = usePhotoTimeline();
 
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    PHOTO_ENTITY_READS.collectionEntries
   );
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
-  );
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
-  );
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
   // A face row carries a party ID, never a name; `PhotosPeopleView` must
   // resolve it the same way.
-  const parties = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
-  );
+  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
 
   const sections = useMemo(() => {
     // `target_id`, not `asset_id`: collection entries are polymorphic, and the
@@ -252,22 +239,7 @@ export default function PhotosCollectionsView({
     return buildCollectionSections({
       assets,
       albums,
-      places: places.rows.flatMap((row) => {
-        const key = placeCardKey(row);
-        return key === null
-          ? []
-          : [
-              {
-                placeId: String(row.place_id),
-                key,
-                // `readableName`, like the shelf and the map: a coordinate
-                // pair is not a name, and must never print as one (#816).
-                name:
-                  readableName(row.name == null ? null : String(row.name)) ??
-                  PLACE_UNNAMED,
-              },
-            ];
-      }),
+      places: placeCells(places.rows),
       people: [...byParty.entries()].map(([partyId, entry]) => ({
         partyId,
         ...entry,

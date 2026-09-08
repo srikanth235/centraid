@@ -34,7 +34,7 @@ export function verdictOf(disposition: string): ImportVerdictKey {
 export function draftBatches(batches: readonly StagedBatch[]): StagedBatch[] {
   return batches
     .filter((batch) => batch.status === "draft")
-    .toSorted((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 
 export function verdictCounts(

@@ -362,7 +362,6 @@ function recurrenceSummary(
 }
 
 export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const from =
       typeof query?.from === "string" && query.from
@@ -386,7 +385,6 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
         where,
         orderBy: { column: "dtstart", dir: "asc" },
         limit: EVENT_WINDOW_CAP,
-        purpose,
       }),
       ctx.vault.read({
         entity: "core.event",
@@ -396,9 +394,11 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
         ],
         orderBy: { column: "dtstart", dir: "desc" },
         limit: RECURRING_ANCHOR_CAP,
-        purpose,
       }),
-      ctx.vault.read({ entity: "schedule.calendar", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "schedule.calendar",
+      }),
     ]);
     const windowedById = new Map<string, RawEvent>(
       ((events.rows ?? []) as unknown as RawEvent[]).map((e) => [e.event_id, e])
@@ -415,45 +415,48 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const [exts, attachments, attendeesRes, vaultRes, exceptionsRes] =
       await Promise.all([
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.event_ext",
           where: [{ column: "event_id", op: "in", value: eventIds }],
-          purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.attachment",
           where: [
             { column: "target_type", op: "eq", value: "core.event" },
             { column: "target_id", op: "in", value: eventIds },
           ],
-          purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.attendee",
           where: [{ column: "event_id", op: "in", value: eventIds }],
-          purpose,
         }),
-        ctx.vault.read({ entity: "core.vault", purpose }),
         ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.vault",
+        }),
+        ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.recurrence_exception",
           where: [
             { column: "target_type", op: "eq", value: "core.event" },
             { column: "target_id", op: "in", value: eventIds },
           ],
-          purpose,
         }),
       ]);
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
     const mePartyId =
-      ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
+      ((vaultRes.rows ?? [])[0]?.self_party_id as string | undefined) ?? null;
     const attendeePartyIds = [
       ...new Set(attendeeRows.map((a) => a.party_id)),
     ].filter(Boolean);
     const partiesRes =
       attendeePartyIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
-            purpose,
           })
         : { rows: [] };
     const partyNameById = new Map<string, unknown>(
@@ -472,9 +475,9 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] };
     const contentById = new Map<string, RawContent>(

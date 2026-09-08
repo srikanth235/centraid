@@ -1,19 +1,20 @@
-// Per-entity activity read (#352 phase 3/4): journal.db already
+// Per-entity activity read (#352 phase 3/4): the audit band already
 // records a provenance row for every command write (writeProvenance,
 // evidence.ts) keyed by (entity_type, entity_id); this is the app-plane read
-// path over it — plain `gw.read({ entity: 'consent.provenance', ... })`, held
+// path over it — plain `gw.read({ entity: 'access.provenance', ... })`, held
 // to two extra rules (provenanceScopeFailure in gateway.ts) so a table-level
-// grant on `consent.provenance` cannot become a browse-everything key.
+// grant on `access.provenance` cannot become a browse-everything key.
 
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
@@ -48,40 +49,38 @@ describe("activity-read", () => {
       verbs: "read" | "read+act" | "act";
     }[]
   ): Credential {
-    const app = enrollApp(db, { name });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes,
-    });
-    return { kind: "app", appId: app.appId, signingKey: app.signingKey };
+    const app = enrollAgent(db, { name, modelRef: "test-automation" });
+    answerScopes(db, boot, name, scopes);
+    return {
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   }
 
   function addDocument(): string {
     const outcome = gw.invoke(owner, {
       command: "core.add_document",
       input: { data_uri: TEXT, title: "Lease" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { output: { document_id: string } }).output.document_id;
   }
 
-  describe("activity read over consent.provenance", () => {
+  describe("activity read over access.provenance", () => {
     test("an app holding both scopes reads the specific entity's activity", () => {
       const documentId = addDocument();
       const cred = grantApp("docs-app", [
         { schema: "core", table: "document", verbs: "read" },
-        { schema: "consent", table: "provenance", verbs: "read" },
+        { schema: "access", table: "provenance", verbs: "read" },
       ]);
       const result = gw.read(cred, {
-        entity: "consent.provenance",
+        entity: "access.provenance",
         where: [
           { column: "entity_type", op: "eq", value: "core.document" },
           { column: "entity_id", op: "eq", value: documentId },
         ],
-        purpose: "dpv:ServiceProvision",
       });
       expect(result.rows.length).toBeGreaterThan(0);
       expect(result.rows[0]).toMatchObject({
@@ -95,32 +94,30 @@ describe("activity-read", () => {
       addDocument();
       const cred = grantApp("docs-app-2", [
         { schema: "core", table: "document", verbs: "read" },
-        { schema: "consent", table: "provenance", verbs: "read" },
+        { schema: "access", table: "provenance", verbs: "read" },
       ]);
       expect(() =>
         gw.read(cred, {
-          entity: "consent.provenance",
-          purpose: "dpv:ServiceProvision",
+          entity: "access.provenance",
         })
       ).toThrow(/scope to exactly one/u);
     });
 
     test("holding the provenance grant alone cannot browse a domain the app cannot read", () => {
       const documentId = addDocument();
-      // Grants read on consent.provenance but NOT on core.document — a health
+      // Grants read on access.provenance but NOT on core.document — a health
       // app fishing for another domain's activity must not see it.
       const cred = grantApp("health-app", [
-        { schema: "health", verbs: "read" },
-        { schema: "consent", table: "provenance", verbs: "read" },
+        { schema: "knowledge", verbs: "read" },
+        { schema: "access", table: "provenance", verbs: "read" },
       ]);
       expect(() =>
         gw.read(cred, {
-          entity: "consent.provenance",
+          entity: "access.provenance",
           where: [
             { column: "entity_type", op: "eq", value: "core.document" },
             { column: "entity_id", op: "eq", value: documentId },
           ],
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/no read consent for core\.document/u);
     });
@@ -128,16 +125,15 @@ describe("activity-read", () => {
     test("an unrecognized entity_type is denied, never resolved to SQL", () => {
       const cred = grantApp("docs-app-3", [
         { schema: "core", table: "document", verbs: "read" },
-        { schema: "consent", table: "provenance", verbs: "read" },
+        { schema: "access", table: "provenance", verbs: "read" },
       ]);
       expect(() =>
         gw.read(cred, {
-          entity: "consent.provenance",
+          entity: "access.provenance",
           where: [
             { column: "entity_type", op: "eq", value: "not.a.real.entity" },
             { column: "entity_id", op: "eq", value: "x" },
           ],
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/unknown entity/u);
     });
@@ -145,8 +141,7 @@ describe("activity-read", () => {
     test("the owner bypasses the extra guard — no entity_type/entity_id required", () => {
       addDocument();
       const result = gw.read(owner, {
-        entity: "consent.provenance",
-        purpose: "owner-assistant",
+        entity: "access.provenance",
       });
       expect(result.rows.length).toBeGreaterThan(0);
     });

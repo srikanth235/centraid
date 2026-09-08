@@ -54,10 +54,23 @@ export interface ToolErrorResult {
   readonly structuredContent: ToolErrorContent;
 }
 
+/** One `ctx.vault.read` that hit its row ceiling during a handler run. */
+export interface TruncatedRead {
+  readonly entity: string;
+  readonly appliedLimit: number;
+}
+
 export interface ToolSuccessResult {
   readonly isError: false;
   readonly content: readonly [{ readonly type: "text"; readonly text: string }];
   readonly structuredContent: unknown;
+  /**
+   * TRUNCATION IS NEVER SILENT (#922 0a) — and it must not go silent one layer
+   * up either. The gateway marks a read that hit its ceiling; a handler is
+   * free to ignore that flag, so the dispatcher aggregates every truncated
+   * read of the run into the envelope. Absent means every read was complete.
+   */
+  readonly truncatedReads?: readonly TruncatedRead[];
 }
 
 export type ToolResult = ToolErrorResult | ToolSuccessResult;
@@ -78,11 +91,47 @@ function errorResult(
   };
 }
 
-function successResult(value: unknown): ToolSuccessResult {
+function successResult(
+  value: unknown,
+  truncatedReads: readonly TruncatedRead[] = []
+): ToolSuccessResult {
   return {
     isError: false,
     content: [{ type: "text", text: JSON.stringify(value ?? null) }],
     structuredContent: value,
+    ...(truncatedReads.length > 0 ? { truncatedReads } : {}),
+  };
+}
+
+/**
+ * Wrap a bridge so the run records which reads the gateway had to cut short.
+ * The recorder is per handler run, never per app, so two concurrent runs never
+ * see each other's truncations.
+ */
+function recordTruncatedReads(bridge: VaultBridge): {
+  bridge: VaultBridge;
+  truncated: readonly TruncatedRead[];
+} {
+  const seen = new Map<string, TruncatedRead>();
+  const wrapped: VaultBridge = async (call) => {
+    const outcome = await bridge(call);
+    if (call.op !== "read" || !outcome.ok) return outcome;
+    const result = outcome.result as
+      | { truncated?: unknown; appliedLimit?: unknown }
+      | null
+      | undefined;
+    if (result?.truncated !== true) return outcome;
+    const entity = String(call.payload.entity ?? "unknown");
+    const appliedLimit =
+      typeof result.appliedLimit === "number" ? result.appliedLimit : 0;
+    seen.set(`${entity}\u0000${appliedLimit}`, { entity, appliedLimit });
+    return outcome;
+  };
+  return {
+    bridge: wrapped,
+    get truncated() {
+      return [...seen.values()];
+    },
   };
 }
 
@@ -126,7 +175,26 @@ interface ManifestCacheEntry {
   readonly manifest: Manifest;
   readonly actionValidators: Map<string, ValidateFunction>;
   readonly queryValidators: Map<string, ValidateFunction>;
+  /** Last time the mtime was re-read; see CODE_REVALIDATE_MS. */
+  checkedAt: number;
 }
+
+/** Which file on disk backs one declared handler, and when that was last
+ *  confirmed. */
+interface HandlerFileCacheEntry {
+  readonly file: string;
+  checkedAt: number;
+}
+
+/**
+ * Revalidation window for an app's on-disk code (#922 B2). App code changes
+ * only when a version is published, so a `stat` per dispatch is one syscall
+ * per invocation for an answer that is stable for the life of a version. The
+ * mtime check stays — it is coalesced to at most one per window per code dir,
+ * which bounds how long a publish can be served stale. `invalidate(codeDir)`
+ * drops an entry outright and is the immediate path.
+ */
+const CODE_REVALIDATE_MS = 500;
 
 export class Dispatcher {
   private readonly registryProvider: () => Registry;
@@ -137,6 +205,7 @@ export class Dispatcher {
   private readonly vaultFor?: (appId: string) => VaultBridge;
   private readonly timeModuleUrl?: string;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
+  private readonly handlerFileCache = new Map<string, HandlerFileCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
     const reg = opts.registry;
@@ -158,10 +227,17 @@ export class Dispatcher {
   }
 
   private async loadManifest(codeDir: string): Promise<Manifest> {
+    const cached = this.manifestCache.get(codeDir);
+    const now = Date.now();
+    if (cached && now - cached.checkedAt < CODE_REVALIDATE_MS) {
+      return cached.manifest;
+    }
     const file = path.join(codeDir, APP_MANIFEST_FILE);
     const stat = await fs.stat(file);
-    const cached = this.manifestCache.get(codeDir);
-    if (cached && cached.mtimeMs === stat.mtimeMs) return cached.manifest;
+    if (cached && cached.mtimeMs === stat.mtimeMs) {
+      cached.checkedAt = now;
+      return cached.manifest;
+    }
     const text = await fs.readFile(file, "utf8");
     const manifest = parseManifest(text);
     this.manifestCache.set(codeDir, {
@@ -170,8 +246,28 @@ export class Dispatcher {
       manifest,
       actionValidators: new Map(),
       queryValidators: new Map(),
+      checkedAt: now,
     });
     return manifest;
+  }
+
+  /** The `.ts`/`.js` probe is the same two stats for every invocation of the
+   *  same handler, so it caches on the same window as the manifest. */
+  private async resolveHandlerFile(
+    codeDir: string,
+    dir: "actions" | "queries",
+    name: string
+  ): Promise<string> {
+    const key = `${codeDir}\u0000${dir}\u0000${name}`;
+    const now = Date.now();
+    const cached = this.handlerFileCache.get(key);
+    if (cached && now - cached.checkedAt < CODE_REVALIDATE_MS) {
+      return cached.file;
+    }
+    const file = await probeHandlerFile(codeDir, dir, name);
+    if (cached && cached.file === file) cached.checkedAt = now;
+    else this.handlerFileCache.set(key, { file, checkedAt: now });
+    return file;
   }
 
   private validatorFor(
@@ -194,8 +290,15 @@ export class Dispatcher {
 
   /** Call when a version is activated. */
   invalidate(codeDir?: string): void {
-    if (codeDir === undefined) this.manifestCache.clear();
-    else this.manifestCache.delete(codeDir);
+    if (codeDir === undefined) {
+      this.manifestCache.clear();
+      this.handlerFileCache.clear();
+      return;
+    }
+    this.manifestCache.delete(codeDir);
+    for (const key of this.handlerFileCache.keys()) {
+      if (key.startsWith(`${codeDir}\u0000`)) this.handlerFileCache.delete(key);
+    }
   }
 
   // `overrideCodeDir` is the draft-preview path (#141), on all three verbs.
@@ -342,9 +445,20 @@ export class Dispatcher {
     );
     if (validation) return validation;
 
+    const reads = this.vaultFor
+      ? recordTruncatedReads(
+          intentId
+            ? bindIntentToVaultBridge(this.vaultFor(appId), intentId)
+            : this.vaultFor(appId)
+        )
+      : undefined;
     const outcome = await runHandler({
       app: { id: entry.id, dir: dataDir },
-      handlerFile: await resolveHandlerFile(codeDir, "actions", actionName),
+      handlerFile: await this.resolveHandlerFile(
+        codeDir,
+        "actions",
+        actionName
+      ),
       handlerKind: "action",
       args: { params: {}, body: handlerInput },
       timeoutMs: 30_000,
@@ -352,13 +466,7 @@ export class Dispatcher {
       // instead of making every listener re-derive the app (#883 D2).
       declaredWrites: entryDef.writes ?? [],
       ...(this.onWriteFor ? { onWrite: this.onWriteFor(appId) } : {}),
-      ...(this.vaultFor
-        ? {
-            vault: intentId
-              ? bindIntentToVaultBridge(this.vaultFor(appId), intentId)
-              : this.vaultFor(appId),
-          }
-        : {}),
+      ...(reads ? { vault: reads.bridge } : {}),
       ...(this.timeModuleUrl ? { timeModuleUrl: this.timeModuleUrl } : {}),
     });
     if (!outcome.ok) {
@@ -388,7 +496,7 @@ export class Dispatcher {
           : `action returned status ${result.status}`;
       return errorResult("HANDLER_ERROR", bodyText);
     }
-    return successResult(result?.body ?? null);
+    return successResult(result?.body ?? null, reads?.truncated ?? []);
   }
 
   async read(
@@ -441,9 +549,12 @@ export class Dispatcher {
     );
     if (validation) return validation;
 
+    const reads = this.vaultFor
+      ? recordTruncatedReads(this.vaultFor(appId))
+      : undefined;
     const outcome = await runHandler({
       app: { id: entry.id, dir: dataDir },
-      handlerFile: await resolveHandlerFile(codeDir, "queries", queryName),
+      handlerFile: await this.resolveHandlerFile(codeDir, "queries", queryName),
       handlerKind: "query",
       args: {
         params: {},
@@ -452,7 +563,7 @@ export class Dispatcher {
         input: handlerInput,
       },
       timeoutMs: 10_000,
-      ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
+      ...(reads ? { vault: reads.bridge } : {}),
       ...(this.timeModuleUrl ? { timeModuleUrl: this.timeModuleUrl } : {}),
     });
     if (!outcome.ok) {
@@ -464,7 +575,7 @@ export class Dispatcher {
         outcome.error ?? "query handler failed"
       );
     }
-    return successResult(outcome.value ?? null);
+    return successResult(outcome.value ?? null, reads?.truncated ?? []);
   }
 
   private validateInput(
@@ -530,19 +641,25 @@ function bindIntentToVaultBridge(
   };
 }
 
-/** `.ts` wins over `.js`; the worker's esbuild hook loads either. */
-async function resolveHandlerFile(
+/**
+ * PRECOMPILED `.js` WINS (#922 B2). A first-party app ships one beside every
+ * handler source, so its dispatch never registers the worker's esbuild hook
+ * and never transpiles the `_shared` graph again. `.ts` is the fallback for
+ * code nobody precompiled — a user's own app — and that is the only path that
+ * still boots the TS loader.
+ */
+async function probeHandlerFile(
   codeDir: string,
   dir: "actions" | "queries",
   name: string
 ): Promise<string> {
-  const tsPath = path.join(codeDir, dir, `${name}.ts`);
+  const jsPath = path.join(codeDir, dir, `${name}.js`);
   try {
-    if ((await fs.stat(tsPath)).isFile()) return tsPath;
+    if ((await fs.stat(jsPath)).isFile()) return jsPath;
   } catch {
-    /* no .ts source — fall back to .js */
+    /* not precompiled — the TS source is the handler */
   }
-  return path.join(codeDir, dir, `${name}.js`);
+  return path.join(codeDir, dir, `${name}.ts`);
 }
 
 function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {

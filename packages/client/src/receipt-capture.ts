@@ -15,6 +15,14 @@ export interface ReceiptDraft {
   needsReview: boolean;
 }
 
+function findLastRow<T>(rows: readonly T[], match: (row: T) => boolean) {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row !== undefined && match(row)) return row;
+  }
+  return undefined;
+}
+
 const MONEY_AT_END =
   /(?:^|\s)(?<symbol>[$€£₹])?\s*(?<amount>\d{1,8}(?:[.,]\d{2}))\s*$/u;
 const TOTAL = /\b(?:grand\s+total|amount\s+due|total)\b/iu;
@@ -66,7 +74,7 @@ export function parseReceiptText(raw: string): ReceiptDraft {
         money: NonNullable<ReturnType<typeof parseAmount>>;
       } => value.money !== null
     );
-  const total = parsed.toReversed().find(({ row }) => TOTAL.test(row));
+  const total = findLastRow(parsed, ({ row }) => TOTAL.test(row));
   const currency =
     parsed
       .map(({ money }) => money.symbol)

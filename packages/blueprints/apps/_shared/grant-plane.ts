@@ -78,7 +78,7 @@ export interface GrantSubjectOffer {
 }
 
 export type GrantChannel =
-  | { state: "live" | "invited" | "severed"; vaultId?: string }
+  | { state: "live" | "severed"; vaultId?: string }
   | null
   | undefined;
 
@@ -223,8 +223,7 @@ export function parseChannel(value: unknown): GrantChannel {
   const row = record(value);
   if (!row) return undefined;
   const state = row.state;
-  if (state !== "live" && state !== "invited" && state !== "severed")
-    return undefined;
+  if (state !== "live" && state !== "severed") return undefined;
   const vaultId = text(row, "vaultId");
   return { state, ...(vaultId ? { vaultId } : {}) };
 }
@@ -246,16 +245,70 @@ export function subjectNoun(subjectType: string): string {
   );
 }
 
-export type GrantReach =
-  | "unknown"
-  | "never-reached"
-  | "invited"
-  | "live"
-  | "severed";
+export type GrantReach = "unknown" | "never-reached" | "live" | "severed";
 
 export function channelReach(channel: GrantChannel): GrantReach {
   if (channel === undefined) return "unknown";
   return channel === null ? "never-reached" : channel.state;
+}
+
+/**
+ * Whether this reach makes the share verb an act the surface cannot perform
+ * (#903): a person is reachable only through a live link, and the command pack
+ * refuses the rest, so offering the submit would name a promise nothing keeps.
+ *
+ * `unknown` deliberately does NOT block. "We could not look" is not "they are
+ * not linked", and a denied channel read must never disable a control the
+ * member is in fact entitled to use — the route stays the authority, and it
+ * answers in words if the guess here was generous.
+ */
+export function reachBlocksSharing(reach: GrantReach): boolean {
+  return reach === "never-reached" || reach === "severed";
+}
+
+/**
+ * Whether the sheet offers the LINK-TICKET ceremony inline (#929 S6).
+ *
+ * #903's rule is untouched: a person is reachable only through a live link, the
+ * submit still refuses, and nothing is sent on the member's behalf. What
+ * changes is that the refusal stops being a dead end — the one act that would
+ * make this share possible is offered where the member already is, through the
+ * same one-time ticket People and Settings mint. A circle is not a person and
+ * has no link to make, and `unknown` is not a refusal, so neither is offered
+ * the ceremony.
+ */
+export function offersLinkTicket(
+  audienceKind: GrantAudience["kind"] | undefined,
+  reach: GrantReach
+): boolean {
+  return audienceKind === "party" && reachBlocksSharing(reach);
+}
+
+/** A ticket the gateway minted: opaque string plus the expiry IT decided. */
+export interface MintedLinkTicket {
+  ticket: string;
+  expiresAt: string;
+}
+
+/**
+ * Mint one through the ceremony that already exists — `peer_link_tickets`
+ * behind POST `…/links/ticket`, the same route the People and Settings link
+ * rows use. No new gateway surface; a refusal comes back as the words the
+ * member reads, never as a thrown stack.
+ */
+export type LinkTicketDoor = () => Promise<
+  { ok: true; ticket: MintedLinkTicket } | { ok: false; message: string }
+>;
+
+/** The wire shape, guarded once so neither seat reads a payload itself. */
+export function parseMintedLinkTicket(
+  body: unknown
+): MintedLinkTicket | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const row = body as { ticket?: unknown; expiresAt?: unknown };
+  return typeof row.ticket === "string" && typeof row.expiresAt === "string"
+    ? { ticket: row.ticket, expiresAt: row.expiresAt }
+    : undefined;
 }
 
 export function liveGrants(

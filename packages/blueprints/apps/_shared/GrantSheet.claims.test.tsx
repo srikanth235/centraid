@@ -18,28 +18,36 @@ describe("the grant sheet, web seat — claims", () => {
   });
 
   describe("absent is never empty", () => {
-    test("a person this vault has never reached says so", async () => {
-      const { container } = await mount();
+    test("a person this vault has never reached says so, and Share is not offered", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({ known: true, channel: null, grants: [] }),
+        }),
+      });
       expect(container.textContent).toContain("Not reached yet");
       expect(container.textContent).toContain(
-        "Sharing sends an invitation first."
+        "Link their account in People to share with them."
       );
+      // #903: the reach line names the act that WOULD work, and the sheet does
+      // not grow a control naming the one that would not.
+      expect(pressing(container, "Share").disabled).toBe(true);
     });
 
-    test("an unaccepted invitation reads as pending, not as an error", async () => {
+    test("a grant whose channel has since closed reads as pending, not as an error", async () => {
       const { container } = await mount({
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
               known: true,
-              channel: { state: "invited" as const },
+              channel: { state: "severed" as const },
               grants: [
                 standingGrant({
                   // The vault's own phrase and reason for a grant with no
-                  // channel to carry it (ruling V-phrases).
+                  // channel left to carry it (ruling V-phrases).
                   phrase: "on its way",
                   reason:
-                    "there is no way to reach them yet; the ask is recorded",
+                    "the link to their vault has ended; nothing new can be delivered",
                   fulfillment: [
                     {
                       peerVaultId: "vault-priya",
@@ -55,7 +63,7 @@ describe("the grant sheet, web seat — claims", () => {
       });
       expect(container.textContent).toContain("On its way");
       expect(container.textContent).toContain(
-        "there is no way to reach them yet; the ask is recorded"
+        "the link to their vault has ended; nothing new can be delivered"
       );
       // The seam rung, not the error rung, and keyed on the WIRE's word.
       expect(
@@ -76,10 +84,11 @@ describe("the grant sheet, web seat — claims", () => {
       });
       expect(container.textContent).toContain("Link ended");
       expect(container.textContent).toContain(
-        "The link to their vault ended; nothing new can be delivered."
+        "The link to their vault ended; link again in People to share."
       );
       expect(container.querySelector('[data-reach="severed"]')).not.toBeNull();
       expect(container.textContent).not.toContain("Not reached yet");
+      expect(pressing(container, "Share").disabled).toBe(true);
     });
 
     test("a reach still being read makes no claim about the person", async () => {
@@ -309,6 +318,89 @@ describe("the grant sheet, web seat — claims", () => {
       );
       await act(async () => answer());
       expect(container.textContent).toContain("Reachable");
+    });
+  });
+  // #929 S6. The refusal is not the finding here — #903's rule is right and
+  // stays. What was wrong is that the refusal was a DEAD END: the sheet named
+  // an act ("link them in People") and offered no way to perform it, so a
+  // member who came to share had to leave, find the link row, mint a ticket
+  // and come back. These pin the offer AND pin that it grants nothing.
+  describe("an unlinked person is offered the link ticket inline", () => {
+    const NEVER_REACHED = {
+      forParty: () =>
+        Promise.resolve({ known: true, channel: null, grants: [] }),
+    };
+    const ticketDoor =
+      (
+        ticket = "tkt-abc",
+        expiresAt = new Date(Date.now() + 9 * 60_000).toISOString()
+      ) =>
+      () =>
+        Promise.resolve({ ok: true as const, ticket: { ticket, expiresAt } });
+
+    test("the ticket is offered, and the share is still refused", async () => {
+      const { container } = await mount({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(pressing(container, "Send them a link ticket").disabled).toBe(
+        false
+      );
+      // The whole point of the slice: the offer does not soften #903.
+      expect(pressing(container, "Share").disabled).toBe(true);
+      expect(container.textContent).toContain("Not reached yet");
+    });
+
+    // A ticket nobody asked for is a live credential on screen; it exists
+    // only after the member presses.
+    test("no ticket exists until it is asked for", async () => {
+      const { container } = await mount({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(container.textContent).not.toContain("tkt-abc");
+
+      await act(async () => {
+        pressing(container, "Send them a link ticket").click();
+      });
+
+      expect(container.textContent).toContain("tkt-abc");
+      // The expiry is the TICKET'S, read off the ticket rather than a TTL this
+      // seat remembers — the gateway is free to change it.
+      expect(container.textContent).toContain("Good for 8 more minutes.");
+      // Still refused: a ticket is an invitation to link, not a link.
+      expect(pressing(container, "Share").disabled).toBe(true);
+    });
+
+    test("a refused mint says so in the door's own words", async () => {
+      const { container } = await mount({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: () =>
+          Promise.resolve({ ok: false as const, message: "no vault to link" }),
+      });
+
+      await act(async () => {
+        pressing(container, "Send them a link ticket").click();
+      });
+
+      expect(container.textContent).toContain("no vault to link");
+      expect(pressing(container, "Share").disabled).toBe(true);
+    });
+
+    test("a circle is never offered one — there is no person to link", async () => {
+      const { container } = await mount({
+        audiences: [
+          { kind: "circle" as const, id: "circle-1", label: "Family" },
+        ],
+        door: stubDoor({
+          forAudience: () => Promise.resolve({ known: true, grants: [] }),
+        }),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(container.textContent).not.toContain("Send them a link ticket");
     });
   });
 });

@@ -14,6 +14,7 @@ import type {
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
 
+import { fetchWithinReplyDeadline } from "./gateway-deadline";
 import type { AsyncStorageLike, StreamFetch } from "./native-change-feed";
 import type { NativeChangeFeed } from "./native-session";
 
@@ -53,6 +54,7 @@ export interface NativeMultiplexChangeFeedOptions {
   maxReconnectMs?: number;
   onScopeRevoked?: (vaultId: string) => void;
   onScopeUpdated?: (vaultId: string) => void;
+  onStreamOutcome?: (reachable: boolean) => void;
 }
 
 /**
@@ -69,6 +71,7 @@ export class NativeMultiplexChangeFeed {
   readonly #maxReconnectMs: number;
   readonly #onScopeRevoked: ((vaultId: string) => void) | undefined;
   readonly #onScopeUpdated: ((vaultId: string) => void) | undefined;
+  readonly #onStreamOutcome: ((reachable: boolean) => void) | undefined;
   #abort: AbortController | undefined;
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   #reconnectDelay: number;
@@ -83,6 +86,7 @@ export class NativeMultiplexChangeFeed {
     this.#reconnectDelay = this.#minReconnectMs;
     this.#onScopeRevoked = options.onScopeRevoked;
     this.#onScopeUpdated = options.onScopeUpdated;
+    this.#onStreamOutcome = options.onStreamOutcome;
   }
 
   scope(vaultId: string): NativeChangeFeed {
@@ -168,25 +172,31 @@ export class NativeMultiplexChangeFeed {
     const abort = new AbortController();
     this.#abort = abort;
     try {
-      const response = await this.#streamFetch(this.streamUrl(states), {
-        method: "GET",
-        headers: {
-          ...authHeaders(this.#gatewayAuth.token),
-          Accept: "text/event-stream",
-        },
-        signal: abort.signal,
-      });
+      const response = await fetchWithinReplyDeadline(
+        (signal) =>
+          this.#streamFetch(this.streamUrl(states), {
+            method: "GET",
+            headers: {
+              ...authHeaders(this.#gatewayAuth.token),
+              Accept: "text/event-stream",
+            },
+            signal,
+          }) as Promise<Response>,
+        abort.signal
+      );
       if (!this.current(abort, generation)) return;
       if (!response.ok || !response.body)
         throw new Error(`multiplex replica stream failed (${response.status})`);
       this.#reconnectDelay = this.#minReconnectMs;
+      this.#onStreamOutcome?.(true);
       await consumeVaultChangeSse(
         response.body,
         (frame) => this.handleFrame(frame),
         abort.signal
       );
     } catch {
-      // Connectivity and gateway-sleep state is reported by ReplicaProvider.
+      // Swallowing this hid a dead vault (docs/traps/unreachable-vault.md).
+      if (!abort.signal.aborted) this.#onStreamOutcome?.(false);
     } finally {
       if (this.#abort === abort) this.#abort = undefined;
       if (generation === this.#generation && !abort.signal.aborted)

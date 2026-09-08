@@ -14,8 +14,8 @@ import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { SEARCHABLE } from "../schema/fts.js";
 import { resolveEntity } from "../schema/tables.js";
-import { evaluateConsent } from "./consent.js";
-import { writeReceipt } from "./evidence.js";
+import { evaluateAccess } from "./access.js";
+import { skipsAllowReceipt, writeAuthorityReceipt } from "./evidence.js";
 import { extSearchable } from "./ext.js";
 import { applyFieldMask, compileFilters } from "./filters.js";
 import type { Identity, SearchRequest, SearchResult } from "./types.js";
@@ -44,28 +44,24 @@ export function searchEntity(
   identity: Identity,
   request: SearchRequest
 ): SearchResult {
-  const deny = (failing: string, grantId: string | null = null): never => {
-    const receiptId = writeReceipt(db.journal, {
-      grantId,
-      invocationId: null,
-      action: "search",
-      objectType: request.entity,
-      objectId: null,
-      purpose: request.purpose,
-      decision: "deny",
-      detail: { failing },
-    });
-    throw new GatewayError(
-      "consent",
-      `deny (receipt ${receiptId}): ${failing}`
-    );
+  const deny = (failing: string, authorityId: string | null = null): never => {
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(db, {
+          authorityId,
+          invocationId: null,
+          action: "search",
+          objectType: request.entity,
+          objectId: null,
+          decision: "deny",
+          detail: { failing },
+        });
+    throw new GatewayError("access", `deny (receipt ${receiptId}): ${failing}`);
   };
   const ref = resolveEntity(request.entity, db.vault);
   if (!ref) return deny(`unknown entity ${request.entity}`);
   const spec =
-    ref.file === "vault"
-      ? (SEARCHABLE[request.entity] ?? extSearchable(db.vault, request.entity))
-      : undefined;
+    SEARCHABLE[request.entity] ?? extSearchable(db.vault, request.entity);
   if (!spec) {
     throw new GatewayError(
       "contract",
@@ -77,16 +73,15 @@ export function searchEntity(
     throw new GatewayError("contract", "search query has no searchable words");
   }
 
-  const consent = evaluateConsent(
+  const access = evaluateAccess(
     db.vault,
     identity,
     ref.schema,
     ref.table,
-    "read",
-    request.purpose
+    "read"
   );
-  if (consent.decision === "deny")
-    return deny(consent.failing, consent.grantId);
+  if (access.decision === "deny")
+    return deny(access.failing, access.authorityId);
   // Folded-in canonical text needs its own read consent — matching a note
   // body IS reading core.content_item.
   for (const extra of spec.alsoConsent) {
@@ -94,28 +89,30 @@ export function searchEntity(
     if (!extraRef)
       return deny(
         `search index folds in unknown entity ${extra}`,
-        consent.grantId
+        access.authorityId
       );
-    const extraConsent = evaluateConsent(
+    const extraConsent = evaluateAccess(
       db.vault,
       identity,
       extraRef.schema,
       extraRef.table,
-      "read",
-      request.purpose
+      "read"
     );
     if (extraConsent.decision === "deny") {
-      return deny(`${extra}: ${extraConsent.failing}`, extraConsent.grantId);
+      return deny(
+        `${extra}: ${extraConsent.failing}`,
+        extraConsent.authorityId
+      );
     }
   }
-  if (consent.fieldMask !== null) {
+  if (access.fieldMask !== null) {
     const hidden = spec.maskColumns.filter(
-      (c) => !consent.fieldMask?.includes(c)
+      (c) => !access.fieldMask?.includes(c)
     );
     if (hidden.length > 0) {
       return deny(
         `field mask hides indexed column(s) ${hidden.join(", ")} — search unavailable`,
-        consent.grantId
+        access.authorityId
       );
     }
   }
@@ -124,7 +121,7 @@ export function searchEntity(
   const grantFilter = compileFilters(
     db.vault,
     ref.physical,
-    consent.rowFilter,
+    access.rowFilter,
     now,
     "b"
   );
@@ -135,7 +132,7 @@ export function searchEntity(
     now,
     "b"
   );
-  const select = applyFieldMask(db.vault, ref.physical, consent.fieldMask, "b");
+  const select = applyFieldMask(db.vault, ref.physical, access.fieldMask, "b");
   const limit = Math.min(Math.max(request.limit ?? 100, 1), 1000);
   const rows = db.vault
     .prepare(
@@ -149,19 +146,20 @@ export function searchEntity(
     string,
     unknown
   >[];
-  const receiptId = writeReceipt(db.journal, {
-    grantId: consent.grantId,
-    invocationId: null,
-    action: "search",
-    objectType: request.entity,
-    objectId: null,
-    purpose: request.purpose,
-    decision: "allow",
-    detail: {
-      query: request.query,
-      filter: request.where ?? [],
-      rowCount: rows.length,
-    },
-  });
-  return { rows, receiptId };
+  const receiptId = skipsAllowReceipt(identity)
+    ? undefined
+    : writeAuthorityReceipt(db, {
+        authorityId: access.authorityId,
+        invocationId: null,
+        action: "search",
+        objectType: request.entity,
+        objectId: null,
+        decision: "allow",
+        detail: {
+          query: request.query,
+          filter: request.where ?? [],
+          rowCount: rows.length,
+        },
+      });
+  return { rows, ...(receiptId === undefined ? {} : { receiptId }) };
 }

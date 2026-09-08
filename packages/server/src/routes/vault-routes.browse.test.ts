@@ -133,8 +133,8 @@ describe("vault-routes.browse", () => {
     const now = new Date().toISOString();
     plane.db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('px','person','Ravi',?,?, '1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('px','person','Ravi',?,?)`
       )
       .run(now, now);
     plane.db.vault

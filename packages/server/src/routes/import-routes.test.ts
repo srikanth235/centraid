@@ -6,11 +6,16 @@ import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { ensureConversationLedger } from "@centraid/server/engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { seedYear3Vault } from "@centraid/test-kit/year3-vault";
-import { sealAad, sealValue, verifyPortableVault } from "@centraid/vault";
+import {
+  readZipEntries,
+  sealAad,
+  sealValue,
+  unsealValue,
+  verifyPortableVault,
+} from "@centraid/vault";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -75,6 +80,8 @@ describe("import-routes", () => {
     };
   }
 
+  const PASSPHRASE = "correct horse battery staple";
+
   const ICS = [
     "BEGIN:VCALENDAR",
     "BEGIN:VEVENT",
@@ -131,11 +138,9 @@ describe("import-routes", () => {
 
   test("HTTP export → staged reimport → HTTP re-export preserves the seeded artifact", async () => {
     const source = await fixture();
-    ensureConversationLedger(source.plane.db.journal);
     seedYear3Vault(
       {
         vault: source.plane.db.vault,
-        journal: source.plane.db.journal,
         sealCell: (entity, column, rowId, plaintext) =>
           sealValue(
             source.plane.db.sealKey,
@@ -144,6 +149,17 @@ describe("import-routes", () => {
           ),
       },
       { parties: 7, photos: 31, conversations: 3, turnsPerConversation: 4 }
+    );
+    const sourceItem = source.plane.db.vault
+      .prepare(
+        `SELECT item_id, password FROM locker_item
+          WHERE password IS NOT NULL ORDER BY item_id LIMIT 1`
+      )
+      .get() as { item_id: string; password: string };
+    const sourceSealedPassword = unsealValue(
+      source.plane.db.sealKey,
+      sealAad("locker_item", "password", sourceItem.item_id),
+      sourceItem.password
     );
     const staged = (await (
       await fetch(source.base, {
@@ -154,11 +170,21 @@ describe("import-routes", () => {
     ).json()) as { batchId: string };
     await fetch(`${source.base}/${staged.batchId}/publish`, { method: "POST" });
 
-    const exportedResponse = await fetch(`${source.base}/export`);
+    // The seeded vault holds sealed cells, so the bundle needs its custody
+    // kit (#630) — POST carries the passphrase, GET stays the key-free door.
+    const exportedResponse = await fetch(`${source.base}/export`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: PASSPHRASE }),
+    });
     expect(exportedResponse.status).toBe(200);
     expect(exportedResponse.headers.get("cache-control")).toBe("no-store");
+    expect(exportedResponse.headers.get("x-centraid-export-sealed")).toBe(
+      "recovery-kit"
+    );
     const exported = Buffer.from(await exportedResponse.arrayBuffer());
     expect(() => verifyPortableVault(exported)).not.toThrow();
+    expect(verifyPortableVault(exported).sealed).toBe("recovery-kit");
 
     const target = await fixture();
     const importResponse = await fetch(target.base, {
@@ -168,6 +194,7 @@ describe("import-routes", () => {
         filename: "centraid-portable-v1.zip",
         base64: exported.toString("base64"),
         replaceFreshVault: true,
+        passphrase: PASSPHRASE,
       }),
     });
     const importText = await importResponse.text();
@@ -189,19 +216,181 @@ describe("import-routes", () => {
     cleanups.push(() => reopened.stop());
     target.replacePlane(reopened);
 
-    const reexportResponse = await fetch(`${target.base}/export`);
+    const reexportResponse = await fetch(`${target.base}/export`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: PASSPHRASE }),
+    });
     const reexported = Buffer.from(await reexportResponse.arrayBuffer());
     expect(reexportResponse.status, reexported.toString("utf8")).toBe(200);
     expect(() => verifyPortableVault(reexported)).not.toThrow();
-    expect(verifyPortableVault(reexported).canonicalVerifyHash).toBe(
-      verifyPortableVault(exported).canonicalVerifyHash
+    // The canonical artifact round-trips EXCEPT where import is contractually
+    // obliged to change it (#630, rulings PX-reseal / PX-onewrap): a bundle
+    // never installs a foreign key, so every sealed cell is RE-SEALED under
+    // the target's own DEK and `core.vault` carries the target's fingerprint,
+    // not the source's. Asserting the whole hash is equal would be asserting
+    // that the target adopted the source's key.
+    const canonicalTables = (bundle: Buffer): Record<string, unknown[]> =>
+      (
+        JSON.parse(
+          readZipEntries(bundle)
+            .find((entry) => entry.name === "canonical/vault.json")!
+            .data.toString("utf8")
+        ) as { tables: Record<string, unknown[]> }
+      ).tables;
+    const before = canonicalTables(exported);
+    const after = canonicalTables(reexported);
+    const RESEALED = [
+      "core.vault",
+      "locker.item",
+      "locker.item_field",
+      "locker.item_passkey",
+      "sync.connection_credential",
+    ];
+    expect(Object.keys(after).sort()).toStrictEqual(Object.keys(before).sort());
+    const differing = Object.keys(before).filter(
+      (entity) =>
+        JSON.stringify(before[entity]) !== JSON.stringify(after[entity])
     );
+    expect(differing.sort()).toStrictEqual([...RESEALED].sort());
+    // Same rows, same count — a re-seal changes the cell, never the row set.
+    for (const entity of RESEALED) {
+      expect(after[entity], entity).toHaveLength(before[entity]!.length);
+    }
+
+    // And the re-seal is real: the target's own key opens the cell, and what
+    // comes out is the plaintext the source sealed.
+    const item = reopened.db.vault
+      .prepare(
+        `SELECT item_id, password FROM locker_item
+          WHERE password IS NOT NULL ORDER BY item_id LIMIT 1`
+      )
+      .get() as { item_id: string; password: string };
+    expect(
+      unsealValue(
+        reopened.db.sealKey,
+        sealAad("locker_item", "password", item.item_id),
+        item.password
+      )
+    ).toBe(sourceSealedPassword);
+
     expect(
       reopened.db.vault
         .prepare("SELECT summary FROM core_event ORDER BY summary")
         .all()
         .map((row) => row.summary)
     ).toContain("Housewarming");
+  });
+
+  test("a sealed bundle exported without a passphrase is refused, writing nothing", async () => {
+    const source = await fixture();
+    // One sealed cell is the whole premise; seeded directly so this pins the
+    // route's refusal rather than any fixture's breadth.
+    const itemId = crypto.randomUUID();
+    source.plane.db.vault
+      .prepare(
+        `INSERT INTO locker_item (item_id, type, title, username, password, created_at)
+         VALUES (?, 'login', 'example.com', 'priya', ?, '2026-09-01T00:00:00.000Z')`
+      )
+      .run(
+        itemId,
+        sealValue(
+          source.plane.db.sealKey,
+          sealAad("locker_item", "password", itemId),
+          "hunter2-zzyzxsecret"
+        )
+      );
+
+    const exportedResponse = await fetch(`${source.base}/export`);
+    expect(exportedResponse.headers.get("x-centraid-export-sealed")).toBe(
+      "ciphertext-only"
+    );
+    const exported = Buffer.from(await exportedResponse.arrayBuffer());
+    expect(exported.indexOf(Buffer.from("hunter2-zzyzxsecret", "utf8"))).toBe(
+      -1
+    );
+
+    const target = await fixture();
+    const before = target.plane.db.vault
+      .prepare("SELECT count(*) AS n FROM core_party")
+      .get() as { n: number };
+    const response = await fetch(target.base, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filename: "centraid-portable-v1.zip",
+        base64: exported.toString("base64"),
+        replaceFreshVault: true,
+      }),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("sealed value"),
+    });
+    expect(
+      target.plane.db.vault
+        .prepare("SELECT count(*) AS n FROM core_party")
+        .get()
+    ).toMatchObject({ n: before.n });
+    expect(
+      target.plane.db.vault
+        .prepare("SELECT count(*) AS n FROM locker_item")
+        .get()
+    ).toMatchObject({ n: 0 });
+  });
+
+  test("a passphrased bundle restores its sealed cell under the target's own key", async () => {
+    const source = await fixture();
+    const itemId = crypto.randomUUID();
+    source.plane.db.vault
+      .prepare(
+        `INSERT INTO locker_item (item_id, type, title, username, password, created_at)
+         VALUES (?, 'login', 'example.com', 'priya', ?, '2026-09-01T00:00:00.000Z')`
+      )
+      .run(
+        itemId,
+        sealValue(
+          source.plane.db.sealKey,
+          sealAad("locker_item", "password", itemId),
+          "hunter2-zzyzxsecret"
+        )
+      );
+
+    const exportedResponse = await fetch(`${source.base}/export`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: PASSPHRASE }),
+    });
+    expect(exportedResponse.headers.get("x-centraid-export-sealed")).toBe(
+      "recovery-kit"
+    );
+    const exported = Buffer.from(await exportedResponse.arrayBuffer());
+
+    const target = await fixture();
+    const targetKey = Buffer.from(target.plane.db.sealKey);
+    const response = await fetch(target.base, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filename: "centraid-portable-v1.zip",
+        base64: exported.toString("base64"),
+        replaceFreshVault: true,
+        passphrase: PASSPHRASE,
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    // Re-sealed under the target's own key, so the target opens it.
+    expect(target.plane.db.sealKey).toStrictEqual(targetKey);
+    const stored = target.plane.db.vault
+      .prepare("SELECT password FROM locker_item WHERE item_id = ?")
+      .get(itemId) as { password: string };
+    expect(
+      unsealValue(
+        targetKey,
+        sealAad("locker_item", "password", itemId),
+        stored.password
+      )
+    ).toBe("hunter2-zzyzxsecret");
   });
 
   test("portable replacement refuses a target that already contains user data", async () => {

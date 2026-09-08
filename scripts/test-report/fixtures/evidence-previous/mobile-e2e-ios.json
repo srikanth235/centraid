@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "candidate": "f5ca34fb6deadbeef0000000000000000000000",
+  "startedAt": "2026-09-02T06:00:00Z",
+  "finishedAt": "2026-09-02T06:40:00Z",
+  "budgetMs": 3600000,
+  "durationMs": 2496000,
+  "cases": [
+    {
+      "id": "locker-gate",
+      "verdict": "failed",
+      "durationMs": 184000,
+      "attempts": 3
+    },
+    {
+      "id": "pairing-canary",
+      "verdict": "passed",
+      "durationMs": 181000,
+      "attempts": 1
+    }
+  ],
+  "parked": null,
+  "tags": {
+    "qualities": ["journey"],
+    "surfaces": ["mobile-native"]
+  },
+  "lane": "mobile-e2e-ios",
+  "rung": 4,
+  "platform": "ios",
+  "verdict": "passed"
+}

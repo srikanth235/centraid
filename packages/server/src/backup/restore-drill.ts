@@ -83,15 +83,12 @@ function countOf(db: DatabaseSync, table: string): number {
   ).c;
 }
 
-export function spineCensus(
-  vault: DatabaseSync,
-  journal: DatabaseSync
-): SpineCensus {
+export function spineCensus(vault: DatabaseSync): SpineCensus {
   return {
     party: countOf(vault, "core_party"),
     content: countOf(vault, "core_content_item"),
     media: countOf(vault, "media_asset"),
-    receipt: countOf(journal, "consent_receipt"),
+    receipt: countOf(vault, "access_receipt"),
   };
 }
 
@@ -237,17 +234,13 @@ export interface RestoreDrillInput {
   readonly casSampleSize?: number | undefined;
 }
 
-/** A pair too damaged to open returns an error FINDING, never a throw. */
+/** A file too damaged to open returns an error FINDING, never a throw. */
 export function runRestoreDrill(
   input: RestoreDrillInput
 ): RestoreDrillFinding[] {
   let vault: DatabaseSync;
-  let journal: DatabaseSync;
   try {
     vault = new DatabaseSync(path.join(input.destDir, "vault.db"), {
-      readOnly: true,
-    });
-    journal = new DatabaseSync(path.join(input.destDir, "journal.db"), {
       readOnly: true,
     });
   } catch (error) {
@@ -255,7 +248,7 @@ export function runRestoreDrill(
       finding(
         "database-integrity",
         "error",
-        `${input.vaultId}: the restored pair could not be opened — ` +
+        `${input.vaultId}: the restored vault could not be opened — ` +
           (error instanceof Error ? error.message : String(error)),
         input.vaultId
       ),
@@ -267,7 +260,7 @@ export function runRestoreDrill(
     const findings: RestoreDrillFinding[] = [
       checkRestoredCensus({
         vaultId: input.vaultId,
-        restored: spineCensus(vault, journal),
+        restored: spineCensus(vault),
         source: input.sourceCensus,
       }),
       checkRestoredBlobCoverage({
@@ -289,14 +282,12 @@ export function runRestoreDrill(
         checkReplicaJournalConsistency({
           vaultId: input.vaultId,
           vault,
-          journal,
         })
       ),
     ];
     return findings;
   } finally {
     vault.close();
-    journal.close();
   }
 }
 

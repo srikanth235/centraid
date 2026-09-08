@@ -5,7 +5,6 @@ import { relativeTime } from "../format.js";
 import type {
   VaultBridgeProps,
   VaultData,
-  VaultGrantDTO,
   VaultParkedDTO,
   VaultScopeDTO,
 } from "../screen-contracts.js";
@@ -30,15 +29,18 @@ function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
-// WHAT the app asked for — why line + requested scopes as chips.
-function RequestSection({
+// AN APP DECLARES; IT IS NOT GRANTED (#928 A1). A first-party app runs on the
+// owner's own device against the owner's own vault, and its reach is fixed at
+// build time by this manifest — so this pane STATES it rather than offering a
+// grant the owner would have to give and could take away.
+function DeclaredSection({
   block,
 }: {
   block: VaultBridgeProps["block"];
 }): JSX.Element {
   return (
     <div className={appSettingsCss.appSettingsSection}>
-      <div className={vault.label}>Requested access</div>
+      <div className={vault.label}>Declared access</div>
       {block.why ? <div className={vault.why}>{block.why}</div> : null}
       <div className={vault.scopes}>
         {block.scopes.map((scope) => (
@@ -52,84 +54,6 @@ function RequestSection({
           </span>
         ))}
       </div>
-      <div className={vault.purpose}>{`Purpose · ${block.purpose}`}</div>
-    </div>
-  );
-}
-
-function GrantSection({
-  grants,
-  vaultName,
-  onGrant,
-  onRevoke,
-}: {
-  grants: VaultGrantDTO[];
-  vaultName: string;
-  onGrant: () => void;
-  onRevoke: (grantId: string) => void;
-}): JSX.Element {
-  const [busy, setBusy] = useState(false);
-  // `grants` is a fresh array from every reload — including the one that
-  // follows a grant/revoke action completing — so resetting on change
-  // un-disables the button that action just flipped. Without this, the
-  // "Grant access" button that appears after a Revoke inherits the `busy`
-  // this same component instance set for the Revoke click, since the
-  // grants.length===0 → >0 branch swap doesn't remount GrantSection.
-  // Done during render so the button is live on the same paint the new grants
-  // arrive, not one render later.
-  const [seenGrants, setSeenGrants] = useState(grants);
-  if (seenGrants !== grants) {
-    setSeenGrants(grants);
-    setBusy(false);
-  }
-  return (
-    <div className={cx(appSettingsCss.appSettingsSection, vault.grants)}>
-      <div className={vault.label}>{`Access · ${vaultName}`}</div>
-      {grants.length === 0 ? (
-        <>
-          <Note>
-            No access yet — the vault denies every call until you grant it.
-          </Note>
-          <button
-            type="button"
-            className={vault.grantBtn}
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              onGrant();
-            }}
-          >
-            Grant access
-          </button>
-        </>
-      ) : (
-        grants.map((grant) => (
-          <div key={grant.grantId} className={vault.grantRow}>
-            <div className={vault.grantText}>
-              <div
-                className={vault.grantTitle}
-              >{`Granted · ${grant.purpose ?? "purpose"}`}</div>
-              <div className={vault.grantSub}>
-                {grant.scopes.map(scopeLabel).join(" · ") +
-                  (grant.expiresAt
-                    ? ` · expires ${grant.expiresAt.slice(0, 10)}`
-                    : "")}
-              </div>
-            </div>
-            <button
-              type="button"
-              className={vault.revokeBtn}
-              disabled={busy}
-              onClick={() => {
-                setBusy(true);
-                onRevoke(grant.grantId);
-              }}
-            >
-              Revoke
-            </button>
-          </div>
-        ))
-      )}
     </div>
   );
 }
@@ -243,11 +167,11 @@ type State =
   | { phase: "ready"; data: VaultData };
 
 /**
- * Vault — the per-app owner consent pane. Unlike the read-only screens this
- * one is stateful: it fetches the consent surface through the route-supplied
- * `loadData`, and every owner act (grant / revoke / confirm / demo) runs the
- * matching gateway call, then reloads. Emits the `cd-vault-*` /
- * `cd-app-settings-*` classes global styles.css targets.
+ * Vault — the per-app owner pane. Unlike the read-only screens this one is
+ * stateful: it fetches the surface through the route-supplied `loadData`, and
+ * every owner act (confirm / demo) runs the matching gateway call, then
+ * reloads. Emits the `cd-vault-*` / `cd-app-settings-*` classes global
+ * styles.css targets.
  */
 export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   const { block, loadData, showToast, onAccessChanged, onParkedCount } = props;
@@ -292,7 +216,7 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   if (state.phase === "loading") {
     return (
       <>
-        <RequestSection block={block} />
+        <DeclaredSection block={block} />
         <div className={au.auLoading}>Loading…</div>
       </>
     );
@@ -300,7 +224,7 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   if (state.phase === "no-vault") {
     return (
       <>
-        <RequestSection block={block} />
+        <DeclaredSection block={block} />
         <Note>
           No vault is mounted on this gateway, so this app has nothing to
           project.
@@ -316,15 +240,7 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   const showDemo = data.demo && (data.demo.seedable || data.demo.rows > 0);
   return (
     <>
-      <RequestSection block={block} />
-      <GrantSection
-        grants={data.grants}
-        vaultName={data.vaultName}
-        onGrant={() => act(props.grant, "Vault access granted", "Grant failed")}
-        onRevoke={(id) =>
-          act(() => props.revoke(id), "Vault access revoked", "Revoke failed")
-        }
-      />
+      <DeclaredSection block={block} />
       {data.parked.length > 0 ? (
         <ParkedSection
           parked={data.parked}

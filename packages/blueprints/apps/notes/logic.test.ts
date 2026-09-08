@@ -187,7 +187,7 @@ describe("opening a note pulls the body lazily", () => {
   it("leaves the editor on the preview when the read was denied", async () => {
     const app = harness({
       data: { notes: [note({ note_id: "n1", preview: "first line" })] },
-      read: async () => ({ vaultDenied: { code: "VAULT_CONSENT" } }),
+      read: async () => ({ vaultDenied: { code: "VAULT_ACCESS" } }),
     });
     await app.logic.openNote("n1");
     expect(app.data.notes[0]?.body).toBeUndefined();

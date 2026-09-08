@@ -6,52 +6,47 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
+import { diffCounters } from "@centraid/core/protocol";
 import {
   atlasCensus,
   atlasGraph,
   atlasPulse,
   createGateway,
+  gatewayWorkCounters,
+  instrumentVaultStatements,
   sealAad,
   sealValue,
 } from "@centraid/vault";
 
 import { ConversationHistoryStore } from "../../packages/server/src/engine/conversation/history.js";
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import type { WorkspaceProvider } from "../../packages/server/src/engine/stores/vault-workspace.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 import { seedYear3Vault } from "../../packages/test-kit/src/year3-vault.js";
-import budgets from "../experience-budgets/client-query-counts.json";
 import { createTestVault } from "../helpers/factories.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
-type Screen = keyof typeof budgets.screens;
+const FIRST_PAINT_KEY = "client/first-paint-work/year3/any";
+type Screen = "photos-grid" | "notifications" | "atlas" | "assistant";
 
-function countReadStatements(...databases: DatabaseSync[]): {
-  value: () => number;
-  restore: () => void;
-} {
-  let count = 0;
-  const originals = databases.map((database) => {
-    const original = database.prepare.bind(database);
-    Object.defineProperty(database, "prepare", {
-      configurable: true,
-      value: ((sql: string) => {
-        if (/^\s*(?:SELECT|WITH|PRAGMA)\b/iu.test(sql)) count += 1;
-        return original(sql);
-      }) as DatabaseSync["prepare"],
-    });
-    return { database, original };
-  });
-  return {
-    value: () => count,
-    restore: () => {
-      for (const { database, original } of originals)
-        Object.defineProperty(database, "prepare", {
-          configurable: true,
-          value: original,
-        });
-    },
-  };
+/**
+ * The statements a screen's first paint costs, taken from THE PRODUCT'S OWN
+ * counter (#927) rather than a second count of the same thing. This file used
+ * to monkey-patch `DatabaseSync.prepare` and count the SELECTs it saw, which
+ * measured a different quantity from the one the merge-rung gate compares —
+ * two instruments over one fact, free to disagree. `gatewayWorkCounters` is the
+ * instrument every other counter gate reads: statement EXECUTIONS on the handle
+ * the gateway instruments, monotonic for the life of the process, so a snapshot
+ * pair is the cost of exactly what happened between them.
+ */
+function countStatements(db: DatabaseSync): () => number {
+  // Instrument the handle THIS screen reads. `createGateway` does it for the
+  // gateway's own connection; a screen that reads a vault plane or calls a
+  // vault function directly gets it here, so no screen is counted as costing
+  // zero statements because nobody wrapped its handle.
+  instrumentVaultStatements(db);
+  const before = gatewayWorkCounters();
+  return () => diffCounters(before, gatewayWorkCounters()).statements;
 }
 
 async function screenHttpHarness(
@@ -102,16 +97,10 @@ async function screenHttpHarness(
   };
 }
 
-function seedSmallYear3(db: {
-  vault: DatabaseSync;
-  journal: DatabaseSync;
-  sealKey: Buffer;
-}): void {
-  ensureConversationLedger(db.journal);
+function seedSmallYear3(db: { vault: DatabaseSync; sealKey: Buffer }): void {
   seedYear3Vault(
     {
       vault: db.vault,
-      journal: db.journal,
       sealCell: (entity, column, rowId, plaintext) =>
         sealValue(
           db.sealKey,
@@ -127,12 +116,14 @@ function assertBudget(
   screen: Screen,
   actual: { sqlStatements: number; httpRequests: number }
 ): void {
-  const budget = budgets.screens[screen];
   expect(actual.sqlStatements, `${screen} SQL statements`).toBeLessThanOrEqual(
-    budget.sqlStatements
+    journeyCeiling(FIRST_PAINT_KEY, screen, "maxStatements")
   );
   expect(actual.httpRequests, `${screen} HTTP requests`).toBeLessThanOrEqual(
-    budget.httpRequests
+    journeyCeiling(FIRST_PAINT_KEY, screen, "maxHttpRequests")
+  );
+  console.error(
+    `OBSERVED ${screen} ${actual.sqlStatements} ${actual.httpRequests}`
   );
 }
 
@@ -141,10 +132,10 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     const db = await createTestVault();
     seedSmallYear3(db);
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM consent_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const gateway = createGateway(db);
-    const counter = countReadStatements(db.vault, db.journal);
+    const statements = countStatements(db.vault);
     const moduleUrl = pathToFileURL(
       path.resolve("packages/blueprints/apps/photos/queries/library.ts")
     ).href;
@@ -176,12 +167,11 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
       );
       expect(projection).toBeTruthy();
       assertBudget("photos-grid", {
-        sqlStatements: counter.value(),
+        sqlStatements: statements(),
         httpRequests: requests.value(),
       });
     } finally {
       await requests.close();
-      counter.restore();
     }
   });
 
@@ -200,7 +190,7 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     });
     try {
       seedSmallYear3(plane.db);
-      const counter = countReadStatements(plane.db.vault, plane.db.journal);
+      const statements = countStatements(plane.db.vault);
       const requests = await screenHttpHarness({
         "/centraid/_vault/notifications": () =>
           plane.notificationsSummary(true),
@@ -215,12 +205,11 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
         ]);
         expect(firstPaint).toHaveLength(3);
         assertBudget("notifications", {
-          sqlStatements: counter.value(),
+          sqlStatements: statements(),
           httpRequests: requests.value(),
         });
       } finally {
         await requests.close();
-        counter.restore();
       }
     } finally {
       plane.stop();
@@ -230,16 +219,16 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
   test("Atlas runs the exact stats/pulse first paint within budget", async () => {
     const db = await createTestVault();
     seedSmallYear3(db);
-    const counter = countReadStatements(db.vault, db.journal);
+    const statements = countStatements(db.vault);
     const requests = await screenHttpHarness({
-      "/centraid/_vault/atlas/stats": () => atlasCensus(db.vault, db.journal),
-      "/centraid/_vault/atlas/pulse": () => atlasPulse(db.journal),
+      "/centraid/_vault/atlas/stats": () => atlasCensus(db.vault),
+      "/centraid/_vault/atlas/pulse": () => atlasPulse(db.vault),
     });
     try {
       await requests.request("/centraid/_vault/atlas/stats");
       await requests.request("/centraid/_vault/atlas/pulse");
       assertBudget("atlas", {
-        sqlStatements: counter.value(),
+        sqlStatements: statements(),
         httpRequests: requests.value(),
       });
       // The graph is deliberately lazy after first paint; prove its separately
@@ -247,7 +236,6 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
       expect(atlasGraph(db.vault).nodes.length).toBeGreaterThan(0);
     } finally {
       await requests.close();
-      counter.restore();
     }
   });
 
@@ -255,23 +243,23 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     const db = await createTestVault();
     seedSmallYear3(db);
     const owner = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const workspace: WorkspaceProvider = () => ({
       vaultId: "quality-vault",
-      ownerPartyId: owner.owner_party_id,
+      ownerPartyId: owner.self_party_id,
       appsDir: `${db.dir}/apps`,
-      journal: () => db.journal,
-      journalDbFile: `${db.dir}/journal.db`,
+      journal: () => db.audit,
+      ledgerDbFile: `${db.dir}/vault.db`,
       harnessSessionDir: `${db.dir}/harness-sessions`,
     });
     const store = new ConversationHistoryStore(workspace);
-    const conversation = db.journal
+    const conversation = db.audit
       .prepare(
         "SELECT id FROM conversations WHERE app_id = '_assistant' ORDER BY id LIMIT 1"
       )
       .get() as { id: string };
-    const counter = countReadStatements(db.vault, db.journal);
+    const statements = countStatements(db.vault);
     const requests = await screenHttpHarness({
       [`/centraid/_vault/assistant/conversations/${conversation.id}`]: () =>
         store.getSession("_assistant", conversation.id),
@@ -283,12 +271,11 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
         )
       ).resolves.toBeTruthy();
       assertBudget("assistant", {
-        sqlStatements: counter.value(),
+        sqlStatements: statements(),
         httpRequests: requests.value(),
       });
     } finally {
       await requests.close();
-      counter.restore();
     }
   });
 });

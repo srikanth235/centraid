@@ -318,8 +318,8 @@ describe("tally — #872 expense entry", () => {
       const stranger = "party-never-enrolled";
       fx.db.vault
         .prepare(
-          `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-           VALUES (?, 'person', 'Stranger', NULL, NULL, NULL, ?, ?, '1.4')`
+          `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+           VALUES (?, 'person', 'Stranger', NULL, NULL, NULL, ?, ?)`
         )
         .run(stranger, new Date().toISOString(), new Date().toISOString());
       const reason = fx.refusal(

@@ -53,5 +53,5 @@ The run exits non-zero. That is expected — the untouched packages' floors fail
 
 - Issue [#839](https://github.com/srikanth235/centraid/issues/839) (Wave 0 blend re-seed; the recorded numbers did not reproduce)
 - [TESTING.md](../../TESTING.md#product-tiers-and-coverage-gates) — the floor table and its measured column
-- `tests/coverage-floors.json` — `approvedDeviation` carries each seed's provenance
+- `tests/floors.json#coverage` — `approvedDeviation` carries each seed's provenance
 - `vitest.config.ts` — the root config whose `include` defines every denominator

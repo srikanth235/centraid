@@ -228,7 +228,6 @@ export async function handleEnrichCascadeRoute(input: {
     const outcome = await plane.invoke(plane.ownerCredential, {
       command: "enrich.record_consent",
       input: { capability, egress, scope_ref: scopeRef, decision },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       return sendJson(res, 409, {

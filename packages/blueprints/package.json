@@ -50,7 +50,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun run build:manifest && tsc -p tsconfig.build.json",
+    "build": "bun run build:handlers && bun run build:manifest && tsc -p tsconfig.build.json",
+    "build:handlers": "node scripts/build-handlers.mjs",
     "build:manifest": "node scripts/build-manifest.mjs",
     "clean": "rm -rf dist",
     "test": "vitest run",
@@ -60,7 +61,7 @@
   "dependencies": {
     "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
-    "pdfjs-dist": "6.1.200",
+    "pdfjs-dist": "6.2.108",
     "tldts": "7.4.9"
   },
   "devDependencies": {

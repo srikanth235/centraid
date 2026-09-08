@@ -134,7 +134,7 @@ interface Fixture {
 
 async function buildSourceTree(sourceDir: string): Promise<SourceEntry[]> {
   await fs.mkdir(path.join(sourceDir, "blobs", "ab"), { recursive: true });
-  // /1 requires a complete, verifiable WAL base pair.
+  // /1 requires a complete, verifiable vault.db base.
   const vaultPath = path.join(sourceDir, "vault.db");
   const vault = new DatabaseSync(vaultPath);
   vault.exec(
@@ -144,15 +144,6 @@ async function buildSourceTree(sourceDir: string): Promise<SourceEntry[]> {
     .prepare("INSERT INTO payload (bytes) VALUES (?)")
     .run(Buffer.from(pseudoRandomBuffer(3 * 1024 * 1024, 1)));
   vault.close();
-  const journalPath = path.join(sourceDir, "journal.db");
-  const journal = new DatabaseSync(journalPath);
-  journal.exec(
-    "PRAGMA journal_mode=DELETE; CREATE TABLE payload (bytes BLOB NOT NULL)"
-  );
-  journal
-    .prepare("INSERT INTO payload (bytes) VALUES (?)")
-    .run(Buffer.from(pseudoRandomBuffer(10_000, 2)));
-  journal.close();
   await fs.writeFile(
     path.join(sourceDir, "blobs", "ab", "cdef"),
     pseudoRandomBuffer(50_000, 3)
@@ -173,14 +164,6 @@ async function buildSourceTree(sourceDir: string): Promise<SourceEntry[]> {
       absolutePath: vaultPath,
       sha256: await fileSha256(vaultPath),
       walGeneration: "11".repeat(16),
-      baseTickMs: 1_752_480_000_000,
-    },
-    {
-      path: "journal.db",
-      kind: "db",
-      absolutePath: journalPath,
-      sha256: await fileSha256(journalPath),
-      walGeneration: "22".repeat(16),
       baseTickMs: 1_752_480_000_000,
     },
     {
@@ -628,7 +611,6 @@ async function fileSha256(filePath: string): Promise<string> {
 
 describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", () => {
   const GEN_VAULT = "11".repeat(16);
-  const GEN_JOURNAL = "22".repeat(16);
   const BASE_TICK = 1752480000000;
 
   async function buildSqliteFixture(): Promise<
@@ -644,7 +626,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
     const sourceDir = await tempDir("backup-engine-source-");
 
     makeSqliteDbFile(path.join(sourceDir, "vault.db"), ["v1", "v2", "v3"]);
-    makeSqliteDbFile(path.join(sourceDir, "journal.db"), ["j1"]);
     // Last close checkpoints and deletes the WAL — the state the shipper snapshots.
     await expect(
       fs.access(path.join(sourceDir, "vault.db-wal"))
@@ -664,24 +645,12 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
         baseTickMs: BASE_TICK,
       },
       {
-        path: "journal.db",
-        kind: "db",
-        absolutePath: path.join(sourceDir, "journal.db"),
-        sha256: await fileSha256(path.join(sourceDir, "journal.db")),
-        walGeneration: GEN_JOURNAL,
-        // Same tick as the vault: restore refuses a pair that cannot show it.
-        baseTickMs: BASE_TICK,
-      },
-      {
         path: "seal.key",
         kind: "seal-key",
         absolutePath: path.join(sourceDir, "seal.key"),
       },
     ];
-    const genByPath = new Map([
-      ["vault.db", GEN_VAULT],
-      ["journal.db", GEN_JOURNAL],
-    ]);
+    const genByPath = new Map([["vault.db", GEN_VAULT]]);
     return { provider, targetId, keyring, sourceDir, entries, genByPath };
   }
 
@@ -712,13 +681,11 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
       current: CURRENT,
     });
 
-    // Empty streams (no segments shipped); generations still flow through integrity.
+    // Empty stream (no segments shipped); the generation still flows through integrity.
     expect(result.walReplay).not.toBeNull();
-    expect(result.walReplay!.perDb.vault.generation).toBe(GEN_VAULT);
-    expect(result.walReplay!.perDb.journal.generation).toBe(GEN_JOURNAL);
-    expect(result.walReplay!.perDb.vault.integrityCheck).toBe("ok");
-    expect(result.walReplay!.perDb.journal.integrityCheck).toBe("ok");
-    expect(result.walReplay!.perDb.vault.segmentsApplied).toBe(0);
+    expect(result.walReplay!.generation).toBe(GEN_VAULT);
+    expect(result.walReplay!.integrityCheck).toBe("ok");
+    expect(result.walReplay!.segmentsApplied).toBe(0);
     expect(result.walReplay!.damaged).toStrictEqual([]);
 
     expect(readSqliteRows(path.join(destDir, "vault.db"))).toStrictEqual([
@@ -726,16 +693,13 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
       "v2",
       "v3",
     ]);
-    expect(readSqliteRows(path.join(destDir, "journal.db"))).toStrictEqual([
-      "j1",
-    ]);
     const originalSeal = await fs.readFile(path.join(sourceDir, "seal.key"));
     expect(
       (await fs.readFile(path.join(destDir, "seal.key"))).equals(originalSeal)
     ).toBe(true);
   });
 
-  test("db entries carry baseTickMs, and the two agree", async () => {
+  test("the db entry carries its baseTickMs", async () => {
     const { provider, targetId, keyring, entries } = await buildSqliteFixture();
     await createSnapshot({
       provider,
@@ -755,34 +719,38 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
       row.manifestHash
     );
     const dbEntries = opened.entries.filter((e) => e.kind === "db");
-    expect(dbEntries).toHaveLength(2);
-    expect(dbEntries.map((e) => e.baseTickMs)).toStrictEqual([
-      BASE_TICK,
-      BASE_TICK,
-    ]);
+    expect(dbEntries).toHaveLength(1);
+    expect(dbEntries[0]!.baseTickMs).toBe(BASE_TICK);
   });
 
-  test("a snapshot whose two db bases are from DIFFERENT ticks is REFUSED, not restored", async () => {
-    // A later journal base holds receipts for rows that live only in vault
-    // segments. Empty listing has no hole to detect — refuse, never degrade.
-    const { provider, targetId, keyring, entries } = await buildSqliteFixture();
-    const skewed = entries.map((e) =>
-      e.path === "journal.db" ? { ...e, baseTickMs: BASE_TICK + 60_000 } : e
-    );
+  test("a snapshot carrying a SECOND db entry is refused", async () => {
+    // The snapshot names one database. A second `db` entry comes from another
+    // protocol, and restoring it beside the vault would replay a stream the
+    // manifest cannot vouch for.
+    const { provider, targetId, keyring, entries, sourceDir } =
+      await buildSqliteFixture();
+    const extra: SourceEntry[] = [
+      ...entries,
+      {
+        ...entries.find((e) => e.kind === "db")!,
+        path: "other.db",
+        absolutePath: path.join(sourceDir, "vault.db"),
+      },
+    ];
     await expect(
       createSnapshot({
         provider,
         targetId,
         keyring,
         vaultId: "vault-1",
-        entries: skewed,
+        entries: extra,
         generation: 1,
         appMeta: APP_META,
       })
-    ).rejects.toThrow(/bases are from DIFFERENT ticks/u);
+    ).rejects.toThrow(/exactly one vault\.db entry/u);
   });
 
-  test("a /1 snapshot with NO base ticks at all is refused (it cannot prove coherence)", async () => {
+  test("a /1 snapshot with NO base tick is refused (it cannot place its segments)", async () => {
     const { provider, targetId, keyring, entries } = await buildSqliteFixture();
     const stripped = entries.map(({ baseTickMs: _drop, ...rest }) => rest);
     await expect(
@@ -1033,9 +1001,7 @@ describe("point-in-time snapshot row selection", () => {
     const sourceDir = await tempDir("backup-engine-source-");
     const filePath = path.join(sourceDir, "seal.key");
     const vaultPath = path.join(sourceDir, "vault.db");
-    const journalPath = path.join(sourceDir, "journal.db");
     makeSqliteDbFile(vaultPath, ["base"]);
-    makeSqliteDbFile(journalPath, ["base"]);
     const baseEntries: SourceEntry[] = [
       {
         path: "vault.db",
@@ -1043,14 +1009,6 @@ describe("point-in-time snapshot row selection", () => {
         absolutePath: vaultPath,
         sha256: await fileSha256(vaultPath),
         walGeneration: "33".repeat(16),
-        baseTickMs: 1_000_000,
-      },
-      {
-        path: "journal.db",
-        kind: "db",
-        absolutePath: journalPath,
-        sha256: await fileSha256(journalPath),
-        walGeneration: "44".repeat(16),
         baseTickMs: 1_000_000,
       },
       { path: "seal.key", kind: "seal-key", absolutePath: filePath },
@@ -1230,11 +1188,8 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
     const sourceDir = await tempDir("backup-compress-source-");
 
     const vaultPath = path.join(sourceDir, "vault.db");
-    const journalPath = path.join(sourceDir, "journal.db");
     makeCompressibleDb(vaultPath, 40_000); // multi-MB, highly compressible
-    makeCompressibleDb(journalPath, 200);
-    const rawBytes =
-      (await fs.stat(vaultPath)).size + (await fs.stat(journalPath)).size;
+    const rawBytes = (await fs.stat(vaultPath)).size;
 
     const entries: SourceEntry[] = [
       {
@@ -1243,14 +1198,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
         absolutePath: vaultPath,
         sha256: await fileSha256(vaultPath),
         walGeneration: "33".repeat(16),
-        baseTickMs: 1_752_480_000_000,
-      },
-      {
-        path: "journal.db",
-        kind: "db",
-        absolutePath: journalPath,
-        sha256: await fileSha256(journalPath),
-        walGeneration: "44".repeat(16),
         baseTickMs: 1_752_480_000_000,
       },
     ];
@@ -1280,9 +1227,7 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
     const sourceDir = await tempDir("backup-mixed-source-");
 
     const vaultPath = path.join(sourceDir, "vault.db");
-    const journalPath = path.join(sourceDir, "journal.db");
     makeCompressibleDb(vaultPath, 8_000); // compressible → stored as zstd
-    makeCompressibleDb(journalPath, 50);
     // Incompressible blob → stored raw. One snapshot, both algos.
     const blobPath = path.join(sourceDir, "random.bin");
     await fs.writeFile(blobPath, pseudoRandomBuffer(300_000, 99));
@@ -1294,14 +1239,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
         absolutePath: vaultPath,
         sha256: await fileSha256(vaultPath),
         walGeneration: "55".repeat(16),
-        baseTickMs: 1_752_480_000_000,
-      },
-      {
-        path: "journal.db",
-        kind: "db",
-        absolutePath: journalPath,
-        sha256: await fileSha256(journalPath),
-        walGeneration: "66".repeat(16),
         baseTickMs: 1_752_480_000_000,
       },
       { path: "random.bin", kind: "blob", absolutePath: blobPath },
@@ -1375,9 +1312,7 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
     const raw = new Uint8Array(2 * 1024 * 1024);
     raw.fill(0x41);
     const vaultPath = path.join(sourceDir, "vault.db");
-    const journalPath = path.join(sourceDir, "journal.db");
     makeCompressibleDb(vaultPath, 100);
-    makeCompressibleDb(journalPath, 20);
     const blobPath = path.join(sourceDir, "flat.bin");
     await fs.writeFile(blobPath, raw);
 
@@ -1388,14 +1323,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
         absolutePath: vaultPath,
         sha256: await fileSha256(vaultPath),
         walGeneration: "77".repeat(16),
-        baseTickMs: 1_752_480_000_000,
-      },
-      {
-        path: "journal.db",
-        kind: "db",
-        absolutePath: journalPath,
-        sha256: await fileSha256(journalPath),
-        walGeneration: "88".repeat(16),
         baseTickMs: 1_752_480_000_000,
       },
       { path: "flat.bin", kind: "blob", absolutePath: blobPath },

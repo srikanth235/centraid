@@ -11,7 +11,7 @@ import {
 describe("canonicalizeRrule", () => {
   it("strips a Google/ICS RRULE: prefix so parsers share one bare form", async () => {
     const { canonicalizeRrule, parseRrule, rruleLine } =
-      await import("./recurrence.js");
+      await import("./rrule-support.js");
     expect(canonicalizeRrule("RRULE:FREQ=WEEKLY;BYDAY=MO")).toBe(
       "FREQ=WEEKLY;BYDAY=MO"
     );
@@ -182,16 +182,22 @@ describe(describeRecurrence, () => {
     ["FREQ=WEEKLY;BYDAY=TH;COUNT=5", "Every Thursday · 5 times"],
     ["FREQ=WEEKLY;BYDAY=TH;COUNT=1", "Every Thursday · once"],
     ["FREQ=DAILY;UNTIL=20260905T000000Z", "Daily · until Sep 5, 2026"],
-    // BYDAY steers WEEKLY expansion only, so a monthly rule never claims days.
-    ["FREQ=MONTHLY;BYDAY=MO", "Every month"],
     // An unparseable UNTIL drops the tail rather than leaking the rule text.
     ["FREQ=DAILY;UNTIL=SOON", "Daily"],
   ])("summarises %s as %s", (rrule, expected) => {
     expect(describeRecurrence(rrule)).toBe(expected);
   });
 
-  it("returns null for a rule it cannot parse", () => {
-    expect(describeRecurrence("FREQ=HOURLY")).toBeNull();
+  it.each([
+    ["FREQ=HOURLY", "sub-daily frequencies are not expanded"],
+    [
+      "FREQ=MONTHLY;BYDAY=MO",
+      "means every Monday IN the month, not 'every month'",
+    ],
+    ["FREQ=WEEKLY;BYDAY=-1FR", "a positional day is BYSETPOS by another name"],
+    ["FREQ=WEEKLY;BYDAY=MO,XX", "a non-day token is not filtered away"],
+  ])("summarises nothing for %s: %s", (rrule) => {
+    expect(describeRecurrence(rrule)).toBeNull();
   });
 });
 

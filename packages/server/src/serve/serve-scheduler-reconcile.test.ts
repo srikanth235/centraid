@@ -101,7 +101,6 @@ const DATA_AUTOMATION_JSON = JSON.stringify({
   triggers: [{ kind: "data", entities: ["core.party"] }],
   requires: {},
   vault: {
-    purpose: "dpv:ServiceProvision",
     scopes: [{ schema: "core", table: "party", verbs: "read" }],
   },
   history: { keep: { count: 100 } },
@@ -222,29 +221,36 @@ describe("serve-scheduler-reconcile scenarios", () => {
     // Publishing awaits reconciliation, including the fresh watcher's
     // no-history cursor bootstrap, before the app is considered live.
     const plane = handle.vaults.current();
-    const cursor = plane.db.journal
+    const cursor = plane.db.audit
       .prepare(
         `SELECT position_json FROM automation_trigger_cursor
         WHERE automation_id = 'brief/brief' AND trigger_index = 0`
       )
       .get();
     expect(cursor).toBeTruthy();
-    const startedAt = Date.now();
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_party",
       input: { display_name: "Doorbell Test" },
-      purpose: "dpv:ServiceProvision",
     });
+    // The commit is in-process and synchronous, so this is the instant the
+    // scheduler's nudge window opens — and it is the same clock the turn
+    // record below is stamped with.
+    const committedAt = Date.now();
     expect(outcome.status).toBe("executed");
     expect(
-      plane.db.journal
+      plane.db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_provenance WHERE entity_type = 'core.party'`
+          `SELECT count(*) AS n FROM access_provenance WHERE entity_type = 'core.party'`
         )
         .get()
     ).toMatchObject({ n: 1 });
 
-    let runs: Array<{ turnId: string; endedAt?: number; ok: boolean }> = [];
+    let runs: Array<{
+      turnId: string;
+      startedAt: number;
+      endedAt?: number;
+      ok: boolean;
+    }> = [];
     const refreshRuns = async (): Promise<boolean> => {
       const response = await fetch(
         `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent("brief/brief")}`,
@@ -253,17 +259,33 @@ describe("serve-scheduler-reconcile scenarios", () => {
       expect(response.status).toBe(200);
       runs = (
         (await response.json()) as {
-          turns: Array<{ turnId: string; endedAt?: number; ok: boolean }>;
+          turns: Array<{
+            turnId: string;
+            startedAt: number;
+            endedAt?: number;
+            ok: boolean;
+          }>;
         }
       ).turns;
       return runs.length > 0;
     };
+    // How long the TEST is willing to watch — not the claim. The two used to
+    // be the same 900/1000 ms, so every HTTP round trip this poll loop makes
+    // counted against the scheduler: on a coverage shard contending with
+    // three others the assertion read 1638 ms and failed a gateway that had
+    // done nothing wrong.
     await waitFor(async () => {
       return refreshRuns();
-    }, 900);
+    }, 5_000);
 
     expect(runs).toHaveLength(1);
-    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    // "Well under a second" is a claim about the SCHEDULER: it reacted to the
+    // commit nudge instead of waiting for a periodic sweep. Measured on the
+    // turn's own recorded start, which is stamped server-side and owes
+    // nothing to how fast this process could poll for it.
+    expect(
+      (runs[0]?.startedAt ?? Number.POSITIVE_INFINITY) - committedAt
+    ).toBeLessThan(1_000);
     await waitFor(async () => {
       await refreshRuns();
       return runs[0]?.endedAt !== undefined;
@@ -277,7 +299,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
       const burst = plane.gateway.invoke(plane.ownerCredential, {
         command: "core.add_party",
         input: { display_name: `Doorbell Burst ${i}` },
-        purpose: "dpv:ServiceProvision",
       });
       expect(burst.status).toBe("executed");
     }
@@ -305,12 +326,11 @@ describe("serve-scheduler-reconcile scenarios", () => {
     const missed = droppedPlane.gateway.invoke(droppedPlane.ownerCredential, {
       command: "core.add_party",
       input: { display_name: "Restart Backstop Test" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(missed.status).toBe("executed");
-    const missedProv = droppedPlane.db.journal
+    const missedProv = droppedPlane.db.audit
       .prepare(
-        `SELECT prov_id FROM consent_provenance
+        `SELECT prov_id FROM access_provenance
         WHERE entity_type = 'core.party' ORDER BY prov_id DESC LIMIT 1`
       )
       .get() as { prov_id: string };
@@ -329,7 +349,7 @@ describe("serve-scheduler-reconcile scenarios", () => {
     expect(runs).toHaveLength(10);
     const recoveredCursor = handle.vaults
       .current()
-      .db.journal.prepare(
+      .db.audit.prepare(
         `SELECT position_json FROM automation_trigger_cursor
         WHERE automation_id = 'brief/brief' AND trigger_index = 0`
       )

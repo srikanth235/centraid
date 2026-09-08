@@ -106,7 +106,7 @@ export interface MockState {
   scopes: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/links → `{links}` (vault-links-routes.ts `linkDto`). */
   links: Array<Record<string, unknown>>;
-  /** GET /centraid/_gateway/edges → `{edges}` (edges-routes.ts `edgeWire`).
+  /** GET /centraid/_gateway/edges → `{edges}` (placement-routes.ts `placementWire`).
    *  Same-owner placements only: there is no copy-as-share (#825, G-copy). */
   edges: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/commons/invitations?actorVaultId= → `{invitations}`
@@ -710,7 +710,7 @@ async function route(
     }
   }
 
-  // edges-routes.ts GET (`{edges}`). No pending/answer verbs: copy-as-share
+  // placement-routes.ts GET (`{edges}`). No pending/answer verbs: copy-as-share
   // does not exist (#825), and answering a route the gateway 404s would let a
   // journey pass against a fiction.
   if (p === "/centraid/_gateway/edges" && method === "GET")

@@ -35,7 +35,7 @@ import {
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_REFS,
 } from "../enrich/system-recognition.js";
-import { journalConversationStore } from "../journal-stores.js";
+import { ledgerConversationStore } from "../ledger-stores.js";
 import { unrefTimer } from "../lib/unref-timer.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import {
@@ -55,8 +55,8 @@ export function turnEventsSubscriberCount(): number {
 
 export interface AutomationsRouteOptions {
   store: WorktreeStore;
-  /** The vault's `journal.db`: every turn's full ledger (#280). */
-  journalDbFile: string;
+  /** The vault's `vault.db`: every turn's full ledger (#280). */
+  ledgerDbFile: string;
   analytics: AnalyticsStore;
   insights: InsightsStore;
   /** The route mints the turnId and passes it in. */
@@ -163,12 +163,12 @@ export function makeAutomationsRouteHandler(
     path.join(opts.store.getActiveMainLink(), "apps");
   const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
 
-  // One `journal.db` per vault (#280); a missing file means no turn yet.
-  const turnsStore = journalConversationStore(opts.journalDbFile);
+  // One `vault.db` per vault (#280); a missing file means no turn yet.
+  const turnsStore = ledgerConversationStore(opts.ledgerDbFile);
   const turnsStoreForTurnId = (
     _turnId: string
   ): ConversationStore | undefined => {
-    if (!existsSync(opts.journalDbFile)) return undefined;
+    if (!existsSync(opts.ledgerDbFile)) return undefined;
     return turnsStore;
   };
 
@@ -386,7 +386,7 @@ export function makeAutomationsRouteHandler(
           systemLaneParam === "member" || systemLaneParam === "recognition"
             ? systemLaneParam
             : undefined;
-        if (!existsSync(opts.journalDbFile))
+        if (!existsSync(opts.ledgerDbFile))
           return sendJson(res, 200, { turns: [] });
         const rows = ref
           ? turnsStore.listAutomationTurns(ref, { limit: boundedLimit })

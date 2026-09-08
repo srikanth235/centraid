@@ -2,9 +2,19 @@
 # Directive: coverage-scope-reachability (#532).
 #
 # Every packages/* or apps/* tree with non-test TS source must be:
-#   (a) covered by a tests/coverage-floors.json glob, OR
-#   (b) named as owner path prefix in tests/matrix.json, OR
+#   (a) covered by a tests/floors.json#coverage glob, OR
+#   (b) named as an owner path prefix in the DERIVED flow view
+#       (`node scripts/test-report/derive-flows.mjs --json`), OR
 #   (c) listed in this directive's allowlist.txt
+#
+# #915 replaced `tests/matrix.json` with `tests/claims.json` plus the mobile
+# roster, so flow ownership is no longer readable from one file. The derived
+# view is a deterministic, offline CLI over both - one place to change when the
+# sources move again, and the same view the report renders from.
+#
+# #915 Wave 4 merged the twenty tighten-only ledgers under tests/ into four.
+# The coverage floors are the `coverage` SECTION of tests/floors.json - the
+# same object, the same object-valued-key rule, one level deeper.
 #
 # Executable code co-located OUTSIDE `src/` is its own scope, not part of the
 # package's. A floor on `packages/<pkg>/src/**` cannot instrument a sibling
@@ -23,7 +33,7 @@
 # is one line shorter, and the generic discovery keeps watch over whatever
 # lands outside `src/` next.
 #
-# Also: every coverage-floors.json path-scope must sit under packages/ or
+# Also: every tests/floors.json#coverage path-scope must sit under packages/ or
 # apps/.
 #
 # Bash 3.2 compatible (macOS /bin/bash) — no mapfile, no associative arrays.
@@ -41,13 +51,14 @@ require_git
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-FLOORS="$REPO_ROOT/tests/coverage-floors.json"
-MATRIX="$REPO_ROOT/tests/matrix.json"
+FLOORS="$REPO_ROOT/tests/floors.json"
+CLAIMS="$REPO_ROOT/tests/claims.json"
+DERIVE_FLOWS="$REPO_ROOT/scripts/test-report/derive-flows.mjs"
 ALLOWLIST="$DIR/allowlist.txt"
 VITEST_CFG="$REPO_ROOT/vitest.config.ts"
 
-if [[ ! -f "$FLOORS" || ! -f "$MATRIX" ]]; then
-    violation "tests/coverage-floors.json and tests/matrix.json are required"
+if [[ ! -f "$FLOORS" || ! -f "$CLAIMS" || ! -f "$DERIVE_FLOWS" ]]; then
+    violation "tests/floors.json, tests/claims.json and scripts/test-report/derive-flows.mjs are required"
     directive_end
     exit 0
 fi
@@ -62,8 +73,8 @@ if [[ "$SELFTEST" == "1" ]]; then
             echo "self-test: synthetic id unexpectedly present in floors" >&2
             exit 1
         fi
-        if grep -q "$synthetic" "$MATRIX" 2>/dev/null; then
-            echo "self-test: synthetic id unexpectedly present in matrix" >&2
+        if grep -q "$synthetic" "$CLAIMS" 2>/dev/null; then
+            echo "self-test: synthetic id unexpectedly present in the claims file" >&2
             exit 1
         fi
         if grep -qE "^${synthetic}$" "$ALLOWLIST" 2>/dev/null; then
@@ -73,12 +84,12 @@ if [[ "$SELFTEST" == "1" ]]; then
     done
 fi
 
-# Floor path scopes (object-valued keys in coverage-floors.json).
+# Floor path scopes (object-valued keys in tests/floors.json#coverage).
 FLOOR_GLOBS="$(
     python3 - "$FLOORS" <<'PY'
 import json, sys
 with open(sys.argv[1]) as f:
-    data = json.load(f)
+    data = json.load(f)["coverage"]
 for k, v in data.items():
     if k.startswith("_") or k == "approvedDeviation":
         continue
@@ -116,18 +127,21 @@ ALLOW_LINES="$(
     fi
 )"
 
-# Matrix owner paths.
+# Flow owner paths, from the derived view. The CLI is deterministic and does no
+# network or clock work, so this stays a pure function of the working tree.
 OWNERS="$(
-    python3 - "$MATRIX" <<'PY'
+    node "$DERIVE_FLOWS" --json | python3 -c '
 import json, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
+data = json.load(sys.stdin)
 for flow in data.get("flows", []):
     owner = flow.get("owner")
     if isinstance(owner, str) and owner.strip():
         print(owner.strip())
-PY
+'
 )"
+if [[ -z "$OWNERS" ]]; then
+    violation "scripts/test-report/derive-flows.mjs emitted no flow owners - a silent empty view would let every unfloored package pass"
+fi
 
 # Package/app ids that have non-test source.
 # git's **/ requires an intervening directory, so also list flat src/*.ts
@@ -188,7 +202,7 @@ is_floored() {
     return 1
 }
 
-has_matrix_owner() {
+has_flow_owner() {
     local pkg="$1"
     local o
     while IFS= read -r o; do
@@ -223,10 +237,10 @@ while IFS= read -r pkg; do
     if is_floored "$pkg"; then
         continue
     fi
-    if has_matrix_owner "$pkg"; then
+    if has_flow_owner "$pkg"; then
         continue
     fi
-    violation "$pkg - has src/ TypeScript but no coverage floor, matrix owner, or allowlist entry (add a floor, matrix flow, or allowlist.txt row)"
+    violation "$pkg - has src/ TypeScript but no coverage floor, derived flow owner, or allowlist entry (add a floor, a tests/claims.json flow, or an allowlist.txt row)"
 done <<<"$PKG_IDS"
 
 while IFS= read -r scope; do
@@ -243,10 +257,10 @@ while IFS= read -r scope; do
         fi
         continue
     fi
-    if has_matrix_owner "$scope"; then
+    if has_flow_owner "$scope"; then
         continue
     fi
-    violation "$scope - executable code outside src/ with no coverage floor, matrix owner, or allowlist entry; the package's src/** floor cannot instrument it (add a floor, matrix flow, or allowlist.txt row)"
+    violation "$scope - executable code outside src/ with no coverage floor, derived flow owner, or allowlist entry; the package's src/** floor cannot instrument it (add a floor, a tests/claims.json flow, or an allowlist.txt row)"
 done <<<"$EXTRA_SCOPE_IDS"
 
 directive_end

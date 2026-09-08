@@ -34,6 +34,8 @@ export interface EmptyStateInput extends EmptyStateGate {
   folderName?: string;
   /** Drive holds nothing — the only first-run state that gets the display serif. */
   driveIsEmpty?: boolean;
+  /** `false` REPLACES the Shared empty state, never captions it. */
+  sharedFromKnown?: boolean;
 }
 
 export interface EmptyStateView extends EmptyCopy {
@@ -59,6 +61,7 @@ export function emptyStateView(input: EmptyStateInput): EmptyStateView {
       ...(input.filtered ? { filtered: true } : {}),
       ...(input.folderName ? { folderName: input.folderName } : {}),
       ...(input.driveIsEmpty ? { driveIsEmpty: true } : {}),
+      ...(input.sharedFromKnown === false ? { sharedFromKnown: false } : {}),
     }),
   };
 }

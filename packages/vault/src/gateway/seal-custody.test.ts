@@ -31,8 +31,6 @@ import {
 } from "../schema/sealed.js";
 import { resealVaultKey } from "./reseal.js";
 
-const PURPOSE = "dpv:ServiceProvision";
-
 let root: string;
 let vaultDir: string;
 let db: VaultDb;
@@ -77,7 +75,6 @@ describe("seal-custody", () => {
         otp_seed: "JBSWY3DPEHPK3PXP",
         ...(alias ? { alias } : {}),
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { item_id: string } }).output.item_id;
@@ -152,7 +149,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(revealed.values["password"]).toBe("hunter2-Corr3ct");
     moved.close();
@@ -184,7 +180,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(revealed.values["password"]).toBe("rotate-me-1234");
     // …and so does a fresh open from the rotated key file.
@@ -195,7 +190,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(again.values["password"]).toBe("rotate-me-1234");
   });
@@ -203,9 +197,9 @@ describe("seal-custody", () => {
   test("reseal is receipted in the journal", () => {
     addLogin();
     const { receiptId } = resealVaultKey(db);
-    const row = db.journal
+    const row = db.audit
       .prepare(
-        "SELECT action, decision, detail_json FROM consent_receipt WHERE receipt_id = ?"
+        "SELECT action, decision, detail_json FROM access_receipt WHERE receipt_id = ?"
       )
       .get(receiptId) as {
       action: string;
@@ -260,7 +254,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(revealed.values["password"]).toBe("heal-me-5678");
   });
@@ -279,7 +272,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(revealed.values["password"]).toBe(devious);
   });
@@ -313,12 +305,11 @@ describe("seal-custody", () => {
         otp_seed: "JBSWY3DPEHPK3PXP",
         extra_field_that_should_fail_schema: secret,
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("failed");
-    const receipts = db.journal
+    const receipts = db.audit
       .prepare(
-        "SELECT detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1"
+        "SELECT detail_json FROM access_receipt ORDER BY receipt_id DESC LIMIT 1"
       )
       .get() as { detail_json: string };
     expect(receipts.detail_json).not.toContain(secret);
@@ -332,7 +323,6 @@ describe("seal-custody", () => {
     const out = gw.invoke(owner, {
       command: "locker.totp_code",
       input: { item_id: itemId },
-      purpose: PURPOSE,
       invocationId,
     });
     expect(out.status).toBe("executed");
@@ -340,9 +330,9 @@ describe("seal-custody", () => {
     expect(code).toMatch(/^\d{6}$/u); // the live caller gets the real 6 digits
 
     // …but the journal receipt (a durable, replayable store) must not hold it.
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
-        "SELECT detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1"
+        "SELECT detail_json FROM access_receipt ORDER BY receipt_id DESC LIMIT 1"
       )
       .get() as { detail_json: string };
     expect(receipt.detail_json).not.toContain(code);
@@ -354,7 +344,6 @@ describe("seal-custody", () => {
     const replay = gw.invoke(owner, {
       command: "locker.totp_code",
       input: { item_id: itemId },
-      purpose: PURPOSE,
       invocationId,
     });
     expect(replay).toMatchObject({
@@ -371,16 +360,15 @@ describe("seal-custody", () => {
     const first = gw.invoke(owner, {
       command: "locker.star_item",
       input: { item_id: itemId },
-      purpose: PURPOSE,
       invocationId,
     });
     expect(first).toMatchObject({
       status: "executed",
       output: { item_id: itemId },
     });
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
-        "SELECT detail_json FROM consent_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1"
+        "SELECT detail_json FROM access_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1"
       )
       .get() as { detail_json: string } | undefined;
     expect(JSON.parse(receipt?.detail_json ?? "{}")).toMatchObject({
@@ -390,7 +378,6 @@ describe("seal-custody", () => {
     const replay = gw.invoke(owner, {
       command: "locker.star_item",
       input: { item_id: itemId },
-      purpose: PURPOSE,
       invocationId,
     });
     expect(replay).toMatchObject({
@@ -407,7 +394,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       alias: "github-token",
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(out.values["password"]).toBe("by-alias-secret");
   });
@@ -418,7 +404,6 @@ describe("seal-custody", () => {
     gw.invoke(owner, {
       command: "locker.trash_item",
       input: { item_id: oldId },
-      purpose: PURPOSE,
     });
     // A reveal by alias now fails: no live item holds it.
     expect(() =>
@@ -426,7 +411,6 @@ describe("seal-custody", () => {
         entity: "locker.item",
         alias: "github-token",
         columns: ["password"],
-        purpose: PURPOSE,
       })
     ).toThrow(/no live locker item/u);
     // Add the replacement with the SAME alias — the binding heals, no manifest edit.
@@ -435,7 +419,6 @@ describe("seal-custody", () => {
       entity: "locker.item",
       alias: "github-token",
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(healed.values["password"]).toBe("new-token");
   });
@@ -445,7 +428,6 @@ describe("seal-custody", () => {
     gw.invoke(owner, {
       command: "locker.trash_item",
       input: { item_id: firstId },
-      purpose: PURPOSE,
     });
     // The partial unique index only constrains live rows, so this succeeds.
     const secondId = addLogin("second", "shared-alias");
@@ -458,7 +440,6 @@ describe("seal-custody", () => {
         entity: "locker.item",
         alias: "nope",
         columns: ["password"],
-        purpose: PURPOSE,
       })
     ).toThrow(/no live locker item/u);
   });

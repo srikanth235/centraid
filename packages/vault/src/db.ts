@@ -1,6 +1,12 @@
-// One vault owns vault.db/journal.db/blobs/; only the gateway holds these.
+// One vault owns vault.db and blobs/; only the gateway holds these.
+//
+// ONE FILE (#916). The sibling `journal.db` is gone: the audit band and the
+// conversation-ledger band are bands of vault.db like every other, so a write
+// and its receipt share one transaction and a pointer between them is a real
+// foreign key. Size is answered by RETENTION (schema/audit.ts,
+// `RETENTION_WINDOWS`), not by a second file.
 
-import { mkdirSync, statfsSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, statfsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -27,7 +33,7 @@ import { initializeReplicaProtocol } from "./replica/change-log.js";
 import { repairReplicaInvocationCommits } from "./replica/invocation-commits.js";
 import { registerContentTextFn } from "./schema/fts.js";
 import type { KeyStore } from "./schema/key-store.js";
-import { JOURNAL_MIGRATIONS, migrate, migrateVault } from "./schema/migrate.js";
+import { migrateVault } from "./schema/migrate.js";
 import {
   ephemeralSealKey,
   resolveSealKey,
@@ -38,15 +44,30 @@ import {
   identityKeyFileFor,
   loadOrCreateVaultIdentitySeed,
 } from "./schema/vault-identity.js";
+import { migrateCommonsToSubscriptions } from "./share/subscription-migration.js";
 import {
   applyVaultFootprint,
   assertVaultFootprint,
 } from "./vault-footprint.js";
 import type { VaultFootprintBudget } from "./vault-footprint.js";
 
+/** What one size-based checkpoint pass did, for the caller's log and gauges. */
+export interface VaultWalCheckpoint {
+  walBytes: number;
+  checkpointed: boolean;
+  /** A live reader kept some frames; the next pass takes them. */
+  busy: boolean;
+}
+
 export interface VaultDb {
   vault: DatabaseSync;
-  journal: DatabaseSync;
+  /**
+   * The AUDIT BAND's connection — the same handle as `vault`, named for what
+   * an audit writer is doing (#916). A writer that means "this is evidence,
+   * not model state" says so at the call site; there is no second file to get
+   * wrong any more.
+   */
+  audit: DatabaseSync;
   dir: string;
   /** DEK for sealed columns (#293); outside export/backup/copy. */
   sealKey: Buffer;
@@ -57,6 +78,17 @@ export interface VaultDb {
   remote: () => RemoteTier | null;
   blobTransfers: BlobTransferCoordinator;
   previewCodec?: PreviewCodec;
+  /**
+   * Bound the WAL by SIZE, independently of who else is checkpointing.
+   * `wal_autocheckpoint = 0` above hands TRUNCATE to the shipper (#408) and
+   * leaves the file to grow for the whole uptime whenever no shipper is
+   * attached. PASSIVE, never TRUNCATE: a client holding a read transaction
+   * makes TRUNCATE answer `busy` and change nothing at all, while PASSIVE
+   * backfills every frame no reader still needs and lets the WAL be REUSED —
+   * so the file stops growing, which is the property the disk cares about.
+   * A memory vault has no WAL and reports zero.
+   */
+  checkpointIfLargerThan: (thresholdBytes: number) => VaultWalCheckpoint;
   /** ANALYZE must not sit in the WAL at close (#408). */
   close: (opts?: { skipOptimize?: boolean }) => void;
 }
@@ -122,7 +154,7 @@ function openFile(
       db.exec(`PRAGMA synchronous = ${synchronous}`);
       applyVaultFootprint(db, footprint);
       db.exec("PRAGMA temp_store = MEMORY");
-      // Workers open journal.db by path — wait for locks.
+      // Workers open the vault by path — wait for locks.
       db.exec("PRAGMA busy_timeout = 30000");
       // WAL-shipper exclusive (#408): foreign checkpoint = whole-DB re-upload.
       db.exec("PRAGMA wal_autocheckpoint = 0");
@@ -162,7 +194,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   assertVaultFootprint(options.footprint);
   const footprint = options.footprint;
   let vault: DatabaseSync;
-  let journal: DatabaseSync;
   let local: LocalBlobStore;
   if (dir === undefined) {
     vault = openFile(
@@ -171,7 +202,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       footprint,
       options.loadExtensions
     );
-    journal = openFile(":memory:", "FULL", footprint);
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
@@ -181,7 +211,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       footprint,
       options.loadExtensions
     );
-    journal = openFile(path.join(dir, "journal.db"), "FULL", footprint);
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
   // Must exist before migrations (FTS triggers).
@@ -189,15 +218,32 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   registerHammingFn(vault);
   registerCosineFn(vault);
   migrateVault(vault);
-  migrate(journal, JOURNAL_MIGRATIONS);
   // Durable write choke (#406), after every fresh-schema open.
   initializeReplicaProtocol(vault);
+  // THE COMMONS RAIL BECOMES SUBSCRIPTIONS (#929), once per file. It is a DATA
+  // pass, not DDL, so it cannot be a ladder rung: it reads a roster and writes
+  // standing answers before dropping the tables it read. Here rather than in a
+  // host, so every seat that can open a vault — gateway, desktop, a drill —
+  // brings the file forward the same way. On a file that never had the rail it
+  // is one `sqlite_master` lookup. One transaction: a half-migrated roster is
+  // the single outcome a re-run cannot repair.
+  vault.exec("BEGIN");
+  try {
+    migrateCommonsToSubscriptions(vault, {
+      stewardVaultId: dir ?? "memory",
+      now: new Date().toISOString(),
+    });
+    vault.exec("COMMIT");
+  } catch (error) {
+    vault.exec("ROLLBACK");
+    vault.close();
+    throw error;
+  }
   // Unprovable marker fails CLOSED.
   try {
-    repairReplicaInvocationCommits({ vault, journal });
+    repairReplicaInvocationCommits({ vault, audit: vault });
   } catch (error) {
     vault.close();
-    journal.close();
     throw error;
   }
   // After migration (#298): sealed vault refuses a regenerated key.
@@ -317,7 +363,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
 
   const api: VaultDb = {
     vault,
-    journal,
+    audit: vault,
     dir: dir ?? ":memory:",
     sealKey,
     identitySeed,
@@ -328,6 +374,22 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remote: remoteTier,
     blobTransfers,
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
+    checkpointIfLargerThan(thresholdBytes) {
+      if (dir === undefined)
+        return { walBytes: 0, checkpointed: false, busy: false };
+      const walFile = path.join(dir, "vault.db-wal");
+      const walBytes = existsSync(walFile) ? statSync(walFile).size : 0;
+      if (walBytes <= thresholdBytes)
+        return { walBytes, checkpointed: false, busy: false };
+      const row = vault.prepare("PRAGMA wal_checkpoint(PASSIVE)").get() as
+        | { busy: number; checkpointed: number }
+        | undefined;
+      return {
+        walBytes: existsSync(walFile) ? statSync(walFile).size : 0,
+        checkpointed: (row?.checkpointed ?? 0) > 0,
+        busy: (row?.busy ?? 0) !== 0,
+      };
+    },
     close(opts) {
       // Fence the runner: no in-flight request may settle against SQLite.
       blobTransfers.abandon();
@@ -338,14 +400,8 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         } catch {
           // best-effort maintenance.
         }
-        try {
-          journal.exec("PRAGMA optimize");
-        } catch {
-          // best-effort maintenance.
-        }
       }
       vault.close();
-      journal.close();
     },
   };
   return api;

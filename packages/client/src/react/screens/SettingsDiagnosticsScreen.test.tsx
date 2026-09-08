@@ -205,8 +205,8 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       // The `disk`/`vaults` components (#351) bake everything into one
       // detail string — long enough that the row must not ellipsis-clip it.
       const longDetail =
-        "vault 019f5079-vault-one: 42.3 MB (vault.db 30.1 MB, journal.db 12.2 MB); " +
-        "vault 019f5079-vault-two: 118.7 MB (vault.db 90.0 MB, journal.db 28.7 MB); " +
+        "vault 019f5079-vault-one: 42.3 MB (vault.db 30.1 MB, blobs 12.2 MB); " +
+        "vault 019f5079-vault-two: 118.7 MB (vault.db 90.0 MB, blobs 28.7 MB); " +
         "disk free 12.4 GB of 500.0 GB (2.5% free) on /Users/owner/Library/Application Support/Centraid";
       const health = makeHealth({
         components: [

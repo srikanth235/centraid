@@ -7,11 +7,17 @@ import type { VaultDb } from "./db.js";
 import type { FilterClause, Risk } from "./gateway/types.js";
 import { setDeviceTrust } from "./grant/device-trust.js";
 import { nowIso, uuidv7 } from "./ids.js";
-import { ONTOLOGY_VERSION } from "./schema/migrate.js";
 
 export interface BootstrapResult {
   vaultId: string;
   displayName: string;
+  /**
+   * The vault's SELF party (#916, ruling ONT-05): the person as DATA. It
+   * confers no permission — authority is gateway-side (`vault_owners`) and in
+   * `share_authority` — and the column it lands in is `core_vault.
+   * self_party_id`. The field keeps its name because every caller in the
+   * monorepo reads it as "whose vault is this", which is still true.
+   */
   ownerPartyId: string;
   deviceId: string;
   /** The first device's key — the owner's credential. */
@@ -26,10 +32,6 @@ interface SeedConcept {
 }
 
 const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
-  purposes: {
-    uri: "https://w3id.org/dpv#Purpose",
-    title: "Consent purposes (DPV)",
-  },
   relations: { uri: "urn:duaility:relations", title: "Link relation types" },
   "activity-kinds": {
     uri: "urn:duaility:activity-kinds",
@@ -46,17 +48,6 @@ const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
   doctype: { uri: "urn:centraid:doctype", title: "Document types (machine)" },
 };
 const SEED_CONCEPTS: SeedConcept[] = [
-  {
-    scheme: "purposes",
-    notation: "dpv:ServiceProvision",
-    label: "Service provision",
-  },
-  { scheme: "purposes", notation: "dpv:Billing", label: "Billing" },
-  {
-    scheme: "purposes",
-    notation: "dpv:HealthMonitoring",
-    label: "Health monitoring",
-  },
   { scheme: "relations", notation: "same-as", label: "Same as" },
   { scheme: "relations", notation: "about", label: "About" },
   { scheme: "relations", notation: "works-for", label: "Works for" },
@@ -118,15 +109,15 @@ export function bootstrapVault(
   const ownerPartyId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
+      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?)`
     )
-    .run(ownerPartyId, options.ownerName, now, now, ONTOLOGY_VERSION);
+    .run(ownerPartyId, options.ownerName, now, now);
   const vaultId = options.vaultId ?? uuidv7();
   const displayName = options.vaultName ?? `${options.ownerName}'s vault`;
   db.vault
     .prepare(
-      `INSERT INTO core_vault (vault_id, owner_party_id, display_name, status, base_currency, settings_json, created_at)
+      `INSERT INTO core_vault (vault_id, self_party_id, display_name, status, base_currency, settings_json, created_at)
        VALUES (?, ?, ?, 'active', ?, '{}', ?)`
     )
     .run(
@@ -157,14 +148,6 @@ export function bootstrapVault(
        VALUES (?, ?, 'Personal', NULL, ?, 'private', NULL)`
     )
     .run(uuidv7(), ownerPartyId, options.defaultTz ?? "UTC");
-  // §03/§07: condition is highest-sensitivity — only an explicit scope
-  // naming it covers it.
-  db.vault
-    .prepare(
-      `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, residency_region, effective_from, priority)
-       VALUES (?, 'minimization', 'health', 'condition', '{"require_explicit_scope":true}', NULL, NULL, ?, 1)`
-    )
-    .run(uuidv7(), now);
   const device = enrollDevice(
     db,
     ownerPartyId,
@@ -189,11 +172,11 @@ export function enrollDevice(
   const deviceId = uuidv7();
   const deviceKey = randomBytes(32).toString("hex");
   const now = nowIso();
-  // Identity here, authority next door: `consent_device` says who the device
+  // Identity here, authority next door: `access_device` says who the device
   // is, `share_authority` what the member let it do (#883).
   db.vault
     .prepare(
-      `INSERT INTO consent_device (device_id, owner_party_id, name, platform, public_key, enrolled_at, last_seen_at, sync_cursor)
+      `INSERT INTO access_device (device_id, owner_party_id, name, platform, public_key, enrolled_at, last_seen_at, sync_cursor)
        VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL)`
     )
     .run(deviceId, ownerPartyId, name, deviceKey, now);
@@ -205,7 +188,6 @@ export function enrollApp(
   db: VaultDb,
   options: {
     name: string;
-    origin?: "installed" | "generated";
     riskCeiling?: Risk;
     displayName?: string;
   }
@@ -214,15 +196,17 @@ export function enrollApp(
   const signingKey = randomBytes(32).toString("hex");
   db.vault
     .prepare(
-      `INSERT INTO consent_app (app_id, name, display_name, publisher, manifest_uri, signing_key, status, origin, risk_ceiling, installed_at)
-       VALUES (?, ?, ?, NULL, NULL, ?, 'active', ?, ?, ?)`
+      // `origin` is a one-value vocabulary (#916, ruling ONT-07): an app
+      // reaches a vault by being installed, and has had no other door
+      // since #799.
+      `INSERT INTO access_app (app_id, name, display_name, publisher, manifest_uri, signing_key, status, origin, risk_ceiling, installed_at)
+       VALUES (?, ?, ?, NULL, NULL, ?, 'active', 'installed', ?, ?)`
     )
     .run(
       appId,
       options.name,
       options.displayName ?? null,
       signingKey,
-      options.origin ?? "installed",
       options.riskCeiling ?? "low",
       nowIso()
     );
@@ -242,20 +226,14 @@ export function enrollAgent(
   const partyId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'agent', ?, NULL, NULL, NULL, ?, ?, ?)`
+      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+       VALUES (?, 'agent', ?, NULL, NULL, NULL, ?, ?)`
     )
-    .run(
-      partyId,
-      options.displayName ?? options.name,
-      now,
-      now,
-      ONTOLOGY_VERSION
-    );
+    .run(partyId, options.displayName ?? options.name, now, now);
   const agentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO consent_agent (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
+      `INSERT INTO access_agent (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES (?, ?, ?, ?, ?, ?, 'active')`
     )
     .run(
@@ -275,49 +253,4 @@ export interface ScopeSpec {
   verbs: "read" | "read+act" | "act" | "reveal";
   rowFilter?: FilterClause[];
   fieldMask?: string[];
-}
-
-export function createGrant(
-  db: VaultDb,
-  options: {
-    appId?: string;
-    granteePartyId?: string;
-    purposeConceptId: string;
-    grantedByPartyId: string;
-    scopes: ScopeSpec[];
-    expiresAt?: string;
-  }
-): string {
-  const grantId = uuidv7();
-  db.vault
-    .prepare(
-      `INSERT INTO consent_access_grant
-         (grant_id, app_id, grantee_party_id, purpose_concept_id, granted_by_party_id, granted_at, expires_at, revoked_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'active')`
-    )
-    .run(
-      grantId,
-      options.appId ?? null,
-      options.granteePartyId ?? null,
-      options.purposeConceptId,
-      options.grantedByPartyId,
-      nowIso(),
-      options.expiresAt ?? null
-    );
-  const stmt = db.vault.prepare(
-    `INSERT INTO consent_grant_scope (scope_id, grant_id, schema_name, table_name, verbs, row_filter_json, field_mask_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const scope of options.scopes) {
-    stmt.run(
-      uuidv7(),
-      grantId,
-      scope.schema,
-      scope.table ?? null,
-      scope.verbs,
-      scope.rowFilter ? JSON.stringify(scope.rowFilter) : null,
-      scope.fieldMask ? JSON.stringify(scope.fieldMask) : null
-    );
-  }
-  return grantId;
 }

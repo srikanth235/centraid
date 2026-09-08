@@ -7,7 +7,7 @@ import { validateManifest } from "@centraid/server/automation";
 import type { Row as AutomationRow } from "@centraid/server/automation";
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type {
   AutomationTurnStreamEvent,
@@ -17,6 +17,7 @@ import type {
 } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import { runInteractiveAutomationTurn } from "./interactive-automation-turn.js";
 
 const dirs: string[] = [];
@@ -39,7 +40,6 @@ describe("interactive-automation-turn suite", () => {
         { connectionId: "gmail-work", kind: "pull.gmail", label: "Work" },
       ],
       vault: {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "core", table: "message", verbs: "read" }],
       },
       history: { keep: { count: 100 } },
@@ -57,8 +57,8 @@ describe("interactive-automation-turn suite", () => {
     };
   }
 
-  function seed(journalDbFile: string, withHandle: boolean): void {
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+  function seed(ledgerDbFile: string, withHandle: boolean): void {
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const conversationId = store.ensureAutomationConversation(
       "brief/main",
       "brief",
@@ -113,8 +113,8 @@ describe("interactive-automation-turn suite", () => {
   }> {
     const dir = await tempDir("interactive-automation-turn-");
     dirs.push(dir);
-    const journalDbFile = path.join(dir, "journal.db");
-    seed(journalDbFile, input.withHandle);
+    const ledgerDbFile = ledgerDbFileIn(dir);
+    seed(ledgerDbFile, input.withHandle);
     const artifactOptions = (await input.prepareArtifacts?.(dir)) ?? {};
     let received!: ConversationTurnInput;
     const runner: ConversationRunner = {
@@ -130,7 +130,7 @@ describe("interactive-automation-turn suite", () => {
       row: row(dir),
       turnId: "interactive-1",
       message: "What changed?",
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir: path.join(dir, "sessions"),
       runner,
       harnessKind: "codex",
@@ -145,7 +145,7 @@ describe("interactive-automation-turn suite", () => {
       received,
       stream,
       bus,
-      store: new ConversationStore(makeJournalDbProvider(journalDbFile)),
+      store: new ConversationStore(makeLedgerDbProvider(ledgerDbFile)),
     };
   }
 
@@ -331,8 +331,8 @@ describe("interactive-automation-turn suite", () => {
     it("keeps one automation conversation and routes A→B→A through per-harness watermarks", async () => {
       const dir = await tempDir("interactive-automation-switch-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
-      seed(journalDbFile, true);
+      const ledgerDbFile = ledgerDbFileIn(dir);
+      seed(ledgerDbFile, true);
       const calls: ConversationTurnInput[] = [];
       const runner: ConversationRunner = {
         run: async (turn) => {
@@ -352,7 +352,7 @@ describe("interactive-automation-turn suite", () => {
       };
       const common = {
         row: row(dir),
-        journalDbFile,
+        ledgerDbFile,
         harnessSessionDir: path.join(dir, "sessions"),
         runner,
         abortSignal: new AbortController().signal,
@@ -382,7 +382,7 @@ describe("interactive-automation-turn suite", () => {
       expect(calls[1]?.hydrationContext?.prompt).not.toContain(
         "Found two important changes."
       );
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       expect(
         store.listTurns("brief/main").map((turn) => turn.turnId)
       ).toStrictEqual(["prior", "interactive-b", "interactive-a-return"]);
@@ -401,8 +401,8 @@ describe("interactive-automation-turn suite", () => {
     it("rolls back turn completion when the binding and watermark cannot commit", async () => {
       const dir = await tempDir("interactive-automation-atomic-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
-      seed(journalDbFile, false);
+      const ledgerDbFile = ledgerDbFileIn(dir);
+      seed(ledgerDbFile, false);
       const noteTurn = vi
         .spyOn(ConversationStore.prototype, "noteTurn")
         .mockImplementationOnce(() => {
@@ -425,7 +425,7 @@ describe("interactive-automation-turn suite", () => {
           row: row(dir),
           turnId: "interactive-atomic",
           message: "Commit atomically",
-          journalDbFile,
+          ledgerDbFile,
           harnessSessionDir: path.join(dir, "sessions"),
           runner,
           harnessKind: "codex",
@@ -436,7 +436,7 @@ describe("interactive-automation-turn suite", () => {
       ).rejects.toThrow("binding write failed");
       noteTurn.mockRestore();
 
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       const turn = store.getTurn("interactive-atomic");
       expect(turn?.endedAt).toBeUndefined();
       expect(turn?.hydrationTokens).toBeUndefined();

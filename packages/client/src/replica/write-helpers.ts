@@ -26,19 +26,14 @@ export function prepareReplicaWrite(
   appId: string,
   optimistic: readonly ReplicaWriteMutationInput[] | undefined,
   catalog: readonly ReplicaShape[],
-  resolveShapeId: (
-    appId: string,
-    entity: string,
-    requested?: string,
-    purpose?: string
-  ) => string,
+  resolveShapeId: (appId: string, entity: string, requested?: string) => string,
   includeAllCatalog = false
 ): PreparedReplicaWrite {
   const normalized = (optimistic ?? []).map((mutation) => {
-    const { purpose, shapeId, ...rest } = mutation;
+    const { shapeId, ...rest } = mutation;
     return {
       ...rest,
-      shapeId: resolveShapeId(appId, mutation.entity, shapeId, purpose),
+      shapeId: resolveShapeId(appId, mutation.entity, shapeId),
     };
   }) as OptimisticMutation[];
 

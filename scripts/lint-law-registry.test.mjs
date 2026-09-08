@@ -110,7 +110,7 @@ test("a tag used nowhere in the registry is rejected", (t) => {
   });
   const violations = run(root);
   assert.ok(
-    violations.some((v) => /is not in tests\/matrix\.json#laws/u.test(v))
+    violations.some((v) => /is not in tests\/claims\.json#laws/u.test(v))
   );
 });
 
@@ -147,7 +147,7 @@ test("a registry entry with no statement is rejected", (t) => {
   assert.ok(violations.some((v) => /has no "statement"/u.test(v)));
 });
 
-test("a flow id the matrix does not define is rejected", (t) => {
+test("a flow id the derived flow view does not define is rejected", (t) => {
   const root = fixture(t, {
     [OWNER]: 'test("[law:backup-no-change] a")\n',
   });
@@ -156,7 +156,7 @@ test("a flow id the matrix does not define is rejected", (t) => {
       "backup-no-change": { ...laws["backup-no-change"], flow: "no-such-flow" },
     },
   });
-  assert.ok(violations.some((v) => /is not a flow id/u.test(v)));
+  assert.ok(violations.some((v) => /is not a derived flow id/u.test(v)));
 });
 
 test("a malformed tag is reported rather than silently unowned", (t) => {

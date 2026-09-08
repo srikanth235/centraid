@@ -49,7 +49,6 @@ export async function createAutomation(input: {
   triggers?: CentraidCreateTrigger[];
   /** Required when `triggers` has a condition/data entry. */
   vault?: {
-    purpose: string;
     why?: string;
     scopes: Array<{
       schema: string;
@@ -99,7 +98,6 @@ export async function updateAutomation(input: {
   prompt?: string;
   triggers?: CentraidCreateTrigger[];
   vault?: {
-    purpose: string;
     why?: string;
     scopes: Array<{
       schema: string;

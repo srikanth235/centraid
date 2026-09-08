@@ -5,6 +5,7 @@ import {
   claimedPath,
   claimedPaths,
   duplicateGlobs,
+  escapeHatchProblems,
   lintPathFilters,
   parseFilters,
   pathsRequiringClaim,
@@ -107,6 +108,57 @@ test("a ledger entry claims a path — but only with a real reason", () => {
     })[0],
     /must name the always-on job/u
   );
+});
+
+test("escapeHatchProblems accepts a read that carries the `all` fallback", () => {
+  assert.deepEqual(
+    escapeHatchProblems(
+      "    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.all == 'true'\n"
+    ),
+    []
+  );
+});
+
+test("escapeHatchProblems catches the `with:` read the `if:`-only reasoning missed", () => {
+  const problems = escapeHatchProblems(
+    `    if: needs.changes.outputs.client == 'true' || needs.changes.outputs.all == 'true'
+    with:
+      web: \${{ needs.changes.outputs.web == 'true' }}
+`
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /ci\.yml:3 reads `web`/u);
+  assert.match(problems[0], /counts as a PASS/u);
+});
+
+test("escapeHatchProblems ignores a line that only reads `all`", () => {
+  assert.deepEqual(
+    escapeHatchProblems("    if: needs.changes.outputs.all == 'true'\n"),
+    []
+  );
+});
+
+test("escapeHatchProblems reads a folded `if:` as one condition, not two lines", () => {
+  const folded =
+    "    if: >\n      needs.changes.outputs.docs == 'true' ||\n      needs.changes.outputs.all == 'true'\n    runs-on: ubuntu-latest\n";
+  assert.deepEqual(escapeHatchProblems(folded), []);
+
+  const missing =
+    "    if: >\n      needs.changes.outputs.docs == 'true'\n    runs-on: ubuntu-latest\n";
+  const problems = escapeHatchProblems(missing);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /ci\.yml:1 reads `docs`/u);
+});
+
+test("escapeHatchProblems does not swallow the line after a folded block", () => {
+  const problems = escapeHatchProblems(
+    `    if: >
+      always()
+    web: \${{ needs.changes.outputs.web == 'true' }}
+`
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /ci\.yml:3 reads `web`/u);
 });
 
 test("a ledger entry for a path that no longer exists fails as stale", () => {

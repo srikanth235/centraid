@@ -8,12 +8,13 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerLinkCommands } from "../commands/links.js";
 import { registerPartyCommands } from "../commands/parties.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { canonicalSpecJson, validateExtSpecs } from "../schema/ext.js";
 import type { ExtTableSpec } from "../schema/ext.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
@@ -24,7 +25,6 @@ import { exportVault, importVaultExport } from "./portability.js";
 import { GatewayError } from "./types.js";
 import type { Credential } from "./types.js";
 
-const PURPOSE = "dpv:ServiceProvision";
 const APP = "gym-log";
 
 let db: VaultDb;
@@ -57,20 +57,16 @@ function specs(): ExtTableSpec[] {
   ];
 }
 
-function appCred(): { cred: Credential; grantId: string } {
-  const app = enrollApp(db, { name: APP, origin: "generated" });
-  const purpose = db.vault
-    .prepare(`SELECT concept_id FROM core_concept WHERE notation = ?`)
-    .get(PURPOSE) as { concept_id: string };
-  const grantId = createGrant(db, {
-    appId: app.appId,
-    purposeConceptId: purpose.concept_id,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes: [{ schema: `ext.${APP}`, verbs: "read+act" }],
-  });
+function appCred(): { cred: Credential } {
+  const app = enrollAgent(db, { name: APP, modelRef: "test-automation" });
+  answerScopes(db, boot, APP, [{ schema: `ext.${APP}`, verbs: "read+act" }]);
   return {
-    cred: { kind: "app", appId: app.appId, signingKey: app.signingKey },
-    grantId,
+    cred: {
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    },
   };
 }
 
@@ -163,7 +159,6 @@ describe("ext", () => {
           table: "workout",
           values: { kind: "lift", notes: "heavy day", reps: 5 },
         },
-        purpose: PURPOSE,
       });
       expect(ins.status).toBe("executed");
       const id = (ins as { output: { id: string } }).output.id;
@@ -171,13 +166,11 @@ describe("ext", () => {
       const upd = gw.invoke(cred, {
         command: `ext.${APP}.update`,
         input: { table: "workout", id, set: { reps: 8 } },
-        purpose: PURPOSE,
       });
       expect(upd.status).toBe("executed");
 
       const read = gw.read(cred, {
         entity: `ext.${APP}.workout`,
-        purpose: PURPOSE,
       });
       expect(read.rows).toHaveLength(1);
       expect(read.rows[0]?.reps).toBe(8);
@@ -185,7 +178,6 @@ describe("ext", () => {
       const bad = gw.invoke(cred, {
         command: `ext.${APP}.insert`,
         input: { table: "workout", values: { nope: 1 } },
-        purpose: PURPOSE,
       });
       expect(bad.status).toBe("failed");
       expect((bad as { reason: string }).reason).toMatch(
@@ -195,42 +187,40 @@ describe("ext", () => {
       const del = gw.invoke(cred, {
         command: `ext.${APP}.delete`,
         input: { table: "workout", id },
-        purpose: PURPOSE,
       });
       expect(del.status).toBe("executed");
-      expect(
-        gw.read(cred, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows
-      ).toHaveLength(0);
+      expect(gw.read(cred, { entity: `ext.${APP}.workout` }).rows).toHaveLength(
+        0
+      );
     });
 
     test("an app without the scope is denied; another app cannot write the band", () => {
       gw.applyAppExt(owner, APP, specs());
-      const stranger = enrollApp(db, {
+      const stranger = enrollAgent(db, {
         name: "other-app",
-        origin: "generated",
+        modelRef: "test-automation",
       });
       const cred: Credential = {
-        kind: "app",
-        appId: stranger.appId,
-        signingKey: stranger.signingKey,
+        kind: "agent",
+        agentId: stranger.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
-      expect(() =>
-        gw.read(cred, { entity: `ext.${APP}.workout`, purpose: PURPOSE })
-      ).toThrow(GatewayError);
+      expect(() => gw.read(cred, { entity: `ext.${APP}.workout` })).toThrow(
+        GatewayError
+      );
       const write = gw.invoke(cred, {
         command: `ext.${APP}.insert`,
         input: { table: "workout", values: {} },
-        purpose: PURPOSE,
       });
       expect(write.status).toBe("denied");
     });
 
-    test("ext rows link and tag like canonical entities; deleting sweeps links", () => {
+    test("ext rows are the app\u2019s own: they cannot be linked as entities", () => {
       gw.applyAppExt(owner, APP, specs());
       const party = gw.invoke(owner, {
         command: "core.add_party",
         input: { display_name: "Rahul" },
-        purpose: PURPOSE,
       }) as { output: { party_id: string } };
       const ins = gw.invoke(owner, {
         command: `ext.${APP}.insert`,
@@ -238,8 +228,12 @@ describe("ext", () => {
           table: "workout",
           values: { party_id: party.output.party_id, kind: "row" },
         },
-        purpose: PURPOSE,
       }) as { output: { id: string } };
+      // AN EXT ROW IS AN APP'S, NOT AN ENTITY (#916). A link's endpoints are
+      // composite foreign keys into `core_entity`, and an ext-band table has
+      // no supertype row and never will — so the relation is refused rather
+      // than written and then swept. What used to happen instead was a link
+      // the dangling-link duty had to end-date when the app deleted its row.
       const link = gw.invoke(owner, {
         command: "core.link_entities",
         input: {
@@ -249,14 +243,12 @@ describe("ext", () => {
           to_id: party.output.party_id,
           relation: "references",
         },
-        purpose: PURPOSE,
       });
-      expect(link.status).toBe("executed");
+      expect(link.status).toBe("failed");
 
       const del = gw.invoke(owner, {
         command: `ext.${APP}.delete`,
         input: { table: "workout", id: ins.output.id },
-        purpose: PURPOSE,
       });
       expect(del.status).toBe("executed");
       const live = db.vault
@@ -264,7 +256,7 @@ describe("ext", () => {
           `SELECT count(*) AS n FROM core_link WHERE valid_to IS NULL AND from_type = ?`
         )
         .get(`ext.${APP}.workout`) as { n: number };
-      expect(live.n).toBe(0); // the dangling-link duty end-dated it
+      expect(live.n).toBe(0);
     });
 
     test("search works over a searchable ext column (owner and granted app)", () => {
@@ -275,12 +267,10 @@ describe("ext", () => {
           table: "workout",
           values: { notes: "tempo intervals on the bridge" },
         },
-        purpose: PURPOSE,
       });
       const hits = gw.search(owner, {
         entity: `ext.${APP}.workout`,
         query: "tempo bridge",
-        purpose: PURPOSE,
       });
       expect(hits.rows).toHaveLength(1);
       expect(String(hits.rows[0]?._snippet)).toContain("⟦");
@@ -293,7 +283,6 @@ describe("ext", () => {
       gw.invoke(owner, {
         command: `ext.${APP}.insert`,
         input: { table: "workout", values: { notes: "keep me" } },
-        purpose: PURPOSE,
       });
 
       const next = specs().filter((s) => s.name === "workout");
@@ -333,13 +322,11 @@ describe("ext", () => {
       gw.invoke(owner, {
         command: `ext.${APP}.insert`,
         input: { table: "workout", values: { notes: "live row" } },
-        purpose: PURPOSE,
       });
 
       gw.seedAppExtDraft(owner, APP, specs());
       const draft = gw.read(owner, {
         entity: `extdraft.${APP}.workout`,
-        purpose: PURPOSE,
       });
       expect(draft.rows).toHaveLength(1); // seeded from live
 
@@ -349,8 +336,7 @@ describe("ext", () => {
       const again = gw.seedAppExtDraft(owner, APP, evolved);
       expect(again.altered).toStrictEqual(["workout"]);
       expect(
-        gw.read(owner, { entity: `extdraft.${APP}.workout`, purpose: PURPOSE })
-          .rows
+        gw.read(owner, { entity: `extdraft.${APP}.workout` }).rows
       ).toHaveLength(1);
       // An explicit reset re-snapshots from live.
       gw.seedAppExtDraft(owner, APP, specs(), { reset: true });
@@ -362,14 +348,12 @@ describe("ext", () => {
           values: { notes: "draft only" },
           band: "draft",
         },
-        purpose: PURPOSE,
       });
       expect(
-        gw.read(owner, { entity: `extdraft.${APP}.workout`, purpose: PURPOSE })
-          .rows
+        gw.read(owner, { entity: `extdraft.${APP}.workout` }).rows
       ).toHaveLength(2);
       expect(
-        gw.read(owner, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows
+        gw.read(owner, { entity: `ext.${APP}.workout` }).rows
       ).toHaveLength(1); // live untouched
 
       gw.dropAppExtDraft(owner, APP);
@@ -405,7 +389,6 @@ describe("ext", () => {
       gw.invoke(owner, {
         command: `ext.${APP}.insert`,
         input: { table: "workout", values: { notes: "survives uninstall" } },
-        purpose: PURPOSE,
       });
 
       gw.retainAppExt(owner, APP);
@@ -424,7 +407,7 @@ describe("ext", () => {
         `ext.${APP}.insert`
       );
       expect(
-        gw.read(owner, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows
+        gw.read(owner, { entity: `ext.${APP}.workout` }).rows
       ).toHaveLength(1);
 
       const purge = gw.purgeAppExt(owner, APP);
@@ -448,7 +431,6 @@ describe("ext", () => {
       gw.invoke(owner, {
         command: `ext.${APP}.insert`,
         input: { table: "workout", values: { notes: "portable" } },
-        purpose: PURPOSE,
       });
       const { artifact } = exportVault(db, {
         kind: "owner-device",

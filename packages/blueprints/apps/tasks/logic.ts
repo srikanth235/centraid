@@ -57,10 +57,10 @@ export function byDue(a: Task, b: Task): number {
 /** Today: overdue first with its own header and its own verbs, then today. */
 export function todayGroups(rows: readonly Task[], now: string): TaskGroup[] {
   const open = rows.filter(isOpen);
-  const overdue = open.filter((task) => isOverdue(task, now)).toSorted(byDue);
+  const overdue = open.filter((task) => isOverdue(task, now)).sort(byDue);
   const today = open
     .filter((task) => landsToday(task, now) && !isOverdue(task, now))
-    .toSorted(byDue);
+    .sort(byDue);
   const groups: TaskGroup[] = [];
   if (overdue.length > 0) {
     groups.push({
@@ -93,11 +93,11 @@ export function upcomingGroups(
     byDay.get(key)?.push(task);
   }
   return [...byDay.entries()]
-    .toSorted(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, group]) => ({
       key: day,
       label: dayLabel(day),
-      rows: group.toSorted(byDue),
+      rows: [...group].sort(byDue),
     }));
 }
 
@@ -114,11 +114,11 @@ export function anytimeGroups(
     byProject.get(key)?.push(task);
   }
   return [...byProject.entries()]
-    .toSorted(([a], [b]) => projectName(a).localeCompare(projectName(b)))
+    .sort(([a], [b]) => projectName(a).localeCompare(projectName(b)))
     .map(([id, group]) => ({
       key: id || "inbox",
       label: id ? projectName(id) : GROUPS.inbox,
-      rows: group.toSorted(byDue),
+      rows: [...group].sort(byDue),
     }));
 }
 
@@ -132,14 +132,14 @@ export function allGroups(rows: readonly Task[]): TaskGroup[] {
     groups.push({
       key: "dated",
       label: GROUPS.dated,
-      rows: dated.toSorted(byDue),
+      rows: [...dated].sort(byDue),
     });
   }
   if (undated.length > 0) {
     groups.push({
       key: "undated",
       label: GROUPS.undated,
-      rows: undated.toSorted(byDue),
+      rows: [...undated].sort(byDue),
     });
   }
   return groups;
@@ -159,10 +159,10 @@ export function logbookGroups(rows: readonly Task[]): TaskGroup[] {
   const groups: TaskGroup[] = [];
   const done = closed
     .filter((task) => task.status === "completed")
-    .toSorted(byClosed);
+    .sort(byClosed);
   const released = closed
     .filter((task) => task.status === "cancelled")
-    .toSorted(byClosed);
+    .sort(byClosed);
   if (done.length > 0) groups.push({ key: "done", label: DONE, rows: done });
   if (released.length > 0)
     groups.push({ key: "wont-do", label: WONT_DO, rows: released });
@@ -178,14 +178,14 @@ export function remindingTasks(rows: readonly Task[]): Task[] {
         typeof task.remind_before_min === "number" &&
         Boolean(task.next_due ?? task.due_at)
     )
-    .toSorted(byDue);
+    .sort(byDue);
 }
 
 /** The Inbox: unfiled rows, an age signal on each, and no badge anywhere. */
 export function inboxGroup(rows: readonly Task[]): TaskGroup {
   const unfiled = rows
     .filter((task) => isOpen(task) && !task.project_id)
-    .toSorted(byDue);
+    .sort(byDue);
   return {
     key: "inbox",
     label: GROUPS.inbox,
@@ -201,7 +201,7 @@ export function awayDays(rows: readonly Task[], now: string): number {
   const oldest = overdue
     .map((task) => task.next_due ?? task.due_at ?? "")
     .filter(Boolean)
-    .toSorted()[0];
+    .sort()[0];
   return oldest ? Math.max(0, daysBetween(oldest, now)) : 0;
 }
 
@@ -245,7 +245,7 @@ export function reentryBuckets(
     key,
     label: labels[key].label,
     verb: labels[key].verb,
-    rows: group.toSorted(byDue),
+    rows: [...group].sort(byDue),
   });
   return [
     bucket("dated", dated),

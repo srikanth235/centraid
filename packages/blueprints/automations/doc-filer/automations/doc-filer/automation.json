@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads new documents' extracted text and the existing folder concepts, proposes filing (title + folder + doctype tag), and stages the proposals for review (issue #299 phase 2 — filing never applies itself).",
     "scopes": [
       { "schema": "core", "verbs": "read" },

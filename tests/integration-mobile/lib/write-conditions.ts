@@ -207,7 +207,7 @@ export async function arrangeDenied(
   deniedIntentId: string;
   allowedIntentId: string;
   pending: PendingEntry[];
-  grantsRevoked: number;
+  appRevoked: boolean;
 }> {
   const seeds = recipe.queuedWriteNeedsSeed
     ? [
@@ -225,7 +225,7 @@ export async function arrangeDenied(
   );
   seat.cut();
   let denied: string;
-  let grantsRevoked: number;
+  let appRevoked: boolean;
   try {
     denied = intentIdOf(
       await seat.session.write(
@@ -235,7 +235,8 @@ export async function arrangeDenied(
     );
     const plane = gateway.handle.vaults.get(gateway.vaultId);
     if (!plane) throw new Error("the vault plane is not mounted");
-    grantsRevoked = plane.revokeApp(recipe.appId).grantsRevoked;
+    plane.revokeApp(recipe.appId);
+    appRevoked = !plane.installedAppIds().has(recipe.appId);
   } finally {
     seat.restore();
   }
@@ -244,6 +245,6 @@ export async function arrangeDenied(
     deniedIntentId: denied,
     allowedIntentId: allowed,
     pending: (await seat.session.pendingChanges()) as PendingEntry[],
-    grantsRevoked,
+    appRevoked,
   };
 }

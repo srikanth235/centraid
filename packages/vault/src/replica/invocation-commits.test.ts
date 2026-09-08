@@ -9,6 +9,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { writeReceipt } from "../gateway/evidence.js";
 import { uuidv7 } from "../ids.js";
 import {
   deleteReplicaIntentOutcomesForDevice,
@@ -28,8 +29,7 @@ function auditFor(invocationId: string): ReplicaInvocationAudit {
     commandName: "test.command",
     agentId: "device-1",
     agentKind: "owner",
-    grantId: null,
-    purpose: "dpv:ServiceProvision",
+    authorityId: null,
     preconditionCount: 0,
     postChecks: [],
     writes: [],
@@ -43,10 +43,10 @@ function auditFor(invocationId: string): ReplicaInvocationAudit {
 }
 
 function recordJournalPrefix(db: VaultDb, invocationId: string): void {
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_command_invocation (
-         invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at
+         invocation_id, command_id, caller_id, authority_id, input_json, status, requested_at
        ) VALUES (?, 'command-1', 'device-1', NULL, '{}', 'checked', ?)`
     )
     .run(invocationId, "2026-07-15T00:00:00.000Z");
@@ -184,7 +184,7 @@ describe("replica invocation commit receipt", () => {
 
       db = openVaultDb({ dir });
       expect(
-        db.journal
+        db.audit
           .prepare(
             `SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -193,7 +193,7 @@ describe("replica invocation commit receipt", () => {
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT count(*) AS n FROM agent_explanation WHERE invocation_id = ?`
           )
@@ -202,6 +202,46 @@ describe("replica invocation commit receipt", () => {
       expect(
         readReplicaInvocationCommit(db.vault, "invocation-reopen")
       ).toBeUndefined();
+    } finally {
+      db?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("repairs a marker whose handler wrote its own receipt beside the invocation's", () => {
+    // `HandlerCtx.receipt` grants every handler ONE receipt of its own (#883),
+    // and `share.grant` takes it. Reading every receipt on the invocation
+    // counted that one as corruption, so sharing a document left a marker no
+    // reopen could repair — and the vault then refused to open at all.
+    const dir = tempVaultDir();
+    let db: VaultDb | undefined;
+    try {
+      db = openVaultDb({ dir });
+      recordJournalPrefix(db, "invocation-handler-receipt");
+      recordCommit(db, "invocation-handler-receipt");
+      writeReceipt(db.audit, {
+        authorityId: null,
+        invocationId: "invocation-handler-receipt",
+        action: "act test.command",
+        objectType: "share.authority",
+        objectId: "authority-1",
+        decision: "allow",
+        detail: { decisionRecorded: "granted" },
+      });
+      db.close();
+      db = undefined;
+
+      db = openVaultDb({ dir });
+      expect(
+        readReplicaInvocationCommit(db.vault, "invocation-handler-receipt")
+      ).toBeUndefined();
+      expect(
+        db.audit
+          .prepare(
+            `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
+          )
+          .get("invocation-handler-receipt")
+      ).toMatchObject({ status: "executed" });
     } finally {
       db?.close();
       rmSync(dir, { recursive: true, force: true });
@@ -242,7 +282,7 @@ describe("replica invocation commit receipt", () => {
 
       db = openVaultDb({ dir });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -292,7 +332,7 @@ describe("replica invocation commit receipt", () => {
 
       db = openVaultDb({ dir });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -327,7 +367,7 @@ describe("replica invocation commit receipt", () => {
       readReplicaInvocationCommit(db.vault, "invocation-provable")
     ).toBeUndefined();
     expect({
-      ...db.journal
+      ...db.audit
         .prepare(
           `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
         )

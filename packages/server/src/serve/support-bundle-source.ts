@@ -81,6 +81,12 @@ const TOP_TABLES = 24;
 /** Log tail depth. Grouped and digested downstream, so this is cheap. */
 const LOG_TAIL = 1000;
 
+/**
+ * COUNTS ONLY (#916, C2). `dbSizeBreakdown` reads `sqlite_stat1`/`dbstat`, not
+ * the tables, so the audit and ledger bands — now bands of the one file —
+ * contribute a name, a row count and a page count and nothing else. A support
+ * bundle must never carry a receipt's detail or a conversation item's text.
+ */
 function rowCounts(db: VaultDb | undefined): Record<string, number> {
   if (!db) return {};
   try {
@@ -143,7 +149,6 @@ export async function collectSupportBundleInput(
       vaultId: plane.boot.vaultId,
       name: plane.name,
       vaultDbBytes: sizes?.vaultBytes ?? null,
-      journalDbBytes: sizes?.journalBytes ?? null,
       tableRowCounts: rowCounts(plane.db),
     });
     sensitive.add(plane.name);
@@ -171,14 +176,9 @@ export async function collectSupportBundleInput(
   };
 }
 
-function dbSizeBreakdownSafe(
-  db: VaultDb
-): { vaultBytes: number; journalBytes: number } | null {
+function dbSizeBreakdownSafe(db: VaultDb): { vaultBytes: number } | null {
   try {
-    return {
-      vaultBytes: dbSizeBreakdown(db.vault).fileBytesTotal,
-      journalBytes: dbSizeBreakdown(db.journal).fileBytesTotal,
-    };
+    return { vaultBytes: dbSizeBreakdown(db.vault).fileBytesTotal };
   } catch {
     return null;
   }

@@ -38,7 +38,17 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  AWAIT_LAUNCHER,
+  FIRST_LAUNCH_TIMEOUT_MS,
+  runFlow,
+} from "../lib/harness.mjs";
+import { screenshot } from "../lib/ui-impact.mjs";
+
+/** The roster as `SeatList` draws it, published to
+ *  `artifacts/e2e/ui-impact/issue-922-mobile-roster.png` — the UI-impact
+ *  evidence for #922 E6, which put this screen on the kit list primitive. */
+const ROSTER_FRAME = "issue-922-mobile-roster.png";
 
 await runFlow("people-roster", async (ctx) => {
   await ctx.ensureDemo("people");
@@ -46,7 +56,7 @@ await runFlow("people-roster", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open People.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open People.*")}
 # THE ROSTER DREW A ROW AT ALL, by the leading row's handle — the arrival
 # marker. The roster's header word is the app's name and is drawn by the
 # launcher tile too, so it could not tell an arrival from a tap that did
@@ -87,6 +97,14 @@ ${retryableTapCommands("Open Grandpa Ray", "Open Jake Bennett")}
 `,
     "person-cadence"
   );
+  // PUBLISHING IS NOT ASSERTING: a failed copy is a note, never a second
+  // reason for this journey to go red.
+  try {
+    await screenshot(ctx, "people-roster", ROSTER_FRAME);
+  } catch (error) {
+    ctx.note(`roster frame not published: ${error.message}`);
+  }
+
   return {
     pass: true,
     notes:

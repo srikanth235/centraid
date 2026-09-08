@@ -4,7 +4,7 @@
 // into a plaintext.
 
 import { DAY_MS } from "../_shared/format-kit.ts";
-import { HISTORY_PASSWORD_LABEL, PASSKEY_KEY_ROW } from "./item-copy.ts";
+import { PASSKEY_KEY_ROW } from "./item-copy.ts";
 import type { SidecarTarget } from "./permits.ts";
 import type {
   LockerCustomField,
@@ -57,9 +57,6 @@ export function sectionsOf(
 export function sealedFieldKey(fieldId: string): string {
   return `field:${fieldId}`;
 }
-export function historyPasswordKey(revisionId: string): string {
-  return `history:${revisionId}`;
-}
 export const PASSKEY_KEY_FIELD = "passkey";
 
 export interface SidecarAsk {
@@ -99,21 +96,9 @@ export function sidecarAskOf(
       label: own.label,
     };
   }
-  if (field.startsWith("history:")) {
-    const revisionId = field.slice("history:".length);
-    const revision = (detail.history ?? []).find(
-      (row) => row.revision_id === revisionId
-    );
-    if (!revision?.has_previous_password) return null;
-    return {
-      target: {
-        entity: "locker.item_history",
-        entityId: revisionId,
-        column: "password",
-      },
-      label: HISTORY_PASSWORD_LABEL,
-    };
-  }
+  // A REVISION HAS NO KEY HERE (#916, D2). `locker.item_history` is gone and a
+  // previous password lives sealed in a `core_entity_revision` snapshot, which
+  // no permit reveals — so there is no `history:<id>` address to mint one for.
   return null;
 }
 
@@ -135,8 +120,8 @@ export function byteSize(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** `changed` lists column NAMES, never values — a history records that a
- *  rotation happened, not what it rotated. */
+/** `changed` lists column NAMES, never values — a revision records that a
+ *  rotation happened, not what it rotated away from. */
 export function changedWords(
   changed: Record<string, unknown> | undefined
 ): string {

@@ -119,16 +119,18 @@ const VITEST_TEST_FILES = [
 // can carry both this and the seam rules — an override replaces a rule's
 // configuration, so the two lists have to be spread together rather than
 // layered.
+// `toSorted` alone, because it is the only absence anything measured (#905):
+// the device threw on it, and #903's polyfill header reaches the same finding
+// from the engine side while recording that this Hermes build DOES ship
+// `toReversed`, `toSpliced`, `with` and `findLast`. Those four were briefly
+// banned here as a precaution; a gate that fails a build over a method the
+// engine implements is wrong rather than cautious, so they are gone.
+// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning.
 const HERMES_ARRAY_PROPERTIES = [
   {
     property: "toSorted",
     message:
       "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
-  },
-  {
-    property: "findLast",
-    message:
-      "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
   },
 ] as const;
 
@@ -375,6 +377,43 @@ export default defineConfig({
       },
     },
     {
+      // #915 Wave 2 — `shQuote` was USED and never imported in
+      // `tests/agent-e2e-mobile/flows/share-intent-in.mjs`, and it survived six
+      // passing assertions before throwing. Nothing caught it statically: a
+      // `promoting` member that has never run on a device is exactly where an
+      // unimported name lives, because nothing at any tier evaluates the module
+      // body. A bespoke "every referenced helper is imported" lint was tried and
+      // reverted — it needs a scope chain and fired on 29 of 37 files — and
+      // `no-undef` is the rule that already has one. Scoped to this tree, whose
+      // files are all Node ESM scripts, so the environment below is the whole
+      // configuration the rule needs to be right here without being enabled
+      // repo-wide (where TypeScript's own checker already answers it).
+      files: ["tests/agent-e2e-*/**/*.mjs"],
+      env: {
+        browser: false,
+        es2024: true,
+        node: true,
+      },
+      rules: {
+        "no-undef": "error",
+      },
+    },
+    {
+      // The one file in that tree that legitimately names browser and MV3
+      // globals: `extension-companion.mjs` serialises callbacks INTO the page
+      // and into the extension's service worker (`page.waitForFunction`,
+      // `worker.evaluate`), where `document` and `chrome` exist and the Node
+      // process's globals do not. Declaring exactly those two here keeps the
+      // rule above meaningful — turning on the whole `browser` env would let a
+      // genuine `document` typo in a Node-side flow pass unnoticed, which is
+      // the class of defect the rule was enabled for.
+      files: ["tests/agent-e2e-pairing/flows/extension-companion.mjs"],
+      globals: {
+        chrome: "readonly",
+        document: "readonly",
+      },
+    },
+    {
       // The two rules in the preset that trade assertion precision for
       // brevity, and the only two that contradict a rule this repo already
       // documents: TESTING.md's test convention says "Prefer specific matchers
@@ -510,6 +549,15 @@ export default defineConfig({
       // redbox in the exact-HEAD journey, and time-engine is bundled into
       // native Agenda/Tally. Keep compatibility mechanical rather than relying
       // on Node-based unit tests, whose newer Array prototype masks the bug.
+      //
+      // THIS GLOB IS THE FAST SIGNAL, NOT THE GATE (#905). It covers the two
+      // trees an author is most likely to be editing, and it is a guess about
+      // reachability — the guess that failed, when eight crashing sites turned
+      // out to live in `packages/blueprints` and two more in `packages/client`.
+      // `bun run lint:hermes-surface` walks the import graph out of
+      // `apps/mobile/src` and checks what the bundle ACTUALLY reaches (793
+      // modules today), so widening this list is never the way to cover a new
+      // package: the walker already does, and derives it rather than guessing.
       files: ["apps/mobile/src/**", "packages/core/src/time/**"],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],

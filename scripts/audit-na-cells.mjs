@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// THE n/a-CELL AUDIT (#890 W6).
+// THE n/a-CELL AUDIT (#890 W6, re-pointed at tests/claims.json by #915).
 //
-// `tests/matrix.json` carries 56 cells that are deliberately not owned — a seat
+// `tests/claims.json` carries 56 cells that are deliberately not owned — a seat
 // an app disables, an engine an app has no entity for, a dimension a surface is
 // not the right place to assert. Every one cites a doctrine anchor or an issue,
 // and `validate-app-axes.mjs` already checks that those citations RESOLVE.
@@ -35,8 +35,8 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const REGISTER_PATH = "tests/na-cells.json";
-const MATRIX_PATH = "tests/matrix.json";
+const REGISTER_PATH = "tests/claims.json#naCells";
+const CLAIMS_PATH = "tests/claims.json";
 
 // Two quarters. Long enough that the ritual is not busywork against 56 cells,
 // short enough that no deliberate absence outlives the reasoning behind it.
@@ -51,7 +51,17 @@ export function ageInDays(reviewed, now = Date.now()) {
   return Math.floor((now - parsed) / dayMs);
 }
 
-/** Every non-owned cell in the matrix, keyed `<grid>.<app-or-surface>.<axis>`. */
+/**
+ * Every non-owned cell the claims file DERIVES a grid from, keyed
+ * `<grid>.<app>.<axis>`.
+ *
+ * #915 retired `surfaces[].assessment`: the promises grid (§7) is now the join
+ * of lane tags with tonight's verdicts, so there is no declared surface cell to
+ * walk. The `surface.*` rows in the register are therefore AUTHORITATIVE rather
+ * than derived — they are the only statement that a promise cannot arise on a
+ * surface — and `auditNaCells` exempts them from the phantom rule while still
+ * holding them to the kind / restatement / re-verification ritual.
+ */
 export function collectNaCells(matrix) {
   const cells = new Map();
   for (const app of matrix.appSeats?.apps ?? []) {
@@ -66,17 +76,6 @@ export function collectNaCells(matrix) {
       cells.set(`appEngines.${app.id}.${engine}`, {
         ...cell,
         grid: "appEngines",
-      });
-    }
-  }
-  for (const surface of matrix.surfaces ?? []) {
-    for (const [dimension, status] of Object.entries(
-      surface.assessment ?? {}
-    )) {
-      if (status !== "skip") continue;
-      cells.set(`surface.${surface.id}.${dimension}`, {
-        status,
-        grid: "surface",
       });
     }
   }
@@ -110,6 +109,8 @@ export function auditNaCells({
 
   for (const [key, row] of Object.entries(rows)) {
     if (!cells.has(key)) {
+      // The promises-grid rows are declared, not derived (see above).
+      if (key.startsWith("surface.")) continue;
       fail(
         "no-phantom",
         `${REGISTER_PATH} classifies ${key}, which is no longer a non-owned cell. ` +
@@ -331,15 +332,15 @@ function selfTest() {
 function main() {
   selfTest();
   const read = (rel) => readFileSync(path.resolve(ROOT, rel), "utf8");
-  const matrix = JSON.parse(read(MATRIX_PATH));
-  const register = JSON.parse(read(REGISTER_PATH));
-  const cells = collectNaCells(matrix);
+  const claims = JSON.parse(read(CLAIMS_PATH));
+  const register = { cells: claims.naCells ?? {} };
+  const cells = collectNaCells(claims);
 
   // Silent-no-op guard: an empty cell set reads as "everything is owned", which
   // would be wonderful and is not what a matrix-shape change looks like.
   if (cells.size === 0) {
     console.error(
-      `\nFAIL — found zero non-owned cells in ${MATRIX_PATH}. Either every cell ` +
+      `\nFAIL — found zero non-owned cells in ${CLAIMS_PATH}. Either every cell ` +
         `gained an owner (say so deliberately) or the grid shape moved.\n`
     );
     process.exit(1);

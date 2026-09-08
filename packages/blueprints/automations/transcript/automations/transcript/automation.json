@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads size-bounded audio/video originals and stamps, and writes validated transcript derivatives.",
     "scopes": [
       {

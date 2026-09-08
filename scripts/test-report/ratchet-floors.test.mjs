@@ -80,6 +80,88 @@ describe("diffMutationFloors", () => {
   });
 });
 
+describe("diffMinimumTests — approved outright retirement (#927)", () => {
+  const owner = "tests/perf/vault-write.perf.test.ts";
+  const base = { flows: [{ id: "a", owner, minimumTests: 2 }] };
+  const marker = {
+    owner,
+    reason:
+      "Approved by the maintainer 2026-09-05 as part of the #927 rig diet",
+    issue: "#927",
+  };
+
+  test("a marked deletion passes: the floor is gone, and named", () => {
+    const head = { flows: [], removedMinimumTestsFlows: { a: marker } };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("an UNMARKED deletion is still refused", () => {
+    expect(diffMinimumTests(base, { flows: [] })).toHaveLength(1);
+  });
+
+  test("a marker with no matching removed row is refused", () => {
+    const head = {
+      flows: [{ id: "a", owner, minimumTests: 2 }],
+      removedMinimumTestsFlows: { a: marker },
+    };
+    expect(diffMinimumTests(base, head)).toEqual([
+      expect.stringContaining("the head still declares"),
+    ]);
+  });
+
+  test("a marker naming a flow the base never declared is refused", () => {
+    const head = { flows: [], removedMinimumTestsFlows: { b: marker } };
+    // Two errors: the unknown marker, and "a" still deleted unauthorized.
+    expect(diffMinimumTests(base, head)).toEqual([
+      expect.stringContaining("which the base does not declare"),
+      expect.stringContaining('flow "a" removed'),
+    ]);
+  });
+
+  test("a marker missing its reason or issue authorizes nothing", () => {
+    for (const bad of [
+      { owner, issue: "#927" },
+      { owner, reason: "because", issue: "927" },
+      { reason: "because", issue: "#927" },
+    ]) {
+      const head = { flows: [], removedMinimumTestsFlows: { a: bad } };
+      const errors = diffMinimumTests(base, head);
+      expect(errors.length).toBeGreaterThan(1);
+      expect(errors.at(-1)).toContain('flow "a" removed');
+    }
+  });
+
+  test("a marker naming the wrong owner is refused", () => {
+    const head = {
+      flows: [],
+      removedMinimumTestsFlows: { a: { ...marker, owner: "tests/perf/x.ts" } },
+    };
+    expect(diffMinimumTests(base, head).at(0)).toContain("was owned by");
+  });
+
+  test("two markers may not retire the same owner", () => {
+    const twoFlows = {
+      flows: [
+        { id: "a", owner, minimumTests: 2 },
+        { id: "b", owner, minimumTests: 1 },
+      ],
+    };
+    const head = {
+      flows: [],
+      removedMinimumTestsFlows: { a: marker, b: marker },
+    };
+    expect(diffMinimumTests(twoFlows, head).at(0)).toContain(
+      "one marker per deleted rig"
+    );
+  });
+
+  test("a SPENT marker is inert: carried on both sides, it re-litigates nothing", () => {
+    // What main looks like after the retirement landed — no flow either side.
+    const landed = { flows: [], removedMinimumTestsFlows: { a: marker } };
+    expect(diffMinimumTests(landed, landed)).toEqual([]);
+  });
+});
+
 describe("diffMinimumTests", () => {
   test("flags a minimumTests decrease without waiver", () => {
     const base = { flows: [{ id: "a", minimumTests: 10 }] };
@@ -113,6 +195,66 @@ describe("diffMinimumTests", () => {
       ],
     };
     expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  // #988 — a marker that already landed is not a claim about THIS diff.
+  test("tolerates a spent rename marker carried on the base", () => {
+    const spentFlow = {
+      id: "new-name",
+      surface: "runtime",
+      dimension: "compat",
+      tier: "unit",
+      minimumTests: 10,
+      replacesMinimumTestsFlow: "old-name",
+      approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+    };
+    // `old-name` is gone from both sides: the rename landed several PRs ago.
+    expect(
+      diffMinimumTests({ flows: [spentFlow] }, { flows: [spentFlow] })
+    ).toEqual([]);
+  });
+
+  test("refuses a rename marker this diff introduces against an unknown predecessor", () => {
+    const base = { flows: [{ id: "new-name", minimumTests: 10 }] };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "never-existed",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head).join("")).toMatch(
+      /names unknown predecessor "never-existed"/u
+    );
+  });
+
+  test("refuses re-spending a marker the base already carries", () => {
+    const spentFlow = {
+      id: "new-name",
+      surface: "runtime",
+      dimension: "compat",
+      tier: "unit",
+      minimumTests: 10,
+      replacesMinimumTestsFlow: "old-name",
+      approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+    };
+    const base = { flows: [spentFlow, { id: "other", minimumTests: 4 }] };
+    const head = {
+      flows: [
+        spentFlow,
+        // A second flow reaches for the same, already-spent predecessor.
+        {
+          id: "other",
+          minimumTests: 4,
+          replacesMinimumTestsFlow: "old-name",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head).join("\n")).toMatch(
+      /multiple replacements|unknown predecessor "old-name"/u
+    );
   });
 
   test("allows an explicitly approved ID rename without lowering the cell floor", () => {
@@ -378,7 +520,7 @@ describe("ratchetFloors", () => {
       headMatrix: { flows: [] },
       perfBudgets: [
         {
-          label: "tests/suite-wall-clock.json",
+          label: "tests/budgets.json#suiteWallClock",
           base: { totalMs: 100 },
           head: { totalMs: 999 },
           approvedDeviation: "same ledger text",

@@ -6,12 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  ACTION_PURPOSE,
-  actionInput,
-  deniedResult,
-  runVaultAction,
-} from "./action-kit.ts";
+import { actionInput, deniedResult, runVaultAction } from "./action-kit.ts";
 
 type Ctx = Parameters<typeof runVaultAction>[0];
 
@@ -52,7 +47,6 @@ describe("the shared vault-action run", () => {
       {
         command: "schedule.add_task",
         input: { title: "Ship it" },
-        purpose: ACTION_PURPOSE,
       },
     ]);
     expect(result).toStrictEqual({
@@ -63,7 +57,7 @@ describe("the shared vault-action run", () => {
 
   it("turns a thrown refusal into a 200 denial carrying reason and code", async () => {
     const error = Object.assign(new Error("no consent"), {
-      code: "VAULT_CONSENT",
+      code: "VAULT_ACCESS",
     });
     const result = await runVaultAction(throwingCtx(error), {
       command: "schedule.add_task",
@@ -71,7 +65,7 @@ describe("the shared vault-action run", () => {
     });
     expect(result.status).toBe(200);
     expect(JSON.stringify(result.body)).toBe(
-      '{"status":"denied","reason":"no consent","code":"VAULT_CONSENT"}'
+      '{"status":"denied","reason":"no consent","code":"VAULT_ACCESS"}'
     );
   });
 

@@ -55,7 +55,12 @@ export function nativeUploadPolicy(): UploadPolicy {
   };
 }
 
-/** Replica sync/rebootstrap deliberately shares the upload network policy. */
+/** Byte work obeys the whole table. */
 export async function nativeSyncAllowed(): Promise<boolean> {
   return nativeUploadPolicy().canTransfer();
+}
+
+/** Rows are metadata, not bytes (#905 O); only the `never` floor stops them. */
+export async function nativeRowSyncAllowed(): Promise<boolean> {
+  return !(await hydrateTransferPolicy()).never;
 }

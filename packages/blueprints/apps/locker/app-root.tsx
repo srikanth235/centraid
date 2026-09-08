@@ -182,9 +182,8 @@ export function Root({
 
   /**
    * THE ONE DOOR OUT. Every path that ends a session runs through here — the
-   * idle timer, the hidden window, an `authRequired` read and a
-   * `SESSION_EXPIRED` permit — so the client wipe and the HOST lock can never
-   * come apart. A client that forgot only its own copy would leave a live
+   * idle timer, the hidden window and a `SESSION_EXPIRED` permit — so the
+   * client wipe and the HOST lock can never come apart. A client that forgot only its own copy would leave a live
    * session on the gateway, which is the worst possible half of a lock.
    *
    * `notifyHost` is false only where the host is the one telling US the session
@@ -221,9 +220,11 @@ export function Root({
 
   // ---- the read -------------------------------------------------------------
 
+  // The window is the app GRANT's to read, not the session's (#928): opening
+  // an item is what a session buys. The shelf still waits for an open one
+  // because a locker draws nothing behind its own lock.
   const refresh = useCallback(async (): Promise<void> => {
-    const token = bagRef.current.sessionToken;
-    if (!isOpen(sessionRef.current) || !token) return;
+    if (!isOpen(sessionRef.current)) return;
     let next: ItemsPayload;
     // THE ARCHIVED SHELF IS A DIFFERENT READ, not a client-side slice:
     // archived items are out of the default window by construction, so a
@@ -235,7 +236,6 @@ export function Root({
         query: "items",
         input: {
           limit: bagRef.current.windowSize,
-          auth_session: token,
           ...(archived ? { archived: true } : {}),
         },
       });
@@ -245,13 +245,6 @@ export function Root({
       return;
     }
     setReadFailedState(false);
-    // The host says the session is gone: relock rather than render a list the
-    // member is no longer entitled to.
-    if (next?.authRequired) {
-      relock(false);
-      setLoaded(true);
-      return;
-    }
     const denied = next?.vaultDenied;
     setConsent(denied ? { message: denied.message ?? "" } : null);
     setLoaded(true);
@@ -281,7 +274,7 @@ export function Root({
       bagRef.current.trashRows = [];
     }
     bump();
-  }, [relock]);
+  }, []);
 
   /**
    * Every write goes through one door, so every outcome lands on the ONE

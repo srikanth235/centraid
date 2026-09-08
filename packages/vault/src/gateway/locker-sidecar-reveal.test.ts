@@ -1,5 +1,5 @@
 // Locker's sealed SIDECARS ride the same one-shot permit as the item (#873).
-// `locker_item_field.value_sealed`, `locker_item_history.password` and
+// `locker_item_field.value_sealed`, the previous password in a revision, and
 // `locker_item_passkey.private_key` are secrets that hang off an item, so the
 // reveal gate is keyed on the locker SCHEMA, not on `locker.item` alone — and
 // the permit a sidecar reveal spends is the OWNING item's.
@@ -23,7 +23,6 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-const PURPOSE = "dpv:ServiceProvision";
 const SECRET = "correct horse battery staple";
 
 /** The failing reason, with the per-call receipt id stripped off. */
@@ -61,7 +60,6 @@ describe("locker sidecar reveal", () => {
         password,
         url: "https://example.com",
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { item_id: string } }).output.item_id;
@@ -77,7 +75,6 @@ describe("locker sidecar reveal", () => {
         kind: "sealed",
         value,
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { field_id: string } }).output.field_id;
@@ -117,14 +114,13 @@ describe("locker sidecar reveal", () => {
       entityId: fieldId,
       columns: ["value_sealed"],
       authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
     });
     expect(revealed.values.value_sealed).toBe("recovery-c0de");
 
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
         `SELECT object_type, object_id, decision, detail_json
-           FROM consent_receipt WHERE receipt_id = ?`
+           FROM access_receipt WHERE receipt_id = ?`
       )
       .get(revealed.receiptId) as {
       object_type: string;
@@ -152,7 +148,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: fieldId,
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     ).toThrow(/locked/u);
   });
@@ -168,7 +163,6 @@ describe("locker sidecar reveal", () => {
       entityId: fieldId,
       columns: ["value_sealed"],
       authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
     });
     // One-shot: the same token no longer opens the item itself…
     expect(() =>
@@ -177,7 +171,6 @@ describe("locker sidecar reveal", () => {
         entityId: itemId,
         columns: ["password"],
         authentication: { sessionToken, itemToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
     // …nor the field again.
@@ -187,7 +180,6 @@ describe("locker sidecar reveal", () => {
         entityId: fieldId,
         columns: ["value_sealed"],
         authentication: { sessionToken, itemToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
   });
@@ -205,7 +197,6 @@ describe("locker sidecar reveal", () => {
         entityId: fieldId,
         columns: ["value_sealed"],
         authentication: { sessionToken, itemToken: otherToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
   });
@@ -220,7 +211,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: "no-such-field",
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     );
     const present = refusal(() =>
@@ -228,7 +218,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: fieldId,
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     );
     expect(missing).toBe(present);
@@ -240,7 +229,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: "no-such-field",
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     );
     const missingItem = refusal(() =>
@@ -248,7 +236,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item",
         entityId: "no-such-item",
         columns: ["password"],
-        purpose: PURPOSE,
       })
     );
     expect(missingField).toBe(
@@ -263,7 +250,6 @@ describe("locker sidecar reveal", () => {
     const trashed = gw.invoke(owner, {
       command: "locker.trash_item",
       input: { item_id: itemId },
-      purpose: PURPOSE,
     });
     expect(trashed.status).toBe("executed");
 
@@ -273,7 +259,6 @@ describe("locker sidecar reveal", () => {
           entity: "locker.item_field",
           entityId: fieldId,
           columns: ["value_sealed"],
-          purpose: PURPOSE,
         })
       )
     ).toBe(`no revealable locker.item_field row ${fieldId}`);
@@ -286,37 +271,38 @@ describe("locker sidecar reveal", () => {
         entityId: fieldId,
         columns: ["value_sealed"],
         authentication: { sessionToken, itemToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
   });
 
-  test("a history row reveals the PREVIOUS password under the item's permit", async () => {
+  // HISTORY IS REVISIONS (#916, D2): `locker_item_history` was a second
+  // revision mechanism, so its `password` cell was a second sealed surface
+  // with its own reveal path. The previous password rides a
+  // `core_entity_revision` snapshot of the item row — ciphertext under the
+  // ITEM's additional data — and `locker.export` is what unseals it, under the
+  // export's own confirmation, rather than a per-row reveal.
+  test("the previous password survives a rotation as sealed ciphertext", () => {
     const itemId = addLogin("first-p4ssword");
     const edited = gw.invoke(owner, {
       command: "locker.edit_item",
       input: { item_id: itemId, password: "second-p4ssword" },
-      purpose: PURPOSE,
     });
     expect(edited.status).toBe("executed");
     const revision = db.vault
       .prepare(
-        `SELECT revision_id FROM locker_item_history
-          WHERE item_id = ? AND password IS NOT NULL`
+        `SELECT snapshot_json FROM core_entity_revision
+          WHERE entity_type = 'locker.item' AND entity_id = ?
+          ORDER BY recorded_at DESC LIMIT 1`
       )
-      .get(itemId) as { revision_id: string } | undefined;
-    expect(revision?.revision_id).toBeTypeOf("string");
-
-    const sessionToken = await configure();
-    const itemToken = await permitFor(sessionToken, itemId);
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item_history",
-      entityId: revision!.revision_id,
-      columns: ["password"],
-      authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
-    });
-    expect(revealed.values.password).toBe("first-p4ssword");
+      .get(itemId) as { snapshot_json: string } | undefined;
+    expect(revision).toBeDefined();
+    const snapshot = JSON.parse(revision!.snapshot_json) as {
+      password?: string;
+    };
+    expect(snapshot.password).toBeTypeOf("string");
+    // Sealed at rest: the history of a secret is as much a secret as the
+    // current value.
+    expect(snapshot.password).not.toContain("first-p4ssword");
   });
 
   test("a passkey private key reveals under the item's own permit", async () => {
@@ -328,7 +314,6 @@ describe("locker sidecar reveal", () => {
         rp_id: "example.com",
         private_key: "pk-material-xyz",
       },
-      purpose: PURPOSE,
     });
     expect(stored.status).toBe("executed");
 
@@ -339,12 +324,11 @@ describe("locker sidecar reveal", () => {
       entityId: itemId,
       columns: ["private_key"],
       authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
     });
     expect(revealed.values.private_key).toBe("pk-material-xyz");
     // The passkey's PK IS the item, so no separate item id is receipted.
-    const detail = db.journal
-      .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+    const detail = db.audit
+      .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
       .get(revealed.receiptId) as { detail_json: string };
     expect(JSON.parse(detail.detail_json)).toStrictEqual({
       columns: ["private_key"],
@@ -373,7 +357,6 @@ describe("locker sidecar reveal", () => {
       entity: "sync.connection_credential",
       entityId: "conn-1",
       columns: ["api_key"],
-      purpose: PURPOSE,
     });
     expect(revealed.values.api_key).toBe("ak-live-123");
   });

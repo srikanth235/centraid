@@ -1,0 +1,77 @@
+{
+  "_comment": "THE SHELL↔APP CONFORMANCE MANIFEST (#905 Part 2). One row per first-party app, and the row is what every layer reads instead of hand-listing apps. Written because the coverage question 'why does photos get preference over the other mini apps' has no honest answer while each app's coverage is hand-authored: hand-writing a journey per app is O(apps) to author AND O(apps) to run, and app #9 arrives untested until someone remembers it. Making conformance a property of the manifest makes every app covered identically, and makes a NEW app covered the day it registers — or `bun run lint:app-conformance` fails the PR that registers it. Four tables in three trees have to agree for a tile tap to reach a screen: the registry (packages/design/src/apps.ts), the launcher catalog (apps/mobile/src/screens/home/catalog.ts), Home's navigate switch (apps/mobile/src/screens/Home.tsx), and the deep-link table (apps/mobile/src/deep-links.ts). Nothing linked them; each could move alone and stay green. This file is the fifth table that pins the other four, and the linter is what holds them against it. JSON rather than a TS module ON PURPOSE: the RNTL sweep imports it (resolveJsonModule), the linter reads it from plain node, and the Maestro layer's `.mjs` runners can read it without a build step — the one source of truth the layer allocation needs, readable from every layer that needs it.",
+  "apps": {
+    "agenda": {
+      "route": "agenda",
+      "navigator": "Agenda",
+      "screen": "AgendaHome",
+      "deepLink": "agenda",
+      "tile": "home-tile-agenda",
+      "landmark": "agenda-band",
+      "seeded": true
+    },
+    "docs": {
+      "route": "docs",
+      "navigator": "Docs",
+      "screen": "DocsHome",
+      "deepLink": "docs",
+      "tile": "home-tile-docs",
+      "landmark": "docs-band",
+      "seeded": true
+    },
+    "locker": {
+      "route": "locker",
+      "navigator": "Locker",
+      "screen": "LockerHome",
+      "deepLink": "locker",
+      "tile": "home-tile-locker",
+      "landmark": "locker-band",
+      "seeded": false
+    },
+    "notes": {
+      "route": "notes",
+      "navigator": "Notes",
+      "screen": null,
+      "deepLink": "apps/notes",
+      "tile": "home-tile-notes",
+      "landmark": "notes-band",
+      "seeded": true
+    },
+    "people": {
+      "route": "people",
+      "navigator": "People",
+      "screen": "PeopleHome",
+      "deepLink": "apps/people",
+      "tile": "home-tile-people",
+      "landmark": "people-band",
+      "seeded": true
+    },
+    "photos": {
+      "route": "photos",
+      "navigator": "Photos",
+      "screen": "PhotosHome",
+      "deepLink": "photos",
+      "tile": "home-tile-photos",
+      "landmark": "photos-band",
+      "seeded": true
+    },
+    "tally": {
+      "route": "tally",
+      "navigator": "Tally",
+      "screen": "TallyHome",
+      "deepLink": "apps/tally",
+      "tile": "home-tile-tally",
+      "landmark": "tally-band",
+      "seeded": true
+    },
+    "tasks": {
+      "route": "tasks",
+      "navigator": "Tasks",
+      "screen": null,
+      "deepLink": "apps/tasks",
+      "tile": "home-tile-tasks",
+      "landmark": "tasks-band",
+      "seeded": true
+    }
+  }
+}

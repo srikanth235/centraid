@@ -82,4 +82,21 @@ describe(originHealthSignal, () => {
       }).tone
     ).toBe("attention");
   });
+
+  it("never claims the vault is caught up while it cannot be reached", () => {
+    const signal = originHealthSignal({
+      online: false,
+      paired: true,
+      queue: queue(),
+    });
+    expect(signal.copy).toContain("Can't reach your vault");
+    expect(signal.copy).not.toContain("uploaded");
+    expect(signal.tone).toBe("attention");
+  });
+
+  it("says nothing about a vault on a phone that has never paired with one", () => {
+    expect(
+      originHealthSignal({ online: false, paired: false, queue: queue() }).copy
+    ).toBe("On this phone · pair a vault when ready");
+  });
 });

@@ -10,10 +10,11 @@
 // member nothing they cannot see. Neither is ALL SETTLED: it is a state of the
 // figures, drawn by the hero in its own words (§6), not a warning about a delay.
 //
-// The `--net` token is spent on exactly one state: denied. Offline, stale,
-// pending, parked and conflict are facts about a delay, not about a refusal —
-// and the offline one is the least alarming of the five, because Tally records
-// fully offline and the notice's whole job is to name the one exception.
+// The `--net` token is spent on exactly one state: denied. Offline, pending,
+// parked and conflict are facts about a delay, not about a refusal — and the
+// offline one is the least alarming of the four, because Tally now both
+// records AND reads fully offline, so it names a delay in reaching other
+// devices rather than a ledger this one cannot show.
 
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -23,21 +24,17 @@ import {
   OFFLINE_NOTICE,
   PARKED_NOTICE,
   pendingNotice,
-  staleNotice,
 } from "@centraid/blueprints/apps/tally/view-copy";
 
 import { Text } from "../../kit/components/NativeText";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { clockAt } from "./tally-view-model";
 import type { TallyScreenState } from "./tally-view-model";
 
 export interface TallyNoticeProps {
   state: TallyScreenState;
   /** How many of this member's writes are still on this device. */
   pending: number;
-  /** When the last read landed, for the stale sentence's clock. */
-  lastReadAt: string | null;
 }
 
 /** The sentence one state carries, or nothing where the state is not a notice
@@ -47,10 +44,6 @@ export function tallyNoticeText(props: TallyNoticeProps): string | null {
   if (props.state === "parked") return PARKED_NOTICE;
   if (props.state === "offline") return OFFLINE_NOTICE;
   if (props.state === "pending") return pendingNotice(props.pending);
-  if (props.state === "stale") {
-    const at = props.lastReadAt ? clockAt(props.lastReadAt) : null;
-    return at === null ? null : staleNotice(at);
-  }
   return null;
 }
 

@@ -168,13 +168,11 @@ export interface ManifestVaultScope {
 
 /**
  * The automation's requested vault access (duaility §12). Fires authenticate
- * as an enrolled `consent.agent`; this block is a *request* the owner approves
- * into a grant on the agent's party — never a grant by itself. Until
- * approval every `ctx.vault` call is a receipted deny.
+ * as an enrolled `access.agent`; this block is a *request* the owner answers
+ * into `share_authority` rows — never an answer by itself. Until the owner
+ * answers, every `ctx.vault` call is a receipted deny.
  */
 export interface ManifestVault {
-  /** DPV purpose notation, e.g. `dpv:ServiceProvision`. */
-  readonly purpose: string;
   /** Owner-facing one-liner: why this automation needs the access. */
   readonly why?: string;
   readonly scopes: readonly ManifestVaultScope[];
@@ -388,7 +386,8 @@ const TRIGGER_CURSOR_DENIED_TABLES = new Set([
 /**
  * Shared authoring/runtime loop guard for cursor-targeted vault entities.
  *
- * The denied names are runtime ledger tables — they live in `journal.db` and
+ * The denied names are runtime ledger tables — they are the ledger band
+ * of `vault.db` (#916) and
  * are only ever referenced bare. A QUALIFIED entity is a user's own vault
  * table: `inventory.items`, `shop.attachments`, and `crm.conversations` are
  * ordinary data and must stay watchable.
@@ -1139,7 +1138,6 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     );
   }
   const v = raw as Record<string, unknown>;
-  const purpose = requireString(v.purpose, "vault.purpose");
   let why: string | undefined;
   if (v.why !== undefined) {
     if (typeof v.why !== "string") {
@@ -1255,7 +1253,7 @@ function validateVault(raw: unknown): ManifestVault | undefined {
       ...(fieldMask ? { fieldMask } : {}),
     } satisfies ManifestVaultScope;
   });
-  return { purpose, ...(why === undefined ? {} : { why }), scopes };
+  return { ...(why === undefined ? {} : { why }), scopes };
 }
 
 /**

@@ -340,8 +340,10 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   };
 
-  /** `ApprovalsScreen` owns the struck-through row; splice the grant out of
-   *  `apps`/`agents` so a background revalidate cannot resurrect it (#708). */
+  /** `ApprovalsScreen` owns the struck-through row; splice the ANSWER out of
+   *  `agents` so a background revalidate cannot resurrect it (#708). An app
+   *  holds no answer to splice: its reach is its declared manifest (#928 A1),
+   *  and this handler is never offered one. */
   const handleRevokeStoreGrant = (holder: StoreHolderDTO): void => {
     void runDecision(
       holder.grantId,
@@ -351,20 +353,12 @@ export default function ApprovalsRoute(): JSX.Element {
       },
       (previous) => ({
         ...previous,
-        apps: previous.apps.map((app) =>
-          app.appId === holder.holderId
-            ? {
-                ...app,
-                grants: app.grants.filter((g) => g.grantId !== holder.grantId),
-              }
-            : app
-        ),
         agents: previous.agents.map((agent) =>
           agent.agentId === holder.holderId
             ? {
                 ...agent,
-                grants: agent.grants.filter(
-                  (g) => g.grantId !== holder.grantId
+                answers: agent.answers.filter(
+                  (answer) => answer.authorityId !== holder.grantId
                 ),
               }
             : agent

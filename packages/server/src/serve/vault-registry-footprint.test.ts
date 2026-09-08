@@ -46,11 +46,10 @@ function cacheBytesOf(db: DatabaseSync): number {
   return Math.abs(raw) * 1024;
 }
 
-/** Every open database handle across every mounted plane (two per vault). */
+/** Every open database handle across every mounted plane — ONE per vault
+ *  since #916, the audit and ledger bands sharing the file's handle. */
 function handlesOf(registry: VaultRegistry): DatabaseSync[] {
-  return registry
-    .planesList()
-    .flatMap((plane) => [plane.db.vault, plane.db.journal]);
+  return registry.planesList().map((plane) => plane.db.vault);
 }
 
 describe("vault-registry footprint budget (#659 L8)", () => {
@@ -81,12 +80,12 @@ describe("vault-registry footprint budget (#659 L8)", () => {
     const planes = 5;
     const registry = await registryWith(planes, DEFAULT_VAULT_FOOTPRINT);
     const handles = handlesOf(registry);
-    expect(handles).toHaveLength(planes * 2);
+    expect(handles).toHaveLength(planes);
 
     const totalMmap = handles.reduce((sum, db) => sum + mmapBytesOf(db), 0);
     const totalCache = handles.reduce((sum, db) => sum + cacheBytesOf(db), 0);
 
-    // The whole point: the SUM across ten handles is within one vault's budget.
+    // The whole point: the SUM across every handle is within one vault's budget.
     expect(totalMmap).toBeLessThanOrEqual(DEFAULT_VAULT_FOOTPRINT.mmapBytes);
     expect(totalCache).toBeLessThanOrEqual(DEFAULT_VAULT_FOOTPRINT.cacheBytes);
 

@@ -30,7 +30,7 @@ import {
   READABLE_SNAPSHOT_FORMATS,
   sealManifest,
   SNAPSHOT_FORMAT_V2,
-  validateSnapshotBasePair,
+  validateSnapshotBase,
 } from "./manifest.js";
 import type { ManifestEntry, ManifestEntryKind } from "./manifest.js";
 import type { ObjectStore } from "./object-store.js";
@@ -43,25 +43,22 @@ import { partStream } from "./parts.js";
 import type { BackupProvider, SnapshotRow } from "./provider.js";
 import {
   openWalCloser,
-  openWalPairMarker,
   openWalSegment,
+  openWalTickMarker,
   parseWalCloserKey,
-  parseWalPairMarkerKey,
   parseWalSegmentKey,
-  planCoordinatedReplay,
+  parseWalTickMarkerKey,
+  planMarkedReplay,
   planWalReplay,
-  WAL_DB_FILES,
-  WAL_DB_NAMES,
-  walPairMarkerPrefix,
   walSegmentKey,
   walSegmentPrefix,
+  walTickMarkerPrefix,
 } from "./wal-format.js";
 import type {
-  WalDbName,
   WalGroupCloser,
-  WalPairMarker,
   WalSegmentAddress,
   WalStreamListing,
+  WalTickMarker,
 } from "./wal-format.js";
 import { replayWalSegments } from "./wal-restore.js";
 import type { WalReplayOutcome } from "./wal-restore.js";
@@ -369,7 +366,7 @@ export async function createSnapshot(
     id,
     size,
   }));
-  validateSnapshotBasePair(sealedEntries);
+  validateSnapshotBase(sealedEntries);
   const { bytes, manifestHash } = sealManifest({
     keyring: opts.keyring,
     vaultId: opts.vaultId,
@@ -534,7 +531,7 @@ async function openSnapshotRow(
   }
   if (current) assertCompatibleAppMeta(opened.public.appMeta, current);
   assertManifestMatchesRegistry(opened.public, opened.entries, row);
-  const baseTimeMs = validateSnapshotBasePair(opened.entries).baseTickMs;
+  const baseTimeMs = validateSnapshotBase(opened.entries).baseTickMs;
   return { row, opened, baseTimeMs };
 }
 
@@ -680,20 +677,16 @@ export async function restoreSnapshot(
   });
 
   // SQLite itself performs and validates the replay (wal-restore.ts).
-  const pair = validateSnapshotBasePair(opened.entries);
+  const base = validateSnapshotBase(opened.entries);
   const walReplay = await replayWalSegments({
     store,
     dataKey,
     vaultId: opts.vaultId,
     destDir: opts.destDir,
-    generationByDb: {
-      vault: pair.vault.walGeneration!,
-      journal: pair.journal.walGeneration!,
-    },
-    baseTickMsByDb: { vault: pair.baseTickMs, journal: pair.baseTickMs },
-    ...(pair.walTipTickMs === undefined
+    generation: base.entry.walGeneration!,
+    ...(base.walTipTickMs === undefined
       ? {}
-      : { walTipTickMs: pair.walTipTickMs }),
+      : { walTipTickMs: base.walTipTickMs }),
     ...(opts.pointInTimeMs === undefined
       ? {}
       : { pointInTimeMs: opts.pointInTimeMs }),
@@ -785,7 +778,7 @@ export async function verifySnapshot(
     );
   }
   assertManifestMatchesRegistry(opened.public, opened.entries, row);
-  const basePair = validateSnapshotBasePair(opened.entries);
+  const base = validateSnapshotBase(opened.entries);
   const master = masterKeyForEpoch(opts.keyring, opened.public.keyEpoch);
   const dataKey = deriveDataKey(master, opts.vaultId);
   const dedupKey = deriveDedupKey(master, opts.vaultId);
@@ -834,25 +827,18 @@ export async function verifySnapshot(
   //
   // The per-chain hole check alone lets an entirely-lost stream verify GREEN: a
   // listing with no segments has no hole, nor does one whose newest objects are
-  // gone. Only the pair marker separates "idle" from "erased", so verify must
-  // run the SAME coordinated planner restore does.
+  // gone. Only the tick marker separates "idle" from "erased", so verify must
+  // run the SAME marked planner restore does.
   let walSegments = 0;
   let walSampled = 0;
   {
-    const generationByDb: Partial<Record<WalDbName, string>> = {};
-    const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
-    const walTipTickMs = basePair.walTipTickMs ?? -1;
-    await applyInOrder(WAL_DB_NAMES, async (db) => {
-      const entry = opened.entries.find(
-        (e) => e.kind === "db" && e.path === WAL_DB_FILES[db]
-      );
-      if (entry?.walGeneration === undefined) return;
-      const generation = entry.walGeneration;
-      generationByDb[db] = generation;
+    const walTipTickMs = base.walTipTickMs ?? -1;
+    const generation = base.entry.walGeneration;
+    if (generation !== undefined) {
       const segments: WalSegmentAddress[] = [];
       const closers: WalGroupCloser[] = [];
       await applyAvailableInOrder(
-        store.list(walSegmentPrefix(db, generation)),
+        store.list(walSegmentPrefix("vault", generation)),
         async (obj) => {
           const addr = parseWalSegmentKey(obj.key);
           if (addr) {
@@ -874,12 +860,12 @@ export async function verifySnapshot(
           }
         }
       );
-      listingByDb[db] = { segments, closers };
+      const listing: WalStreamListing = { segments, closers };
       walSegments += segments.length;
-      const plan = planWalReplay({ segments, closers }, { db, generation });
+      const plan = planWalReplay(listing, { generation });
       if (plan.truncatedByHole) {
         missing.push(
-          `wal/${db}/${generation}: stream hole — replay reaches tick ${plan.lastTickMs} ` +
+          `wal/vault/${generation}: stream hole — replay reaches tick ${plan.lastTickMs} ` +
             `but ${segments.length - plan.segments.length} listed segment(s) lie beyond it`
         );
       }
@@ -904,19 +890,16 @@ export async function verifySnapshot(
       corrupt.push(
         ...corruptAddresses.filter((key): key is string => key !== undefined)
       );
-    });
 
-    const { vault: gv, journal: gj } = generationByDb;
-    if (gv !== undefined && gj !== undefined) {
-      const markers: WalPairMarker[] = [];
+      const markers: WalTickMarker[] = [];
       await applyAvailableInOrder(
-        store.list(walPairMarkerPrefix(gv, gj)),
+        store.list(walTickMarkerPrefix(generation)),
         async (obj) => {
-          const addr = parseWalPairMarkerKey(obj.key);
+          const addr = parseWalTickMarkerKey(obj.key);
           if (!addr) return;
           try {
             markers.push(
-              openWalPairMarker(
+              openWalTickMarker(
                 dataKey,
                 opts.vaultId,
                 addr,
@@ -928,31 +911,26 @@ export async function verifySnapshot(
           }
         }
       );
-      const coordinated = planCoordinatedReplay({
-        listingByDb,
-        generationByDb,
-        markers,
-      });
+      const marked = planMarkedReplay({ listing, generation, markers });
       if (
-        coordinated.newestMarkerTickMs >= 0 &&
-        coordinated.coordinatedCutMs < coordinated.newestMarkerTickMs
+        marked.newestMarkerTickMs >= 0 &&
+        marked.cutTickMs < marked.newestMarkerTickMs
       ) {
         missing.push(
-          `wal/tick/${gv}-${gj}: the newest coordinated point the producer shipped ` +
-            `(tick ${coordinated.newestMarkerTickMs}) cannot be reassembled — the pair can only ` +
-            `be restored at tick ${coordinated.coordinatedCutMs}; segments are missing`
+          `wal/tick/${generation}: the newest point the producer shipped ` +
+            `(tick ${marked.newestMarkerTickMs}) cannot be reassembled — the stream can only ` +
+            `be restored at tick ${marked.cutTickMs}; segments are missing`
         );
       }
       // Deleting the markers themselves is invisible above: the plan falls
-      // back to the base pair, every named object is present, and the restore
-      // is silently hours stale. `walTipTickMs` — the newest tick the producer
+      // back to the base, every named object is present, and the restore is
+      // silently hours stale. `walTipTickMs` — the newest tick the producer
       // watched this store accept — closes that hole.
-      if (walTipTickMs >= 0 && coordinated.coordinatedCutMs < walTipTickMs) {
+      if (walTipTickMs >= 0 && marked.cutTickMs < walTipTickMs) {
         missing.push(
-          `wal/tick/${gv}-${gj}: pair marker(s) this snapshot registered are GONE — the producer ` +
-            `confirmed the pair reached tick ${walTipTickMs}, but the store can only be replayed ` +
-            `to tick ${coordinated.coordinatedCutMs}. A restore would silently return an earlier ` +
-            "state."
+          `wal/tick/${generation}: tick marker(s) this snapshot registered are GONE — the producer ` +
+            `confirmed the stream reached tick ${walTipTickMs}, but the store can only be replayed ` +
+            `to tick ${marked.cutTickMs}. A restore would silently return an earlier state.`
         );
       }
     }

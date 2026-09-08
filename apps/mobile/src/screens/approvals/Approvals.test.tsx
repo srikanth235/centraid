@@ -435,7 +435,7 @@ describe(ApprovalsScreen, () => {
     expect(spans).toContain("This phone is not paired with a gateway yet.");
     expect(spans).toContain("This page could not load");
     press(buttonLabelled(container, "Open Settings"));
-    expect(navigation.popTo).toHaveBeenCalledWith("Settings");
+    expect(navigation.popTo).toHaveBeenCalledWith("SettingsHome");
     // The filled commit is withheld on error; the quiet verb is not.
     expect(buttonLabelled(container, "Review all")).toBeNull();
     expect(buttonLabelled(container, "History")).not.toBeNull();

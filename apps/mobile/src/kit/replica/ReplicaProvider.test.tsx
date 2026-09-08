@@ -48,7 +48,32 @@ const registry = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
 }));
 
+/** The device axis. Every double below used to pin it to "offline" (#905). */
+const net = vi.hoisted(() => ({
+  deviceOnline: false,
+  base: undefined as string | undefined,
+}));
+
+/** The gateway's `/info` answer, held open so a test can ask what the mount did
+ *  while it was still in flight (#922 E8). Undefined = answers at once, which
+ *  is what every other test in this file wants. */
+const wall = vi.hoisted(() => ({
+  gate: undefined as Promise<void> | undefined,
+  release: (): void => undefined,
+  hold(): void {
+    this.gate = new Promise<void>((resolve) => {
+      this.release = () => resolve();
+    });
+  },
+  open(): void {
+    this.gate = undefined;
+    this.release = (): void => undefined;
+  },
+}));
+
 const world = vi.hoisted(() => ({
+  /** Every local replica file the mount opened, in order. */
+  opened: [] as string[],
   enrolled: [] as string[],
   /** Scopes the gateway has taken away; the plan can never return them. */
   revoked: [] as string[],
@@ -97,7 +122,8 @@ vi.mock(
   () =>
     ({
       addNetworkStateListener: () => ({ remove: (): void => undefined }),
-      getNetworkStateAsync: () => Promise.resolve({ isConnected: false }),
+      getNetworkStateAsync: () =>
+        Promise.resolve({ isConnected: net.deviceOnline }),
     }) as unknown as Partial<NetworkModule>
 );
 
@@ -106,6 +132,7 @@ vi.mock(
   () =>
     ({
       replicaStorageDirectory: () => "/replica",
+      replicaStorageDirectoryUri: () => "file:///replica",
     }) as unknown as Partial<StorageDirModule>
 );
 
@@ -121,7 +148,7 @@ vi.mock(
   import("../../lib/gateway"),
   () =>
     ({
-      resolveGatewayBase: () => Promise.resolve(undefined),
+      resolveGatewayBase: () => Promise.resolve(net.base),
     }) as unknown as Partial<GatewayModule>
 );
 
@@ -146,7 +173,10 @@ vi.mock(
   import("../../lib/replica/mobile-gateway-compatibility"),
   () =>
     ({
-      requireMobileOfflineGateway: () => Promise.resolve(undefined),
+      requireMobileOfflineGateway: async () => {
+        await wall.gate;
+        return undefined;
+      },
     }) as unknown as Partial<CompatibilityModule>
 );
 
@@ -223,10 +253,14 @@ vi.mock(
   import("../../lib/replica/op-sqlite-driver"),
   () =>
     ({
-      openMountedReplicaReaderDriver: () =>
-        Promise.resolve({ close: (): void => undefined }),
-      openNativeReplicaDriver: () =>
-        Promise.resolve({ close: (): void => undefined }),
+      openMountedReplicaReaderDriver: () => {
+        world.opened.push("reader");
+        return Promise.resolve({ close: (): void => undefined });
+      },
+      openNativeReplicaDriver: (identity: { vaultId: string }) => {
+        world.opened.push(identity.vaultId);
+        return Promise.resolve({ close: (): void => undefined });
+      },
     }) as unknown as Partial<DriverModule>
 );
 
@@ -252,6 +286,7 @@ vi.mock(
   () =>
     ({
       nativeSyncAllowed: () => Promise.resolve(true),
+      nativeRowSyncAllowed: () => Promise.resolve(true),
     }) as unknown as Partial<UploadPolicyModule>
 );
 
@@ -312,6 +347,11 @@ vi.mock(
         );
       },
       refreshCachedScopes: () => Promise.resolve(),
+      // Held open by `wall.hold()`; the mount must reach disk before it lands.
+      startCompatibilityWall: () => async () => {
+        await wall.gate;
+        return undefined;
+      },
       removeCachedScope: () => Promise.resolve(),
       resolveIdentity: () => Promise.reject(new Error("must not probe")),
     }) as unknown as Partial<ReplicaMountModule>
@@ -366,10 +406,14 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
       "vault-5",
       "vault-6",
     ];
+    net.deviceOnline = false;
+    net.base = undefined;
     world.revoked = [];
     world.mountPlans = 0;
     world.purged = [];
     world.closedSessions = [];
+    world.opened = [];
+    wall.open();
     seen = undefined;
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -440,5 +484,106 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
     // The plan is asked exactly once more, and then the provider settles.
     expect(world.mountPlans).toBe(2);
     expect(seen?.ready).toBe(true);
+  });
+});
+
+// Every double above pinned the device offline, so the suite agreed with a
+// provider that never connects. These pin the other half of the axis (#905).
+describe("a device that is online with a gateway in reach (#905)", () => {
+  const BASE = "http://127.0.0.1:9999";
+
+  beforeEach(async () => {
+    net.deviceOnline = true;
+    net.base = BASE;
+    registry.active = { gatewayId: "gateway-1", vaultId: "vault-1" };
+    registry.listeners.clear();
+    world.enrolled = ["vault-1"];
+    world.revoked = [];
+    world.mountPlans = 0;
+    world.purged = [];
+    world.closedSessions = [];
+    world.opened = [];
+    wall.open();
+    seen = undefined;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(
+        React.createElement(ReplicaProvider, null, React.createElement(Probe))
+      );
+    });
+    await settle();
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("resolves a base and publishes it as the gateway to talk to", () => {
+    expect(seen?.gatewayBase).toBe(BASE);
+  });
+
+  it("reports itself online rather than settling offline", () => {
+    expect(seen?.online).toBe(true);
+    expect(seen?.reachability).not.toBe("device-offline");
+  });
+});
+
+// A COLD START MUST NOT WAIT ON THE GATEWAY TO LOOK AT ITS OWN DISK (#922 E8).
+// The one `/info` read that raises the compatibility wall used to be awaited
+// before `mountedScopes`, so a phone whose gateway was asleep sat through the
+// reply deadline before a single local row could be read — on the one path
+// (a relaunch, identity already on disk) where nothing about the gateway is
+// needed to know which files to open. `wall.hold()` is the only way to see the
+// ordering: with an instant answer both orders look identical.
+describe("a cold start with the gateway still answering (#922 E8)", () => {
+  beforeEach(async () => {
+    net.deviceOnline = true;
+    net.base = "http://127.0.0.1:9999";
+    registry.active = { gatewayId: "gateway-1", vaultId: "vault-1" };
+    registry.listeners.clear();
+    world.enrolled = ["vault-1", "vault-2"];
+    world.revoked = [];
+    world.mountPlans = 0;
+    world.purged = [];
+    world.closedSessions = [];
+    world.opened = [];
+    wall.hold();
+    seen = undefined;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(
+        React.createElement(ReplicaProvider, null, React.createElement(Probe))
+      );
+    });
+    await settle();
+  });
+
+  afterEach(() => {
+    wall.open();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("opens every local replica file before the gateway has replied", () => {
+    expect(world.opened).toStrictEqual(["vault-1", "vault-2", "reader"]);
+  });
+
+  // The other half of the same invariant: opening early is not publishing
+  // early. An incompatible gateway must still be able to refuse this mount.
+  it("publishes no session until the wall has answered", () => {
+    expect(seen?.ready).not.toBe(true);
+  });
+
+  it("publishes the session once the answer lands", async () => {
+    wall.release();
+    await settle();
+
+    expect(seen?.ready).toBe(true);
+    expect(mountedVaultIds()).toStrictEqual(["vault-1", "vault-2"]);
   });
 });

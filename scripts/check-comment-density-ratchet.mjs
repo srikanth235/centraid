@@ -21,13 +21,26 @@
 // A deliberate raise is a hand edit to the baseline carrying an
 // approved-deviation note in the receipt.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import ts from "typescript";
 
+import {
+  INVENTORY_PATH,
+  readLedgerSection,
+  writeLedgerSection,
+} from "./check-ledgers.mjs";
+
 export const ROOT = path.resolve(import.meta.dirname, "..");
-export const BASELINE_REL = "tests/comment-density-ratchet.json";
+// The pins live in the merged inventory ledger since #915 Wave 4. The bespoke
+// serializer that made `--write` output survive `format:check` moved with them
+// and became `serializeLedger` in scripts/check-ledgers.mjs, generalised to
+// nested sections: an all-number array is filled to 80 columns exactly as
+// oxfmt fills it, so 3,600 `[commentChars, totalChars]` pairs stay one per
+// line instead of spreading over four.
+export const BASELINE_REL = `${INVENTORY_PATH}#commentDensity`;
+export const BASELINE_SECTION = "commentDensity";
 
 // Percent, held as an integer so the cap comparison stays exact.
 export const CAP_PERCENT = 15;
@@ -48,6 +61,10 @@ const SEED_COMMENT =
 
 const SEED_DEVIATION =
   "Seeded 2026-08-25 on the #861 Wave 0 tree: 3,638 files, global character share 24.31%, global line density 14.83%, 1,975 files above the 15% cap. Every pin here is expected to fall — the sweep waves under #861 are what lower them, and --write re-pins them as they do.";
+
+// The date by which the density ratchet itself is re-argued (#915 Wave 4:
+// every inventory section carries a deadline, not only its rows).
+const SEED_EXPIRY = "2026-12-01";
 
 const SEED_ALLOWLIST = {
   "packages/design/src/blocks/contracts.ts":
@@ -222,8 +239,14 @@ export function reconcileRatchet(baseline, measured) {
     files[rel] = [measurement.commentChars, measurement.totalChars];
   }
   return {
+    // Key order and the shared section fields survive a `--write`: the ledger
+    // rule (#915 Wave 4) is that a population budget carries its own issue and
+    // expiry, and a re-pin must not quietly drop the deadline.
     next: {
       _comment: baseline._comment ?? SEED_COMMENT,
+      _entries: baseline._entries ?? "population",
+      issue: baseline.issue ?? 915,
+      expires: baseline.expires ?? SEED_EXPIRY,
       approvedDeviation: baseline.approvedDeviation ?? SEED_DEVIATION,
       allowlist: baseline.allowlist ?? {},
       files,
@@ -232,68 +255,22 @@ export function reconcileRatchet(baseline, measured) {
   };
 }
 
-// One line per pin — `JSON.stringify` spreads each pair over four. The 80-col
-// wrap reproduces oxfmt's, so `--write` leaves a tree `format:check` passes.
-const WRAP_COLUMN = 80;
-
-function renderEntry(key, value, comma) {
-  const single = `    ${JSON.stringify(key)}: ${value}${comma}`;
-  if (single.length <= WRAP_COLUMN || !value.startsWith("[")) return [single];
-  return [
-    `    ${JSON.stringify(key)}: [`,
-    `      ${value.slice(1, -1)}`,
-    `    ]${comma}`,
-  ];
-}
-
-function renderBlock(name, entries, render, comma) {
-  if (entries.length === 0) return [`  "${name}": {}${comma}`];
-  return [
-    `  "${name}": {`,
-    ...entries.flatMap(([key, value], index) =>
-      renderEntry(key, render(value), index === entries.length - 1 ? "" : ",")
-    ),
-    `  }${comma}`,
-  ];
-}
-
-export function serializeBaseline(doc) {
-  const lines = [
-    "{",
-    `  "_comment": ${JSON.stringify(doc._comment)},`,
-    `  "approvedDeviation": ${JSON.stringify(doc.approvedDeviation)},`,
-    ...renderBlock(
-      "allowlist",
-      Object.entries(doc.allowlist).sort(([a], [b]) => (a < b ? -1 : 1)),
-      (reason) => JSON.stringify(reason),
-      ","
-    ),
-    ...renderBlock(
-      "files",
-      Object.entries(doc.files),
-      (pair) => `[${pair[0]}, ${pair[1]}]`,
-      ""
-    ),
-    "}",
-  ];
-  return `${lines.join("\n")}\n`;
-}
-
 export function loadBaseline(root = ROOT) {
-  try {
-    return JSON.parse(readFileSync(path.join(root, BASELINE_REL), "utf8"));
-  } catch {
-    return {
-      _comment: SEED_COMMENT,
-      approvedDeviation: SEED_DEVIATION,
-      allowlist: Object.fromEntries(
-        Object.entries(SEED_ALLOWLIST).filter(([rel]) =>
-          trackedFiles(root).includes(rel)
-        )
-      ),
-      files: {},
-    };
-  }
+  const section = readLedgerSection(INVENTORY_PATH, BASELINE_SECTION, root);
+  if (section) return section;
+  return {
+    _comment: SEED_COMMENT,
+    _entries: "population",
+    issue: 915,
+    expires: SEED_EXPIRY,
+    approvedDeviation: SEED_DEVIATION,
+    allowlist: Object.fromEntries(
+      Object.entries(SEED_ALLOWLIST).filter(([rel]) =>
+        trackedFiles(root).includes(rel)
+      )
+    ),
+    files: {},
+  };
 }
 
 function reportTotals(totals) {
@@ -311,7 +288,7 @@ function main() {
 
   if (process.argv.includes("--write")) {
     const { next, refused } = reconcileRatchet(baseline, measured);
-    writeFileSync(path.join(ROOT, BASELINE_REL), serializeBaseline(next));
+    writeLedgerSection(INVENTORY_PATH, BASELINE_SECTION, next, ROOT);
     reportTotals(totals);
     for (const line of refused) console.warn(`warn  refused to raise ${line}`);
     console.log(

@@ -13,6 +13,7 @@ import { uuidv7 } from "../ids.js";
 import type { ShareableItemType } from "../share/closure.js";
 import { listFulfillment } from "./grant-fulfillment-rows.js";
 import {
+  defaultDeparturePolicy,
   GRANT_SELECT,
   PRINCIPAL_OF_AUDIENCE,
   toGrant,
@@ -34,6 +35,18 @@ export * from "./grant-records.js";
 export * from "./grant-authority.js";
 export * from "./grant-fulfillment-rows.js";
 
+/**
+ * What LIVE means for an answer (#916, review 6.1). `expires_at` was written
+ * at every "until Friday" grant and read by nothing: the resolvers filtered
+ * `revoked_at` alone, so a time-boxed share kept answering yes forever and the
+ * end date was decoration. The clock is SQLite's, the same one the purge
+ * triggers stamp with, so a resolver and a sweep can never disagree about
+ * whether an answer has run out.
+ */
+const AUTHORITY_CLOCK = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+export const LIVE_AUTHORITY_SQL = `revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ${AUTHORITY_CLOCK})`;
+const LIVE_AUTHORITY_A_SQL = `a.revoked_at IS NULL AND (a.expires_at IS NULL OR a.expires_at > ${AUTHORITY_CLOCK})`;
+
 export function readLiveShareGrant(
   db: DatabaseSync,
   audience: ShareGrantAudience,
@@ -44,7 +57,7 @@ export function readLiveShareGrant(
     db,
     `${GRANT_SELECT}
         AND a.principal_kind = ? AND a.principal_id = ?
-        AND a.subject_type = ? AND a.subject_id = ? AND a.revoked_at IS NULL`
+        AND a.subject_type = ? AND a.subject_id = ? AND ${LIVE_AUTHORITY_A_SQL}`
   ).get(
     PRINCIPAL_OF_AUDIENCE[audience.kind],
     audience.id,
@@ -72,7 +85,7 @@ export function readLiveShareRefusal(
     `SELECT authority_id FROM share_authority
       WHERE principal_kind = ? AND principal_id = ? AND subject_type = ?
         AND subject_id = ? AND verb = ? AND duration = 'standing'
-        AND decision = 'declined' AND revoked_at IS NULL`
+        AND decision = 'declined' AND ${LIVE_AUTHORITY_SQL}`
   ).get(
     PRINCIPAL_OF_AUDIENCE[input.audience.kind],
     input.audience.id,
@@ -127,12 +140,17 @@ export function createShareGrant(
     input.grantedAt,
     input.grantedBy
   );
-  // Only a real ceiling gets a row: absence IS the default.
-  if (input.maxSizeBytes !== undefined && input.maxSizeBytes !== null) {
+  // Only a chosen ceiling or a non-default departure policy gets a row:
+  // absence IS the default, on both halves.
+  const departurePolicy =
+    input.departurePolicy ?? defaultDeparturePolicy(input.subjectType);
+  const ceiling = input.maxSizeBytes ?? null;
+  if (ceiling !== null || departurePolicy !== "remove-member-only") {
     db.prepare(
-      `INSERT INTO share_delivery_config (grant_id, max_size_bytes)
-       VALUES (?, ?)`
-    ).run(grantId, input.maxSizeBytes);
+      `INSERT INTO share_delivery_config
+         (grant_id, max_size_bytes, departure_policy)
+       VALUES (?, ?, ?)`
+    ).run(grantId, ceiling, departurePolicy);
   }
   const grant = readShareGrant(db, grantId);
   if (!grant) throw new Error(`share grant ${grantId} vanished after insert`);
@@ -253,7 +271,7 @@ export function maskedPartiesForSubject(
         db,
         `SELECT principal_id FROM share_authority
           WHERE principal_kind = 'person' AND decision = 'declined'
-            AND subject_type = ? AND subject_id = ? AND revoked_at IS NULL`
+            AND subject_type = ? AND subject_id = ? AND ${LIVE_AUTHORITY_SQL}`
       ).all(subjectType, subjectId) as { principal_id: string }[]
     ).map((row) => row.principal_id)
   );
@@ -287,7 +305,7 @@ export function listShareGrantsForAudience(
   options: { includeRevoked?: boolean } = {}
 ): ShareGrantRecord[] {
   const live =
-    options.includeRevoked === true ? "" : " AND a.revoked_at IS NULL";
+    options.includeRevoked === true ? "" : ` AND ${LIVE_AUTHORITY_A_SQL}`;
   return (
     db
       .prepare(
@@ -306,7 +324,7 @@ export function listShareGrantsForSubject(
   options: { includeRevoked?: boolean } = {}
 ): ShareGrantRecord[] {
   const live =
-    options.includeRevoked === true ? "" : " AND a.revoked_at IS NULL";
+    options.includeRevoked === true ? "" : ` AND ${LIVE_AUTHORITY_A_SQL}`;
   return (
     db
       .prepare(
@@ -357,7 +375,7 @@ export function listLiveGrantsReachingParty(
     db
       .prepare(
         `${GRANT_SELECT}
-          AND a.revoked_at IS NULL
+          AND ${LIVE_AUTHORITY_A_SQL}
           AND (
             (a.principal_kind = 'person' AND a.principal_id = ?)
             OR (a.principal_kind = 'circle' AND a.principal_id IN (

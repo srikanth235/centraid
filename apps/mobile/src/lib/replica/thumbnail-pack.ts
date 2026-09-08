@@ -3,6 +3,7 @@ import { Directory, File } from "expo-file-system";
 import {
   nativeDirectorySize,
   replicaStorageDirectory,
+  replicaStorageDirectoryUri,
 } from "../../../modules/centraid-storage";
 import { authHeader } from "../gateway";
 import { THUMBNAIL_SOURCE_BUDGET_BYTES } from "./offline-budgets";
@@ -24,7 +25,7 @@ export interface PinnedThumbnailCandidate {
 }
 
 function packDirectory(scopeId: string): Directory | undefined {
-  const root = replicaStorageDirectory();
+  const root = replicaStorageDirectoryUri();
   if (!root) return undefined;
   return new Directory(root, "thumbnail-pack", encodeURIComponent(scopeId));
 }
@@ -55,7 +56,7 @@ let packListing: Map<string, string> | undefined;
 function packIndex(): Map<string, string> {
   if (packListing) return packListing;
   const built = new Map<string, string>();
-  const root = replicaStorageDirectory();
+  const root = replicaStorageDirectoryUri();
   if (!root) return built;
   const packs = new Directory(root, "thumbnail-pack");
   if (!packs.exists) {
@@ -264,7 +265,7 @@ async function statsYielding(directory: Directory): Promise<PackFileStat[]> {
 }
 
 function rootPackDirectory(): Directory | undefined {
-  const root = replicaStorageDirectory();
+  const root = replicaStorageDirectoryUri();
   return root ? new Directory(root, "thumbnail-pack") : undefined;
 }
 

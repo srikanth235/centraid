@@ -1,0 +1,34 @@
+{
+  "label": "2026-08-15",
+  "verdict": "SHIPPABLE",
+  "candidate": "c5",
+  "lanes": {
+    "static": {
+      "verdict": "passed",
+      "durationMs": 270000
+    },
+    "verify": {
+      "verdict": "passed",
+      "durationMs": 620000
+    },
+    "mobile-e2e-ios": {
+      "verdict": "passed",
+      "durationMs": 2400000
+    },
+    "mobile-e2e-android": {
+      "verdict": "parked",
+      "durationMs": 0
+    },
+    "web-e2e": {
+      "verdict": "passed",
+      "durationMs": 220000
+    }
+  },
+  "laneSeries": {
+    "iOS cold start → usable": {
+      "value": 1415,
+      "unit": "ms",
+      "budget": 1800
+    }
+  }
+}

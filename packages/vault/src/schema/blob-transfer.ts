@@ -5,6 +5,8 @@
 // outbox row is only a custody obligation. Both survive process restarts so
 // resumability never depends on an in-memory hash/multipart object.
 
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 export const BLOB_TRANSFER_DDL = `
 CREATE TABLE IF NOT EXISTS blob_outbox (
   sha256          TEXT PRIMARY KEY CHECK (length(sha256) = 64),
@@ -17,7 +19,7 @@ CREATE TABLE IF NOT EXISTS blob_outbox (
   next_retry_at   TEXT,
   last_error      TEXT,
   created_at      TEXT NOT NULL,
-  updated_at      TEXT NOT NULL
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_blob_outbox_retry
   ON blob_outbox(state, next_retry_at, created_at);
@@ -43,7 +45,7 @@ CREATE TABLE IF NOT EXISTS blob_ingress_session (
   part_count       INTEGER CHECK (part_count IS NULL OR (part_count > 0 AND part_count <= 10000)),
   device_id        TEXT,
   created_at       TEXT NOT NULL,
-  updated_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   expires_at       TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_blob_ingress_expiry
@@ -61,12 +63,12 @@ CREATE TABLE IF NOT EXISTS blob_content_key (
   wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
   key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
   created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS blob_device_content_key (
   sha256       TEXT NOT NULL REFERENCES blob_content_key(sha256) ON DELETE CASCADE,
-  device_id    TEXT NOT NULL REFERENCES consent_device(device_id) ON DELETE CASCADE,
+  device_id    TEXT NOT NULL REFERENCES access_device(device_id) ON DELETE CASCADE,
   wrapped_key  BLOB NOT NULL,
   wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
   device_key_epoch INTEGER NOT NULL CHECK (device_key_epoch > 0),
@@ -77,9 +79,13 @@ CREATE INDEX IF NOT EXISTS idx_blob_device_content_key_device
   ON blob_device_content_key(device_id);
 
 CREATE TABLE IF NOT EXISTS blob_device_wrap_key (
-  device_id    TEXT PRIMARY KEY REFERENCES consent_device(device_id) ON DELETE CASCADE,
+  device_id    TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
   key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
   salt         BLOB NOT NULL CHECK (length(salt) = 32),
-  updated_at   TEXT NOT NULL
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
+${touchUpdatedAt("blob_outbox", "sha256")}
+${touchUpdatedAt("blob_ingress_session", "session_id")}
+${touchUpdatedAt("blob_content_key", "sha256")}
+${touchUpdatedAt("blob_device_wrap_key", "device_id")}
 `;

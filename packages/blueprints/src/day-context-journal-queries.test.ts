@@ -215,7 +215,7 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
     );
     const ctx = ctxOf({});
     ctx.vault.read = async () => {
-      throw Object.assign(new Error("no grant"), { code: "VAULT_CONSENT" });
+      throw Object.assign(new Error("no grant"), { code: "VAULT_ACCESS" });
     };
     const result = await dayContext({
       input: { from: "2026-03-01", to: "2026-03-31" },
@@ -225,7 +225,7 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
       birthdays: [],
       due: [],
       holidays: [],
-      vaultDenied: { code: "VAULT_CONSENT", message: "no grant" },
+      vaultDenied: { code: "VAULT_ACCESS", message: "no grant" },
     });
   });
 });
@@ -361,7 +361,7 @@ describe("Notes journal exclusion (#834 R-journal)", () => {
       "search:knowledge.note": rows["knowledge.note"],
     });
     ctx.vault.read = async () => {
-      throw Object.assign(new Error("no grant"), { code: "VAULT_CONSENT" });
+      throw Object.assign(new Error("no grant"), { code: "VAULT_ACCESS" });
     };
     const result = await linkTargets({ input: { term: "coffee" }, ctx });
     expect(

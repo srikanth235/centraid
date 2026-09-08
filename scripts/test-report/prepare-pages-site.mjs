@@ -41,6 +41,14 @@ const runDate = normalizeDate(flags.date);
 const runId = sanitizeSegment(flags["run-id"] ?? "");
 const runUrl = String(flags["run-url"] ?? "");
 const keep = Math.max(1, Number(flags.keep ?? 30) || 30);
+// #915 C1 — the immutable copy carries the evidence directory that produced
+// it. Tonight's report needs LAST night's evidence to compute a
+// candidate-to-candidate delta, and the only durable place to read it from is
+// the dated slot the nightly already publishes. Without this the delta would
+// have to be recomputed from the HTML, which is not a data source.
+const evidenceDir = flags.evidence
+  ? path.resolve(flags.evidence)
+  : path.join(root, "artifacts/evidence");
 
 if (!slot || slot.includes("..")) {
   console.error(`invalid --slot: ${flags.slot}`);
@@ -69,6 +77,11 @@ if (runSlug) {
   await rm(archived, { recursive: true, force: true });
   await mkdir(archived, { recursive: true });
   await cp(reportDir, archived, { recursive: true });
+  // Best-effort: a run with no evidence directory (a PR-scoped report, say)
+  // publishes without one, and the next night reads it as no previous evidence.
+  await cp(evidenceDir, path.join(archived, "evidence"), {
+    recursive: true,
+  }).catch(() => {});
   series = await appendSeries({
     historyDir: path.join(siteDir, "test-report", "history"),
     summary: await readJson(path.join(reportDir, "summary.json"), null),

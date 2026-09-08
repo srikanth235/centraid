@@ -11,7 +11,6 @@
  */
 
 const BATCH = 6;
-const PURPOSE = "dpv:ServiceProvision";
 
 const OBLIGATIONS_SCHEMA = {
   type: "object",
@@ -51,7 +50,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const derivatives = read.rows ?? [];
   if (derivatives.length === 0)
@@ -100,7 +98,6 @@ export default async function handler({ ctx, log }) {
     await ctx.vault.invoke({
       command: "sync.stage_rows",
       input: { kind: "enrichment.obligations", label: "docs", rows },
-      purpose: PURPOSE,
     });
     log.info(`${rows.length} obligation(s) staged for review`);
   }

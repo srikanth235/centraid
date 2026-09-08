@@ -126,7 +126,7 @@ function makeStats(over: Partial<AtlasCensusPayload> = {}): AtlasCensusPayload {
         file: "vault",
         rows: 12,
         bytes: 40_000,
-        tables: [table("consent.device", "Device", 12, 40_000)],
+        tables: [table("access.device", "Device", 12, 40_000)],
       },
     ],
     totals: { rows: 226, bytes: 3_040_000, kinds: 3, populatedKinds: 2 },

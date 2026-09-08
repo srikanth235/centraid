@@ -84,7 +84,6 @@ describe("preview", () => {
     const out = gw.invoke(owner, {
       command: "media.add_asset",
       input: { staged_sha: staged.sha256 },
-      purpose: "dpv:ServiceProvision",
     });
     expect((out as { status: string }).status).toBe("executed");
     return (out as { output: { content_id: string } }).output.content_id;
@@ -261,8 +260,8 @@ describe("preview", () => {
   test("sweepBlobs runs the backstop and reports the yield in its receipt", async () => {
     addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(20)]));
     const sweep = await gw.sweepBlobs(owner);
-    const receipt = db.journal
-      .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+    const receipt = db.audit
+      .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
       .get(sweep.receiptId) as { detail_json: string };
     const detail = JSON.parse(receipt.detail_json) as {
       previewsGenerated: number;

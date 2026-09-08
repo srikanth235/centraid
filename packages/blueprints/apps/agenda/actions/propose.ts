@@ -17,6 +17,8 @@ export default async function propose({
       dtstart: String(input.dtstart ?? ""),
       dtend: String(input.dtend ?? ""),
       calendar_id: String(input.calendar_id ?? ""),
+      // The seat mints the row's id and the origin honours it (#922 G2).
+      ...(input.event_id ? { event_id: String(input.event_id) } : {}),
       ...(input.description ? { description: String(input.description) } : {}),
       ...(input.start_tz ? { start_tz: String(input.start_tz) } : {}),
       ...(input.end_tz ? { end_tz: String(input.end_tz) } : {}),

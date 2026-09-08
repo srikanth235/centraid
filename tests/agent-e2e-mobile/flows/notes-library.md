@@ -1,5 +1,7 @@
 # notes-library
 
+**Claim:** a write made on the phone reaches the vault and survives process death — the one property that makes this a local-first product rather than a cache. If this passes when it should not, a release ships in which a member's note is gone after the OS reclaims the app.
+
 **Goal:** prove the phone's Notes cover against the real seeded library — the reading room lists the vault's notes with the promoted heading AND the preview under it, a row opens the editor with its acts, and **a note captured on the device round-trips through a real process restart**.
 
 **Setup:** `ctx.ensureDemo("notes")` runs before pairing, so the initial replica clone holds the deterministic library (`packages/blueprints/apps/notes/seed.js`: two notebooks and five notes, three markdown and two plain). The flow then pairs via `ctx.configureGateway()`.

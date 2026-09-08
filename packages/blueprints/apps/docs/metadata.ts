@@ -2,7 +2,7 @@
 // core.tag_item/untag_item (the shared "Tags" concept scheme,
 // packages/vault/src/commands/tags.ts — additive and idempotent, mirroring
 // the photos app's tag-asset/untag-asset actions) and the activity read over
-// consent.provenance. Split out of logic.ts purely for file-size
+// access.provenance. Split out of logic.ts purely for file-size
 // hygiene — versions.ts/popovers.ts's exact factory pattern: closes over
 // app.tsx's own `data`/`refresh` plus logic.ts's own `act`/`narrate`
 // (passed in, never re-implemented).

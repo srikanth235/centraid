@@ -34,6 +34,8 @@
 // All tables STRICT; PKs are TEXT UUIDv7; timestamps are TEXT ISO-8601 UTC —
 // the core spine's conventions.
 
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 export const LOCKER_DDL = `
 CREATE TABLE locker_item (
   item_id      TEXT PRIMARY KEY,
@@ -80,7 +82,7 @@ CREATE TABLE locker_item (
   -- rather than claiming an age Review would then reason from.
   password_set_at TEXT,
   created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   -- archive (#872, GAPS §3.3 #9): "keep forever, hide from lists", the
   -- opposite end of trash's 30-day countdown. Deliberately EXCLUSIVE with
   -- deleted_at rather than orthogonal: an item is live, archived, or trashed,
@@ -93,12 +95,16 @@ CREATE TABLE locker_item (
   -- trash-bearing tables.
   deleted_at   TEXT,
   purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
-  CHECK (archived_at IS NULL OR deleted_at IS NULL)
+  CHECK (archived_at IS NULL OR deleted_at IS NULL),
+  FOREIGN KEY (item_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
 CREATE INDEX locker_item_type_idx ON locker_item(type);
 CREATE INDEX locker_item_connection_idx ON locker_item(connection_id);
 CREATE INDEX locker_item_archived_idx ON locker_item(archived_at);
+CREATE INDEX IF NOT EXISTS locker_item_purge_idx
+  ON locker_item(purge_at) WHERE purge_at IS NOT NULL;
+${touchUpdatedAt("locker_item", "item_id")}
 `;
 
 // A stable, owner-assigned alias for an item (#298). A
@@ -112,9 +118,10 @@ CREATE INDEX locker_item_archived_idx ON locker_item(archived_at);
 // so a trashed item's alias frees for its successor once reassigned. ON
 // DELETE CASCADE drops the mapping when the item is purged.
 export const LOCKER_ALIAS_DDL = `
-CREATE TABLE IF NOT EXISTS locker_item_alias (
-  alias    TEXT PRIMARY KEY,
-  item_id  TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE
+CREATE TABLE locker_item_alias (
+  alias      TEXT PRIMARY KEY,
+  item_id    TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS locker_item_alias_item_idx ON locker_item_alias(item_id);
 `;
@@ -137,10 +144,11 @@ CREATE TABLE locker_auth_credential (
   salt          BLOB NOT NULL,
   verifier      BLOB NOT NULL,
   created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX locker_auth_credential_kind_idx
   ON locker_auth_credential(kind);
+${touchUpdatedAt("locker_auth_credential", "credential_id")}
 `;
 
 // Owner-defined sections and fields (#872, GAPS §3.3 #2 — "the largest
@@ -171,12 +179,14 @@ CREATE TABLE locker_item_field (
   -- Owner ordering within (item, section); ties break on label.
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   CHECK (kind = 'sealed' OR value_sealed IS NULL),
-  CHECK (kind <> 'sealed' OR value_text IS NULL)
+  CHECK (kind <> 'sealed' OR value_text IS NULL),
+  FOREIGN KEY (field_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX locker_item_field_item_idx
   ON locker_item_field(item_id, section, position);
+${touchUpdatedAt("locker_item_field", "field_id")}
 `;
 
 // More than one address per login (#872, GAPS §3.3 #4), each with its OWN
@@ -194,7 +204,8 @@ CREATE TABLE locker_item_address (
   match_policy TEXT NOT NULL DEFAULT 'registrable-domain'
     CHECK (match_policy IN ('registrable-domain','exact-host')),
   position     INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL
+  created_at   TEXT NOT NULL,
+  FOREIGN KEY (address_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX locker_item_address_item_idx
   ON locker_item_address(item_id, position);
@@ -218,9 +229,10 @@ CREATE TABLE locker_item_passkey (
   algorithm     TEXT,
   private_key   TEXT,
   created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
+${touchUpdatedAt("locker_item_passkey", "item_id")}
 `;
 
 // Item and password history (#872, GAPS §3.3 #5 — "also fixes 'I rotated it
@@ -235,16 +247,14 @@ CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
 // change (which fields moved, the title before it) so History can say what
 // happened without unsealing anything. CASCADE on purge: "erase for good"
 // must not leave the old passwords behind.
-export const LOCKER_HISTORY_DDL = `
-CREATE TABLE locker_item_history (
-  revision_id  TEXT PRIMARY KEY,
-  item_id      TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
-  operation    TEXT NOT NULL,
-  title        TEXT,
-  password     TEXT,
-  changed_json TEXT NOT NULL CHECK (json_valid(changed_json)),
-  recorded_at  TEXT NOT NULL
-) STRICT;
-CREATE INDEX locker_item_history_item_idx
-  ON locker_item_history(item_id, recorded_at DESC);
-`;
+// `locker_item_history` is GONE (#916, owner decision D2). The vault carried
+// two revision mechanisms that answered the same question: this one, written
+// by the Locker commands with the old title and password inline, and
+// `core_entity_revision`, the generic pre-mutation snapshot every other pack
+// uses. Two mechanisms meant two retention policies, two undo paths and two
+// export shapes for one fact. Locker's history is now `core_entity_revision`
+// rows with `entity_type = 'locker.item'`; the old values ride in
+// `snapshot_json` exactly as this table stored them, sealed columns still
+// ciphertext, and `locker.item` and its sidecars declare
+// `revisions: { retain: 'forever' }` so the durable password history the
+// Locker promises is a declaration rather than a second table.

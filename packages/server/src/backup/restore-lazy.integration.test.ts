@@ -215,7 +215,6 @@ describe("restore-lazy", () => {
 
       // --- The DB restored intact ---
       expect(result.entries).toContain("vault.db");
-      expect(result.entries).toContain("journal.db");
       const restoredDb = new DatabaseSync(path.join(destDir, "vault.db"), {
         readOnly: true,
       });

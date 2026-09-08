@@ -3,8 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  isPendingTaskId,
-  landedTask,
+  boardTask,
   mountedWriteScope,
   removeTaskWrite,
   taskWrite,
@@ -45,25 +44,20 @@ describe("a write names a HOUSE scope only when that house is mounted", () => {
   });
 });
 
-describe("completing an optimistic add waits for the landed row", () => {
-  const pending = {
-    task_id: "pending:intent-1:task",
+// #922 G2: there is no landed id to wait for. The projection mints the task's
+// real id, the write carries it, the origin honours it — so the row a
+// completion names is the row the member is looking at, queued or not.
+describe("completing an optimistic add names the same row either way", () => {
+  const queued = {
+    task_id: "1f2e3d4c-0000-8000-8000-0000000000aa",
     title: "Renew the passport",
   };
-  const landed = {
-    task_id: "task-real",
-    title: "Renew the passport",
-  };
+  const other = { task_id: "task-real", title: "Renew the passport" };
 
-  it("recognises the synthetic pending id", () => {
-    expect(isPendingTaskId(pending.task_id)).toBe(true);
-    expect(isPendingTaskId(landed.task_id)).toBe(false);
-  });
-
-  it("resolves a pending add to the vault row of the same title", () => {
-    expect(landedTask(pending, [landed])).toStrictEqual(landed);
-    expect(landedTask(pending, [pending])).toBeUndefined();
-    expect(landedTask(landed, [landed])).toStrictEqual(landed);
+  it("finds the task by its id, never by its title", () => {
+    expect(boardTask(queued, [queued])).toStrictEqual(queued);
+    expect(boardTask(queued, [other])).toBeUndefined();
+    expect(boardTask(other, [queued, other])).toStrictEqual(other);
   });
 });
 

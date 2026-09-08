@@ -19,7 +19,7 @@ import { describe, afterEach, expect, test } from "vitest";
 import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
-  openJournalDb,
+  openLedgerDb,
 } from "@centraid/server/engine";
 import type {
   ConversationRunner,
@@ -27,6 +27,7 @@ import type {
 } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { makeAssistantRouteHandler } from "./assistant-routes.js";
 import type { AssistantRouteOptions } from "./assistant-routes.js";
@@ -42,10 +43,10 @@ function fakeRegistry(): VaultRegistry {
     ownerPartyId: "owner-party",
     appsDir: path.join(dir, "apps"),
     journal: () => {
-      journal ??= openJournalDb(path.join(dir, "journal.db"));
+      journal ??= openLedgerDb(ledgerDbFileIn(dir));
       return journal;
     },
-    journalDbFile: path.join(dir, "journal.db"),
+    ledgerDbFile: ledgerDbFileIn(dir),
     harnessSessionDir: path.join(dir, "harness-sessions"),
   };
   const plane = {

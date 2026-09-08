@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AsyncStorageLike } from "../../lib/replica/native-change-feed";
 import {
+  attemptedReachability,
   dismissRevokedNotice,
   loadRevokedNotices,
   recordRevokedNotice,
@@ -215,5 +216,26 @@ describe("the trace a revoked scope leaves", () => {
     await expect(
       loadRevokedNotices(storage, "gateway-3")
     ).resolves.toStrictEqual([]);
+  });
+});
+
+describe("what a pass may claim before it has asked the gateway anything", () => {
+  it("does not call an unreachable vault `syncing` just because a URL resolved", () => {
+    // THE REGRESSION THIS PINS (#903). `resolveGatewayBase()` never probes, so
+    // every pass re-asserted reachability over a gateway whose last pull had
+    // already failed, and Home flipped back to "Everything's uploaded".
+    expect(attemptedReachability(true, true, false)).toBe("gateway-asleep");
+  });
+
+  it("says it is trying when the last answer was a good one", () => {
+    expect(attemptedReachability(true, true, true)).toBe("syncing");
+  });
+
+  it("blames the radio over the gateway when the device itself is off", () => {
+    expect(attemptedReachability(false, true, true)).toBe("device-offline");
+  });
+
+  it("has no gateway to be syncing with when no base resolved", () => {
+    expect(attemptedReachability(true, false, true)).toBe("gateway-asleep");
   });
 });

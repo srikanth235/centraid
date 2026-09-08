@@ -21,6 +21,15 @@
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 
+import {
+  isFresh,
+  record,
+  repoRoot,
+  stampKey,
+  STATIC_TIER,
+  tierIsComplete,
+} from "./gate-stamp.mjs";
+
 const args = process.argv.slice(2);
 const gates = args.filter((a) => !a.startsWith("--"));
 const jobsFlag = args.find((a) => a.startsWith("--jobs="));
@@ -32,6 +41,17 @@ if (gates.length === 0) {
   process.stderr.write("run-gates: no gates given\n");
   process.exit(2);
 }
+
+// `--stamp` opts this invocation into the static-tier gate stamp (#988): the
+// members of STATIC_TIER named here are skipped when the same tree, against the
+// same `origin/main`, already passed them, and re-stamped only when every one
+// of them runs green in this invocation. Without the flag nothing is read or
+// written, which is what CI and any ad-hoc `run-gates.mjs` call get.
+const stamping = args.includes("--stamp");
+const tierGates = stamping ? gates.filter((g) => STATIC_TIER.includes(g)) : [];
+const stampedKey = tierGates.length > 0 ? stampKey(repoRoot()) : null;
+const skipTier = stampedKey !== null && isFresh("static", stampedKey);
+const queued = skipTier ? gates.filter((g) => !tierGates.includes(g)) : gates;
 
 const started = Date.now();
 const results = [];
@@ -65,8 +85,8 @@ function runOne(name) {
 }
 
 function pump(resolveAll) {
-  while (running < jobs && cursor < gates.length) {
-    const name = gates[cursor++];
+  while (running < jobs && cursor < queued.length) {
+    const name = queued[cursor++];
     running += 1;
     runOne(name).then((res) => {
       running -= 1;
@@ -74,20 +94,44 @@ function pump(resolveAll) {
       const mark = res.code === 0 ? "✓" : "✗";
       process.stderr.write(
         `  ${mark} ${res.name.padEnd(26)} ${secs(res.ms).padStart(6)}s  ` +
-          `(${results.length}/${gates.length})\n`
+          `(${results.length}/${queued.length})\n`
       );
-      if (results.length === gates.length) resolveAll();
+      if (results.length === queued.length) resolveAll();
       else pump(resolveAll);
     });
   }
 }
 
-process.stderr.write(`▶ ${gates.length} gates, ${jobs} at a time\n`);
-await new Promise((resolve) => {
-  pump(resolve);
-});
+if (skipTier) {
+  process.stderr.write(
+    `⊘ static tier stamped for tree ${stampedKey.tree.slice(0, 9)} ` +
+      `(base ${stampedKey.base.slice(0, 9)}): ${tierGates.join(", ")} skipped ` +
+      `— re-run them with CENTRAID_GATE_STAMPS=0\n`
+  );
+}
+process.stderr.write(`▶ ${queued.length} gates, ${jobs} at a time\n`);
+if (queued.length > 0) {
+  await new Promise((resolve) => {
+    pump(resolve);
+  });
+}
 
 const failed = results.filter((r) => r.code !== 0);
+
+// The tier is stamped only when EVERY member of STATIC_TIER ran here and
+// passed — not merely every member this invocation happened to name. An
+// invocation that names a subset (`run-gates.mjs --stamp format:check`) stamps
+// nothing, because the stamp is read as a claim about the whole tier and the
+// next `check:push:static` would otherwise skip three gates nobody ran. Any
+// failure at all also leaves the previous stamp alone.
+if (
+  stampedKey !== null &&
+  !skipTier &&
+  failed.length === 0 &&
+  tierIsComplete(results)
+) {
+  record("static", stampedKey);
+}
 // Slowest first: the list doubles as the evidence for what to scope or move to
 // CI the next time this gate goes over budget.
 const slowest = [...results].sort((a, b) => b.ms - a.ms).slice(0, 5);

@@ -3,7 +3,7 @@
 // ON` (always on — see ../db.ts) every DELETE/UPDATE on a parent row full-
 // scans any child table whose FK columns aren't covered by an index, and
 // commands/merge.ts re-points FKs via UPDATE...WHERE fk=old across every
-// child table. This walks the live schema (both vault.db and journal.db)
+// child table. This walks the live schema
 // and asserts every FK child column-set is covered as the LEFTMOST prefix
 // of some index — an explicit one, or the implicit index SQLite gives a
 // rowid table's TEXT PRIMARY KEY / UNIQUE constraint, or a WITHOUT ROWID
@@ -110,25 +110,9 @@ function describeUncovered(items: UncoveredFk[]): string {
 
 describe("fk-index", () => {
   test("every vault.db FK child column-set is covered by a leftmost index prefix", () => {
-    const { vault, journal, close } = openVaultDb();
+    const { vault, close } = openVaultDb();
     try {
       const uncovered = findUncoveredForeignKeys(vault);
-      expect(
-        uncovered,
-        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`
-      ).toStrictEqual([]);
-    } finally {
-      close();
-      // journal is closed by close() too; referencing it keeps the pair open
-      // together for the duration of the assertion above.
-      void journal;
-    }
-  });
-
-  test("every journal.db FK child column-set is covered by a leftmost index prefix", () => {
-    const { journal, close } = openVaultDb();
-    try {
-      const uncovered = findUncoveredForeignKeys(journal);
       expect(
         uncovered,
         `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`

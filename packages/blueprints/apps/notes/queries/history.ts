@@ -5,6 +5,7 @@ import {
   RELATIONS_SCHEME_URI,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
 const REVISES_NOTATION = "revises";
@@ -30,21 +31,18 @@ interface ContentRow {
 export default async function noteHistory({ input, ctx }: HandlerArgs) {
   const noteId = String(input?.note_id ?? "");
   if (!noteId) return { versions: [] };
-  const purpose = "dpv:ServiceProvision";
   try {
     const notes = await ctx.vault.read({
       entity: "knowledge.note",
       where: [{ column: "note_id", op: "eq", value: noteId }],
       limit: 1,
-      purpose,
     });
     const note = ((notes.rows ?? []) as unknown as NoteRow[])[0];
     if (!note) return { versions: [] };
 
-    const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-    ]);
+    const [concepts, schemes] = await Promise.all(
+      conceptTaxonomyReads(ctx.vault)
+    );
     const relationId = findSchemeConcept(
       schemes.rows as Array<{ scheme_id: string; uri: string }>,
       concepts.rows as Array<{
@@ -76,7 +74,6 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
           ],
           orderBy: { column: "valid_from", dir: "desc" },
           limit: 1,
-          purpose,
         });
         const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
         if (!next || seen.has(next.to_id)) return;
@@ -89,9 +86,9 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     }
 
     const contents = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chain }],
-      purpose,
     });
     const byId = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((row) => [

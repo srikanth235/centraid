@@ -240,16 +240,15 @@ describe("shell/routes/homeTileContent", () => {
     expect(content.photos).toStrictEqual({ thumbs: [], total: 3 });
   });
 
-  it("never sends a purpose on a replica read — it selects the SHAPE, not the reason", async () => {
-    // `ReplicaShellSession.resolveShapeId` filters the catalog by
-    // `shape.purpose === purpose`, so a descriptive value ("home-springboard")
-    // matches no shape and every read throws. Each read here is `.catch()`-ed,
-    // so the failure was silent and Home simply stayed empty over a full vault.
+  it("names only the app and the entity on a replica read — one app, one shape", async () => {
+    // ONE APP, ONE SHAPE (#928 A1): a shape is composed from the app's own
+    // declared manifest, so a read names the app and the entity and there is
+    // nothing left for a caller-supplied selector to get wrong.
     const reader = readerOf({ "knowledge.note": [{ title: "n" }] });
     await loadHomeTileContent({ reader });
     expect(vi.mocked(reader.read).mock.calls.length).toBeGreaterThan(0);
     for (const [, request] of vi.mocked(reader.read).mock.calls)
-      expect(request.purpose).toBeUndefined();
+      expect(Object.keys(request).sort()).not.toContain("purpose");
   });
 
   it("paints the ORIGINAL when a photo has no thumb derivative yet", async () => {

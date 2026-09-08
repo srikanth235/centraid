@@ -1,103 +1,37 @@
 // People's native recipes — the phone mirror of blueprints' people Shared.tsx;
 // ONE ROW AND ONE SECTION for the whole app, every string the caller's.
 //
-// THE LINK RING (v12): solid ink where linked, dashed line-colour where not,
-// NOTHING where the sharing plane could not be read. A wrapper View border
-// (`outline` does not exist in React Native) reserving the same outer rectangle
-// in all three states, so a row cannot reflow when link facts arrive.
+// The avatar and its link ring are the KIT's (`components/PersonAvatar`): the
+// share sheet draws the same people, and a face that differs between the two
+// screens reads as two people. Re-exported here so this file stays People's
+// one import.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import { LABELS } from "@centraid/blueprints/apps/people/people-copy";
-import { identityInitials, identityInk } from "@centraid/design";
-import type { ColorKey } from "@centraid/design";
 
 import Button from "../../kit/components/Button";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import PersonAvatar from "../../kit/components/PersonAvatar";
+import type {
+  AvatarSubject,
+  LinkRing,
+} from "../../kit/components/PersonAvatar";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { avatarFill } from "./people-model";
 
-export type LinkRing = "linked" | "unlinked" | "unknown";
+export { default as PersonAvatar } from "../../kit/components/PersonAvatar";
+export type {
+  AvatarSubject,
+  LinkRing,
+} from "../../kit/components/PersonAvatar";
 
 /** Star mark: 17px on a 24 grid, stroke 1.5 (the handoff's path). */
 const STAR_PATH =
   "M12 3.8l2.6 5.2 5.7.9-4.1 4 1 5.7-5.2-2.8-5.2 2.8 1-5.7-4.1-4 5.7-.9z";
-
-/** Avatar boxes and ring rungs; fixed sizes. */
-const AVATAR_ROW = 34;
-const AVATAR_HERO = 52;
-const RING_ROW = { width: 1.5, offset: 2 } as const;
-const RING_HERO = { width: 2, offset: 3 } as const;
-
-export interface AvatarSubject {
-  party_id: string;
-  name: string;
-  avatar_color?: string | null;
-}
-
-export function PersonAvatar({
-  person,
-  link = "unknown",
-  hero = false,
-}: {
-  person: AvatarSubject;
-  link?: LinkRing;
-  hero?: boolean;
-}): React.JSX.Element {
-  const { colors } = useTheme();
-  const ring = hero ? RING_HERO : RING_ROW;
-  const box = hero ? AVATAR_HERO : AVATAR_ROW;
-  const fill = avatarFill(
-    person,
-    (key: ColorKey) =>
-      colors[`c${key.slice(0, 1).toUpperCase()}${key.slice(1)}`] ??
-      colors.accent
-  );
-  const ink = identityInk(fill, colors.text, colors.textInv);
-  const outer = box + 2 * (ring.offset + ring.width);
-  return (
-    <View
-      style={{
-        alignItems: "center",
-        justifyContent: "center",
-        width: outer,
-        height: outer,
-        borderRadius: radii.pill,
-        borderWidth: ring.width,
-        // Unknown draws NOTHING — never paint a dashed ring and call it
-        // "not linked" (transparent border keeps the outer box).
-        borderColor:
-          link === "linked"
-            ? colors.text
-            : link === "unlinked"
-              ? colors.line
-              : "transparent",
-        borderStyle: link === "unlinked" ? "dashed" : "solid",
-      }}
-    >
-      <View
-        style={{
-          alignItems: "center",
-          justifyContent: "center",
-          width: box,
-          height: box,
-          borderRadius: radii.pill,
-          backgroundColor: fill,
-        }}
-      >
-        <Text
-          style={[hero ? t("bodyStrong") : t("smallStrong"), { color: ink }]}
-        >
-          {identityInitials(person.name)}
-        </Text>
-      </View>
-    </View>
-  );
-}
 
 /** Its own 44×44 target — pressing never opens the person. */
 export function StarButton({

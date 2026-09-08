@@ -99,7 +99,7 @@ export function collectCitations(node, where, citations = new Map()) {
  * but every offline validator reads its notion of "still open" from them, so a
  * stale entry silently re-opens the hole this gate closes.
  *
- * @param {object} matrix parsed tests/matrix.json
+ * @param {object} matrix parsed tests/claims.json
  * @returns {number[]} issue numbers declared open, ascending
  */
 export function declaredOpenIssues(matrix) {
@@ -237,9 +237,11 @@ export async function validateOpenCitations({
 
 /** The ledgers this gate reads, relative to the repository root. */
 export const LEDGERS = [
-  "tests/matrix.json",
-  "tests/skips.json",
-  "tests/env-red.json",
+  "tests/claims.json",
+  // #915 Wave 4 merged tests/skips.json and tests/env-red.json into the
+  // inventory ledger; every `issue` citation in either section is still walked,
+  // because the walk is over the parsed document rather than a fixed key path.
+  "tests/inventory.json",
   "tests/quarantine.json",
 ];
 
@@ -254,7 +256,7 @@ async function main() {
   );
   const { errors, checked } = await validateOpenCitations({
     sources,
-    matrix: sources["tests/matrix.json"],
+    matrix: sources["tests/claims.json"],
     token: process.env.GITHUB_TOKEN,
   });
   if (errors.length) {

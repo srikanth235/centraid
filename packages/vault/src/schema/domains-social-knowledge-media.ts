@@ -1,26 +1,21 @@
-// `social_contact_card` is retired (#883); rung one's text is history.
+// Domain DDL — schemas `social`, `knowledge`, `media`.
+//
+// No `social_contact_card` (#883, ruling O-contact): a nickname is a
+// `people.profile` field and a reachable address is a
+// `social.contact_channel`, so the card had nothing of its own left to say.
 
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const SOCIAL_DDL = `
-CREATE TABLE social_contact_card (
-  card_id              TEXT PRIMARY KEY,
-  party_id             TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  nickname             TEXT,
-  -- Display label only (vCard ORG + TITLE). The employment CLAIM is a
-  -- core.link (party -works-for-> org) with provenance, never a card field
-  -- (issue #274 kink 4; the social boundary always said so).
-  org_title            TEXT,
-  vcard_rev            TEXT,
-  updated_at           TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
-) STRICT;
-
 CREATE TABLE social_circle (
   circle_id      TEXT PRIMARY KEY,
   owner_party_id TEXT NOT NULL REFERENCES core_party(party_id),
   name           TEXT NOT NULL,
   kind           TEXT NOT NULL CHECK (kind IN ('family','friends','work','custom')),
-  UNIQUE (owner_party_id, name)
+  created_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  UNIQUE (owner_party_id, name),
+  FOREIGN KEY (circle_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE social_circle_member (
@@ -28,7 +23,9 @@ CREATE TABLE social_circle_member (
   circle_id TEXT NOT NULL REFERENCES social_circle(circle_id),
   party_id  TEXT NOT NULL REFERENCES core_party(party_id),
   added_at  TEXT NOT NULL,
-  UNIQUE (circle_id, party_id)
+  updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  UNIQUE (circle_id, party_id),
+  FOREIGN KEY (member_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_circle_member_party ON social_circle_member(party_id);
 
@@ -45,7 +42,9 @@ CREATE TABLE social_thread (
   -- purges can drift it, so the standing sweep (gateway/duties.ts) HEALS it
   -- wholesale — one UPDATE recomputing it from the messages — exactly as
   -- blob_custody_state is rebuilt. It is therefore never a source of truth.
-  last_message_at TEXT
+  last_message_at TEXT,
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (thread_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE social_thread_participant (
@@ -56,8 +55,10 @@ CREATE TABLE social_thread_participant (
   joined_at TEXT,
   muted     INTEGER NOT NULL CHECK (muted IN (0,1)),
   last_read_at TEXT,
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   UNIQUE (thread_id, party_id),
-  CHECK (party_id IS NOT NULL OR handle IS NOT NULL)
+  CHECK (party_id IS NOT NULL OR handle IS NOT NULL),
+  FOREIGN KEY (tp_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_thread_participant_party ON social_thread_participant(party_id);
 
@@ -71,13 +72,23 @@ CREATE TABLE social_message (
   in_reply_to_id  TEXT REFERENCES social_message(message_id),
   delivery        TEXT NOT NULL CHECK (delivery IN ('draft','sent','delivered','read','failed')),
   external_id     TEXT UNIQUE,
-  CHECK (sender_party_id IS NOT NULL OR sender_handle IS NOT NULL)
+  created_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  CHECK (sender_party_id IS NOT NULL OR sender_handle IS NOT NULL),
+  FOREIGN KEY (message_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_message_thread ON social_message(thread_id);
 CREATE INDEX IF NOT EXISTS idx_message_sender_party ON social_message(sender_party_id);
 CREATE INDEX IF NOT EXISTS idx_message_body_content ON social_message(body_content_id);
 CREATE INDEX IF NOT EXISTS idx_message_in_reply_to ON social_message(in_reply_to_id);
-${touchUpdatedAt("social_contact_card", "card_id")}
+-- #883: a thread view is every message in one thread, oldest first, and the
+-- thread-only index made SQLite sort every message this vault holds.
+CREATE INDEX IF NOT EXISTS idx_message_thread_sent ON social_message(thread_id, sent_at);
+${touchUpdatedAt("social_circle", "circle_id")}
+${touchUpdatedAt("social_circle_member", "member_id")}
+${touchUpdatedAt("social_thread", "thread_id")}
+${touchUpdatedAt("social_thread_participant", "tp_id")}
+${touchUpdatedAt("social_message", "message_id")}
 `;
 
 export const KNOWLEDGE_DDL = `
@@ -89,15 +100,18 @@ CREATE TABLE knowledge_note (
   format          TEXT NOT NULL CHECK (format IN ('markdown','html','plain')),
   pinned          INTEGER NOT NULL CHECK (pinned IN (0,1)),
   created_at      TEXT NOT NULL,
-  updated_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   -- Trash (issue #308 A6): delete is reversible — the soft-delete pair, with
   -- real deletion deferred to the lifecycle sweep's purge window. The FTS
   -- spec's deletedColumn guard keeps trashed notes out of the index. The guard
   -- (issue #441 A4) makes purge_at-without-deleted_at unrepresentable, matching
   -- core_content_item / core_document / media_asset.
   deleted_at      TEXT,
-  purge_at        TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
+  purge_at        TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  FOREIGN KEY (note_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX IF NOT EXISTS knowledge_note_purge_idx
+  ON knowledge_note(purge_at) WHERE purge_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_note_author_party ON knowledge_note(author_party_id);
 CREATE INDEX IF NOT EXISTS idx_note_body_content ON knowledge_note(body_content_id);
 
@@ -108,9 +122,17 @@ CREATE TABLE knowledge_annotation (
   target_id       TEXT NOT NULL,
   selector_json   TEXT CHECK (selector_json IS NULL OR json_valid(selector_json)),
   body_text       TEXT NOT NULL,
-  created_at      TEXT NOT NULL
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (annotation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_annotation_author_party ON knowledge_annotation(author_party_id);
+CREATE INDEX IF NOT EXISTS idx_annotation_target
+  ON knowledge_annotation(target_type, target_id);
+${touchUpdatedAt("knowledge_note", "note_id")}
+${touchUpdatedAt("knowledge_annotation", "annotation_id")}
 `;
 
 export const MEDIA_DDL = `
@@ -127,7 +149,7 @@ CREATE TABLE media_asset (
   -- Stable logical capture grouping for Live Photo / motion-photo companions.
   capture_group_id TEXT,
   place_id         TEXT REFERENCES core_place(place_id),
-  camera_device_id TEXT REFERENCES consent_device(device_id),
+  camera_device_id TEXT REFERENCES access_device(device_id),
   width            INTEGER CHECK (width > 0),
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
@@ -143,17 +165,24 @@ CREATE TABLE media_asset (
   -- column, and merge.ts re-points FKs by UPDATE, so it carries its own index.
   source_asset_id  TEXT REFERENCES media_asset(asset_id)
                      CHECK (source_asset_id IS NULL OR source_asset_id <> asset_id),
-  -- First-class asset state (issue #419) so the Photos replica shape is
-  -- self-contained: favorite is a boolean on the asset (no more reconstructing
-  -- it from a 3-table core_tag/core_concept join), and archive hides an asset
-  -- from the timeline without trashing it. Trash is the deleted_at pair below.
-  favorite         INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0,1)),
+  -- No \`favorite\` column (#916, ruling ONT-03). The star was a MIRROR of the
+  -- \`starred\` tag in the flags scheme that Docs, Locker and People already
+  -- use, and a mirror has two truths. Archive hides an asset from the timeline
+  -- without trashing it; trash is the deleted_at pair below.
   archived_at      TEXT,
   -- The standard soft-delete pair (issue #274): every owner-deletable row
   -- carries its own grace window, not just the drive's content items.
   deleted_at       TEXT,
-  purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
+  purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  created_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- Archived and trashed are different answers, and a row claiming both is
+  -- neither (#916).
+  CHECK (archived_at IS NULL OR deleted_at IS NULL),
+  FOREIGN KEY (asset_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX IF NOT EXISTS media_asset_purge_idx
+  ON media_asset(purge_at) WHERE purge_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_asset(place_id);
 CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_asset(camera_device_id);
 CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_asset(capture_group_id);
@@ -163,7 +192,13 @@ CREATE TABLE media_face_region (
   region_id             TEXT PRIMARY KEY,
   asset_id              TEXT NOT NULL REFERENCES media_asset(asset_id),
   bbox_json             TEXT NOT NULL CHECK (json_valid(bbox_json)),
-  party_id              TEXT REFERENCES core_party(party_id),
+  -- The person this face IS. It yields to their purge rather than blocking it
+  -- (#916, D1): forgetting a person must take their name off their faces, and
+  -- the CHECK below stays satisfied because a NULL party is always allowed.
+  -- \`confirmed_by_party_id\` does NOT yield — the CHECK ties it to
+  -- \`review_state\`, so a foreign-key SET NULL would leave a 'confirmed' row
+  -- with no confirmer and fail the constraint mid-purge.
+  party_id              TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   confidence            REAL CHECK (confidence BETWEEN 0 AND 1),
   confirmed_by_party_id TEXT REFERENCES core_party(party_id),
   -- WHERE A REVIEW QUEUE ENDS (issue #712). Before this column the table could
@@ -175,6 +210,8 @@ CREATE TABLE media_face_region (
   -- this; nothing else does.
   review_state          TEXT NOT NULL DEFAULT 'proposed'
                           CHECK (review_state IN ('proposed','confirmed','rejected','dismissed')),
+  created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   -- ONE SOURCE OF TRUTH, STRUCTURALLY. "confirmed" is already derivable from
   -- confirmed_by_party_id, so the two facts are pinned to each other here
   -- rather than left to agree by convention: a writer cannot mark a region
@@ -186,9 +223,12 @@ CREATE TABLE media_face_region (
   -- A rejected or dismissed region asserts neither, so it carries no party --
   -- which is what keeps rejected rows (now that they survive) out of every
   -- per-person count that falls back from confirmed_by_party_id to party_id.
-  CHECK (review_state IN ('proposed','confirmed') OR party_id IS NULL)
+  CHECK (review_state IN ('proposed','confirmed') OR party_id IS NULL),
+  FOREIGN KEY (region_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_face_region_asset ON media_face_region(asset_id);
 CREATE INDEX IF NOT EXISTS idx_face_region_party ON media_face_region(party_id);
 CREATE INDEX IF NOT EXISTS idx_face_region_confirmed_by_party ON media_face_region(confirmed_by_party_id);
+${touchUpdatedAt("media_asset", "asset_id")}
+${touchUpdatedAt("media_face_region", "region_id")}
 `;

@@ -9,7 +9,7 @@ import path from "node:path";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type {
   AutomationTriggerKind,
@@ -84,7 +84,7 @@ export interface RunFireOptions {
   automationRef: string;
   runId?: string;
   appsDir: string;
-  journalDbFile: string;
+  ledgerDbFile: string;
   /** Per-app CODE folders (#137); defaults to `appsDir` in the flat layout. */
   codeAppsDir?: string;
   /** Bound to THAT app's enrolled agent credential, so a cross-app cascade acts
@@ -195,7 +195,7 @@ export async function runFire(
   }
 
   const runsStore = new ConversationStore(
-    makeJournalDbProvider(opts.journalDbFile)
+    makeLedgerDbProvider(opts.ledgerDbFile)
   );
   const runId =
     opts.runId ??
@@ -566,7 +566,7 @@ export async function runFire(
             {
               automationRef: next.ref,
               appsDir: opts.appsDir,
-              journalDbFile: opts.journalDbFile,
+              ledgerDbFile: opts.ledgerDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
               ...((nestedRuntime?.harnessKind ?? opts.harnessKind)
@@ -670,7 +670,6 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
       entity: "locker.item",
       ...target,
       columns: [column],
-      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) throw new Error(reply.error ?? "reveal failed");
@@ -694,7 +693,6 @@ async function flipNeedsAuth(
     payload: {
       command: "sync.set_connection_status",
       input: { connection_id: connectionId, status: "needs-auth" },
-      purpose: "dpv:ServiceProvision",
     },
   });
 }
@@ -713,7 +711,6 @@ async function connectionIdOf(
         { column: "label", op: "eq", value: connector.label },
       ],
       limit: 1,
-      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) return undefined;
@@ -737,7 +734,6 @@ async function connectionStatus(
           { column: "connection_id", op: "eq", value: connector.connectionId },
         ],
         limit: 1,
-        purpose: "dpv:ServiceProvision",
       },
     });
     if (!byId.ok) return undefined;
@@ -753,7 +749,6 @@ async function connectionStatus(
         { column: "label", op: "eq", value: connector.label },
       ],
       limit: 1,
-      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) return undefined;

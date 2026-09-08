@@ -748,17 +748,8 @@ export {
 } from "./gateway-client-links.js";
 export {
   listGatewayEdges,
-  createCommons,
-  listCommonsInvitations,
-  claimCommonsInvitation,
-  answerCommonsInvitation,
-  listCommonsRecovery,
-  recoverCommons,
   type GatewayEdge,
   type EdgeMode,
   type EdgeKind,
   type EdgeStatus,
-  type CommonsInvitation,
-  type CommonsRecoveryGrant,
-  type CommonsRecoveryOutcome,
 } from "./gateway-client-edges.js";

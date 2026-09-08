@@ -56,7 +56,7 @@ describe("buildCollectionSections — every section, always, in order", () => {
       facts({
         places: [
           {
-            placeId: "raw-place-id",
+            placeIds: ["raw-place-id"],
             key: "39.1:-120.0",
             name: "Lake Tahoe",
           },
@@ -68,6 +68,24 @@ describe("buildCollectionSections — every section, always, in order", () => {
       id: "39.1:-120.0",
       label: "Lake Tahoe",
     });
+  });
+
+  it("covers a cell from any of its place rows, not just the first", () => {
+    const other = asset("other", { placeId: "second-place-id" });
+    const sections = buildCollectionSections(
+      facts({
+        assets: [other],
+        places: [
+          {
+            placeIds: ["first-place-id", "second-place-id"],
+            key: "39.1:-120.0",
+            name: "Lake Tahoe",
+          },
+        ],
+      })
+    );
+    const places = sections.find((section) => section.key === "places")!;
+    expect(places.tiles[0]).toMatchObject({ uri: "uri-other" });
   });
 });
 

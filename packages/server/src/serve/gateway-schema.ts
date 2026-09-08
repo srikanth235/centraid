@@ -56,7 +56,15 @@ export function installGatewaySchema(db: DatabaseSync): void {
       label TEXT NOT NULL,
       platform TEXT,
       remember_device INTEGER NOT NULL CHECK (remember_device IN (0, 1)),
-      grant_profile_json TEXT,
+      /*
+       * Is this device confined to a subset of the owner's surfaces (#928 A6)?
+       * The SET of surfaces is not here — it is share_authority rows in the
+       * vault, principal 'device' over subject type 'app.surface'. This flag
+       * is the one fact the gateway must know BEFORE any vault is open, and
+       * it is the reason a missing projection can deny instead of guessing:
+       * attenuated with nothing projected is a refusal, not a full device.
+       */
+      attenuated INTEGER NOT NULL DEFAULT 0 CHECK (attenuated IN (0, 1)),
       compute_json TEXT,
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       added_at TEXT NOT NULL
@@ -65,6 +73,21 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * Replica checkpoints are the one genuinely per-(device, vault) fact, so
      * they keep their own table now that 'devices' no longer fans out.
      */
+    /*
+     * The PROJECTION of a Companion device's attenuation (#928 A6), per
+     * (device, vault) because the answer lives in a vault and a device may be
+     * enrolled in several. The authority rows are the source of truth; this
+     * table exists only because the gateway authorizes a Companion request
+     * BEFORE it opens a vault. It is rebuilt from those rows whenever the
+     * vault opens or the answer changes, and an absent row denies.
+     */
+    CREATE TABLE IF NOT EXISTS device_surface_projection (
+      endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      vault_id TEXT NOT NULL,
+      surfaces_json TEXT NOT NULL,
+      projected_at TEXT NOT NULL,
+      PRIMARY KEY (endpoint_id, vault_id)
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS device_checkpoints (
       endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       vault_id TEXT NOT NULL,
@@ -159,99 +182,18 @@ export function installGatewaySchema(db: DatabaseSync): void {
       journal_limit_bytes INTEGER
     ) STRICT;
     /*
-     * A cross-vault EDGE is a recoverable two-step workflow, not a
-     * distributed SQLite transaction (#726 P2 — succeeds placement_intents,
-     * deleted outright, pre-1.0, no dual write). One edge covers a SET of
-     * items: scope_json is that set for a snapshot edge, so three
-     * photographs sharing one edge project through ONE reconcile pass, not
-     * three. The audience projection always commits before a move deletes
-     * its source; replay resumes from target_state/source_state.
+     * SAME-OWNER PLACEMENT HISTORY (#726 P2, reduced to history by #928 A7).
+     * The edge rows, the effect outbox and their reducer are gone: a
+     * placement between two of one owner's vaults is one synchronous vault
+     * call, not a distributed obligation, and the durable INTENT belongs to
+     * the caller's own offline queue.
      *
-     * A live/lend relationship is not representable (#731): mode admits ONE
-     * value, asserted at the boundary rather than merely remembered by a
-     * reader. A live edge cannot be written here, so no
-     * reader downstream has to ask whether a scope is a standing declaration
-     * — a scope is always a fixed, validated set of item ids
-     * (serve/share-scope.ts).
-     */
-    CREATE TABLE IF NOT EXISTS share_edges (
-      edge_id TEXT PRIMARY KEY,
-      created_by_device TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      owner_id TEXT NOT NULL REFERENCES owners(owner_id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK (kind IN ('add', 'move')),
-      mode TEXT NOT NULL CHECK (mode = 'snapshot'),
-      item_type TEXT NOT NULL,
-      scope_json TEXT,
-      origin_vault_id TEXT NOT NULL,
-      audience_vault_id TEXT NOT NULL,
-      verbs TEXT NOT NULL CHECK (verbs = 'read'),
-      target_item_ids_json TEXT,
-      target_state TEXT NOT NULL CHECK (target_state IN ('queued', 'executed')),
-      source_state TEXT NOT NULL CHECK (source_state IN ('not-needed', 'queued', 'executed')),
-      status TEXT NOT NULL CHECK (status IN ('queued', 'in-flight', 'established', 'parked', 'denied', 'revoked', 'completed', 'failed')),
-      reason TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      CHECK (mode != 'snapshot' OR scope_json IS NOT NULL),
-      CHECK (kind != 'move' OR mode = 'snapshot')
-    ) STRICT;
-    /*
-     * Listing is BY OWNER (issue #750): every device of one owner sees the
-     * same edges, because authority is the owner's and a phone must not show
-     * a different share history than the laptop that made it.
-     * created_by_device stays on the row as PROVENANCE (which device acted)
-     * and is answered in the wire DTO — it is simply not a scope.
-     */
-    CREATE INDEX IF NOT EXISTS share_edges_owner_status
-      ON share_edges(owner_id, updated_at);
-    /*
-     * The ONE durable effect outbox of the sharing plane (issue #750
-     * abstraction 2). It succeeds peer_pending_gives, peer_blob_pulls and
-     * peer_pending_refusals outright — pre-1.0, no dual write — because
-     * those were three hand-rolled queues with three drainers, three retry
-     * policies and three places to forget a crash. One table, one executor.
-     *
-     * Every effect is forward-only and idempotent: effect_id is DERIVED from
-     * what the effect is about (give:<edge>), so a replay after a crash
-     * re-enqueues the SAME row rather than a second copy, and the handler
-     * keeps the anchor that already made its work replay-safe: the
-     * edge-unique share_access_receipts row for a delivered placement.
-     *
-     * next_attempt_at is the retry clock. ONE KIND remains (#825, ruling
-     * G-copy): 'await-answer', 'deliver-refusal' and 'pull-blob' each existed
-     * only to carry a copy to ANOTHER person's vault, and left with
-     * copy-as-share. 'deliver-give' survives as the same-owner placement's
-     * retry anchor, and its payload carries nothing beyond the kind and the
-     * edge. A gateway upgraded across that retirement has its leftover rows
-     * removed once by retireDeadShareEffects (share-effects-retire.ts),
-     * which also ends their edges honestly — an obligation whose transport no
-     * longer exists must not sit queued forever pretending it might land.
-     *
-     * edge_id is deliberately not a foreign key: it was written at the
-     * AUDIENCE end of a remote give, where no local share_edges row existed.
-     */
-    CREATE TABLE IF NOT EXISTS share_effects (
-      effect_id TEXT PRIMARY KEY,
-      edge_id TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('deliver-give')),
-      payload_json TEXT NOT NULL,
-      status TEXT NOT NULL CHECK (status IN ('queued', 'done')),
-      attempts INTEGER NOT NULL DEFAULT 0,
-      next_attempt_at INTEGER,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS share_effects_due_idx
-      ON share_effects(status, next_attempt_at);
-    CREATE INDEX IF NOT EXISTS share_effects_edge_idx
-      ON share_effects(edge_id);
-    /*
-     * Durable access audit, one row per EDGE regardless of item count (#726
-     * P2) — three photographs placed by one edge leave one receipt, not
-     * three. Owner ids are deliberately not foreign keys: removing an owner
-     * must revoke authority without erasing the fact that access was granted
-     * or removed. edge_id makes offline edge replay exactly-once at this
-     * control-plane boundary.
+     * One row per PLACEMENT regardless of item count — three photographs
+     * moved by one act leave one receipt, not three. Owner ids are
+     * deliberately not foreign keys: removing an owner must revoke authority
+     * without erasing the fact that access was granted or removed. edge_id is
+     * the caller's placement token and is UNIQUE, which is what makes a
+     * replayed placement exactly-once at this control-plane boundary.
      */
     CREATE TABLE IF NOT EXISTS share_access_receipts (
       receipt_id TEXT PRIMARY KEY,
@@ -263,6 +205,8 @@ export function installGatewaySchema(db: DatabaseSync): void {
       origin_item_ids_json TEXT,
       audience_vault_id TEXT NOT NULL,
       audience_item_ids_json TEXT NOT NULL,
+      placement_kind TEXT CHECK (placement_kind IS NULL OR placement_kind IN ('add', 'move')),
+      created_by_device TEXT,
       created_at TEXT NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS share_access_receipts_audience_idx

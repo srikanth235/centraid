@@ -13,7 +13,7 @@ import {
 import { PLACE_MENU } from "../drive-copy.ts";
 import type { Crumb } from "../drive-copy.ts";
 import type { DriveFilters } from "../filters.ts";
-import { isTrash } from "../shelves.ts";
+import { isTrash, SHARED } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
 import type { DriveDoc, SortKey } from "../types.ts";
 import type { EmptyStateView } from "../view-state.ts";
@@ -99,6 +99,7 @@ function DriveBody(props: DriveRouteProps): ReactNode {
               onOpenDetails={props.onOpenDetails}
               onOpenQuick={props.onOpenQuick}
               onToggleSelect={props.onToggleSelect}
+              showSender={props.shelf === SHARED}
             />
           ))}
         </div>
@@ -176,6 +177,7 @@ function WindowedRows(props: DriveRouteProps): ReactNode {
             onToggleSelect={props.onToggleSelect}
             onOpenMenu={props.onOpenMenu}
             onRestore={props.onRestore}
+            showSender={props.shelf === SHARED}
           />
         );
       })}

@@ -23,7 +23,7 @@ import React from "react";
  * `React.lazy` returns a `LazyExoticComponent`, which react-navigation's
  * `component=` prop does not accept.
  */
-function lazyScreen<P extends object>(
+export function lazyScreen<P extends object>(
   load: () => Promise<{ default: React.ComponentType<P> }>
 ): React.ComponentType<P> {
   const Lazy = React.lazy(load);
@@ -86,9 +86,6 @@ export const DocsUpload = lazyScreen(
 export const DocsScan = lazyScreen(() => import("./src/apps/docs/DocsScan"));
 export const DocsRecent = lazyScreen(
   () => import("./src/apps/docs/RecentlyChanged")
-);
-export const DocsStarred = lazyScreen(
-  () => import("./src/apps/docs/DocsStarred")
 );
 export const DocsTrash = lazyScreen(() => import("./src/apps/docs/DocsTrash"));
 export const DocsStorage = lazyScreen(

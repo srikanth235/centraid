@@ -59,7 +59,7 @@ describe("reading one person's standing grants", () => {
         forParty: () =>
           Promise.resolve({
             known: true,
-            channel: { state: "invited" as const },
+            channel: { state: "severed" as const },
             grants: [grant(), grant({ grantId: "grant-2", revokedAt: "2026" })],
           }),
       }),
@@ -67,7 +67,7 @@ describe("reading one person's standing grants", () => {
     );
     expect(state).toStrictEqual({
       kind: "read",
-      reach: "invited",
+      reach: "severed",
       grants: [grant()],
     });
   });

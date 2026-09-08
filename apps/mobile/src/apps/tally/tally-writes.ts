@@ -26,7 +26,7 @@ import {
 } from "@centraid/blueprints/apps/tally/compose-copy";
 import type { TallyWrite } from "@centraid/blueprints/apps/tally/writes";
 
-import { postStatus } from "../../kit/components/status-line";
+import { postStatus, showUndoStatus } from "../../kit/components/status-line";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
@@ -73,12 +73,8 @@ export async function issueTallyWrite(
       queuedMessage: COMPOSE_OUTCOMES.added,
     });
     if (ok && outcome.status === "executed") {
-      postStatus(
-        options.executed,
-        options.undo
-          ? { action: { label: "Undo", run: options.undo } }
-          : undefined
-      );
+      if (options.undo) showUndoStatus(options.executed, options.undo);
+      else postStatus(options.executed);
     }
     if (ok && options.refresh !== false) await refreshTally();
     return ok;

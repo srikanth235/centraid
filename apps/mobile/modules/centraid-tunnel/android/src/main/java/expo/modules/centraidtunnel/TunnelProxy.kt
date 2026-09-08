@@ -26,9 +26,16 @@ class TunnelProxy(private val openStream: suspend () -> TunnelStream) {
   /**
    * Bind 127.0.0.1:0 (ephemeral). Loopback only — the proxy must never be
    * reachable from off-device.
+   *
+   * The address is the IPv4 literal, never `InetAddress.getLoopbackAddress()`:
+   * Android answers `::1` there, and a socket bound to `::1` REFUSES the IPv4
+   * connection every caller actually makes — `http://127.0.0.1:<port>` is the
+   * JS contract, the WebView origin, and what iOS (`.ipv4(.loopback)`) and the
+   * Node reference proxy both bind. A JVM unit test cannot see the difference,
+   * because the desktop JVM answers 127.0.0.1 for the same call (#905).
    */
   fun start(): Int {
-    val socket = ServerSocket(0, 64, InetAddress.getLoopbackAddress())
+    val socket = ServerSocket(0, 64, InetAddress.getByName("127.0.0.1"))
     server = socket
     scope.launch { acceptLoop(socket) }
     return socket.localPort

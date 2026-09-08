@@ -3,6 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { enforceRevisionRetention } from "../gateway/revision-capture.js";
 import type { HandlerCtx } from "../gateway/types.js";
 
 const DEFAULT_UNDO_WINDOW_MS = 10_000;
@@ -24,12 +25,23 @@ export interface EntityRevision<T = unknown> {
 function actorPartyId(ctx: HandlerCtx): string | null {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  return owner?.owner_party_id ?? null;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  return owner?.self_party_id ?? null;
 }
 
-/** Append a pre-mutation snapshot; returns its stable id. */
+/**
+ * Append a pre-mutation snapshot of a COMPOSITE entity; returns its stable id.
+ *
+ * The pipeline captures every row a command touches on its own (#916, review
+ * 5.1 — `gateway/revision-capture.ts`), which is what the hundred and
+ * seventy-odd commands that used to snapshot nothing now get for free. This
+ * stays for the handful of entities whose undo needs MORE than the row: an
+ * expense is its splits, its payers and its line items, and a person is their
+ * channels, so a row snapshot would restore the header and lose the money. A
+ * command that records one here wins — the generic drain leaves that
+ * (entity, id) alone for this invocation.
+ */
 export function recordEntityRevision(
   ctx: HandlerCtx,
   input: {
@@ -48,8 +60,8 @@ export function recordEntityRevision(
     .prepare(
       `INSERT INTO core_entity_revision
         (revision_id, entity_type, entity_id, operation, snapshot_json,
-         recorded_at, undo_until, undone_at, actor_party_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
+         recorded_at, undo_until, undone_at, actor_party_id, invocation_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
     )
     .run(
       revisionId,
@@ -59,9 +71,11 @@ export function recordEntityRevision(
       JSON.stringify(input.snapshot),
       ctx.now,
       undoUntil,
-      actorPartyId(ctx)
+      actorPartyId(ctx),
+      ctx.invocationId
     );
   ctx.wrote("core.entity_revision", revisionId);
+  enforceRevisionRetention(ctx.db, input.entityType, input.entityId);
   return { revisionId, undoUntil };
 }
 

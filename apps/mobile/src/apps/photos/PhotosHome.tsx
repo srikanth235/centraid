@@ -35,10 +35,12 @@ import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import { Store } from "../../storage";
 import CameraRollImportOffer from "./CameraRollImportOffer";
 import { detectFacesFor } from "./people-model";
 import { photoAccessTakesOverTimeline } from "./photo-access";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
 import PhotoGrainView from "./PhotoGrainView";
 import { runBackup, useAutomaticPhotoBackup } from "./photos-backup";
@@ -181,13 +183,10 @@ export default function PhotosHome({
   }, []);
   useAutomaticPhotoBackup(backupConsent);
 
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    PHOTO_ENTITY_READS.collectionEntries
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const visibleSections = useMemo(
@@ -220,7 +219,7 @@ export default function PhotosHome({
   // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
   const enrichPolicies = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
   );
   const detectFacesAvailability = detectFacesFor(
     enrichPolicies.loading
@@ -463,6 +462,9 @@ export default function PhotosHome({
         { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
+      {/* The vault lockup on every route (see `VaultBar`). This surface hosts
+          its own band rather than a shared frame, so it mounts the bar. */}
+      <VaultBar />
       {selecting ? (
         // iOS parity (#712): Select keeps the page title. Count/verbs live on the foot bar.
         <View style={styles.header}>

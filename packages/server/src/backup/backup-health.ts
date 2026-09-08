@@ -135,8 +135,8 @@ export function evaluateBackupHealth(opts: {
       if (worst !== "error") worst = "degraded";
       notes.push(
         `${vaultId}: ${target.walForeignCheckpointCount ?? 1} foreign checkpoint(s) detected ` +
-          `(last: ${lastForeign.db} — ${lastForeign.reason}) — something else is checkpointing ` +
-          `this vault's databases`
+          `(last: ${lastForeign.reason}) — something else is checkpointing ` +
+          `this vault's database`
       );
     }
     // Issue #408 G9: a never-restored backup is a hypothesis — restore

@@ -45,8 +45,6 @@ export function reachLabel(reach: GrantReach): string {
   switch (reach) {
     case "live":
       return "Reachable";
-    case "invited":
-      return "Invitation pending";
     case "severed":
       return "Link ended";
     case "never-reached":
@@ -58,20 +56,48 @@ export function reachLabel(reach: GrantReach): string {
 
 export function reachNote(reach: GrantReach): string | null {
   switch (reach) {
-    case "invited":
-      return "Sharing waits here until they join with a vault.";
     case "severed":
-      return "The link to their vault ended; nothing new can be delivered.";
+      return "The link to their vault ended; link again in People to share.";
+    // Not "an invitation goes out first" — since #903 nothing is sent, and a
+    // note promising an act the sheet will not perform is worse than silence.
     case "never-reached":
-      return "Sharing sends an invitation first.";
+      return "Link their account in People to share with them.";
     case "live":
     case "unknown":
       return null;
   }
 }
 
+/* THE LINK TICKET, OFFERED INLINE (#929 S6). The reach note above still says
+ * why this share cannot be made; these words are the act that would change
+ * that, and they promise only what the ceremony does — the member sends the
+ * ticket themselves, and nothing is granted until the link is live. */
+
+export const LINK_TICKET_ACTION = "Send them a link ticket";
+export const LINK_TICKET_BUSY = "Making a ticket…";
+export const LINK_TICKET_COPY_ACTION = "Copy";
+export const LINK_TICKET_COPIED = "Copied";
+export const LINK_TICKET_NOTE =
+  "One-time. Send it to them yourself; they paste it in People, and this share can be made once the link is live.";
+
+/** The ticket's OWN expiry, read off the ticket — never a remembered TTL, which
+ *  is the gateway's to change without telling this file. */
+export function linkTicketExpiry(expiresAt: string, now: number): string {
+  const minutes = Math.floor((Date.parse(expiresAt) - now) / 60_000);
+  if (!Number.isFinite(minutes) || minutes < 1)
+    return "This ticket has expired — make another.";
+  return `Good for ${minutes} more minute${minutes === 1 ? "" : "s"}.`;
+}
+
 export function nothingSharedYet(audienceLabel: string): string {
   return `Nothing shared with ${audienceLabel} yet.`;
+}
+
+/** Subject-first lists one subject's grants across every audience, so its empty
+ *  line is about the subject; `nothingSharedYet` would read the document as the
+ *  person it went to. */
+export function notSharedWithAnyoneYet(subjectLabel: string): string {
+  return `${subjectLabel} is not shared with anyone yet.`;
 }
 
 export function audienceNotKnown(audienceLabel: string): string {

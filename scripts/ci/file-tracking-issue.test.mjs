@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   buildSearchQuery,
   fileTrackingIssue,
+  findExactTitleNumber,
   parseArgs,
   parseExistingNumber,
+  updateTrackingIssue,
 } from "./file-tracking-issue.mjs";
 
 /** Record every `gh` invocation and reply from a scripted queue. */
@@ -152,4 +154,97 @@ test("a failed search opens a new issue rather than going silent", () => {
   });
   assert.equal(result.ok, true);
   assert.equal(result.action, "create");
+});
+
+test("--update is a boolean flag and does not consume the next token", () => {
+  const parsed = parseArgs([
+    "--update",
+    "--title",
+    "T",
+    "--search",
+    "S",
+    "--body-file",
+    "/b",
+  ]);
+  assert.equal(parsed.update, true);
+  assert.equal(parsed.title, "T");
+});
+
+test("findExactTitleNumber ignores a near-match from the fuzzy search", () => {
+  const stdout = JSON.stringify([
+    { number: 1, title: "[nightly] lane red — mobile-e2e-ios-smoke" },
+    { number: 2, title: "[nightly] lane red — mobile-e2e-ios" },
+  ]);
+  assert.equal(
+    findExactTitleNumber(stdout, "[nightly] lane red — mobile-e2e-ios"),
+    2
+  );
+  assert.equal(
+    findExactTitleNumber(stdout, "[nightly] lane red — web-e2e"),
+    null
+  );
+});
+
+test("findExactTitleNumber survives an empty or unparseable listing", () => {
+  assert.equal(findExactTitleNumber("", "T"), null);
+  assert.equal(findExactTitleNumber("not json", "T"), null);
+  assert.equal(findExactTitleNumber("{}", "T"), null);
+});
+
+test("update mode rewrites the matching issue body rather than commenting", () => {
+  const gh = fakeGh([
+    {
+      status: 0,
+      stdout: JSON.stringify([{ number: 77, title: "T" }]),
+      stderr: "",
+    },
+    ok,
+  ]);
+  const result = updateTrackingIssue({
+    run: gh.run,
+    title: "T",
+    search: "S",
+    body: "today",
+  });
+  assert.deepEqual(result, { ok: true, action: "edit", number: 77 });
+  assert.deepEqual(gh.calls[1], ["issue", "edit", "77", "--body", "today"]);
+});
+
+test("update mode creates when no open issue carries the exact title", () => {
+  const gh = fakeGh([
+    {
+      status: 0,
+      stdout: JSON.stringify([{ number: 9, title: "other" }]),
+      stderr: "",
+    },
+    ok,
+  ]);
+  const result = updateTrackingIssue({
+    run: gh.run,
+    title: "T",
+    search: "S",
+    body: "B",
+    label: "tech-debt",
+  });
+  assert.deepEqual(result, { ok: true, action: "create", labelled: true });
+});
+
+test("update mode reports a failed edit rather than swallowing it", () => {
+  const gh = fakeGh([
+    {
+      status: 0,
+      stdout: JSON.stringify([{ number: 5, title: "T" }]),
+      stderr: "",
+    },
+    fail,
+  ]);
+  const result = updateTrackingIssue({
+    run: gh.run,
+    title: "T",
+    search: "S",
+    body: "B",
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.action, "edit");
+  assert.equal(result.number, 5);
 });

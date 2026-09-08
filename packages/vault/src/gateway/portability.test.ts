@@ -2,19 +2,14 @@ import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { createShareGrant, setFulfillmentState } from "../grant/grant-store.js";
 import { sha256Hex, uuidv7 } from "../ids.js";
-import {
-  acknowledgeCommonsSeatCursor,
-  appendCommonsOperation,
-  createCommonsGrant,
-  queueCommonsIntent,
-} from "../share/commons.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import { canonicalJson, importVaultExport } from "./portability.js";
@@ -58,7 +53,6 @@ describe("portability", () => {
         calendar_id: calendarId,
         attendee_party_ids: [boot.ownerPartyId],
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       throw new Error(`seed failed: ${JSON.stringify(outcome)}`);
@@ -69,15 +63,11 @@ describe("portability", () => {
         party_id: boot.ownerPartyId,
         partstat: "accepted",
       },
-      purpose: "dpv:ServiceProvision",
     });
-    const app = enrollApp(db, { name: "calendar-app", riskCeiling: "medium" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "schedule", verbs: "read" }],
-    });
+    enrollApp(db, { name: "calendar-app", riskCeiling: "medium" });
+    answerScopes(db, boot, "calendar-app", [
+      { schema: "schedule", verbs: "read" },
+    ]);
   }
 
   test("respond_rsvp drives the RFC 5545 state machine", () => {
@@ -101,7 +91,6 @@ describe("portability", () => {
         party_id: uuidv7(),
         partstat: "declined",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -112,16 +101,26 @@ describe("portability", () => {
     seedLife();
     const first = gw.exportVault(owner);
     expect(first.artifact.verifyHash).toMatch(/^[0-9a-f]{64}$/u);
-    const jobs = db.vault
+    // The export's record is its RECEIPT (#916, ruling ONT-06): the
+    // export-job table was a second copy of it and left the ontology.
+    const receipt = db.audit
       .prepare(
-        "SELECT verify_hash, completed_at FROM consent_export_job WHERE export_id = ?"
+        "SELECT object_type, object_id, detail_json FROM access_receipt WHERE receipt_id = ?"
       )
-      .get(first.exportId) as {
-      verify_hash: string;
-      completed_at: string | null;
+      .get(first.receiptId) as {
+      object_type: string;
+      object_id: string;
+      detail_json: string | null;
     };
-    expect(jobs.verify_hash).toBe(first.artifact.verifyHash);
-    expect(jobs.completed_at).not.toBeNull();
+    expect(receipt.object_type).toBe("core.vault");
+    expect(
+      (JSON.parse(receipt.detail_json ?? "{}") as { exportId?: string })
+        .exportId
+    ).toBe(first.exportId);
+    expect(
+      (JSON.parse(receipt.detail_json ?? "{}") as { verifyHash?: string })
+        .verifyHash
+    ).toBe(first.artifact.verifyHash);
 
     // Rebuild a fresh vault from the artifact — identities intact.
     const restored = openVaultDb();
@@ -141,7 +140,6 @@ describe("portability", () => {
     const gw2 = createGateway(restored);
     const events = gw2.read(owner, {
       entity: "core.event",
-      purpose: "dpv:ServiceProvision",
     });
     expect(events.rows).toHaveLength(1);
 
@@ -152,120 +150,96 @@ describe("portability", () => {
     restored.close();
   });
 
-  test("portable restore retains every Commons truth and mechanics table", () => {
+  /**
+   * THE SHARING PLANE'S CONTROL TRUTH still rides the walk (#929). The commons
+   * rail is gone, so what a restore must not lose is the binding that says
+   * where a person is reachable, the standing answer, the delivery state, and
+   * the subscription's shape-keyed lineage — a restore without them hands back
+   * a copy no revoke can reach.
+   */
+  test("portable restore retains every sharing-plane table", () => {
     const now = "2026-08-10T00:00:00.000Z";
-    const grant = createCommonsGrant({
-      origin: db.vault,
-      ownerPartyId: boot.ownerPartyId,
-      ownerVaultId: boot.vaultId,
-      ownerVault: db,
-      containerType: "core.document",
-      containerId: uuidv7(),
-      members: [],
-      now,
+    const documentId = uuidv7();
+    const contentId = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'text/plain', 'data:text/plain,x', ?, 1, ?)`
+      )
+      .run(contentId, `sha-${contentId}`.padEnd(64, "0"), now);
+    db.vault
+      .prepare(
+        `INSERT INTO core_document
+           (document_id, title, current_content_id, created_at, updated_at)
+         VALUES (?, 'Portable plan', ?, ?, ?)`
+      )
+      .run(documentId, contentId, now, now);
+
+    // A BINDING IS ABOUT SOMEONE ELSE (#916, R9): a vault holds no row for
+    // its own party at its own vault, so the peer is stated explicitly.
+    const peerPartyId = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+         VALUES (?, 'person', 'Peer', ?, ?)`
+      )
+      .run(peerPartyId, now, now);
+    db.vault
+      .prepare(
+        `INSERT INTO share_party_vault_binding
+           (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+         VALUES (?, ?, 'remote-vault', NULL, ?, NULL)`
+      )
+      .run(uuidv7(), peerPartyId, now);
+    const grant = createShareGrant(db.vault, {
+      audience: { kind: "party", id: peerPartyId },
+      subjectType: "core.document",
+      subjectId: documentId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: boot.ownerPartyId,
     });
-    appendCommonsOperation({
-      steward: db.vault,
+    setFulfillmentState(db.vault, {
       grantId: grant.grantId,
-      actorPartyId: boot.ownerPartyId,
-      kind: "command",
-      command: "core.rename_document",
-      input: { document_id: grant.containerId },
-      outcome: "refused",
-      reason: "portable proof",
-      now,
+      peerVaultId: "remote-vault",
+      state: "delivered",
+      updatedAt: now,
     });
+    const shapeId = `@share:${grant.grantId}`;
     db.vault
       .prepare(
-        `INSERT INTO share_commons_replay
-           (grant_id, signing_vault_id, signature_nonce, sequence, outcome, reason)
-         VALUES (?, 'portable-member-vault', 'portable-nonce', 1,
-                 'refused', 'portable replay proof')`
+        `INSERT INTO share_subscription
+           (shape_id, audience_vault_id, grant_id, origin_vault_id,
+            subject_type, cursor_epoch, cursor_seq, structure_digest, state,
+            subscribed_at, removed_at, detail)
+         VALUES (?, 'remote-vault', ?, ?, 'core.document', 'epoch-1', 4,
+                 'digest', 'subscribed', ?, NULL, NULL)`
       )
-      .run(grant.grantId);
+      .run(shapeId, grant.grantId, boot.vaultId, now);
     db.vault
       .prepare(
-        `INSERT INTO share_commons_receipt
-           (grant_id, sequence, kind, actor_party_id, outcome, reason, created_at)
-         VALUES (?, 1, 'command', ?, 'refused',
-                 'portable receipt proof', ?)`
+        `INSERT INTO share_subscription_lineage
+           (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+         VALUES (?, 'core.document', ?, ?, 7)`
       )
-      .run(grant.grantId, boot.ownerPartyId, now);
-    acknowledgeCommonsSeatCursor({
-      steward: db.vault,
-      grantId: grant.grantId,
-      memberVaultId: boot.vaultId,
-      sequence: 1,
-      now,
-    });
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_lineage
-           (grant_id, item_type, item_id, origin_item_id)
-         VALUES (?, 'core.document', ?, ?)`
-      )
-      .run(grant.grantId, grant.containerId, grant.containerId);
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_retained
-           (grant_id, item_type, item_id, retained_at)
-         VALUES (?, 'core.document', 'retained-portable-item', ?)`
-      )
-      .run(grant.grantId, now);
-    queueCommonsIntent({
-      seat: db.vault,
-      intentId: "portable-intent",
-      grantId: grant.grantId,
-      actorPartyId: boot.ownerPartyId,
-      command: "core.rename_document",
-      commandInput: { document_id: grant.containerId },
-      stewardLabel: "Priya",
-      now,
-    });
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_invitation
-           (invitation_id, grant_id, steward_vault_id, member_vault_id,
-            member_party_id, capability, container_type, container_id,
-            container_label, current_size_bytes, max_size_bytes,
-            status, created_at, answered_at)
-         VALUES ('portable-invite', ?, ?, 'remote-vault', ?, 'read',
-                 'core.document', ?, 'Portable invite', 42, NULL,
-                 'pending', ?, NULL)`
-      )
-      .run(
-        grant.grantId,
-        boot.vaultId,
-        boot.ownerPartyId,
-        grant.containerId,
-        now
-      );
+      .run(shapeId, documentId, documentId);
 
     const { artifact } = gw.exportVault(owner);
-    const commonsEntities = [
+    const shareEntities = [
       "share.party_vault_binding",
-      "share.circle_grant",
-      "share.commons_member_state",
-      "share.commons_op",
-      "share.commons_replay",
-      "share.commons_receipt",
-      "share.commons_cursor",
-      "share.commons_lineage",
-      "share.commons_retained",
-      "share.commons_intent",
-      "share.commons_invitation",
+      "share.authority",
+      "share.fulfillment",
+      "share.subscription",
+      "share.subscription_lineage",
     ];
-    for (const entity of commonsEntities)
+    for (const entity of shareEntities)
       expect(artifact.tables[entity]?.length, entity).toBeGreaterThan(0);
 
     const restored = openVaultDb();
     importVaultExport(restored, artifact);
-    for (const entity of commonsEntities) {
+    for (const entity of shareEntities) {
       const physical = entity.replace(".", "_");
-      expect(
-        restored.vault.prepare(`SELECT COUNT(*) AS n FROM "${physical}"`).get(),
-        entity
-      ).toMatchObject({ n: expect.any(Number) });
       expect(
         (
           restored.vault

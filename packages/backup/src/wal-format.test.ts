@@ -22,35 +22,33 @@ import {
   lastCommitBoundary,
   newWalGeneration,
   openWalCloser,
-  openWalPairMarker,
   openWalSegment,
+  openWalTickMarker,
   parseWalCloserKey,
-  parseWalPairMarkerKey,
   parseWalSegmentKey,
-  planCoordinatedReplay,
+  parseWalTickMarkerKey,
+  planMarkedReplay,
   planWalReplay,
   reachedPosition,
   scanWalPrefix,
   sealWalCloser,
-  sealWalPairMarker,
   sealWalSegment,
-  WAL_CAPTURE_ORDER,
-  WAL_DB_NAMES,
+  sealWalTickMarker,
+  WAL_DB_FILES,
   WAL_HEADER_BYTES,
   walGroupCloserKey,
   walPageSize,
-  walPairMarkerKey,
   walSalts,
   walSegmentKey,
   walSegmentPrefix,
+  walTickMarkerKey,
   validateCommittedWal,
 } from "./wal-format.js";
 import type {
-  WalDbName,
   WalGroupCloser,
-  WalPairMarker,
   WalSegmentAddress,
   WalStreamListing,
+  WalTickMarker,
 } from "./wal-format.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -99,7 +97,6 @@ describe("wal-format", () => {
   describe("walSegmentKey / parseWalSegmentKey", () => {
     test("emits the exact FORMAT.md key shape and roundtrips", () => {
       const addr = seg({
-        db: "journal",
         group: 3,
         startOffset: 123,
         endOffset: 4567,
@@ -107,7 +104,7 @@ describe("wal-format", () => {
       });
       const key = walSegmentKey(addr);
       expect(key).toBe(
-        `wal/journal/${GEN}/00000003/000000000123-000000004567-0000000089012`
+        `wal/vault/${GEN}/00000003/000000000123-000000004567-0000000089012`
       );
       expect(parseWalSegmentKey(key)).toStrictEqual(addr);
     });
@@ -193,9 +190,9 @@ describe("wal-format", () => {
 
   describe("walGroupCloserKey / parseWalCloserKey", () => {
     test("emits the exact FORMAT.md closer key shape and roundtrips", () => {
-      const c = closer({ db: "journal", group: 7, endOffset: 200 });
+      const c = closer({ group: 7, endOffset: 200 });
       const key = walGroupCloserKey(c);
-      expect(key).toBe(`wal/journal/${GEN}/00000007/closed-000000000200`);
+      expect(key).toBe(`wal/vault/${GEN}/00000007/closed-000000000200`);
       expect(parseWalCloserKey(key)).toStrictEqual(c);
     });
 
@@ -250,11 +247,11 @@ describe("wal-format", () => {
     });
 
     test("prefix with group pins one zero-padded group directory", () => {
-      expect(walSegmentPrefix("journal", GEN, 5)).toBe(
-        `wal/journal/${GEN}/00000005/`
+      expect(walSegmentPrefix("vault", GEN, 5)).toBe(
+        `wal/vault/${GEN}/00000005/`
       );
-      expect(walSegmentPrefix("journal", GEN, 0)).toBe(
-        `wal/journal/${GEN}/00000000/`
+      expect(walSegmentPrefix("vault", GEN, 0)).toBe(
+        `wal/vault/${GEN}/00000000/`
       );
     });
 
@@ -318,8 +315,8 @@ describe("wal-format", () => {
 
     test("a forged tick does not authenticate — PITR cuts cannot be lied about", () => {
       // tickMs is in the object key and it ALONE decides the point-in-time cut
-      // (planWalReplay stops at the first tick > cut) and the coordinated
-      // two-db cut. If the seal did not cover it, a hostile provider could
+      // (planWalReplay stops at the first tick > cut) and which marker proves
+      // that cut. If the seal did not cover it, a hostile provider could
       // copy this object to a key bearing an earlier tick and a "restore to T"
       // would apply bytes captured well after T.
       const real = seg({
@@ -434,11 +431,6 @@ describe("wal-format", () => {
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addrB, sealed)).toThrow(
         /unsupported state or unable to authenticate data/iu
       );
-      // db swap
-      const addrJournal = seg({ db: "journal" });
-      expect(() =>
-        openWalSegment(DATA_KEY, VAULT_ID, addrJournal, sealed)
-      ).toThrow(/unsupported state or unable to authenticate data/iu);
       // generation swap
       expect(() =>
         openWalSegment(DATA_KEY, VAULT_ID, seg({ generation: GEN2 }), sealed)
@@ -559,14 +551,6 @@ describe("wal-format", () => {
           DATA_KEY,
           VAULT_ID,
           closer({ group: 1, endOffset: 200 }),
-          sealed
-        )
-      ).toThrow(/unsupported state or unable to authenticate data/iu);
-      expect(() =>
-        openWalCloser(
-          DATA_KEY,
-          VAULT_ID,
-          closer({ db: "journal", endOffset: 200 }),
           sealed
         )
       ).toThrow(/unsupported state or unable to authenticate data/iu);
@@ -798,14 +782,13 @@ describe("wal-format", () => {
       const short = seg({ startOffset: 0, endOffset: 100, tickMs: 1000 });
       const lateLong = seg({ startOffset: 0, endOffset: 150, tickMs: 1100 });
       const plan = planWalReplay(listing([lateLong, short]), {
-        db: "vault",
         generation: GEN,
         cutTickMs: 1000,
       });
       expect(plan.segments).toStrictEqual([short]);
       expect(plan.lastTickMs).toBe(1000);
     });
-    const opts = { generation: GEN, db: "vault" as WalDbName };
+    const opts = { generation: GEN };
 
     test("plans a happy chain across two groups through the closer", () => {
       const s1 = seg({
@@ -993,7 +976,7 @@ describe("wal-format", () => {
       expect(plan.truncatedByHole).toBe(true);
     });
 
-    test("segments of other generations and databases are ignored entirely", () => {
+    test("segments of other generations are ignored entirely", () => {
       const mine = seg({
         group: 0,
         startOffset: 0,
@@ -1007,16 +990,9 @@ describe("wal-format", () => {
         endOffset: 999,
         tickMs: 500,
       });
-      const otherDb = seg({
-        db: "journal",
-        group: 0,
-        startOffset: 0,
-        endOffset: 999,
-        tickMs: 500,
-      });
       const plan = planWalReplay(
         listing(
-          [otherGen, otherDb, mine],
+          [otherGen, mine],
           [closer({ generation: GEN2, group: 0, endOffset: 999 })]
         ),
         opts
@@ -1084,95 +1060,81 @@ describe("wal-format", () => {
     });
   });
 
-  // Titled in prose, not `describe(WAL_CAPTURE_ORDER)`: the constant is a
-  // readonly array, and `describe` only accepts a string or a function.
-  describe("WAL capture order", () => {
-    test("is journal FIRST — and WAL_DB_NAMES is deliberately NOT", () => {
-      // The one ordering fact the whole G8 argument rests on, pinned: a receipt
-      // commits to journal.db only after its vault.db transaction, so the journal
-      // must be cut first or a cut can contain a receipt whose row is missing.
-      // `WAL_DB_NAMES` is vault-first and safe only for order-INDIFFERENT loops;
-      // this test exists so a "tidy-up" that unifies them fails loudly.
-      expect(WAL_CAPTURE_ORDER).toStrictEqual(["journal", "vault"]);
-      expect(WAL_DB_NAMES).toStrictEqual(["vault", "journal"]);
-    });
-  });
-
   // ───────────────────────────────────────────────────────────────────────────
-  // Pair markers (FORMAT.md § WAL segments — the idle-vs-missing discriminator)
+  // Tick markers (FORMAT.md § WAL segments — the idle-vs-missing discriminator)
   // ───────────────────────────────────────────────────────────────────────────
 
-  const JGEN = "ef56".repeat(8);
-
-  function marker(over: Partial<WalPairMarker> = {}): WalPairMarker {
+  function marker(over: Partial<WalTickMarker> = {}): WalTickMarker {
     return {
-      vaultGeneration: GEN,
-      journalGeneration: JGEN,
+      generation: GEN,
       tickMs: 1000,
-      vault: { group: 0, endOffset: 100 },
-      journal: { group: 0, endOffset: 200 },
+      position: { group: 0, endOffset: 100 },
       ...over,
     };
   }
 
-  describe("walPairMarkerKey / parseWalPairMarkerKey", () => {
+  describe("walTickMarkerKey / parseWalTickMarkerKey", () => {
     test("emits the exact FORMAT.md key shape and roundtrips", () => {
-      const key = walPairMarkerKey(marker({ tickMs: 1752480060000 }));
-      expect(key).toBe(`wal/tick/${GEN}-${JGEN}/1752480060000`);
-      expect(parseWalPairMarkerKey(key)).toStrictEqual({
-        vaultGeneration: GEN,
-        journalGeneration: JGEN,
+      const key = walTickMarkerKey(marker({ tickMs: 1752480060000 }));
+      expect(key).toBe(`wal/tick/${GEN}/1752480060000`);
+      expect(parseWalTickMarkerKey(key)).toStrictEqual({
+        generation: GEN,
         tickMs: 1752480060000,
       });
     });
 
     test("parse rejects segment keys, closer keys, and malformed marker keys", () => {
-      expect(parseWalPairMarkerKey(walSegmentKey(seg()))).toBeNull();
-      expect(parseWalPairMarkerKey(walGroupCloserKey(closer()))).toBeNull();
-      expect(parseWalPairMarkerKey(`wal/tick/${GEN}/0000000001000`)).toBeNull();
-      expect(parseWalPairMarkerKey(`wal/tick/${GEN}-${JGEN}/1000`)).toBeNull();
+      expect(parseWalTickMarkerKey(walSegmentKey(seg()))).toBeNull();
+      expect(parseWalTickMarkerKey(walGroupCloserKey(closer()))).toBeNull();
+      expect(parseWalTickMarkerKey(`wal/tick/${GEN}/1000`)).toBeNull();
+      expect(parseWalTickMarkerKey(`wal/tick/${GEN}-${GEN2}/1000`)).toBeNull();
+    });
+
+    test("a marker key never collides with the stream it describes", () => {
+      // `wal/tick/` and `wal/vault/` are disjoint prefixes, so a marker LIST
+      // never sweeps up segments and a segment LIST never sweeps up markers.
+      expect(walTickMarkerKey(marker())).not.toContain(
+        `/${WAL_DB_FILES.vault.replace(".db", "")}/`
+      );
+      expect(parseWalSegmentKey(walTickMarkerKey(marker()))).toBeNull();
     });
   });
 
-  describe("sealWalPairMarker / openWalPairMarker", () => {
-    const addrOf = (m: WalPairMarker) => ({
-      vaultGeneration: m.vaultGeneration,
-      journalGeneration: m.journalGeneration,
+  describe("sealWalTickMarker / openWalTickMarker", () => {
+    const addrOf = (m: WalTickMarker) => ({
+      generation: m.generation,
       tickMs: m.tickMs,
     });
 
-    test("roundtrips the recorded positions", () => {
-      const m = marker({
-        vault: { group: 2, endOffset: 0 },
-        journal: { group: 1, endOffset: 4128 },
-      });
-      const opened = openWalPairMarker(
+    test("roundtrips the recorded position", () => {
+      const m = marker({ position: { group: 2, endOffset: 0 } });
+      const opened = openWalTickMarker(
         DATA_KEY,
         VAULT_ID,
         addrOf(m),
-        sealWalPairMarker(DATA_KEY, VAULT_ID, m)
+        sealWalTickMarker(DATA_KEY, VAULT_ID, m)
       );
       expect(opened).toStrictEqual(m);
     });
 
     test("re-sealing the same marker is BYTE-IDENTICAL (idempotent PUT, and no nonce reuse)", () => {
-      // The nonce derives from (vaultGeneration, journalGeneration, tick) alone,
-      // so one address MUST have exactly one payload encoding — two different
-      // ciphertexts under one address would be a (key, nonce) reuse.
+      // The nonce derives from (generation, tick) alone, so one address MUST
+      // have exactly one payload encoding — two different ciphertexts under one
+      // address would be a (key, nonce) reuse.
       const m = marker();
-      const a = sealWalPairMarker(DATA_KEY, VAULT_ID, m);
-      const b = sealWalPairMarker(DATA_KEY, VAULT_ID, { ...m });
+      const a = sealWalTickMarker(DATA_KEY, VAULT_ID, m);
+      const b = sealWalTickMarker(DATA_KEY, VAULT_ID, { ...m });
       expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
     });
 
     test("RELABELLING the tick in the key fails the tag", () => {
       const m = marker({ tickMs: 5000 });
-      const sealed = sealWalPairMarker(DATA_KEY, VAULT_ID, m);
+      const sealed = sealWalTickMarker(DATA_KEY, VAULT_ID, m);
       // A provider copies the object to an earlier tick's key: a restore "at
-      // 3000" would then trust positions the databases only reached at 5000 and
+      // 3000" would then trust a position the stream only reached at 5000 and
       // cut past segments the vault never actually shipped.
       expect(() =>
-        openWalPairMarker(
+        openWalTickMarker(
           DATA_KEY,
           VAULT_ID,
           { ...addrOf(m), tickMs: 3000 },
@@ -1181,31 +1143,30 @@ describe("wal-format", () => {
       ).toThrow(/unsupported state or unable to authenticate data/iu);
     });
 
-    test("SWAPPING two markers of different generations fails the tag", () => {
-      const mine = marker();
-      const other = marker({ vaultGeneration: GEN2 });
-      const sealed = sealWalPairMarker(DATA_KEY, VAULT_ID, other);
+    test("SWAPPING a marker from another generation fails the tag", () => {
+      const other = marker({ generation: GEN2 });
+      const sealed = sealWalTickMarker(DATA_KEY, VAULT_ID, other);
       expect(() =>
-        openWalPairMarker(DATA_KEY, VAULT_ID, addrOf(mine), sealed)
+        openWalTickMarker(DATA_KEY, VAULT_ID, addrOf(marker()), sealed)
       ).toThrow(/unsupported state or unable to authenticate data/iu);
     });
 
     test("a marker sealed for another vault fails the tag", () => {
       const m = marker();
-      const sealed = sealWalPairMarker(DATA_KEY, "other-vault", m);
+      const sealed = sealWalTickMarker(DATA_KEY, "other-vault", m);
       expect(() =>
-        openWalPairMarker(DATA_KEY, VAULT_ID, addrOf(m), sealed)
+        openWalTickMarker(DATA_KEY, VAULT_ID, addrOf(m), sealed)
       ).toThrow(/unsupported state or unable to authenticate data/iu);
     });
 
     test("the nonce info + AAD strings are pinned to FORMAT.md verbatim", () => {
       const m = marker({ tickMs: 7000 });
-      const info = `centraid-backup:wal-nonce:tick:${GEN}:${JGEN}:7000`;
+      const info = `centraid-backup:wal-nonce:tick:${GEN}:7000`;
       const aad = new TextEncoder().encode(
-        `centraid-wal/1:${VAULT_ID}:tick:${GEN}:${JGEN}:7000`
+        `centraid-wal/1:${VAULT_ID}:tick:${GEN}:7000`
       );
       const payload = new TextEncoder().encode(
-        `{"journal":{"endOffset":200,"group":0},"tickMs":7000,"v":1,"vault":{"endOffset":100,"group":0}}`
+        `{"position":{"endOffset":100,"group":0},"tickMs":7000,"v":1}`
       );
       const expected = encryptWithNonce(
         DATA_KEY,
@@ -1214,7 +1175,7 @@ describe("wal-format", () => {
         aad
       );
       expect(
-        Buffer.from(sealWalPairMarker(DATA_KEY, VAULT_ID, m)).equals(
+        Buffer.from(sealWalTickMarker(DATA_KEY, VAULT_ID, m)).equals(
           Buffer.from(expected)
         )
       ).toBe(true);
@@ -1226,7 +1187,7 @@ describe("wal-format", () => {
   // ───────────────────────────────────────────────────────────────────────────
 
   describe(reachedPosition, () => {
-    const opts = { db: "vault" as WalDbName, generation: GEN };
+    const opts = { generation: GEN };
 
     test("an empty plan is the base itself: (0, 0)", () => {
       const l = listing([]);
@@ -1274,248 +1235,159 @@ describe("wal-format", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // planCoordinatedReplay (G8 — the marker-driven two-database cut)
+  // planMarkedReplay — the marker-driven cut (a listing cannot tell idle from lost)
   // ───────────────────────────────────────────────────────────────────────────
 
-  describe("planCoordinatedReplay (G8 two-database cut)", () => {
-    const generationByDb = { vault: GEN, journal: JGEN } as const;
-
-    /** vault: three chained segments, group 0, ending at 100/200/300. */
-    function vaultListing(): WalStreamListing {
+  describe(planMarkedReplay, () => {
+    /** Three chained segments, group 0, ending at 100/200/300. */
+    function streamListing(): WalStreamListing {
       return listing([
-        seg({
-          db: "vault",
-          group: 0,
-          startOffset: 0,
-          endOffset: 100,
-          tickMs: 1000,
-        }),
-        seg({
-          db: "vault",
-          group: 0,
-          startOffset: 100,
-          endOffset: 200,
-          tickMs: 2000,
-        }),
-        seg({
-          db: "vault",
-          group: 0,
-          startOffset: 200,
-          endOffset: 300,
-          tickMs: 3000,
-        }),
+        seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 }),
+        seg({ group: 0, startOffset: 100, endOffset: 200, tickMs: 2000 }),
+        seg({ group: 0, startOffset: 200, endOffset: 300, tickMs: 3000 }),
       ]);
     }
 
-    /** journal: three chained segments, group 0, ending at 50/150/250. */
-    function journalListing(): WalStreamListing {
-      return listing([
-        seg({
-          db: "journal",
-          generation: JGEN,
-          group: 0,
-          startOffset: 0,
-          endOffset: 50,
-          tickMs: 1000,
-        }),
-        seg({
-          db: "journal",
-          generation: JGEN,
-          group: 0,
-          startOffset: 50,
-          endOffset: 150,
-          tickMs: 2000,
-        }),
-        seg({
-          db: "journal",
-          generation: JGEN,
-          group: 0,
-          startOffset: 150,
-          endOffset: 250,
-          tickMs: 3000,
-        }),
-      ]);
-    }
-
-    /** The markers a healthy shipper would have written for those two streams. */
-    function markers(): WalPairMarker[] {
+    /** The markers a healthy shipper would have written for that stream. */
+    function markers(): WalTickMarker[] {
       return [
-        marker({
-          tickMs: 1000,
-          vault: { group: 0, endOffset: 100 },
-          journal: { group: 0, endOffset: 50 },
-        }),
-        marker({
-          tickMs: 2000,
-          vault: { group: 0, endOffset: 200 },
-          journal: { group: 0, endOffset: 150 },
-        }),
-        marker({
-          tickMs: 3000,
-          vault: { group: 0, endOffset: 300 },
-          journal: { group: 0, endOffset: 250 },
-        }),
+        marker({ tickMs: 1000, position: { group: 0, endOffset: 100 } }),
+        marker({ tickMs: 2000, position: { group: 0, endOffset: 200 } }),
+        marker({ tickMs: 3000, position: { group: 0, endOffset: 300 } }),
       ];
     }
 
-    test("intact streams cut at the newest marker", () => {
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb,
+    test("an intact stream cuts at the newest marker", () => {
+      const r = planMarkedReplay({
+        listing: streamListing(),
+        generation: GEN,
         markers: markers(),
       });
-      expect(r.coordinatedCutMs).toBe(3000);
+      expect(r.cutTickMs).toBe(3000);
       expect(r.newestMarkerTickMs).toBe(3000);
-      expect(r.plans.vault.lastTickMs).toBe(3000);
-      expect(r.plans.journal.lastTickMs).toBe(3000);
+      expect(r.plan.lastTickMs).toBe(3000);
     });
 
     test("a LOST TAIL (listing simply ends — no hole) walks back to the last provable marker", () => {
-      const vault = vaultListing();
-      vault.segments = vault.segments.slice(0, 2); // ticks 3000's segment is gone
-      const r = planCoordinatedReplay({
-        listingByDb: { vault, journal: journalListing() },
-        generationByDb,
+      // The listing alone is indistinguishable from an idle vault; only the
+      // 3000 marker, which says the stream reached 300, proves objects are gone.
+      const l = streamListing();
+      l.segments = l.segments.slice(0, 2);
+      const r = planMarkedReplay({
+        listing: l,
+        generation: GEN,
         markers: markers(),
       });
-      // The 3000 marker says the vault reached 300; the listing chains to 200.
-      expect(r.coordinatedCutMs).toBe(2000);
+      expect(r.cutTickMs).toBe(2000);
       expect(r.newestMarkerTickMs).toBe(3000);
-      expect(r.plans.vault.lastTickMs).toBe(2000);
-      expect(r.plans.journal.lastTickMs).toBe(2000); // the INTACT journal is re-cut with it
-      expect(r.plans.journal.segments).toHaveLength(2);
+      expect(r.plan.lastTickMs).toBe(2000);
     });
 
-    test("an IDLE database (no new segments, unchanged position) constrains nothing", () => {
-      // The vault stopped at 100 after tick 1000; every later marker carries that
-      // SAME position, so every later marker is satisfiable and the busy journal
-      // reaches its own tip. This is the case a "min over reached ticks" rule
-      // silently destroys.
-      const vault = listing([
-        seg({
-          db: "vault",
-          group: 0,
-          startOffset: 0,
-          endOffset: 100,
-          tickMs: 1000,
-        }),
+    test("an IDLE stream (no new segments, unchanged position) is NOT a truncation", () => {
+      // The vault stopped writing after tick 1000; every later marker carries
+      // that SAME position, so the newest one is still satisfiable and the cut
+      // advances to the producer's newest tick.
+      const l = listing([
+        seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 }),
       ]);
       const idleMarkers = markers().map((m) => ({
         ...m,
-        vault: { group: 0, endOffset: 100 },
+        position: { group: 0, endOffset: 100 },
       }));
-      const r = planCoordinatedReplay({
-        listingByDb: { vault, journal: journalListing() },
-        generationByDb,
+      const r = planMarkedReplay({
+        listing: l,
+        generation: GEN,
         markers: idleMarkers,
       });
-      expect(r.coordinatedCutMs).toBe(3000);
-      expect(r.plans.journal.lastTickMs).toBe(3000);
-      expect(r.plans.vault.lastTickMs).toBe(1000);
+      expect(r.cutTickMs).toBe(3000);
+      expect(r.newestMarkerTickMs).toBe(3000);
+      expect(r.plan.lastTickMs).toBe(1000);
     });
 
     test("a marker whose GROUP CLOSER is missing is unsatisfiable", () => {
-      // The shipper rolled the vault's group at tick 3000, so its marker says
-      // (1, 0). Without the closer the chain can only claim (0, 300).
+      // The shipper rolled the group at tick 3000, so its marker says (1, 0).
+      // Without the closer the chain can only claim (0, 300).
       const rolled = markers();
       rolled[2] = marker({
         tickMs: 3000,
-        vault: { group: 1, endOffset: 0 },
-        journal: { group: 0, endOffset: 250 },
+        position: { group: 1, endOffset: 0 },
       });
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb,
+      const r = planMarkedReplay({
+        listing: streamListing(),
+        generation: GEN,
         markers: rolled,
       });
-      expect(r.coordinatedCutMs).toBe(2000);
+      expect(r.cutTickMs).toBe(2000);
 
       // Put the closer back and the very same listing satisfies it.
-      const closed = vaultListing();
-      closed.closers = [closer({ db: "vault", group: 0, endOffset: 300 })];
-      const ok = planCoordinatedReplay({
-        listingByDb: { vault: closed, journal: journalListing() },
-        generationByDb,
+      const closed = streamListing();
+      closed.closers = [closer({ group: 0, endOffset: 300 })];
+      const ok = planMarkedReplay({
+        listing: closed,
+        generation: GEN,
         markers: rolled,
       });
-      expect(ok.coordinatedCutMs).toBe(3000);
+      expect(ok.cutTickMs).toBe(3000);
     });
 
     test("a HOLE before a marker makes it unsatisfiable, however the arithmetic falls", () => {
-      const holed = vaultListing();
+      const holed = streamListing();
       holed.segments = [holed.segments[0]!, holed.segments[2]!]; // the [100,200) middle is gone
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: holed, journal: journalListing() },
-        generationByDb,
+      const r = planMarkedReplay({
+        listing: holed,
+        generation: GEN,
         markers: markers(),
       });
-      expect(r.coordinatedCutMs).toBe(1000);
-      expect(r.plans.journal.lastTickMs).toBe(1000);
+      expect(r.cutTickMs).toBe(1000);
+      expect(r.plan.lastTickMs).toBe(1000);
     });
 
-    test("markers naming OTHER generations are never considered", () => {
-      const foreign = markers().map((m) => ({ ...m, vaultGeneration: GEN2 }));
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb,
+    test("markers naming ANOTHER generation are never considered", () => {
+      const foreign = markers().map((m) => ({ ...m, generation: GEN2 }));
+      const r = planMarkedReplay({
+        listing: streamListing(),
+        generation: GEN,
         markers: foreign,
       });
-      // (The restore LISTs a pair-scoped prefix, so this cannot happen in
+      // (The restore LISTs a generation-scoped prefix, so this cannot happen in
       // practice; the planner refuses to trust them regardless.)
-      expect(r.coordinatedCutMs).toBe(-1);
+      expect(r.cutTickMs).toBe(-1);
     });
 
-    test("NO markers at all ⇒ the base floor, for both databases", () => {
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb,
+    test("NO markers at all ⇒ the base floor, however much the listing offers", () => {
+      const r = planMarkedReplay({
+        listing: streamListing(),
+        generation: GEN,
         markers: [],
       });
-      expect(r.coordinatedCutMs).toBe(-1);
+      expect(r.cutTickMs).toBe(-1);
       expect(r.newestMarkerTickMs).toBe(-1);
-      expect(r.plans.vault.segments).toStrictEqual([]);
-      expect(r.plans.journal.segments).toStrictEqual([]);
+      expect(r.plan.segments).toStrictEqual([]);
     });
 
     test("an explicit point-in-time cut selects the newest marker AT OR BEFORE it", () => {
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb,
+      const r = planMarkedReplay({
+        listing: streamListing(),
+        generation: GEN,
         markers: markers(),
         cutTickMs: 2500,
       });
-      expect(r.coordinatedCutMs).toBe(2000);
+      expect(r.cutTickMs).toBe(2000);
       // A cut that lands where the producer proved it got to is NOT a truncation:
       // the newest CANDIDATE marker is 2000, and we reached it.
       expect(r.newestMarkerTickMs).toBe(2000);
-      expect(r.plans.vault.lastTickMs).toBe(2000);
-      expect(r.plans.journal.lastTickMs).toBe(2000);
+      expect(r.plan.lastTickMs).toBe(2000);
     });
 
-    test("a cut before any marker is the base pair, and is not a truncation", () => {
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb,
+    test("a cut before any marker is the base, and is not a truncation", () => {
+      const r = planMarkedReplay({
+        listing: streamListing(),
+        generation: GEN,
         markers: markers(),
         cutTickMs: 999,
       });
-      expect(r.coordinatedCutMs).toBe(-1);
+      expect(r.cutTickMs).toBe(-1);
       expect(r.newestMarkerTickMs).toBe(-1);
-    });
-
-    test("a single database (no pair) plans uncoordinated — markers cannot apply", () => {
-      const r = planCoordinatedReplay({
-        listingByDb: { vault: vaultListing(), journal: journalListing() },
-        generationByDb: { journal: JGEN },
-        markers: markers(),
-      });
-      expect(r.coordinated).toBe(false);
-      expect(r.plans.vault).toStrictEqual({
-        segments: [],
-        lastTickMs: -1,
-        truncatedByHole: false,
-      });
-      expect(r.plans.journal.lastTickMs).toBe(3000);
     });
   });
 });

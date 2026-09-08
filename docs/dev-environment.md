@@ -106,6 +106,12 @@ Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-agent.md](multi-agent.md).
 
+### Receipts are append-only, and sibling appends merge by union
+
+One issue carries one receipt (`receipts/issue-<N>-<slug>.md`), and a slice adds exactly one section at the **end** of it: `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. Two sibling slices appending to the same receipt therefore conflict on every rebase, always with the same correct resolution — keep both hunks, upstream first. The root `.gitattributes` marks `receipts/*.md merge=union`, and git's built-in union driver concatenates a conflicting hunk ours-then-theirs; during a `git rebase` onto `main` "ours" is `main`, so main's section lands first and the prefix survives. Check the seam afterwards: union factors out the blank line both sides share, so the second section may need one blank line reinserted before its heading — still an append, still prefix-safe.
+
+Two things the driver does not do. It cannot tell an append from an edit — it resolves _any_ conflicting hunk the same way — so the rule it does not replace still stands: never touch text above your own section, and `doc-integrity` still fails you if you do. And GitHub's own PR mergeability check does not honour `.gitattributes` merge drivers, so this helps local rebases only; that is where the conflicts were being paid, because a branch is rebased onto `main` before it is pushed. Rebase, do not merge: `git merge` resolves union with the **checked-out** branch first, so merging `main` into a slice branch would put your section above main's and break the byte-prefix.
+
 ## Unattended desktop runs: `CENTRAID_INSECURE_DEVICE_SECRETS`
 
 Every read of the desktop's device credentials decrypts through Electron `safeStorage`, i.e. the OS keychain. A dev build is ad-hoc signed, so macOS does not durably trust it and **re-prompts for the login password on every restart**. That makes restart-heavy scenarios — fresh gateway, warm boot, crash recovery, credential desync — impossible to drive unattended by a test harness or agent.
@@ -122,16 +128,33 @@ If a local `.claude/launch.json` exists (may be gitignored), treat it as the **n
 
 ## The local gate loop
 
-Three tiers, each with a cost budget, each enforced by a hook. Nothing here is something you have to remember to run.
+The local half of the six-rung quality ladder ([#915](https://github.com/srikanth235/centraid/issues/915)). Rungs 0 and 1 are hooks; nothing here is something you have to remember to run.
 
-| Tier | When | Cost | What runs |
-| --- | --- | --- | --- |
-| 0 | pre-commit | ~36s (see below) | Governance directives, plus `oxfmt` and `oxlint` **on staged files only** |
-| 1 | pre-push | ~55s | `bun run check:push` — 25 gates run concurrently, wall clock bounded by affected tests |
-| 1.5 | want CI's answer early | ~4 min | `bun run check:pr` — `check:push` plus full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage |
-| 2 | before requesting merge | minutes | `bun run check:full`, including dependents, coverage, mutation/perf, and client e2e |
+| Rung | When | Budget | Cost | What runs |
+| --- | --- | --- | --- | --- |
+| 0 commit | pre-commit hook | ≤ 5s | 6.2s | The governance directives that fit the budget, plus `oxfmt` and `oxlint` **on staged files only**. The two repo-wide ones are deferred to rung 1 (below) |
+| 1 push | pre-push hook | ≤ 90s | bounded by `test:affected` | The deferred directives (~86s), then the tier the pushed ref earns (#988): `main` gets `bun run check:push` — **17 gate names**, run concurrently — every other branch gets `check:push:static` |
+| 1.5 | want CI's answer early | — | ~4 min | `bun run check:pr` — `check:push` plus full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage |
+| 2 merge | PR, required `check` | ≤ 15 min | minutes | `ci.yml`. Locally: `bun run check:full`, including dependents, coverage, mutation/perf, and client e2e |
+| 3 candidate | push to `main` | ≤ 45 min | — | `candidate.yml` |
+| 4 nightly | 06:00 UTC on the latest candidate | ≤ 90 min | — | `e2e.yml` |
+| 5 weekly | weekend on the latest candidate | ≤ 5h | — | `soak-weekly.yml`, `interop-weekly.yml`, `enrichment-live-weekly.yml`, `hygiene.yml` |
 
-**Why tier 1 was rebuilt (#668).** `check:pr` was the pre-push gate, and it had three compounding problems. It ran **serially** — 28 `&&`-chained steps where almost none depend on each other. It **stopped at the first failure**, so three unrelated problems cost three full passes. And four gates dominated the clock while duplicating work CI recomputes authoritatively anyway:
+Costs are measured on this repo's CI container, which runs the governance directives about 2.7× slower than the 8-core M-series the rest of this section is measured on (`repo-hygiene` is 51.2s here against 18.7s there).
+
+**The 17 gates are not 17 checks.** `check:push` named 59 gates while this document claimed 25. #915 Wave 4 cut the list to 17 without dropping a check, three ways:
+
+| Move | Names | Why |
+| --- | --- | --- |
+| Bundle into `lint:product` | 38 → 1 | Every one runs in under a second. They are not 38 decisions a developer makes, they are one — "does this diff satisfy the repo's contracts?" — and they cost 38 of the concurrency pool's slots. `scripts/lint-product.mjs` runs them in one process at full machine parallelism with the same per-gate buffered failure output |
+| Move to the weekly `hygiene.yml` | 7 → 0 | Tighten-only ratchets over the **test suite's own** quality (comment density, assertion matchers, fixed sleeps, skips, environment-red sites, the type floor, the schema/export fingerprint). Each is a _standing_ check over the whole tree, so a weekly run against `main` sees exactly what a per-push run would; what changes is detection latency, not coverage. One rolling issue on red |
+| Drop to rung 2 | 1 → 0 | `check:mobile-native-state` is 30.5s and ci.yml's `mobile-smoke` job already runs it on exactly the diffs that matter |
+
+The class and the one-line reason for every gate live in [`scripts/ci/gate-classes.json`](../scripts/ci/gate-classes.json) — **product** (a user-visible claim), **contract** (a repo-internal wiring or shape claim), **hygiene** (a ratchet over the suite itself). `scripts/ci/gate-classes.test.mjs` fails if a gate in `check:push` is unclassified, if a hygiene gate is still charged to every push, or if one left `check:push` without arriving in the weekly lane — the last is the failure mode that would make a gate enforced nowhere.
+
+**The knobs those gates read are four files.** #915 Wave 4 also merged the twenty tighten-only JSON ledgers under `tests/` into [`tests/floors.json`](../tests/floors.json) (up-only), [`tests/budgets.json`](../tests/budgets.json) (down-only), [`tests/inventory.json`](../tests/inventory.json) (down-only, issue and expiry per exception) and [`tests/quarantine.json`](../tests/quarantine.json) (flaky tests and parked lanes). One validator, `bun run lint:ledgers`, holds the direction, the per-section waiver scope and the deadlines; it is a **contract** gate inside the `lint:product` bundle, so it costs the push tier a name of nothing and a fraction of a second. What each section holds and why two of them are references rather than copies is in [TESTING.md](../TESTING.md#the-four-ledgers-915-wave-4).
+
+**Why rung 1 was rebuilt (#668).** `check:pr` was the pre-push gate, and it had three compounding problems. It ran **serially** — 28 `&&`-chained steps where almost none depend on each other. It **stopped at the first failure**, so three unrelated problems cost three full passes. And four gates dominated the clock while duplicating work CI recomputes authoritatively anyway:
 
 | Gate | Cost | Why it left the push tier |
 | --- | --- | --- |
@@ -140,17 +163,41 @@ Three tiers, each with a cost budget, each enforced by a hook. Nothing here is s
 | `lint:types` | 21.3s | Type-aware lint over every package; low hit rate, and `static` already gates it |
 | `lint:workflow-pins` | 0.1s | Only meaningful when `.github/workflows/**` changed, which the push tier cannot cheaply know |
 
-Measured on an 8-core M-series with warm turbo caches. The remaining 25 gates run through `scripts/ci/run-gates.mjs` at a bounded concurrency, so the 24 non-test gates (including `typecheck:affected` at 24s cold) finish inside the `test:affected` window and cost nothing. **The gate now costs exactly what the affected tests cost.**
+Measured on an 8-core M-series with warm turbo caches. The remaining gates run through `scripts/ci/run-gates.mjs` at a bounded concurrency, so every non-test gate (including `typecheck:affected` at 24s cold) finishes inside the `test:affected` window and costs nothing. **The gate costs exactly what the affected tests cost.**
 
 The failure report changed too, and that matters as much as the clock: every gate runs even when an earlier one fails, and the summary lists all of them with the slowest five. One pass tells you everything that is wrong.
 
 **A gate that is always skipped enforces nothing.** `lint:node-version` demanded the _exact_ pinned Node at position three of the chain. CI satisfies that by construction (`setup-node` reads `.node-version`) and never ran the check; locally it hard-failed for anyone whose version manager defaulted elsewhere — so every push died five seconds in for a reason unrelated to the diff. It now warns locally, stays fatal under `CI`, and is wired into the `static` job where the claim is real.
 
-**Tier 0 is over budget and the reason is upstream.** The target is 2s. The gates this repo owns hit it easily — staged-file `oxfmt` 0.16s, staged-file `oxlint` 0.09s, every repo-local directive under 0.5s. The 36s is two vendored `governance-kit` directives that are repo-wide by construction: `repo-hygiene` (18.7s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue` (13.2s, re-reads the receipt corpus). Both carry digests in `.governance/packs.lock` and `managed-tree-integrity` exists to stop them being hand-edited, so scoping them to the staged set is an upstream change. Until then, `git commit` costs about half a minute; `SKIP_GOVERNANCE=1` is the pressure valve for a rapid commit loop, and CI still enforces.
+**Rung 0 was 88.7s and is now 6.2s (#915).** Two vendored `governance-kit` directives were 86.3s of it, because both are repo-wide by construction: `repo-hygiene` (51.2s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue` (35.1s, re-reads the receipt corpus). Neither can be scoped to the staged set, and neither can be moved by changing its `hook:` field — both folders carry digests in `.governance/packs.lock`, so `managed-tree-integrity` fails on a hand edit, and the kit exposes no supported override (`.governance/lib.sh` reads `hook:` straight out of `directive.yaml`; `conf_get`/`conf_list` only serve keys a directive declares in its own `config:` block, and `hook` is not one).
+
+So the deferral lives in the hooks, which the kit does not digest (`.governance/install.yaml` covers only `governance.yml`, `lib.sh` and `run.sh`): `.githooks/pre-commit` skips the ids in `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf`, and `.githooks/pre-push` runs exactly those before `check:push`. **Nothing left the ladder** — `.governance/run.sh`, which CI invokes, runs every directive regardless of `hook:`, so the enforcing copy never moved. Only the local rung did, 0 → 1. The cost of the deferral is that a repo-wide hygiene violation is now caught at push instead of at commit; the cost it removed is 82 seconds on every commit, which `SKIP_GOVERNANCE=1` was the honest measure of.
+
+What is left at rung 0 is 5.6s of directives, and the two poles are now `internal-doc-links` (2.7s) and `managed-tree-integrity` (1.4s) — also vendored, also repo-wide. On the 8-core reference machine that is ~2.1s, inside budget; on the slower CI container it is 6.2s. Neither is deferred: a broken internal link and a hand-edited managed file are exactly the "is this diff well-formed?" question rung 0 exists to answer.
+
+**`governance.yml` cannot be given a `timeout-minutes` by hand (#915).** It is listed in `.governance/install.yaml`'s `managed_digests`, so `managed-tree-integrity` fails on any edit to it, and neither `install.yaml` nor `lib.sh` exposes a timeout setting for the generated workflow — there is no `governance` CLI vendored in this repo to regenerate it, either. Its bare `pull_request:` listener and its missing `timeout-minutes` are both legal today by the same mechanism: `scripts/lint-workflow-pins.mjs` skips any file whose first lines carry `# governance-kit:managed`, which is a whole-file exemption rather than a per-rule allowlist. The supported path to a timeout is a kit update; until one ships, this is a known, documented gap and not something to hand-patch.
 
 **Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no matter what runs here — so the only thing a local gate buys is not paying those 12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s needs 57%, which is why it is scoped rather than run whole.
 
-Tier 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
+Rung 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
+
+### Tiers, stamps, and one cache (#988)
+
+Five agents work this repo in parallel, each in its own worktree, and each pushes several times an hour. Three costs were being paid per worktree and per push for answers that were already known.
+
+**The push tier is chosen by the ref being pushed.** A push to `main` runs the full `bun run check:push`; every other ref runs `bun run check:push:static` — `format:check`, `lint`, `turbo:lint`, `typecheck:affected`. Nothing left the ladder: `ci.yml` and `governance.yml` both listen on a bare `pull_request:`, so **CI runs the full tier on every commit of every branch**; what moved is the local rung, from "every push" to "the push that is the last moment before the trunk moves". `CENTRAID_PUSH_TIER=full` widens a branch push back to the full tier — there is deliberately no value that narrows the `main` tier, and `SKIP_CHECK_PR=1`, `SKIP_GOVERNANCE=1` and `--no-verify` behave exactly as they did.
+
+**A tier does not re-run against a tree it already passed.** `scripts/ci/gate-stamp.mjs` keys a pass on a pair: the oid of a real git tree built from the working copy in a _copy_ of the index (56 ms on this tree — git's stat cache still applies, and your staging area is untouched), and `origin/main`, because the `[origin/main]` filters give the same tree a different affected set once the base moves. `check:push --stamp` skips the static members on a match; `bun run governance` and `.githooks/pre-push`'s deferred-directive loop take the same treatment. Three properties make it a cache rather than a hole: a tier is stamped only when **every** one of its gates ran and passed in that invocation, `CI` in the environment disables reading and writing outright so the enforcing copy always recomputes from zero, and `CENTRAID_GATE_STAMPS=0` turns it off — a knob that can only ever make more run. `.governance/run.sh` itself is digest-locked and could not carry the stamp, which is why `bun run governance` exists; it delegates the whole run to the managed script unchanged.
+
+**One turbo cache for every worktree.** Turbo's default `cacheDir` is `.turbo/cache`, per checkout, so a build one worktree had already paid for was re-paid in the next — and a fresh worktree started from a fully cold graph (4 m 09.7 s here, 278 s of it one release cargo compile). The cache key is turbo's own content hash, so entries were always interchangeable across checkouts of the same repo; only the directory was not. Every root script that runs turbo goes through `scripts/ci/turbo.mjs`, which points it at the shared directory named in [toolchain.md](toolchain.md#where-the-caches-live). Measured on this container: a fresh worktree with no `.turbo` of its own restores 13/13 build tasks in **0.48 s**. `dev:*` keeps the plain binary — persistent tasks are never cached, and an interactive run should have nothing between it and its TTY.
+
+**Stamps and caches live outside the repository**, under the user's cache home, and are never committed. A stale one dies with the cache instead of travelling in a diff.
+
+### Reaching the vault from outside it
+
+`bun run lint:vault-sql` (tier 1, in `check:push`, and a step of the CI `static` job) fails when a file outside `packages/vault` names a physical vault table in raw SQL. The gateway is where consent is resolved, a receipt is written, and trashed rows are filtered out; a `SELECT … FROM core_event` written anywhere else walks past all three, and nothing in the type system notices. The vocabulary is **read from** `packages/vault/src/schema/entity-catalog.ts`, so a table added tomorrow is covered the day it is declared, and the plane machinery that legitimately owns tables outside the vault (replica, share/commons, broker, notices, doctor, restore, quarantine) is named in `ALLOW_LIST` in [`scripts/lint-vault-sql.mjs`](../scripts/lint-vault-sql.mjs) with one clause each. An allow-list entry whose file has stopped speaking SQL fails too — a standing allowance nothing needs is a permission slip for the next file that moves in.
+
+It went green the way it was meant to (review lens 8.1): the three life-data readers that used to fail it — `packages/server/src/brief/daily-brief.ts`, `packages/server/src/reminders/due-reminders.ts` and `packages/server/src/enrich/semantic-search.ts` — moved behind the gateway rather than onto the allow-list.
 
 ### Escape hatches
 
@@ -174,7 +221,36 @@ The strace fsync perf gate, the actionlint container, cargo data-plane, the wasm
 
 `ci.yml` is the **only** workflow listening on `pull_request`, and `release.yml` the only one on `push: tags` (#557, enforced by `lint:workflow-pins`). Every PR gate is a job there, rolling up into one required `check` aggregator. Lanes the diff does not touch report `skipped`, which `check` treats as satisfied; `cancelled` is a failure. This is why the one-workflow rule is mechanical: a lane in its own path-filtered workflow reports no status on unrelated PRs, so it can never be a required check.
 
-`static` runs the lint/typecheck gates plus matrix and ratchet. `verify` runs build, native tunnel, data-plane, gateway perf, coverage, and diff-coverage. Neither runs `test:affected` — full package vitest lives under `verify`.
+`static` runs the lint/typecheck gates plus the claims ledger (`test:claims`, `lint:evidence-mapping`) and the floors ratchet. `verify` runs build, native tunnel, data-plane, gateway perf, coverage, and diff-coverage. Neither runs `test:affected` — full package vitest lives under `verify`.
+
+**Six rungs, one question each ([#915](https://github.com/srikanth235/centraid/issues/915)).** Rungs 0 and 1 are the hooks above. Rungs 2–5 are workflows:
+
+| Rung | Trigger | Workflow | Question | p95 budget |
+| --: | --- | --- | --- | --- |
+| 2 | PR, required `check` | `ci.yml` | Can this land without a regression a user would see on the phone or through the gateway? | ≤ 15 min |
+| 3 | every push to `main` | `candidate.yml` | Is this SHA a build we would hand to a device — on Android **and** on iOS? | ≤ 45 min |
+| 4 | 06:00 UTC, on the promoted candidate | `e2e.yml` | Does the candidate hold under depth — iOS, cross-browser, scale, chaos, adversaries? | ≤ 90 min |
+| 5 | weekend, on the promoted candidate | `soak-weekly.yml`, `interop-weekly.yml`, `enrichment-live-weekly.yml`, `hygiene.yml` | Does it survive time, live dependencies, and our own suite being attacked? | ≤ 5 h |
+
+**Lane identity is the GitHub job id** (no `name:` overrides); a matrix leg is `<job> (<leg>)`. That is what `scripts/ci/lane-health.mjs`, the evidence files and the rolling issues all key on, so renaming a job renames a lane everywhere at once.
+
+**Rung 3 is what rungs 4 and 5 and the release chain consume.** `candidate.yml`'s `promote` job moves the git ref `refs/candidates/latest` and publishes `test-report/candidate.json` on gh-pages; every deep workflow opens with a `resolve-candidate` job (`scripts/ci/resolve-candidate.mjs`) whose fallback chain — dispatch input → the pointer → the last green `ci.yml` run on main → the run's own SHA — is printed to the step summary so the page always says which link answered. Before this, the nightly ran against whatever `main` pointed at when the cron fired, and thirty consecutive red nights could not distinguish a product regression from a dependency merge four hours earlier.
+
+**The rung-2 budget is enforced on the run that spends it.** The `check` job (which holds `actions: read`) runs `scripts/ci/pr-gate-wall-clock.mjs`: it reads this run's own jobs, computes the **union of the `started_at → completed_at` intervals** across `check`'s `needs:` — the time during which at least one gate lane was actually running — appends the number to the Job Summary, and fails over `tests/budgets.json#suiteWallClock`'s `lanes["pr-gate"].budgetMs` (900,000 ms). It was `max(completed_at) − min(started_at)` until [#931](https://github.com/srikanth235/centraid/issues/931): the raw span charged the PR for the account's runner backlog, so a `packages/core`-only diff with every lane green failed at 16.0 min because three workflows shared the runner pool and the coverage shards queued. Overlapping lanes still collapse into one interval, so parallelism is worth exactly what it was; only the gaps in which no gate job was running are dropped. The elapsed span and the queue wait inside it are printed beside the budgeted number. **The ceiling did not move** — `tests/budgets.json` is untouched and tighten-only.
+
+### The `build:ci` cache miss, diagnosed (#915)
+
+[#892](https://github.com/srikanth235/centraid/issues/892) found one provable defect (a git-tracked file declared as a turbo output) and instrumented the rest; `bun run build:ci` has printed a per-task HIT/MISS table and the global hash inputs ever since. #915 read those inputs and measured the remaining miss on this tree:
+
+- A cold `build:ci` is **349 s over 13 build tasks, and 278 s of it is `@centraid/tunnel#build`** — a release `cargo` compile behind the napi module.
+- `@centraid/tunnel#build` `dependsOn: ["^build"]` → `@centraid/core#build`. With no `inputs:` declared, turbo hashes **every non-ignored file in a package**, so editing one line of `packages/core/src/blob/cbsf-properties.test.ts` moved **11 of 16 build hashes**, `@centraid/tunnel` among them. A test-file edit — which is on nearly every PR — was re-paying a Rust compile, in each of the five lanes that build.
+- The fix is `turbo.json`'s `build.inputs`: `$TURBO_DEFAULT$` minus `*.test.*`, `*.spec.*`, `__tests__/**` and `**/*.md`. Every package's build is `tsc` or a bundler and none reads markdown or a test module, so the exclusions cannot produce a stale hit. Re-measured on the same tree: a test-file edit and a README edit now move **0** hashes; a real `packages/core/src` edit still moves the same 11.
+- Second cause, same symptom: a turbo MISS on `@centraid/tunnel#build` degrades to a **fully cold** cargo compile in any lane without a Cargo cache. `verify` had `cargo-cache: verify` and `coverage-shard` / `coverage` did not, so identical misses cost very differently. Both now carry the preset.
+- Enforcement: the three `build:ci` lanes call `bun run build:ci:floored` → [`scripts/ci/turbo-floor.mjs`](../scripts/ci/turbo-floor.mjs), which enforces `--min-hit-rate 0.15`. The number is justified by the graph — the deepest single-package change (`packages/core/src`) still leaves 3 of 13 tasks cached (≈ 23 %), so only a genuine whole-graph miss falls below it.
+- **The one legitimate way to be below the floor is a global-hash change**, and the wrapper detects it rather than offering a waiver. Before enforcing, it reads the diff (merge-base three-dot against `origin/main`, falling back to a two-dot diff and then to `HEAD~1` for a main push) and checks it against `GLOBAL_HASH_INPUTS`: `bun.lock`, the **root** `package.json`, `turbo.json`, `.npmrc`, `bunfig.toml`, `Cargo.lock`, `.node-version`, `rust-toolchain*`, and `.github/actions/setup/**`. If any moved, the failure is downgraded to `::warning title=Turbo cache floor waived::` **naming the file**, and the reason is written to the Job Summary; otherwise the floor enforces. A package-local `package.json` is deliberately not a mover — that is exactly the case the floor is meant to catch. An unreadable diff (a shallow checkout with no `origin/main`) also waives, loudly, because reding a lane for the checkout depth is a false red the author cannot fix from the PR.
+- There is **no flag and no environment variable that turns the floor off.** The waiver is computed from the diff, so it is an exception rather than a hole; a gate that is always red on the PRs that need it least is a gate that is off ([#915](https://github.com/srikanth235/centraid/issues/915) principle 2), and the scorecard's PR false-red target is ≤ 2 %. Do not lower the floor to make anything green, and add a path to `GLOBAL_HASH_INPUTS` only when a run has proved it moves the global hash — the `### Turbo cache` summary prints `globalCacheInputs` for exactly that.
+
+Two things this repo cannot answer from inside the tree, recorded rather than implied: whether the GitHub-backed remote cache is actually **serving** those hits across jobs and branches, and whether the 10 GB Actions cache pool is evicting turbo entries. Both are readable from the next real run's `### Turbo cache` table (hit **source** column: `local` vs `remote`), which is why the report prints it.
 
 ## Tools only via repo scripts
 

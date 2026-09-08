@@ -16,11 +16,12 @@ import { describe, expect, test } from "vitest";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   ProviderEgressConsentStore,
 } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import { HARNESSES } from "../registry.js";
 import { runTurn } from "../runtime.js";
 import type { HarnessKind } from "../types.js";
@@ -47,7 +48,7 @@ describe("live-automation-failover suite", () => {
       const root = await tempDir("centraid-live-automation-failover-");
       const appsDir = path.join(root, "state-apps");
       const codeAppsDir = path.join(root, "code-apps");
-      const journalDbFile = path.join(root, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(root);
       const automationDir = path.join(
         codeAppsDir,
         "smoke",
@@ -91,7 +92,7 @@ describe("live-automation-failover suite", () => {
         nextRunId: string;
       }> = [];
       const providerEgressConsent = new ProviderEgressConsentStore(
-        makeJournalDbProvider(journalDbFile),
+        makeLedgerDbProvider(ledgerDbFile),
         (harness) => harness === primary || harness === fallback
       );
       const result = await runAutomation({
@@ -99,7 +100,7 @@ describe("live-automation-failover suite", () => {
         runId: baseRunId,
         appsDir,
         codeAppsDir,
-        journalDbFile,
+        ledgerDbFile,
         runTurn,
         providerEgressConsent,
         harness: primary,
@@ -130,7 +131,7 @@ describe("live-automation-failover suite", () => {
       });
 
       const fallbackRunId = `${baseRunId}:failover:1:${fallback}`;
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       const primaryTurn = store.getTurn(baseRunId);
       const fallbackTurn = store.getTurn(fallbackRunId);
       store.close();

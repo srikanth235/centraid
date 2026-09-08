@@ -9,6 +9,7 @@ import { nextOccurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { MINTED_ID_PROPERTY, mintedIdIsFree } from "./minted-id.js";
 
 const ADD_TASK: CommandDefinition = {
   name: "schedule.add_task",
@@ -18,6 +19,7 @@ const ADD_TASK: CommandDefinition = {
     required: ["title"],
     additionalProperties: false,
     properties: {
+      task_id: MINTED_ID_PROPERTY,
       title: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
       due_at: { type: "string", minLength: 1 },
@@ -68,6 +70,7 @@ const ADD_TASK: CommandDefinition = {
       value: 1,
       message: "A reminder needs a due date to count back from.",
     },
+    mintedIdIsFree("schedule_task", "task_id", "task"),
   ],
   postconditions: [
     {
@@ -86,6 +89,7 @@ const ADD_TASK: CommandDefinition = {
 
 function addTask(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
+    task_id?: string;
     title: string;
     description?: string;
     due_at?: string;
@@ -96,10 +100,10 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
     remind_before_min?: number;
   };
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  const taskId = ctx.newId();
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  const taskId = input.task_id ?? ctx.newId(); // The seat's, or ours (#922 G2).
   ctx.db
     .prepare(
       `INSERT INTO schedule_task
@@ -108,7 +112,7 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(
       taskId,
-      owner.owner_party_id,
+      owner.self_party_id,
       input.title,
       input.description ?? null,
       input.priority ?? 0,
@@ -196,7 +200,7 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
     .prepare(
       `SELECT status, owner_party_id, title, description, priority, due_at,
               effort_min, parent_task_id, rrule, remind_before_min, project_id,
-              section_id, sort_order, recurrence_anchor, recurrence_tz
+              section_id, sort_order, recurrence_anchor, tz
          FROM schedule_task WHERE task_id = ?`
     )
     .get(input.task_id) as
@@ -215,7 +219,7 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
         section_id: string | null;
         sort_order: number;
         recurrence_anchor: "scheduled" | "completion";
-        recurrence_tz: string | null;
+        tz: string | null;
       }
     | undefined;
   if (!previous) throw new Error("task vanished between check and execute");
@@ -248,7 +252,7 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
       scheduledStart: previous.due_at,
       after:
         previous.recurrence_anchor === "completion" ? ctx.now : previous.due_at,
-      timeZone: previous.recurrence_tz ?? "Etc/UTC",
+      timeZone: previous.tz ?? "Etc/UTC",
       anchor: previous.recurrence_anchor,
     });
     if (nextDue) {
@@ -259,7 +263,7 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
              (task_id, owner_party_id, title, description, status, priority,
               due_at, completed_at, effort_min, parent_task_id, rrule,
               remind_before_min, project_id, section_id, sort_order,
-              recurrence_anchor, recurrence_tz)
+              recurrence_anchor, tz)
            VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?)`
         )
@@ -278,7 +282,7 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
           previous.section_id,
           previous.sort_order,
           previous.recurrence_anchor,
-          previous.recurrence_tz
+          previous.tz
         );
       ctx.wrote("schedule.task", nextTaskId);
       ctx.cite({
@@ -576,8 +580,10 @@ const RESTORE_TASK: CommandDefinition = {
   preconditions: [
     {
       name: "task_trashed",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM schedule_task
-             WHERE task_id = :task_id AND deleted_at IS NOT NULL`,
+             WHERE task_id = :task_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,

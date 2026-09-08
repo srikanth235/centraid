@@ -1,12 +1,10 @@
 // S3 — Contract: is this a valid typed command? Writes are never rows, only
 // commands (rule R04). Payloads validate against JSON-Schema; pre- and
 // postconditions are real queries evaluated by the gateway and recorded as
-// agent.invocation_check rows; agent.judgment rules are consulted as
-// constraints — never authored here.
+// agent.invocation_check rows.
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { nowIso } from "../ids.js";
 import type { ConditionSpec, Risk } from "./types.js";
 
 export interface CommandRow {
@@ -114,32 +112,7 @@ export function evaluateConditions(
   });
 }
 
-/**
- * Consult active agent.judgment rows as constraints: a rule whose rule_json
- * carries {"veto_command": "<name>"} and whose subject_scope matches the
- * command's schema or full name vetoes the call (rule R08 — the owner's
- * distilled corrections can veto an otherwise-valid call).
- */
-export function judgmentVeto(
-  vault: DatabaseSync,
-  commandName: string,
-  ownerSchema: string
-): string | null {
-  const rows = vault
-    .prepare(
-      `SELECT judgment_id, subject_scope, rule_json FROM agent_judgment
-        WHERE active = 1 AND (expires_at IS NULL OR expires_at > ?)`
-    )
-    .all(nowIso()) as {
-    judgment_id: string;
-    subject_scope: string;
-    rule_json: string;
-  }[];
-  for (const row of rows) {
-    if (row.subject_scope !== commandName && row.subject_scope !== ownerSchema)
-      continue;
-    const rule = JSON.parse(row.rule_json) as { veto_command?: string };
-    if (rule.veto_command === commandName) return row.judgment_id;
-  }
-  return null;
-}
+// The judgment veto is gone with `agent.judgment` (#916, ruling ONT-06): the
+// learn loop had commands, a table and no caller, so no correction was ever
+// distilled into a rule and no call was ever vetoed. R08 stays a design
+// commitment; it will need a producer before it needs a consultation.

@@ -92,10 +92,41 @@ const SOURCES = {
   "flows/b.mjs": "// b\n",
 };
 
-function run(matrix, { sources = SOURCES, flowFiles } = {}) {
+/**
+ * The roster half of the fixture (#915). Journeys are no longer declared in a
+ * registry block — the roster declares suites and the report derives §5 from
+ * them — so the journey rule is COMPLETENESS: every committed flow the roster
+ * calls `scheduled` is scheduled by some suite, and every scheduled file
+ * exists.
+ */
+const SUITES = [
+  {
+    id: "budgeted",
+    runner: "budget.md",
+    budgetMs: 720_000,
+    flows: ["a.mjs", "b.mjs"],
+  },
+];
+const ROSTER = {
+  suites: {},
+  flows: {
+    "tests/agent-e2e-mobile/flows/a.mjs": { status: "scheduled" },
+    "tests/agent-e2e-mobile/flows/b.mjs": { status: "scheduled" },
+  },
+};
+
+function run(
+  matrix,
+  { sources = SOURCES, flowFiles, suites = SUITES, roster = ROSTER } = {}
+) {
   return validateReportRegistries(matrix, {
     readSource: async (file) => sources[file] ?? null,
-    flowFiles: flowFiles ?? ["flows/a.mjs", "flows/b.mjs"],
+    flowFiles: flowFiles ?? [
+      "tests/agent-e2e-mobile/flows/a.mjs",
+      "tests/agent-e2e-mobile/flows/b.mjs",
+    ],
+    suites,
+    roster,
   });
 }
 
@@ -179,9 +210,9 @@ describe("validateReportRegistries", () => {
     expect((await run(baseMatrix({ joinLaws: [] }))).join(" ")).toContain(
       "has nothing to derive"
     );
-    expect(
-      (await run(baseMatrix({ journeys: { suites: [] } }))).join(" ")
-    ).toContain("grid G has nothing to derive");
+    expect((await run(baseMatrix(), { suites: [] })).join(" ")).toContain(
+      "the roster declares no suites"
+    );
   });
 
   test("SABOTAGE: unknown flow ids and seats are rejected", async () => {
@@ -199,96 +230,47 @@ describe("validateReportRegistries", () => {
     expect((await run(matrix)).join(" ")).toContain("duplicate join law id");
   });
 
-  test("SABOTAGE: a journey dropped from the suite fails against the runner", async () => {
-    const matrix = baseMatrix();
-    matrix.journeys.suites[0].flows.pop();
-    const errors = await run(matrix);
-    expect(errors.join(" ")).toContain("does not match its runner's");
-    expect(errors.join(" ")).toContain(
-      "no journeys suite declares it: flows/b.mjs"
-    );
-  });
-
-  test("SABOTAGE: a journey file added to disk must be declared", async () => {
+  test("SABOTAGE: a committed journey no suite schedules is caught", async () => {
     const errors = await run(baseMatrix(), {
-      flowFiles: ["flows/a.mjs", "flows/b.mjs", "flows/c.mjs"],
+      suites: [{ ...SUITES[0], flows: ["a.mjs"] }],
     });
-    expect(errors.join(" ")).toContain(
-      "no journeys suite declares it: flows/c.mjs"
-    );
+    expect(errors.join(" ")).toContain("no roster suite schedules it");
+    expect(errors.join(" ")).toContain("b.mjs");
   });
 
-  test("SABOTAGE: a budget that drifted from its runner is caught", async () => {
-    const matrix = baseMatrix();
-    matrix.journeys.suites[0].budgetMinutes = 45;
-    expect((await run(matrix)).join(" ")).toContain(
-      "declares a 45-minute budget; run.mjs enforces 10"
-    );
-  });
-
-  test("SABOTAGE: a budget with no runner to enforce it is rejected", async () => {
-    const matrix = baseMatrix();
-    matrix.journeys.suites[0].runner = null;
-    expect((await run(matrix)).join(" ")).toContain(
-      "declares a budget but no runner to enforce it"
-    );
-  });
-
-  test("an unbudgeted suite is an honest state, not an error", async () => {
-    const matrix = baseMatrix();
-    matrix.journeys.suites[0].runner = null;
-    matrix.journeys.suites[0].budgetDoc = null;
-    matrix.journeys.suites[0].budgetMinutes = null;
-    expect(await run(matrix)).toStrictEqual([]);
-  });
-
-  test("SABOTAGE: a missing runner, budget doc or journey file is named", async () => {
-    const missingRunner = baseMatrix();
-    missingRunner.journeys.suites[0].runner = "gone.mjs";
-    expect((await run(missingRunner)).join(" ")).toContain(
-      "journey suite runner does not exist: gone.mjs"
-    );
-    const missingDoc = baseMatrix();
-    missingDoc.journeys.suites[0].budgetDoc = "gone.md";
-    expect((await run(missingDoc)).join(" ")).toContain(
-      "journey budget doc does not exist: gone.md"
-    );
-    const missingFlow = baseMatrix();
-    missingFlow.journeys.suites[0].flows[0].owner = "flows/gone.mjs";
-    expect((await run(missingFlow)).join(" ")).toContain(
-      "journey flow owner does not exist: flows/gone.mjs"
-    );
-  });
-
-  test("SABOTAGE: a runner with no FLOWS or no BUDGET_MS is caught", async () => {
+  test("SABOTAGE: a suite scheduling a flow that is gone is caught", async () => {
     const errors = await run(baseMatrix(), {
-      sources: { ...SOURCES, "run.mjs": "// nothing here\n" },
+      suites: [{ ...SUITES[0], flows: ["a.mjs", "b.mjs", "ghost.mjs"] }],
     });
-    expect(errors.join(" ")).toContain("declares no FLOWS");
-    expect(errors.join(" ")).toContain("declares no BUDGET_MS");
+    expect(errors.join(" ")).toContain("does not exist on disk");
   });
 
-  test("SABOTAGE: a journey claiming a flow owned by another file is caught", async () => {
-    const matrix = baseMatrix();
-    matrix.journeys.suites[0].flows[0].flow = "sim-flow";
-    expect((await run(matrix)).join(" ")).toContain(
-      "claims flow sim-flow, which is owned by sim.test.ts"
-    );
-    const unknown = baseMatrix();
-    unknown.journeys.suites[0].flows[0].flow = "no-such-flow";
-    expect((await run(unknown)).join(" ")).toContain(
-      "references unknown flow no-such-flow"
-    );
+  test("a flow the roster declares promoting needs no suite", async () => {
+    // The roster's own `status` is the deliberate exception: an exploratory or
+    // promoting flow is committed on purpose without a lane, and saying so in
+    // the roster is what makes that visible rather than silent.
+    const errors = await run(baseMatrix(), {
+      suites: [{ ...SUITES[0], flows: ["a.mjs"] }],
+      roster: {
+        suites: {},
+        flows: {
+          "tests/agent-e2e-mobile/flows/a.mjs": { status: "scheduled" },
+          "tests/agent-e2e-mobile/flows/b.mjs": { status: "promoting" },
+        },
+      },
+    });
+    expect(errors).toStrictEqual([]);
   });
 
-  test("SABOTAGE: the same journey declared in two suites is rejected", async () => {
-    const matrix = baseMatrix();
-    matrix.journeys.suites.push({
-      ...matrix.journeys.suites[0],
-      id: "budgeted",
+  test("SABOTAGE: a suite with no budget is rejected", async () => {
+    const errors = await run(baseMatrix(), {
+      suites: [{ ...SUITES[0], budgetMs: null }],
     });
-    const errors = await run(matrix);
-    expect(errors.join(" ")).toContain("duplicate journey suite id");
-    expect(errors.join(" ")).toContain("journey flow declared twice");
+    expect(errors.join(" ")).toContain("declares no budgetMs");
+  });
+
+  test("SABOTAGE: a duplicate suite id is rejected", async () => {
+    const errors = await run(baseMatrix(), { suites: [SUITES[0], SUITES[0]] });
+    expect(errors.join(" ")).toContain("duplicate suite id");
   });
 });

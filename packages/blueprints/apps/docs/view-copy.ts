@@ -1,3 +1,4 @@
+import { fmtDate } from "./format.ts";
 // Every string a Docs view says about ITSELF: bar title, what the count counts,
 // the caption closing a row set, how each shelf is empty on its own terms, the
 // one mark a row may carry (§1.5, §2, §4.1, §4.3, §4.6). Here rather than in the
@@ -18,6 +19,7 @@ import {
   RECENT,
   SCAN,
   SEARCH,
+  SHARED,
   STARRED,
   STORAGE,
   TRASH,
@@ -68,6 +70,7 @@ export const SHELF_LABELS: Readonly<Record<string, string>> = {
   [FOLDERS]: "Folders",
   [RECENT]: "Recently changed",
   [STARRED]: "Starred",
+  [SHARED]: "Shared with you",
   [TRASH]: "Trash",
   [SEARCH]: "Search",
   [STORAGE]: "Storage",
@@ -85,6 +88,21 @@ const CAPTION_RECENT =
   "Ordered by last change, newest first — a machine reading the contents counts as a change.";
 const CAPTION_TRASH =
   "Each document is purged 30 days after deletion, on the date shown.";
+const CAPTION_SHARED = "Sorted by when it reached you, newest first.";
+
+/** The sender, unnamed where no live binding says whose vault it was. */
+export const SHARED_SENDER_UNKNOWN = "Another vault";
+
+/** The Shared row's lead line, in the slot a matched passage takes on Search;
+ *  a row carries one or the other, never both. */
+export function sharedFromLine(from: {
+  name: string | null;
+  at: number;
+}): string {
+  const who = from.name ?? SHARED_SENDER_UNKNOWN;
+  const when = from.at ? fmtDate(new Date(from.at).toISOString()) : "";
+  return when ? `${who} · ${when}` : who;
+}
 const CAPTION_SEARCH =
   "318 documents could not be looked inside; they were matched on title and filing only.";
 
@@ -111,6 +129,7 @@ export function captionFor(
   if (offline) return CAPTION_OFFLINE;
   if (id === TRASH) return CAPTION_TRASH;
   if (id === RECENT) return CAPTION_RECENT;
+  if (id === SHARED) return CAPTION_SHARED;
   if (id === SEARCH) {
     return searchUnreadable === undefined
       ? null
@@ -187,6 +206,14 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
     title: "Trash is empty",
     body: "Each document carries its own purge date.",
   },
+  // Ruling G-revoke: withdrawal hard-deletes the audience's copy. The shelf may
+  // not promise it survives one.
+  [SHARED]: {
+    variant: "shelf",
+    display: false,
+    title: "Nothing has been shared with you yet",
+    body: "When someone you are linked with shares a document, a copy lands here — and goes when they withdraw it.",
+  },
   [FOLDERS]: {
     variant: "shelf",
     display: false,
@@ -233,6 +260,15 @@ export const FILTER_EMPTY: EmptyCopy = {
   actionIcon: "dismiss",
 };
 
+/** Not an empty shelf: a shelf that does not know. The two must never look
+ *  alike, so this REPLACES the set rather than captioning it. */
+const SHARED_UNKNOWN: EmptyCopy = {
+  variant: "shelf",
+  display: false,
+  title: "This seat cannot say what was shared",
+  body: "Where each document came from is a separate read, and it did not answer.",
+};
+
 /** `query` and `filtered` are about what the member JUST DID, so they win — in
  *  that order, since a query is typed over a filter. */
 export function emptyCopy(
@@ -242,14 +278,20 @@ export function emptyCopy(
     filtered,
     folderName,
     driveIsEmpty,
+    sharedFromKnown = true,
   }: {
     query?: string;
     filtered?: boolean;
     folderName?: string;
     /** The one first-run state. */
     driveIsEmpty?: boolean;
+    /** Whether the placement reads ANSWERED (#903). */
+    sharedFromKnown?: boolean;
   } = {}
 ): EmptyCopy {
+  // Ahead of query and filter: neither is why this shelf is blank when the
+  // read behind it never answered.
+  if (id === SHARED && !sharedFromKnown) return SHARED_UNKNOWN;
   if (query) return searchEmpty(query);
   if (filtered) return FILTER_EMPTY;
   if (folderIdFrom(id)) return folderEmpty(folderName ?? "this folder");

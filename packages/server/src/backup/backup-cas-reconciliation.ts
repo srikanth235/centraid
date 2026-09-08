@@ -110,8 +110,8 @@ export async function runCasOnlyReconciliation(
     // base set is SHARED/read-only (#659): union into a local copy, never
     // mutate it.
     const live = new Set(liveBlobShasCached(opts.db.vault));
-    for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
-    for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
+    for (const sha of archivedSegmentShas(opts.db.vault)) live.add(sha);
+    for (const sha of conversationArchiveShas(opts.db.vault)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
     // Scope the cas diff to `store='cas'` rows (#425).

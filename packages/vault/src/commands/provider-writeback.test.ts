@@ -41,7 +41,6 @@ describe("provider write-back", () => {
     return gateway.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 

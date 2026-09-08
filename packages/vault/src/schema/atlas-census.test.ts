@@ -15,7 +15,7 @@ import {
   atlasPulse,
   ATLAS_GRAPH_CENTER,
 } from "./atlas-census.js";
-import { JOURNAL_TABLES, VAULT_TABLES } from "./tables.js";
+import { VAULT_TABLES } from "./tables.js";
 
 const cleanups: (() => void)[] = [];
 describe("atlas-census", () => {
@@ -27,26 +27,35 @@ describe("atlas-census", () => {
     const db = openVaultDb();
     cleanups.push(() => {
       db.vault.close();
-      db.journal.close();
     });
     return db;
   }
 
-  /** Independently walk PRAGMA foreign_key_list — the derived expectation. */
+  /** Independently walk PRAGMA foreign_key_list — the derived expectation.
+   * Keys into unregistered machinery (`core_entity`, since #916's rung ten)
+   * are not edges of the canonical model and are not counted, exactly as
+   * `atlasGraph` does not draw them. */
   function walkFkCount(vault: DatabaseSync): {
     total: number;
     toCenter: number;
   } {
+    const registered = new Set(
+      Object.entries(VAULT_TABLES).flatMap(([schema, tables]) =>
+        tables.map((t) => `${schema}_${t}`)
+      )
+    );
     let total = 0;
     let toCenter = 0;
     for (const [schema, tables] of Object.entries(VAULT_TABLES)) {
       for (const t of tables) {
         const physical = `${schema}_${t}`;
-        const fks = vault
-          .prepare(`PRAGMA foreign_key_list("${physical}")`)
-          .all() as unknown as {
-          table: string;
-        }[];
+        const fks = (
+          vault
+            .prepare(`PRAGMA foreign_key_list("${physical}")`)
+            .all() as unknown as {
+            table: string;
+          }[]
+        ).filter((f) => registered.has(f.table));
         total += fks.length;
         toCenter += fks.filter((f) => f.table === ATLAS_GRAPH_CENTER).length;
       }
@@ -71,8 +80,8 @@ describe("atlas-census", () => {
     // Parent spine row, then a child with a NOT NULL FK to it.
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('p1', 'person', 'Ravi', ?, ?, '1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p1', 'person', 'Ravi', ?, ?)`
       )
       .run(now, now);
     db.vault
@@ -123,8 +132,8 @@ describe("atlas-census", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('p1','person','Ravi',?,?,'1.3'),('p2','person','Asha',?,?,'1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p1','person','Ravi',?,?),('p2','person','Asha',?,?)`
       )
       .run(now, now, now, now);
     db.vault
@@ -158,9 +167,12 @@ describe("atlas-census", () => {
 
     // The authored link did NOT invent a party→party FK edge, and did not
     // change any FK fill (fkEdges are schema-derived, not link-derived).
+    // `from_id` DOES carry an engine key since #916's rung ten — into the
+    // entity supertype, which is machinery and therefore not an Atlas edge at
+    // all (see atlasGraph). What must never appear is an edge to core_party.
     expect(
       graph.fkEdges.some(
-        (e) => e.fromTable === "core_link" && e.col === "from_id"
+        (e) => e.fromTable === "core_link" && e.toTable === "core_party"
       )
     ).toBe(false);
   });
@@ -222,12 +234,12 @@ describe("atlas-census", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('p1','person','Ravi',?,?,'1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p1','person','Ravi',?,?)`
       )
       .run(now, now);
 
-    const census = atlasCensus(db.vault, db.journal);
+    const census = atlasCensus(db.vault);
     // Ontology packs sort before machinery.
     const firstMachinery = census.packs.findIndex(
       (p) => p.packKind === "machinery"
@@ -237,9 +249,7 @@ describe("atlas-census", () => {
       .lastIndexOf("ontology");
     expect(lastOntology).toBeLessThan(firstMachinery);
 
-    const core = census.packs.find(
-      (p) => p.pack === "core" && p.file === "vault"
-    );
+    const core = census.packs.find((p) => p.pack === "core");
     expect(core).toBeDefined();
     const partyTable = core!.tables.find((t) => t.physical === "core_party");
     expect(partyTable?.rows).toBe(1);
@@ -254,22 +264,22 @@ describe("atlas-census", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('p1', 'person', 'Ravi', ?, ?, '1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p1', 'person', 'Ravi', ?, ?)`
       )
       .run(now, now);
-    db.journal
+    db.vault
       .prepare(
-        `INSERT INTO consent_provenance
+        `INSERT INTO access_provenance
          (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, occurred_at)
        VALUES ('pv1', 'core.party', 'p1', 'create', 'owner', 'owner', ?)`
       )
       .run(now);
 
-    const census = atlasCensus(db.vault, db.journal);
+    const census = atlasCensus(db.vault);
     let counted = 0;
     for (const pack of census.packs) {
-      const file = pack.file === "vault" ? db.vault : db.journal;
+      const file = db.vault;
       for (const table of pack.tables) {
         const walked = (
           file
@@ -282,17 +292,14 @@ describe("atlas-census", () => {
     }
     // EVERY registered table is counted: the batch is an arithmetic identity,
     // not a narrower census (#883).
-    expect(counted).toBe(
-      Object.values(VAULT_TABLES).flat().length +
-        Object.values(JOURNAL_TABLES).flat().length
-    );
+    expect(counted).toBe(Object.values(VAULT_TABLES).flat().length);
     const walkedTotal = census.packs.reduce((sum, p) => sum + p.rows, 0);
     expect(census.totals.rows).toBe(walkedTotal);
   });
 
   test("the census counts the authority plane again (#883 V-census)", () => {
     const db = freshVault();
-    const census = atlasCensus(db.vault, db.journal);
+    const census = atlasCensus(db.vault);
     const physicals = census.packs.flatMap((pack) =>
       pack.tables.map((table) => table.physical)
     );
@@ -306,8 +313,8 @@ describe("atlas-census", () => {
   test("pulse buckets provenance writes by entity_type and day within the window", () => {
     const db = freshVault();
     const today = new Date("2026-07-17T12:00:00.000Z");
-    const insert = db.journal.prepare(
-      `INSERT INTO consent_provenance
+    const insert = db.vault.prepare(
+      `INSERT INTO access_provenance
        (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, occurred_at)
      VALUES (?, ?, ?, 'create', 'owner', 'owner', ?)`
     );
@@ -317,7 +324,7 @@ describe("atlas-census", () => {
     // Outside the 30-day window — must be excluded.
     insert.run("pv-old", "core.party", "p-old", "2026-01-01T09:00:00.000Z");
 
-    const pulse = atlasPulse(db.journal, { now: today });
+    const pulse = atlasPulse(db.vault, { now: today });
     expect(pulse.windowDays).toBe(30);
     expect(pulse.live).toBe(true);
 

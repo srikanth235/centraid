@@ -9,7 +9,6 @@ import { describe, expect, test } from "vitest";
 import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
-  ensureConversationLedger,
 } from "@centraid/server/engine";
 import {
   isSealedValue,
@@ -48,6 +47,7 @@ import {
 } from "../../packages/server/src/routes/route-security.js";
 import { buildGateway } from "../../packages/server/src/serve/build-gateway.js";
 import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/server/src/serve/health-registry.js";
+import { runWithVaultContext } from "../../packages/server/src/serve/vault-context.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { forEachSequentially } from "../../packages/test-kit/src/sequential.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
@@ -230,6 +230,11 @@ function scanCopy(
 // allowlist. Comments are stripped first, so neither a commented-out `limit:`
 // nor prose can decide a verdict.
 const REPLICA_REQUEST_KEYS = new Set([
+  // `acceptTruncation` belongs to the request vocabulary as of #922 0a. Without
+  // it here, a request carrying the flag stops looking like a request at all
+  // and this walk skips it -- the gate would go blind on exactly the reads the
+  // flag marks as debt, which is the opposite of what the flag is for.
+  "acceptTruncation",
   "entity",
   "limit",
   "orderBy",
@@ -316,50 +321,58 @@ function scanReplicaReads(
 }
 
 describe("issue #679 user-facing quality gates", () => {
-  test("A1/A3/A4: seven visible qualities own classified, governed, demonstrated-red gates", async () => {
-    const matrix = await json("tests/matrix.json");
-    const qualities = matrix["qualities"] as Array<{
+  test("A1/A3/A4: every visible quality claim is classified, governed and demonstrated red", async () => {
+    // #915 retired `tests/matrix.json#qualities` — a seven-row panel whose 45
+    // gates were nested under it and whose demonstrated-red seeds lived in a
+    // parallel top-level block, so a gate could lose its seed without either
+    // half noticing. The panel is now 45 flat claim ROWS in
+    // `tests/claims.json#claims`, each carrying its own family, severity and
+    // demonstrated-red evidence, which is what makes this test one pass over
+    // one list instead of a join.
+    const claimsFile = await json("tests/claims.json");
+    const claims = claimsFile["claims"] as Array<{
       id: string;
-      gates: Array<{
-        id: string;
-        owner: string;
-        knob: string;
-        governance: string;
-        redLastDemonstrated: string;
-      }>;
+      family: string;
+      severity: string;
+      owner: string;
+      knob: string;
+      governance: string;
+      demonstratedRed: {
+        date: string;
+        command: string;
+        seed: string;
+        failure: string;
+      };
     }>;
-    expect(qualities.map((quality) => quality.id)).toStrictEqual([
-      "trust",
-      "correctness",
-      "reliability",
-      "responsiveness",
-      "friction",
-      "transparency",
-      "longevity",
-    ]);
-    const gates = qualities.flatMap((quality) => quality.gates);
-    const demonstratedRed = matrix["demonstratedRed"] as Record<
-      string,
-      { command: string; seed: string; failure: string }
-    >;
-    expect(new Set(gates.map((gate) => gate.id)).size).toBe(gates.length);
-    expect(Object.keys(demonstratedRed).toSorted()).toStrictEqual(
-      gates.map((gate) => gate.id).toSorted()
+    expect(
+      [...new Set(claims.map((claim) => claim.family))].toSorted()
+    ).toStrictEqual(
+      [
+        "correctness",
+        "friction",
+        "longevity",
+        "reliability",
+        "responsiveness",
+        "transparency",
+        "trust",
+      ].toSorted()
     );
+    expect(new Set(claims.map((claim) => claim.id)).size).toBe(claims.length);
     await Promise.all(
-      gates.flatMap((gate) => [
-        access(path.join(root, gate.owner)),
-        access(path.join(root, gate.knob.split("#", 1)[0]!)),
+      claims.flatMap((claim) => [
+        access(path.join(root, claim.owner.split("#", 1)[0]!)),
+        access(path.join(root, claim.knob.split("#", 1)[0]!)),
       ])
     );
-    for (const gate of gates) {
+    for (const claim of claims) {
       expect(["tighten-only", "waiver-gated", "none"]).toContain(
-        gate.governance
+        claim.governance
       );
-      expect(Number.isNaN(Date.parse(gate.redLastDemonstrated))).toBe(false);
-      expect(demonstratedRed[gate.id]?.command).toMatch(/^(?:bun|node) /u);
-      expect(demonstratedRed[gate.id]?.seed.length).toBeGreaterThan(8);
-      expect(demonstratedRed[gate.id]?.failure.length).toBeGreaterThan(8);
+      expect(["S1", "S2", "S3", "S4"]).toContain(claim.severity);
+      expect(Number.isNaN(Date.parse(claim.demonstratedRed.date))).toBe(false);
+      expect(claim.demonstratedRed.command).toMatch(/^(?:bun|node) /u);
+      expect(claim.demonstratedRed.seed.length).toBeGreaterThan(8);
+      expect(claim.demonstratedRed.failure.length).toBeGreaterThan(8);
     }
   });
 
@@ -382,11 +395,9 @@ describe("issue #679 user-facing quality gates", () => {
       year3FixtureCacheKey(first, 5)
     );
     const db = await createTestVault();
-    ensureConversationLedger(db.journal);
     seedYear3Vault(
       {
         vault: db.vault,
-        journal: db.journal,
         sealCell: (entity, column, rowId, plaintext) =>
           sealValue(
             db.sealKey,
@@ -405,7 +416,7 @@ describe("issue #679 user-facing quality gates", () => {
     ).toBe(11);
     expect(
       (
-        db.journal.prepare("SELECT count(*) AS n FROM turns").get() as {
+        db.audit.prepare("SELECT count(*) AS n FROM turns").get() as {
           n: number;
         }
       ).n
@@ -416,7 +427,7 @@ describe("issue #679 user-facing quality gates", () => {
       )
       .get() as Record<string, string>;
     expect(Object.values(sealed).every(isSealedValue)).toBe(true);
-    const cacheRoot = await tempDir("quality-year3-cache-");
+    const cacheRoot = await tempDir("quality-year3-fixture-cache-");
     let generated = 0;
     const generate = async (target: string): Promise<void> => {
       generated += 1;
@@ -459,15 +470,23 @@ describe("issue #679 user-facing quality gates", () => {
       const added = await plane.invoke(plane.ownerCredential, {
         command: "locker.add_item",
         input: { type: "login", title: "Consent canary", password: "secret" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(added.status).toBe("executed");
       const itemId = (added as { output: { item_id: string } }).output.item_id;
-      const parked = await plane.invokeAsAssistant({
-        command: "locker.purge_item",
-        input: { item_id: itemId },
-        purpose: "dpv:ServiceProvision",
-      });
+      // The assistant has no standing grant: the shell must supply the
+      // acting owner's frame for its authority to ride.
+      const parked = await runWithVaultContext(
+        {
+          vaultId: plane.boot.vaultId,
+          ownerId: plane.boot.ownerPartyId,
+          ownsVault: true,
+        },
+        () =>
+          plane.invokeAsAssistant({
+            command: "locker.purge_item",
+            input: { item_id: itemId },
+          })
+      );
       expect(parked.status).toBe("parked");
       expect(
         plane.db.vault
@@ -476,7 +495,7 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ n: 1 });
       const invocationId = (parked as { invocationId: string }).invocationId;
       expect(
-        plane.db.journal
+        plane.db.audit
           .prepare(
             "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
           )
@@ -484,9 +503,9 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ status: "proposed" });
       expect(plane.confirmParked(invocationId, true).status).toBe("executed");
       expect(
-        plane.db.journal
+        plane.db.audit
           .prepare(
-            "SELECT decision FROM consent_receipt WHERE invocation_id = ?"
+            "SELECT decision FROM access_receipt WHERE invocation_id = ?"
           )
           .get(invocationId)
       ).toMatchObject({ decision: "allow" });
@@ -503,14 +522,12 @@ describe("issue #679 user-facing quality gates", () => {
           title: "Automation consent canary",
           password: "automation-secret",
         },
-        purpose: "dpv:ServiceProvision",
       });
       const automationItemId = (
         automationItem as { output: { item_id: string } }
       ).output.item_id;
       plane.enrollAutomationAgent("quality");
       plane.approveAgentGrant("quality", {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "locker", verbs: "read+act" }],
       });
       const codeAppsDir = await tempDir("quality-consent-automation-");
@@ -531,7 +548,6 @@ describe("issue #679 user-facing quality gates", () => {
           triggers: [],
           requires: {},
           vault: {
-            purpose: "dpv:ServiceProvision",
             scopes: [{ schema: "locker", verbs: "read+act" }],
           },
           history: { keep: { count: 100 } },
@@ -540,14 +556,14 @@ describe("issue #679 user-facing quality gates", () => {
       );
       await writeFile(
         path.join(automationDir, "handler.js"),
-        `export default async ({ ctx }) => ({ output: await ctx.vault.invoke({ command: 'locker.purge_item', input: { item_id: '${automationItemId}' }, purpose: 'dpv:ServiceProvision' }) });\n`
+        `export default async ({ ctx }) => ({ output: await ctx.vault.invoke({ command: 'locker.purge_item', input: { item_id: '${automationItemId}' } }) });\n`
       );
       const automated = await runFire(
         {
           automationRef: "quality/consent",
           runId: "quality-consent-fire",
           appsDir: plane.db.dir,
-          journalDbFile: path.join(plane.db.dir, "journal.db"),
+          ledgerDbFile: path.join(plane.db.dir, "vault.db"),
           codeAppsDir,
           harnessKind: HARNESS_KINDS[0],
           triggerKind: "scheduled",
@@ -569,10 +585,10 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ n: 1 });
       const automationAgent = plane.db.vault
         .prepare(
-          "SELECT agent_id FROM consent_agent WHERE enrollment_key = 'quality'"
+          "SELECT agent_id FROM access_agent WHERE enrollment_key = 'quality'"
         )
         .get() as { agent_id: string };
-      const proposed = plane.db.journal
+      const proposed = plane.db.audit
         .prepare(
           `SELECT invocation_id, status FROM agent_command_invocation
             WHERE caller_id = ?
@@ -669,16 +685,15 @@ describe("issue #679 user-facing quality gates", () => {
 
   test("F1: every harness turn, harness tool, and automation trigger persists through conversation/turn/item", async () => {
     const db = await createTestVault();
-    ensureConversationLedger(db.journal);
     const owner = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const history = new ConversationHistoryStore(() => ({
       vaultId: "quality-ledger",
-      ownerPartyId: owner.owner_party_id,
+      ownerPartyId: owner.self_party_id,
       appsDir: path.join(db.dir, "apps"),
-      journal: () => db.journal,
-      journalDbFile: path.join(db.dir, "journal.db"),
+      journal: () => db.audit,
+      ledgerDbFile: path.join(db.dir, "vault.db"),
       harnessSessionDir: path.join(db.dir, "harness-sessions"),
     }));
     const starts: Array<{
@@ -820,7 +835,7 @@ describe("issue #679 user-facing quality gates", () => {
             automationRef: `quality/${automationId}`,
             runId,
             appsDir: db.dir,
-            journalDbFile: path.join(db.dir, "journal.db"),
+            ledgerDbFile: path.join(db.dir, "vault.db"),
             codeAppsDir,
             harnessKind,
             triggerKind: "scheduled",
@@ -837,7 +852,7 @@ describe("issue #679 user-facing quality gates", () => {
         expect(fire.outcome.ok, triggerKind).toBe(true);
       }
     );
-    const persisted = db.journal
+    const persisted = db.audit
       .prepare(
         `SELECT c.harness_kind, t.trigger_origin, i.name
            FROM conversations c
@@ -890,11 +905,9 @@ describe("issue #679 user-facing quality gates", () => {
       enableWalShipper: false,
     });
     const db = t3Plane.db;
-    ensureConversationLedger(db.journal);
     seedYear3Vault(
       {
         vault: db.vault,
-        journal: db.journal,
         sealCell: (entity, column, rowId, plaintext) =>
           sealValue(
             db.sealKey,
@@ -909,11 +922,11 @@ describe("issue #679 user-facing quality gates", () => {
       Object.keys(profile.sealedSentinels).toSorted(compareStrings)
     ).toStrictEqual(declared.toSorted(compareStrings));
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM consent_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const ownerParty = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const gateway = createGateway(db);
     registerLockerCommands(gateway);
     const sqlArtifacts = [
@@ -941,7 +954,6 @@ describe("issue #679 user-facing quality gates", () => {
       // seeded canary item so every selected cell is a populated sealed one.
       ...[
         "SELECT value_sealed FROM locker_item_field WHERE item_id = 'year3-sealed-locker'",
-        "SELECT password FROM locker_item_history WHERE item_id = 'year3-sealed-locker'",
         "SELECT private_key FROM locker_item_passkey WHERE item_id = 'year3-sealed-locker'",
       ].map((sql) =>
         gateway.sql(
@@ -963,11 +975,36 @@ describe("issue #679 user-facing quality gates", () => {
     ).toSatisfy((values: unknown[]) =>
       values.every((value) => value === SEALED_PLACEHOLDER)
     );
+    // HISTORY IS REVISIONS (#916, D2). `locker_item_history` carried a sealed
+    // `password` column and is gone; the previous value now lives in a
+    // `core_entity_revision` snapshot. That snapshot must record THAT a sealed
+    // column changed and never WHAT it changed to, so the canary reads the
+    // snapshot as stored: no placeholder to check, because there must be no
+    // secret there in the first place.
+    const snapshots = gateway.sql(
+      {
+        kind: "device",
+        deviceId: device.device_id,
+        deviceKey: device.public_key,
+      },
+      {
+        sql: "SELECT snapshot_json FROM core_entity_revision WHERE entity_type = 'locker.item' AND entity_id = 'year3-sealed-locker'",
+      }
+    );
+    expect(snapshots.rows.length).toBeGreaterThan(0);
+    for (const row of snapshots.rows) {
+      const snapshot = String(
+        (row as { snapshot_json: unknown }).snapshot_json
+      );
+      for (const sentinel of Object.values(profile.sealedSentinels)) {
+        expect(snapshot).not.toContain(sentinel);
+      }
+    }
     const portable = await exportPortableVault(db, {
       kind: "owner-device",
       callerId: device.device_id,
       provAgentKind: "owner",
-      partyId: ownerParty.owner_party_id,
+      partyId: ownerParty.self_party_id,
       mayAct: true,
     });
     const credential = {
@@ -983,34 +1020,24 @@ describe("issue #679 user-facing quality gates", () => {
         title: "T3 journal canary",
         password: invokedSentinel,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(invoked.status).toBe("executed");
     const revealed = [
       gateway.reveal(credential, {
         entity: "locker.item",
         entityId: "year3-sealed-locker",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "sync.connection_credential",
         entityId: "year3-sealed-connection",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "locker.item_field",
         entityId: "year3-sealed-field",
-        purpose: "dpv:ServiceProvision",
-      }),
-      gateway.reveal(credential, {
-        entity: "locker.item_history",
-        entityId: "year3-sealed-revision",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "locker.item_passkey",
         entityId: "year3-sealed-locker",
-        purpose: "dpv:ServiceProvision",
       }),
     ];
     // Reveal is the ONE surface a sentinel is allowed through, so every
@@ -1025,7 +1052,11 @@ describe("issue #679 user-facing quality gates", () => {
       db.vault.prepare("SELECT * FROM locker_item").all(),
       db.vault.prepare("SELECT * FROM sync_connection_credential").all(),
       db.vault.prepare("SELECT * FROM locker_item_field").all(),
-      db.vault.prepare("SELECT * FROM locker_item_history").all(),
+      db.vault
+        .prepare(
+          "SELECT * FROM core_entity_revision WHERE entity_type = 'locker.item'"
+        )
+        .all(),
       db.vault.prepare("SELECT * FROM locker_item_passkey").all(),
     ];
     expect(JSON.stringify(rawStorage)).not.toContain("CENTRAID-SEALED-");
@@ -1047,12 +1078,12 @@ describe("issue #679 user-facing quality gates", () => {
       reader.readRows("locker.item"),
       reader.readRows("sync.connection_credential"),
       reader.readRows("locker.item_field"),
-      reader.readRows("locker.item_history"),
+      reader.readRows("core.entity_revision"),
       reader.readRows("locker.item_passkey"),
     ]);
     const backupArtifact = checkpointVault(db);
-    const receipts = db.journal.prepare("SELECT * FROM consent_receipt").all();
-    const invocationArtifact = db.journal
+    const receipts = db.audit.prepare("SELECT * FROM access_receipt").all();
+    const invocationArtifact = db.audit
       .prepare(
         "SELECT input_json FROM agent_command_invocation WHERE invocation_id = ?"
       )
@@ -1071,7 +1102,7 @@ describe("issue #679 user-facing quality gates", () => {
         kind: "owner-device",
         callerId: device.device_id,
         provAgentKind: "owner",
-        partyId: ownerParty.owner_party_id,
+        partyId: ownerParty.self_party_id,
         mayAct: true,
       },
       connectionId,
@@ -1103,10 +1134,10 @@ describe("issue #679 user-facing quality gates", () => {
       .join("\n");
     const workspace = {
       vaultId: "quality-t3",
-      ownerPartyId: ownerParty.owner_party_id,
+      ownerPartyId: ownerParty.self_party_id,
       appsDir: path.join(t3Dir, "apps"),
-      journal: () => db.journal,
-      journalDbFile: path.join(t3Dir, "journal.db"),
+      journal: () => db.audit,
+      ledgerDbFile: path.join(t3Dir, "vault.db"),
       harnessSessionDir: path.join(t3Dir, "harness-sessions"),
     };
     const conversationStore = new ConversationHistoryStore(() => workspace);
@@ -1262,13 +1293,12 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("P2: first-paint query budgets are per-screen identities, never an aggregate", async () => {
-    const budgets = await json(
-      "tests/experience-budgets/client-query-counts.json"
-    );
-    const screens = budgets["screens"] as Record<
+    const ledger = await json("tests/journeys.json");
+    const entries = ledger["entries"] as Record<
       string,
-      { sqlStatements: number; httpRequests: number }
+      { metrics: Record<string, Record<string, number>> }
     >;
+    const screens = entries["client/first-paint-work/year3/any"]?.metrics ?? {};
     expect(Object.keys(screens).sort()).toStrictEqual([
       "assistant",
       "atlas",
@@ -1276,8 +1306,8 @@ describe("issue #679 user-facing quality gates", () => {
       "photos-grid",
     ]);
     for (const budget of Object.values(screens)) {
-      expect(budget.sqlStatements).toBeGreaterThan(0);
-      expect(budget.httpRequests).toBeGreaterThan(0);
+      expect(budget["maxStatements"]).toBeGreaterThan(0);
+      expect(budget["maxHttpRequests"]).toBeGreaterThan(0);
     }
   });
 
@@ -1445,7 +1475,7 @@ describe("issue #679 user-facing quality gates", () => {
     expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
     expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
     const keyed = (entry: { file: string; literal: string }): string =>
-      `${entry.file} ${entry.literal}`;
+      `${entry.file}\u0000${entry.literal}`;
     expect(new Set(ratchet.entries.map(keyed)).size).toBe(
       ratchet.entries.length
     );

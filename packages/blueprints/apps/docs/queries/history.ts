@@ -10,6 +10,7 @@ import {
   RELATIONS_SCHEME_URI,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 
 const REVISES_RELATION = "revises";
 // Caps runaway growth.
@@ -42,7 +43,6 @@ interface ContentRow {
 }
 
 export default async function historyHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const documentId = String(input?.document_id ?? "");
   if (!documentId) return { versions: [] };
   try {
@@ -50,15 +50,13 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
       entity: "core.document",
       where: [{ column: "document_id", op: "eq", value: documentId }],
       limit: 1,
-      purpose,
     });
     const doc = ((docRes.rows ?? []) as unknown as DocumentRow[])[0];
     if (!doc) return { versions: [] };
 
-    const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-    ]);
+    const [concepts, schemes] = await Promise.all(
+      conceptTaxonomyReads(ctx.vault)
+    );
     const revisesConceptId = findSchemeConcept(
       (schemes.rows ?? []) as unknown as SchemeRow[],
       (concepts.rows ?? []) as unknown as ConceptRow[],
@@ -87,7 +85,6 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
           ],
           orderBy: { column: "valid_from", dir: "desc" },
           limit: 5,
-          purpose,
         });
         const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
         if (!next || seen.has(next.to_id)) return;
@@ -100,9 +97,9 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     }
 
     const contents = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chainIds }],
-      purpose,
     });
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [

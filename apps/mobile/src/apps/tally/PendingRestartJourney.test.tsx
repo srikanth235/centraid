@@ -31,7 +31,7 @@
 //     The row Waiting draws is an outbox row; the EXPENSE is an optimistic
 //     projection, and it is the mounted reader's overlay that carries it. The
 //     phone draws no surface over that read (Tally's reads are gateway RPCs —
-//     `tally-gateway.ts` says why), so the claim is asserted at the reader the
+//     `tally-reads.ts` says why), so the claim is asserted at the reader the
 //     app mounts rather than at a screen that does not exist.
 //
 // WHAT THIS FILE DELIBERATELY DOES NOT CLAIM: reconnect. The gateway is
@@ -66,6 +66,19 @@ import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 // `onPress` and drops every other handler, and a journey that TYPES needs
 // `onChangeText` to reach the draft. Overridden here rather than in the shared
 // stub, because a composer is the only surface that needs it.
+// The vault lockup every app frame draws. Stubbed for the same reason as in
+// `PhotosScreen.test.tsx`: this journey's claim is Tally's pending-write
+// behaviour, and mounting the real header pulls the active-vault read and its
+// native storage into a project with no setup file to seam them.
+vi.mock(import("../../screens/home/VaultBar"), () => ({
+  default: (): React.JSX.Element => React.createElement("view"),
+}));
+
+vi.mock(import("@shopify/flash-list"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.flashListStub() as unknown as typeof import("@shopify/flash-list");
+});
+
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const stub = await import("../../test/react-native-stub");
@@ -146,17 +159,18 @@ vi.mock(
     }) as never
 );
 
-// The gateway door, replaced wholesale — the neighbouring read-plane suite's
-// own shape (`tally-store.test.ts`). Tally's reads are RPCs, so "the gateway
-// is unreachable" IS these handlers rejecting.
+// The read door, replaced wholesale — the neighbouring read-plane suite's own
+// shape (`tally-store.test.ts`). This journey is about the WRITE rail across a
+// restart, so the reads answer whatever the test hands them.
 const answers = vi.hoisted(() => ({
   dashboard: vi.fn<() => Promise<unknown>>(),
 }));
 vi.mock(
-  import("./tally-gateway"),
+  import("./tally-reads"),
   () =>
     ({
       EXPORT_WINDOW: 2000,
+      attachTallyReadPlane: () => undefined,
       tallyActivity: () => answers.dashboard(),
       tallyDashboard: () => answers.dashboard(),
       tallyExport: () => answers.dashboard(),
@@ -164,7 +178,7 @@ vi.mock(
       tallyGroup: () => answers.dashboard(),
       tallyHistory: () => answers.dashboard(),
       tallySearch: () => answers.dashboard(),
-    }) as unknown as typeof import("./tally-gateway")
+    }) as unknown as typeof import("./tally-reads")
 );
 
 const replica = vi.hoisted(() => ({
@@ -181,7 +195,11 @@ vi.mock(
 const posted = vi.hoisted(() => [] as string[]);
 vi.mock(
   import("../../kit/components/status-line"),
-  () => ({ postStatus: (message: string) => posted.push(message) }) as never
+  () =>
+    ({
+      postStatus: (message: string) => posted.push(message),
+      showUndoStatus: (message: string) => posted.push(message),
+    }) as never
 );
 
 const { WAITING_OWN_SCOPE } = await import("./tally-seat-copy");
@@ -199,7 +217,6 @@ const SPENT = "Airplane dinner at the Ship";
 const TALLY_SHAPE = {
   shapeId: "tally-default",
   appId: "tally",
-  purpose: "dpv:ServiceProvision",
   entities: [
     {
       entity: "tally.expense",
@@ -549,8 +566,12 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     expect(found.rows[0]?.values).toMatchObject({
       description: SPENT,
       amount_minor: 1234,
-      [PENDING_OVERLAY_FIELDS.status]: "queued",
       __centraidScopeId: VAULT,
+    });
+    const intentId = found.rows[0]?.values[PENDING_OVERLAY_FIELDS.key];
+    // Queued is a fact about the WRITE, so the read's sidecar says it (G3).
+    expect(found.pending?.[String(intentId)]).toMatchObject({
+      status: "queued",
     });
   });
 });

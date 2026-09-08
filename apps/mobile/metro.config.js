@@ -41,4 +41,17 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
 };
 
+// Hermes ships no `Array.prototype.toSorted` (see polyfills/array-to-sorted.js
+// for the upstream story). `getPolyfills` is the hook whose contract is "these
+// run before app code": an import at the top of `index.ts` only wins if nothing
+// above it reaches blueprints, and `getModulesRunBeforeMainModule` — the other
+// candidate — is marked deprecated by @expo/metro-config, which explicitly does
+// not enforce ordering there. Expo puts React Native's own polyfills in this
+// hook, so compose with it rather than replacing it.
+const expoGetPolyfills = config.serializer.getPolyfills;
+config.serializer.getPolyfills = (options) => [
+  ...(expoGetPolyfills?.(options) ?? []),
+  require.resolve("./polyfills/array-to-sorted.js"),
+];
+
 module.exports = config;

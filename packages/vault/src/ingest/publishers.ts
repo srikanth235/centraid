@@ -21,7 +21,6 @@ import {
   insertMediaAssetTx,
 } from "../commands/media.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
-import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
@@ -62,8 +61,9 @@ const eventPublisher: Publisher = {
       .prepare(
         `INSERT INTO core_event
            (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
-            location_place_id, organizer_party_id, sequence, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)`
+            location_place_id, organizer_party_id, sequence, created_at, updated_at,
+            recurrence_semantics)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)`
       )
       .run(
         eventId,
@@ -76,7 +76,10 @@ const eventPublisher: Publisher = {
         p.rrule,
         p.status,
         now,
-        now
+        now,
+        // An imported event with no zone is a FLOATING wall clock (#916, R2):
+        // claiming 'zoned' without one is what the schema now refuses.
+        p.startTz && p.dtstart.endsWith("Z") ? "zoned" : "floating"
       );
     return { entityId: eventId, wrote: [] };
   },
@@ -260,10 +263,10 @@ const partyPublisher: Publisher = {
     const partyId = uuidv7();
     vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', ?, ?, ?, NULL, ?, ?, ?)`
+        `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+         VALUES (?, 'person', ?, ?, ?, NULL, ?, ?)`
       )
-      .run(partyId, p.fn, p.sortName, p.bday, now, now, ONTOLOGY_VERSION);
+      .run(partyId, p.fn, p.sortName, p.bday, now, now);
     return {
       entityId: partyId,
       wrote: [
@@ -980,17 +983,12 @@ function applyImportedAssetFlags(
   payload: MediaAssetPayload
 ): void {
   if (payload.favorite !== 1) return;
-  deps.vault
-    .prepare("UPDATE media_asset SET favorite = 1 WHERE asset_id = ?")
-    .run(assetId);
-  const row = deps.vault
-    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
-    .get(assetId) as { content_id: string } | undefined;
-  if (!row) return;
+  // The payload keeps a boolean because that is what a Takeout sidecar says;
+  // it LANDS as the one star, on the asset (#916).
   setStarredTx(
     { ...deps, actorPartyId: () => ownerPartyId },
-    "core.content_item",
-    row.content_id,
+    "media.asset",
+    assetId,
     true
   );
 }

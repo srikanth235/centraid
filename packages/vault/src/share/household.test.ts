@@ -2,8 +2,14 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso, uuidv7 } from "../ids.js";
 import { sealAad, sealValue, unsealValue } from "../schema/sealed.js";
-import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
-import { shareItemsToVault, unshareFromVault } from "./placement.js";
+import {
+  closeOpenVaults,
+  household,
+  placementAuthority,
+  seedPhoto,
+  unplaceProjection,
+} from "./placement-fixture.js";
+import { shareItemsToVault } from "./placement.js";
 
 describe("household audience placement", () => {
   afterEach(closeOpenVaults);
@@ -37,6 +43,7 @@ describe("household audience placement", () => {
       itemType: "core.collection",
       itemIds: [collectionId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "core.collection", [collectionId]),
     });
 
     expect(
@@ -55,11 +62,8 @@ describe("household audience placement", () => {
     ).toMatchObject({ n: 2 });
 
     expect(
-      unshareFromVault({
-        audience,
-        itemType: "core.collection",
-        itemId: shared.items[0]!.itemId,
-      }).removed
+      unplaceProjection(audience, "core.collection", shared.items[0]!.itemId)
+        .removed
     ).toBe(true);
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
@@ -127,6 +131,7 @@ describe("household audience placement", () => {
       itemType: "core.collection",
       itemIds: [collectionId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "core.collection", [collectionId]),
     });
 
     expect(
@@ -164,6 +169,7 @@ describe("household audience placement", () => {
       itemType: "locker.item",
       itemIds: [itemId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "locker.item", [itemId]),
     });
     const row = audience.vault
       .prepare(
@@ -192,8 +198,8 @@ describe("household audience placement", () => {
       .prepare(
         `INSERT INTO core_party
            (party_id, kind, display_name, sort_name, birth_date,
-            avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', 'Sid', 'Sid', NULL, NULL, ?, ?, 'v0')`
+            avatar_content_id, created_at, updated_at)
+         VALUES (?, 'person', 'Sid', 'Sid', NULL, NULL, ?, ?)`
       )
       .run(friendId, now, now);
     const circleId = uuidv7();
@@ -214,17 +220,17 @@ describe("household audience placement", () => {
     origin.vault
       .prepare(
         `INSERT INTO tally_group
-           (group_id, circle_id, icon, color, created_at, updated_at)
-         VALUES (?, ?, '🏠', '#336699', ?, ?)`
+           (group_id, circle_id, icon, color, currency, created_at, updated_at)
+         VALUES (?, ?, '🏠', '#336699', 'USD', ?, ?)`
       )
       .run(groupId, circleId, now, now);
     const expenseId = uuidv7();
     origin.vault
       .prepare(
         `INSERT INTO tally_expense
-           (expense_id, group_id, description, amount_minor, paid_by, spent_on,
-            category, txn_id, created_at, updated_at)
-         VALUES (?, ?, 'Groceries', 4200, ?, '2026-07-29', 'groceries',
+           (expense_id, group_id, description, amount_minor, currency, paid_by,
+            spent_on, category, txn_id, created_at, updated_at)
+         VALUES (?, ?, 'Groceries', 4200, 'USD', ?, '2026-07-29', 'groceries',
                  NULL, ?, ?)`
       )
       .run(expenseId, groupId, originBoot.ownerPartyId, now, now);
@@ -242,6 +248,7 @@ describe("household audience placement", () => {
       itemType: "tally.group",
       itemIds: [groupId],
       sharedBy: "gateway-member-priya",
+      authority: placementAuthority(origin, "tally.group", [groupId]),
     });
 
     expect(

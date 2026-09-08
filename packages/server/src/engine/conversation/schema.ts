@@ -1,6 +1,6 @@
 /*
- * Conversation ⊃ turn ⊃ item row types (#190); the DDL lives in
- * `RUNTIME_MIGRATIONS`. The CONVERSATION is the spine — `RunKind` lives on it,
+ * Conversation ⊃ turn ⊃ item row types (#190). The DDL is the vault's LEDGER
+ * BAND (`packages/vault/src/schema/ledger.ts`, #916). The CONVERSATION is the spine — `RunKind` lives on it,
  * never re-stamped per turn — and ordinal 0 is the inbound message.
  */
 

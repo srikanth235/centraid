@@ -256,7 +256,7 @@ export function ItemScreen(props: ItemScreenProps): ReactNode {
       <AddressSection detail={detail} onOpen={props.onOpenAddress} />
       <PasskeySection detail={detail} reveal={reveal} />
       <AttachmentSection detail={detail} />
-      <HistorySection detail={detail} reveal={reveal} />
+      <HistorySection detail={detail} />
 
       <LifeRows
         detail={detail}

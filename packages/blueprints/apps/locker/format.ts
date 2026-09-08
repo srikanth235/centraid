@@ -5,7 +5,10 @@
 // derivations — a title, a meta sentence, and at most one verdict.
 
 import { DAY_MS } from "../_shared/format-kit.ts";
-import { readPendingOverlay } from "../_shared/pending-overlay.ts";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "../_shared/pending-overlay.ts";
 import { displayText } from "../_shared/untrusted.ts";
 import type {
   CheckKey,
@@ -168,7 +171,7 @@ export function rowsFor(
     // would be asking the same question twice and risking two answers.
     return true;
   });
-  return pool.toSorted(byTitle);
+  return [...pool].sort(byTitle);
 }
 
 /** How many rows each type holds, for the rail's six rows. A zero is drawn as
@@ -197,7 +200,7 @@ export function tagCounts(
   }
   return [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
-    .toSorted((a, b) => a.tag.localeCompare(b.tag));
+    .sort((a, b) => a.tag.localeCompare(b.tag));
 }
 
 /**
@@ -256,25 +259,22 @@ export { purgeCountdown } from "../_shared/format-kit.ts";
  * (`writes.ts`). `parked` and `conflict` are decisions, not delays: one is
  * waiting on the owner, the other on the member.
  */
+function pendingStatus(row: LockerRow): string | undefined {
+  const record = row as unknown as Record<string, unknown>;
+  return readPendingOverlay(record, pendingSidecarOf(record))?.status;
+}
+
 export function isQueued(row: LockerRow): boolean {
-  const status = readPendingOverlay(
-    row as unknown as Record<string, unknown>
-  )?.status;
+  const status = pendingStatus(row);
   return status === "queued" || status === "sending";
 }
 
 export function isConflicted(row: LockerRow): boolean {
-  return (
-    readPendingOverlay(row as unknown as Record<string, unknown>)?.status ===
-    "conflict"
-  );
+  return pendingStatus(row) === "conflict";
 }
 
 export function isParked(row: LockerRow): boolean {
-  return (
-    readPendingOverlay(row as unknown as Record<string, unknown>)?.status ===
-    "parked"
-  );
+  return pendingStatus(row) === "parked";
 }
 
 /**

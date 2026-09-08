@@ -4,7 +4,7 @@
 // needs. The dependent preview is the shared seam with Part A: engine FKs are
 // found by a reverse `PRAGMA foreign_key_list` walk, and the polymorphic
 // `(type,id)` mechanisms — invisible to the engine — by the A1
-// `POLY_REF_REGISTRY`. That is the acceptance criterion "counts polymorphic
+// `ENTITY_POINTERS`. That is the acceptance criterion "counts polymorphic
 // dependents via the registry, not only engine FKs". The no-SQL-from-input
 // invariants of atlas-browse.ts apply here identically.
 
@@ -19,7 +19,7 @@ import {
   tableInfo,
 } from "./atlas-browse.js";
 import { atlasTables } from "./atlas.js";
-import { POLY_REF_REGISTRY } from "./poly-refs.js";
+import { ENTITY_POINTERS } from "./entity-refs.js";
 
 export interface BrowseRefHit {
   id: string;
@@ -104,10 +104,10 @@ export interface BrowseDependentsResult {
 
 /**
  * Every row that references `(table, id)`, from BOTH the reverse engine-FK
- * index (a `PRAGMA foreign_key_list` walk over every vault table) AND the A1
- * `POLY_REF_REGISTRY` matched on the row's LOGICAL entity name. Engine FKs
- * block a delete; polymorphic dependents are reported so the confirmation
- * dialog never lies by omission (#441).
+ * index (a `PRAGMA foreign_key_list` walk over every vault table) AND
+ * `ENTITY_POINTERS` matched on the row's LOGICAL entity name. Engine FKs on
+ * the row itself block a delete; entity pointers cascade, and are reported so
+ * the confirmation dialog never lies by omission (#441).
  */
 export function browseDependents(
   vault: DatabaseSync,
@@ -121,7 +121,6 @@ export function browseDependents(
 
   // Engine FKs: any vault table with an FK column whose parent is this table.
   for (const entry of atlasTables()) {
-    if (entry.file !== "vault") continue;
     if (entry.physical === ref.physical) continue; // self-refs handled below
     for (const fk of foreignKeys(vault, entry.physical)) {
       if (fk.table !== ref.physical) continue;
@@ -163,9 +162,11 @@ export function browseDependents(
   }
   const hasEngineDependents = dependents.length > 0;
 
-  // Polymorphic (type,id) mechanisms — invisible to the engine, matched on the
-  // LOGICAL name (`core.party`, `knowledge.note`…) the type columns store.
-  for (const entry of POLY_REF_REGISTRY) {
+  // Entity pointers. These ARE engine foreign keys since #916's rung ten, but
+  // the key names `core_entity` as its parent, so `PRAGMA foreign_key_list`
+  // above cannot say which rows point at THIS event. They are still matched on
+  // the LOGICAL name (`core.party`, `knowledge.note`…) the type columns store.
+  for (const entry of ENTITY_POINTERS) {
     for (const pair of entry.pairs) {
       const count = (
         vault

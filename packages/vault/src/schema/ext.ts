@@ -1,3 +1,5 @@
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 // The ext band (#286): app-declared extension tables that live
 // INSIDE vault.db — physical `ext_<app>_<table>` — for shapes the canonical
 // ontology genuinely doesn't cover (Lane 2 of the two-lane rule; Lane 1 is
@@ -392,13 +394,13 @@ export function dropExtFtsDdl(physical: string): string {
 }
 
 /**
- * Migration rung (v5): the band registry. One row per (app, band, table) —
- * `spec_json` is the canonical declared spec (the diff base for the next
- * apply), `status` survives uninstall (`retained`: data kept, app access
- * gone) until the owner purges.
+ * The band registry. One row per (app, band, table) — `spec_json` is the
+ * canonical declared spec (the diff base for the next apply), `status`
+ * survives uninstall (`retained`: data kept, app access gone) until the owner
+ * purges.
  */
 export const APP_EXT_DDL = `
-CREATE TABLE IF NOT EXISTS consent_app_ext (
+CREATE TABLE access_app_ext (
   app_id      TEXT NOT NULL,
   band        TEXT NOT NULL DEFAULT 'live' CHECK (band IN ('live', 'draft')),
   table_name  TEXT NOT NULL,
@@ -406,7 +408,8 @@ CREATE TABLE IF NOT EXISTS consent_app_ext (
   spec_json   TEXT NOT NULL CHECK (json_valid(spec_json)),
   status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retained')),
   created_at  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   PRIMARY KEY (app_id, band, table_name)
-);
+) STRICT;
+${touchUpdatedAt("access_app_ext", ["app_id", "band", "table_name"])}
 `;

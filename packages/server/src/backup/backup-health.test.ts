@@ -42,14 +42,12 @@ describe("backup-health", () => {
       walForeignCheckpointCount: 3,
       walLastForeignCheckpoint: {
         atMs: NOW - HOUR_MS,
-        db: "journal",
         reason: "wal-salts-changed-without-our-checkpoint",
       },
     });
     const res = evaluateBackupHealth({ state: stateWith(target), now: NOW });
     expect(res.status).toBe("degraded");
     expect(res.detail).toContain("3 foreign checkpoint(s)");
-    expect(res.detail).toContain("journal");
     expect(res.detail).toContain("wal-salts-changed-without-our-checkpoint");
   });
 
@@ -58,7 +56,6 @@ describe("backup-health", () => {
       walForeignCheckpointCount: 3,
       walLastForeignCheckpoint: {
         atMs: NOW - 25 * HOUR_MS,
-        db: "journal",
         reason: "wal-reset-during-capture",
       },
     });
@@ -82,7 +79,6 @@ describe("backup-health", () => {
       walForeignCheckpointCount: 1,
       walLastForeignCheckpoint: {
         atMs: NOW - HOUR_MS,
-        db: "vault",
         reason: "main-db-file-changed-without-our-checkpoint",
       },
     });

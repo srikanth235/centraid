@@ -10,9 +10,9 @@ import { sealedColumnsOf } from "../schema/sealed.js";
 const REPLICA_PROTOCOL_CREDENTIAL_COLUMNS: Readonly<
   Record<string, readonly string[]>
 > = {
-  "consent.app": ["signing_key"],
-  "consent.agent": ["enrollment_key"],
-  "consent.device": ["public_key"],
+  "access.app": ["signing_key"],
+  "access.agent": ["enrollment_key"],
+  "access.device": ["public_key"],
 };
 
 /** One structural deny-list shared by log snapshots, bootstrap, and lazy reads. */

@@ -11,7 +11,7 @@
 // second payload asks for exactly that one and no other. That law is
 // `apps/tally/ledger-reads.ts`'s, restated here rather than imported because
 // the web seat's version is a React hook bound to `window.centraid`, and this
-// seat's door is `tally-gateway.ts`.
+// seat's door is `tally-reads.ts`.
 //
 // NOTHING HERE FOLDS A FIGURE. Every net, share and total arrives derived from
 // `queries/dashboard.ts`'s one balance engine; this module moves payloads and
@@ -43,16 +43,12 @@ import {
   tallyGroup,
   tallyHistory,
   tallySearch,
-} from "./tally-gateway";
+} from "./tally-reads";
 
-/** How long a landed read may stand before the screen says it is behind the
- *  vault. Ten minutes: long enough that a member reading one expense is not
- *  told their ledger is stale, short enough that one left open overnight is. */
-const STALE_AFTER_MS = 10 * 60 * 1000;
-
-/** How often the store re-examines its own freshness. The stale verdict is
- *  decided on this tick rather than by a screen reading the clock during
- *  render, which is a purity violation and an unstable result besides. */
+/** How often the store re-reads the wall clock. The day heading and the rows
+ *  under it must not straddle midnight and disagree about what "today" is;
+ *  a screen reading the clock during render is a purity violation and an
+ *  unstable result besides. */
 const TICK_MS = 30_000;
 
 const EMPTY_DASHBOARD: DashboardData = {
@@ -90,9 +86,6 @@ export interface TallyVaultState {
   readError: string;
   /** The vault's refusal, as data. Denial is a screen, not an error. */
   denied: VaultDenied | null;
-  /** When the last read that ACTUALLY LANDED did — the stale sentence's clock. */
-  lastReadAt: string | null;
-  stale: boolean;
   /** The clock the whole room reads, so a day heading and the rows under it
    *  cannot straddle midnight and disagree about what "today" is. */
   now: string;
@@ -113,8 +106,6 @@ function initialState(): TallyVaultState {
     reading: false,
     readError: "",
     denied: null,
-    lastReadAt: null,
-    stale: false,
     now: new Date().toISOString(),
     window: ACTIVITY_WINDOW,
   };
@@ -152,12 +143,8 @@ function startTicker(): void {
   if (ticker !== null) return;
   ticker = setInterval(() => {
     const now = new Date().toISOString();
-    const matchedAt = state.lastReadAt;
-    const stale =
-      matchedAt !== null && Date.now() - Date.parse(matchedAt) > STALE_AFTER_MS;
-    if (stale === state.stale && now.slice(0, 10) === state.now.slice(0, 10))
-      return;
-    set({ now, stale });
+    if (now.slice(0, 10) === state.now.slice(0, 10)) return;
+    set({ now });
   }, TICK_MS);
 }
 
@@ -194,9 +181,7 @@ function markLanded(
     loaded: true,
     reading: false,
     readError: "",
-    lastReadAt: new Date().toISOString(),
     now: new Date().toISOString(),
-    stale: false,
   });
 }
 

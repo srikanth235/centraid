@@ -246,7 +246,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path.includes("/grants") && method === "POST")
     return json({ grantId: "grant-1" });
   if (path.startsWith("/centraid/_vault/grants/"))
-    return json({ viewsRevoked: 1, parkedDropped: 1 });
+    return json({ parkedDropped: 1 });
   if (path === "/centraid/_vault/parked") return json({ parked: [] });
   if (path.startsWith("/centraid/_vault/parked/"))
     return json({ status: "executed" });

@@ -8,9 +8,9 @@
 import {
   openManifest,
   parseWalCloserKey,
-  parseWalPairMarkerKey,
   parseWalSegmentKey,
-  walPairMarkerKey,
+  parseWalTickMarkerKey,
+  walTickMarkerKey,
 } from "@centraid/backup";
 import type {
   BackupProvider,
@@ -134,12 +134,8 @@ export function walInventoryGaps(
     if (closer && generations.has(closer.generation)) closers.push(closer);
   }
   const gaps: string[] = [];
-  for (const generation of generations) {
-    gaps.push(
-      ...walStreamGaps("vault", generation, segments, closers),
-      ...walStreamGaps("journal", generation, segments, closers)
-    );
-  }
+  for (const generation of generations)
+    gaps.push(...walStreamGaps("vault", generation, segments, closers));
   return gaps;
 }
 
@@ -164,12 +160,8 @@ export function walCoverageFromInventory(
       observe(segment.tickMs);
       continue;
     }
-    const marker = parseWalPairMarkerKey(key);
-    if (
-      marker &&
-      generations.has(marker.vaultGeneration) &&
-      generations.has(marker.journalGeneration)
-    ) {
+    const marker = parseWalTickMarkerKey(key);
+    if (marker && generations.has(marker.generation)) {
       markerCount += 1;
       observe(marker.tickMs);
     }
@@ -251,22 +243,12 @@ async function analyzeBackupInventory(opts: {
         const vault = manifest.entries.find(
           (entry) => entry.path === "vault.db"
         );
-        const journal = manifest.entries.find(
-          (entry) => entry.path === "journal.db"
-        );
         if (vault?.walGeneration) generations.add(vault.walGeneration);
-        if (journal?.walGeneration) generations.add(journal.walGeneration);
-        const tip = vault?.walTipTickMs ?? journal?.walTipTickMs;
-        if (
-          vault?.walGeneration &&
-          journal?.walGeneration &&
-          tip !== undefined
-        ) {
+        if (vault?.walGeneration && vault.walTipTickMs !== undefined) {
           expectedMarkerKeys.add(
-            walPairMarkerKey({
-              vaultGeneration: vault.walGeneration,
-              journalGeneration: journal.walGeneration,
-              tickMs: tip,
+            walTickMarkerKey({
+              generation: vault.walGeneration,
+              tickMs: vault.walTipTickMs,
             })
           );
         }
@@ -281,17 +263,9 @@ async function analyzeBackupInventory(opts: {
   await Promise.all(
     Array.from({ length: Math.min(8, liveRows.length) }, readManifest)
   );
-  for (const [pair, tickMs] of Object.entries(opts.walMarkerTips ?? {})) {
-    const [vaultGeneration, journalGeneration] = [
-      pair.slice(0, 32),
-      pair.slice(33),
-    ];
-    if (!vaultGeneration || !journalGeneration) continue;
-    expectedMarkerKeys.add(
-      walPairMarkerKey({ vaultGeneration, journalGeneration, tickMs })
-    );
-    generations.add(vaultGeneration);
-    generations.add(journalGeneration);
+  for (const [generation, tickMs] of Object.entries(opts.walMarkerTips ?? {})) {
+    expectedMarkerKeys.add(walTickMarkerKey({ generation, tickMs }));
+    generations.add(generation);
   }
   const missing = [...expected].filter((key) => !liveKeys.has(key));
   const markerMissing = [...expectedMarkerKeys].filter(
@@ -306,14 +280,8 @@ async function analyzeBackupInventory(opts: {
     }
     const closer = parseWalCloserKey(key);
     if (closer && generations.has(closer.generation)) continue;
-    const marker = parseWalPairMarkerKey(key);
-    if (
-      marker &&
-      generations.has(marker.vaultGeneration) &&
-      generations.has(marker.journalGeneration)
-    ) {
-      continue;
-    }
+    const marker = parseWalTickMarkerKey(key);
+    if (marker && generations.has(marker.generation)) continue;
     orphans.push(key);
   }
   const gaps = [
@@ -405,8 +373,8 @@ export async function runBackupReconciliation(opts: {
   if (casResult.collection) {
     // Shared, read-only base set + this caller's own extra roots (#659).
     const live = new Set(liveBlobShasCached(opts.db.vault));
-    for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
-    for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
+    for (const sha of archivedSegmentShas(opts.db.vault)) live.add(sha);
+    for (const sha of conversationArchiveShas(opts.db.vault)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     // Scope the cas diff to `store='cas'` rows (#425) so the cas
     // listing never disproves derived evidence.

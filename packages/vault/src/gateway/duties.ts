@@ -7,160 +7,84 @@ import { shaOfBlobUri } from "../blob/store.js";
 import { partyForReach } from "../commands/contact-reach.js";
 import { RELATIONS_SCHEME_URI } from "../commands/links.js";
 import type { VaultDb } from "../db.js";
-import { subjectRowExists } from "../grant/authority-registry.js";
-import {
-  listStandingShareAuthority,
-  revokeAuthorityForPrincipal,
-  revokeAuthorityOverSubject,
-} from "../grant/grant-store.js";
 import { nowIso } from "../ids.js";
-import { writeScopeTombstones } from "../install-memory.js";
 import { contentReferenceExists } from "../schema/content-references.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
-import { listVaultEntities, resolveEntity } from "../schema/tables.js";
-import { writeProvenance, writeReceipt } from "./evidence.js";
-import { retainExtBand } from "./ext.js";
-import { tableColumns } from "./filters.js";
-import type { FilterClause, Identity } from "./types.js";
+import { writeProvenance, writeAuthorityReceipt } from "./evidence.js";
+import type { Identity } from "./types.js";
 
 export interface RevocationResult {
-  grantId: string;
-  /** The grantee app's Centraid id, when app-shaped. */
-  appId: string | null;
-  viewsRevoked: number;
+  /** The `share_authority` row that was withdrawn (#928, one id space). */
+  authorityId: string;
+  /** The principal it answered about — an automation's own id. */
+  principalId: string;
   parkedDropped: number;
-  /** Ext tables marked `retained` because the app's last grant died. */
-  extRetained: string[];
   receiptId: string;
 }
 
-/** Revoke is instant; the ext band is RETAINED when the last grant dies (#286). Model, history and receipts survive. */
-export function revokeGrantCascade(
+/**
+ * Withdraw ONE standing answer (#928, AP-one-id-space). Revoke is instant, and
+ * what it leaves behind is the point: the row stays as history with
+ * `revoked_at` stamped, so "asked and told no" never reads as "never asked",
+ * and every receipt naming it survives. Parked work that rode the answer is
+ * dropped by the caller's callback, which owns the parked queue.
+ *
+ * The ext band is not touched here: a first-party app holds no answer to
+ * withdraw (#928 A1), and its band is retained when the APP is retired —
+ * `retainExtBand`, called from the uninstall path.
+ */
+export function revokeAuthorityCascade(
   db: VaultDb,
   owner: Identity,
-  grantId: string,
-  dropParked: (grantId: string) => number
+  authorityId: string,
+  dropParked: (authorityId: string) => number
 ): RevocationResult {
   const now = nowIso();
-  const grant = db.vault
+  const answer = db.vault
     .prepare(
-      "SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?"
+      `SELECT authority_id, principal_id FROM share_authority
+        WHERE authority_id = ? AND principal_kind = 'automation'`
     )
-    .get(grantId) as
-    | {
-        grant_id: string;
-        app_id: string | null;
-        grantee_party_id: string | null;
-      }
+    .get(authorityId) as
+    | { authority_id: string; principal_id: string }
     | undefined;
-  if (!grant) throw new Error(`no grant ${grantId}`);
+  if (!answer) throw new Error(`no standing answer ${authorityId}`);
   db.vault
     .prepare(
-      `UPDATE consent_access_grant SET status='revoked', revoked_at=? WHERE grant_id=?`
+      `UPDATE share_authority SET revoked_at = ?
+        WHERE authority_id = ? AND revoked_at IS NULL`
     )
-    .run(now, grantId);
-  // The owner's "no" outlives the grant row (#308): tombstone each revoked
-  // scope so a top-up cannot re-mint it. Uninstall clears them.
-  const revokedScopes = db.vault
-    .prepare(
-      `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
-         FROM consent_grant_scope WHERE grant_id = ?`
-    )
-    .all(grantId) as {
-    schema_name: string;
-    table_name: string | null;
-    verbs: string;
-    row_filter_json: string | null;
-    field_mask_json: string | null;
-  }[];
-  const tombstoned =
-    grant.app_id !== null || grant.grantee_party_id !== null
-      ? writeScopeTombstones(
-          db,
-          grant.app_id === null
-            ? { granteePartyId: grant.grantee_party_id as string }
-            : { appId: grant.app_id },
-          revokedScopes.map((s) => ({
-            schema: s.schema_name,
-            ...(s.table_name === null ? {} : { table: s.table_name }),
-            verbs: s.verbs as "read" | "read+act" | "act" | "reveal",
-            ...(s.row_filter_json
-              ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }
-              : {}),
-            ...(s.field_mask_json
-              ? { fieldMask: JSON.parse(s.field_mask_json) as string[] }
-              : {}),
-          }))
-        )
-      : 0;
-  let viewsRevoked = 0;
-  let extRetained: string[] = [];
-  let centraidAppId: string | null = null;
-  if (grant.app_id !== null) {
-    // `consent_app.app_id` is a row uuid; the ext band keys on the Centraid
-    // app id, carried as `name`.
-    const appRow = db.vault
-      .prepare("SELECT name FROM consent_app WHERE app_id = ?")
-      .get(grant.app_id) as { name: string } | undefined;
-    centraidAppId = appRow?.name ?? null;
-    const stillGranted = db.vault
-      .prepare(
-        `SELECT count(*) AS n FROM consent_access_grant WHERE app_id = ? AND status = 'active' AND revoked_at IS NULL`
-      )
-      .get(grant.app_id) as { n: number };
-    if (stillGranted.n === 0) {
-      const res = db.vault
-        .prepare(
-          `UPDATE consent_app_view SET revoked_at=? WHERE app_id=? AND revoked_at IS NULL`
-        )
-        .run(now, grant.app_id);
-      viewsRevoked = Number(res.changes);
-      if (centraidAppId) extRetained = retainExtBand(db, centraidAppId);
-    }
-  }
-  const parkedDropped = dropParked(grantId);
-  const receiptId = writeReceipt(db.journal, {
-    grantId,
+    .run(now, authorityId);
+  const parkedDropped = dropParked(authorityId);
+  const receiptId = writeAuthorityReceipt(db, {
+    authorityId,
     invocationId: null,
-    action: "act consent.revoke_grant",
-    objectType: "consent.access_grant",
-    objectId: grantId,
-    purpose: null,
+    action: "act share.revoke_authority",
+    objectType: "share.authority",
+    objectId: authorityId,
     decision: "allow",
-    detail: {
-      viewsRevoked,
-      parkedDropped,
-      extRetained,
-      tombstoned,
-      revokedBy: owner.partyId,
-    },
+    detail: { parkedDropped, revokedBy: owner.partyId },
   });
   writeProvenance(
-    db.journal,
+    db.audit,
     owner,
-    "consent.access_grant",
-    grantId,
+    "share.authority",
+    authorityId,
     "owner.revoke"
   );
   return {
-    grantId,
-    appId: centraidAppId,
-    viewsRevoked,
+    authorityId,
+    principalId: answer.principal_id,
     parkedDropped,
-    extRetained,
     receiptId,
   };
 }
 
 export interface SweepResult {
-  grantsExpired: number;
   contentPurged: number;
   assetsPurged: number;
   notesPurged: number;
   documentsPurged: number;
   domainRowsPurged: number;
-  retentionDeleted: number;
-  retentionRefused: RetentionRefusal[];
   /** Lineage-blocked (#711): `purge_at` stays lapsed, retried next sweep. */
   contentBlockedByLineage: string[];
   assetsBlockedByLineage: string[];
@@ -168,81 +92,57 @@ export interface SweepResult {
   /** Unclaimed `blob_staging` rows past the TTL, dropped with their bytes. */
   stagingExpired: number;
   /**
-   * Answers the sweep ended because their subject was gone (#883). Non-zero is
-   * a REPAIR: a purge through `purgedSubject` already ended its own.
+   * Answers the sweep ended: the purge of a subject revokes every live answer
+   * about it through the `core_entity` trigger (#916 E2), and an answer past
+   * its own `expires_at` is revoked here (review 6.1). Each one is receipted.
    */
   authorityRevoked: number;
+  /**
+   * Rows this pass could not finish, each with the reason (#916, review
+   * 1.2/10.5). A named skip is what keeps ONE wedged row from stopping every
+   * later pass forever — the sweep used to run in autocommit with no
+   * isolation, so a single FK refusal aborted the tick and every tick after.
+   */
+  skipped: SweepSkip[];
   receiptId: string;
 }
 
-export interface RetentionRefusal {
+export interface SweepSkip {
   entity: string;
+  id: string;
   reason: string;
 }
 
-/** Recorded refusals (#712): `media.asset` has no `created_at`, and lineage FKs lack ON DELETE. */
-const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
-  [
-    "media.asset",
-    "media assets are purged by the trash lifecycle, never by blanket retention: no created_at exists to measure against, and edit lineage (source_asset_id) plus face regions block raw deletes",
-  ],
-]);
-
-/** Timestamp from `rule_json.timestamp_column`; an unserved policy is a recorded refusal (#712). */
-function enforceRetention(
+/**
+ * One row, one savepoint (#916, review 1.2/10.5). The sweep is the only
+ * mutator outside the command pipeline, and it used to be the only untransacted
+ * one: a purge that threw left its provenance committed and its mutation half
+ * done. Everything a row's purge does — the delete, its provenance, the
+ * receipts for the answers it ended — either lands together or not at all, and
+ * the failure becomes a named skip rather than a dead sweep.
+ */
+function purgeOneRow(
   db: VaultDb,
-  now: string
-): { deleted: number; refused: RetentionRefusal[] } {
-  const policies = db.vault
-    .prepare(
-      `SELECT applies_schema, applies_table, retention_days, rule_json FROM consent_policy
-        WHERE kind = 'retention' AND retention_days IS NOT NULL AND applies_table IS NOT NULL
-          AND effective_from <= ?
-        ORDER BY priority ASC`
-    )
-    .all(now) as {
-    applies_schema: string;
-    applies_table: string;
-    retention_days: number;
-    rule_json: string;
-  }[];
-  let deleted = 0;
-  const refused: RetentionRefusal[] = [];
-  for (const policy of policies) {
-    const requestedEntity = `${policy.applies_schema}.${policy.applies_table}`;
-    // Imported rows may carry the PHYSICAL table where the logical one
-    // belongs; normalize before applying standing decisions.
-    const entity = resolveEntity(requestedEntity, db.vault)
-      ? requestedEntity
-      : (listVaultEntities(db.vault).find(
-          (logical) =>
-            resolveEntity(logical, db.vault)?.physical === policy.applies_table
-        ) ?? requestedEntity);
-    const standingRefusal = RETENTION_REFUSALS.get(entity);
-    if (standingRefusal !== undefined) {
-      refused.push({ entity, reason: standingRefusal });
-      continue;
-    }
-    const ref = resolveEntity(entity, db.vault);
-    if (!ref || ref.file !== "vault") continue;
-    const rule = JSON.parse(policy.rule_json) as { timestamp_column?: string };
-    const tsColumn = rule.timestamp_column ?? "created_at";
-    if (!tableColumns(db.vault, ref.physical).has(tsColumn)) {
-      refused.push({
-        entity,
-        reason: `no "${tsColumn}" column exists to measure retention against; the policy deletes nothing rather than the wrong thing`,
-      });
-      continue;
-    }
-    const cutoff = new Date(
-      Date.parse(now) - policy.retention_days * 86_400_000
-    ).toISOString();
-    const result = db.vault
-      .prepare(`DELETE FROM "${ref.physical}" WHERE "${tsColumn}" < ?`)
-      .run(cutoff);
-    deleted += Number(result.changes);
+  skipped: SweepSkip[],
+  entity: string,
+  id: string,
+  body: () => void
+): boolean {
+  db.vault.exec("SAVEPOINT sweep_row");
+  try {
+    body();
+    db.vault.exec("RELEASE sweep_row");
+    return true;
+  } catch (error) {
+    db.vault.exec("ROLLBACK TO sweep_row");
+    db.vault.exec("RELEASE sweep_row");
+    skipped.push({
+      entity,
+      id,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return false;
   }
-  return { deleted, refused };
 }
 
 function revisesConceptId(db: VaultDb): string | null {
@@ -334,41 +234,39 @@ function isLineageSource(db: VaultDb, assetId: string): boolean {
   return row !== undefined;
 }
 
-/** Face regions have no CASCADE: delete by hand before poly-refs. Callers must already know this is not a lineage source. */
-function deleteAssetRow(
-  db: VaultDb,
-  owner: Identity,
-  now: string,
-  assetId: string
-): void {
-  writeProvenance(db.journal, owner, "media.asset", assetId, "sweep.purge");
-  // A face region is itself a polymorphic TARGET (#724): deleting it without
-  // sweeping enrich_* orphans a FACE vector.
-  const regions = db.vault
-    .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
-    .all(assetId) as { region_id: string }[];
-  for (const region of regions)
-    cleanupPolyRefs(db.vault, now, "media.face_region", region.region_id);
+/**
+ * Face regions have no CASCADE from the asset, so they go by hand; a region is
+ * itself an entity, so everything pointing AT one (its face vector, its
+ * derivation stamps) cascades away with it (#916). Callers must already know
+ * this is not a lineage source.
+ *
+ * PROVENANCE AFTER THE MUTATION (#916, review 1.2/10.5): written first, it
+ * claimed a purge that had not happened yet — and, in the untransacted sweep
+ * this replaced, one that might never happen.
+ */
+function deleteAssetRow(db: VaultDb, owner: Identity, assetId: string): number {
   db.vault
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(assetId);
   db.vault.prepare("DELETE FROM media_asset WHERE asset_id = ?").run(assetId);
-  purgedSubject(db, owner, now, "media.asset", assetId);
+  writeProvenance(db.audit, owner, "media.asset", assetId, "sweep.purge");
+  return receiptPurgeRevocations(db, owner, "media.asset", assetId);
 }
 
 interface ContentPurgeResult {
   reclaimed: number;
   blockedByAssetId: string | null;
+  authorityRevoked: number;
 }
 
-/** Derivatives and CAS first (FK), then the row, then poly-refs (#296). */
+/** Derivatives and CAS first (FK), then the row; every pointer at it cascades (#296, #916). */
 function purgeContentItem(
   db: VaultDb,
   owner: Identity,
-  now: string,
   contentId: string
 ): ContentPurgeResult {
   let reclaimed = 0;
+  let authorityRevoked = 0;
   // The asset references the content NOT NULL: purging one purges both.
   const asset = db.vault
     .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
@@ -379,16 +277,13 @@ function purgeContentItem(
     // content item (content_id FK NOT NULL), as `media.purge_asset` does;
     // `purge_at` stays lapsed and the skip is named in the receipt.
     if (isLineageSource(db, asset.asset_id))
-      return { reclaimed: 0, blockedByAssetId: asset.asset_id };
-    deleteAssetRow(db, owner, now, asset.asset_id);
+      return {
+        reclaimed: 0,
+        blockedByAssetId: asset.asset_id,
+        authorityRevoked: 0,
+      };
+    authorityRevoked += deleteAssetRow(db, owner, asset.asset_id);
   }
-  writeProvenance(
-    db.journal,
-    owner,
-    "core.content_item",
-    contentId,
-    "sweep.purge"
-  );
   // A cover pointing at these bytes goes dark, or the FK refuses.
   db.vault
     .prepare(
@@ -425,10 +320,20 @@ function purgeContentItem(
     db.blobs.deleteLocalSync(originalSha);
     reclaimed += 1;
   }
-  // Every polymorphic pointer at the item (#441); `cover_content_id` above is
-  // a plain FK.
-  purgedSubject(db, owner, now, "core.content_item", contentId);
-  return { reclaimed, blockedByAssetId: null };
+  writeProvenance(
+    db.audit,
+    owner,
+    "core.content_item",
+    contentId,
+    "sweep.purge"
+  );
+  authorityRevoked += receiptPurgeRevocations(
+    db,
+    owner,
+    "core.content_item",
+    contentId
+  );
+  return { reclaimed, blockedByAssetId: null, authorityRevoked };
 }
 
 /** Soft-delete tables with no bespoke purge (#441): the next domain is one entry here. */
@@ -471,6 +376,21 @@ const DOMAIN_TRASH_TABLES: readonly {
     // cascade.
     orderBy: "parent_task_id IS NULL, task_id",
   },
+  // Locker (#916, review 1.3). `locker.item` had a trash pair and a purge
+  // COMMAND, and nothing that ran when the window lapsed: a trashed password
+  // sat in the vault forever while every other domain's trash emptied. Its
+  // sidecars have no cascade from the item, so they go first.
+  {
+    physical: "locker_item",
+    idCol: "item_id",
+    entity: "locker.item",
+    dependents: [
+      { table: "locker_item_field", column: "item_id" },
+      { table: "locker_item_address", column: "item_id" },
+      { table: "locker_item_passkey", column: "item_id" },
+      { table: "locker_item_alias", column: "item_id" },
+    ],
+  },
   {
     physical: "core_event",
     idCol: "event_id",
@@ -484,93 +404,139 @@ const DOMAIN_TRASH_TABLES: readonly {
 
 /**
  * A purged subject ENDS the standing answers about it, dated and receipted
- * (#883). `share_authority` sits outside the poly-ref sweep: deleting an
- * answer with its subject would erase that it ever stood.
+ * (#883). The ENDING is the engine's since #916 (E2): a `BEFORE DELETE`
+ * trigger on `core_entity` stamps `revoked_at` and a `revoked_reason` on every
+ * live answer naming the purged row, so it cannot be forgotten at a call site
+ * the way a hand-called sweep could. What is left here is the RECEIPT — the
+ * member-facing record of a share that ended without anyone saying so — read
+ * back from the rows the trigger just marked.
  */
-function revokeAuthorityForPurgedSubject(
+function receiptPurgeRevocations(
   db: VaultDb,
   owner: Identity,
-  now: string,
   entityType: string,
   entityId: string
 ): number {
-  const ended = revokeAuthorityOverSubject(db.vault, {
-    subjectType: entityType,
-    subjectId: entityId,
-    revokedAt: now,
-  });
-  for (const row of ended)
-    writeReceipt(db.journal, {
-      grantId: row.authorityId,
+  const ended = db.vault
+    .prepare(
+      `SELECT authority_id, principal_kind, principal_id, subject_type,
+              subject_id, verb, decision, revoked_reason
+         FROM share_authority
+        WHERE revoked_at IS NOT NULL AND receipt_id IS NULL
+          AND revoked_reason IN ('subject-purged','principal-purged')
+          AND ((subject_type = ? AND subject_id = ?)
+               OR (revoked_reason = 'principal-purged' AND principal_id = ?))`
+    )
+    .all(entityType, entityId, entityId) as {
+    authority_id: string;
+    principal_kind: string;
+    principal_id: string;
+    subject_type: string;
+    subject_id: string;
+    verb: string;
+    decision: string;
+    revoked_reason: string;
+  }[];
+  const stamp = db.vault.prepare(
+    "UPDATE share_authority SET receipt_id = ? WHERE authority_id = ?"
+  );
+  for (const row of ended) {
+    const receiptId = writeAuthorityReceipt(db, {
+      authorityId: row.authority_id,
       invocationId: null,
       action: "act share.revoke",
       objectType: "share.authority",
-      objectId: row.authorityId,
-      purpose: null,
+      objectId: row.authority_id,
       decision: "allow",
       detail: {
-        cause: "subject purged",
-        subjectType: row.subjectType,
-        subjectId: row.subjectId,
-        principalKind: row.principalKind,
-        principalId: row.principalId,
+        cause: row.revoked_reason,
+        subjectType: row.subject_type,
+        subjectId: row.subject_id,
+        principalKind: row.principal_kind,
+        principalId: row.principal_id,
         verb: row.verb,
         answered: row.decision,
         revokedBy: owner.partyId,
       },
     });
+    stamp.run(receiptId, row.authority_id);
+  }
   return ended.length;
 }
 
-function purgedSubject(
-  db: VaultDb,
-  owner: Identity,
-  now: string,
-  entityType: string,
-  entityId: string
-): void {
-  cleanupPolyRefs(db.vault, now, entityType, entityId);
-  revokeAuthorityForPurgedSubject(db, owner, now, entityType, entityId);
-}
-
 /**
- * VERIFICATION of the rule above (#883): an answer whose subject row is gone
- * outlived its purge, so the sweep ends it on the same terms. It repairs, not
- * reports — nobody can revoke by hand an authority whose subject is invisible.
+ * An answer past its own end date is over (#916, review 6.1). `expires_at` was
+ * written at every "until Friday" grant and read by nothing, so a time-boxed
+ * share answered yes forever. The resolvers now exclude it the moment it
+ * lapses; this is what makes the row SAY so, and leaves the member a receipt.
  */
-function verifyPurgedSubjectsRevoked(
+function revokeExpiredAuthority(
   db: VaultDb,
   owner: Identity,
   now: string
 ): number {
-  let repaired = 0;
-  const checked = new Set<string>();
-  for (const row of listStandingShareAuthority(db.vault)) {
-    const key = `${row.subjectType} ${row.subjectId}`;
-    if (checked.has(key)) continue;
-    checked.add(key);
-    // `undefined` is "cannot tell", never "gone".
-    if (subjectRowExists(db.vault, row.subjectType, row.subjectId) !== false)
-      continue;
-    repaired += revokeAuthorityForPurgedSubject(
-      db,
-      owner,
-      now,
-      row.subjectType,
-      row.subjectId
-    );
+  const expired = db.vault
+    .prepare(
+      `SELECT authority_id, principal_kind, principal_id, subject_type,
+              subject_id, verb, decision, expires_at
+         FROM share_authority
+        WHERE revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ?
+        ORDER BY expires_at`
+    )
+    .all(now) as {
+    authority_id: string;
+    principal_kind: string;
+    principal_id: string;
+    subject_type: string;
+    subject_id: string;
+    verb: string;
+    decision: string;
+    expires_at: string;
+  }[];
+  const revoke = db.vault.prepare(
+    `UPDATE share_authority SET revoked_at = ?, revoked_reason = 'expired', receipt_id = ?
+      WHERE authority_id = ? AND revoked_at IS NULL`
+  );
+  for (const row of expired) {
+    const receiptId = writeAuthorityReceipt(db, {
+      authorityId: row.authority_id,
+      invocationId: null,
+      action: "act share.revoke",
+      objectType: "share.authority",
+      objectId: row.authority_id,
+      decision: "allow",
+      detail: {
+        cause: "expired",
+        expiresAt: row.expires_at,
+        subjectType: row.subject_type,
+        subjectId: row.subject_id,
+        principalKind: row.principal_kind,
+        principalId: row.principal_id,
+        verb: row.verb,
+        answered: row.decision,
+        revokedBy: owner.partyId,
+      },
+    });
+    revoke.run(now, receiptId, row.authority_id);
   }
-  return repaired;
+  return expired.length;
 }
 
-/** `sweep.purge` stamp + `cleanupPolyRefs` (#441). */
+/**
+ * The purge of a lapsed trashed row: ONE delete, per row, in its own savepoint
+ * (#916). Every pointer at the row is a composite foreign key into
+ * `core_entity`, so the engine sweeps or refuses; provenance follows the
+ * mutation; a refusal is a NAMED SKIP, not a dead sweep (review 1.2/10.5).
+ */
 function purgeDomainTrash(
   db: VaultDb,
   owner: Identity,
   now: string,
-  limit: number
-): number {
+  limit: number,
+  skipped: SweepSkip[]
+): { purged: number; authorityRevoked: number } {
   let purged = 0;
+  let authorityRevoked = 0;
   for (const t of DOMAIN_TRASH_TABLES) {
     const order = t.orderBy ? ` ORDER BY ${t.orderBy}` : " ORDER BY purge_at";
     const lapsed = db.vault
@@ -581,128 +547,111 @@ function purgeDomainTrash(
       )
       .all(now, limit) as { id: string; party_id?: string }[];
     for (const row of lapsed) {
-      writeProvenance(db.journal, owner, t.entity, row.id, "sweep.purge");
-      for (const dependent of t.dependents ?? [])
+      const done = purgeOneRow(db, skipped, t.entity, row.id, () => {
+        for (const dependent of t.dependents ?? [])
+          db.vault
+            .prepare(
+              `DELETE FROM "${dependent.table}" WHERE "${dependent.column}" = ?`
+            )
+            .run(row.id);
         db.vault
-          .prepare(
-            `DELETE FROM "${dependent.table}" WHERE "${dependent.column}" = ?`
-          )
+          .prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`)
           .run(row.id);
-      db.vault
-        .prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`)
-        .run(row.id);
-      purgedSubject(db, owner, now, t.entity, row.id);
-      if (t.physical === "people_profile" && row.party_id)
-        erasePurgedPerson(db, owner, now, row.party_id);
-      purged += 1;
+        writeProvenance(db.audit, owner, t.entity, row.id, "sweep.purge");
+        authorityRevoked += receiptPurgeRevocations(
+          db,
+          owner,
+          t.entity,
+          row.id
+        );
+        if (t.physical === "people_profile" && row.party_id)
+          authorityRevoked += purgePartyRow(db, owner, row.party_id);
+      });
+      if (done) purged += 1;
     }
   }
-  return purged;
+  return { purged, authorityRevoked };
 }
 
-/** Engine FKs onto `core_party`, discovered live, as merge does. */
-function partyFkColumns(db: VaultDb): {
-  table: string;
-  column: string;
-  notnull: number;
-}[] {
+/**
+ * A purged person's PARTY row, deleted like any other entity (#916, D1).
+ *
+ * What this replaced walked every foreign key onto `core_party` and, wherever
+ * the column was NOT NULL, deleted the referencing row — swallowing whatever
+ * refused. That destroyed other people's money: the splits of a shared expense
+ * name a party, so erasing a friend silently left Σ splits ≠ the amount
+ * (review 1.4, adversarial BUG-1/BUG-2). The schema now decides instead:
+ * pointers that are merely attribution are `ON DELETE SET NULL`, and the money
+ * and authority rows are `RESTRICT`. So the delete is ORDINARY, and when the
+ * member still has ledgers naming this person the ENGINE refuses it — which is
+ * the right answer, and the one the caller can act on, because the blockers
+ * are named.
+ */
+function purgePartyRow(db: VaultDb, owner: Identity, partyId: string): number {
+  const ownerRow = db.vault
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string } | undefined;
+  if (!ownerRow || ownerRow.self_party_id === partyId) return 0;
+  const party = db.vault
+    .prepare("SELECT kind FROM core_party WHERE party_id = ?")
+    .get(partyId) as { kind: string } | undefined;
+  if (!party || party.kind !== "person") return 0;
+  // THE PERSON'S OWN ROWS GO WITH THEM, DELIBERATELY. An identifier, a
+  // birthday and a way to reach someone are facts ABOUT this person and say
+  // nothing without them — leaving them behind is how a "purged" person keeps
+  // turning up in the agenda and the reach index (#864). Money and authority
+  // are NOT here: those are other people's records, and the engine refuses the
+  // delete while they name this party (#916, D1).
+  for (const table of [
+    "core_party_identifier",
+    "people_important_date",
+  ] as const)
+    db.vault.prepare(`DELETE FROM "${table}" WHERE party_id = ?`).run(partyId);
+  try {
+    db.vault.prepare("DELETE FROM core_party WHERE party_id = ?").run(partyId);
+  } catch (error) {
+    throw new Error(
+      `core.party ${partyId} cannot be erased while these rows still name it: ${partyBlockers(
+        db,
+        partyId
+      ).join(", ")}`,
+      { cause: error }
+    );
+  }
+  writeProvenance(db.audit, owner, "core.party", partyId, "sweep.purge");
+  return receiptPurgeRevocations(db, owner, "core.party", partyId);
+}
+
+/**
+ * WHICH rows refused the erasure, for the denial to name. A refusal a member
+ * cannot act on is indistinguishable from a bug, so the engine's one-line
+ * "FOREIGN KEY constraint failed" is turned back into the list of tables that
+ * still point at the person.
+ */
+function partyBlockers(db: VaultDb, partyId: string): string[] {
+  const blockers: string[] = [];
   const tables = db.vault
     .prepare(
       `SELECT name FROM sqlite_master WHERE type = 'table'
         AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%' AND name != 'core_party'`
     )
     .all() as { name: string }[];
-  const refs: { table: string; column: string; notnull: number }[] = [];
   for (const { name } of tables) {
     const fks = db.vault
       .prepare(`PRAGMA foreign_key_list(${JSON.stringify(name)})`)
-      .all() as { table: string; from: string }[];
-    const cols = db.vault
-      .prepare(`PRAGMA table_info(${JSON.stringify(name)})`)
-      .all() as { name: string; notnull: number }[];
+      .all() as { table: string; from: string; on_delete: string }[];
     for (const fk of fks) {
       if (fk.table !== "core_party") continue;
-      const col = cols.find((c) => c.name === fk.from);
-      refs.push({
-        table: name,
-        column: fk.from,
-        notnull: col?.notnull ?? 0,
-      });
-    }
-  }
-  return refs;
-}
-
-/** Grace window lapsed: hard-erase the person — party, identifiers, tags,
- * channels — not a hide that keeps notifying (#864). */
-function erasePurgedPerson(
-  db: VaultDb,
-  owner: Identity,
-  now: string,
-  partyId: string
-): void {
-  const ownerRow = db.vault
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string } | undefined;
-  if (!ownerRow || ownerRow.owner_party_id === partyId) return;
-  const party = db.vault
-    .prepare("SELECT kind FROM core_party WHERE party_id = ?")
-    .get(partyId) as { kind: string } | undefined;
-  if (!party || party.kind !== "person") return;
-
-  writeProvenance(db.journal, owner, "core.party", partyId, "sweep.purge");
-  // The principal goes, so the answers about it end — dated and receipted,
-  // before the FK pass below (#883).
-  for (const row of revokeAuthorityForPrincipal(db.vault, {
-    principalKind: "person",
-    principalId: partyId,
-    revokedAt: now,
-  }))
-    writeReceipt(db.journal, {
-      grantId: row.authorityId,
-      invocationId: null,
-      action: "act share.revoke",
-      objectType: "share.authority",
-      objectId: row.authorityId,
-      purpose: null,
-      decision: "allow",
-      detail: {
-        cause: "principal purged",
-        principalKind: row.principalKind,
-        principalId: row.principalId,
-        subjectType: row.subjectType,
-        subjectId: row.subjectId,
-        verb: row.verb,
-        answered: row.decision,
-        revokedBy: owner.partyId,
-      },
-    });
-  db.vault
-    .prepare("DELETE FROM core_party_identifier WHERE party_id = ?")
-    .run(partyId);
-  db.vault
-    .prepare("DELETE FROM people_important_date WHERE party_id = ?")
-    .run(partyId);
-  cleanupPolyRefs(db.vault, now, "core.party", partyId);
-  for (const ref of partyFkColumns(db)) {
-    if (ref.table === "core_vault" || ref.table === "people_profile") continue;
-    if (ref.notnull) {
-      try {
-        db.vault
-          .prepare(`DELETE FROM "${ref.table}" WHERE "${ref.column}" = ?`)
-          .run(partyId);
-      } catch {
-        // Nested FKs can refuse one child; the party delete is the last gate.
-      }
-    } else {
-      db.vault
+      if (fk.on_delete === "SET NULL" || fk.on_delete === "CASCADE") continue;
+      const row = db.vault
         .prepare(
-          `UPDATE "${ref.table}" SET "${ref.column}" = NULL WHERE "${ref.column}" = ?`
+          `SELECT count(*) AS n FROM ${JSON.stringify(name)} WHERE ${JSON.stringify(fk.from)} = ?`
         )
-        .run(partyId);
+        .get(partyId) as { n: number };
+      if (row.n > 0) blockers.push(`${name}.${fk.from} (${row.n})`);
     }
   }
-  db.vault.prepare("DELETE FROM core_party WHERE party_id = ?").run(partyId);
+  return blockers;
 }
 
 /**
@@ -716,8 +665,10 @@ function purgeLapsedAssets(
   db: VaultDb,
   owner: Identity,
   now: string,
-  limit: number
-): { purged: number; blocked: string[] } {
+  limit: number,
+  skipped: SweepSkip[]
+): { purged: number; blocked: string[]; authorityRevoked: number } {
+  let authorityRevoked = 0;
   const pending = new Set(
     (
       db.vault
@@ -754,8 +705,11 @@ function purgeLapsedAssets(
   let purged = 0;
   while (ready.length > 0) {
     const assetId = ready.pop()!;
-    deleteAssetRow(db, owner, now, assetId);
+    const done = purgeOneRow(db, skipped, "media.asset", assetId, () => {
+      authorityRevoked += deleteAssetRow(db, owner, assetId);
+    });
     pending.delete(assetId);
+    if (!done) continue;
     purged += 1;
     const parent = parentOf.get(assetId);
     if (parent === undefined || !pending.has(parent)) continue;
@@ -763,7 +717,7 @@ function purgeLapsedAssets(
     blocking.set(parent, remaining);
     if (remaining === 0) ready.push(parent);
   }
-  return { purged, blocked: [...pending] };
+  return { purged, blocked: [...pending], authorityRevoked };
 }
 
 /**
@@ -774,17 +728,13 @@ function purgeLapsedAssets(
  */
 const PURGE_BATCH = 5_000;
 
-/** Lapse grants, execute `purge_at` deletions, enforce retention. */
+/** Lapse standing answers and execute `purge_at` deletions. */
 export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const now = nowIso();
   let blobsReclaimed = 0;
+  let authorityRevoked = 0;
+  const skipped: SweepSkip[] = [];
   const contentBlockedByLineage: string[] = [];
-  const grants = db.vault
-    .prepare(
-      `UPDATE consent_access_grant SET status='expired'
-        WHERE status='active' AND expires_at IS NOT NULL AND expires_at <= ?`
-    )
-    .run(now);
   const purgeable = db.vault
     .prepare(
       `SELECT content_id FROM core_content_item
@@ -792,9 +742,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         ORDER BY purge_at LIMIT ?`
     )
     .all(now, PURGE_BATCH) as { content_id: string }[];
-  // Purges are the one hard delete outside the command pipeline, so poly-ref
-  // cleanup runs here too. Notes FIRST (#308): note rents its body NOT NULL,
-  // so the row goes before this pass frees the bytes.
+  // Purges are the one hard delete outside the command pipeline. Notes FIRST
+  // (#308): a note rents its body NOT NULL, so the row goes before this pass
+  // frees the bytes.
   const lapsedNotes = db.vault
     .prepare(
       `SELECT note_id FROM knowledge_note
@@ -802,18 +752,27 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         ORDER BY purge_at LIMIT ?`
     )
     .all(now, PURGE_BATCH) as { note_id: string }[];
+  let notesPurged = 0;
   for (const n of lapsedNotes) {
-    writeProvenance(
-      db.journal,
-      owner,
-      "knowledge.note",
-      n.note_id,
-      "sweep.purge"
-    );
-    db.vault
-      .prepare("DELETE FROM knowledge_note WHERE note_id = ?")
-      .run(n.note_id);
-    purgedSubject(db, owner, now, "knowledge.note", n.note_id);
+    const done = purgeOneRow(db, skipped, "knowledge.note", n.note_id, () => {
+      db.vault
+        .prepare("DELETE FROM knowledge_note WHERE note_id = ?")
+        .run(n.note_id);
+      writeProvenance(
+        db.audit,
+        owner,
+        "knowledge.note",
+        n.note_id,
+        "sweep.purge"
+      );
+      authorityRevoked += receiptPurgeRevocations(
+        db,
+        owner,
+        "knowledge.note",
+        n.note_id
+      );
+    });
+    if (done) notesPurged += 1;
   }
   // Documents next (#352), same NOT NULL reason; each chain item is judged at
   // purge, not while the document lives.
@@ -828,21 +787,37 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     document_id: string;
     current_content_id: string;
   }[];
+  let documentsPurged = 0;
   for (const doc of lapsedDocuments) {
     const chain = revisesId
       ? documentChain(db, doc.current_content_id, revisesId)
       : [doc.current_content_id];
-    writeProvenance(
-      db.journal,
-      owner,
+    const done = purgeOneRow(
+      db,
+      skipped,
       "core.document",
       doc.document_id,
-      "sweep.purge"
+      () => {
+        db.vault
+          .prepare("DELETE FROM core_document WHERE document_id = ?")
+          .run(doc.document_id);
+        writeProvenance(
+          db.audit,
+          owner,
+          "core.document",
+          doc.document_id,
+          "sweep.purge"
+        );
+        authorityRevoked += receiptPurgeRevocations(
+          db,
+          owner,
+          "core.document",
+          doc.document_id
+        );
+      }
     );
-    db.vault
-      .prepare("DELETE FROM core_document WHERE document_id = ?")
-      .run(doc.document_id);
-    purgedSubject(db, owner, now, "core.document", doc.document_id);
+    if (!done) continue;
+    documentsPurged += 1;
     for (const contentId of chain) {
       if (contentRentedElsewhere(db, contentId)) continue;
       if (
@@ -850,26 +825,41 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId)
       )
         continue;
-      const purge = purgeContentItem(db, owner, now, contentId);
-      blobsReclaimed += purge.reclaimed;
-      if (purge.blockedByAssetId !== null)
-        contentBlockedByLineage.push(contentId);
+      purgeOneRow(db, skipped, "core.content_item", contentId, () => {
+        const purge = purgeContentItem(db, owner, contentId);
+        blobsReclaimed += purge.reclaimed;
+        authorityRevoked += purge.authorityRevoked;
+        if (purge.blockedByAssetId !== null)
+          contentBlockedByLineage.push(contentId);
+      });
     }
   }
   let contentPurged = 0;
   for (const row of purgeable) {
-    const purge = purgeContentItem(db, owner, now, row.content_id);
-    blobsReclaimed += purge.reclaimed;
-    if (purge.blockedByAssetId === null) contentPurged += 1;
-    else contentBlockedByLineage.push(row.content_id);
+    // THE LAST-MOMENT RENTED CHECK (#916, review 1.2). The direct pass used to
+    // call the purge without it, so a lapsed content item that some live row
+    // still rents — a note's body, a document's page — threw a foreign key
+    // error mid-sweep and, in the untransacted sweep this replaced, wedged
+    // every later pass forever.
+    if (contentRentedElsewhere(db, row.content_id)) continue;
+    purgeOneRow(db, skipped, "core.content_item", row.content_id, () => {
+      const purge = purgeContentItem(db, owner, row.content_id);
+      blobsReclaimed += purge.reclaimed;
+      authorityRevoked += purge.authorityRevoked;
+      if (purge.blockedByAssetId === null) contentPurged += 1;
+      else contentBlockedByLineage.push(row.content_id);
+    });
   }
   // A lapsed trashed asset purges while its bytes stay rented elsewhere
   // (#274): meaning and byte custody have independent lifecycles.
-  const lapsedAssets = purgeLapsedAssets(db, owner, now, PURGE_BATCH);
+  const lapsedAssets = purgeLapsedAssets(db, owner, now, PURGE_BATCH, skipped);
+  authorityRevoked += lapsedAssets.authorityRevoked;
   // After the content/asset passes: a row referencing purged bytes goes last.
-  const domainRowsPurged = purgeDomainTrash(db, owner, now, PURGE_BATCH);
-  // Checks the whole plane rather than trusting each purge above (#883).
-  const authorityRevoked = verifyPurgedSubjectsRevoked(db, owner, now);
+  const domainTrash = purgeDomainTrash(db, owner, now, PURGE_BATCH, skipped);
+  const domainRowsPurged = domainTrash.purged;
+  authorityRevoked += domainTrash.authorityRevoked;
+  // An answer that ran out of time ends here, receipted (review 6.1).
+  authorityRevoked += revokeExpiredAuthority(db, owner, now);
   // Heal the rebuildable projection (#441 A3). KEEP THE PREDICATE (#883):
   // unqualified, this dirties every thread row every tick — WAL pages, replica
   // rows, woken devices — to fix the few that drifted. `IS NOT`, not `<>`, so
@@ -882,49 +872,42 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
          (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)`
     )
     .run();
-  const retention = enforceRetention(db, now);
-  const retentionDeleted = retention.deleted;
   // Staging TTL (#296): a batch hold pins past it.
   const staging = sweepBlobStaging(db, { now });
-  const receiptId = writeReceipt(db.journal, {
-    grantId: null,
+  const receiptId = writeAuthorityReceipt(db, {
+    authorityId: null,
     invocationId: null,
-    action: "act consent.lifecycle_sweep",
-    objectType: "consent.policy",
+    action: "act access.lifecycle_sweep",
+    objectType: "core.vault",
     objectId: null,
-    purpose: null,
     decision: "allow",
     detail: {
-      grantsExpired: Number(grants.changes),
       contentPurged,
       assetsPurged: lapsedAssets.purged,
-      notesPurged: lapsedNotes.length,
-      documentsPurged: lapsedDocuments.length,
+      notesPurged,
+      documentsPurged,
       domainRowsPurged,
-      retentionDeleted,
-      retentionRefused: retention.refused,
       // Declined, not died on (#711).
       contentBlockedByLineage,
       assetsBlockedByLineage: lapsedAssets.blocked,
       blobsReclaimed,
       stagingExpired: staging.expired.length,
       authorityRevoked,
+      skipped,
     },
   });
   return {
-    grantsExpired: Number(grants.changes),
     contentPurged,
     assetsPurged: lapsedAssets.purged,
-    notesPurged: lapsedNotes.length,
-    documentsPurged: lapsedDocuments.length,
+    notesPurged,
+    documentsPurged,
     domainRowsPurged,
-    retentionDeleted,
-    retentionRefused: retention.refused,
     contentBlockedByLineage,
     assetsBlockedByLineage: lapsedAssets.blocked,
     blobsReclaimed,
     stagingExpired: staging.expired.length,
     authorityRevoked,
+    skipped,
     receiptId,
   };
 }
@@ -946,16 +929,9 @@ export function admitImportedRow(
     .get(externalId);
   if (existing) return null;
   const entityId = insert();
-  writeProvenance(
-    db.journal,
-    importer,
-    entityType,
-    entityId,
-    `import.${batch}`,
-    {
-      external_id: externalId,
-    }
-  );
+  writeProvenance(db.audit, importer, entityType, entityId, `import.${batch}`, {
+    external_id: externalId,
+  });
   return entityId;
 }
 

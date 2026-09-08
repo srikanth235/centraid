@@ -122,7 +122,7 @@ describe(settledPartyIdFromOutcome, () => {
     expect(() =>
       settledPartyIdFromOutcome({
         status: "executed",
-        output: { party_id: "pending:intent-1:0" },
+        output: { party_id: "" },
       })
     ).toThrow(/settled identity/u);
   });
@@ -378,7 +378,7 @@ describe(installInlineCentraid, () => {
             : [
                 {
                   rowId: "vault",
-                  values: { owner_party_id: "owner" },
+                  values: { self_party_id: "owner" },
                   oversizedFields: [],
                   hasUnavailableFields: false,
                 },
@@ -413,7 +413,7 @@ describe(installInlineCentraid, () => {
                 { party_id: "ben", display_name: "Ben" },
               ]
             : appId === "people" && request.entity === "core.vault"
-              ? [{ owner_party_id: "owner" }]
+              ? [{ self_party_id: "owner" }]
               : request.entity === "social.circle"
                 ? [
                     {

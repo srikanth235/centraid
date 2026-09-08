@@ -86,11 +86,10 @@ Rules for editing `automation.json`:
   }
   ```
 
-- **Data/condition triggers require a `vault` block (hard rule).** A data or condition trigger _is_ a consented vault read, so the manifest must carry a top-level `vault` block whose read scopes cover every watched entity — validation rejects the manifest otherwise, and at runtime the read runs under that owner-approved grant (a receipted deny disables the evaluation, it never widens it). Mirror the shape real templates use: a `purpose` (`"dpv:ServiceProvision"`), a one-line `why`, and a `scopes` array. Each scope is `{ "schema": "<schema>", "verbs": "read" }` to cover a whole domain, or add `"table": "<table>"` to narrow to one entity. For the two examples above:
+- **Data/condition triggers require a `vault` block (hard rule).** A data or condition trigger _is_ a consented vault read, so the manifest must carry a top-level `vault` block whose read scopes cover every watched entity — validation rejects the manifest otherwise, and at runtime the read runs under the owner's standing answer to it (a receipted deny disables the evaluation, it never widens it). Mirror the shape real templates use: a one-line `why` and a `scopes` array. Each scope is `{ "schema": "<schema>", "verbs": "read" }` to cover a whole domain, or add `"table": "<table>"` to narrow to one entity. For the two examples above:
 
   ```json
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Watches new transactions to reconcile them against open invoices.",
     "scopes": [
       { "schema": "core", "verbs": "read" }

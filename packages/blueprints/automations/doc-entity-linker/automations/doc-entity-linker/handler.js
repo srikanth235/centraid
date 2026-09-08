@@ -15,7 +15,6 @@
  */
 
 const BATCH = 6;
-const PURPOSE = "dpv:ServiceProvision";
 
 const MENTIONS_SCHEMA = {
   type: "object",
@@ -63,7 +62,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const derivatives = read.rows ?? [];
   if (derivatives.length === 0)
@@ -72,7 +70,6 @@ export default async function handler({ ctx, log }) {
   const parties = await ctx.vault.read({
     entity: "core.party",
     limit: 500,
-    purpose: PURPOSE,
   });
   const people = (parties.rows ?? []).filter((p) => p.kind === "person");
 
@@ -125,7 +122,6 @@ export default async function handler({ ctx, log }) {
                 : {}),
             },
           },
-          purpose: PURPOSE,
         });
         linked += 1;
       } catch (error) {

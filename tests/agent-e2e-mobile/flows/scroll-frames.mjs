@@ -1,12 +1,10 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import {
-  recordQualityResult,
-  rigDriftBudget,
-} from "../../agent-e2e-shared/harness.mjs";
+import { journeyCeiling } from "../../../scripts/lib/journey-ledger.mjs";
+import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
 import {
+  AWAIT_LAUNCHER,
   CONFIRM_SYSTEM_OPEN,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
@@ -152,13 +150,11 @@ ${CONFIRM_SYSTEM_OPEN}# Prove the arm took BEFORE flinging — a fling against a
 await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.configureGateway();
 
-  const budgets = JSON.parse(
-    await fs.readFile(
-      path.join(REPO_ROOT, "tests/experience-budgets/mobile.json"),
-      "utf8"
-    )
+  const ceiling = journeyCeiling(
+    "mobile/scroll/device-fixture/ci-ios-sim",
+    "maxDroppedFramePercent",
+    "maxPercent"
   );
-  const ceiling = budgets.metrics.maxDroppedFramePercent.maxPercent;
 
   // ---- Photos grid ---------------------------------------------------------
   const photosStartedAt = Date.now();
@@ -169,6 +165,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
 # label / route name that scripts/lint-e2e-flows.mjs refuses to let a flow
 # ASSERT on, used here as a locator, where it is the same hazard: it matches
 # whatever draws that word.
+${AWAIT_LAUNCHER}
 - tapOn:
     id: "home-tile-photos"
     retryTapIfNoChange: true
@@ -196,10 +193,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
     .map(([surface]) => surface);
 
   const worstDropped = photos.report?.dropped ?? 0;
-  const drift = await rigDriftBudget(REPO_ROOT, "scale", OWNER);
-  const withinDrift = drift == null || worstDropped <= drift;
-  const passed =
-    unparsed.length === 0 && worstDropped <= ceiling && withinDrift;
+  const passed = unparsed.length === 0 && worstDropped <= ceiling;
 
   await recordQualityResult(REPO_ROOT, {
     lane: "scale",
@@ -211,7 +205,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
         name: "worst dropped frames",
         value: worstDropped,
         unit: "percent",
-        budget: drift == null ? ceiling : Math.min(drift, ceiling),
+        budget: ceiling,
       },
       {
         name: "Photos dropped frames",

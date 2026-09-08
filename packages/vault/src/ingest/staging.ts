@@ -27,7 +27,10 @@ import {
   unsealValue,
 } from "../schema/sealed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { writeProvenance, writeReceipt } from "./../gateway/evidence.js";
+import {
+  writeProvenance,
+  writeAuthorityReceipt,
+} from "./../gateway/evidence.js";
 
 export function payloadAad(rowId: string, field: string): string {
   return sealAad("sync_import_row", `payload.${field}`, rowId);
@@ -282,13 +285,12 @@ export function stageCandidates(
     throw error;
   }
   const { batchId, counts } = staged;
-  const receiptId = writeReceipt(db.journal, {
-    grantId: null,
+  const receiptId = writeAuthorityReceipt(db, {
+    authorityId: null,
     invocationId: null,
     action: "act sync.stage_import",
     objectType: "sync.import_batch",
     objectId: batchId,
-    purpose: null,
     decision: "allow",
     detail: {
       connectionId,
@@ -415,7 +417,7 @@ export function applyBatchTx(
     const cols = sealedColumnsOf(entityType);
     if (cols.length === 0) return;
     const ref = resolveEntity(entityType, vault);
-    if (!ref || ref.file !== "vault") return;
+    if (!ref) return;
     const pk = pkColumn(vault, ref.physical);
     const live = vault
       .prepare(
@@ -605,7 +607,7 @@ export function publishBatch(
   const activity = `import.${applied.kind.replace(/^file\./u, "")}`;
   for (const write of applied.provenanced) {
     writeProvenance(
-      db.journal,
+      db.audit,
       owner,
       write.type,
       write.id,
@@ -614,13 +616,12 @@ export function publishBatch(
       "import"
     );
   }
-  const receiptId = writeReceipt(db.journal, {
-    grantId: null,
+  const receiptId = writeAuthorityReceipt(db, {
+    authorityId: null,
     invocationId: null,
     action: "act sync.publish_import",
     objectType: "sync.import_batch",
     objectId: batchId,
-    purpose: null,
     decision: "allow",
     detail: { created, updated, skipped, failed, by: owner.partyId },
   });
@@ -666,13 +667,12 @@ export function discardBatch(
     db.vault.exec("ROLLBACK");
     throw error;
   }
-  const receiptId = writeReceipt(db.journal, {
-    grantId: null,
+  const receiptId = writeAuthorityReceipt(db, {
+    authorityId: null,
     invocationId: null,
     action: "act sync.discard_import",
     objectType: "sync.import_batch",
     objectId: batchId,
-    purpose: null,
     decision: "allow",
     detail: { by: owner.partyId },
   });

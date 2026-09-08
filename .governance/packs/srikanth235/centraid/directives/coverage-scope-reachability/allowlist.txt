@@ -19,7 +19,7 @@ packages/test-kit
 # source-level suites in the tree itself (pull-connectors, outbox-send,
 # release-notes-drafter beside handler-harness.ts), are instrumented via the
 # root coverageInclude `packages/blueprints/automations/**/handler.js`, and
-# the directive expects their floor scope in tests/coverage-floors.json. The
+# the directive expects their floor scope in tests/floors.json#coverage. The
 # five GENERATED recognition bundles (photo-ocr, embed-image, embed-text,
 # faces, transcript — the id list in
 # packages/model-runtime/build-automation-handlers.ts) need no row of their
@@ -51,3 +51,10 @@ apps/web
 # percentages) — a per-app floor for apps/mobile stays tracked under #781.
 apps/mobile/modules
 apps/mobile/plugins
+# apps/mobile/polyfills is the same shape as the two rows above: a Metro
+# `getPolyfills` entry patches a global BEFORE app code, inside the device
+# bundle. The node/jsdom coverage run never loads it — it runs against a
+# JavaScriptCore/Hermes gap that does not exist in node — so a floor would
+# measure nothing. Correctness is pinned where it is observable instead: the
+# blueprint filters that call `toSorted` are floored in their own tree.
+apps/mobile/polyfills

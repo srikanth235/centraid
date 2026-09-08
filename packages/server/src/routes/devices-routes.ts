@@ -46,6 +46,7 @@ interface DeviceDTO {
   /** A tombstone, never a role (#726). */
   revoked: boolean;
   rememberDevice: boolean;
+  /** For an attenuated Companion, the surfaces its authority rows name (#928). */
   grantProfile?: string[];
   compute?: DeviceComputeProfile;
   checkpoint?: {
@@ -293,9 +294,13 @@ function toDto(
     current: row.endpointId === callerKey,
     revoked: row.revoked,
     rememberDevice: row.rememberDevice,
-    ...(row.grantProfile === undefined
-      ? {}
-      : { grantProfile: [...row.grantProfile] }),
+    ...(row.attenuated
+      ? {
+          grantProfile:
+            deps.enrollments.projectedSurfaces(row.endpointId, row.vaultId) ??
+            [],
+        }
+      : {}),
     ...(row.compute ? { compute: row.compute } : {}),
     ...(row.checkpoint ? { checkpoint: row.checkpoint } : {}),
   };

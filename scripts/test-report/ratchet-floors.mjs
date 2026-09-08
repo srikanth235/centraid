@@ -6,10 +6,18 @@
  * unit tests and the CLI entry share a single source of truth.
  *
  * Diffs against a git merge-base (default: origin/main):
- *   - `tests/coverage-floors.json` (up-only)
- *   - every matrix flow `minimumTests` (up-only)
- *   - `tests/mutation-floors.json` (up-only mutation scores, #532)
+ *   - `tests/floors.json#coverage` (up-only)
+ *   - every claims flow `minimumTests` (up-only)
+ *   - `tests/floors.json#mutation` (up-only mutation scores, #532)
  *   - perf budget numeric ceilings/floors (tighten-only / widen fails, #532)
+ *
+ * #915 Wave 4 merged twenty ledgers into four. The ceiling table below names
+ * SECTIONS of `tests/budgets.json` rather than seven separate files, and each
+ * section keeps its OWN `approvedDeviation` — merging the files must not merge
+ * the waivers, or a reviewed widen of one ceiling would silently waive a drop
+ * in another. `scripts/check-ledgers.mjs` (`bun run lint:ledgers`) holds the
+ * rest of the merged shape (issue-and-expiry, the derived mirrors, the
+ * inventory budgets); this module stays the numeric ratchet the report reads.
  *
  * Any decrease (or budget widen) fails unless the touched file's
  * `approvedDeviation` (flow-level: `approvedMinimumTestsDeviation`) was
@@ -36,28 +44,30 @@ const root = path.resolve(import.meta.dirname, "../..");
 export const PERF_BUDGET_SOURCES = [
   { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
   { path: "packages/server/benchmarks/low-end-budgets.json" },
-  // #656 Layer 1F — the nightly rig registry. `regressionMultiplier` and each
-  // rig's `budgetMs` are ceilings (tighten-only); `minimumSamples` is a min*
-  // floor and may only rise. Before this the absolute ceilings lived as
-  // `const BUDGET_MS` inside five rig files, where widening one to make a slow
-  // rig green was an unreviewed one-line edit.
-  { path: "tests/quality-rig-budgets.json" },
   // #656 Layer 5 — the PR lane's total wall clock. Tighten-only for the same
   // reason as any perf ceiling: it is the only gate that pushes back on adding
   // tests, so widening it must be a reviewed edit rather than a quiet one.
-  { path: "tests/suite-wall-clock.json" },
-  // #659 R2 — the EXPERIENCE budgets: the same regressions the files above
-  // fence, restated as what the vault owner feels (cold open → first usable
-  // screen, tap → visual response, send → first token, scroll frame drops,
-  // sync staleness after reconnect). One file per shipping surface; see
-  // tests/experience-budgets/README.md for the status vocabulary and the
-  // year-3 volume table every ceiling is stated at. Entries with
-  // `status: "unmeasured"` deliberately carry NO number, so they contribute
-  // nothing to the ratchet until a real run fills them in.
-  { path: "tests/experience-budgets/web.json" },
-  { path: "tests/experience-budgets/desktop.json" },
-  { path: "tests/experience-budgets/mobile.json" },
-  { path: "tests/experience-budgets/gateway.json" },
+  {
+    path: "tests/budgets.json",
+    section: "suiteWallClock",
+    legacy: "tests/suite-wall-clock.json",
+  },
+  // #915 — the ladder's own p95 budget per rung, lifted out of a literal in
+  // scripts/ci/lane-rules.mjs so that widening a rung is a reviewed edit.
+  { path: "tests/budgets.json", section: "rungs" },
+  // #915 Wave 2/4 — the mobile suite budgets, mirrored from the roster. The
+  // roster is still ratcheted at its own source by check-mobile-suite-budgets;
+  // this holds the mirror to the same direction so neither copy can drift up.
+  { path: "tests/budgets.json", section: "mobileSuites" },
+  // #927 — THE JOURNEY LEDGER, keyed `surface / journey / volume / hardware`.
+  // It replaced four per-surface experience files, the rig register and the
+  // query-count file, whose keys said which SURFACE a ceiling belonged to but
+  // not the volume or the hardware it held at. `legacy` keeps the merge that
+  // created it from reading as a wholesale widen. A metric with
+  // `status: "unmeasured"` carries NO number and contributes nothing here
+  // until a real run fills it in; a leading underscore is invisible, which is
+  // how an intended-but-unobserved ceiling is parked without gating.
+  { path: "tests/journeys.json" },
   // #842 W3.5 — the renderer-leak ceilings. Same tighten-only posture as every
   // budget above: a ceiling may drop freely, and widening one must be a
   // reviewed edit. These are load-bearing in a way a perf number is not — the
@@ -131,12 +141,104 @@ export function diffMutationFloors(base, head) {
 }
 
 /**
+ * Validate the retirement markers this change set ADDS, and return the set of
+ * flow ids they authorize. Errors are pushed onto `errors`; a marker that fails
+ * validation authorizes nothing, so the removal it was meant to cover is still
+ * reported by the caller.
+ * @param {{ removedMinimumTestsFlows?: Record<string, unknown> }} base Matrix on the merge base.
+ * @param {{ removedMinimumTestsFlows?: Record<string, unknown> }} head Matrix on the working tree.
+ * @param {Map<string, { id?: string; owner?: string; minimumTests?: number }>} baseMap Base flows by id.
+ * @param {Map<string, unknown>} headMap Head flows by id.
+ * @param {string[]} errors Sink for human-readable errors.
+ * @returns {Set<string>} Flow ids whose removal is authorized.
+ */
+function retiredFlowMarkers(base, head, baseMap, headMap, errors) {
+  const baseMarkers = base?.removedMinimumTestsFlows ?? {};
+  const headMarkers = head?.removedMinimumTestsFlows ?? {};
+  const authorized = new Set();
+  const owners = new Map();
+  for (const [id, marker] of Object.entries(headMarkers)) {
+    if (id.startsWith("_")) continue;
+    // Spent on a previous change set: the flow is gone from both sides, so
+    // there is nothing left to authorize and nothing to re-litigate.
+    if (Object.hasOwn(baseMarkers, id)) continue;
+    const owner = typeof marker?.owner === "string" ? marker.owner.trim() : "";
+    const reason =
+      typeof marker?.reason === "string" ? marker.reason.trim() : "";
+    const issue = typeof marker?.issue === "string" ? marker.issue.trim() : "";
+    const label = `removedMinimumTestsFlows["${id}"]`;
+    let sound = true;
+    if (!owner) {
+      errors.push(`${label} must name the owner path of the deleted rig`);
+      sound = false;
+    }
+    if (!reason) {
+      errors.push(`${label} must give a reason citing the approval`);
+      sound = false;
+    }
+    if (!/^#\d+$/u.test(issue)) {
+      errors.push(
+        `${label} must name its change set as an issue (e.g. "#927")`
+      );
+      sound = false;
+    }
+    const prev = baseMap.get(id);
+    if (!prev) {
+      errors.push(
+        `${label} names "${id}", which the base does not declare — a retirement marker must name a flow that existed`
+      );
+      sound = false;
+    } else if (headMap.has(id)) {
+      errors.push(
+        `${label} names "${id}", which the head still declares — retire the flow or drop the marker`
+      );
+      sound = false;
+    } else if (owner && prev.owner !== undefined && prev.owner !== owner) {
+      errors.push(
+        `${label} names owner "${owner}" but flow "${id}" was owned by "${prev.owner}"`
+      );
+      sound = false;
+    }
+    if (owner) {
+      const seen = owners.get(owner);
+      if (seen === undefined) {
+        owners.set(owner, id);
+      } else {
+        errors.push(
+          `${label} and removedMinimumTestsFlows["${seen}"] both retire owner "${owner}"; one marker per deleted rig`
+        );
+        sound = false;
+      }
+    }
+    if (sound) authorized.add(id);
+  }
+  return authorized;
+}
+
+/**
  * Compare matrix flow minimumTests floors for any downward movement or removal.
  * An ID rename must name its exact predecessor with
  * `replacesMinimumTestsFlow`; a prose deviation alone cannot let one new flow
  * absorb several removed floors.
- * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} base Matrix on the merge base.
- * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} head Matrix on the working tree.
+ *
+ * A flow can also be RETIRED OUTRIGHT, with no successor to carry its floor:
+ * the test it fenced was deleted on purpose and nothing replaces it. The two
+ * escapes above cannot say that — one needs a successor flow, the other needs
+ * the row to survive, and a row whose owner no longer exists on disk is refused
+ * by validate-claims.mjs. `removedMinimumTestsFlows` is that vocabulary: a map
+ * from the retired flow's id to `{ owner, reason, issue }`, where `reason`
+ * cites the approval and `issue` names the change set. The ratchet's property
+ * is unchanged — no floor drops SILENTLY — because a marker is a reviewed line
+ * in the diff naming what was deleted and why.
+ *
+ * A marker is ONE-SHOT, and it is checked only while it is new. A marker
+ * present on the base as well as the head has already been spent: the flow it
+ * retired is gone from both sides, there is no removal left to authorize, and
+ * re-validating it would red every later PR on main. So only markers ADDED by
+ * this change set are validated, and each must name a flow the base declared
+ * and the head does not.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }>, removedMinimumTestsFlows?: Record<string, { owner?: string; reason?: string; issue?: string }> }} base Matrix on the merge base.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }>, removedMinimumTestsFlows?: Record<string, { owner?: string; reason?: string; issue?: string }> }} head Matrix on the working tree.
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMinimumTests(base, head) {
@@ -145,7 +247,19 @@ export function diffMinimumTests(base, head) {
   const headFlows = head?.flows ?? [];
   const baseMap = new Map(baseFlows.filter((f) => f?.id).map((f) => [f.id, f]));
   const headMap = new Map(headFlows.filter((f) => f?.id).map((f) => [f.id, f]));
+  const retired = retiredFlowMarkers(base, head, baseMap, headMap, errors);
   const replacements = new Map();
+  // A marker is SPENT once the change set that used it lands: the same flow, on
+  // the base, already carries the identical `replacesMinimumTestsFlow`, and the
+  // predecessor it names is long gone. Left in place it reported "unknown
+  // predecessor" on every later branch — a red on a tree nobody had touched —
+  // so the shape checks below run only over markers this diff INTRODUCED or
+  // MOVED. A spent marker can still grant nothing: the removal loop only
+  // consults `replacements` for a flow present on the base, and a spent
+  // marker's predecessor is not. Re-spending one (pointing a second flow at the
+  // same predecessor) puts a NEW marker in the group, which re-arms the whole
+  // group including its spent members.
+  const spent = new Set();
   for (const candidate of headFlows) {
     if (
       typeof candidate?.replacesMinimumTestsFlow !== "string" ||
@@ -154,11 +268,18 @@ export function diffMinimumTests(base, head) {
       continue;
     }
     const previousId = candidate.replacesMinimumTestsFlow.trim();
+    if (
+      candidate.id !== undefined &&
+      baseMap.get(candidate.id)?.replacesMinimumTestsFlow?.trim() === previousId
+    ) {
+      spent.add(candidate);
+    }
     const claimed = replacements.get(previousId) ?? [];
     claimed.push(candidate);
     replacements.set(previousId, claimed);
   }
   for (const [previousId, candidates] of replacements) {
+    if (candidates.every((candidate) => spent.has(candidate))) continue;
     if (!baseMap.has(previousId)) {
       errors.push(`flow replacement names unknown predecessor "${previousId}"`);
     } else if (headMap.has(previousId)) {
@@ -178,6 +299,9 @@ export function diffMinimumTests(base, head) {
     if (!prev?.id || prev.minimumTests === undefined) continue;
     const flow = headMap.get(prev.id);
     if (!flow || flow.minimumTests === undefined) {
+      // Retired outright, named and reasoned in the diff. The marker was
+      // validated above, including that it names THIS rig.
+      if (retired.has(prev.id)) continue;
       const candidates = replacements.get(prev.id) ?? [];
       const candidate = candidates.length === 1 ? candidates[0] : undefined;
       const approvedReplacement =
@@ -517,6 +641,10 @@ function readJsonAt(ref, relPath) {
     const raw = execFileSync("git", ["show", `${ref}:${relPath}`], {
       cwd: root,
       encoding: "utf8",
+      // A path absent on the base is the FIRST-LAND case, handled by the
+      // callers; git's "exists on disk, but not in <ref>" on stderr would read
+      // as a gate failure in the log when it is nothing of the sort.
+      stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 8 * 1024 * 1024,
     });
     return JSON.parse(raw);
@@ -530,6 +658,7 @@ function readTextAt(ref, relPath) {
     return execFileSync("git", ["show", `${ref}:${relPath}`], {
       cwd: root,
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 8 * 1024 * 1024,
     });
   } catch {
@@ -568,14 +697,21 @@ function parseArgs(argv) {
 /**
  * Load flattened budget numbers from a working-tree or base-ref source.
  * @param {string} absPath Absolute path on disk for head.
- * @param {{ path: string; exportName?: string }} source Source descriptor.
+ * @param {{ path: string; exportName?: string; section?: string; legacy?: string }} source Source descriptor. `section` names one section of a merged ledger; `legacy` is the standalone file it lived in before #915 Wave 4, read only on the base side.
  * @param {string | null} ref Git ref, or null for working tree.
  * @returns {{ numbers: Record<string, number>; approvedDeviation: string }} Return value.
  */
 function loadBudgetSource(absPath, source, ref) {
   let text = null;
+  let section = source.section;
   if (ref) {
     text = readTextAt(ref, source.path);
+    if (text === null && source.legacy) {
+      // The merged ledger does not exist on the base: read the file this
+      // section used to be, whole, so the rename cannot widen a ceiling.
+      text = readTextAt(ref, source.legacy);
+      section = undefined;
+    }
   } else if (existsSync(absPath)) {
     text = readFileSync(absPath, "utf8");
   }
@@ -588,10 +724,14 @@ function loadBudgetSource(absPath, source, ref) {
 
   if (source.path.endsWith(".json")) {
     try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed.approvedDeviation === "string") {
-        approvedDeviation = parsed.approvedDeviation;
-      }
+      const whole = JSON.parse(text);
+      // A section's waiver is its own. Reading the file-level note would let a
+      // reviewed widen of one budget waive a drop in the section next door.
+      const parsed = section ? (whole[section] ?? {}) : whole;
+      approvedDeviation =
+        typeof parsed.approvedDeviation === "string"
+          ? parsed.approvedDeviation
+          : "";
       return { numbers: flattenBudgetNumbers(parsed), approvedDeviation };
     } catch {
       return { numbers: {}, approvedDeviation };
@@ -623,9 +763,8 @@ function main() {
     return;
   }
 
-  const floorsPath = "tests/coverage-floors.json";
-  const matrixPath = "tests/matrix.json";
-  const mutationPath = "tests/mutation-floors.json";
+  const floorsPath = "tests/floors.json";
+  const matrixPath = "tests/claims.json";
   if (
     !existsSync(path.join(root, floorsPath)) ||
     !existsSync(path.join(root, matrixPath))
@@ -636,19 +775,32 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  const headFloors = JSON.parse(
+  const floorsDoc = JSON.parse(
     readFileSync(path.join(root, floorsPath), "utf8")
   );
+  const headFloors = floorsDoc.coverage;
   const headMatrix = JSON.parse(
     readFileSync(path.join(root, matrixPath), "utf8")
   );
-  const baseFloors = readJsonAt(baseRef, floorsPath);
-  const baseMatrix = readJsonAt(baseRef, matrixPath);
+  // #915 Wave 4 merged tests/coverage-floors.json and tests/mutation-floors.json
+  // into tests/floors.json. The base side falls back to the OLD paths so the
+  // very commit that renamed them cannot lower a floor unwatched — without this
+  // the ratchet would go silent for exactly one merge.
+  const baseFloorsDoc = readJsonAt(baseRef, floorsPath);
+  const baseFloors =
+    baseFloorsDoc?.coverage ??
+    readJsonAt(baseRef, "tests/coverage-floors.json");
+  // #915 renamed tests/matrix.json to tests/claims.json. The `flows[]`
+  // minimumTests floors moved file, not value, so the base side falls back to
+  // the old path: without this the ratchet would go silent for exactly one
+  // merge, which is when a floor could be lowered unwatched.
+  const baseMatrix =
+    readJsonAt(baseRef, matrixPath) ?? readJsonAt(baseRef, "tests/matrix.json");
 
-  const headMutation = existsSync(path.join(root, mutationPath))
-    ? JSON.parse(readFileSync(path.join(root, mutationPath), "utf8"))
-    : null;
-  const baseMutation = readJsonAt(baseRef, mutationPath);
+  const headMutation = floorsDoc.mutation ?? null;
+  const baseMutation =
+    baseFloorsDoc?.mutation ??
+    readJsonAt(baseRef, "tests/mutation-floors.json");
 
   if (!baseFloors || !baseMatrix) {
     if (!baseFloors && !baseMatrix) {
@@ -668,7 +820,7 @@ function main() {
   // the file, decreases require approvedDeviation.
   if (headMutation && !baseMutation) {
     console.log(
-      `ratchet-floors: ${mutationPath} absent on ${baseRef}; mutation floors first land (ok)`
+      `ratchet-floors: ${floorsPath}#mutation absent on ${baseRef}; mutation floors first land (ok)`
     );
   }
 
@@ -683,7 +835,7 @@ function main() {
       continue;
     }
     perfBudgets.push({
-      label: source.path,
+      label: source.section ? `${source.path}#${source.section}` : source.path,
       base: base.numbers,
       head: head.numbers,
       approvedDeviation: head.approvedDeviation,

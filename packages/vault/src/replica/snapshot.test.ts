@@ -45,14 +45,14 @@ describe("snapshot", () => {
     db = openVaultDb();
     db.vault
       .prepare(
-        `INSERT INTO consent_app
+        `INSERT INTO access_app
          (app_id, name, display_name, signing_key, status, origin, risk_ceiling, installed_at)
        VALUES ('credential-app', 'credential-app', 'Credential app', 'signing-never-replicate',
                'active', 'installed', 'low', '2026-07-15T00:00:00.000Z')`
       )
       .run();
 
-    const snapshot = readReplicaRows(db.vault, "consent.app");
+    const snapshot = readReplicaRows(db.vault, "access.app");
     expect(snapshot.columns).not.toContain("signing_key");
     expect(snapshot.rows).toStrictEqual([
       expect.objectContaining({
@@ -66,7 +66,7 @@ describe("snapshot", () => {
     expect(snapshot.rows[0]?.values).not.toHaveProperty("signing_key");
     expect(snapshot.rows[0]?.deferredColumns).not.toContain("signing_key");
 
-    const lazy = readReplicaRow(db.vault, "consent.app", "credential-app");
+    const lazy = readReplicaRow(db.vault, "access.app", "credential-app");
     expect(lazy?.values).not.toHaveProperty("signing_key");
     expect(lazy?.deferredColumns).not.toContain("signing_key");
     expect(JSON.stringify({ snapshot, lazy })).not.toContain(

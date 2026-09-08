@@ -37,16 +37,16 @@ function ensureLedger(journal: DatabaseSync): void {
 describe("conversation-archive-roots", () => {
   test("an archive-row segment sha reads as a live GC root", () => {
     const db = openVaultDb({});
-    ensureLedger(db.journal);
+    ensureLedger(db.audit);
     const conv = "app/digest";
-    db.journal
+    db.audit
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, automation_id, title, created_at, updated_at)
        VALUES (?, 'automation', 'u1', ?, 'D', 0, 0)`
       )
       .run(conv, conv);
     const sha = sha256OfBytes(Buffer.from("segment bytes"));
-    db.journal
+    db.audit
       .prepare(
         `INSERT INTO conversation_archive
          (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, item_count,
@@ -55,7 +55,7 @@ describe("conversation-archive-roots", () => {
       )
       .run(conv, sha);
 
-    const roots = conversationArchiveShas(db.journal);
+    const roots = conversationArchiveShas(db.audit);
     expect(roots.has(sha)).toBe(true);
     expect(roots.size).toBe(1);
     db.close();
@@ -63,15 +63,15 @@ describe("conversation-archive-roots", () => {
 
   test("a pruned archive row is STILL a root (its segment is the only copy left)", () => {
     const db = openVaultDb({});
-    ensureLedger(db.journal);
+    ensureLedger(db.audit);
     const sha = sha256OfBytes(Buffer.from("pruned segment"));
-    db.journal
+    db.audit
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, automation_id, title, created_at, updated_at)
        VALUES ('a/x','automation','u1','a/x','x',0,0)`
       )
       .run();
-    db.journal
+    db.audit
       .prepare(
         `INSERT INTO conversation_archive
          (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, item_count,
@@ -79,7 +79,7 @@ describe("conversation-archive-roots", () => {
        VALUES ('ar1','a/x',0,1,0,1,2,4, ?, 50, 90, '[]', 123, 0)`
       )
       .run(sha);
-    expect(conversationArchiveShas(db.journal).has(sha)).toBe(true);
+    expect(conversationArchiveShas(db.audit).has(sha)).toBe(true);
     db.close();
   });
 
@@ -87,7 +87,7 @@ describe("conversation-archive-roots", () => {
     const db = openVaultDb({});
     // No ensureLedger — the vault opened the journal before app-engine ensured
     // the conversation band. The guard must not throw "no such table".
-    expect(conversationArchiveShas(db.journal).size).toBe(0);
+    expect(conversationArchiveShas(db.audit).size).toBe(0);
     db.close();
   });
 });
