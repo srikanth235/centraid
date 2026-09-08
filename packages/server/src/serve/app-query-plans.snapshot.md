@@ -15,8 +15,7 @@ SELECT event_id, ical_uid, summary, description, dtstart, dtend, start_tz, end_t
 ```
 
 ```
-SEARCH core_event USING INDEX core_event_dtstart_idx (dtstart>? AND dtstart<?)
-USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+SEARCH core_event USING INDEX core_event_dtstart_page_idx (dtstart>? AND dtstart<?)
 ```
 
 ### agenda.upcoming.recurringAnchors (agenda/upcoming)
@@ -30,8 +29,7 @@ SELECT event_id, ical_uid, summary, description, dtstart, dtend, start_tz, end_t
 ```
 
 ```
-SCAN core_event USING INDEX core_event_dtstart_idx
-USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+SCAN core_event USING INDEX core_event_dtstart_page_idx
 ```
 
 ### agenda.upcoming.calendars (agenda/upcoming)
@@ -40,7 +38,7 @@ USE TEMP B-TREE FOR LAST TERM OF ORDER BY
 SELECT calendar_id, owner_party_id, name, color, default_tz, visibility
       FROM schedule_calendar
 
-      ORDER BY calendar_id ASC, calendar_id ASC
+      ORDER BY calendar_id ASC
       LIMIT ?
 ```
 
@@ -54,7 +52,7 @@ SCAN schedule_calendar USING INDEX sqlite_autoindex_schedule_calendar_1
 SELECT party_id, display_name, kind, birth_date
       FROM core_party
       WHERE kind = ? AND birth_date IS NOT NULL
-      ORDER BY party_id ASC, party_id ASC
+      ORDER BY party_id ASC
       LIMIT ?
 ```
 
@@ -73,8 +71,7 @@ SELECT task_id, status, title, due_at, project_id
 ```
 
 ```
-SEARCH schedule_task USING INDEX schedule_task_due_at_idx (due_at>? AND due_at<?)
-USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+SEARCH schedule_task USING INDEX schedule_task_due_page_idx (due_at>? AND due_at<?)
 ```
 
 ### agenda.dayContext.flagsScheme (agenda/day-context)
@@ -83,7 +80,7 @@ USE TEMP B-TREE FOR LAST TERM OF ORDER BY
 SELECT scheme_id, uri
       FROM core_concept_scheme
       WHERE uri = ?
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -97,7 +94,7 @@ SEARCH core_concept_scheme USING INDEX sqlite_autoindex_core_concept_scheme_2 (u
 SELECT vault_id, self_party_id
       FROM core_vault
 
-      ORDER BY vault_id ASC, vault_id ASC
+      ORDER BY vault_id ASC
       LIMIT ?
 ```
 
@@ -111,7 +108,7 @@ SCAN core_vault USING INDEX sqlite_autoindex_core_vault_1
 SELECT party_id, display_name, kind
       FROM core_party
       WHERE kind = ?
-      ORDER BY party_id ASC, party_id ASC
+      ORDER BY party_id ASC
       LIMIT ?
 ```
 
@@ -127,7 +124,7 @@ SCAN core_party USING INDEX sqlite_autoindex_core_party_1
 SELECT concept_id, scheme_id, pref_label, notation
       FROM core_concept
 
-      ORDER BY concept_id ASC, concept_id ASC
+      ORDER BY concept_id ASC
       LIMIT ?
 ```
 
@@ -141,7 +138,7 @@ SCAN core_concept USING INDEX sqlite_autoindex_core_concept_1
 SELECT scheme_id, uri, title
       FROM core_concept_scheme
 
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -160,8 +157,7 @@ SELECT authority_id, origin_vault_id, subscribed_at
 ```
 
 ```
-SCAN share_subscription
-USE TEMP B-TREE FOR ORDER BY
+SCAN share_subscription USING INDEX share_subscription_subscribed_page_idx
 ```
 
 ### docs.history.document (docs/history)
@@ -170,7 +166,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT document_id, current_content_id, current_revision_id, created_at
       FROM core_document
       WHERE document_id = ?
-      ORDER BY document_id ASC, document_id ASC
+      ORDER BY document_id ASC
       LIMIT ?
 ```
 
@@ -189,8 +185,7 @@ SELECT prov_id, prov_activity, agent_kind, occurred_at
 ```
 
 ```
-SEARCH access_provenance USING INDEX idx_provenance_entity (entity_type=? AND entity_id=?)
-USE TEMP B-TREE FOR ORDER BY
+SEARCH access_provenance USING INDEX access_provenance_occurred_page_idx (entity_type=? AND entity_id=?)
 ```
 
 ## locker
@@ -206,8 +201,7 @@ SELECT item_id, type, title, username, url, url_match_policy, notes, cardholder,
 ```
 
 ```
-SEARCH locker_item USING INDEX locker_item_type_idx (type=?)
-USE TEMP B-TREE FOR ORDER BY
+SEARCH locker_item USING INDEX locker_item_type_updated_page_idx (type=? AND deleted_at=?)
 ```
 
 ### locker.autofill.item (locker/autofill-item)
@@ -216,7 +210,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT item_id, type, title, username, url, url_match_policy, notes, cardholder, expiry, brand, fullname, email, phone, address, network, connection_id, compromised, password_set_at, created_at, updated_at, archived_at, deleted_at, purge_at
       FROM locker_item
       WHERE item_id = ? AND type = ? AND deleted_at IS NULL
-      ORDER BY item_id ASC, item_id ASC
+      ORDER BY item_id ASC
       LIMIT ?
 ```
 
@@ -235,8 +229,7 @@ SELECT item_id, type, title, username, url, url_match_policy, notes, cardholder,
 ```
 
 ```
-SCAN locker_item
-USE TEMP B-TREE FOR ORDER BY
+SCAN locker_item USING INDEX locker_item_updated_page_idx
 ```
 
 ### locker.items.concepts (locker/items)
@@ -245,7 +238,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT concept_id, scheme_id, pref_label, notation
       FROM core_concept
 
-      ORDER BY concept_id ASC, concept_id ASC
+      ORDER BY concept_id ASC
       LIMIT ?
 ```
 
@@ -259,7 +252,7 @@ SCAN core_concept USING INDEX sqlite_autoindex_core_concept_1
 SELECT scheme_id, uri
       FROM core_concept_scheme
 
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -273,7 +266,7 @@ SCAN core_concept_scheme USING INDEX sqlite_autoindex_core_concept_scheme_1
 SELECT item_id, type, title, username, url, url_match_policy, notes, cardholder, expiry, brand, fullname, email, phone, address, network, connection_id, compromised, password_set_at, created_at, updated_at, archived_at, deleted_at, purge_at
       FROM locker_item
       WHERE item_id = ?
-      ORDER BY item_id ASC, item_id ASC
+      ORDER BY item_id ASC
       LIMIT ?
 ```
 
@@ -292,8 +285,7 @@ SELECT item_id, type, title, username, url, url_match_policy, notes, cardholder,
 ```
 
 ```
-SCAN locker_item
-USE TEMP B-TREE FOR ORDER BY
+SCAN locker_item USING INDEX locker_item_updated_page_idx
 ```
 
 ### locker.trash.items (locker/trash)
@@ -307,8 +299,7 @@ SELECT item_id, type, title, username, url, url_match_policy, notes, cardholder,
 ```
 
 ```
-SCAN locker_item
-USE TEMP B-TREE FOR ORDER BY
+SCAN locker_item USING INDEX locker_item_updated_page_idx
 ```
 
 ### locker.access.receipts (locker/access)
@@ -322,8 +313,7 @@ SELECT receipt_id, action, object_type, object_id, decision, occurred_at, detail
 ```
 
 ```
-SCAN access_receipt
-USE TEMP B-TREE FOR ORDER BY
+SCAN access_receipt USING INDEX access_receipt_occurred_page_idx
 ```
 
 ## notes
@@ -334,7 +324,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT scheme_id, uri
       FROM core_concept_scheme
       WHERE uri = ?
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -353,8 +343,7 @@ SELECT note_id, title, format, pinned, body_content_id, created_at, updated_at, 
 ```
 
 ```
-SCAN knowledge_note
-USE TEMP B-TREE FOR ORDER BY
+SEARCH knowledge_note USING INDEX knowledge_note_updated_page_idx (deleted_at=?)
 ```
 
 ### notes.library.pinned (notes/library)
@@ -368,8 +357,7 @@ SELECT note_id, title, format, pinned, body_content_id, created_at, updated_at, 
 ```
 
 ```
-SCAN knowledge_note
-USE TEMP B-TREE FOR ORDER BY
+SEARCH knowledge_note USING INDEX knowledge_note_updated_page_idx (deleted_at=?)
 ```
 
 ### notes.library.trash (notes/library)
@@ -383,8 +371,7 @@ SELECT note_id, title, format, pinned, body_content_id, created_at, updated_at, 
 ```
 
 ```
-SCAN knowledge_note
-USE TEMP B-TREE FOR ORDER BY
+SEARCH knowledge_note USING INDEX knowledge_note_deleted_page_idx (deleted_at>?)
 ```
 
 ### notes.library.notebooks (notes/library)
@@ -398,8 +385,7 @@ SELECT collection_id, name, sort_order
 ```
 
 ```
-SCAN core_collection
-USE TEMP B-TREE FOR ORDER BY
+SCAN core_collection USING INDEX core_collection_sort_page_idx
 ```
 
 ### notes.note.row (notes/note)
@@ -408,7 +394,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT note_id, body_content_id, format
       FROM knowledge_note
       WHERE note_id = ?
-      ORDER BY note_id ASC, note_id ASC
+      ORDER BY note_id ASC
       LIMIT ?
 ```
 
@@ -422,7 +408,7 @@ SEARCH knowledge_note USING INDEX sqlite_autoindex_knowledge_note_1 (note_id=?)
 SELECT note_id, body_content_id, current_revision_id, created_at
       FROM knowledge_note
       WHERE note_id = ?
-      ORDER BY note_id ASC, note_id ASC
+      ORDER BY note_id ASC
       LIMIT ?
 ```
 
@@ -443,8 +429,7 @@ SELECT party_id, created_at, cadence_days, role, avatar_color, last_contacted_at
 ```
 
 ```
-SCAN people_profile
-USE TEMP B-TREE FOR ORDER BY
+SEARCH people_profile USING INDEX people_profile_created_page_idx (deleted_at=?)
 ```
 
 ### _shared/taxonomy.concepts (people/people)
@@ -453,7 +438,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT concept_id, scheme_id, pref_label, notation
       FROM core_concept
 
-      ORDER BY concept_id ASC, concept_id ASC
+      ORDER BY concept_id ASC
       LIMIT ?
 ```
 
@@ -467,7 +452,7 @@ SCAN core_concept USING INDEX sqlite_autoindex_core_concept_1
 SELECT scheme_id, uri, title
       FROM core_concept_scheme
 
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -481,7 +466,7 @@ SCAN core_concept_scheme USING INDEX sqlite_autoindex_core_concept_scheme_1
 SELECT party_id, role, nickname, avatar_color, cadence_days, last_contacted_at, created_at, met, deleted_at
       FROM people_profile
       WHERE party_id = ? AND deleted_at IS NULL
-      ORDER BY party_id ASC, party_id ASC
+      ORDER BY party_id ASC
       LIMIT ?
 ```
 
@@ -495,7 +480,7 @@ SEARCH people_profile USING INDEX sqlite_autoindex_people_profile_2 (party_id=?)
 SELECT party_id, display_name, kind
       FROM core_party
       WHERE party_id = ?
-      ORDER BY party_id ASC, party_id ASC
+      ORDER BY party_id ASC
       LIMIT ?
 ```
 
@@ -514,8 +499,7 @@ SELECT party_id, created_at, last_contacted_at, cadence_days, avatar_color, role
 ```
 
 ```
-SCAN people_profile
-USE TEMP B-TREE FOR ORDER BY
+SEARCH people_profile USING INDEX people_profile_created_page_idx (deleted_at=?)
 ```
 
 ### _shared/journal.scheme (people/journal)
@@ -524,7 +508,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT scheme_id, uri
       FROM core_concept_scheme
       WHERE uri = ?
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -538,7 +522,7 @@ SEARCH core_concept_scheme USING INDEX sqlite_autoindex_core_concept_scheme_2 (u
 SELECT concept_id, notation
       FROM core_concept
 
-      ORDER BY concept_id ASC, concept_id ASC
+      ORDER BY concept_id ASC
       LIMIT ?
 ```
 
@@ -552,13 +536,12 @@ SCAN core_concept USING INDEX sqlite_autoindex_core_concept_1
 SELECT link_id, from_type, from_id, to_type, to_id
       FROM core_link
       WHERE from_type = ? AND to_type = ? AND valid_to IS NULL
-      ORDER BY link_id ASC, link_id ASC
+      ORDER BY link_id ASC
       LIMIT ?
 ```
 
 ```
-SEARCH core_link USING INDEX idx_link_to (to_type=?)
-USE TEMP B-TREE FOR ORDER BY
+SEARCH core_link USING INDEX core_link_from_to_page_idx (from_type=? AND to_type=?)
 ```
 
 ### people.trash.profiles (people/trash)
@@ -572,8 +555,7 @@ SELECT party_id, role, deleted_at, purge_at
 ```
 
 ```
-SCAN people_profile
-USE TEMP B-TREE FOR ORDER BY
+SEARCH people_profile USING INDEX people_profile_deleted_page_idx (deleted_at>?)
 ```
 
 ### people.history.revisions (people/history)
@@ -587,8 +569,7 @@ SELECT revision_id, entity_type, entity_id, operation, snapshot_json, recorded_a
 ```
 
 ```
-SEARCH core_entity_revision USING INDEX core_entity_revision_entity_idx (entity_type=? AND entity_id=?)
-USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+SEARCH core_entity_revision USING INDEX core_entity_revision_recorded_page_idx (entity_type=? AND entity_id=?)
 ```
 
 ## photos
@@ -599,7 +580,7 @@ USE TEMP B-TREE FOR LAST TERM OF ORDER BY
 SELECT bucket, item_count, byte_size, computed_at
       FROM blob_custody_rollup
 
-      ORDER BY bucket ASC, bucket ASC
+      ORDER BY bucket ASC
       LIMIT ?
 ```
 
@@ -618,8 +599,7 @@ SELECT asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_gr
 ```
 
 ```
-SCAN media_asset
-USE TEMP B-TREE FOR ORDER BY
+SEARCH media_asset USING INDEX media_asset_captured_page_idx (deleted_at=? AND archived_at=? AND captured_at<?)
 ```
 
 ### photos.library.trash (photos/library)
@@ -633,8 +613,7 @@ SELECT asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_gr
 ```
 
 ```
-SCAN media_asset
-USE TEMP B-TREE FOR ORDER BY
+SEARCH media_asset USING INDEX media_asset_deleted_page_idx (deleted_at>?)
 ```
 
 ### photos.library.albums (photos/library)
@@ -643,7 +622,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT collection_id, name, cover_content_id
       FROM core_collection
 
-      ORDER BY collection_id ASC, collection_id ASC
+      ORDER BY collection_id ASC
       LIMIT ?
 ```
 
@@ -657,7 +636,7 @@ SCAN core_collection USING INDEX sqlite_autoindex_core_collection_1
 SELECT place_id, name, geo_lat, geo_lng, kind, address_json
       FROM core_place
 
-      ORDER BY place_id ASC, place_id ASC
+      ORDER BY place_id ASC
       LIMIT ?
 ```
 
@@ -671,7 +650,7 @@ SCAN core_place USING INDEX sqlite_autoindex_core_place_1
 SELECT scheme_id, uri
       FROM core_concept_scheme
 
-      ORDER BY scheme_id ASC, scheme_id ASC
+      ORDER BY scheme_id ASC
       LIMIT ?
 ```
 
@@ -685,7 +664,7 @@ SCAN core_concept_scheme USING INDEX sqlite_autoindex_core_concept_scheme_1
 SELECT concept_id, scheme_id, pref_label, notation
       FROM core_concept
 
-      ORDER BY concept_id ASC, concept_id ASC
+      ORDER BY concept_id ASC
       LIMIT ?
 ```
 
@@ -699,13 +678,12 @@ SCAN core_concept USING INDEX sqlite_autoindex_core_concept_1
 SELECT region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id, review_state
       FROM media_face_region
       WHERE asset_id = ?
-      ORDER BY region_id ASC, region_id ASC
+      ORDER BY region_id ASC
       LIMIT ?
 ```
 
 ```
-SEARCH media_face_region USING INDEX idx_face_region_asset (asset_id=?)
-USE TEMP B-TREE FOR ORDER BY
+SEARCH media_face_region USING INDEX media_face_region_asset_page_idx (asset_id=?)
 ```
 
 ### photos.faces.parties (photos/faces)
@@ -719,8 +697,7 @@ SELECT party_id, display_name, kind
 ```
 
 ```
-SCAN core_party
-USE TEMP B-TREE FOR ORDER BY
+SCAN core_party USING INDEX core_party_display_name_page_idx
 ```
 
 ### photos.faceQueue.regions (photos/face-queue)
@@ -729,7 +706,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id, review_state, created_at
       FROM media_face_region
 
-      ORDER BY region_id ASC, region_id ASC
+      ORDER BY region_id ASC
       LIMIT ?
 ```
 
@@ -743,7 +720,7 @@ SCAN media_face_region USING INDEX sqlite_autoindex_media_face_region_1
 SELECT region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id, review_state
       FROM media_face_region
 
-      ORDER BY region_id ASC, region_id ASC
+      ORDER BY region_id ASC
       LIMIT ?
 ```
 
@@ -757,7 +734,7 @@ SCAN media_face_region USING INDEX sqlite_autoindex_media_face_region_1
 SELECT region_id, cluster_id, computed_at
       FROM media_face_cluster
 
-      ORDER BY region_id ASC, region_id ASC
+      ORDER BY region_id ASC
       LIMIT ?
 ```
 
@@ -776,8 +753,7 @@ SELECT asset_id, phash, cluster_id, computed_at
 ```
 
 ```
-SEARCH media_asset_phash USING INDEX idx_media_asset_phash_cluster (cluster_id>?)
-USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+SEARCH media_asset_phash USING INDEX media_asset_phash_cluster_page_idx (cluster_id>?)
 ```
 
 ### photos.enrichment.policy (photos/enrichment-status)
@@ -786,7 +762,7 @@ USE TEMP B-TREE FOR LAST TERM OF ORDER BY
 SELECT domain, tier, updated_at
       FROM enrich_policy
       WHERE domain = ?
-      ORDER BY domain ASC, domain ASC
+      ORDER BY domain ASC
       LIMIT ?
 ```
 
@@ -802,7 +778,7 @@ SEARCH enrich_policy USING INDEX sqlite_autoindex_enrich_policy_1 (domain=?)
 SELECT vault_id, self_party_id, base_currency
       FROM core_vault
 
-      ORDER BY vault_id ASC, vault_id ASC
+      ORDER BY vault_id ASC
       LIMIT ?
 ```
 
@@ -816,7 +792,7 @@ SCAN core_vault USING INDEX sqlite_autoindex_core_vault_1
 SELECT friend_id, party_id, created_at
       FROM tally_friend
 
-      ORDER BY friend_id ASC, friend_id ASC
+      ORDER BY friend_id ASC
       LIMIT ?
 ```
 
@@ -830,7 +806,7 @@ SCAN tally_friend USING INDEX sqlite_autoindex_tally_friend_1
 SELECT group_id, circle_id, icon, color, simplify_opt_in, archived_at, currency
       FROM tally_group
 
-      ORDER BY group_id ASC, group_id ASC
+      ORDER BY group_id ASC
       LIMIT ?
 ```
 
@@ -844,7 +820,7 @@ SCAN tally_group USING INDEX sqlite_autoindex_tally_group_1
 SELECT circle_id, owner_party_id, name, kind
       FROM social_circle
 
-      ORDER BY circle_id ASC, circle_id ASC
+      ORDER BY circle_id ASC
       LIMIT ?
 ```
 
@@ -858,7 +834,7 @@ SCAN social_circle USING INDEX sqlite_autoindex_social_circle_1
 SELECT member_id, circle_id, party_id
       FROM social_circle_member
 
-      ORDER BY member_id ASC, member_id ASC
+      ORDER BY member_id ASC
       LIMIT ?
 ```
 
@@ -877,8 +853,7 @@ SELECT expense_id, group_id, description, amount_minor, currency, paid_by, split
 ```
 
 ```
-SCAN tally_expense
-USE TEMP B-TREE FOR ORDER BY
+SEARCH tally_expense USING INDEX tally_expense_spent_page_idx (deleted_at=?)
 ```
 
 ### tally.dashboard.splits (tally/dashboard)
@@ -915,7 +890,7 @@ SCAN tally_expense_payer USING INDEX sqlite_autoindex_tally_expense_payer_1
 SELECT settlement_id, group_id, from_party, to_party, amount_minor, currency, paid_on, txn_id, created_at
       FROM tally_settlement
       WHERE deleted_at IS NULL
-      ORDER BY settlement_id ASC, settlement_id ASC
+      ORDER BY settlement_id ASC
       LIMIT ?
 ```
 
@@ -929,7 +904,7 @@ SCAN tally_settlement USING INDEX sqlite_autoindex_tally_settlement_1
 SELECT obligation_id, from_party, to_party, amount_minor, currency, reason, incurred_on, settled_at
       FROM tally_obligation
       WHERE settled_at IS NULL AND deleted_at IS NULL
-      ORDER BY obligation_id ASC, obligation_id ASC
+      ORDER BY obligation_id ASC
       LIMIT ?
 ```
 
@@ -943,13 +918,12 @@ SCAN tally_obligation USING INDEX sqlite_autoindex_tally_obligation_1
 SELECT attachment_id, target_type, target_id, content_id, role, is_primary
       FROM core_attachment
       WHERE target_type = ? AND role = ?
-      ORDER BY attachment_id ASC, attachment_id ASC
+      ORDER BY attachment_id ASC
       LIMIT ?
 ```
 
 ```
-SEARCH core_attachment USING INDEX idx_attachment_target (target_type=?)
-USE TEMP B-TREE FOR ORDER BY
+SEARCH core_attachment USING INDEX core_attachment_target_role_page_idx (target_type=? AND role=?)
 ```
 
 ### tally.dashboard.receiptLines (tally/dashboard)
@@ -958,7 +932,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT line_item_id, expense_id, receipt_id, kind, description, amount_minor, sort_order
       FROM tally_expense_line_item
 
-      ORDER BY line_item_id ASC, line_item_id ASC
+      ORDER BY line_item_id ASC
       LIMIT ?
 ```
 
@@ -991,8 +965,7 @@ SELECT nudge_id, party_id, group_id, as_of_minor, note, prepared_at, created_at
 ```
 
 ```
-SCAN tally_nudge
-USE TEMP B-TREE FOR ORDER BY
+SCAN tally_nudge USING INDEX tally_nudge_prepared_page_idx
 ```
 
 ### tally.dashboard.parties (tally/dashboard)
@@ -1001,7 +974,7 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT party_id, display_name
       FROM core_party
       WHERE party_id IN (?)
-      ORDER BY party_id ASC, party_id ASC
+      ORDER BY party_id ASC
       LIMIT ?
 ```
 
@@ -1020,8 +993,7 @@ SELECT expense_id, group_id, description, amount_minor, currency, paid_by, spent
 ```
 
 ```
-SCAN tally_expense
-USE TEMP B-TREE FOR ORDER BY
+SEARCH tally_expense USING INDEX tally_expense_deleted_page_idx (deleted_at>?)
 ```
 
 ### tally.dashboard.recurring (tally/dashboard)
@@ -1035,8 +1007,7 @@ SELECT template_id, group_id, description, original_amount_minor, original_curre
 ```
 
 ```
-SCAN tally_recurring_expense
-USE TEMP B-TREE FOR ORDER BY
+SCAN tally_recurring_expense USING INDEX tally_recurring_expense_updated_page_idx
 ```
 
 ### tally.dashboard.recurringExceptions (tally/dashboard)
@@ -1045,13 +1016,12 @@ USE TEMP B-TREE FOR ORDER BY
 SELECT exception_id, target_type, target_id, original_start_local, recurrence_semantics, scope, action, override_json
       FROM schedule_recurrence_exception
       WHERE target_type = ?
-      ORDER BY exception_id ASC, exception_id ASC
+      ORDER BY exception_id ASC
       LIMIT ?
 ```
 
 ```
-SEARCH schedule_recurrence_exception USING INDEX schedule_recurrence_exception_target_idx (target_type=?)
-USE TEMP B-TREE FOR ORDER BY
+SEARCH schedule_recurrence_exception USING INDEX schedule_recurrence_exception_target_page_idx (target_type=?)
 ```
 
 ### tally.history.revisions (tally/history)
@@ -1065,8 +1035,7 @@ SELECT revision_id, entity_type, entity_id, operation, snapshot_json, recorded_a
 ```
 
 ```
-SEARCH core_entity_revision USING INDEX core_entity_revision_entity_idx (entity_type=? AND entity_id=?)
-USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+SEARCH core_entity_revision USING INDEX core_entity_revision_recorded_page_idx (entity_type=? AND entity_id=?)
 ```
 
 ### tally.matches.transactions (tally/matches)
@@ -1080,8 +1049,7 @@ SELECT txn_id, account_id, posted_at, amount_minor, currency, direction, descrip
 ```
 
 ```
-SCAN core_transaction
-USE TEMP B-TREE FOR ORDER BY
+SCAN core_transaction USING INDEX core_transaction_posted_page_idx
 ```
 
 ## tasks
@@ -1097,8 +1065,7 @@ SELECT task_id, parent_task_id, project_id, section_id, status, title, descripti
 ```
 
 ```
-SCAN schedule_task
-USE TEMP B-TREE FOR ORDER BY
+SCAN schedule_task USING INDEX schedule_task_created_page_idx
 ```
 
 ### tasks.board.logbook (tasks/board)
@@ -1112,8 +1079,7 @@ SELECT task_id, parent_task_id, project_id, section_id, status, title, descripti
 ```
 
 ```
-SCAN schedule_task
-USE TEMP B-TREE FOR ORDER BY
+SCAN schedule_task USING INDEX schedule_task_completed_page_idx
 ```
 
 ### tasks.board.projects (tasks/board)
@@ -1127,8 +1093,7 @@ SELECT project_id, name, area, color, sort_order
 ```
 
 ```
-SCAN schedule_project
-USE TEMP B-TREE FOR ORDER BY
+SCAN schedule_project USING INDEX schedule_project_sort_page_idx
 ```
 
 ### tasks.board.sections (tasks/board)
@@ -1142,6 +1107,5 @@ SELECT section_id, project_id, name, sort_order
 ```
 
 ```
-SCAN schedule_section
-USE TEMP B-TREE FOR ORDER BY
+SCAN schedule_section USING INDEX schedule_section_sort_page_idx
 ```

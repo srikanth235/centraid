@@ -24,7 +24,7 @@ import {
 // (`schema/private-tables.ts`) minus the FTS shadow tables. Wave 0b's schema
 // changes deliberately carry no bump of their own — this one covers both, and
 // a mismatch is a re-bootstrap, never a partial apply.
-export const REPLICA_SCHEMA_EPOCH = 2;
+export const REPLICA_SCHEMA_EPOCH = 3;
 
 /**
  * Orders the ADDITIVE migrations a seat applies, and is deliberately a second

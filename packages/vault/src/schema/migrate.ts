@@ -58,6 +58,10 @@ import { LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { SHARE_PARTY_BINDING_DDL } from "./party-vault-binding.js";
+import {
+  READ_PATH_INDEX_DDL,
+  SUBSCRIPTION_READ_PATH_INDEX_DDL,
+} from "./read-path-indexes.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
@@ -150,6 +154,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     ENRICH_DDL,
     OUTBOX_DDL,
     REPLICA_DDL,
+    // The paged door's ordering indexes (#996, W5 / R8). Last of the base
+    // tables' DDL: every column they name is in place by here, including the
+    // ALTERs TIME_ORGANIZE_DDL adds and the sidecar ENRICH_DDL creates.
+    READ_PATH_INDEX_DDL,
     FTS_DDL,
     BLOB_TRANSFER_DDL,
     BLOB_DDL,
@@ -173,6 +181,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // is JS and therefore cannot be a rung — it runs on open, right after this.
   [
     SHARE_SUBSCRIPTION_DDL,
+    SUBSCRIPTION_READ_PATH_INDEX_DDL,
     // The purge trigger loses its clause over the rail's own grant table, so a
     // file frozen with the old body is re-cut here. `refreshEntityTriggers`
     // does not own this one — it is stated DDL, and stated DDL migrates.

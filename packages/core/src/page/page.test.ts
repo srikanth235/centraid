@@ -16,6 +16,8 @@
 
 import { describe, expect, it } from "vitest";
 
+import { pageStatement } from "./statement.js";
+import type { PageQuery } from "./statement.js";
 import { MAX_PAGE_ROWS, pageOf, probeLimit } from "./window.js";
 import type { PageRequest } from "./window.js";
 
@@ -93,5 +95,47 @@ describe("the page result", () => {
     const page = pageOf(rows(MAX_PAGE_ROWS + 1), { limit: 10_000_000 }, key);
     expect(page.rows).toHaveLength(MAX_PAGE_ROWS);
     expect(page.next).toBeDefined();
+  });
+});
+
+// THE TIEBREAKER IS STATED ONCE (#996, W5). A handler whose sort column IS its
+// primary key would otherwise emit `ORDER BY id, id`, and SQLite answers that
+// with a temp B-tree "for the last term of ORDER BY" — a sort of one-row groups
+// that four of the shipped plans were paying for.
+describe("pageStatement ordering", () => {
+  const query: PageQuery<Row> = {
+    name: "t.rows",
+    select: "id, at",
+    from: "t",
+    order: { sortColumn: "at", pkColumn: "id", descending: false },
+  };
+
+  it("names the sort column and the key when they differ", () => {
+    const { sql } = pageStatement<Row>(query, { limit: 5 });
+    expect(sql).toContain("ORDER BY at ASC, id ASC");
+  });
+
+  it("names the key once when the sort column IS the key", () => {
+    const { sql } = pageStatement<Row>(
+      {
+        ...query,
+        order: { sortColumn: "id", pkColumn: "id", descending: false },
+      },
+      { limit: 5 }
+    );
+    expect(sql).toContain("ORDER BY id ASC");
+    expect(sql).not.toContain("ORDER BY id ASC, id ASC");
+  });
+
+  it("keeps the direction on the single term", () => {
+    const { sql } = pageStatement<Row>(
+      {
+        ...query,
+        order: { sortColumn: "id", pkColumn: "id", descending: true },
+      },
+      { limit: 5 }
+    );
+    expect(sql).toContain("ORDER BY id DESC");
+    expect(sql).not.toContain("id DESC, id DESC");
   });
 });

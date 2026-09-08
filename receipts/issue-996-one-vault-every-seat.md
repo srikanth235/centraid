@@ -8610,3 +8610,85 @@ ledger rows with provenance `emulator`.
   this tree.
 - **A cut whose contract is atomicity is not started until it can be finished.**
   Half a deletion is the compatibility path the deletion exists to remove.
+
+## Wave 5j — the paged door's ordering indexes, measured to zero (#996)
+
+### The owner ruling this wave runs under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+`mobile/*` rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head `a1e8c4390` stand as v0 evidence; the rows stay open
+ledger rows with provenance `emulator`.
+
+### `(sort column, primary key)` was the plan, and it was measured wrong
+
+Wave 5i counted thirty `(table, ORDER BY)` groups printing
+`USE TEMP B-TREE FOR ORDER BY` in `app-query-plans.snapshot.md` and named the
+fix as `(sort column, pk)` for twenty-six of them. Written that way and
+re-measured, **fourteen of the thirty were still sorting.** Seven because SQLite
+does not choose the index the plan predicted: against
+`WHERE deleted_at IS NULL ORDER BY updated_at DESC` it prefers the index that
+SEEKS — the predicate's — and then sorts, so a bare `(updated_at, note_id)` is
+never used at all. The shape that works is
+`(equality predicate columns, sort column, primary key)`, and it is in the tree
+because the snapshot said so, not because it reads well.
+
+The other four are `ORDER BY id, id`: a handler whose sort column IS its
+primary key. `pageStatement` emitted the tiebreaker twice, and SQLite answers
+that with a temp B-tree "for the last term of ORDER BY" — a sort of one-row
+groups. Half the fix is an index leading with the predicate; the other half is
+in `@centraid/core/page`, which now states the tiebreaker once. Red-first: the
+two new `page.test.ts` claims fail on the previous `statement.ts`.
+
+**Measured, at this commit:** `grep -c "TEMP B-TREE"
+packages/server/src/serve/app-query-plans.snapshot.md` — **36 before, 0 after**.
+Every one of the thirty indexes is named by at least one plan in the
+regenerated snapshot; none is dead weight.
+
+### One epoch bump, a baseline edit, and a re-frozen corpus
+
+`REPLICA_SCHEMA_EPOCH` 2 → 3 — the one bump W5 gets. The indexes are stated in
+the composed baseline (rung one, last of the base tables' DDL: they name columns
+`TIME_ORGANIZE_DDL` ALTERs in and a table `ENRICH_DDL` creates), plus one beside
+`SHARE_SUBSCRIPTION_DDL` for the table rung two creates. **No rung was added.**
+The golden corpus is re-frozen under its own label in the same slice, which is
+the ONT-ladder reading `CONTENT_TEXT_DDL` already stands under, and
+`golden-vault.test.ts` was the one red test until it was.
+
+### Gates
+
+- `bun run check:push:static` — 4/4.
+- `bun run --cwd packages/vault test` — 209 files, 1,743 passed, 2 skipped, 0 failed.
+- `bun run --cwd packages/core test` — 20 files, 313 tests, 0 failed.
+- `bun run --cwd packages/server test` — 8 failed, all eight inherited: the same
+  eight fail on this branch head with this commit stashed (`acp/launch` ×2,
+  `replica-shape-parity` ×2, `seat-routes` ×2, `gateway-db-lock`,
+  `manifest-scope-denial`).
+- `node scripts/check-schema-export-ratchet.mjs` — green on the new pin.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/core/src/page/page.test.ts`
+- `packages/core/src/page/statement.ts`
+- `packages/server/src/serve/app-query-plans.snapshot.md`
+- `packages/vault/src/gateway/portable-export.ts`
+- `packages/vault/src/schema/migrate.ts`
+- `packages/vault/src/schema/replica.ts`
+- `packages/vault/tests/golden/issue-929/manifest.json`
+- `packages/vault/tests/golden/issue-929/vault.db.gz`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `tests/schema-export-fingerprint.json`
+
+**Added:**
+
+- `packages/vault/src/schema/read-path-indexes.ts`
+
+### Decisions — the indexes
+
+- **A plan snapshot is the evidence, and it overrules the brief's arithmetic.**
+  The index shape in the tree is the one that measured to zero, not the one that
+  was predicted.
+- **A duplicated tiebreaker is a statement-builder bug, not an index gap.** No
+  index can remove `ORDER BY id, id`; stating the column once does.

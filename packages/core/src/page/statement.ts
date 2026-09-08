@@ -101,6 +101,26 @@ export interface PageStatement {
  * for every table the statement names, compiled by the gateway and ANDed in
  * with the handler's own predicate. It is never reachable from a handler.
  */
+/**
+ * The page's ordering, with the tiebreaker stated ONCE.
+ *
+ * A handler that sorts on its own primary key names the same column twice, and
+ * `ORDER BY id, id` is not free: SQLite satisfies the first term from an index
+ * and then builds a temp B-tree for "the last term of ORDER BY", which is a
+ * sort of one-row groups that answers nothing (#996, W5 — four of the plans in
+ * `app-query-plans.snapshot.md` printed exactly that). `ORDER BY id` is the
+ * same order and no sort.
+ */
+function orderBy(
+  sortColumn: string,
+  pkColumn: string,
+  direction: string
+): string {
+  return sortColumn === pkColumn
+    ? `${pkColumn} ${direction}`
+    : `${sortColumn} ${direction}, ${pkColumn} ${direction}`;
+}
+
 export function pageStatement<Row extends object>(
   query: PageQuery<Row>,
   request: PageRequest,
@@ -125,7 +145,7 @@ export function pageStatement<Row extends object>(
     sql: `SELECT ${query.select}
       FROM ${query.from}
       ${predicates.length > 0 ? `WHERE ${predicates.join(" AND ")}` : ""}
-      ORDER BY ${sortColumn} ${direction}, ${pkColumn} ${direction}
+      ORDER BY ${orderBy(sortColumn, pkColumn, direction)}
       LIMIT ?`,
     bind,
   };
