@@ -181,7 +181,7 @@ Every lane, every suite and every flow is declared in [`roster.json`](roster.jso
 | `resilience` (3 flows) | 3 | the retired second gate leg, one rung later: `pairing-canary`, `native-v0-resilience`, `cold-start` — same budget doc |
 | `ios-smoke` (3 flows) | 3 | every candidate's iOS verdict — budget in [flows/ios-smoke-budget.md](flows/ios-smoke-budget.md) |
 | `home-apps` (7 flows) | 3, 4 | the Docs, Agenda, Notes, Tasks, People, Tally and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
-| `probes-suite` (6 flows) | 4 | the standalone journeys that grid G showed unbudgeted: `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames`, `volume-proof` — budget in [flows/probes-budget.md](flows/probes-budget.md) |
+| `probes-suite` (5 flows) | 4 | the standalone journeys that grid G showed unbudgeted: `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames` — budget in [flows/probes-budget.md](flows/probes-budget.md) |
 | `photos` (5 flows) | 4 | the Photos seat: refused permission, library, viewer, search, select-and-write — budget in [flows/photos-budget.md](flows/photos-budget.md) |
 | `sharing` (1 flow) | 4 | the phone's one commons producer and the surface that makes a person reachable — budget in [flows/sharing-budget.md](flows/sharing-budget.md) |
 | `promoting-suite` (2 flows) | 4 | the D3 promotion pipeline — budget in [flows/promoting-budget.md](flows/promoting-budget.md) |

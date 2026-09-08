@@ -4,7 +4,7 @@
 import { enrollAgent, enrollApp } from "./bootstrap.js";
 import type { BootstrapResult } from "./bootstrap.js";
 import type { VaultDb } from "./db.js";
-import type { FilterClause, Risk } from "./gateway/types.js";
+import type { Risk } from "./gateway/types.js";
 import { nowIso } from "./ids.js";
 
 export interface HostBootstrap extends BootstrapResult {
@@ -323,83 +323,6 @@ export function ensureAppEnrolled(
   };
 }
 
-export interface GrantSummary {
-  grantId: string;
-  purposeConceptId: string;
-  purpose: string | null;
-  expiresAt: string | null;
-  scopes: {
-    schema: string;
-    table: string | null;
-    verbs: string;
-    rowFilter?: FilterClause[];
-    fieldMask?: string[];
-  }[];
-}
-
-function grantSummariesBy(
-  db: VaultDb,
-  granteeColumn: "app_id" | "grantee_party_id",
-  granteeId: string
-): GrantSummary[] {
-  const grants = db.vault
-    .prepare(
-      `SELECT g.grant_id, g.purpose_concept_id, g.expires_at, c.notation
-         FROM access_grant g
-         LEFT JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-        WHERE g.${granteeColumn} = ? AND g.status = 'active' ORDER BY g.granted_at`
-    )
-    .all(granteeId) as {
-    grant_id: string;
-    purpose_concept_id: string;
-    expires_at: string | null;
-    notation: string | null;
-  }[];
-  const scopeStmt = db.vault.prepare(
-    `SELECT entity, verbs, row_filter_json, field_mask_json
-       FROM access_grant_scope WHERE grant_id = ?`
-  );
-  return grants.map((g) => ({
-    grantId: g.grant_id,
-    purposeConceptId: g.purpose_concept_id,
-    purpose: g.notation,
-    expiresAt: g.expires_at,
-    scopes: (
-      scopeStmt.all(g.grant_id) as {
-        entity: string;
-        verbs: string;
-        row_filter_json: string | null;
-        field_mask_json: string | null;
-      }[]
-    ).map((s) => ({
-      schema: s.entity.includes(".")
-        ? s.entity.slice(0, s.entity.indexOf("."))
-        : s.entity,
-      table: s.entity.includes(".")
-        ? s.entity.slice(s.entity.indexOf(".") + 1)
-        : null,
-      verbs: s.verbs,
-      ...(s.row_filter_json
-        ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }
-        : {}),
-      ...(s.field_mask_json
-        ? { fieldMask: JSON.parse(s.field_mask_json) as string[] }
-        : {}),
-    })),
-  }));
-}
-
-export function listActiveGrants(db: VaultDb, appId: string): GrantSummary[] {
-  return grantSummariesBy(db, "app_id", appId);
-}
-
-export function listActiveAgentGrants(
-  db: VaultDb,
-  partyId: string
-): GrantSummary[] {
-  return grantSummariesBy(db, "grantee_party_id", partyId);
-}
-
 export interface EnrolledAgent {
   agentId: string;
   partyId: string;
@@ -436,13 +359,24 @@ export function lookupAgentByName(
   };
 }
 
-/** Enroll once under host-side key. Identity only — authority still needs an owner-approved grant. `displayName` self-heals without minting a new identity. */
+/** Enroll once under host-side key. Identity only — authority still needs an owner-approved answer. `displayName` self-heals without minting a new identity. */
 export function ensureAgentEnrolled(
   db: VaultDb,
   name: string,
   options?: { modelRef?: string; version?: string; displayName?: string }
 ): EnrolledAgent & { created: boolean } {
   const resolvedName = options?.displayName ?? humanizeSlug(name);
+  // A RETIRED NAME COMES BACK (#928). `enrollment_key` is UNIQUE, so a revoked
+  // automation's name was unusable forever: reinstalling it threw on the
+  // index instead of minting a fresh answer. Re-enrolling reactivates the
+  // identity row it already has; the ANSWERS do not come back with it — they
+  // were withdrawn, and the install path parks the manifest again.
+  db.vault
+    .prepare(
+      `UPDATE access_agent SET status = 'active'
+        WHERE enrollment_key = ? AND status = 'revoked'`
+    )
+    .run(name);
   const existing = lookupAgentByName(db, name);
   if (existing) {
     // Only a caller that knows `displayName` may overwrite. Name-less must not regress to `humanizeSlug` except the legacy raw slug (`existing.name === name`).
@@ -471,7 +405,7 @@ export function ensureAgentEnrolled(
   };
 }
 
-/** Pause the identity row. Grants MUST be revoked through the gateway first so the cascade runs. */
+/** Pause the identity row. Standing answers are withdrawn through the gateway first so the cascade runs. */
 export function markAgentRevoked(db: VaultDb, agentId: string): void {
   db.vault
     .prepare(`UPDATE access_agent SET status = 'revoked' WHERE agent_id = ?`)
@@ -513,21 +447,13 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   }));
 }
 
-export function purposeConceptId(
-  db: VaultDb,
-  notation: string
-): string | undefined {
-  const row = db.vault
-    .prepare("SELECT concept_id FROM core_concept WHERE notation = ? LIMIT 1")
-    .get(notation) as { concept_id: string } | undefined;
-  return row?.concept_id;
-}
-
-/** Retire the identity row. Grants MUST be revoked through the gateway first. Reinstall under the same name mints a fresh identity. */
+/** Retire the identity row. Standing answers are withdrawn through the gateway first. Reinstall under the same name mints a fresh identity. */
 export function markAppRevoked(db: VaultDb, appId: string): void {
   db.vault
-    .prepare(`UPDATE access_app SET status = 'revoked' WHERE app_id = ?`)
-    .run(appId);
+    .prepare(
+      `UPDATE access_app SET status = 'revoked', revoked_at = ? WHERE app_id = ?`
+    )
+    .run(nowIso(), appId);
 }
 
 export interface InstalledAppRow {

@@ -11,14 +11,12 @@ interface Party {
 
 /** Secret-free People trash shelf; canonical parties remain intact. */
 export default async function trashPeople({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const profiles = await ctx.vault.read({
       entity: "people.profile",
       where: [{ column: "deleted_at", op: "not-null" }],
       orderBy: { column: "deleted_at", dir: "desc" },
       limit: 500,
-      purpose,
     });
     const rows = (profiles.rows ?? []) as unknown as TrashedProfile[];
     const ids = rows.map((row) => row.party_id);
@@ -26,9 +24,9 @@ export default async function trashPeople({ ctx }: HandlerArgs) {
       ids.length === 0
         ? { rows: [] }
         : await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: ids }],
-            purpose,
           });
     const names = new Map(
       ((parties.rows ?? []) as unknown as Party[]).map((party) => [

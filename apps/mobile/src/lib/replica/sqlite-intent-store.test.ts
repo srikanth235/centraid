@@ -344,6 +344,36 @@ describe("SqliteIntentStore (node:sqlite stand-in)", () => {
     SqliteIntentStore.create(new NodeSqliteDriver())
   );
 
+  // #922 G5: the new verdicts are a VOCABULARY widening of an unconstrained
+  // TEXT column, so a phone that already holds queued member writes takes them
+  // with no migration at all — and certainly no rebuild.
+  test("the new verdicts persist with no schema change", async () => {
+    const driver = new NodeSqliteDriver();
+    const store = SqliteIntentStore.create(driver);
+    const ddl = (): string[] =>
+      driver
+        .all<{ sql: string }>(
+          "SELECT sql FROM sqlite_master WHERE name = 'replica_intent_outbox'"
+        )
+        .map((row) => row.sql);
+    const before = ddl();
+    expect(before).toHaveLength(1);
+    const verdicts = ["conflict", "conflict-base-missing", "expired"] as const;
+    const stored = await Promise.all(
+      verdicts.map(async (state) => {
+        const intentId = `intent-${state}`;
+        await store.add({ ...newIntent(), intentId });
+        await store.transition(intentId, ["queued"], { state: "sending" });
+        const settled = await store.transition(intentId, ["sending"], {
+          state,
+        });
+        return [settled.state, (await store.get(intentId))?.state];
+      })
+    );
+    expect(stored).toStrictEqual(verdicts.map((state) => [state, state]));
+    expect(ddl()).toStrictEqual(before);
+  });
+
   test("caps the settled journal at what listSettled can read", async () => {
     const driver = new NodeSqliteDriver();
     const store = SqliteIntentStore.create(driver);

@@ -10,6 +10,11 @@ import type { ResourceMode } from "./hardware-profile.js";
  * "share of granted host" restructure changed the SHAPE, not the numbers.
  * Only cgroup/steal-constrained hosts (covered in hardware-profile.test.ts)
  * may resolve to smaller knobs.
+ *
+ * `workerPoolSize` LEFT THIS TABLE'S PRESETS in #922 B3: the warm-pool size
+ * has one source, `CONSTRAINED_WORKER_POOL_SIZE`/`DEFAULT_WORKER_POOL_SIZE`
+ * beside the pool, so it is graded only by class — 1 constrained, 2 standard —
+ * and no longer by mode. The other six knobs are unmoved.
  */
 
 interface ResolvedKnobs {
@@ -41,7 +46,7 @@ const HOSTS: Record<
 const CONSERVE: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
   workerMaxConcurrent: 2,
   workerMaxOldGenerationMb: 128,
-  workerPoolSize: 0,
+  workerPoolSize: 1,
   replicationConcurrency: 1,
   vaultSweepIntervalMs: 7_200_000,
   outboxIdleIntervalMs: 120_000,
@@ -57,7 +62,7 @@ const BALANCED: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
 const PERFORMANCE: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
   workerMaxConcurrent: 12,
   workerMaxOldGenerationMb: 384,
-  workerPoolSize: 4,
+  workerPoolSize: 2,
   replicationConcurrency: 4,
   vaultSweepIntervalMs: 3_600_000,
   outboxIdleIntervalMs: 60_000,

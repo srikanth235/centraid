@@ -214,22 +214,38 @@ describe("Docs, on the real React Native host tree", () => {
     // Two placements and one ordinary document: only what ARRIVED is a row
     // here, and the one whose origin vault no binding names stays unnamed
     // rather than wearing a truncated id.
-    replicaRows.byEntity.set("core.share_origin", [
+    replicaRows.byEntity.set("share.subscription", [
+      {
+        __rowId: "s1",
+        shape_id: "shape-alice",
+        origin_vault_id: "vault-alice",
+        state: "subscribed",
+        subscribed_at: "2026-08-31T13:42:06.358Z",
+      },
+      {
+        __rowId: "s2",
+        shape_id: "shape-stranger",
+        origin_vault_id: "vault-stranger",
+        state: "subscribed",
+        subscribed_at: "2026-08-02T09:00:00.000Z",
+      },
+    ]);
+    replicaRows.byEntity.set("share.subscription_lineage", [
       {
         __rowId: "o1",
+        shape_id: "shape-alice",
         target_type: "core.document",
         target_id: "d1",
-        origin_vault_id: "vault-alice",
         origin_item_id: "far-away-1",
-        shared_at: Date.parse("2026-08-31T13:42:06.358Z"),
+        origin_row_version: 1,
       },
       {
         __rowId: "o2",
+        shape_id: "shape-stranger",
         target_type: "core.document",
         target_id: "d2",
-        origin_vault_id: "vault-stranger",
         origin_item_id: "far-away-2",
-        shared_at: Date.parse("2026-08-02T09:00:00.000Z"),
+        origin_row_version: 1,
       },
     ]);
     replicaRows.byEntity.set("share.party_vault_binding", [

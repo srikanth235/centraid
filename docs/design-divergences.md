@@ -299,7 +299,7 @@ The **web row menu still has none** (`apps/docs/popovers.ts`), where the web's S
 
 | Withheld | Handoff site | Why |
 | --- | --- | --- |
-| Who shared a document, where no link binding names the origin vault | Band → Shared | `core_share_origin` records the origin VAULT; turning that into a person needs a live `share_party_vault_binding`. Without one the row says "Another vault" — never a truncated vault id worn as a name, and never a guess from the `shared_by` attribution, which is an owner id or `peer:<vaultId>` rather than a party. |
+| Who shared a document, where no link binding names the origin vault | Band → Shared | `share_subscription` records the origin VAULT that served the shape; turning that into a person needs a live `share_party_vault_binding`. Without one the row says "Another vault" — never a truncated vault id worn as a name. |
 | The Shared set itself, when the placement-origin read is denied | Band → Shared | An empty shelf would read as "nobody has shared anything with you". The shelf states that it cannot say instead, on the same absent-never-empty doctrine as the People filter axis below. |
 | Coming due's obligations, dates and quoted passages | §4 | The `due` capability is a consent that is OFF with no runner behind it — there is no staged-obligations source anywhere, and a date without its passage is the guess the handoff itself refuses. The screen states the consent's own record and routes to Capabilities. |
 | Searching inside contents; the honest could-not-read count | §5 | The phone's replica indexes titles only, so the field promises what it searches and the could-not-look-inside count is the whole active drive, in the spec's own caption sentence. |

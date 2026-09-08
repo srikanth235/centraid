@@ -19,6 +19,7 @@ import type { View as RNView } from "react-native";
 
 import {
   pendingChangeLabel,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
@@ -73,7 +74,7 @@ export default function DocRow({
   const meta = docRowMeta(doc, mark);
   // Where a queued write is, on the row it changed (#880) — its own line, as
   // the one state slot's ladder is a fact about the document.
-  const overlay = readPendingOverlay(doc.raw);
+  const overlay = readPendingOverlay(doc.raw, pendingSidecarOf(doc.raw));
   const pending = overlay ? pendingChangeLabel(overlay) : "";
 
   const openMenu = (): void => {
@@ -191,7 +192,7 @@ export function DocGridTile({
   // The tile carries the same facts as the row's meta line: a grid is an
   // arrangement, not a different set of truths about a document.
   const meta = docRowMeta(doc, mark);
-  const overlay = readPendingOverlay(doc.raw);
+  const overlay = readPendingOverlay(doc.raw, pendingSidecarOf(doc.raw));
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <Pressable

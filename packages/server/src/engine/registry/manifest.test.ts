@@ -74,7 +74,6 @@ describe(validateManifest, () => {
     const m = {
       ...baseManifest(),
       vault: {
-        purpose: "dpv:ServiceProvision",
         why: "Read one domain's revision history.",
         scopes: [
           {
@@ -110,7 +109,6 @@ describe(validateManifest, () => {
     const m = {
       ...baseManifest(),
       vault: {
-        purpose: "dpv:ServiceProvision",
         why: "Malformed filter.",
         scopes: [
           {

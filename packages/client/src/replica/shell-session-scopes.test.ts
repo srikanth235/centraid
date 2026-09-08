@@ -31,7 +31,6 @@ const shapes: ReplicaShape[] = [
   {
     shapeId: "shape-media",
     appId: "photos",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "media.asset",

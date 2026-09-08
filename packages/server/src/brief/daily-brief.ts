@@ -1,9 +1,9 @@
 /*
  * THE MORNING VIEW GOES THROUGH THE GATEWAY (#916, review-A 8.1). This is
  * LIFE DATA — events, tasks, photos, money — so it is read the way an app
- * reads it: `gateway.read` per entity, under a declared purpose, with consent
- * resolved and a receipt written. Nothing here prepares SQL against a physical
- * table, which is what `bun run lint:vault-sql` enforces.
+ * reads it: `gateway.read` per entity, on the owner's own credential, with a
+ * receipt written. Nothing here prepares SQL against a physical table, which
+ * is what `bun run lint:vault-sql` enforces.
  *
  * The four joins the old SQL did are folded HERE instead, over windowed reads.
  * That is the price of the boundary and it is the right one: a brief is a
@@ -19,9 +19,6 @@ import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
 export interface BriefVaultReader {
   read: (cred: Credential, request: ReadRequest) => ReadResult;
 }
-
-/** DPV purpose every read below declares; it lands on each receipt. */
-const PURPOSE = "dpv:ServiceProvision";
 
 /** Tasks are ordered by due date then priority, and `OrderBy` names ONE
  *  column — so the window is read wide and the tiebreak folded here. */
@@ -82,8 +79,7 @@ export function buildDailyBrief(
   cred: Credential,
   input: { date: string; from: string; to: string; timeZone: string }
 ): DailyBrief {
-  const read = (request: ReadRequest): ReadResult =>
-    vault.read(cred, { purpose: PURPOSE, ...request });
+  const read = (request: ReadRequest): ReadResult => vault.read(cred, request);
 
   // Every live event, because a recurrence that started years ago can land
   // inside today's window; the expansion below is what narrows it.

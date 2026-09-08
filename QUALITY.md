@@ -107,36 +107,6 @@
   is, and a second implementation nobody runs drifts. Whether the proof or the
   function should go is the open decision.
 
-- **An ordered replica page cannot use an index while its refusal guards ride
-  the same statement.** `planComposedReplicaRead` puts one
-  `max(CASE ... END) OVER ()` column in the select list per order guard, and a
-  window function over an unbounded frame must see every row before the first
-  one is emitted — so an ordered read materialises the whole entity whatever the
-  ORDER BY key is made of. Measured on the 2026-08-29 development container
-  against the 50,000-row year-3 corpus
-  (`tests/scale/browser-replica-query.fixture.ts`), through `store.read`:
-  103 ms for the filtered newest-first page, 174 ms unfiltered. Adding an index
-  over the exact ORDER BY expression and changing nothing else moves those to
-  103 ms and 171 ms — no effect, because the plan never reaches the index.
-  Removing the guards (and, for the filtered read, the `(verdict = 0) ASC` tier
-  that leads the sort) moves them to **2.2 ms and 0.4 ms** on the same index.
-  So the ~50-400x lives behind the guards, not behind the extraction. A guard
-  restructure is the lever, and it is a correctness change, not a storage one:
-  a set-wide census answers "does any kept row hold an unorderable value", and
-  making it cheap means either a second statement over the same filtered set
-  (measured 65 ms) or widening the question to the whole entity (measured 24 ms)
-  — a new divergence, since the refusal would then fire on rows the filter
-  excluded. Found while auditing #883's D1 clause, and not taken there because
-  the clause it disproves is a storage clause.
-
-- **Two surfaces #882 added to the phone are unvirtualized.**
-  `apps/mobile/src/apps/notes/NotesPlaces.tsx` and `NotesHistory.tsx` render
-  through a `ScrollView` with `.map()` rather than a `FlatList`, and neither is
-  pinned by `scripts/accessibility-contract.test.mjs`. Found by the independent
-  audit on #882, not a regression of any existing contract (these files are new),
-  and the fix is the same shape the Tasks board already uses. Locker's Access
-  history was the third; #883 C4 windowed it with Locker's other list surfaces
-  and pinned all of them in the contract.
 - **The phone's Access history cannot narrow to one item.**
   `lockerAccess` (`apps/mobile/src/apps/locker/locker-gateway.ts`) never sends
   `item_id`, so the phone always reads the newest receipts across every item
@@ -364,6 +334,37 @@
   which makes every `.tsx` number in that file wrong in the same direction.
 
 ## Resolved
+
+- #922 — **Two surfaces #882 added to the phone were unvirtualized.**
+  `apps/mobile/src/apps/notes/NotesPlaces.tsx` kept one hand-wired `ScrollView`
+  + `.map()` (the More sheet) beside three `SeatList`s, and
+  `NotesHistory.tsx` — a note's whole version chain, which grows by one row per
+  save and has no bound — was a `ScrollView` + `.map()` throughout. Both now
+  draw through `SeatList`, the seat's one virtualised list (#922 E6), with
+  `NEWEST_FIRST_ANCHORING` stated at the call site as that primitive requires,
+  and `NotesHistory.tsx` joins the pinned files in
+  `scripts/accessibility-contract.test.mjs` so a swap back to a bare `.map()`
+  cannot pass. The per-file pin already named `NotesPlaces.tsx`, which is why
+  its remaining `.map()` had to be found by reading rather than by the gate —
+  a pin that matches one tag in a file says nothing about the rest of it.
+
+- #922 — **An ordered replica page could not use an index while its refusal
+  guards rode the same statement.** `planComposedReplicaRead` put one
+  `max(CASE ... END) OVER ()` column in the select list per order guard, and a
+  window function over an unbounded frame must see every row before the first
+  one is emitted, so an ordered read materialised the whole entity whatever the
+  ORDER BY key was made of; an index over the exact ORDER BY expression changed
+  nothing, because the plan never reached it. C3 replaced the aggregate with
+  **index seeks**: `censusClass(column)` is a fixed 0-5 ladder, each guard asks
+  `class >= N ORDER BY class ASC LIMIT 1` against a `replica_row_cen_*`
+  expression index, and `orderGuards` emits classes rather than SQL. Still one
+  statement per read; the plan is the difference. On the 50,000-row fixture an
+  ordered read taken after a write went **37.9 ms to 1.03 ms**, and a one-row
+  write batch went 0.36 ms to 0.55 ms for the extra b-tree. The rule the fix
+  now depends on is that the index expression and the probe expression are
+  spelled identically — [docs/traps/expression-index-spelling.md](docs/traps/expression-index-spelling.md),
+  asserted on the query plan by
+  `packages/client/src/replica/order-census.test.ts`.
 
 - #890 — **The mobile upload allowlist accepted percent-encoded traversal,
   backslash traversal, and embedded credentials.** Filed here rather than under

@@ -23,7 +23,6 @@ describe(vaultForTriggers, () => {
       { kind: "data", entities: ["core.transaction", "core.party"] },
     ]);
     expect(vault).toStrictEqual({
-      purpose: "dpv:ServiceProvision",
       why: "Evaluate automation triggers.",
       scopes: [
         { schema: "schedule", table: "task", verbs: "read" },
@@ -37,7 +36,6 @@ describe(vaultForTriggers, () => {
     expect(
       vaultForTriggers([{ kind: "condition", entity: "notifications" }])
     ).toStrictEqual({
-      purpose: "dpv:ServiceProvision",
       why: "Evaluate automation triggers.",
       scopes: [{ schema: "notifications", verbs: "read" }],
     });

@@ -27,7 +27,7 @@ const CONVENTIONS = `## Conventions
 - Money: core_transaction.amount_minor is an INTEGER in minor units (divide by 100 for display) with its own currency column and a debit/credit direction.
 - Sealed columns (issue #293): secret cells (locker_item password, otp_seed, card_number, cvv, content) are ciphertext at rest and show as «sealed» in results — you cannot SELECT their plaintext, and you must never try to. Derivatives come from typed commands (locker.watchtower, locker.totp_code).
 - External connections live in the sync schema: sync_connection (kind, label, status 'active'/'paused'/'needs-auth') with sync_connection_health.auth_note carrying the human-readable reason a connection left active, sync_connection_run logging recent pull runs, and sync_connection_credential holding broker-owned secrets (sealed — status and allowed_hosts are readable, token cells mask). "Why isn't X syncing?" is answered here.
-- External writes are outbox rows: outbox_item (verb, target, artifact_json, status pending→approved→sent/failed/discarded) and outbox_grant, the standing always-allow rules. Staging is the only way anything leaves the vault.`;
+- External writes are outbox rows: outbox_item (verb, target, artifact_json, status pending→approved→sent/failed/discarded); the standing always-allow rules are share_authority rows with subject_type 'egress'. Staging is the only way anything leaves the vault.`;
 
 const FTS_NOTE = `## Full-text search (joinable FTS5 tables)
 Each fts_* table indexes its base table (join on the shared id column) and supports MATCH:

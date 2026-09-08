@@ -51,7 +51,7 @@ const devicePlane = makeDaemonDevicePlane({
 
 // THE ASSISTANT'S MODEL PROVIDER (#890 follow-up). Without this the CI gateway
 // has no provider at all: a turn cannot start, no token is ever produced, and
-// `sendToFirstToken` in tests/experience-budgets/mobile.json stays unmeasurable
+// `sendToFirstToken` in tests/journeys.json stays unmeasurable
 // by construction rather than by oversight.
 //
 // The `acp` registry kind is the one built for exactly this — "Custom ACP

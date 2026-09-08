@@ -13,6 +13,7 @@ import { uuidv7 } from "../ids.js";
 import type { ShareableItemType } from "../share/closure.js";
 import { listFulfillment } from "./grant-fulfillment-rows.js";
 import {
+  defaultDeparturePolicy,
   GRANT_SELECT,
   PRINCIPAL_OF_AUDIENCE,
   toGrant,
@@ -139,12 +140,17 @@ export function createShareGrant(
     input.grantedAt,
     input.grantedBy
   );
-  // Only a real ceiling gets a row: absence IS the default.
-  if (input.maxSizeBytes !== undefined && input.maxSizeBytes !== null) {
+  // Only a chosen ceiling or a non-default departure policy gets a row:
+  // absence IS the default, on both halves.
+  const departurePolicy =
+    input.departurePolicy ?? defaultDeparturePolicy(input.subjectType);
+  const ceiling = input.maxSizeBytes ?? null;
+  if (ceiling !== null || departurePolicy !== "remove-member-only") {
     db.prepare(
-      `INSERT INTO share_delivery_config (grant_id, max_size_bytes)
-       VALUES (?, ?)`
-    ).run(grantId, input.maxSizeBytes);
+      `INSERT INTO share_delivery_config
+         (grant_id, max_size_bytes, departure_policy)
+       VALUES (?, ?, ?)`
+    ).run(grantId, ceiling, departurePolicy);
   }
   const grant = readShareGrant(db, grantId);
   if (!grant) throw new Error(`share grant ${grantId} vanished after insert`);

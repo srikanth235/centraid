@@ -48,8 +48,7 @@ export interface ReplicaInvocationAudit {
   commandName: string;
   agentId: string;
   agentKind: "owner" | "app" | "ai_agent";
-  grantId: string | null;
-  purpose: string | null;
+  authorityId: string | null;
   preconditionCount: number;
   postChecks: ReplicaInvocationAuditCheck[];
   writes: ReplicaInvocationAuditWrite[];
@@ -123,7 +122,7 @@ interface InvocationCommitRow {
 interface InvocationRow {
   command_id: string;
   caller_id: string;
-  grant_id: string | null;
+  authority_id: string | null;
   status: string;
   receipt_id: string | null;
 }
@@ -255,7 +254,7 @@ export function finalizeInvocationJournal(
   try {
     const invocation = db.audit
       .prepare(
-        `SELECT command_id, caller_id, grant_id, status, receipt_id
+        `SELECT command_id, caller_id, authority_id, status, receipt_id
            FROM agent_command_invocation WHERE invocation_id = ?`
       )
       .get(invocationId) as InvocationRow | undefined;
@@ -264,7 +263,7 @@ export function finalizeInvocationJournal(
     if (
       invocation.command_id !== commandId ||
       invocation.caller_id !== audit.agentId ||
-      invocation.grant_id !== audit.grantId
+      invocation.authority_id !== audit.authorityId
     ) {
       throw new Error(
         `journal invocation ${invocationId} conflicts with its canonical marker`
@@ -750,12 +749,7 @@ function ensureProvenance(
   const available = [...rows];
   let changed = false;
   const identity: Identity = {
-    kind:
-      audit.agentKind === "owner"
-        ? "owner-device"
-        : audit.agentKind === "ai_agent"
-          ? "agent"
-          : "app",
+    kind: audit.agentKind === "ai_agent" ? "agent" : "owner-device",
     callerId: audit.agentId,
     provAgentKind: audit.agentKind,
     partyId: null,
@@ -806,8 +800,8 @@ function ensureReceipt(
   // document's marker unrepairable, so the vault refused to open after it.
   const rows = journal
     .prepare(
-      `SELECT receipt_id, grant_id, action, object_type, object_id,
-              purpose_concept_id, decision, detail_json
+      `SELECT receipt_id, authority_id, action, object_type, object_id,
+              decision, detail_json
          FROM access_receipt
         WHERE invocation_id = ?
           AND object_type = 'agent.command'
@@ -815,11 +809,10 @@ function ensureReceipt(
     )
     .all(invocationId, commandId) as unknown as Array<{
     receipt_id: string;
-    grant_id: string | null;
+    authority_id: string | null;
     action: string;
     object_type: string;
     object_id: string | null;
-    purpose_concept_id: string | null;
     decision: string;
     detail_json: string | null;
   }>;
@@ -828,11 +821,10 @@ function ensureReceipt(
   const row = rows[0];
   if (row) {
     if (
-      row.grant_id !== audit.grantId ||
+      row.authority_id !== audit.authorityId ||
       row.action !== `act ${audit.commandName}` ||
       row.object_type !== "agent.command" ||
       row.object_id !== commandId ||
-      row.purpose_concept_id !== audit.purpose ||
       row.decision !== "allow" ||
       !sameJson(row.detail_json, audit.receiptDetail)
     ) {
@@ -844,12 +836,11 @@ function ensureReceipt(
   }
   return {
     receiptId: writeReceipt(journal, {
-      grantId: audit.grantId,
+      authorityId: audit.authorityId,
       invocationId,
       action: `act ${audit.commandName}`,
       objectType: "agent.command",
       objectId: commandId,
-      purpose: audit.purpose,
       decision: "allow",
       detail: audit.receiptDetail,
     }),

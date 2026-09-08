@@ -68,11 +68,17 @@ export function onDataChange(
     const named = detail && Array.isArray(detail.tables) ? detail.tables : null;
     if (named && named.length && want.size && !named.some((t) => want.has(t)))
       return;
-    const key =
-      detail?.source === "overlay" && typeof detail?.intentId === "string"
-        ? `${detail.intentId}:${detail.intentState ?? ""}`
-        : "latest";
-    pending.set(key, detail);
+    // THE WRITE'S OWN ECHO IS NOT A DOORBELL (#922 D1). An overlay detail is
+    // this seat's own pending row changing state, and the member is watching
+    // for exactly it — a window would make their own edit the one change that
+    // arrives late. Everything else is somebody else's churn and keeps the
+    // window; a queued detail already waiting is left waiting, so this cannot
+    // drop a coalesced re-read.
+    if (detail?.source === "overlay" && typeof detail?.intentId === "string") {
+      cb(detail);
+      return;
+    }
+    pending.set("latest", detail);
     clearTimeout(timer);
     timer = setTimeout(() => {
       const details = [...pending.values()];

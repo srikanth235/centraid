@@ -51,7 +51,7 @@ describe("execution", () => {
     };
     consent = {
       decision: "allow",
-      grantId: null,
+      authorityId: null,
       rowFilter: [],
       fieldMask: null,
     };
@@ -198,7 +198,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "hello" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       identity,
@@ -273,7 +272,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       identity,
@@ -287,7 +285,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       consent,
@@ -343,7 +340,7 @@ describe("execution", () => {
     ]);
     const invocationId = insertInvocation(
       db,
-      { command: cmd.name, input: {}, purpose: "dpv:ServiceProvision" },
+      { command: cmd.name, input: {} },
       cmd,
       identity,
       null,
@@ -353,7 +350,7 @@ describe("execution", () => {
       db,
       registered,
       identity,
-      { command: cmd.name, input: {}, purpose: "dpv:ServiceProvision" },
+      { command: cmd.name, input: {} },
       cmd,
       consent,
       invocationId
@@ -417,7 +414,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       identity,
@@ -431,7 +427,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       consent,
@@ -509,7 +504,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       identity,
@@ -523,7 +517,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
       },
       cmd,
       consent,
@@ -597,7 +590,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
         invocationId: fixedId,
       },
       cmd,
@@ -613,7 +605,6 @@ describe("execution", () => {
       {
         command: cmd.name,
         input: { note: "x" },
-        purpose: "dpv:ServiceProvision",
         invocationId: fixedId,
       },
       cmd,

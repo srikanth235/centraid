@@ -19,6 +19,7 @@ import {
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readPersonShareLinks } from "./_shared.ts";
 
 interface RawProfile {
@@ -121,23 +122,22 @@ interface ContactEntry {
 }
 
 export default async function personHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const partyId = String(input?.party_id ?? "");
   if (!partyId) return { person: null };
   try {
     const [profiles, parties] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.profile",
         where: [
           { column: "party_id", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "eq", value: partyId }],
-        purpose,
       }),
     ]);
     const profile = ((profiles.rows ?? []) as unknown as RawProfile[])[0];
@@ -164,71 +164,69 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       // rung that moved them onto channels.
       ctx.vault.read({
         entity: "social.contact_channel",
-        purpose,
         limit: 2000,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq", value: "core.party" },
           { column: "from_id", op: "eq", value: partyId },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "to_type", op: "eq", value: "core.party" },
           { column: "to_id", op: "eq", value: partyId },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [
           { column: "party_id", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "eq", value: partyId },
         ],
         orderBy: { column: "created_at", dir: "desc" },
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "tally.obligation",
         where: [
           { column: "from_party", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "tally.obligation",
         where: [
           { column: "to_party", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "eq", value: partyId },
         ],
-        purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.vault", purpose }),
+      ...conceptTaxonomyReads(ctx.vault),
+      ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
       // Null when the sharing plane is unreadable — never a thrown denial.
       readPersonShareLinks(ctx.vault, partyId),
     ]);
@@ -310,6 +308,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     ] = await Promise.all([
       relationLinks.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [
               {
@@ -318,11 +317,11 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
                 value: relationLinks.map((l) => l.to_id),
               },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       duplicatePartyIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [
               {
@@ -331,32 +330,31 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
                 value: duplicatePartyIds,
               },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       taskIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "schedule.task",
             where: [{ column: "task_id", op: "in", value: taskIds }],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.activity",
             where: [{ column: "activity_id", op: "in", value: activityIds }],
             orderBy: { column: "started_at", dir: "desc" },
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "knowledge.annotation",
             where: [
               { column: "target_type", op: "eq", value: "core.activity" },
               { column: "target_id", op: "in", value: activityIds },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);
@@ -521,7 +519,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         occurred_at: i.started_at,
       })),
       vaults: shareLinks?.vaults ?? null,
-      pending_invites: shareLinks?.pending_invites ?? null,
     };
     return { person };
   } catch (error) {

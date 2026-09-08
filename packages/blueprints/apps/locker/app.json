@@ -7,7 +7,6 @@
   "iconKey": "Lock",
   "colorKey": "rose",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Keeps your passwords, cards and secrets locked up, revealable and restorable.",
     "scopes": [
       {

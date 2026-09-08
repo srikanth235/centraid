@@ -14,7 +14,6 @@
  */
 
 const BATCH = 6;
-const PURPOSE = "dpv:ServiceProvision";
 const DOCTYPE_SCHEME_URI = "urn:centraid:doctype";
 
 const FILING_SCHEMA = {
@@ -51,7 +50,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const derivatives = read.rows ?? [];
   if (derivatives.length === 0)
@@ -61,12 +59,10 @@ export default async function handler({ ctx, log }) {
   const folders = await ctx.vault.read({
     entity: "core.concept",
     limit: 200,
-    purpose: PURPOSE,
   });
   const schemes = await ctx.vault.read({
     entity: "core.concept_scheme",
     limit: 50,
-    purpose: PURPOSE,
   });
   const folderScheme = (schemes.rows ?? []).find(
     (s) => s.uri === "https://centraid.dev/schemes/folders"
@@ -92,7 +88,6 @@ export default async function handler({ ctx, log }) {
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 1,
-      purpose: PURPOSE,
     });
     const item = (items.rows ?? [])[0];
     if (!item) continue;
@@ -135,7 +130,6 @@ export default async function handler({ ctx, log }) {
     await ctx.vault.invoke({
       command: "sync.stage_rows",
       input: { kind: "enrichment.doctype", label: "docs", rows },
-      purpose: PURPOSE,
     });
     log.info(`${proposed} filing proposal(s) staged for review`);
   }

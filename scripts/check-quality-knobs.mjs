@@ -53,39 +53,31 @@ function approved(config) {
       })
   );
 }
-// The experience budgets are named by the merged budgets ledger rather than
-// hard-coded here (#915 Wave 4): `tests/budgets.json#experience.files` is the
-// one list of what those ceilings are, and this gate holds the per-screen
-// query counts among them.
-const experienceFiles =
-  currentJson("tests/budgets.json").experience?.files ?? [];
-const queryFile = experienceFiles.find((file) =>
-  file.endsWith("client-query-counts.json")
-);
-if (!queryFile) {
-  console.error(
-    "quality-knobs: tests/budgets.json#experience.files does not name client-query-counts.json"
-  );
-  process.exit(1);
-}
+// The per-screen first-paint counts are one entry of the journey ledger
+// (#927): `client/first-paint-work`, whose metrics are the screens. This gate
+// holds them tighten-only per screen and refuses a silent screen deletion,
+// which the ledger-wide ratchet alone would read as one fewer number.
+const queryFile = "tests/journeys.json";
+const FIRST_PAINT_KEY = "client/first-paint-work/year3/any";
+const screensOf = (doc) =>
+  doc?.entries?.[FIRST_PAINT_KEY]?.metrics ?? doc?.screens ?? null;
 const queryBase = baseJson(queryFile);
 const queryCurrent = currentJson(queryFile);
-if (queryBase) {
-  for (const [screen, budget] of Object.entries(queryCurrent.screens ?? {})) {
-    const prior = queryBase.screens?.[screen];
+const currentScreens = screensOf(queryCurrent) ?? {};
+const baseScreens = screensOf(queryBase);
+if (baseScreens) {
+  for (const [screen, budget] of Object.entries(currentScreens)) {
+    const prior = baseScreens[screen];
     if (!prior) continue;
-    for (const key of ["sqlStatements", "httpRequests"]) {
+    for (const key of ["maxStatements", "maxHttpRequests"]) {
       if (Number(budget[key]) > Number(prior[key]) && !approved(queryCurrent))
         errors.push(
           `${queryFile}: ${screen}.${key} widened without approvedDeviation`
         );
     }
   }
-  for (const screen of Object.keys(queryBase.screens ?? {}))
-    if (
-      !Object.hasOwn(queryCurrent.screens ?? {}, screen) &&
-      !approved(queryCurrent)
-    )
+  for (const screen of Object.keys(baseScreens))
+    if (!Object.hasOwn(currentScreens, screen) && !approved(queryCurrent))
       errors.push(`${queryFile}: screen budget ${screen} was removed`);
 }
 

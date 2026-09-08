@@ -350,11 +350,17 @@ function deleteTallyGroup(
     .run(itemId);
   audience.prepare("DELETE FROM tally_expense WHERE group_id = ?").run(itemId);
   audience.prepare("DELETE FROM tally_group WHERE group_id = ?").run(itemId);
+  // A circle outlives the group only while something still names it. The
+  // commons rail was the other claimant (#929); the standing answers that
+  // replaced it name the CONTAINER, never the circle, so a circle-principal
+  // answer is the one thing left to ask about.
   const circleStillUsed = audience
     .prepare(
       `SELECT 1 AS n
          WHERE EXISTS (SELECT 1 FROM tally_group WHERE circle_id = ?)
-            OR EXISTS (SELECT 1 FROM share_circle_grant WHERE circle_id = ?)`
+            OR EXISTS (SELECT 1 FROM share_authority
+                        WHERE principal_kind = 'circle' AND principal_id = ?
+                          AND revoked_at IS NULL)`
     )
     .get(group.circle_id, group.circle_id);
   if (!circleStillUsed) {

@@ -40,6 +40,7 @@ import { Store } from "../../storage";
 import CameraRollImportOffer from "./CameraRollImportOffer";
 import { detectFacesFor } from "./people-model";
 import { photoAccessTakesOverTimeline } from "./photo-access";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
 import PhotoGrainView from "./PhotoGrainView";
 import { runBackup, useAutomaticPhotoBackup } from "./photos-backup";
@@ -182,13 +183,10 @@ export default function PhotosHome({
   }, []);
   useAutomaticPhotoBackup(backupConsent);
 
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    PHOTO_ENTITY_READS.collectionEntries
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const visibleSections = useMemo(
@@ -221,7 +219,7 @@ export default function PhotosHome({
   // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
   const enrichPolicies = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
   );
   const detectFacesAvailability = detectFacesFor(
     enrichPolicies.loading

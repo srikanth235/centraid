@@ -201,13 +201,21 @@ describe(projectDrive, () => {
     const answered = projectDrive(
       fixtureRows({
         origins: {
-          origins: [
+          subscriptions: [
             {
+              shape_id: "shape-alice",
+              origin_vault_id: "vault-alice",
+              state: "subscribed",
+              subscribed_at: "2026-05-01T09:42:06.358Z",
+            },
+          ],
+          lineage: [
+            {
+              shape_id: "shape-alice",
               target_type: "core.document",
               target_id: "doc-lease",
-              origin_vault_id: "vault-alice",
               origin_item_id: "doc-far-away",
-              shared_at: 1_788_183_726_358,
+              origin_row_version: 1,
             },
           ],
           bindings: [
@@ -238,12 +246,19 @@ describe(projectDrive, () => {
 });
 
 describe(originsByDocument, () => {
-  const origin = {
+  const AT = "2026-05-01T09:42:06.358Z";
+  const subscription = {
+    shape_id: "shape-alice",
+    origin_vault_id: "vault-alice",
+    state: "subscribed",
+    subscribed_at: AT,
+  };
+  const claim = {
+    shape_id: "shape-alice",
     target_type: "core.document",
     target_id: "doc-1",
-    origin_vault_id: "vault-alice",
     origin_item_id: "doc-far-away",
-    shared_at: 1_788_183_726_358,
+    origin_row_version: 1,
   };
   const binding = {
     party_id: "party-alice",
@@ -254,7 +269,8 @@ describe(originsByDocument, () => {
 
   it("names the sender through the link binding, and carries when it landed", () => {
     const found = originsByDocument({
-      origins: [origin],
+      subscriptions: [subscription],
+      lineage: [claim],
       bindings: [binding],
       parties: [party],
     }).get("doc-1");
@@ -262,7 +278,7 @@ describe(originsByDocument, () => {
       vault_id: "vault-alice",
       party_id: "party-alice",
       name: "Alice",
-      at: 1_788_183_726_358,
+      at: Date.parse(AT),
     });
   });
 
@@ -270,7 +286,8 @@ describe(originsByDocument, () => {
     // No binding is the ordinary case for a share that arrived before the
     // link was made, or after it was taken back.
     const noBinding = originsByDocument({
-      origins: [origin],
+      subscriptions: [subscription],
+      lineage: [claim],
       bindings: [],
       parties: [party],
     }).get("doc-1");
@@ -278,7 +295,8 @@ describe(originsByDocument, () => {
     expect(noBinding?.vault_id).toBe("vault-alice");
 
     const revoked = originsByDocument({
-      origins: [origin],
+      subscriptions: [subscription],
+      lineage: [claim],
       bindings: [{ ...binding, revoked_at: "2026-08-31T00:00:00Z" }],
       parties: [party],
     }).get("doc-1");
@@ -287,7 +305,8 @@ describe(originsByDocument, () => {
 
   it("keeps a bound vault unnamed when the directory holds no name for it", () => {
     const unnamed = originsByDocument({
-      origins: [origin],
+      subscriptions: [subscription],
+      lineage: [claim],
       bindings: [binding],
       parties: [{ party_id: "party-alice", display_name: "   " }],
     }).get("doc-1");
@@ -295,12 +314,23 @@ describe(originsByDocument, () => {
   });
 
   it("ignores placements of anything that is not a document", () => {
-    // The table is shared with Photos and every other placed kind; Docs may
+    // The lineage is shared with Photos and every other placed kind; Docs may
     // only ever claim its own rows out of it.
     const map = originsByDocument({
-      origins: [
-        { ...origin, target_type: "media.asset", target_id: "asset-1" },
-      ],
+      subscriptions: [subscription],
+      lineage: [{ ...claim, target_type: "media.asset", target_id: "asset-1" }],
+      bindings: [binding],
+      parties: [party],
+    });
+    expect(map.size).toBe(0);
+  });
+
+  it("drops a claim whose shape this vault no longer subscribes to", () => {
+    // A REMOVED shape still holds lineage until the purge runs; naming its
+    // rows would draw a shelf out of a share that has ended.
+    const map = originsByDocument({
+      subscriptions: [{ ...subscription, state: "removed" }],
+      lineage: [claim],
       bindings: [binding],
       parties: [party],
     });
@@ -309,53 +339,71 @@ describe(originsByDocument, () => {
 });
 
 describe(sharesByDocument, () => {
+  const NOW = "2026-06-01T00:00:00.000Z";
+  const answer = {
+    decision: "granted",
+    revoked_at: null,
+    expires_at: null,
+  };
   const shareRows = {
-    grants: [
+    answers: [
       {
-        grant_id: "g-doc",
-        circle_id: "circle-family",
-        container_type: "core.document",
-        container_id: "doc-lease",
-        plane: "commons",
-        revoked_at: null,
-        implicit_circle: 0,
+        ...answer,
+        authority_id: "g-doc",
+        principal_kind: "circle",
+        principal_id: "circle-family",
+        subject_type: "core.document",
+        subject_id: "doc-lease",
+        verb: "edit",
       },
       {
-        grant_id: "g-folder",
-        circle_id: "circle-implicit",
-        container_type: "docs.folder",
-        container_id: "c-property",
-        plane: "commons",
-        revoked_at: null,
-        implicit_circle: 1,
+        ...answer,
+        authority_id: "g-folder",
+        principal_kind: "person",
+        principal_id: "p-ana",
+        subject_type: "docs.folder",
+        subject_id: "c-property",
+        verb: "view",
       },
       // Revoked — never listed.
       {
-        grant_id: "g-revoked",
-        circle_id: "circle-family",
-        container_type: "core.document",
-        container_id: "doc-lease",
-        plane: "commons",
+        ...answer,
+        authority_id: "g-revoked",
+        principal_kind: "circle",
+        principal_id: "circle-family",
+        subject_type: "core.document",
+        subject_id: "doc-lease",
+        verb: "view",
         revoked_at: "2026-05-01T00:00:00Z",
-        implicit_circle: 0,
       },
-    ],
-    circles: [
-      { circle_id: "circle-family", name: "Family" },
-      { circle_id: "circle-implicit", name: "__implicit__" },
-    ],
-    members: [
+      // Run out — a time-boxed answer that keeps saying yes is the defect.
       {
-        circle_id: "circle-family",
-        party_id: "p-ana",
-        capability: "read+write",
+        ...answer,
+        authority_id: "g-expired",
+        principal_kind: "person",
+        principal_id: "p-tom",
+        subject_type: "core.document",
+        subject_id: "doc-lease",
+        verb: "view",
+        expires_at: "2026-05-20T00:00:00Z",
       },
-      { circle_id: "circle-family", party_id: "p-tom", capability: "read" },
-      { circle_id: "circle-implicit", party_id: "p-ana", capability: "read" },
     ],
-    states: [
-      { grant_id: "g-doc", party_id: "p-ana", status: "current" },
-      { grant_id: "g-doc", party_id: "p-tom", status: "refused" },
+    circles: [{ circle_id: "circle-family", name: "Family" }],
+    members: [
+      { circle_id: "circle-family", party_id: "p-ana" },
+      { circle_id: "circle-family", party_id: "p-tom" },
+    ],
+    fulfillments: [
+      {
+        grant_id: "g-doc",
+        peer_vault_id: "vault-ana",
+        delivered_at: "2026-05-02T00:00:00Z",
+      },
+      { grant_id: "g-doc", peer_vault_id: "vault-tom", delivered_at: null },
+    ],
+    bindings: [
+      { party_id: "p-ana", vault_id: "vault-ana", revoked_at: null },
+      { party_id: "p-tom", vault_id: "vault-tom", revoked_at: null },
     ],
     parties: [
       { party_id: "p-ana", display_name: "Ana" },
@@ -378,23 +426,34 @@ describe(sharesByDocument, () => {
       documentIds: ["doc-lease", "doc-scan"],
       folderByDoc,
       folderConcepts,
+      now: NOW,
     });
     const entries = byDoc.get("doc-lease");
+    // A revoked answer and one that has run out are both absent.
     expect(entries?.map((entry) => entry.grant_id)).toStrictEqual([
       "g-doc",
       "g-folder",
     ]);
     const [docShare, folderShare] = entries ?? [];
-    // A named circle keeps the owner's word; a refused member is absent.
+    // A circle audience keeps the owner's word for the audience.
     expect(docShare?.label).toBe("Family");
-    expect(docShare?.members.map((member) => member.label)).toStrictEqual([
-      "Ana",
+    expect(docShare?.circle_id).toBe("circle-family");
+    expect(docShare?.members.map((member) => member.status)).toStrictEqual([
+      "current",
+      "invited",
     ]);
-    expect(docShare?.pending_count).toBe(0);
-    // The implicit circle's machine name never prints — the roster does.
+    // The verb is the answer's, so both members read `edit`.
+    expect(docShare?.members.map((member) => member.capability)).toStrictEqual([
+      "read+write",
+      "read+write",
+    ]);
+    expect(docShare?.pending_count).toBe(1);
+    // A one-person audience prints the person and names no circle.
     expect(folderShare?.label).toBe("Ana");
+    expect(folderShare?.audience).toBe("person");
+    expect(folderShare?.circle_id).toBeNull();
     expect(folderShare?.via).toBe("folder");
-    // No state row yet means invited, not current.
+    // No delivery row at all means invited, not current.
     expect(folderShare?.pending_count).toBe(1);
     // A document outside every container matches nothing.
     expect(byDoc.has("doc-scan")).toBe(false);

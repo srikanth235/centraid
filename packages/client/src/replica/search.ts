@@ -41,6 +41,15 @@ export const REPLICA_LOCAL_SEARCH: Readonly<
   },
 };
 
+/**
+ * The window a search answer is bounded by. Named here, beside the grammar it
+ * bounds, rather than left as two literals in the store: a bound nobody can
+ * name is one nobody can report, which is how the FTS path kept its silence
+ * after the read path lost its own (#922 0a).
+ */
+export const REPLICA_DEFAULT_SEARCH_ROWS = 100;
+export const REPLICA_MAX_SEARCH_ROWS = 1000;
+
 export function replicaLocalSearchSpec(entity: string): ReplicaLocalSearchSpec {
   const spec = REPLICA_LOCAL_SEARCH[entity];
   if (!spec) {

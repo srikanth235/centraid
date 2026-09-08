@@ -47,6 +47,7 @@ import {
 } from "../../packages/server/src/routes/route-security.js";
 import { buildGateway } from "../../packages/server/src/serve/build-gateway.js";
 import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/server/src/serve/health-registry.js";
+import { runWithVaultContext } from "../../packages/server/src/serve/vault-context.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { forEachSequentially } from "../../packages/test-kit/src/sequential.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
@@ -229,6 +230,11 @@ function scanCopy(
 // allowlist. Comments are stripped first, so neither a commented-out `limit:`
 // nor prose can decide a verdict.
 const REPLICA_REQUEST_KEYS = new Set([
+  // `acceptTruncation` belongs to the request vocabulary as of #922 0a. Without
+  // it here, a request carrying the flag stops looking like a request at all
+  // and this walk skips it -- the gate would go blind on exactly the reads the
+  // flag marks as debt, which is the opposite of what the flag is for.
+  "acceptTruncation",
   "entity",
   "limit",
   "orderBy",
@@ -421,7 +427,7 @@ describe("issue #679 user-facing quality gates", () => {
       )
       .get() as Record<string, string>;
     expect(Object.values(sealed).every(isSealedValue)).toBe(true);
-    const cacheRoot = await tempDir("quality-year3-cache-");
+    const cacheRoot = await tempDir("quality-year3-fixture-cache-");
     let generated = 0;
     const generate = async (target: string): Promise<void> => {
       generated += 1;
@@ -464,15 +470,23 @@ describe("issue #679 user-facing quality gates", () => {
       const added = await plane.invoke(plane.ownerCredential, {
         command: "locker.add_item",
         input: { type: "login", title: "Consent canary", password: "secret" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(added.status).toBe("executed");
       const itemId = (added as { output: { item_id: string } }).output.item_id;
-      const parked = await plane.invokeAsAssistant({
-        command: "locker.purge_item",
-        input: { item_id: itemId },
-        purpose: "dpv:ServiceProvision",
-      });
+      // The assistant has no standing grant: the shell must supply the
+      // acting owner's frame for its authority to ride.
+      const parked = await runWithVaultContext(
+        {
+          vaultId: plane.boot.vaultId,
+          ownerId: plane.boot.ownerPartyId,
+          ownsVault: true,
+        },
+        () =>
+          plane.invokeAsAssistant({
+            command: "locker.purge_item",
+            input: { item_id: itemId },
+          })
+      );
       expect(parked.status).toBe("parked");
       expect(
         plane.db.vault
@@ -508,14 +522,12 @@ describe("issue #679 user-facing quality gates", () => {
           title: "Automation consent canary",
           password: "automation-secret",
         },
-        purpose: "dpv:ServiceProvision",
       });
       const automationItemId = (
         automationItem as { output: { item_id: string } }
       ).output.item_id;
       plane.enrollAutomationAgent("quality");
       plane.approveAgentGrant("quality", {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "locker", verbs: "read+act" }],
       });
       const codeAppsDir = await tempDir("quality-consent-automation-");
@@ -536,7 +548,6 @@ describe("issue #679 user-facing quality gates", () => {
           triggers: [],
           requires: {},
           vault: {
-            purpose: "dpv:ServiceProvision",
             scopes: [{ schema: "locker", verbs: "read+act" }],
           },
           history: { keep: { count: 100 } },
@@ -545,7 +556,7 @@ describe("issue #679 user-facing quality gates", () => {
       );
       await writeFile(
         path.join(automationDir, "handler.js"),
-        `export default async ({ ctx }) => ({ output: await ctx.vault.invoke({ command: 'locker.purge_item', input: { item_id: '${automationItemId}' }, purpose: 'dpv:ServiceProvision' }) });\n`
+        `export default async ({ ctx }) => ({ output: await ctx.vault.invoke({ command: 'locker.purge_item', input: { item_id: '${automationItemId}' } }) });\n`
       );
       const automated = await runFire(
         {
@@ -1009,29 +1020,24 @@ describe("issue #679 user-facing quality gates", () => {
         title: "T3 journal canary",
         password: invokedSentinel,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(invoked.status).toBe("executed");
     const revealed = [
       gateway.reveal(credential, {
         entity: "locker.item",
         entityId: "year3-sealed-locker",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "sync.connection_credential",
         entityId: "year3-sealed-connection",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "locker.item_field",
         entityId: "year3-sealed-field",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "locker.item_passkey",
         entityId: "year3-sealed-locker",
-        purpose: "dpv:ServiceProvision",
       }),
     ];
     // Reveal is the ONE surface a sentinel is allowed through, so every
@@ -1287,13 +1293,12 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("P2: first-paint query budgets are per-screen identities, never an aggregate", async () => {
-    const budgets = await json(
-      "tests/experience-budgets/client-query-counts.json"
-    );
-    const screens = budgets["screens"] as Record<
+    const ledger = await json("tests/journeys.json");
+    const entries = ledger["entries"] as Record<
       string,
-      { sqlStatements: number; httpRequests: number }
+      { metrics: Record<string, Record<string, number>> }
     >;
+    const screens = entries["client/first-paint-work/year3/any"]?.metrics ?? {};
     expect(Object.keys(screens).sort()).toStrictEqual([
       "assistant",
       "atlas",
@@ -1301,8 +1306,8 @@ describe("issue #679 user-facing quality gates", () => {
       "photos-grid",
     ]);
     for (const budget of Object.values(screens)) {
-      expect(budget.sqlStatements).toBeGreaterThan(0);
-      expect(budget.httpRequests).toBeGreaterThan(0);
+      expect(budget["maxStatements"]).toBeGreaterThan(0);
+      expect(budget["maxHttpRequests"]).toBeGreaterThan(0);
     }
   });
 
@@ -1470,7 +1475,7 @@ describe("issue #679 user-facing quality gates", () => {
     expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
     expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
     const keyed = (entry: { file: string; literal: string }): string =>
-      `${entry.file} ${entry.literal}`;
+      `${entry.file}\u0000${entry.literal}`;
     expect(new Set(ratchet.entries.map(keyed)).size).toBe(
       ratchet.entries.length
     );

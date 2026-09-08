@@ -142,7 +142,6 @@ export default async function dayContext({
   input,
   ctx,
 }: HandlerArgs): Promise<DayContextResult> {
-  const purpose = "dpv:ServiceProvision";
   const { from, to } = rangeOf(input);
   try {
     // Half-open, so date-only and timed `due_at` both land.
@@ -155,7 +154,6 @@ export default async function dayContext({
           { column: "birth_date", op: "not-null" },
         ],
         limit: PARTY_CAP,
-        purpose,
       }),
       ctx.vault.read({
         entity: "schedule.task",
@@ -167,12 +165,11 @@ export default async function dayContext({
         // Due order: a shelf lists the day's earliest rows.
         orderBy: { column: "due_at", dir: "asc" },
         limit: TASK_CAP,
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.concept_scheme",
         where: [{ column: "uri", op: "eq", value: FLAGS_SCHEME_URI }],
-        purpose,
       }),
     ]);
 
@@ -183,11 +180,11 @@ export default async function dayContext({
     );
     const concepts = flagsScheme
       ? await ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.concept",
           where: [
             { column: "scheme_id", op: "eq", value: flagsScheme.scheme_id },
           ],
-          purpose,
         })
       : { rows: [] };
     const starredConceptId = findConcept(
@@ -203,7 +200,6 @@ export default async function dayContext({
             { column: "concept_id", op: "eq", value: starredConceptId },
           ],
           limit: TAG_CAP,
-          purpose,
         })
       : { rows: [] };
     const starred = new Set(

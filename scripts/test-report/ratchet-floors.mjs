@@ -44,16 +44,6 @@ const root = path.resolve(import.meta.dirname, "../..");
 export const PERF_BUDGET_SOURCES = [
   { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
   { path: "packages/server/benchmarks/low-end-budgets.json" },
-  // #656 Layer 1F — the nightly rig registry. `regressionMultiplier` and each
-  // rig's `budgetMs` are ceilings (tighten-only); `minimumSamples` is a min*
-  // floor and may only rise. Before this the absolute ceilings lived as
-  // `const BUDGET_MS` inside five rig files, where widening one to make a slow
-  // rig green was an unreviewed one-line edit.
-  {
-    path: "tests/budgets.json",
-    section: "qualityRigs",
-    legacy: "tests/quality-rig-budgets.json",
-  },
   // #656 Layer 5 — the PR lane's total wall clock. Tighten-only for the same
   // reason as any perf ceiling: it is the only gate that pushes back on adding
   // tests, so widening it must be a reviewed edit rather than a quiet one.
@@ -69,18 +59,15 @@ export const PERF_BUDGET_SOURCES = [
   // roster is still ratcheted at its own source by check-mobile-suite-budgets;
   // this holds the mirror to the same direction so neither copy can drift up.
   { path: "tests/budgets.json", section: "mobileSuites" },
-  // #659 R2 — the EXPERIENCE budgets: the same regressions the files above
-  // fence, restated as what the vault owner feels (cold open → first usable
-  // screen, tap → visual response, send → first token, scroll frame drops,
-  // sync staleness after reconnect). One file per shipping surface; see
-  // tests/experience-budgets/README.md for the status vocabulary and the
-  // year-3 volume table every ceiling is stated at. Entries with
-  // `status: "unmeasured"` deliberately carry NO number, so they contribute
-  // nothing to the ratchet until a real run fills them in.
-  { path: "tests/experience-budgets/web.json" },
-  { path: "tests/experience-budgets/desktop.json" },
-  { path: "tests/experience-budgets/mobile.json" },
-  { path: "tests/experience-budgets/gateway.json" },
+  // #927 — THE JOURNEY LEDGER, keyed `surface / journey / volume / hardware`.
+  // It replaced four per-surface experience files, the rig register and the
+  // query-count file, whose keys said which SURFACE a ceiling belonged to but
+  // not the volume or the hardware it held at. `legacy` keeps the merge that
+  // created it from reading as a wholesale widen. A metric with
+  // `status: "unmeasured"` carries NO number and contributes nothing here
+  // until a real run fills it in; a leading underscore is invisible, which is
+  // how an intended-but-unobserved ceiling is parked without gating.
+  { path: "tests/journeys.json" },
   // #842 W3.5 — the renderer-leak ceilings. Same tighten-only posture as every
   // budget above: a ceiling may drop freely, and widening one must be a
   // reviewed edit. These are load-bearing in a way a perf number is not — the
@@ -154,12 +141,104 @@ export function diffMutationFloors(base, head) {
 }
 
 /**
+ * Validate the retirement markers this change set ADDS, and return the set of
+ * flow ids they authorize. Errors are pushed onto `errors`; a marker that fails
+ * validation authorizes nothing, so the removal it was meant to cover is still
+ * reported by the caller.
+ * @param {{ removedMinimumTestsFlows?: Record<string, unknown> }} base Matrix on the merge base.
+ * @param {{ removedMinimumTestsFlows?: Record<string, unknown> }} head Matrix on the working tree.
+ * @param {Map<string, { id?: string; owner?: string; minimumTests?: number }>} baseMap Base flows by id.
+ * @param {Map<string, unknown>} headMap Head flows by id.
+ * @param {string[]} errors Sink for human-readable errors.
+ * @returns {Set<string>} Flow ids whose removal is authorized.
+ */
+function retiredFlowMarkers(base, head, baseMap, headMap, errors) {
+  const baseMarkers = base?.removedMinimumTestsFlows ?? {};
+  const headMarkers = head?.removedMinimumTestsFlows ?? {};
+  const authorized = new Set();
+  const owners = new Map();
+  for (const [id, marker] of Object.entries(headMarkers)) {
+    if (id.startsWith("_")) continue;
+    // Spent on a previous change set: the flow is gone from both sides, so
+    // there is nothing left to authorize and nothing to re-litigate.
+    if (Object.hasOwn(baseMarkers, id)) continue;
+    const owner = typeof marker?.owner === "string" ? marker.owner.trim() : "";
+    const reason =
+      typeof marker?.reason === "string" ? marker.reason.trim() : "";
+    const issue = typeof marker?.issue === "string" ? marker.issue.trim() : "";
+    const label = `removedMinimumTestsFlows["${id}"]`;
+    let sound = true;
+    if (!owner) {
+      errors.push(`${label} must name the owner path of the deleted rig`);
+      sound = false;
+    }
+    if (!reason) {
+      errors.push(`${label} must give a reason citing the approval`);
+      sound = false;
+    }
+    if (!/^#\d+$/u.test(issue)) {
+      errors.push(
+        `${label} must name its change set as an issue (e.g. "#927")`
+      );
+      sound = false;
+    }
+    const prev = baseMap.get(id);
+    if (!prev) {
+      errors.push(
+        `${label} names "${id}", which the base does not declare — a retirement marker must name a flow that existed`
+      );
+      sound = false;
+    } else if (headMap.has(id)) {
+      errors.push(
+        `${label} names "${id}", which the head still declares — retire the flow or drop the marker`
+      );
+      sound = false;
+    } else if (owner && prev.owner !== undefined && prev.owner !== owner) {
+      errors.push(
+        `${label} names owner "${owner}" but flow "${id}" was owned by "${prev.owner}"`
+      );
+      sound = false;
+    }
+    if (owner) {
+      const seen = owners.get(owner);
+      if (seen === undefined) {
+        owners.set(owner, id);
+      } else {
+        errors.push(
+          `${label} and removedMinimumTestsFlows["${seen}"] both retire owner "${owner}"; one marker per deleted rig`
+        );
+        sound = false;
+      }
+    }
+    if (sound) authorized.add(id);
+  }
+  return authorized;
+}
+
+/**
  * Compare matrix flow minimumTests floors for any downward movement or removal.
  * An ID rename must name its exact predecessor with
  * `replacesMinimumTestsFlow`; a prose deviation alone cannot let one new flow
  * absorb several removed floors.
- * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} base Matrix on the merge base.
- * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} head Matrix on the working tree.
+ *
+ * A flow can also be RETIRED OUTRIGHT, with no successor to carry its floor:
+ * the test it fenced was deleted on purpose and nothing replaces it. The two
+ * escapes above cannot say that — one needs a successor flow, the other needs
+ * the row to survive, and a row whose owner no longer exists on disk is refused
+ * by validate-claims.mjs. `removedMinimumTestsFlows` is that vocabulary: a map
+ * from the retired flow's id to `{ owner, reason, issue }`, where `reason`
+ * cites the approval and `issue` names the change set. The ratchet's property
+ * is unchanged — no floor drops SILENTLY — because a marker is a reviewed line
+ * in the diff naming what was deleted and why.
+ *
+ * A marker is ONE-SHOT, and it is checked only while it is new. A marker
+ * present on the base as well as the head has already been spent: the flow it
+ * retired is gone from both sides, there is no removal left to authorize, and
+ * re-validating it would red every later PR on main. So only markers ADDED by
+ * this change set are validated, and each must name a flow the base declared
+ * and the head does not.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }>, removedMinimumTestsFlows?: Record<string, { owner?: string; reason?: string; issue?: string }> }} base Matrix on the merge base.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }>, removedMinimumTestsFlows?: Record<string, { owner?: string; reason?: string; issue?: string }> }} head Matrix on the working tree.
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMinimumTests(base, head) {
@@ -168,7 +247,19 @@ export function diffMinimumTests(base, head) {
   const headFlows = head?.flows ?? [];
   const baseMap = new Map(baseFlows.filter((f) => f?.id).map((f) => [f.id, f]));
   const headMap = new Map(headFlows.filter((f) => f?.id).map((f) => [f.id, f]));
+  const retired = retiredFlowMarkers(base, head, baseMap, headMap, errors);
   const replacements = new Map();
+  // A marker is SPENT once the change set that used it lands: the same flow, on
+  // the base, already carries the identical `replacesMinimumTestsFlow`, and the
+  // predecessor it names is long gone. Left in place it reported "unknown
+  // predecessor" on every later branch — a red on a tree nobody had touched —
+  // so the shape checks below run only over markers this diff INTRODUCED or
+  // MOVED. A spent marker can still grant nothing: the removal loop only
+  // consults `replacements` for a flow present on the base, and a spent
+  // marker's predecessor is not. Re-spending one (pointing a second flow at the
+  // same predecessor) puts a NEW marker in the group, which re-arms the whole
+  // group including its spent members.
+  const spent = new Set();
   for (const candidate of headFlows) {
     if (
       typeof candidate?.replacesMinimumTestsFlow !== "string" ||
@@ -177,11 +268,18 @@ export function diffMinimumTests(base, head) {
       continue;
     }
     const previousId = candidate.replacesMinimumTestsFlow.trim();
+    if (
+      candidate.id !== undefined &&
+      baseMap.get(candidate.id)?.replacesMinimumTestsFlow?.trim() === previousId
+    ) {
+      spent.add(candidate);
+    }
     const claimed = replacements.get(previousId) ?? [];
     claimed.push(candidate);
     replacements.set(previousId, claimed);
   }
   for (const [previousId, candidates] of replacements) {
+    if (candidates.every((candidate) => spent.has(candidate))) continue;
     if (!baseMap.has(previousId)) {
       errors.push(`flow replacement names unknown predecessor "${previousId}"`);
     } else if (headMap.has(previousId)) {
@@ -201,6 +299,9 @@ export function diffMinimumTests(base, head) {
     if (!prev?.id || prev.minimumTests === undefined) continue;
     const flow = headMap.get(prev.id);
     if (!flow || flow.minimumTests === undefined) {
+      // Retired outright, named and reasoned in the diff. The marker was
+      // validated above, including that it names THIS rig.
+      if (retired.has(prev.id)) continue;
       const candidates = replacements.get(prev.id) ?? [];
       const candidate = candidates.length === 1 ? candidates[0] : undefined;
       const approvedReplacement =

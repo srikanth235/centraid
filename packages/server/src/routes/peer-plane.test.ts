@@ -9,12 +9,14 @@ import { Readable } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
-import { peerHello } from "@centraid/core/protocol";
+import { peerHello, PEER_REPLICA_PATHS } from "@centraid/core/protocol";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
   createTokenBucket,
   DEVICE_IDENTITY_HEADER,
+  isPeerPlaneTarget,
   PEER_ENDPOINT_HEADER,
+  PEER_PLANE_PREFIX,
   PEER_PROOF_HEADER,
 } from "@centraid/tunnel";
 import { signWithVaultIdentity, vaultIdentityPublicKey } from "@centraid/vault";
@@ -468,5 +470,20 @@ describe("retired give frames (#825)", () => {
     });
     expect(result.status).toBe(404);
     expect(result.json).toStrictEqual({ state: "not_found" });
+  });
+});
+
+/*
+ * @centraid/core carries no dependencies, so it MIRRORS the peer-plane prefix
+ * rather than importing it. This is the seam that keeps the mirror honest: a
+ * subscription path that stopped being a peer-plane target would be routed by
+ * the relay's guard into nothing, silently.
+ */
+describe("subscription paths are peer-plane targets (#929)", () => {
+  it("agrees with the tunnel guard on every path", () => {
+    for (const path of PEER_REPLICA_PATHS) {
+      expect(path.startsWith(PEER_PLANE_PREFIX)).toBe(true);
+      expect(isPeerPlaneTarget(path)).toBe(true);
+    }
   });
 });

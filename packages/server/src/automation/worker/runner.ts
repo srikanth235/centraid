@@ -6,6 +6,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
 
+async function loadThreadReuse(): Promise<
+  typeof import("../../engine/worker/thread-reuse.js")
+> {
+  const dir = path.join(import.meta.dirname, "..", "..", "engine", "worker");
+  const js = path.join(dir, "thread-reuse.js");
+  const file = existsSync(js) ? js : path.join(dir, "thread-reuse.ts");
+  return (await import(
+    pathToFileURL(file).href
+  )) as typeof import("../../engine/worker/thread-reuse.js");
+}
+
 /** Absolute path: a relative `.js` specifier does not resolve under native
  *  type stripping. */
 async function loadSandboxBoot(): Promise<
@@ -117,12 +128,25 @@ type WorkerMessage =
   | { type: "fetch"; id: number; spec: FetchSpec }
   | { type: "connector-open"; id: number; principal: string }
   | { type: "log"; level: "info" | "warn" | "error"; msg: string }
-  | { type: "result"; ok: boolean; value?: unknown; error?: string };
+  | {
+      type: "result";
+      ok: boolean;
+      value?: unknown;
+      error?: string;
+      /** The thread has served its run budget: terminate rather than park. */
+      retire?: boolean;
+      /** The sandbox this THREAD is committed to, as installed. */
+      sandboxKey?: string;
+    };
 
 if (!parentPort) {
   throw new Error("centraid automation worker must be run as a worker_thread");
 }
 const port = parentPort;
+const { automationRunSandboxKey, createThreadSession } =
+  await loadThreadReuse();
+const session = createThreadSession();
+
 const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
 let req = boot as WorkerRequest;
 
@@ -149,8 +173,6 @@ function rpcCall(msg: RpcRequest): Promise<unknown> {
     port.postMessage({ ...msg, id } as WorkerMessage);
   });
 }
-
-const abortController = new AbortController();
 
 function rejectAllPending(reason: string): void {
   const err = new Error(reason);
@@ -187,8 +209,9 @@ port.on("message", (msg: ParentMessage) => {
     return;
   }
   if (msg.type === "abort") {
-    abortController.abort(msg.reason ?? "aborted");
-    rejectAllPending(msg.reason ?? "aborted");
+    const reason = msg.reason ?? "aborted";
+    session.abort(reason);
+    rejectAllPending(reason);
   }
 });
 
@@ -336,7 +359,9 @@ const ctx = {
   runs,
   vault,
   input: req.input,
-  abortSignal: abortController.signal,
+  get abortSignal(): AbortSignal {
+    return session.signal;
+  },
 };
 
 interface PullRow {
@@ -449,9 +474,11 @@ async function executePullSpec(spec: PullSpec): Promise<unknown> {
 }
 
 function execute(request: WorkerRequest): void {
+  session.beginRun();
   req = request;
   ctx.now = request.now;
   ctx.input = request.input;
+  let sandboxKey: string | undefined;
   void (async () => {
     try {
       {
@@ -474,8 +501,14 @@ function execute(request: WorkerRequest): void {
           redactLaunchArgs: true,
         });
         sandbox.taint(pathToFileURL(req.handlerFile).href);
+        sandboxKey = automationRunSandboxKey(
+          sandbox.policy.lane,
+          roots,
+          request.sandboxRuntimeDir
+        );
+        session.scrub();
       }
-      const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
+      const mod = (await import(session.importHref(req.handlerFile))) as {
         default?: ((args: unknown) => Promise<unknown>) | PullSpec;
       };
       if (
@@ -498,6 +531,7 @@ function execute(request: WorkerRequest): void {
         type: "result",
         ok: true,
         value,
+        ...session.resultFlags(sandboxKey),
       } satisfies WorkerMessage);
     } catch (error) {
       port.postMessage({
@@ -507,9 +541,10 @@ function execute(request: WorkerRequest): void {
           error instanceof Error
             ? (error.stack ?? error.message)
             : String(error),
+        ...session.resultFlags(sandboxKey),
       } satisfies WorkerMessage);
     } finally {
-      abortController.abort();
+      session.finish(pendingCalls);
     }
   })();
 }

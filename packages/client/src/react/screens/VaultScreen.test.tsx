@@ -8,14 +8,12 @@ import type { VaultBridgeProps, VaultData } from "../screen-contracts.js";
 import VaultScreen from "./VaultScreen.js";
 
 const block: VaultBridgeProps["block"] = {
-  purpose: "Read your notes",
   why: "To summarize them.",
   scopes: [{ schema: "notes", table: "note", verbs: "read" }],
 };
 
 const baseData: VaultData = {
   vaultName: "home",
-  grants: [],
   parked: [],
 };
 
@@ -29,9 +27,7 @@ function makeProps(over: Partial<VaultBridgeProps> = {}): VaultBridgeProps {
     demoPurge: vi
       .fn<VaultBridgeProps["demoPurge"]>()
       .mockResolvedValue(undefined),
-    grant: vi.fn<VaultBridgeProps["grant"]>().mockResolvedValue(undefined),
     loadData: vi.fn<VaultBridgeProps["loadData"]>().mockResolvedValue(baseData),
-    revoke: vi.fn<VaultBridgeProps["revoke"]>().mockResolvedValue(undefined),
     ...over,
   };
 }
@@ -58,18 +54,21 @@ describe("screens/VaultScreen", () => {
   }
 
   describe(VaultScreen, () => {
-    it("always shows the requested-access section (even before data loads)", () => {
+    it("always shows the declared-access section (even before data loads)", () => {
       const html = renderToStaticMarkup(<VaultScreen {...makeProps()} />);
-      expect(html).toContain("Requested access");
+      expect(html).toContain("Declared access");
       expect(html).toContain("notes.note");
       expect(html).toContain("To summarize them.");
-      expect(html).toContain("Purpose · Read your notes");
     });
 
-    it("renders the grant CTA when the app holds no grants", async () => {
+    // AN APP DECLARES; IT IS NOT GRANTED (#928 A1). A button offering to give
+    // or take away what the manifest already fixes would be a promise this
+    // pane cannot keep, so there is none to find.
+    it("offers no grant or revoke control at all", async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain("No access yet");
-      expect(el.querySelector(".grantBtn")?.textContent).toBe("Grant access");
+      expect(el.querySelector(".grantBtn")).toBeNull();
+      expect(el.querySelector(".revokeBtn")).toBeNull();
+      expect(el.textContent).not.toContain("No access yet");
     });
 
     it("reports the parked count and renders parked cards", async () => {
@@ -95,18 +94,6 @@ describe("screens/VaultScreen", () => {
       expect(onParkedCount).toHaveBeenCalledWith(1);
       expect(el.textContent).toContain("Waiting for your say-so");
       expect(el.querySelector(".approveBtn")).toBeTruthy();
-    });
-
-    it("runs the grant action then reloads", async () => {
-      const props = makeProps();
-      const el = await mount(props);
-      const btn = el.querySelector(".grantBtn") as HTMLButtonElement;
-      await act(async () => {
-        btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      });
-      expect(props.grant).toHaveBeenCalledOnce();
-      // one initial load + one after the action
-      expect(props.loadData).toHaveBeenCalledTimes(2);
     });
 
     it("shows the no-vault note when loadData resolves null", async () => {

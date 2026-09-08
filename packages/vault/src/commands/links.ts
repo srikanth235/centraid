@@ -63,11 +63,12 @@ function requireEndpoint(
     ctx.identity,
     ref.schema,
     ref.table,
-    "read",
-    ctx.purpose
+    "read"
   );
   if (access.decision === "deny") {
-    throw new Error(`grant does not cover read of ${type}: ${access.failing}`);
+    throw new Error(
+      `no standing answer covers read of ${type}: ${access.failing}`
+    );
   }
 }
 
@@ -216,12 +217,7 @@ function linkEntities(ctx: HandlerCtx): Record<string, unknown> {
     | { concept_id: string }
     | undefined;
   if (!relation) throw new Error(`unknown relation "${input.relation}"`);
-  const assertedBy =
-    ctx.identity.kind === "app"
-      ? "app"
-      : ctx.identity.kind === "agent"
-        ? "agent"
-        : "owner";
+  const assertedBy = ctx.identity.kind === "agent" ? "agent" : "owner";
   const linkId = ctx.newId();
   ctx.db
     .prepare(

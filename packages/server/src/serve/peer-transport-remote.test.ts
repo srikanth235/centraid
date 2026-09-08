@@ -319,7 +319,7 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
     expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(false);
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
     expect(
-      audience.gatewayDb.db.prepare("SELECT * FROM share_effects").all()
+      audience.gatewayDb.db.prepare("SELECT * FROM share_access_receipts").all()
     ).toStrictEqual([]);
   }, 30_000);
 });

@@ -186,7 +186,6 @@ describe(buildScopeRequestRow, () => {
       requestId: "r1",
       plane: "app",
       appId: "invoicer",
-      purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "core", verbs: "read" },
         { schema: "schedule", table: "task", verbs: "act" },

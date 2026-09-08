@@ -1,13 +1,9 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { describe, expect, onTestFinished, test } from "vitest";
 
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-  regressionBudget,
-} from "./quality-result.js";
+import { recordQualityResult } from "./quality-result.js";
 import { forEachSequentially } from "./sequential.js";
 import { tempDir } from "./temp-dir.js";
 import { generateVolumeFixture } from "./volume-fixture.js";
@@ -39,151 +35,6 @@ async function scratchCwd(prefix: string): Promise<string> {
   process.chdir(scratch);
   return scratch;
 }
-
-describe(regressionBudget, () => {
-  test("stays null below the sample minimum so a young rig cannot fail on noise", () => {
-    expect(regressionBudget([5, 5, 5, 5, 5, 5, 5, 5, 5])).toBeNull();
-  });
-
-  test("activates on exactly the sample minimum", () => {
-    expect(regressionBudget([5, 5, 5, 5, 5, 5, 5, 5, 5, 5])).toBe(15);
-  });
-
-  test("uses the trailing window, not the earliest samples", () => {
-    // Ten cheap runs followed by ten expensive ones. A budget derived from the
-    // leading window would be 3x1 = 3 and would red-flag every current run;
-    // the contract is that the budget follows the recent distribution.
-    const values = [
-      ...Array.from({ length: 10 }, () => 1),
-      ...Array.from({ length: 10 }, () => 100),
-    ];
-    expect(regressionBudget(values)).toBe(300);
-  });
-
-  test("takes the median of the window regardless of input order", () => {
-    const ordered = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1_000];
-    const shuffled = [1_000, 3, 9, 1, 7, 5, 2, 8, 4, 6];
-    // Median of the ten is (5+6)/2 = 5.5; a mean would be 104.5 and an
-    // unsorted "middle element" would be whatever landed at index 5.
-    expect(regressionBudget(ordered)).toBe(16.5);
-    expect(regressionBudget(shuffled)).toBe(16.5);
-  });
-
-  test("a single outlier cannot inflate the budget", () => {
-    const withOutlier = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10_000];
-    expect(regressionBudget(withOutlier)).toBe(30);
-  });
-
-  test("drops non-finite and negative samples instead of poisoning the median", () => {
-    const dirty = [
-      Number.NaN,
-      -1,
-      Number.POSITIVE_INFINITY,
-      ...Array.from({ length: 10 }, () => 4),
-    ];
-    expect(regressionBudget(dirty)).toBe(12);
-  });
-
-  test("invalid samples do not count toward the minimum", () => {
-    const mostlyInvalid = [
-      ...Array.from({ length: 20 }, () => Number.NaN),
-      1,
-      2,
-      3,
-    ];
-    expect(regressionBudget(mostlyInvalid)).toBeNull();
-  });
-
-  test("honours an explicit multiplier and sample minimum", () => {
-    expect(
-      regressionBudget([2, 4, 6], { minimumSamples: 3, multiplier: 5 })
-    ).toBe(20);
-  });
-
-  test("zero-valued samples are legitimate and yield a zero budget", () => {
-    // A rig whose measurement is genuinely 0 must not be treated as "no data".
-    expect(regressionBudget(Array.from({ length: 10 }, () => 0))).toBe(0);
-  });
-});
-
-describe(qualityRegressionBudget, () => {
-  test("reads the artifact recordQualityResult writes for the same owner", async () => {
-    // The single highest-leverage property in this file: the writer and the
-    // reader derive the artifact filename independently. If those two slug
-    // rules ever disagree, every rig reads `null` forever, no budget is ever
-    // enforced, and the perf/scale lanes go permanently, silently green.
-    await scratchCwd("centraid-quality-roundtrip-");
-    const owner = "Gateway / Low-End Host";
-    await forEachSequentially(
-      Array.from({ length: 10 }, () => 10),
-      (value) =>
-        recordQualityResult({
-          lane: "scale",
-          owner,
-          name: "wall",
-          status: "passed",
-          measurements: [{ name: "wall", value, unit: "ms" }],
-        })
-    );
-    await expect(qualityRegressionBudget("scale", owner)).resolves.toBe(30);
-  });
-
-  test("returns null when the owner has no artifact yet", async () => {
-    await scratchCwd("centraid-quality-missing-");
-    await expect(
-      qualityRegressionBudget("perf", "never-recorded")
-    ).resolves.toBeNull();
-  });
-
-  test("returns null rather than throwing on a corrupt artifact", async () => {
-    // A truncated artifact (interrupted runner) must degrade to "no budget",
-    // never crash the rig it is supposed to be grading.
-    const scratch = await scratchCwd("centraid-quality-corrupt-");
-    await mkdir(path.join(scratch, "artifacts", "perf"), { recursive: true });
-    await writeFile(
-      path.join(scratch, "artifacts", "perf", "broken.json"),
-      "{ not json",
-      "utf8"
-    );
-    await expect(qualityRegressionBudget("perf", "broken")).resolves.toBeNull();
-  });
-
-  test("returns null when the artifact has no history array", async () => {
-    const scratch = await scratchCwd("centraid-quality-nohistory-");
-    await mkdir(path.join(scratch, "artifacts", "scale"), { recursive: true });
-    await writeFile(
-      path.join(scratch, "artifacts", "scale", "shapeless.json"),
-      JSON.stringify({ lane: "scale", owner: "shapeless" }),
-      "utf8"
-    );
-    await expect(
-      qualityRegressionBudget("scale", "shapeless")
-    ).resolves.toBeNull();
-  });
-
-  test("keeps perf and scale lanes in separate artifact namespaces", async () => {
-    // Same owner name in both lanes must not share one history: a fast perf
-    // microbenchmark would otherwise set the budget for a slow scale rig.
-    await scratchCwd("centraid-quality-lanes-");
-    await forEachSequentially(
-      Array.from({ length: 10 }, () => 2),
-      (value) =>
-        recordQualityResult({
-          lane: "perf",
-          owner: "shared-name",
-          name: "wall",
-          status: "passed",
-          measurements: [{ name: "wall", value, unit: "ms" }],
-        })
-    );
-    await expect(qualityRegressionBudget("perf", "shared-name")).resolves.toBe(
-      6
-    );
-    await expect(
-      qualityRegressionBudget("scale", "shared-name")
-    ).resolves.toBeNull();
-  });
-});
 
 describe(recordQualityResult, () => {
   test("bounds retained history at thirty points, keeping the newest", async () => {

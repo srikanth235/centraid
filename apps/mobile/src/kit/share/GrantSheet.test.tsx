@@ -22,6 +22,9 @@ import GrantSheet from "./GrantSheet";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock(import("expo-clipboard"), () => ({
+  setStringAsync: () => Promise.resolve(true),
+}));
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const element = (
@@ -92,7 +95,12 @@ vi.mock(
 // so every test injects its own and stubs transport at the seam.
 vi.mock(
   import("./grant-seat"),
-  () => ({ nativeGrantDoor: () => undefined }) as never
+  () =>
+    ({
+      nativeGrantDoor: () => undefined,
+      nativeLinkTicketDoor: () => () =>
+        Promise.resolve({ ok: false, message: "no gateway in this test" }),
+    }) as never
 );
 
 vi.mock(
@@ -538,6 +546,65 @@ describe("the grant sheet, native seat", () => {
         }),
       });
       expect(container?.textContent).toContain("Link ended");
+    });
+  });
+  // #929 S6 — the same claim the browser seat pins, on the seat where a member
+  // is most likely to be standing when they hit it. The refusal stays; what
+  // changes is that the act it names is offered here.
+  describe("an unlinked person is offered the link ticket inline", () => {
+    const NEVER_REACHED = {
+      forParty: () =>
+        Promise.resolve({ known: true, channel: null, grants: [] }),
+    };
+    const ticketDoor =
+      (expiresAt = new Date(Date.now() + 9 * 60_000).toISOString()) =>
+      () =>
+        Promise.resolve({
+          ok: true as const,
+          ticket: { ticket: "tkt-native", expiresAt },
+        });
+
+    test("the ticket is offered, and the share is still refused", async () => {
+      await render({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(has("Send them a link ticket")).toBe(true);
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("no ticket exists until it is asked for", async () => {
+      await render({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+      expect(container?.textContent).not.toContain("tkt-native");
+
+      await act(async () => press("Send them a link ticket").click());
+
+      expect(container?.textContent).toContain("tkt-native");
+      expect(container?.textContent).toContain("Good for 8 more minutes.");
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("a refused mint says so in the door's own words", async () => {
+      await render({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: () =>
+          Promise.resolve({ ok: false as const, message: "no gateway here" }),
+      });
+
+      await act(async () => press("Send them a link ticket").click());
+
+      expect(container?.textContent).toContain("no gateway here");
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("a linked person is offered no ticket — there is nothing to fix", async () => {
+      await render({ linkTicket: ticketDoor() });
+
+      expect(has("Send them a link ticket")).toBe(false);
     });
   });
 });

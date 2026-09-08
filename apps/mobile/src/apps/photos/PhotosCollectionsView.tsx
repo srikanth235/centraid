@@ -20,6 +20,7 @@ import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import CollectionShelfBody from "./CollectionShelfBody";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { buildCollectionSections } from "./photos-collections";
 import type {
   CollectionSection,
@@ -189,28 +190,16 @@ export default function PhotosCollectionsView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { assets } = usePhotoTimeline();
 
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    PHOTO_ENTITY_READS.collectionEntries
   );
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
-  );
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
-  );
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
   // A face row carries a party ID, never a name; `PhotosPeopleView` must
   // resolve it the same way.
-  const parties = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
-  );
+  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
 
   const sections = useMemo(() => {
     // `target_id`, not `asset_id`: collection entries are polymorphic, and the

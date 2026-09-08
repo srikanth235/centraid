@@ -28,7 +28,7 @@ let ravi: string;
 let documentId: string;
 
 interface ReceiptRow {
-  grant_id: string | null;
+  authority_id: string | null;
   action: string;
   object_type: string;
   object_id: string | null;
@@ -39,8 +39,8 @@ interface ReceiptRow {
 function receiptsFor(grantId: string): ReceiptRow[] {
   return db.audit
     .prepare(
-      `SELECT grant_id, action, object_type, object_id, decision, detail_json
-         FROM access_receipt WHERE grant_id = ? ORDER BY receipt_id`
+      `SELECT authority_id, action, object_type, object_id, decision, detail_json
+         FROM access_receipt WHERE authority_id = ? ORDER BY receipt_id`
     )
     .all(grantId) as unknown as ReceiptRow[];
 }
@@ -84,7 +84,6 @@ describe("commands/share", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -126,7 +125,7 @@ describe("commands/share", () => {
         .get(commandId)
     ).toMatchObject({ n: 1 });
 
-    // ONE receipt stream, every entry naming `grant_id` (ruling V-receipts).
+    // ONE receipt stream, every entry naming `authority_id` (V-receipts, #928).
     const receipts = receiptsFor(grantId);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({

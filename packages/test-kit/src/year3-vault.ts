@@ -1,57 +1,24 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import type { SQLInputValue } from "node:sqlite";
 
-export const YEAR3_FIXTURE_VERSION = 1;
+import { seedYear3Distributions } from "./year3-distributions.js";
+import {
+  YEAR3_CONTACT_NEEDLE,
+  YEAR3_CONTACT_NEEDLE_INDEX,
+  YEAR3_DISTRIBUTIONS,
+} from "./year3-shape.js";
+import type {
+  Year3SeedCounts,
+  Year3VaultProfile,
+  Year3VaultTarget,
+} from "./year3-shape.js";
 
-/**
- * Stand-in for a caller that names no schema. Distinct from any real ladder
- * length so a fixture cached without a schema can never be mistaken for one
- * cached with a matching schema.
- */
-const UNVERSIONED_SCHEMA = -1;
+// One public subpath: `./year3-vault` stays the whole vocabulary's front door,
+// so splitting the module changed no import anywhere else in the tree.
+export * from "./year3-fixture-cache.js";
+export * from "./year3-shape.js";
+
+/** The one seed every golden artifact is generated from. */
 export const YEAR3_DEFAULT_SEED = 679_003;
-
-export interface Year3VaultProfile {
-  readonly seed: number;
-  readonly generatedAt: string;
-  readonly parties: number;
-  readonly photos: number;
-  readonly conversations: number;
-  readonly turnsPerConversation: number;
-  readonly multiYearStart: string;
-  readonly sealedSentinels: Readonly<Record<string, string>>;
-  readonly parkedActions: readonly string[];
-}
-
-interface Statement {
-  get: (...values: SQLInputValue[]) => unknown;
-  run: (...values: SQLInputValue[]) => unknown;
-}
-
-export interface Year3Sqlite {
-  exec: (sql: string) => void;
-  prepare: (sql: string) => Statement;
-}
-
-export interface Year3VaultTarget {
-  /** The ONE file (#916): ontology, audit and ledger bands share this handle. */
-  readonly vault: Year3Sqlite;
-  readonly sealCell: (
-    entity: string,
-    column: string,
-    rowId: string,
-    plaintext: string
-  ) => string;
-}
-
-export interface Year3SeedCounts {
-  readonly parties: number;
-  readonly photos: number;
-  readonly conversations: number;
-  readonly turnsPerConversation: number;
-}
 
 /**
  * One deterministic generator for the year-3 row, chronology, custody, and
@@ -105,7 +72,13 @@ export function seedYear3Vault(
     const timestamp = at(index % 1_096);
     party.run(
       id("year3-party", index),
-      `Year 3 person ${index}`,
+      // The golden vault plants its own search needle rather than leaving each
+      // rig to UPDATE a row after copying the fixture: a rig that rewrites the
+      // artifact is no longer measuring the artifact.
+      counts.distributions &&
+        index === YEAR3_CONTACT_NEEDLE_INDEX % Math.max(1, counts.parties)
+        ? YEAR3_CONTACT_NEEDLE
+        : `Year 3 person ${index}`,
       timestamp,
       timestamp
     );
@@ -297,6 +270,16 @@ export function seedYear3Vault(
     }
   }
   target.vault.exec("COMMIT");
+  if (counts.distributions) {
+    seedYear3Distributions(target, counts.distributions, profile, {
+      at,
+      id,
+      digest,
+      ownerPartyId: owner.self_party_id,
+      parties: counts.parties,
+      photos: counts.photos,
+    });
+  }
   target.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 }
 
@@ -354,70 +337,22 @@ export function year3VaultProfile(
 }
 
 /**
- * Content address of a materialized fixture.
+ * THE golden year-3 vault (#927 P4): one named, versioned, content-addressed
+ * artifact every rig mounts, so "shape ids unchanged on the golden vault" and
+ * every before/after number stand on the same fixture.
  *
- * `schemaVersion` is part of the identity, and has to be: the fixture IS a
- * vault on disk, so the schema that produced it is as much of its content as
- * the profile is. Without it a cached fixture built before a migration rung
- * lands is reused afterwards and opened by newer code — which is how the
- * nightly restore lane failed with `no such table: main.enrich_policy_rule`,
- * a table a later rung added. Callers pass `VAULT_MIGRATIONS.length`;
- * `test-kit` deliberately does not depend on `@centraid/vault`, so the number
- * arrives as an argument rather than an import.
+ * `photos` is the DAILY-USE path count (10,000), not the library total
+ * (90,000): the golden vault is what a journey rig opens, and a journey reads
+ * the daily path. The 90,000-asset library stays `year3VaultProfile()`'s
+ * number, seeded by the two rigs that measure the library itself
+ * (`phash-clustering`, `restore-10gib`).
  */
-export function year3FixtureCacheKey(
-  profile: Year3VaultProfile,
-  schemaVersion: number
-): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        version: YEAR3_FIXTURE_VERSION,
-        schemaVersion,
-        ...profile,
-      })
-    )
-    .digest("hex");
-}
-
-/**
- * Materialize a generated fixture once under a content-addressed cache.
- * `generate` must close its handles after checkpointing; the atomic rename
- * means readers never copy a live SQLite database beside an uncheckpointed WAL.
- */
-export async function materializeYear3Fixture(
-  cacheRoot: string,
-  generate: (targetDir: string) => Promise<void>,
-  profile = year3VaultProfile(),
-  schemaVersion: number = UNVERSIONED_SCHEMA
-): Promise<{ dir: string; cacheHit: boolean }> {
-  const key = year3FixtureCacheKey(profile, schemaVersion);
-  const dir = path.join(cacheRoot, key);
-  const ready = path.join(dir, "READY.json");
-  try {
-    const value = JSON.parse(await readFile(ready, "utf8")) as { key?: string };
-    if (value.key === key) return { dir, cacheHit: true };
-  } catch {
-    // Cache miss or interrupted prior generation.
-  }
-  await mkdir(cacheRoot, { recursive: true });
-  const temporary = `${dir}.tmp-${process.pid}-${Date.now()}`;
-  await rm(temporary, { recursive: true, force: true });
-  await mkdir(temporary, { recursive: true });
-  try {
-    await generate(temporary);
-    await writeFile(
-      path.join(temporary, "READY.json"),
-      `${JSON.stringify({ key, version: YEAR3_FIXTURE_VERSION, schemaVersion })}\n`,
-      "utf8"
-    );
-    try {
-      await rename(temporary, dir);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
-  return { dir, cacheHit: false };
+export function goldenYear3Profile(
+  seed = YEAR3_DEFAULT_SEED
+): Year3VaultProfile {
+  return {
+    ...year3VaultProfile(seed),
+    photos: YEAR3_DISTRIBUTIONS.dailyPathPhotos,
+    distributions: YEAR3_DISTRIBUTIONS,
+  };
 }

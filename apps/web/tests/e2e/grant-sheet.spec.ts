@@ -26,6 +26,7 @@ const SHEET = path.join(
 );
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-grant-sheet.png";
+const TICKET_PNG = "issue-929-grant-sheet-link-ticket.png";
 
 /** Harness entry: the SHIPPED sheet, with a door covering the three
  *  delivery states. */
@@ -135,11 +136,61 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
+/**
+ * The same shipped sheet for a person this vault has NEVER REACHED (#929 S6).
+ * `channel: null` is the never-reached wire, and `linkTicket` is the ceremony
+ * door — the sheet must offer the ticket AND keep refusing the share.
+ */
+const UNLINKED_ENTRY = `
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { GrantSheet } from ${JSON.stringify(SHEET)};
+
+const door = {
+  subjects: () =>
+    Promise.resolve({
+      readable: true,
+      offers: [{ subjectType: "core.document", capabilities: ["view", "edit"] }],
+    }),
+  forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
+  forAudience: () => Promise.resolve({ known: true, grants: [] }),
+  forSubject: () => Promise.resolve([]),
+  create: () => Promise.resolve({ ok: true, outcome: "created" }),
+  changeCapability: () => Promise.resolve({ ok: true, outcome: "created" }),
+  revoke: () => Promise.resolve({ ok: true, message: "no longer shared" }),
+};
+
+window.__grantStatus = [];
+
+createRoot(document.getElementById("root")).render(
+  createElement(GrantSheet, {
+    open: true,
+    onClose: () => undefined,
+    onStatus: (message) => window.__grantStatus.push(message),
+    audiences: [{ kind: "party", id: "party-priya", label: "Priya" }],
+    subjects: [
+      { subjectType: "core.document", subjectId: "doc-2", label: "Trip plan" },
+    ],
+    door,
+    linkTicket: () =>
+      Promise.resolve({
+        ok: true,
+        ticket: {
+          ticket: "ctkt_8Qd2r6fXbP4mK1sZ",
+          expiresAt: new Date(Date.now() + 14 * 60000).toISOString(),
+        },
+      }),
+  })
+);
+`;
+
 /** Bundle the shipped sheet, CSS module included, for the browser. */
-async function bundleSheet(): Promise<{ js: string; css: string }> {
+async function bundleSheet(
+  entry = ENTRY
+): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
-      contents: ENTRY,
+      contents: entry,
       resolveDir: here,
       loader: "tsx",
       sourcefile: "grant-sheet-harness.tsx",
@@ -236,4 +287,46 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
     .toStrictEqual([
       "no longer shared; a vault holding a copy has been asked to remove it and has not yet confirmed",
     ]);
+});
+
+// #929 S6. The finding was not that the sheet refuses — #903's rule is right —
+// but that the refusal was a DEAD END: it named an act ("link them in People")
+// and offered no way to perform it. This proves both halves in a real browser:
+// the ceremony is offered here, and the share is still refused.
+test("an unlinked person is offered the link ticket, and the share stays refused", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const [{ js, css }, kitCss] = await Promise.all([
+    bundleSheet(UNLINKED_ENTRY),
+    readFile(KIT_CSS, "utf8"),
+  ]);
+
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.setContent(
+    `<style>${toCss()}</style><style>${kitCss}</style><style>${css}</style>` +
+      `<body style="background:var(--bg);color:var(--text);margin:0">` +
+      `<div id="root" class="centraid-inline-scope"></div></body>`
+  );
+  await page.addScriptTag({ content: js });
+
+  await expect(page.locator('[data-reach="never-reached"]')).toBeVisible();
+  const share = page.getByRole("button", { name: "Share", exact: true });
+  await expect(share).toBeDisabled();
+
+  // No ticket until it is asked for: an unasked ticket is a live credential
+  // drawn on a screen nobody opened for it.
+  await expect(page.getByText("ctkt_", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Send them a link ticket" }).click();
+  await expect(page.getByText("ctkt_8Qd2r6fXbP4mK1sZ")).toBeVisible();
+  await expect(page.getByText("Good for 13 more minutes.")).toBeVisible();
+  // The whole point: the offer does not soften the refusal.
+  await expect(share).toBeDisabled();
+  await expect(page.evaluate(() => window.__grantStatus)).resolves.toEqual([]);
+
+  await mkdir(EVIDENCE_DIR, { recursive: true });
+  await page.screenshot({
+    path: path.join(EVIDENCE_DIR, TICKET_PNG),
+    fullPage: true,
+  });
 });

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { ROUTES } from "@centraid/core/protocol";
+import { PEER_REPLICA_PATHS, ROUTES } from "@centraid/core/protocol";
 import type { RouteName } from "@centraid/core/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
@@ -12,6 +12,7 @@ import type { GatewayPaths } from "../paths.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { PairingTicketStore } from "./pairing-store.js";
+import { link, makeSide, transportTo } from "./peer-give.test-fixtures.js";
 import { serve } from "./serve.js";
 import type { GatewayServeHandle } from "./serve.js";
 
@@ -236,6 +237,51 @@ describe("authz deny matrix (generated from ROUTES)", () => {
       );
       expect(response.status).toBe(403);
       await response.body?.cancel().catch(() => undefined);
+    });
+  });
+
+  /**
+   * THE LINK-AUTHENTICATED CALLER (#929). A subscription is admitted by a peer
+   * proof plus a live link pair, and that is a REAL principal now — the peer
+   * plane serves the grant-keyed replica shape over it. It must reach the
+   * subscription doors and NOTHING ELSE: a link is not a device, so no
+   * device-tier route may answer it, and the vault-plane replica surface in
+   * particular must stay unreachable however the target is spelled.
+   */
+  describe("a link-authenticated peer", () => {
+    test("reaches no device-tier route, and the subscription paths are the only peer-plane replica doors", async () => {
+      const origin = makeSide("deny-origin");
+      const audience = makeSide("deny-audience");
+      await link(origin, audience);
+      const dial = transportTo(origin, audience.endpointId);
+      const probes = Object.values(ROUTES).flatMap((route) =>
+        METHODS.map(async (method) => {
+          const response = await dial({
+            endpointTicket: "ticket",
+            method,
+            target: route,
+          });
+          // `0` is the handler declining the target outright — the peer plane
+          // never saw it, which is the confinement this asserts. Anything in
+          // the 2xx/3xx band is an ANSWER and a hole.
+          return response.status >= 200 && response.status < 400
+            ? `${method} ${route}`
+            : undefined;
+        })
+      );
+      const answered = (await Promise.all(probes)).filter(
+        (entry): entry is string => entry !== undefined
+      );
+      expect(answered).toStrictEqual([]);
+      // The confinement is the peer-plane prefix itself: a device-tier target
+      // dressed as a peer target is still not one of these four.
+      expect(
+        Object.values(ROUTES).some((route) =>
+          PEER_REPLICA_PATHS.includes(route)
+        )
+      ).toBe(false);
+      origin.vault.close();
+      audience.vault.close();
     });
   });
 

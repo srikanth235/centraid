@@ -15,7 +15,9 @@ import {
   pendingOverlayCopy,
   projectPendingWrite,
   readPendingOverlay,
-  enrichPendingRows,
+  stablePendingRowId,
+  enrichPendingSidecar,
+  pendingOverlayFacts,
   settlePendingOverlay,
 } from "./pending-overlay.ts";
 import {
@@ -46,17 +48,17 @@ describe("pending-write overlay law", () => {
 
     expect(task.optimistic[0]).toMatchObject({
       entity: "schedule.task",
-      rowId: "pending:intent-1:task",
+      rowId: stablePendingRowId("intent-1", "task"),
     });
     expect(expense.optimistic.map((row) => row.rowId)).toStrictEqual([
-      "pending:intent-1:expense",
-      "pending:intent-1:payer-0",
-      "pending:intent-1:split-0",
+      stablePendingRowId("intent-1", "expense"),
+      stablePendingRowId("intent-1", "payer-0"),
+      stablePendingRowId("intent-1", "split-0"),
     ]);
     expect(expense.optimistic[1]).toMatchObject({
       entity: "tally.expense_payer",
       values: {
-        expense_id: "pending:intent-1:expense",
+        expense_id: stablePendingRowId("intent-1", "expense"),
         party_id: "me",
         paid_minor: 1200,
       },
@@ -149,7 +151,15 @@ describe("pending-write overlay law", () => {
     });
     expect(conflict.op).toBe("upsert");
     if (conflict.op !== "upsert") return;
-    const pending = readPendingOverlay(conflict.values);
+    const pending = readPendingOverlay(conflict.values, {
+      "intent-conflict": pendingOverlayFacts({
+        intentId: "intent-conflict",
+        state: "conflict",
+        action: "add",
+        reason: "The task changed on another seat.",
+        conflict: { expectedVersion: 4, actualVersion: 7 },
+      })!,
+    });
 
     expect(pending).toMatchObject({
       key: "intent-conflict",
@@ -165,37 +175,46 @@ describe("pending-write overlay law", () => {
   });
 
   test("queued and parked rows use the shared quiet/reason grammar", () => {
-    const row = {
-      [PENDING_OVERLAY_FIELDS.key]: "intent-2",
-      [PENDING_OVERLAY_FIELDS.status]: "parked",
-      [PENDING_OVERLAY_FIELDS.action]: "rsvp",
-      [PENDING_OVERLAY_FIELDS.steward]: "Asha's phone",
-    };
-    expect(pendingOverlayCopy(readPendingOverlay(row)!)).toBe(
+    const row = { [PENDING_OVERLAY_FIELDS.key]: "intent-2" };
+    const sidecar = {
+      "intent-2": {
+        status: "parked",
+        action: "rsvp",
+        stewardLabel: "Asha's phone",
+      },
+    } as const;
+    expect(pendingOverlayCopy(readPendingOverlay(row, sidecar)!)).toBe(
       "Waiting for Asha's phone."
     );
   });
 
-  test("an empty Commons enrichment cannot wipe an outbox row", () => {
-    const rows = [
-      {
-        expense_id: "pending:intent-solo:expense",
-        [PENDING_OVERLAY_FIELDS.key]: "intent-solo",
-        [PENDING_OVERLAY_FIELDS.status]: "queued",
-        [PENDING_OVERLAY_FIELDS.action]: "add-expense",
-      },
-    ];
+  test("a row whose intent the sidecar does not name is not pending", () => {
+    // The write settled between the read and the render: the canonical row
+    // stands on its own rather than wearing a badge with nothing behind it.
+    expect(
+      readPendingOverlay({ [PENDING_OVERLAY_FIELDS.key]: "intent-gone" }, {})
+    ).toBeUndefined();
+  });
 
-    expect(enrichPendingRows(rows, [])).toStrictEqual(rows);
+  test("an empty Commons enrichment cannot wipe an outbox row", () => {
+    const sidecar = {
+      "intent-solo": { status: "queued", action: "add-expense" },
+    } as const;
+
+    expect(enrichPendingSidecar(sidecar, [])).toStrictEqual(sidecar);
   });
 
   test("settlement and expiry are pure visible-row transitions", () => {
-    const parked = readPendingOverlay({
-      [PENDING_OVERLAY_FIELDS.key]: "intent-commons",
-      [PENDING_OVERLAY_FIELDS.status]: "parked",
-      [PENDING_OVERLAY_FIELDS.action]: "add-expense",
-      [PENDING_OVERLAY_FIELDS.steward]: "Asha's phone",
-    })!;
+    const parked = readPendingOverlay(
+      { [PENDING_OVERLAY_FIELDS.key]: "intent-commons" },
+      {
+        "intent-commons": {
+          status: "parked",
+          action: "add-expense",
+          stewardLabel: "Asha's phone",
+        },
+      }
+    )!;
 
     expect(
       settlePendingOverlay(parked, { status: "executed" })
@@ -224,28 +243,29 @@ describe("pending-write overlay law", () => {
 
   test("Commons enrichment can settle copy without owning row membership", () => {
     const row = {
-      expense_id: "pending:intent-expired:expense",
+      expense_id: stablePendingRowId("intent-expired", "expense"),
       [PENDING_OVERLAY_FIELDS.key]: "intent-expired",
-      [PENDING_OVERLAY_FIELDS.status]: "parked",
-      [PENDING_OVERLAY_FIELDS.action]: "add-expense",
     };
+    const sidecar = {
+      "intent-expired": { status: "parked", action: "add-expense" },
+    } as const;
 
-    const [expired] = enrichPendingRows(
-      [row],
-      [
-        {
-          intentId: "intent-expired",
-          status: "expired",
-          reason: "The review window ended.",
-        },
-      ]
-    );
-    expect(readPendingOverlay(expired)).toMatchObject({
+    const expired = enrichPendingSidecar(sidecar, [
+      {
+        intentId: "intent-expired",
+        status: "expired",
+        reason: "The review window ended.",
+      },
+    ]);
+    expect(readPendingOverlay(row, expired)).toMatchObject({
       key: "intent-expired",
       status: "expired",
       reason: "The review window ended.",
     });
-    expect(enrichPendingRows([row], [])).toHaveLength(1);
+    // The row never moves: enrichment says what happened to the WRITE.
+    expect(
+      readPendingOverlay(row, enrichPendingSidecar(sidecar, []))
+    ).toMatchObject({ status: "parked" });
   });
 
   test("[law:pending-overlay] all eight blueprints declare every action", () => {
@@ -272,5 +292,42 @@ describe("pending-write overlay law", () => {
         expect(projection.reason.trim().length).toBeGreaterThan(20);
       }
     }
+  });
+
+  // #922 G9: an old queued change says WHEN it was saved on this device, and
+  // nothing about that number expires the intent — only the sentence changes.
+  test("a badge older than 24 h names the day it was saved", () => {
+    const enqueuedAt = "2026-09-01T09:00:00.000Z";
+    const fresh = pendingOverlayCopy(
+      { key: "i", status: "queued", action: "add", enqueuedAt },
+      Date.parse("2026-09-01T20:00:00.000Z")
+    );
+    expect(fresh).toBe("Waiting for a connection.");
+    const aged = pendingOverlayCopy(
+      { key: "i", status: "queued", action: "add", enqueuedAt },
+      Date.parse("2026-09-03T09:00:00.000Z")
+    );
+    expect(aged).toContain("Waiting for a connection.");
+    expect(aged).toContain("Saved on this device on");
+    // A queued intent with no stamp still reads as waiting, never as expired.
+    expect(
+      pendingOverlayCopy(
+        { key: "i", status: "queued", action: "add" },
+        Date.parse("2030-01-01T00:00:00.000Z")
+      )
+    ).toBe("Waiting for a connection.");
+  });
+
+  test("the two new verdicts read as sentences, not database words", () => {
+    expect(
+      pendingOverlayCopy({
+        key: "i",
+        status: "conflict-base-missing",
+        action: "edit",
+      })
+    ).toContain("is gone");
+    expect(
+      pendingOverlayCopy({ key: "i", status: "expired", action: "edit" })
+    ).toContain("waited too long");
   });
 });

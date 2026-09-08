@@ -98,6 +98,49 @@ describe(onDataChange, () => {
     expect(feed.stopped()).toBe(true);
   });
 
+  // THE WRITE'S OWN ECHO IS NOT A DOORBELL (#922 D1). The window exists for
+  // other people's churn; making the member's own edit the one change that
+  // arrives late is the opposite of what it is for.
+  it("hands the seat's own overlay detail straight through, with no window", () => {
+    useFakeClock();
+    const feed = installFeed();
+    const seen: CentraidChangeDetail[] = [];
+    const stop = onDataChange(["schedule.task"], (d) => seen.push(d), {
+      debounceMs: 200,
+    });
+    feed.emit({
+      source: "overlay",
+      intentId: "intent-1",
+      intentState: "queued",
+    });
+    expect(seen).toHaveLength(1);
+    feed.emit({ source: "overlay", intentId: "intent-1", intentState: "sent" });
+    expect(seen.map((d) => d.intentState)).toStrictEqual(["queued", "sent"]);
+    vi.advanceTimersByTime(200);
+    // Nothing was buffered, so the window has nothing left to fire.
+    expect(seen).toHaveLength(2);
+    stop();
+  });
+
+  it("keeps the window for everything that is not this seat's own write", () => {
+    useFakeClock();
+    const feed = installFeed();
+    const seen: CentraidChangeDetail[] = [];
+    const stop = onDataChange(["schedule.task"], (d) => seen.push(d), {
+      debounceMs: 200,
+    });
+    feed.emit({ tables: ["schedule.task"], source: "canonical" });
+    feed.emit({ tables: ["schedule.task"], source: "canonical" });
+    // A doorbell arriving mid-window must not ride the echo out early.
+    feed.emit({ source: "overlay", intentId: "intent-2" });
+    expect(seen.map((d) => d.source)).toStrictEqual(["overlay"]);
+    vi.advanceTimersByTime(199);
+    expect(seen).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(seen.map((d) => d.source)).toStrictEqual(["overlay", "canonical"]);
+    stop();
+  });
+
   it("is inert on a host with no change feed rather than throwing", () => {
     const stop = onDataChange(["x"], () => {});
     expect(() => stop()).not.toThrow();

@@ -50,7 +50,6 @@ describe("flow", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -199,7 +198,6 @@ describe("flow", () => {
     const hits = gw.search(owner, {
       entity: "core.document",
       query: "unicorn",
-      purpose: "dpv:ServiceProvision",
     });
     expect(hits.rows.map((r) => r.document_id)).toContain(doc.document_id);
     // A rename rebuilds the FTS row — extracted text must survive (the
@@ -213,7 +211,6 @@ describe("flow", () => {
     const after = gw.search(owner, {
       entity: "core.document",
       query: "unicorn",
-      purpose: "dpv:ServiceProvision",
     });
     expect(after.rows.map((r) => r.document_id)).toContain(doc.document_id);
   });
@@ -403,7 +400,6 @@ describe("flow", () => {
     const read = gw.read(owner, {
       entity: "blob.custody_state",
       where: [{ column: "content_id", op: "eq", value: doc.content_id }],
-      purpose: "dpv:ServiceProvision",
     });
     expect(read.rows).toHaveLength(1);
 

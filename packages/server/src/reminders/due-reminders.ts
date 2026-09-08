@@ -16,7 +16,7 @@ import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
 
 /*
  * THROUGH THE GATEWAY (#916, review-A 8.1). Reminders are life data, so every
- * read below is a `gateway.read` under a declared purpose — consent resolved,
+ * read below is a `gateway.read` on the owner's own credential — resolved,
  * receipt written — and never SQL against a physical table. The one join the
  * old query did (`core_event` × `schedule_event_ext`) is folded here over two
  * windowed reads; `bun run lint:vault-sql` is what keeps it that way.
@@ -26,9 +26,6 @@ import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
 export interface ReminderVaultReader {
   read: (cred: Credential, request: ReadRequest) => ReadResult;
 }
-
-/** DPV purpose every read below declares; it lands on each receipt. */
-const PURPOSE = "dpv:ServiceProvision";
 
 function rowsOf<T>(result: ReadResult): T[] {
   return (result.rows ?? []) as unknown as T[];
@@ -53,8 +50,7 @@ function reminderEvents(
   vault: ReminderVaultReader,
   cred: Credential
 ): EventReminderRow[] {
-  const read = (request: ReadRequest): ReadResult =>
-    vault.read(cred, { purpose: PURPOSE, ...request });
+  const read = (request: ReadRequest): ReadResult => vault.read(cred, request);
   const exts = rowsOf<EventExtRow>(
     read({
       entity: "schedule.event_ext",
@@ -89,7 +85,6 @@ function reminderTasks(
   return rowsOf<TaskReminderRow>(
     vault.read(cred, {
       entity: "schedule.task",
-      purpose: PURPOSE,
       where: [
         { column: "status", op: "in", value: ["needs-action", "in-process"] },
         { column: "deleted_at", op: "is-null" },
@@ -307,7 +302,6 @@ function dueFrom(
   }>(
     vault.read(cred, {
       entity: "tally.recurring_expense",
-      purpose: PURPOSE,
       where: [{ column: "status", op: "eq", value: "active" }],
     })
   );
@@ -331,7 +325,6 @@ function dueFrom(
     const already = rowsOf<{ expense_id: string }>(
       vault.read(cred, {
         entity: "tally.expense",
-        purpose: PURPOSE,
         where: [
           {
             column: "recurring_template_id",

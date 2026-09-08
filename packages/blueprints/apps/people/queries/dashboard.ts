@@ -23,6 +23,7 @@ import {
   STARRED_NOTATION,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   daysSinceContact,
   daysUntilMonthDay,
@@ -91,7 +92,6 @@ interface PartyEntry {
 }
 
 export default async function dashboard({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = 9_999;
   try {
     const [profiles, concepts, schemes] = await Promise.all([
@@ -100,10 +100,8 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "created_at", dir: "desc" },
         limit: window,
-        purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -135,27 +133,28 @@ export default async function dashboard({ ctx }: HandlerArgs) {
 
     const [parties, tags, dates, activityLinks, bindings] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "in", value: partyIds },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [
           { column: "party_id", op: "in", value: partyIds },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq", value: "core.activity" },
@@ -163,7 +162,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
           { column: "to_id", op: "in", value: partyIds },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
       // Null means the sharing plane is unreadable, not that nobody is linked.
       readLiveBindings(ctx.vault, partyIds),
@@ -181,17 +179,16 @@ export default async function dashboard({ ctx }: HandlerArgs) {
             where: [{ column: "activity_id", op: "in", value: activityIds }],
             orderBy: { column: "started_at", dir: "desc" },
             limit: 30,
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "knowledge.annotation",
             where: [
               { column: "target_type", op: "eq", value: "core.activity" },
               { column: "target_id", op: "in", value: activityIds },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);

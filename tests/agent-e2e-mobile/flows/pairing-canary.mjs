@@ -17,16 +17,11 @@
 // two reasons to fail no longer answers the question it was asked. Everything
 // below the Home marker belongs to the journey that claims it.
 
-import { copyFile, mkdir, readdir } from "node:fs/promises";
-import path from "node:path";
-
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import { screenshot } from "../lib/ui-impact.mjs";
 
-/**
- * Where the desktop journeys publish their UI-impact frames, and now the one
- * mobile frame that survives a red suite (#905).
- */
-const UI_IMPACT_DIR = "artifacts/e2e/ui-impact";
+/** The one mobile frame that survives a red suite (#905), published under
+ *  `artifacts/e2e/ui-impact/` beside every other seat's. */
 const HOME_FRAME = "issue-905-mobile-paired-home.png";
 
 // The claim: a broken prerequisite is known in single-digit minutes, not after
@@ -72,24 +67,13 @@ await runFlow("pairing-canary", async (ctx) => {
   // intact — no app-specific claim, and no second reason to go red. A failed
   // copy is noted and swallowed: the canary's verdict is about pairing, and
   // the suite behind it must not fall over a file copy.
-  const screenshot = async () => {
-    const frames = await readdir(ctx.state.screenshotsDir);
-    // The frame is `<name>.png`, unprefixed: harness.mjs runs every chunk with
-    // `cwd = screenshotsDir`, and the `NN-` prefix it mints belongs to the
+  try {
+    // The frame is `paired-home.png`, unprefixed: harness.mjs runs every chunk
+    // with `cwd = screenshotsDir`, and the `NN-` prefix it mints belongs to the
     // chunk, not to the frame. A `-paired-home.png` suffix never matched, so
     // the swallowed note below fired on every run and this frame was never
     // published (#905).
-    const home = frames.find((frame) => frame === "paired-home.png");
-    if (home === undefined)
-      throw new Error("paired-home frame was not captured");
-    await mkdir(UI_IMPACT_DIR, { recursive: true });
-    await copyFile(
-      path.join(ctx.state.screenshotsDir, home),
-      path.join(UI_IMPACT_DIR, HOME_FRAME)
-    );
-  };
-  try {
-    await screenshot();
+    await screenshot(ctx, "paired-home", HOME_FRAME);
   } catch (error) {
     ctx.note(`paired-home frame not published: ${error.message}`);
   }

@@ -58,7 +58,6 @@ describe("staging", () => {
     // The batch is owner-readable for review.
     const rows = gw.read(owner, {
       entity: "sync.import_row",
-      purpose: "dpv:ServiceProvision",
     }).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({

@@ -33,6 +33,10 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 
+import {
+  attachPendingSidecar,
+  stablePendingRowId,
+} from "../_shared/pending-overlay.ts";
 import type { InlineFrame } from "../inline-types.ts";
 import { RosterRoute } from "./components/RosterRoute.tsx";
 import { EMPTY, FIRST_RUN, OUTCOMES, REFUSALS, VERBS } from "./people-copy.ts";
@@ -298,22 +302,19 @@ describe("people.pending / people.parked — the frame's one status line", () =>
 
   test("the row a queued add projected wears the shared pending chip", async () => {
     // The status line is one sentence for the whole app; the chip is what says
-    // WHICH person is still on this device. `queries/people.ts` forwards the
-    // outbox stamps onto the row so the shared component can read them.
-    const container = await mountRoster({
-      people: [
-        person({
-          party_id: "pending:add:party",
-          name: "Ravi",
-          ...({
-            __centraid_pending_key: "intent-1",
-            __centraid_pending_status: "queued",
-            __centraid_pending_action: "add-person",
-          } as unknown as Partial<PersonRow>),
-        }),
-        person(),
-      ],
-    });
+    // WHICH person is still on this device. The row carries the intent that
+    // projected it; the read's sidecar says what is happening to it (#922 G3).
+    const queued = attachPendingSidecar(
+      person({
+        party_id: stablePendingRowId("intent-1", "party"),
+        name: "Ravi",
+        ...({
+          __centraid_pending_key: "intent-1",
+        } as unknown as Partial<PersonRow>),
+      }),
+      { "intent-1": { status: "queued", action: "add-person" } }
+    );
+    const container = await mountRoster({ people: [queued, person()] });
     const chips = [...container.querySelectorAll(".kit-pending-chip")];
     expect(chips.map((chip) => chip.textContent)).toStrictEqual(["queued"]);
     // The settled row is not decorated: a chip on every row says nothing.

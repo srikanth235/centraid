@@ -15,6 +15,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   readCustodyByContent,
   readLabelsByDocument,
@@ -42,14 +43,12 @@ interface ContentRow {
 }
 
 export default async function driveHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Owner-curated and small, so unbounded; they bound the rest.
-    const [concepts, schemes] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-    ]);
+    const [concepts, schemes] = await Promise.all(
+      conceptTaxonomyReads(ctx.vault)
+    );
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
 
@@ -70,40 +69,36 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       }))
       .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
 
-    // An `in` filter with an empty array throws; no scheme, empty drive.
-    const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
-    if (folderConceptIds.length === 0) {
-      return {
-        folders,
-        documents: [],
-        root_folder_id: rootFolderId,
-        truncated: false,
-        window,
-        shared_from_known: true,
-      };
-    }
-    const tags = await ctx.vault.read({
-      entity: "core.tag",
-      where: [
-        { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
-        { column: "concept_id", op: "in", value: folderConceptIds },
-      ],
-      orderBy: { column: "tagged_at", dir: "desc" },
+    // A DELIVERED copy carries no folders-scheme tag, so the tag window below
+    // cannot see it: its subscription lineage is the second door in (#903).
+    //
+    // READ BEFORE THE FOLDERS-SCHEME GATE: the scheme is created on first use,
+    // so a member who has never filed a document of their own has none — and
+    // returning early there told someone who HAD received one that nothing
+    // arrived, which is the exact claim this door exists to prevent.
+    const originByDoc = await readOriginsByDocument({
+      ctx,
       limit: window,
-      purpose,
     });
+
+    // An `in` filter with an empty array throws; no scheme, no filed documents.
+    const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
+    const tags =
+      folderConceptIds.length === 0
+        ? { rows: [] as Record<string, unknown>[] }
+        : await ctx.vault.read({
+            entity: "core.tag",
+            where: [
+              { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
+              { column: "concept_id", op: "in", value: folderConceptIds },
+            ],
+            orderBy: { column: "tagged_at", dir: "desc" },
+            limit: window,
+          });
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
 
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
-
-    // A DELIVERED copy carries no folders-scheme tag, so the window above
-    // cannot see it: its placement record is the second door in (#903).
-    const originByDoc = await readOriginsByDocument({
-      ctx,
-      purpose,
-      limit: window,
-    });
     const windowedIds = [
       ...new Set([...folderByDoc.keys(), ...(originByDoc?.keys() ?? [])]),
     ];
@@ -130,12 +125,13 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // while those scopes park for approval (#821).
     const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.document",
         where: [{ column: "document_id", op: "in", value: windowedIds }],
-        purpose,
       }),
       starredConcept
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.tag",
             where: [
               {
@@ -146,19 +142,16 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
               { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
               { column: "target_id", op: "in", value: windowedIds },
             ],
-            purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
       readLabelsByDocument({
         ctx,
-        purpose,
         documentIds: windowedIds,
         schemes: schemeRows,
         concepts: conceptRows,
       }),
       readSharesByDocument({
         ctx,
-        purpose,
         documentIds: windowedIds,
         folderByDoc,
         folderConcepts: schemeConcepts,
@@ -176,12 +169,12 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const [contents, custodyByContent] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
-      readCustodyByContent({ ctx, purpose, contentIds }),
+      readCustodyByContent({ ctx, contentIds }),
     ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [

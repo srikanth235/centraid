@@ -11,12 +11,16 @@ import { expect } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { sweepLocalOrphans } from "../blob/local-orphan-sweep.js";
+import { liveBlobShas } from "../blob/read.js";
 import { blobUriFor } from "../blob/store.js";
 import { bootstrapVault } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import type { ShareableItemType } from "./closure.js";
+import { deleteProjectedClosure } from "./removal.js";
 
 const open: VaultDb[] = [];
 
@@ -179,4 +183,53 @@ export function placementAuthority(
     principalId: audiencePartyId,
     verb: "view",
   };
+}
+
+export interface UnplaceResult {
+  removed: boolean;
+  /** The inode survives until the LAST vault lets go; origin bytes stay. */
+  orphanedShas: string[];
+}
+
+/**
+ * Un-place a same-owner placement, for the tests that measure what removal
+ * leaves behind — blob liveness, inode survival, an audience's own rows.
+ *
+ * This is a FIXTURE, not a plane: `unshareFromVault` was production code with
+ * no production caller once #929 deleted the commons rail, and a share's
+ * removal is `purgeShareShape` (subscription-seat.ts), which walks the shape's
+ * own lineage rather than guessing at reachability. What is kept here is the
+ * one thing these tests need and that path cannot give them — removal of rows
+ * placed by `shareItemsToVault`, which writes no lineage.
+ *
+ * IT REFUSES NOTHING. `unshareFromVault` read a row-keyed provenance row and
+ * declined to touch a row the audience had authored; that table is gone, and
+ * the guarantee is `releaseShapeRows`'s for a stronger reason — it deletes
+ * only what the shape CLAIMS, and nothing claims an authored row.
+ */
+export function unplaceProjection(
+  audience: VaultDb,
+  itemType: ShareableItemType,
+  itemId: string
+): UnplaceResult {
+  const db = audience.vault;
+  db.exec("BEGIN IMMEDIATE");
+  let shas: string[];
+  try {
+    const commit = beginReplicaCommit(db);
+    const removal = deleteProjectedClosure(db, itemType, itemId);
+    if (!removal.removed) {
+      db.exec("ROLLBACK");
+      return { removed: false, orphanedShas: [] };
+    }
+    shas = removal.shas;
+    endReplicaCommit(db, commit);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  // AFTER the commit: a sha another row still holds reads live, never guessed.
+  const live = liveBlobShas(db);
+  return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
 }

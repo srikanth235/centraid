@@ -16,6 +16,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import {
   pendingOverlayCopy,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
@@ -88,7 +89,9 @@ export default function DocumentProperties({
   const custody = doc ? custodyMeta(doc.custody_state) : null;
   // DETAIL surfaces only — the `scopeLabels` join `PhotoInfoSheet` shows.
   const sources = doc?.scopeLabels.join(" · ") ?? "";
-  const pending = doc ? readPendingOverlay(doc.raw) : undefined;
+  const pending = doc
+    ? readPendingOverlay(doc.raw, pendingSidecarOf(doc.raw))
+    : undefined;
 
   return (
     <DocsScreen current="all">

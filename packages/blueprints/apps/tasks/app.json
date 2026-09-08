@@ -7,7 +7,6 @@
   "iconKey": "Check",
   "colorKey": "ochre",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your canonical task list.",
     "scopes": [
       {
@@ -126,6 +125,10 @@
       "input": {
         "type": "object",
         "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "title": {
             "type": "string",
             "minLength": 1

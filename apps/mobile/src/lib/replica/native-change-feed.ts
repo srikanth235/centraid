@@ -216,9 +216,19 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     }
     if (frame.event !== "change" && frame.event !== "message") return;
     const page = payload as
-      | { changes?: unknown; cursor?: unknown; next?: unknown }
+      | { changes?: unknown; cursor?: unknown; next?: unknown; batch?: unknown }
       | undefined;
     const pageCursor = parseCursor(page?.cursor ?? page?.next);
+    // BEFORE the per-entry nudges, so an applier sees the batch ahead of the
+    // doorbell entries it covers and never schedules the pull it replaces
+    // (#922 A1).
+    if (page?.batch && typeof page.batch === "object" && pageCursor) {
+      this.emit({
+        type: "centraid:vault-batch",
+        batch: page.batch,
+        cursor: pageCursor,
+      });
+    }
     const values = Array.isArray(payload)
       ? payload
       : Array.isArray(page?.changes)

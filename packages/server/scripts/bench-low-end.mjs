@@ -7,102 +7,24 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { serve } from "../dist/index.js";
+import {
+  argReader,
+  directoryBytes,
+  fsyncCallsIn,
+  hostRecord,
+  markTraceEpoch,
+  percentile,
+  quietLogger,
+  ratePerHour,
+  readProcIo,
+  resourceCounters,
+  straceAvailable,
+} from "./bench-support.mjs";
 
 const here = import.meta.dirname;
 const packageRoot = path.dirname(here);
 const args = process.argv.slice(2);
-
-function option(name, fallback) {
-  const inline = args.find((arg) => arg.startsWith(`${name}=`));
-  if (inline) return inline.slice(name.length + 1);
-  const index = args.indexOf(name);
-  return index >= 0 && args[index + 1] !== undefined
-    ? args[index + 1]
-    : fallback;
-}
-
-function positiveInteger(name, fallback) {
-  const value = Number(option(name, String(fallback)));
-  if (!Number.isInteger(value) || value <= 0)
-    throw new Error(`${name} must be a positive integer`);
-  return value;
-}
-
-function percentile(sorted, fraction) {
-  if (sorted.length === 0) return 0;
-  return sorted[
-    Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)
-  ];
-}
-
-function ratePerHour(delta, durationMs) {
-  return durationMs > 0 ? (delta * 3_600_000) / durationMs : 0;
-}
-
-async function readProcIo() {
-  try {
-    const text = await fs.readFile("/proc/self/io", "utf8");
-    return Object.fromEntries(
-      text
-        .trim()
-        .split("\n")
-        .map((line) => line.split(":").map((part) => part.trim()))
-        .map(([key, value]) => [key, Number(value)])
-    );
-  } catch {
-    return undefined;
-  }
-}
-
-function resourceCounters() {
-  const usage = process.resourceUsage();
-  return {
-    fsWrites: usage.fsWrite,
-    contextSwitches:
-      usage.voluntaryContextSwitches + usage.involuntaryContextSwitches,
-  };
-}
-
-async function directoryBytes(dir) {
-  let entries;
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch (error) {
-    // The live vault owns temporary/WAL paths that can disappear between a
-    // directory walk and the next syscall. A vanished entry contributes zero
-    // bytes; it must not make the performance gate flaky.
-    if (error?.code === "ENOENT") return 0;
-    throw error;
-  }
-  const sizes = await Promise.all(
-    entries.map(async (entry) => {
-      const target = path.join(dir, entry.name);
-      if (entry.isDirectory()) return directoryBytes(target);
-      if (entry.isFile()) {
-        try {
-          return (await fs.stat(target)).size;
-        } catch (error) {
-          if (error?.code !== "ENOENT") throw error;
-        }
-      }
-      return 0;
-    })
-  );
-  return sizes.reduce((total, size) => total + size, 0);
-}
-
-function quietLogger() {
-  return {
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  };
-}
-
-async function markTraceEpoch(suffix) {
-  const marker = process.env.CENTRAID_BENCH_TRACE_MARKER;
-  if (marker) await fs.writeFile(`${marker}.${suffix}`, "");
-}
+const { option, positiveInteger } = argReader(args);
 
 async function runInternal() {
   const writes = positiveInteger("--requests", 120);
@@ -300,15 +222,7 @@ async function runInternal() {
     const report = {
       schema: "centraid-gateway-low-end-benchmark/1",
       generatedAt: new Date().toISOString(),
-      host: {
-        platform: process.platform,
-        arch: process.arch,
-        node: process.version,
-        cpus: os.availableParallelism(),
-        totalMemoryBytes: os.totalmem(),
-        requestedHardwareProfile:
-          process.env.CENTRAID_HARDWARE_PROFILE ?? "auto",
-      },
+      host: hostRecord(),
       workload: {
         requests: workload.length,
         writes,
@@ -383,26 +297,6 @@ async function runInternal() {
     await handle?.close().catch(() => undefined);
     await fs.rm(root, { recursive: true, force: true });
   }
-}
-
-function fsyncCallsIn(trace, marker) {
-  const lines = trace.split("\n");
-  const start = lines.findIndex((line) => line.includes(`${marker}.start`));
-  const end = lines.findIndex(
-    (line, index) => index > start && line.includes(`${marker}.end`)
-  );
-  if (start < 0 || end < 0)
-    throw new Error("strace workload epoch markers are missing");
-  return lines.slice(start + 1, end).filter((line) => {
-    // A blocking syscall can be split into `<unfinished ...>` and a later
-    // `<... fsync resumed>` record. Count the resumed record exactly once;
-    // ordinary one-line calls count through the opening-call form.
-    if (/<\.\.\. (?:fsync|fdatasync) resumed>/u.test(line)) return true;
-    return (
-      /\b(?:fsync|fdatasync)\(/u.test(line) &&
-      !line.includes("<unfinished ...>")
-    );
-  }).length;
 }
 
 function checkBudgets(report, budgets, requireFsync) {
@@ -535,10 +429,8 @@ async function traceFsyncCalls() {
 }
 
 const underTrace = args.includes("--internal");
-const straceAvailable =
-  process.platform === "linux" && spawnSync("which", ["strace"]).status === 0;
 const report = await runInternal();
-if (!underTrace && straceAvailable) {
+if (!underTrace && straceAvailable()) {
   const fsyncCalls = await traceFsyncCalls();
   report.storage.fsyncCalls = fsyncCalls;
   report.storage.fsyncPerWrite = fsyncCalls / report.workload.writes;

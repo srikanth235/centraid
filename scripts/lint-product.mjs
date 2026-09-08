@@ -43,6 +43,8 @@ export const PRODUCT_GATES = Object.freeze([
   "test:advisory-expiry",
   "lint:law-registry",
   "lint:ledgers",
+  "lint:journey-ledger",
+  "lint:test-reachability",
   "lint:tsconfigs",
   "test:accessibility",
   "lint:mobile-design",
@@ -77,6 +79,7 @@ export const PRODUCT_GATES = Object.freeze([
   "lockfile:lint",
   "security:unsafe-edges",
   "lint:ci-egress",
+  "lint:no-nul-bytes",
 ]);
 
 const secs = (ms) => (ms / 1000).toFixed(1);

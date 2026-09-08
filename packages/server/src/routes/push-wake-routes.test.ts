@@ -437,7 +437,7 @@ describe("push-wake-routes", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
-  test("PushWakeRelay costs one idle tick three receipts, not five", async () => {
+  test("PushWakeRelay reads three entities per idle tick and receipts none", async () => {
     // #916 routed the reminder scan through the gateway, so this timer is a
     // WRITER: every read appends an access.receipt. It used to ask twice for
     // the same two entities — `computeDueReminders` then `nextReminderFireAt`,
@@ -471,8 +471,11 @@ describe("push-wake-routes", () => {
     await clock.advance(10_000);
     await flushMicrotasks();
 
-    // schedule.task, schedule.event_ext, tally.recurring_expense — once each.
-    expect(receipts() - afterFirstScan).toBe(3);
+    // OWNER-DIRECT SCANS COST NO AUDIT WRITE (#928, #922 B1). The three reads
+    // (schedule.task, schedule.event_ext, tally.recurring_expense) happen —
+    // the relay's whole job — and leave the band untouched, which is the
+    // point: an idle tick used to pay three fsyncs to prove nothing.
+    expect(receipts() - afterFirstScan).toBe(0);
     expect(plane.db.vault.isTransaction).toBe(false);
   });
 

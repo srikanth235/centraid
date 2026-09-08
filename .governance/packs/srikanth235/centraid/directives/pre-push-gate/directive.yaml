@@ -2,10 +2,18 @@
 category: Repo hygiene
 recommended: true
 summary: |
-  Every push that creates or updates a ref runs `bun run check:push` (17 gate
-  names since #915 Wave 4), plus the two repo-wide governance directives
-  `.githooks/pre-commit` defers to this rung. Deletes and no-op pushes are
-  exempt.
+  Every push that creates or updates a ref runs a gate tier chosen by the ref it
+  targets (#988): `main` runs `bun run check:push` (17 gate names since #915
+  Wave 4), any other branch runs `bun run check:push:static` — format, lint,
+  turbo lint and affected typecheck. Both run after the two repo-wide governance
+  directives `.githooks/pre-commit` defers to this rung. Deletes and no-op
+  pushes are exempt, and `CENTRAID_PUSH_TIER=full` widens a branch push back to
+  the full tier.
+
+  A branch push is gated by `ci.yml` and `governance.yml`, which listen on a
+  bare `pull_request:` and run the full tier on every commit of every branch, so
+  nothing left the ladder — the full local tier moved to the push that is the
+  last moment before the trunk moves.
 
   AGENTS.md has said "before every `git push` to a PR, agents must run
   `bun run check:pr`" for several releases. It is a good rule enforced by

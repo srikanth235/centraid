@@ -97,49 +97,25 @@ export const ALLOW_LIST = {
     "owns the phone's replica intent outbox tables",
   "packages/client/src/replica/store-core.ts":
     "owns the client's replica mirror tables",
-  "packages/server/src/routes/replica-grantees.ts":
-    "resolves which grants a replica may mirror from the consent tables",
   "packages/server/src/routes/replica-intent-shape.ts":
     "reads the invocation commit log the replica acknowledges against",
   "packages/server/src/routes/replica-projection.ts":
-    "projects a grant's scope into the shape a replica receives",
+    "reads the install register a replica shape is controlled by",
   "packages/server/src/routes/replica-routes.ts":
     "streams the change log rows that ARE the replica protocol",
   "packages/server/src/routes/replica-shape.ts":
-    "answers what a replica may hold, from the change log's own state",
+    "answers what a replica may hold, from the install register and the change log",
   // ── the share / commons plane: server-owned tables, not vault entities ──
   "packages/server/src/serve/gateway-schema.ts":
     "creates the server-owned share-plane tables themselves",
-  "packages/server/src/routes/edges-routes.ts":
-    "serves the share edges the share plane owns",
-  "packages/server/src/serve/share-edge-row.ts":
-    "is the row codec for share_edges",
-  "packages/server/src/serve/share-edge-store.ts":
-    "is the store for share_edges",
-  "packages/server/src/serve/share-effects.ts":
-    "owns share_effects, the audience-side projection table",
-  "packages/server/src/serve/share-effects-retire.ts":
-    "retires share_effects rows when an authority ends",
   "packages/server/src/serve/share-access-receipts.ts":
-    "owns share_access_receipts",
+    "owns share_access_receipts, the same-owner placement history",
   "packages/server/src/serve/grant-fulfillment.ts":
     "owns share_authority and share_fulfillment",
   "packages/server/src/serve/share-notices.ts":
     "names the party a share notice is about",
-  "packages/server/src/routes/commons-routes.ts":
-    "serves the commons control tables the share plane owns",
-  "packages/server/src/routes/peer-commons-route.ts":
-    "answers a peer from the commons membership tables",
-  "packages/server/src/serve/peer-commons-client.ts":
-    "is the commons transport's own client",
-  "packages/server/src/serve/peer-commons-sweep.ts":
-    "sweeps expired commons intents",
-  "packages/server/src/serve/commons-notices.ts":
-    "raises notices from commons invitations",
-  "packages/server/src/serve/commons-observability.ts":
-    "reports the commons plane's own health counters",
-  "packages/server/src/serve/commons-recovery-invites.ts":
-    "issues steward recovery invitations from commons bindings",
+  "packages/server/src/routes/peer-replica-intent-route.ts":
+    "reads the change log versions a member intent is answered against",
   // ── connection broker + outbox: the sync plane's own storage ──
   "packages/server/src/serve/connection-broker.ts":
     "owns sync_connection and its credential rows",
@@ -172,12 +148,19 @@ export const ALLOW_LIST = {
     "seeds the throwaway vault the injection corpus runs against",
   "packages/server/src/serve/outbox-executor-test-kit.ts":
     "is the outbox executor's test kit",
-  "packages/server/src/serve/commons-b6.test-fixtures.ts":
-    "is a commons suite's fixture builder",
+  "packages/server/src/serve/share-subscription-peer.test-fixtures.ts":
+    "seeds the golden pair's six subject types directly, as a fixture",
   "packages/server/src/serve/peer-give.test-fixtures.ts":
     "is a peer-give suite's fixture builder",
   "packages/server/src/serve/vault-plane.test-fixtures.ts":
     "is a vault-plane suite's fixture builder",
+  "apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts":
+    "is the Locker replica fixture builder; it seeds replica_row directly after bootstrap",
+  "apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts":
+    "is the Tally replica fixture builder; it seeds replica_row directly after bootstrap",
+  // ── measurement rigs that verify gateway-owned audit state ──
+  "scripts/measure-read-fsync.mjs":
+    "measures gateway receipt durability and re-hashes its audit chain",
   // ── this linter ──
   "scripts/lint-vault-sql.mjs":
     "its own fixtures name physical tables on purpose",

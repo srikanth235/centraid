@@ -57,15 +57,15 @@ function seedInvocationCluster(
   db.audit
     .prepare(
       `INSERT INTO agent_command_invocation
-         (invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at, executed_at, receipt_id)
+         (invocation_id, command_id, caller_id, authority_id, input_json, status, requested_at, executed_at, receipt_id)
        VALUES (?, 'cmd-1', 'agent-1', NULL, '{}', 'executed', ?, ?, NULL)`
     )
     .run(invocationId, args.requestedAt, args.receiptAt);
   db.audit
     .prepare(
       `INSERT INTO access_receipt
-         (receipt_id, grant_id, invocation_id, action, object_type, object_id, purpose_concept_id, decision, occurred_at, hash, detail_json)
-       VALUES (?, NULL, ?, 'act knowledge.create_note', 'knowledge.note', NULL, NULL, 'allow', ?, ?, NULL)`
+         (receipt_id, authority_id, invocation_id, action, object_type, object_id, decision, occurred_at, hash, detail_json)
+       VALUES (?, NULL, ?, 'act knowledge.create_note', 'knowledge.note', NULL, 'allow', ?, ?, NULL)`
     )
     .run(receiptId, invocationId, args.receiptAt, sha256Hex(receiptId));
   db.audit

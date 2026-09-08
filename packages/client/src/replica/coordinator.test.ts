@@ -383,6 +383,117 @@ describe(ReplicaCoordinator, () => {
     await replica.close();
   });
 
+  // SB-payload (#922 A1): ONE HOP. The frame carries the batch the gateway
+  // already projected, so the happy path never touches `/changes`; the pull
+  // stays for catch-up, which the reconnect and cursor-gap cases below cover.
+  test("applies the batch the change frame carries, without pulling", async () => {
+    const worker = new StateWorker();
+    let applied!: () => void;
+    const batchApplied = new Promise<void>((resolve) => {
+      applied = resolve;
+    });
+    worker.onApply = applied;
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-pushed.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const intents = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-1",
+    });
+    const feed = createFeed();
+    let pulls = 0;
+    const replica = new ReplicaCoordinator(client, intents, {
+      changeFeed: feed,
+      pullChanges: async () => {
+        pulls += 1;
+        return undefined;
+      },
+    });
+    await replica.bootstrap(snapshot);
+    const pushed = {
+      protocolVersion: 1,
+      schemaEpoch: "schema",
+      from: { epoch: "epoch", seq: 0 },
+      to: { epoch: "epoch", seq: 1 },
+      changes: [
+        {
+          op: "upsert",
+          shapeId: "shape",
+          entity: "core.task",
+          rowId: "task-1",
+          values: { task_id: "task-1", status: "done" },
+        },
+      ],
+    };
+    feed.emit({
+      type: "centraid:vault-batch",
+      batch: pushed,
+      cursor: { epoch: "epoch", seq: 1 },
+    });
+    feed.emit({
+      type: "centraid:vault-change",
+      detail: {
+        cursor: { epoch: "epoch", seq: 1 },
+        entity: "core.task",
+        rowId: "task-1",
+        op: "update",
+        changedAt: "2026-07-15T00:00:00.000Z",
+      },
+    });
+    await batchApplied;
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: "epoch",
+      seq: 1,
+    });
+    expect(pulls).toBe(0);
+    await replica.close();
+  });
+
+  // A frame whose batch does not start at the local cursor is a GAP, and a gap
+  // is the pull path's job — the shortcut must never paper over one.
+  test("falls back to the pull when the pushed batch does not start here", async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-gap.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const intents = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-1",
+    });
+    const feed = createFeed();
+    const pulledFrom: ReplicaCursor[] = [];
+    const replica = new ReplicaCoordinator(client, intents, {
+      changeFeed: feed,
+      pullChanges: async (cursor) => {
+        pulledFrom.push(cursor);
+        return undefined;
+      },
+    });
+    await replica.bootstrap(snapshot);
+    feed.emit({
+      type: "centraid:vault-batch",
+      batch: {
+        protocolVersion: 1,
+        schemaEpoch: "schema",
+        from: { epoch: "epoch", seq: 7 },
+        to: { epoch: "epoch", seq: 9 },
+        changes: [],
+      },
+      cursor: { epoch: "epoch", seq: 9 },
+    });
+    await vi.waitFor(() => expect(pulledFrom.length).toBeGreaterThan(0));
+    expect(pulledFrom[0]).toStrictEqual({ epoch: "epoch", seq: 0 });
+    await replica.close();
+  });
+
   test("uses the shared feed as a pull trigger and resolves overlays before cursor advance", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
@@ -462,7 +573,7 @@ describe(ReplicaCoordinator, () => {
     });
     expect(pulledFrom).toStrictEqual([{ epoch: "epoch", seq: 0 }]);
     await expect(intents.list()).resolves.toStrictEqual([]);
-    await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await intents.overlay()).mutations).toStrictEqual([]);
     expect(invalidations).toContainEqual({
       shapeId: "shape",
       entity: "core.task",
@@ -618,16 +729,14 @@ describe(ReplicaCoordinator, () => {
     await expect(intents.list()).resolves.toMatchObject([
       { intentId: "persisted", state: "denied", reason: "grant expired" },
     ]);
-    await expect(intents.overlayMutations()).resolves.toMatchObject([
-      {
-        rowId: "task-1",
-        values: {
-          __centraid_pending_key: "persisted",
-          __centraid_pending_status: "denied",
-          __centraid_pending_reason: "grant expired",
-        },
-      },
+    const overlay = await intents.overlay();
+    expect(overlay.mutations).toMatchObject([
+      { rowId: "task-1", values: { __centraid_pending_key: "persisted" } },
     ]);
+    // The verdict is a fact about the WRITE: it rides the sidecar (#922 G3).
+    expect(overlay.sidecar).toMatchObject({
+      persisted: { status: "denied", reason: "grant expired" },
+    });
     await replica.close();
   });
 
@@ -1195,7 +1304,6 @@ function windowedHeader(): ReplicaBootstrapHeader {
       {
         shapeId: "shape-agenda",
         appId: "agenda",
-        purpose: "dpv:ServiceProvision",
         entities: [
           { entity: "core.event", primaryKey: "id", columns: ["id", "title"] },
         ],

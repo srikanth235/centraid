@@ -1,5 +1,4 @@
 import {
-  ACTION_PURPOSE,
   actionInput,
   deniedResult,
   runVaultAction,
@@ -50,7 +49,6 @@ export default async function sendToTasks({ body, ctx }: HandlerArgs) {
             relation: "references",
             ...(exact ? { selector: { exact, prefix: "", suffix: "" } } : {}),
           },
-          purpose: ACTION_PURPOSE,
         })
         .catch(() => undefined);
     }

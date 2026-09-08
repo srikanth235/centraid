@@ -32,7 +32,7 @@ import {
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { MoreSheet } from "../_shared/MoreSheet.tsx";
-import { readPendingOverlay } from "../_shared/pending-overlay.ts";
+import { pendingRowIntentId } from "../_shared/pending-overlay.ts";
 import {
   canWriteScope,
   mountedScopes,
@@ -107,8 +107,7 @@ import {
   inboxMeta,
 } from "./view-copy.ts";
 import {
-  isPendingTaskId,
-  landedTask,
+  boardTask,
   mountedWriteScope,
   removeTaskWrite,
   taskWrite,
@@ -322,8 +321,10 @@ export function Root({
     [data.projects]
   );
 
-  const pendingWriteCount = data.open.filter((task) =>
-    readPendingOverlay(task as unknown as Record<string, unknown>)
+  const pendingWriteCount = data.open.filter(
+    (task) =>
+      pendingRowIntentId(task as unknown as Record<string, unknown>) !==
+      undefined
   ).length;
 
   // A scope that could not be asked is a NAMED slice of the board that is
@@ -387,26 +388,11 @@ export function Root({
           ...dataRef.current.open,
           ...dataRef.current.logbook,
         ];
-        const pause = (): Promise<void> =>
-          new Promise((resolve) => {
-            window.setTimeout(resolve, 50);
-          });
-        const waitForLanded = async (deadline: number): Promise<Task> => {
-          const current = landedTask(task, rows()) ?? task;
-          if (!isPendingTaskId(current.task_id) || Date.now() >= deadline) {
-            return current;
-          }
-          await refresh();
-          const landed = landedTask(task, rows());
-          if (landed && !isPendingTaskId(landed.task_id)) return landed;
-          await pause();
-          return waitForLanded(deadline);
-        };
-        const target = await waitForLanded(Date.now() + 15_000);
-        if (isPendingTaskId(target.task_id)) {
-          publishOutcome(frame, { text: "This task has not landed yet." });
-          return;
-        }
+        // #922 G2: the id is the row's real id from the moment it is minted,
+        // so completing it needs no wait at all — the write names the same row
+        // whether or not the origin has seen the add yet, and the queue keeps
+        // the two acts in order.
+        const target = boardTask(task, rows()) ?? task;
         try {
           await window.centraid.write(
             taskWrite({

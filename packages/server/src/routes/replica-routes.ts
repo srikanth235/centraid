@@ -7,6 +7,7 @@ import type * as TypeImport_18fk7n9 from "node:sqlite";
 import { SseStream } from "@centraid/server/engine";
 import {
   currentReplicaLogState,
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   InvalidReplicaCursorError,
   parseReplicaCursor,
   readReplicaIntentOutcome,
@@ -37,6 +38,7 @@ import { replicaProjectionHub } from "./replica-fanout.js";
 import { handleReplicaIntent } from "./replica-intent-route.js";
 import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
 import {
+  applyReplicaIntentOutcomes,
   projectReplicaPage,
   replicaOutcomeWire,
   replicaShapeIds,
@@ -47,7 +49,6 @@ import {
   buildReplicaShapes,
   replicaRowColumns,
   replicaShapesWire,
-  REPLICA_MAX_VALUE_BYTES,
   REPLICA_PROTOCOL_VERSION,
   REPLICA_SYNTHETIC_PRIMARY_KEY,
   replicaWireRowId,
@@ -213,7 +214,7 @@ function collectBootstrapWindow(
     const page = reader.readRows(entity, {
       ...(after ? { after } : {}),
       limit: Math.min(BOOTSTRAP_READ_PAGE, windowLimit - rows.length),
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     for (const row of page.rows) {
       const shaped = shapeReplicaRow(shape, entity, row, nowMs);
@@ -276,7 +277,7 @@ function collectNewestVisibleRows(
   const seen = new Set<string>();
   const append = (entity: string, rowId: string): ReplicaRow | undefined => {
     const raw = reader.readRow(entity, rowId, {
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     if (!raw) return undefined;
     for (const shape of shapes) {
@@ -531,7 +532,7 @@ function rowForWireId(
 ): ReplicaRow | undefined {
   if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) {
     return reader.readRow(entity, wireRowId, {
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
   }
   let after: string | undefined;
@@ -540,7 +541,7 @@ function rowForWireId(
     const page = reader.readRows(entity, {
       ...(after ? { after } : {}),
       limit: Math.min(10_000, Math.max(1, maxRows - scanned)),
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     const found = page.rows.find(
       (row) => replicaWireRowId(shape, entity, row.rowId) === wireRowId
@@ -735,9 +736,16 @@ async function streamChanges(
       }
       baseline ??= replicaShapeIds(page.shapes);
       if (page.doorbell.length > 0) {
+        // SB-payload (#922 A1): the frame carries the batch the hub ALREADY
+        // projected, so a subscribed device applies it in one hop instead of
+        // discarding the doorbell and pulling `/changes` — which re-projected
+        // the same window outside the hub memo. Catch-up still pulls:
+        // `hasMore`, a reconnect, or a cursor gap. `changes` stays the
+        // doorbell so shape routing does not have to open the batch.
         writeSse(stream, "change", {
           changes: page.doorbell,
           cursor: page.batch.to,
+          batch: page.batch,
         });
       }
       if (!sameCursor(cursor, page.batch.to))
@@ -1052,7 +1060,7 @@ export function makeReplicaRouteHandler(
               const page = reader.readRows(entity, {
                 ...(after ? { after } : {}),
                 limit: 10_000,
-                maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+                maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
               });
               rows.push(...page.rows);
               if (
@@ -1128,11 +1136,17 @@ export function makeReplicaRouteHandler(
           rebootstrapBody("initial", currentReplicaLogState(plane.db.vault))
         );
       try {
-        const page = projectReplicaPage(
+        // The projection is device-neutral; this device's intent outcomes are
+        // layered on top (#922 A4).
+        const page = applyReplicaIntentOutcomes(
           plane.db.vault,
-          access,
-          parseSince(url),
-          limit ?? 1_000
+          projectReplicaPage(
+            plane.db.vault,
+            access,
+            parseSince(url),
+            limit ?? 1_000
+          ),
+          access
         );
         const expected = expectedReplicaShapeIds(url);
         if (

@@ -24,6 +24,7 @@ import {
   markEntityRevisionUndone,
   recordEntityRevision,
 } from "./entity-revisions.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { registerTallyLedgerCommands } from "./tally-ledger.js";
 import {
   convertCurrencyMinor,
@@ -635,6 +636,7 @@ const CREATE_GROUP: CommandDefinition = {
     required: ["name", "icon", "member_ids"],
     additionalProperties: false,
     properties: {
+      group_id: MINTED_ID_PROPERTY,
       name: { type: "string", minLength: 1 },
       icon: { type: "string", minLength: 1 },
       color: { type: "string" },
@@ -651,7 +653,9 @@ const CREATE_GROUP: CommandDefinition = {
     required: ["group_id"],
     properties: { group_id: { type: "string" } },
   },
-  preconditions: [],
+  preconditions: [
+    mintedIdIsFree("tally_group", "group_id", "group", "group_id"),
+  ],
   postconditions: [
     {
       name: "group_created",
@@ -686,7 +690,7 @@ const CREATE_GROUP: CommandDefinition = {
       )
       .run(circleId, owner, input.name);
     ctx.wrote("social.circle", circleId);
-    const groupId = ctx.newId();
+    const groupId = mintedId(ctx, "group_id");
     ctx.db
       .prepare(
         "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at) VALUES (?, ?, ?, ?, ?, ?)"
@@ -921,6 +925,7 @@ const ADD_EXPENSE: CommandDefinition = {
     required: ["description", "amount_minor", "paid_by", "category", "splits"],
     additionalProperties: false,
     properties: {
+      expense_id: MINTED_ID_PROPERTY,
       // Optional since GAPS #4: no group is a group-less 1:1 expense, and its
       // participants are checked against the friend roster instead.
       group_id: { type: "string", minLength: 1 },
@@ -943,6 +948,7 @@ const ADD_EXPENSE: CommandDefinition = {
     properties: { expense_id: { type: "string" } },
   },
   preconditions: [
+    mintedIdIsFree("tally_expense", "expense_id", "expense", "expense_id"),
     {
       name: "group_exists",
       sql: GROUP_EXISTS_IF_NAMED_SQL,
@@ -972,7 +978,7 @@ const ADD_EXPENSE: CommandDefinition = {
       amountMinor,
       input.payers
     );
-    const expenseId = ctx.newId();
+    const expenseId = mintedId(ctx, "expense_id");
     insertExpenseRow(ctx, expenseId, {
       groupId,
       description: input.description,
@@ -1022,6 +1028,7 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     ],
     additionalProperties: false,
     properties: {
+      expense_id: MINTED_ID_PROPERTY,
       group_id: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
       amount_minor: { type: "integer", minimum: 1 },
@@ -1047,6 +1054,7 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     },
   },
   preconditions: [
+    mintedIdIsFree("tally_expense", "expense_id", "expense"),
     {
       name: "group_exists",
       sql: GROUP_EXISTS_IF_NAMED_SQL,
@@ -1090,7 +1098,7 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     const minted = ctx.blobs.claimStaged(input.staged_sha, {
       title: `${input.description} receipt`,
     });
-    const expenseId = ctx.newId();
+    const expenseId = mintedId(ctx, "expense_id");
     insertExpenseRow(ctx, expenseId, {
       groupId,
       description: input.description,
@@ -1549,6 +1557,7 @@ const SETTLE_UP: CommandDefinition = {
     required: ["from_party", "to_party", "amount_minor"],
     additionalProperties: false,
     properties: {
+      settlement_id: MINTED_ID_PROPERTY,
       from_party: { type: "string", minLength: 1 },
       to_party: { type: "string", minLength: 1 },
       amount_minor: { type: "integer", minimum: 1 },
@@ -1567,7 +1576,14 @@ const SETTLE_UP: CommandDefinition = {
     required: ["settlement_id"],
     properties: { settlement_id: { type: "string" } },
   },
-  preconditions: [],
+  preconditions: [
+    mintedIdIsFree(
+      "tally_settlement",
+      "settlement_id",
+      "settlement",
+      "settlement_id"
+    ),
+  ],
   postconditions: [
     {
       name: "settlement_created",
@@ -1608,7 +1624,7 @@ const SETTLE_UP: CommandDefinition = {
             ? "a settlement is between two members of the group"
             : "a settlement is between you and a Tally friend"
         );
-    const settlementId = ctx.newId();
+    const settlementId = mintedId(ctx, "settlement_id");
     const paidOn = input.paid_on ?? ctx.now.slice(0, 10);
     const amount = Math.round(input.amount_minor);
     const currency = (

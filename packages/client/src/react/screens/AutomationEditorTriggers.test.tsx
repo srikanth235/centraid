@@ -160,7 +160,6 @@ describe("AutomationEditorTriggers", () => {
                 connector: null,
                 mcps: [],
                 secrets: [],
-                vaultPurpose: null,
                 vaultScopes: [],
                 connections: [
                   {

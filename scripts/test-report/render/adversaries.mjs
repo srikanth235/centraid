@@ -121,7 +121,7 @@ function chart(trend) {
     <path class="line" d="${path}"/>
     <circle class="end ${tone}" cx="${x(data.length - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="3.5"/>
   </svg>
-  <div class="foot"><span>${data.length} candidates · band ${format(q1)}–${format(q3)}</span><span>${trend.budget ? `budget ${format(trend.budget)} ${escapeHtml(trend.unit)}` : ""}</span></div>
+  <div class="foot"><span>${data.length} candidates · band ${format(q1)}–${format(q3)}</span><span>${trend.budget ? `budget ${format(trend.budget)} ${escapeHtml(trend.unit)}` : "gauge · no budget"}</span></div>
 </div>`;
 }
 
@@ -139,7 +139,7 @@ export function renderTrends(model) {
     `Only series with ${TREND_MINIMUM_POINTS} or more points`,
     "Trends",
     "with their noise band, endpoint emphasised",
-    `A series earns a chart at ${TREND_MINIMUM_POINTS} candidates. Until then it is a number in the evidence appendix. The band is the trailing 30-night interquartile range; a point outside it is what feeds "since yesterday".`,
+    `A series earns a chart at ${TREND_MINIMUM_POINTS} candidates. Until then it is a number in the evidence appendix. The band is the trailing 30-night interquartile range; a point outside it is what feeds "since yesterday". A card reading "gauge · no budget" is a measured number with no ceiling behind it — a series still waiting for the ledger to say what it should cost, not a gate someone dropped.`,
     body
   );
 }

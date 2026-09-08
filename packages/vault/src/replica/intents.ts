@@ -29,8 +29,27 @@ export interface ReplicaIntentOutcome {
   invocationId?: string;
   reason?: string;
   conflict?: ReplicaConflict;
+  waitingOn?: ReplicaWaitingOn;
+  answeredVersions?: readonly ReplicaAnsweredVersion[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Who a parked write is waiting on, and what to call them (#929). `label` is
+ * read off the LINK, so a member reads a person rather than a vault id.
+ */
+export interface ReplicaWaitingOn {
+  seat: "owner" | "origin" | "gateway";
+  label?: string;
+}
+
+/** One ORIGIN row version an answer stands for (#929, G1). */
+export interface ReplicaAnsweredVersion {
+  shapeId?: string;
+  entity: string;
+  rowId: string;
+  version: number;
 }
 
 export interface RecordReplicaIntentOutcomeInput {
@@ -44,6 +63,8 @@ export interface RecordReplicaIntentOutcomeInput {
   invocationId?: string;
   reason?: string;
   conflict?: ReplicaConflict;
+  waitingOn?: ReplicaWaitingOn;
+  answeredVersions?: readonly ReplicaAnsweredVersion[];
   now?: Date;
 }
 
@@ -57,6 +78,8 @@ interface IntentRow {
   invocation_id: string | null;
   reason: string | null;
   conflict_json: string | null;
+  waiting_on: string | null;
+  answered_versions: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +104,19 @@ function outcomeOf(row: IntentRow): ReplicaIntentOutcome {
     ...(row.conflict_json === null
       ? {}
       : { conflict: JSON.parse(row.conflict_json) as ReplicaConflict }),
+    // TYPE, not `=== null`: a row read by a query that predates these columns
+    // has `undefined` here, and `JSON.parse(undefined)` throws where the
+    // absence means exactly "this outcome names none".
+    ...(typeof row.waiting_on === "string"
+      ? { waitingOn: JSON.parse(row.waiting_on) as ReplicaWaitingOn }
+      : {}),
+    ...(typeof row.answered_versions === "string"
+      ? {
+          answeredVersions: JSON.parse(
+            row.answered_versions
+          ) as ReplicaAnsweredVersion[],
+        }
+      : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -90,7 +126,8 @@ function rowById(vault: DatabaseSync, intentId: string): IntentRow | undefined {
   return vault
     .prepare(
       `SELECT intent_id, device_id, app_id, action, payload_hash, status,
-              invocation_id, reason, conflict_json, created_at, updated_at
+              invocation_id, reason, conflict_json, waiting_on,
+              answered_versions, created_at, updated_at
          FROM replica_intent_outcome WHERE intent_id = ?`
     )
     .get(intentId) as IntentRow | undefined;
@@ -141,7 +178,8 @@ export function recordReplicaIntentOutcomeInTransaction(
     vault
       .prepare(
         `UPDATE replica_intent_outcome
-            SET status = ?, invocation_id = ?, reason = ?, conflict_json = ?, updated_at = ?
+            SET status = ?, invocation_id = ?, reason = ?, conflict_json = ?,
+                waiting_on = ?, answered_versions = ?, updated_at = ?
           WHERE intent_id = ?`
       )
       .run(
@@ -149,6 +187,8 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.invocationId ?? null,
         input.reason ?? null,
         input.conflict ? JSON.stringify(input.conflict) : null,
+        input.waitingOn ? JSON.stringify(input.waitingOn) : null,
+        input.answeredVersions ? JSON.stringify(input.answeredVersions) : null,
         now,
         input.intentId
       );
@@ -157,8 +197,9 @@ export function recordReplicaIntentOutcomeInTransaction(
       .prepare(
         `INSERT INTO replica_intent_outcome (
            intent_id, device_id, app_id, action, payload_hash, status,
-           invocation_id, reason, conflict_json, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           invocation_id, reason, conflict_json, waiting_on, answered_versions,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.intentId,
@@ -170,6 +211,8 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.invocationId ?? null,
         input.reason ?? null,
         input.conflict ? JSON.stringify(input.conflict) : null,
+        input.waitingOn ? JSON.stringify(input.waitingOn) : null,
+        input.answeredVersions ? JSON.stringify(input.answeredVersions) : null,
         now,
         now
       );
@@ -217,6 +260,8 @@ export interface TransitionReplicaIntentOutcomeInput {
   invocationId?: string;
   reason?: string;
   conflict?: ReplicaConflict;
+  waitingOn?: ReplicaWaitingOn;
+  answeredVersions?: readonly ReplicaAnsweredVersion[];
   now?: Date;
 }
 

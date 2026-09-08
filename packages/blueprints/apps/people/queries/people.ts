@@ -30,6 +30,7 @@ import {
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readLiveBindings } from "./_shared.ts";
 
 /** Forwarded verbatim, so the roster can draw the pending chip (#864). */
@@ -92,7 +93,6 @@ interface Reminder {
 const ROSTER_MAX = 9_999;
 
 export default async function peopleHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(
     Math.max(Number(input?.limit) || ROSTER_MAX, 20),
     ROSTER_MAX
@@ -104,10 +104,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "created_at", dir: "desc" },
         limit: window + 1,
-        purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
 
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -147,25 +145,25 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
 
     const [parties, tags, dates, bindings] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "in", value: partyIds },
         ],
-        purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [
           { column: "party_id", op: "in", value: partyIds },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       // One bounded read for the whole window; null means "denied", not "none".
       readLiveBindings(ctx.vault, partyIds),

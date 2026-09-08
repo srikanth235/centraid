@@ -9,7 +9,7 @@ iOS is a **separate artifact**: a different binary, built by a different toolcha
 | Member | What it settles that Android cannot |
 | --- | --- |
 | `pairing-canary` | The `.app` launches, redeems a ticket and reaches Home at all. Everything else in the lane is meaningless without it. |
-| `cold-start` | `tests/experience-budgets/mobile.json` names both jobs as probe hosts, and a launch time measured on a swiftshader-rendered x86_64 emulator says nothing about a hardware-accelerated simulator. Per-platform evidence or no evidence. |
+| `cold-start` | `tests/journeys.json` names both jobs as probe hosts, and a launch time measured on a swiftshader-rendered x86_64 emulator says nothing about a hardware-accelerated simulator. Per-platform evidence or no evidence. |
 | `notes-library` | One home-app journey: a write round-trips through the device replica and survives a real process death. It is the cheapest member that exercises the replica and the navigation stack together, and #870 is the reason a home-app journey is in the smallest set at all. |
 
 Everything else iOS owns — the MediaLibrary refusal, the Keychain boundary, the frame denominator, the Dynamic Island insets — is `ios-depth` on rung 4. This lane is not a small copy of that one; it is the promotion question.

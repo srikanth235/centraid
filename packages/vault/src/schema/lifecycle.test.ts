@@ -210,7 +210,7 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
         if (!column) continue;
         if (UPDATED_AT_EXCEPTIONS.has(name)) continue;
         // The `ledger` band is engine-owned and runs on the gateway's epoch-ms
-        // clock, like `core_share_origin.shared_at` and `blob_orphan.
+        // clock, like `blob_orphan.
         // first_orphaned_at`: its `updated_at` is an INTEGER, not the
         // ontology's ISO-8601 TEXT, and the store code stamps it explicitly on
         // every write. The ontology's one shape is a rule about ontology rows.

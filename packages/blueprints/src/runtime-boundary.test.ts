@@ -53,9 +53,12 @@ describe("v0 blueprint runtime boundary", () => {
   });
 
   it("keeps the maintenance-script set limited to live generated assets", () => {
+    // Both are `bun run build` steps whose output the runtime reads:
+    // `build-handlers.mjs` emits the precompiled handler a bundled app runs
+    // (#922 B2), `build-manifest.mjs` the catalog that lists its sources.
     expect(
       readdirSync(path.join(packageDir, "scripts")).toSorted()
-    ).toStrictEqual(["build-manifest.mjs"]);
+    ).toStrictEqual(["build-handlers.mjs", "build-manifest.mjs"]);
   });
 
   it("ships no generated token stylesheets of its own", () => {

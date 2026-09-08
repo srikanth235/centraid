@@ -32,7 +32,7 @@
 // PROJECTIONS of the row they are keyed by, and so are the composite-keyed
 // join rows (`media.memory_member`, `tally.expense_split`,
 // `tally.expense_payer`, `tally.expense_line_allocation`) and
-// `core.share_origin`, whose key IS its pointer. `locker.item_alias` is a
+// `share.subscription_lineage`, whose key carries its pointer. `locker.item_alias` is a
 // projection for a sharper reason: its key is a word the member chose, and
 // entity ids are one opaque namespace — an alias called "github" would occupy
 // an entity id, and a later entity minted with that id would satisfy the
@@ -135,8 +135,8 @@ CREATE TABLE core_entity (
 /**
  * PURGE REVOKES, IT DOES NOT ERASE (#916, E2).
  *
- * `share_authority` and `share_circle_grant` point at a subject with a
- * `(type, id)` pair and are deliberately NOT composite foreign keys: an answer
+ * `share_authority` points at a subject with a `(type, id)` pair and is
+ * deliberately NOT a composite foreign key: an answer
  * the member gave is a dated decision, and cascading it away on purge would
  * delete the record that the authority once stood — exactly the evidence a
  * revocation exists to keep. But leaving the rows untouched was the other
@@ -150,9 +150,8 @@ CREATE TABLE core_entity (
  * purge came from a command, a sweep, a cascade or a hand-written DELETE.
  * The rows stay; they are history, and history says when it ended.
  *
- * `share_authority_subject` and `share_circle_grant_container` are the indexes
- * this reads through; both are partial on `revoked_at IS NULL`, which is
- * exactly the set the trigger touches.
+ * `share_authority_subject` is the index this reads through; it is partial on
+ * `revoked_at IS NULL`, which is exactly the set the trigger touches.
  */
 export const ENTITY_PURGE_REVOKE_DDL = `
 CREATE TRIGGER core_entity_revoke_on_purge
@@ -162,11 +161,6 @@ BEGIN
      SET revoked_at = ${CLOCK}, revoked_reason = 'subject-purged'
    WHERE subject_type = OLD.entity_type
      AND subject_id = OLD.entity_id
-     AND revoked_at IS NULL;
-  UPDATE share_circle_grant
-     SET revoked_at = ${CLOCK}, revoked_reason = 'container-purged'
-   WHERE container_type = OLD.entity_type
-     AND container_id = OLD.entity_id
      AND revoked_at IS NULL;
   -- The PRINCIPAL side of the same rule (#916, D1). \`principal_id\` is
   -- polymorphic on \`principal_kind\` and carries no foreign key, so a purged

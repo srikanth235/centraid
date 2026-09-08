@@ -11,7 +11,7 @@
 // denominator rather than an invented one.
 
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 
 import {
   dayBuckets,
@@ -26,6 +26,8 @@ import {
   expenseCount,
 } from "@centraid/blueprints/apps/tally/view-copy";
 
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
+import SeatList from "../../kit/components/SeatList";
 import { spacing } from "../../kit/theme";
 import { tallyWindowFoot } from "./tally-view-model";
 import TallyEntryRow from "./TallyEntryRow";
@@ -47,6 +49,15 @@ export interface ActivityViewProps {
   onShowMore: () => void;
 }
 
+type ActivityRow = ActivityData["activity"][number];
+
+/** The day headings and their entries as ONE sequence, because a virtualised
+ *  list windows a flat list of rows and nothing else: a heading nested around
+ *  its rows would pin every row of an open day in memory. */
+type LedgerItem =
+  | { kind: "day"; key: string; label: string; meta: string }
+  | { kind: "entry"; key: string; row: ActivityRow };
+
 export default function ActivityView(
   props: ActivityViewProps
 ): React.JSX.Element {
@@ -54,67 +65,75 @@ export default function ActivityView(
     () => windowOf(props.data.activity, props.window),
     [props.data.activity, props.window]
   );
-  const buckets = useMemo(
-    () => dayBuckets(view.rows, props.now),
-    [view.rows, props.now]
-  );
+  const items = useMemo(() => {
+    const flat: LedgerItem[] = [];
+    for (const bucket of dayBuckets(view.rows, props.now)) {
+      flat.push({
+        kind: "day",
+        key: bucket.key,
+        label: bucket.label,
+        meta: expenseCount(bucket.rows.length),
+      });
+      bucket.rows.forEach((row, index) => {
+        flat.push({ kind: "entry", key: `${bucket.key}-${index}`, row });
+      });
+    }
+    return flat;
+  }, [view.rows, props.now]);
   const currency = props.data.currency;
 
-  return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <TallyNotice {...props.notice} />
-
-      {buckets.map((bucket) => (
-        <Section
-          key={bucket.key}
-          label={bucket.label}
-          meta={expenseCount(bucket.rows.length)}
-          filled={bucket.rows.length > 0}
-        >
-          {bucket.rows.map((row, index) => {
-            const key = `${bucket.key}-${index}`;
-            if (row.kind === "settlement") {
-              const mine =
-                row.from_party === props.data.me ||
-                row.to_party === props.data.me;
-              return (
-                <LedgerRow
-                  key={key}
-                  title={settlementTitle(row.from_name, row.to_name)}
-                  meta={metaSentence([
-                    row.date,
-                    money(row.amount_minor, currency),
-                    row.group_name,
-                    mine ? "" : SETTLEMENT_NOT_YOURS,
-                  ])}
-                  figure={{
-                    netMinor: 0,
-                    text: money(row.amount_minor, currency),
-                    sub: "settled",
-                    tone: "settled",
-                  }}
-                />
-              );
-            }
-            return (
-              <TallyEntryRow
-                key={key}
-                facts={feedFacts(row)}
-                currency={currency}
-                me={props.data.me}
-                {...(row.group_name ? { groupName: row.group_name } : {})}
-              />
-            );
-          })}
-        </Section>
-      ))}
-
-      <WindowFoot
-        text={tallyWindowFoot(props.loaded, view.shown, view.total)}
-        moreLabel={VERBS.showMore}
-        {...(view.more ? { onMore: props.onShowMore } : {})}
+  const renderRow = (item: LedgerItem): React.JSX.Element => {
+    if (item.kind === "day")
+      return <Section label={item.label} meta={item.meta} filled={false} />;
+    const row = item.row;
+    if (row.kind === "settlement") {
+      const mine =
+        row.from_party === props.data.me || row.to_party === props.data.me;
+      return (
+        <LedgerRow
+          title={settlementTitle(row.from_name, row.to_name)}
+          meta={metaSentence([
+            row.date,
+            money(row.amount_minor, currency),
+            row.group_name,
+            mine ? "" : SETTLEMENT_NOT_YOURS,
+          ])}
+          figure={{
+            netMinor: 0,
+            text: money(row.amount_minor, currency),
+            sub: "settled",
+            tone: "settled",
+          }}
+        />
+      );
+    }
+    return (
+      <TallyEntryRow
+        facts={feedFacts(row)}
+        currency={currency}
+        me={props.data.me}
+        {...(row.group_name ? { groupName: row.group_name } : {})}
       />
-    </ScrollView>
+    );
+  };
+
+  return (
+    <SeatList
+      accessibilityLabel="Activity"
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={items}
+      keyOf={(item) => item.key}
+      renderRow={renderRow}
+      contentContainerStyle={styles.page}
+      header={<TallyNotice {...props.notice} />}
+      footer={
+        <WindowFoot
+          text={tallyWindowFoot(props.loaded, view.shown, view.total)}
+          moreLabel={VERBS.showMore}
+          {...(view.more ? { onMore: props.onShowMore } : {})}
+        />
+      }
+    />
   );
 }
 

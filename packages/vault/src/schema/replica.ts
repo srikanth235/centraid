@@ -89,6 +89,18 @@ CREATE TABLE IF NOT EXISTS replica_intent_outcome (
   invocation_id TEXT,
   reason        TEXT,
   conflict_json TEXT CHECK (conflict_json IS NULL OR json_valid(conflict_json)),
+  -- WHO A PARKED WRITE IS WAITING ON (#929): 'owner' when the origin's member
+  -- must decide it, 'origin' when the write is queued for the vault that owns
+  -- the container, 'gateway' when the host cannot carry it yet. The seat draws
+  -- a person from it, so the label rides along — read off the LINK, never a
+  -- vault id a member has no name for.
+  waiting_on    TEXT CHECK (waiting_on IS NULL OR json_valid(waiting_on)),
+  -- The ORIGIN row versions this intent's answer stands for (#929, G1). A
+  -- member's pending row drops only when their replica holds them; without the
+  -- versions the seat would have to guess, and the guess is what makes a
+  -- pending badge clear before the row it wrote arrives.
+  answered_versions TEXT
+    CHECK (answered_versions IS NULL OR json_valid(answered_versions)),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;

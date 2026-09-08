@@ -53,24 +53,19 @@ import {
   removeLockerDeviceCredential,
   storeLockerDeviceCredential,
 } from "./locker-device-auth";
+import { lockerAuth, lockerItem } from "./locker-gateway";
 import {
   ITEMS_WINDOW,
-  lockerAuth,
-  lockerItem,
   lockerItems,
   lockerSearch,
   lockerTrash,
   nextWindow,
-} from "./locker-gateway";
-import type { VaultDenial } from "./locker-gateway";
+} from "./locker-reads";
+import type { VaultDenial } from "./locker-reads";
 
 /** The sliding window and every reveal countdown are read from this one tick,
  *  so a reveal cannot outlive its session. */
 const TICK_MS = 1000;
-
-/** Long enough that a member reading an item is not told their list is stale,
- *  short enough that one left open overnight is. */
-const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export interface LockerVaultState {
   session: SessionState;
@@ -86,10 +81,6 @@ export interface LockerVaultState {
   loaded: boolean;
   reading: boolean;
   readError: string;
-  lastReadAt: string | null;
-  /** Decided on the boundary's tick, never by a screen reading the clock
-   *  during render — that is a purity violation and unstable besides. */
-  stale: boolean;
   /** The permit gate is standing, and this is what it is refusing so far. */
   permitError: string;
   permitBusy: boolean;
@@ -138,8 +129,6 @@ function initialState(): LockerVaultState {
     loaded: false,
     reading: false,
     readError: "",
-    lastReadAt: null,
-    stale: false,
     permitError: "",
     permitBusy: false,
     reauth: false,
@@ -225,10 +214,6 @@ function startTicker(): void {
       lockNow();
       return;
     }
-    const stale =
-      state.lastReadAt !== null &&
-      Date.now() - Date.parse(state.lastReadAt) > STALE_AFTER_MS;
-    if (stale !== state.stale) set({ stale });
     // A revealed value outliving the permit that bought it conceals itself.
     const outlived = Object.entries(state.bag.revealedAt).filter(([, at]) =>
       isRevealExpired(at)
@@ -277,8 +262,6 @@ export function lockNow(): void {
     limit: ITEMS_WINDOW,
     loaded: false,
     readError: "",
-    lastReadAt: null,
-    stale: false,
     permitError: "",
     reauth: false,
     ...lockedSurfaceState(),
@@ -415,19 +398,21 @@ export async function revokeLockerDevice(): Promise<void> {
 
 // ─── Reading ────────────────────────────────────────────────────────────────
 
-/** The bounded window. `limit` is what *Show more* widens. */
+/**
+ * The bounded window, read from THIS DEVICE'S replica. `limit` is what
+ * *Show more* widens.
+ *
+ * The read needs no session token — a `locker.item` window is the app grant's
+ * (#928) — but it still waits for an open one, because a locker that draws its
+ * own list behind its lock screen has not locked anything.
+ */
 export async function loadLockerItems(limit = state.limit): Promise<void> {
-  const token = state.bag.sessionToken;
-  if (!token) return;
+  if (!isOpen(state.session)) return;
   set({ reading: true, readError: "" });
   try {
-    const payload = await lockerItems(token, limit);
+    const payload = await lockerItems(limit);
     if (payload.vaultDenied) {
       set({ reading: false, denied: payload.vaultDenied, loaded: true });
-      return;
-    }
-    if (payload.authRequired) {
-      lockNow();
       return;
     }
     set({
@@ -437,8 +422,6 @@ export async function loadLockerItems(limit = state.limit): Promise<void> {
       truncated: payload.truncated === true,
       limit,
       loaded: true,
-      lastReadAt: new Date().toISOString(),
-      stale: false,
     });
   } catch (error) {
     set({ reading: false, readError: message(error), loaded: true });
@@ -450,8 +433,20 @@ export function showMoreLockerItems(): Promise<void> {
   return loadLockerItems(nextWindow(state.limit));
 }
 
-/** Title, username and address — and it is the server that matches them, over
- *  fields the payload never returns. */
+/**
+ * A change landed in the replica this seat now reads from, so the window has
+ * to be re-taken — and with it the trash shelf, but only where the member has
+ * already opened it. A locked session holds no rows, so it re-reads none.
+ */
+export async function refreshLockerItems(): Promise<void> {
+  if (!isOpen(state.session)) return;
+  const hadTrash = state.bag.trashRows.length > 0;
+  await loadLockerItems();
+  if (hadTrash) await loadLockerTrash();
+}
+
+/** Title, username and address — matched over fields the payload never
+ *  returns, by the app's own query, on this device. */
 export async function searchLocker(term: string): Promise<void> {
   state.bag.searchTerm = term;
   if (!term.trim()) {

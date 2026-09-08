@@ -39,7 +39,6 @@ describe("tally", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
   function out<T = Record<string, unknown>>(o: ReturnType<typeof invoke>): T {

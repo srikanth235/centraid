@@ -18,7 +18,7 @@ describe("hardware-profile: host limits", () => {
       cgroupLimitedCpu: true,
       cgroupLimitedMemory: false,
       workerMaxConcurrent: 2,
-      workerPoolSize: 0,
+      workerPoolSize: 1,
       replicationConcurrency: 1,
       sqliteSynchronous: "FULL",
     });

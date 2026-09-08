@@ -133,7 +133,6 @@ describe("connection-broker", () => {
         allowed_hosts: ["gmail.googleapis.com"],
         ...over,
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       throw new Error(`configure failed: ${JSON.stringify(outcome)}`);
@@ -156,7 +155,6 @@ describe("connection-broker", () => {
         client_id: "shared.apps.googleusercontent.com",
         allowed_hosts: ["www.googleapis.com", "oauth2.googleapis.com"],
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed") {
       throw new Error(`configure failed: ${JSON.stringify(outcome)}`);
@@ -173,7 +171,6 @@ describe("connection-broker", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "sync.store_tokens",
       input: { connection_id: connectionId, ...input },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       throw new Error(`store failed: ${JSON.stringify(outcome)}`);
@@ -205,7 +202,6 @@ describe("connection-broker", () => {
         api_key: "ghp_broker_live",
         allowed_hosts: ["api.github.com"],
       },
-      purpose: "dpv:ServiceProvision",
     });
     const broker = new ConnectionBroker(() => plane);
     const auth = await broker.resolveForFire({
@@ -232,7 +228,6 @@ describe("connection-broker", () => {
         api_key: "github-secret-token",
         allowed_hosts: ["api.github.com"],
       },
-      purpose: "dpv:ServiceProvision",
     });
     const connectionId = (configured as { output: { connection_id: string } })
       .output.connection_id;
@@ -303,7 +298,6 @@ describe("connection-broker", () => {
         api_key: "ghp_broker_live",
         allowed_hosts: ["api.github.com"],
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed") throw new Error("configure failed");
     const connectionId = (outcome as { output: { connection_id: string } })
@@ -331,7 +325,6 @@ describe("connection-broker", () => {
         api_key: "lin_api_test",
         allowed_hosts: ["api.linear.app"],
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed") throw new Error("configure failed");
     const broker = new ConnectionBroker(() => plane);

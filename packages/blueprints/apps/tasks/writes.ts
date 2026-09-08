@@ -29,22 +29,20 @@ export function mountedWriteScope(
   return mountedIds.includes(scopeId) ? scopeId : null;
 }
 
-/** Optimistic add projects `pending:<intent>:task`. Completing that
- *  synthetic id is a vault miss; wait for the landed row instead. */
-export function isPendingTaskId(taskId: string): boolean {
-  return taskId.startsWith("pending:");
-}
-
-export function landedTask<T extends { task_id: string; title: string }>(
-  task: Pick<T, "task_id" | "title">,
+/**
+ * The row this task IS, in the current board.
+ *
+ * There is no "landed" id to wait for any more (#922 G2): the projection mints
+ * the task's real id, the write carries it and the origin honours it, so the
+ * id an optimistic row shows is the id the vault will hold. Matching by title
+ * — the old fallback for a `pending:` id that never became canonical — is
+ * gone with the grammar that made it necessary.
+ */
+export function boardTask<T extends { task_id: string }>(
+  task: Pick<T, "task_id">,
   rows: readonly T[]
 ): T | undefined {
-  if (!isPendingTaskId(task.task_id)) {
-    return rows.find((row) => row.task_id === task.task_id);
-  }
-  return rows.find(
-    (row) => row.title === task.title && !isPendingTaskId(row.task_id)
-  );
+  return rows.find((row) => row.task_id === task.task_id);
 }
 
 /** The id `add` minted, or `null` while the write is still queued. */

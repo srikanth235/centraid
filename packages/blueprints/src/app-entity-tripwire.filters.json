@@ -1,0 +1,85 @@
+{
+  "_comment": "WORK ORDER for #928 waves 2 and 4. Every rowFilter and fieldMask a bundled app declares today, pinned by packages/blueprints/src/app-entity-tripwire.test.ts. The runtime evaluator honours these clauses; #928 deletes it, so each must be re-expressed as a WHERE clause and a column list in the app query that depends on it BEFORE the evaluator stops applying it. Do not re-express them by editing this file - it is the ledger, not the enforcement.",
+  "_shape": "One row per manifest scope carrying either key, in manifest order. rowFilter and fieldMask are null when absent.",
+  "filters": [
+    {
+      "app": "locker",
+      "scope": "core.entity_revision",
+      "verbs": "read",
+      "rowFilter": [
+        {
+          "column": "entity_type",
+          "op": "eq",
+          "value": "locker.item"
+        }
+      ],
+      "fieldMask": [
+        "revision_id",
+        "entity_type",
+        "entity_id",
+        "operation",
+        "snapshot_json",
+        "recorded_at",
+        "undo_until",
+        "undone_at"
+      ]
+    },
+    {
+      "app": "locker",
+      "scope": "access.receipt",
+      "verbs": "read",
+      "rowFilter": [
+        {
+          "column": "object_type",
+          "op": "in",
+          "value": ["locker.item", "locker.auth"]
+        }
+      ],
+      "fieldMask": null
+    },
+    {
+      "app": "people",
+      "scope": "core.entity_revision",
+      "verbs": "read",
+      "rowFilter": [
+        {
+          "column": "entity_type",
+          "op": "eq",
+          "value": "people.person"
+        }
+      ],
+      "fieldMask": [
+        "revision_id",
+        "entity_type",
+        "entity_id",
+        "operation",
+        "snapshot_json",
+        "recorded_at",
+        "undo_until",
+        "undone_at"
+      ]
+    },
+    {
+      "app": "tally",
+      "scope": "core.entity_revision",
+      "verbs": "read",
+      "rowFilter": [
+        {
+          "column": "entity_type",
+          "op": "eq",
+          "value": "tally.expense"
+        }
+      ],
+      "fieldMask": [
+        "revision_id",
+        "entity_type",
+        "entity_id",
+        "operation",
+        "snapshot_json",
+        "recorded_at",
+        "undo_until",
+        "undone_at"
+      ]
+    }
+  ]
+}

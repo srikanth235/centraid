@@ -117,11 +117,11 @@
       ]
     },
     "apps/mobile": {
-      "entry": ["index.ts", "App.tsx", "scripts/*.mjs"],
+      "entry": ["index.ts", "App.tsx", "navigators.tsx", "scripts/*.mjs"],
       "project": [
         "src/**/*.{ts,tsx}",
         "lazy-screens.tsx",
-        "navigators.tsx",
+        "lazy-navigators.tsx",
         "scripts/*.mjs"
       ],
       "ignoreDependencies": [

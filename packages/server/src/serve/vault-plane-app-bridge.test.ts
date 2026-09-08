@@ -19,8 +19,7 @@ describe("vault-plane app bridge", () => {
   test("Locker app reveals require an expiring one-time user-presence permit", async () => {
     const plane = fixture.openPlane(await tempDir("locker-auth-plane-"));
     plane.installApp("locker", "Locker");
-    plane.approveGrant("locker", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("locker", {
       scopes: [{ schema: "locker", table: "item", verbs: "reveal" }],
     });
     const added = plane.gateway.invoke(plane.ownerCredential, {
@@ -31,7 +30,6 @@ describe("vault-plane app bridge", () => {
         password: "permit-protected-secret",
         url: "https://example.com",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(added.status).toBe("executed");
     const itemId = (added as { output: { item_id: string } }).output.item_id;
@@ -47,7 +45,6 @@ describe("vault-plane app bridge", () => {
           entityId: itemId,
           columns: ["password"],
           authentication,
-          purpose: "dpv:ServiceProvision",
         },
       });
 
@@ -153,9 +150,7 @@ describe("vault-plane app bridge", () => {
   test("a granted app invoke executes without parking; the risk marker rides the receipt (issue #306)", async () => {
     const plane = fixture.openPlane(await tempDir());
     const calendarId = seedCalendar(plane);
-    plane.enrollApp("planner");
-    plane.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
 
@@ -170,7 +165,6 @@ describe("vault-plane app bridge", () => {
           dtend: "2026-07-04T09:30:00Z",
           calendar_id: calendarId,
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     // propose_event is medium risk — installing granted the scope, so it
@@ -197,8 +191,7 @@ describe("vault-plane app bridge", () => {
     const plane = fixture.openPlane(await tempDir());
     const calendarId = seedCalendar(plane);
     ensureAppEnrolled(plane.db, "planner", { riskCeiling: "medium" });
-    plane.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
 
@@ -226,7 +219,6 @@ describe("vault-plane app bridge", () => {
         ],
         queries: [],
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [{ schema: "schedule", verbs: "read+act" }],
         },
       }),
@@ -243,7 +235,6 @@ describe("vault-plane app bridge", () => {
            dtend: '2026-07-07T09:30:00Z',
            calendar_id: ${JSON.stringify(calendarId)},
          },
-         purpose: 'dpv:ServiceProvision',
        });
        return { status: 200, body: outcome };
      };\n`,

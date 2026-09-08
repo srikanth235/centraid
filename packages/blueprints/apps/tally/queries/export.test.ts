@@ -97,11 +97,26 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
 };
 
 function run(input: Record<string, unknown>) {
+  // THE DOUBLE HONOURS `where` (#928). The export used to read every revision
+  // and keep the ones it wanted; now it asks for the rows it wants, so a stub
+  // that ignored the clause would leave the SQL untested and pass on the
+  // handler's discarded leftovers.
   const read = vi.fn<
-    (request: { entity: string }) => Promise<{
+    (request: {
+      entity: string;
+      where?: Array<{ column: string; op: string; value?: unknown }>;
+    }) => Promise<{
       rows: Array<Record<string, unknown>>;
     }>
-  >(async ({ entity }) => ({ rows: ROWS[entity] ?? [] }));
+  >(async ({ entity, where }) => ({
+    rows: (ROWS[entity] ?? []).filter((row) =>
+      (where ?? []).every((clause) =>
+        clause.op === "in" && Array.isArray(clause.value)
+          ? clause.value.includes(row[clause.column])
+          : clause.op !== "eq" || row[clause.column] === clause.value
+      )
+    ),
+  }));
   return exportHandler({
     input,
     ctx: { vault: { read } },

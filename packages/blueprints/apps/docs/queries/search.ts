@@ -16,6 +16,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   readCustodyByContent,
   readLabelsByDocument,
@@ -43,7 +44,6 @@ interface ContentRow {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { documents: [] };
   try {
@@ -51,22 +51,20 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       entity: "core.document",
       query: term,
       limit: 100,
-      purpose,
     });
     const hits = (matches.rows ?? []) as unknown as SearchHit[];
     if (hits.length === 0) return { documents: [] };
     const documentIds = hits.map((d) => d.document_id);
     const [tags, concepts, schemes] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
           { column: "target_id", op: "in", value: documentIds },
         ],
-        purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
@@ -75,7 +73,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // read over the same matched ids.
     const tagsByDoc = await readLabelsByDocument({
       ctx,
-      purpose,
       documentIds,
       schemes: schemeRows,
       concepts: conceptRows,
@@ -116,16 +113,15 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const [contents, custodyByContent, sharesByDoc] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
-      readCustodyByContent({ ctx, purpose, contentIds }),
+      readCustodyByContent({ ctx, contentIds }),
       // Shares (#821) bounded by matched documents; same join drive.ts makes.
       readSharesByDocument({
         ctx,
-        purpose,
         documentIds: [...folderByDoc.keys()],
         folderByDoc,
         folderConcepts: schemeConcepts,

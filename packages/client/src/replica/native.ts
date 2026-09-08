@@ -11,8 +11,10 @@
 export * from "./coordinator.js";
 export * from "./digest.js";
 export * from "./errors.js";
+export * from "./inline-query-ctx-core.js";
 export * from "./intent-invalidations.js";
 export * from "./intent-record-store.js";
+export * from "./intent-revision.js";
 export * from "./intents.js";
 export * from "./key.js";
 export * from "./live-query.js";
@@ -28,7 +30,9 @@ export * from "./search.js";
 export * from "./shell-transport.js";
 export * from "./store.js";
 export * from "./store-core.js";
+export * from "./trace.js";
 export * from "./types.js";
+export * from "./work-counters.js";
 export * from "./windowed-bootstrap.js";
 export * from "./write-helpers.js";
 export {

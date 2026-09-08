@@ -1,12 +1,13 @@
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { registerKnowledgeCommands } from "./knowledge.js";
 import { registerLinkCommands } from "./links.js";
 import { registerTaskCommands } from "./tasks.js";
@@ -36,7 +37,7 @@ describe("links", () => {
     command: string,
     input: Record<string, unknown>
   ) {
-    return gw.invoke(cred, { command, input, purpose: "dpv:ServiceProvision" });
+    return gw.invoke(cred, { command, input });
   }
 
   function addTask(title: string): string {
@@ -193,30 +194,28 @@ describe("links", () => {
     expect(meta.reason).toContain("links do not link links");
   });
 
-  test("an app may only assert links between endpoints its grant lets it READ", () => {
+  test("an automation may only assert links between endpoints its ANSWER lets it READ", () => {
     const noteId = addNote("A");
     const taskId = addTask("B");
-    const app = enrollApp(db, { name: "linker" });
-    const appCred: Credential = {
-      kind: "app",
-      appId: app.appId,
-      signingKey: app.signingKey,
-    };
-    const purposeId = boot.concepts["dpv:ServiceProvision"] ?? "";
-
-    // Grant: act on both link commands, read on knowledge only — schedule is
-    // deliberately NOT covered, so the to-endpoint fails the readable rule.
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: purposeId,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [
-        { schema: "core", table: "link_entities", verbs: "act" },
-        { schema: "core", table: "unlink_entities", verbs: "act" },
-        { schema: "core", table: "link", verbs: "read" },
-        { schema: "knowledge", verbs: "read" },
-      ],
+    const app = enrollAgent(db, {
+      name: "linker",
+      modelRef: "test-automation",
     });
+    const appCred: Credential = {
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
+
+    // Answered: act on both link commands, read on knowledge only — schedule
+    // is deliberately NOT covered, so the to-endpoint fails the readable rule.
+    answerScopes(db, boot, "linker", [
+      { schema: "core", table: "link_entities", verbs: "act" },
+      { schema: "core", table: "unlink_entities", verbs: "act" },
+      { schema: "core", table: "link", verbs: "read" },
+      { schema: "knowledge", verbs: "read" },
+    ]);
     const denied = invoke(appCred, "core.link_entities", {
       from_type: "knowledge.note",
       from_id: noteId,
@@ -227,17 +226,12 @@ describe("links", () => {
     expect(denied.status).toBe("failed");
     assert(denied.status === "failed");
     expect(denied.reason).toContain(
-      "grant does not cover read of schedule.task"
+      "no standing answer covers read of schedule.task"
     );
 
-    // A second grant widens read to schedule — now the same assertion lands,
-    // stamped as app-asserted.
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: purposeId,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "schedule", verbs: "read" }],
-    });
+    // A second answer widens read to schedule — now the same assertion lands,
+    // stamped as agent-asserted.
+    answerScopes(db, boot, "linker", [{ schema: "schedule", verbs: "read" }]);
     const allowed = invoke(appCred, "core.link_entities", {
       from_type: "knowledge.note",
       from_id: noteId,
@@ -249,7 +243,7 @@ describe("links", () => {
     const linkId = (allowed as { output: { link_id: string } }).output.link_id;
     expect(liveLink(linkId)).toMatchObject({
       valid_to: null,
-      asserted_by: "app",
+      asserted_by: "agent",
     });
   });
 
@@ -320,7 +314,6 @@ describe("links", () => {
         { column: "to_id", op: "eq", value: taskId },
         { column: "valid_to", op: "is-null" },
       ],
-      purpose: "dpv:ServiceProvision",
     });
     expect(backlinks.rows).toHaveLength(2);
   });

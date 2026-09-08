@@ -72,11 +72,20 @@ export const VAULT_ENTITIES: EntityRegistry = {
       label: "Content",
       blurb: "Files and media you've saved.",
       lifecycle: "trash",
+      // A note body is a `data:` URI in `content_uri`, so this row is where
+      // the ontology keeps long member TEXT (#922, SB-text). Past 1 MiB the
+      // value has stopped being a body and is a document: it takes the blob
+      // path, and both clients name the absence.
+      replicaValues: { textCeilingBytes: 1_024 * 1_024 },
     },
     content_derivative: {
       lifecycle: "mutable",
       label: "Derivatives",
       blurb: "Thumbnails and previews made from content.",
+      // `text_content` is a document's extracted text or a recording's
+      // transcript — what a Docs screen renders offline. Same ceiling as the
+      // body it came from; picture variants carry a sha, not bytes.
+      replicaValues: { textCeilingBytes: 1_024 * 1_024 },
     },
     document: {
       label: "Documents",
@@ -138,36 +147,18 @@ export const VAULT_ENTITIES: EntityRegistry = {
       label: "Entity history",
       blurb: "Pre-mutation snapshots for version history and undo.",
     },
-    // Share-by-placement provenance (#599). Registered so a merged
-    // multi-scope app view can read the audience + who-placed-it badge for a
-    // projected row like any other table.
-    share_origin: {
-      lifecycle: "mutable",
-      // Its PRIMARY KEY *is* its pointer, so a provenance row cannot outlive
-      // the row it attributes; it names a target, it is not one (#916).
-      projectionOf: "core.entity",
-      label: "Shared with here",
-      blurb: "Where an item placed in this space came from, and who placed it.",
-    },
   },
-  // `access`, not `consent` (#916, owner decision D4). The plane decides
-  // ACCESS — who may read what, for how long, under which purpose — and had
-  // stopped being about consent: two thirds of it is an install register and
-  // an enrolment register. `consent.access_grant` became `access.grant`; the
-  // qualifier was only ever there because the plane was called something
-  // else. The plane's evidence stream moved with it: `access.provenance` and
-  // `access.receipt` are the audit band's, one plane with one name. The band
-  // is BAND-EXCLUDED from this registry — see `schema/audit.ts` and
-  // `schema/local-tables.ts`.
+  // `access`, not `consent` (#916, owner decision D4), and REGISTERS ONLY
+  // since #928: an install register, an enrolment register, a device
+  // register and the demo-seed register. What the plane decides — who may
+  // reach what — is a `share_authority` row, one plane for every principal.
+  // The plane's evidence stream is the audit band's `access.provenance` and
+  // `access.receipt`, BAND-EXCLUDED from this registry — see
+  // `schema/audit.ts` and `schema/local-tables.ts`.
   access: {
     app: { label: "Installed apps", lifecycle: "machinery" },
     agent: { label: "Agent registrations", lifecycle: "machinery" },
     app_ext: { label: "App tables", lifecycle: "machinery" },
-    grant: { label: "App grants", lifecycle: "machinery" },
-    grant_scope: { label: "Grant scopes", lifecycle: "machinery" },
-    scope_tombstone: { label: "Withdrawn scopes", lifecycle: "machinery" },
-    scope_request: { label: "Scope requests", lifecycle: "machinery" },
-    policy: { label: "Policies", lifecycle: "machinery" },
     device: { label: "Devices", lifecycle: "machinery" },
     seed_row: { label: "Seeded rows", lifecycle: "machinery" },
   },
@@ -519,7 +510,13 @@ export const VAULT_ENTITIES: EntityRegistry = {
   // beside it as `enrich.consent` are rows of `share.authority` since #883 —
   // one plane for every standing answer — and are registered there.
   enrich: {
-    embedding: { label: "Embeddings", lifecycle: "machinery" },
+    embedding: {
+      label: "Embeddings",
+      lifecycle: "machinery",
+      // The ONE genuinely binary column in the registry: little-endian
+      // float32 vectors. Deferred by declaration, not by weight (#922).
+      replicaValues: { lazyColumns: ["vector"] },
+    },
     request: { label: "Enrichment requests", lifecycle: "machinery" },
     policy: { label: "Enrichment policy", lifecycle: "machinery" },
     derivation: { label: "Enrichment provenance", lifecycle: "machinery" },
@@ -527,24 +524,13 @@ export const VAULT_ENTITIES: EntityRegistry = {
   },
   outbox: {
     item: { label: "Outbox items", lifecycle: "machinery" },
-    grant: { label: "Outbox grants", lifecycle: "machinery" },
   },
-  // Commons control truth and local mechanics (#731). These must stay in the
-  // canonical walk: a portable restore without the grant/roster bindings,
-  // ordered op log, cursors, intent overlay, or pending invitations would
-  // silently turn shared content into an unrelated local copy.
+  // The sharing plane's control truth (#731, #929). These must stay in the
+  // canonical walk: a portable restore without the bindings, the standing
+  // answers, the delivery state or the subscription lineage would silently turn
+  // shared content into an unrelated local copy.
   share: {
     party_vault_binding: { label: "Vault bindings", lifecycle: "machinery" },
-    circle_grant: { label: "Circle grants", lifecycle: "machinery" },
-    commons_member_state: { label: "Member state", lifecycle: "machinery" },
-    commons_op: { label: "Commons operations", lifecycle: "machinery" },
-    commons_replay: { label: "Replayed operations", lifecycle: "machinery" },
-    commons_receipt: { label: "Commons receipts", lifecycle: "machinery" },
-    commons_cursor: { label: "Commons cursors", lifecycle: "machinery" },
-    commons_lineage: { label: "Commons lineage", lifecycle: "machinery" },
-    commons_retained: { label: "Retained commons", lifecycle: "machinery" },
-    commons_intent: { label: "Commons intents", lifecycle: "machinery" },
-    commons_invitation: { label: "Invitations", lifecycle: "machinery" },
     // The authority plane (#825, unified by #883). `authority` is EVERY
     // standing answer the member has given — to a person, a circle, a harness
     // or one of their own devices — `delivery_config` the per-grant
@@ -554,24 +540,30 @@ export const VAULT_ENTITIES: EntityRegistry = {
     // engines it agreed to, and which devices it trusts — and would re-deliver
     // everything it had already sent.
     authority: { label: "Access answers", lifecycle: "machinery" },
+    // What an automation has ASKED for and the member has not decided yet
+    // (#928). Registered, not local: a restore that forgot the open ask would
+    // silently drop a question the member was about to be shown, and the
+    // automation's next mount would park it again as if it were new.
+    authority_request: { label: "Pending asks", lifecycle: "machinery" },
+    // WHEN each answer was last exercised (#928) — what Settings → Access
+    // draws beside every row. Registered because "you granted this a year ago
+    // and nothing has used it since" is the fact that makes a stale answer
+    // visible, and a restore that forgot it would silently reset every row to
+    // "never used".
+    authority_use: { label: "Answer last used", lifecycle: "machinery" },
     delivery_config: { label: "Delivery limits", lifecycle: "machinery" },
     fulfillment: { label: "Delivery state", lifecycle: "machinery" },
-    // #916, R8 / review 6.4: these four were in `LOCAL_TABLES` as "device
-    // observation", which contradicted the comment above — they are Commons
-    // CONTROL truth, and a restore without them hands back a seat that has
-    // forgotten which op hashes it verified, which recovery it is the
-    // successor of, and how far behind its steward it had fallen. Being
-    // unregistered also meant no replica change-log trigger, so none of it
-    // ever reached a second device. Machinery, like the rest of the band.
-    commons_verified: { label: "Verified checkpoints", lifecycle: "machinery" },
-    commons_supersession: {
-      label: "Commons recovery lineage",
+    // The subscription seat (#929): which grant-keyed shapes this vault holds
+    // rows for, how far it has ingested, and which rows each shape placed. A
+    // restore without them hands back a copy no revoke can reach.
+    subscription: { label: "Subscriptions", lifecycle: "machinery" },
+    subscription_lineage: {
+      label: "Subscription lineage",
       lifecycle: "machinery",
-    },
-    commons_device_reach: { label: "Device reach", lifecycle: "machinery" },
-    commons_steward_contact: {
-      label: "Steward contact",
-      lifecycle: "machinery",
+      // Its key CARRIES its pointer — `(shape_id, target_type, target_id)`,
+      // with a composite foreign key into the supertype — so a claim cannot
+      // outlive the row it names; it names a target, it is not one (#916).
+      projectionOf: "core.entity",
     },
   },
   notifications: { notice: { label: "Notices", lifecycle: "machinery" } },

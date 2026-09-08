@@ -7,9 +7,8 @@
 import { deniedPayload, loadTally, personOf } from "./dashboard.ts";
 
 export default async function activityHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
-    const data = await loadTally(ctx, purpose);
+    const data = await loadTally(ctx);
     const me = data.me;
     const groupName = new Map(data.groups.map((g) => [g.group_id, g.name]));
     const rows: Array<Record<string, unknown>> = [];

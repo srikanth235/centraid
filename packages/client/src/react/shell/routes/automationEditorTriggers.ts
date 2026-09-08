@@ -64,7 +64,6 @@ export function vaultForTriggers(
   });
   return scopes.length > 0
     ? {
-        purpose: "dpv:ServiceProvision",
         why: "Evaluate automation triggers.",
         scopes,
       }

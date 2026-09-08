@@ -146,6 +146,42 @@
       "status": "gating"
     },
     {
+      "id": "device-rung-android",
+      "rung": 5,
+      "platform": "android",
+      "budgetMs": 3600000,
+      "qualities": ["journey", "performance"],
+      "surfaces": ["mobile-native"],
+      "status": "advisory"
+    },
+    {
+      "id": "device-rung-gate",
+      "rung": 5,
+      "platform": "any",
+      "budgetMs": 3600000,
+      "qualities": ["journey"],
+      "surfaces": ["mobile-native"],
+      "status": "advisory"
+    },
+    {
+      "id": "device-rung-gateway-pi",
+      "rung": 5,
+      "platform": "any",
+      "budgetMs": 3600000,
+      "qualities": ["performance"],
+      "surfaces": ["gateway"],
+      "status": "advisory"
+    },
+    {
+      "id": "device-rung-ios",
+      "rung": 5,
+      "platform": "ios",
+      "budgetMs": 3600000,
+      "qualities": ["journey", "performance"],
+      "surfaces": ["mobile-native"],
+      "status": "advisory"
+    },
+    {
       "id": "design-gallery",
       "rung": 2,
       "platform": "web",
@@ -335,12 +371,30 @@
       "status": "gating"
     },
     {
+      "id": "paired-journeys",
+      "rung": 3,
+      "platform": "any",
+      "budgetMs": 2700000,
+      "qualities": ["performance"],
+      "surfaces": ["gateway", "protocol"],
+      "status": "gating"
+    },
+    {
       "id": "rust-supply-chain",
       "rung": 3,
       "platform": "any",
       "budgetMs": 1200000,
       "qualities": ["security", "compat"],
       "surfaces": ["protocol", "gateway"],
+      "status": "gating"
+    },
+    {
+      "id": "rung1-on-main",
+      "rung": 3,
+      "platform": "any",
+      "budgetMs": 1200000,
+      "qualities": ["contracts"],
+      "surfaces": ["vault", "gateway", "protocol"],
       "status": "gating"
     },
     {
@@ -552,7 +606,7 @@
       "evidence": "HTTP erase → blank-machine product recovery",
       "lane": "restore-year3",
       "wallClockCost": "high",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -984,7 +1038,7 @@
       "evidence": "core route p95 and cold start",
       "lane": "nightly",
       "wallClockCost": "medium",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1002,7 +1056,7 @@
       "evidence": "P2 first-paint query counts",
       "lane": "vitest",
       "wallClockCost": "low",
-      "knob": "tests/experience-budgets/client-query-counts.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1038,12 +1092,12 @@
       "evidence": "the whole household run together costs about the same wall clock as the lanes run one at a time; worst-lane p95 under composition stays under an absolute ceiling",
       "lane": "nightly",
       "wallClockCost": "medium",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
         "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/composite-load.scale.test.ts",
-        "seed": "tighten metrics.compositeLoadFactor.ceilingWorstLaneP95Ms in tests/experience-budgets/gateway.json from 3500 to 300",
+        "seed": "tighten entries.gateway/composite-load/empty/ci-linux-x64-4c.metrics.compositeLoadFactor.ceilingWorstLaneP95Ms in tests/journeys.json from 3500 to 300",
         "failure": "lane starvation: write p95 reached 1551.0 ms under composition (solo 278.2 ms), ceiling 300 ms"
       }
     },
@@ -1254,7 +1308,7 @@
       "evidence": "HTTP export → staged reimport → HTTP re-export",
       "lane": "nightly",
       "wallClockCost": "medium",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1326,12 +1380,12 @@
       "evidence": "RSS, open-descriptor, database and latency growth measured across looped household cycles; growth ceilings assert at the declared soak duration, the always-true invariants at every duration",
       "lane": "nightly",
       "wallClockCost": "high",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
         "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/long-run-soak.scale.test.ts",
-        "seed": "tighten metrics.soakDegradation.ceilingOpenDescriptors in tests/experience-budgets/gateway.json from 256 to 16",
+        "seed": "tighten entries.gateway/soak/empty/ci-linux-x64-4c.metrics.soakDegradation.ceilingOpenDescriptors in tests/journeys.json from 256 to 16",
         "failure": "descriptor ceiling: peaked at 80 open descriptors, ceiling 16"
       }
     },
@@ -1356,7 +1410,7 @@
   ],
   "laws": {
     "consent-denial-monotone": {
-      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding an access_policy row can only turn an allow into a deny, never a deny into an allow.",
+      "statement": "Withdrawing a standing answer, replacing it with a declined row, or narrowing a clamp verb can only turn an allow into a deny, never a deny into an allow.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
@@ -1366,22 +1420,22 @@
       "flow": "consent-chain-properties"
     },
     "consent-clamp-only-narrows": {
-      "statement": "For every allow, the returned rowFilter is a superset of the grant scope's and the clamp's clauses, and the fieldMask is exactly grantMask ∩ clampMask (null only when both are null).",
+      "statement": "For every allow, the returned rowFilter is exactly the covering clamp scopes' clauses and the fieldMask exactly their intersection (null only when every covering scope leaves it null); a standing answer contributes no rows and no fields of its own.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-reveal-never-rides": {
-      "statement": "Reveal is allowed only when both a grant_scope and a clamp scope carry the 'reveal' verb; a 'reveal' scope never satisfies a read or act request.",
+      "statement": "No standing answer ever confers reveal, so an automation is refused reveal whatever it holds; a clamp scope carrying only 'reveal' satisfies no read or act request.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
-    "consent-explicit-scope-unbypassable": {
-      "statement": "A table under a kind:'minimization' policy row is never allowed by a whole-schema (table_name IS NULL) grant scope; only a scope naming the table explicitly covers it.",
+    "consent-standing-answer-required": {
+      "statement": "No caller but the owner's own device reaches anything without a live granted share_authority row covering the entity for the verb, and naming a first-party surface confers nothing: a surface identity reaches exactly what the bare owner device reaches.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-onbehalf-cap-precedes-grants": {
-      "statement": "When onBehalfOfOwner.mayAct is false, no grant set produces an allow for act or reveal, and the deny names the owner id, checked before any grant is consulted.",
+      "statement": "When onBehalfOfOwner.mayAct is false, no standing answer produces an allow for act or reveal, and the deny names the owner id, checked before any answer is consulted.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
@@ -1404,11 +1458,6 @@
       "statement": "safeBackgroundImage output is undefined or a single sealed CSS url(\"…\") token whose every quote and backslash is escaped and which recovers exactly the URL the media sink admitted, so no member string can break out of the quoted string.",
       "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
       "flow": "untrusted-render-properties"
-    },
-    "commons-steward-ordered-convergence": {
-      "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
-      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
-      "flow": "commons-convergence-properties"
     },
     "placement-registry-parity": {
       "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
@@ -1464,6 +1513,11 @@
       "owner": "packages/blueprints/src/one-computation.test.ts",
       "flow": "blueprint-one-computation-law"
     },
+    "app-entity-tripwire": {
+      "statement": "Every entity a bundled app's queries, actions and phone screens read, and every command they invoke, is declared in that app's app.json#vault.scopes — minimisation is a build-time check over the manifest, not a runtime grant evaluation (#928 A1).",
+      "owner": "packages/blueprints/src/app-entity-tripwire.test.ts",
+      "flow": "blueprint-app-entity-tripwire-law"
+    },
     "select-all-filtered": {
       "statement": "Select-all takes the rows the current filter shows, never the whole table, and a selection survives a filter change through pruneSelection rather than being carried onto rows the member never saw.",
       "owner": "packages/blueprints/src/select-all-scope.test.ts",
@@ -1515,14 +1569,9 @@
       "flow": "share-closure-confinement"
     },
     "share-receipt-authority": {
-      "statement": "A cross-vault access receipt exists exactly when an edge's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per edge; a refused, parked, revoked or peer-handed-off edge leaves none, and a malformed scope refuses the transition atomically.",
-      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
+      "statement": "A cross-vault access receipt exists exactly when a placement's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per placement token; a refused placement, one this gateway could not perform, and a malformed scope each leave none.",
+      "owner": "packages/server/src/routes/placement-routes.test.ts",
       "flow": "share-receipt-authority"
-    },
-    "share-outbox-obligation": {
-      "statement": "Every share obligation is durable and keyed by what it is about: a replayed enqueue reuses the row without rewinding its retry clock, a human-awaiting obligation is never machine-claimed, an unreadable row never blocks its neighbours, and a failed attempt backs off while a progressed transfer does not.",
-      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
-      "flow": "share-outbox-obligation"
     },
     "experimental-gate-parity": {
       "statement": "An experimental feature is advertised in the C1 handshake exactly when its own routes are mounted: gated off it is absent from capabilities and its surfaces are unowned; gated on, and only then, they answer.",
@@ -1593,6 +1642,11 @@
       "statement": "A queued People change says so on its own row: the overlay sentence is a third line under the sub, and a row with no pending change draws no pending line at all.",
       "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
       "flow": "people-crm"
+    },
+    "pending-destructive-projection": {
+      "statement": "Every destructive action the eight blueprint apps declare projects a delete or a tombstone while its intent is queued, or carries a written structural exclusion; a plain patch that leaves the row on screen is a finding.",
+      "owner": "packages/blueprints/src/pending-projection-tripwire.test.ts",
+      "flow": "blueprint-pending-overlay-law"
     }
   },
   "consentLedger": [
@@ -1762,62 +1816,29 @@
       "label": "Schedules replay from their seed",
       "kind": "simulation",
       "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
       "testName": "the same seed produces the same program",
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
       "statement": "A seeded interleaving is a program: the same seed yields the same schedule, so a simulation failure is replayable rather than anecdotal."
     },
     {
-      "id": "sim-grant-plane-replay",
-      "label": "The grant plane replays too",
-      "kind": "simulation",
-      "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "testName": "the grant plane replays from its seed too",
-      "flow": "commons-grant-plane-simulation",
-      "seats": ["origin", "custodian", "viewer"],
-      "statement": "The grant plane rides the same seeded schedule as the commons rail, and a run that proved nothing about grants is itself a failure."
-    },
-    {
       "id": "sim-seeded-convergence",
       "label": "Every seed converges",
       "kind": "simulation",
       "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
       "testName": "seed %i converges and holds every golden invariant",
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
-      "statement": "Across the pinned seed set — including the regression seeds earlier runs found — cursor-gapped members converge and every golden invariant holds through pulls, crash-restarts and compaction."
-    },
-    {
-      "id": "sim-wide-overlap",
-      "label": "Five seats, three grants, heavy overlap",
-      "kind": "simulation",
-      "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "testName": "a five-seat, three-grant world with heavy overlap also converges",
-      "flow": "commons-grant-plane-simulation",
-      "seats": ["origin", "custodian", "viewer"],
-      "statement": "Widening the world past the join lane's floor — five seats sharing three overlapping grants — does not break convergence."
-    },
-    {
-      "id": "sim-grant-commons-interleave",
-      "label": "Grant lifecycle interleaves with the rail",
-      "kind": "simulation",
-      "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "testName": "seed 839001 interleaves the grant lifecycle with the commons rail",
-      "flow": "commons-grant-plane-simulation",
-      "seats": ["origin", "custodian", "viewer"],
-      "statement": "Grant create / fulfil / origin-edit operations interleaved with commons traffic on one seeded schedule still converge to one domain state."
+      "statement": "Across the pinned seed set — including the regression seeds earlier runs found — the subscription plane converges and every golden invariant holds through delivery, origin edits, audience tampers, channel churn, revocation and parked-payload settlement."
     },
     {
       "id": "sim-revocation-severance",
       "label": "Revocation severs a grant the host lost reach for",
       "kind": "simulation",
       "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
       "testName": "a revocation severs a grant the host lost reach for mid-life",
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
@@ -1917,10 +1938,10 @@
       "id": "scope-commons",
       "label": "Scope commons",
       "source": [
-        "packages/vault/src/share/commons-chain.ts",
+        "packages/vault/src/share/subscription-seat.ts",
         "packages/blueprints/apps/_shared/scope-merge.ts"
       ],
-      "propertyFlow": "commons-convergence-properties",
+      "propertyFlow": "commons-grant-plane-simulation",
       "mutationSeed": null,
       "appEngineColumn": false
     },
@@ -3567,6 +3588,114 @@
       }
     ]
   },
+  "removedMinimumTestsFlows": {
+    "_comment": "#927 RIG DIET. Each entry retires a flow whose owning rig was DELETED with maintainer approval on 2026-09-05 for citing no tests/journeys.json entry. A rig earns its wall clock by fencing an interval a vault owner can feel; these timed machine costs with nothing above them, so their floors have no successor to carry. ONE-SHOT: scripts/test-report/ratchet-floors.mjs validates a marker only while it is new against the base, so these rows are inert once landed and are dropped by the next change set that touches this file.",
+    "vault-write-budget": {
+      "owner": "tests/perf/vault-write.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "ontology-10k-query": {
+      "owner": "tests/scale/ontology.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blob-egress-budget": {
+      "owner": "tests/perf/blob-egress.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blob-gc-volume": {
+      "owner": "tests/scale/blob-gc.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "backup-big-vault": {
+      "owner": "tests/scale/backup-restore.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "replica-bootstrap-volume": {
+      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 mobile/first-bootstrap is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "conversation-years": {
+      "owner": "tests/scale/conversation-ledger.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "pwa-waterfall-budget": {
+      "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "tunnel-throughput": {
+      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "backup-throughput-budget": {
+      "owner": "tests/perf/backup-throughput.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "app-engine-handler-budget": {
+      "owner": "tests/perf/app-engine-handler.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "automation-fire-budget": {
+      "owner": "tests/perf/automation-fire.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "harness-turn-budget": {
+      "owner": "tests/perf/harness-turn.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "harness-sessions-volume": {
+      "owner": "tests/scale/harness-sessions.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blueprint-clones-volume": {
+      "owner": "tests/scale/blueprint-clones.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "desktop-windows-volume": {
+      "owner": "tests/scale/desktop-windows.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "web-tabs-volume": {
+      "owner": "tests/scale/web-tabs.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "tunnel-pairs-volume": {
+      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "mobile-volume-proof": {
+      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "photos.scale-50k": {
+      "owner": "tests/scale/photos-timeline.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "photos.memories-scale-50k": {
+      "owner": "tests/scale/photos-memories.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    }
+  },
   "flows": [
     {
       "id": "consent-chain-properties",
@@ -3668,6 +3797,15 @@
       "minimumTests": 3
     },
     {
+      "id": "blueprint-app-entity-tripwire-law",
+      "name": "An app reads and invokes only what its manifest declares",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/app-entity-tripwire.test.ts",
+      "minimumTests": 17
+    },
+    {
       "id": "blueprint-select-all-law",
       "name": "Select-all is the filtered set, and a filter change prunes it",
       "surface": "blueprints",
@@ -3704,24 +3842,6 @@
       "minimumTests": 21
     },
     {
-      "id": "vault-write-budget",
-      "name": "Vault write latency and durability budget",
-      "surface": "vault-core",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/vault-write.perf.test.ts",
-      "minimumTests": 2
-    },
-    {
-      "id": "ontology-10k-query",
-      "name": "Atlas and Browse queries at 10k entities",
-      "surface": "vault-core",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/ontology.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "blob-custody-state",
       "name": "Blob custody and CAS state machine",
       "surface": "blob-custody",
@@ -3750,21 +3870,22 @@
     },
     {
       "id": "commons-convergence-properties",
-      "name": "Commons sequencing and cursor-gapped convergence properties",
+      "name": "Subscription origin-authoritative ingest holds across the live grant plane",
       "surface": "vault-core",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "owner": "packages/vault/src/share/subscription.test.ts",
       "minimumTests": 3
     },
     {
       "id": "commons-grant-plane-simulation",
-      "name": "Seeded commons+grant schedules converge and hold the grant-plane invariants",
+      "name": "Seeded subscription+grant schedules converge and hold the grant-plane invariants",
       "surface": "vault-core",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "minimumTests": 6
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
+      "minimumTests": 3,
+      "approvedMinimumTestsDeviation": "#929 deleted the commons rail: the dropped cases (`the grant plane replays from its seed too`, `a five-seat, three-grant world with heavy overlap also converges`, `seed 839001 interleaves the grant lifecycle with the commons rail`) named compaction, the chain, and interleave with the op log, which left with the rail. Seed 839001's 320-action program already fires grant create / fulfil / origin-edit / revoke / propagate, so the interleave case is subsumed. The surviving three are the same-seed replay, the golden-invariant seed, and the D1 severance probe."
     },
     {
       "id": "backup-crypto-properties",
@@ -3831,8 +3952,7 @@
     },
     {
       "id": "golden-vault-archaeology",
-      "replacesMinimumTestsFlow": "schema-migration-corpus",
-      "approvedMinimumTestsDeviation": "#916 collapsed the vault ladder to a SINGLE baseline rung (`VAULT_MIGRATIONS` holds one entry; a fresh vault stamps `user_version = 1`), so `schema-migration-corpus` has no epochs left to walk: `scripts/corpora/vault-corpus.ts` and `tests/quality/schema-migration-corpus.test.ts` are deleted, not weakened. The guarantee is frozen differently, not dropped. The predecessor pinned a seeded pair at every `user_version`, migrated each forward, and asked whether it landed at HEAD with a clean doctor report and its census intact; `packages/vault/src/golden-vault.test.ts` asks exactly that of the corpus this wave froze (`packages/vault/tests/golden/issue-916/vault.db.gz`, 67 tables / 288 rows): the frozen file opens under today's code and may only move forward, every row the release froze survives, the migrated file is doctor-clean, and — the assertion the epoch lane never had (#916 audit F2) — its DDL equals the schema a vault founded by today's baseline builds. Its fifth case is the anti-vacuous guard that the corpus directory is not empty, which is what the predecessor's growth-guard was for. The two predecessor claims that do not belong to a frozen corpus kept their existing homes rather than being restated here: the ahead-of-the-ladder refusal is `vault-schema-ladder`'s (`packages/vault/src/schema/migrate.test.ts`, two cases inside a floor of 16), and byte-determinism of the corpus builder is `backup-format-archaeology`'s over `tests/quality/backup-corpus-fixture.ts`. Same surface, dimension and tier: this cell is where the repo grades \"a file frozen by an earlier build still opens under today's code, census-preserving\", which is what the predecessor was too — a vault-schema archaeology lane, not a snapshot one. The floor RISES 4 → 5, and this registers a gate that until now carried no flow row at all.",
+      "_comment": "Floor history: this flow took over the retired `schema-migration-corpus` flow's floor one-to-one and RAISED it 4 → 5 when #916 collapsed the vault ladder to a single baseline rung, so the epoch-walked corpus lane had no epochs left to walk. The rename marker (`replacesMinimumTestsFlow`) and the paired `approvedMinimumTestsDeviation` that authorized it were one-shot claims about THAT change set and were dropped once it landed (#930): the predecessor exists at no base any more, so the marker could only report an unknown predecessor, and a standing `approvedMinimumTestsDeviation` waives a future floor drop by presence alone. The full rationale is receipts/issue-916-vault-ontology-review.md; this note is a pointer, not a waiver.",
       "name": "The vault a release froze still opens, migrates forward and carries today's baseline schema",
       "surface": "backup-restore",
       "dimension": "compat",
@@ -3886,24 +4006,6 @@
       "minimumTests": 2
     },
     {
-      "id": "blob-egress-budget",
-      "name": "Large-blob egress TTFB and memory ceiling",
-      "surface": "blob-custody",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/blob-egress.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "blob-gc-volume",
-      "name": "Eviction and GC preserve mixed custody states at volume",
-      "surface": "blob-custody",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/blob-gc.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "backup-round-trip",
       "name": "Backup and restore round-trip with fencing",
       "surface": "backup-restore",
@@ -3932,15 +4034,6 @@
       "minimumTests": 11
     },
     {
-      "id": "backup-big-vault",
-      "name": "Backup and restore a large deterministic vault",
-      "surface": "backup-restore",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/backup-restore.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "replica-intents",
       "name": "Replica convergence and intent idempotency",
       "surface": "replica-sync",
@@ -3966,15 +4059,6 @@
       "tier": "contract",
       "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
       "minimumTests": 3
-    },
-    {
-      "id": "replica-bootstrap-volume",
-      "name": "Windowed bootstrap converges with deletions at volume",
-      "surface": "replica-sync",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "gateway-session-boundaries",
@@ -4021,15 +4105,6 @@
       "tier": "contract",
       "owner": "packages/server/src/engine/conversation/archive/archive.contract.test.ts",
       "minimumTests": 4
-    },
-    {
-      "id": "conversation-years",
-      "name": "Conversation archive and prune over years of history",
-      "surface": "app-engine",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/conversation-ledger.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "scheduler-no-backfill",
@@ -4114,15 +4189,6 @@
       "tier": "unit",
       "owner": "apps/mobile/src/lib/upload/crash.test.ts",
       "minimumTests": 6
-    },
-    {
-      "id": "pwa-waterfall-budget",
-      "name": "#404 PWA fast-path browser waterfall stays within budget (nightly perf lane)",
-      "surface": "web",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/pwa-waterfall.perf.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "mobile-pairing-canary",
@@ -4223,15 +4289,6 @@
       "tier": "contract",
       "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
       "minimumTests": 10
-    },
-    {
-      "id": "tunnel-throughput",
-      "name": "Paired local QUIC tunnel throughput stays above its floor",
-      "surface": "tunnel-pairing",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "pairing-device-lifecycle",
@@ -4414,15 +4471,6 @@
       "dimension": "accessibility",
       "tier": "accessibility",
       "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx",
-      "minimumTests": 1
-    },
-    {
-      "id": "backup-throughput-budget",
-      "name": "Backup encrypt + verify throughput budget",
-      "surface": "backup-restore",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/backup-throughput.perf.test.ts",
       "minimumTests": 1
     },
     {
@@ -4651,15 +4699,6 @@
       "minimumTests": 3
     },
     {
-      "id": "app-engine-handler-budget",
-      "name": "Isolated handler dispatch stays inside the nightly ceiling",
-      "surface": "app-engine",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/app-engine-handler.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "app-vault-bridge-authz",
       "name": "ctx.vault worker channel binds and scopes every handler invocation",
       "surface": "app-engine",
@@ -4696,15 +4735,6 @@
       "minimumTests": 16
     },
     {
-      "id": "automation-fire-budget",
-      "name": "Automation fire latency through the real ledger",
-      "surface": "automations",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/automation-fire.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "automations-desktop-journey",
       "name": "List, view, run and recover an automation in the desktop app",
       "surface": "automations",
@@ -4712,89 +4742,6 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/automations.spec.ts",
       "minimumTests": 14
-    },
-    {
-      "id": "harness-turn-budget",
-      "name": "Harness turn dispatch budget through the registry",
-      "surface": "agent-runtime",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/harness-turn.perf.test.ts",
-      "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
-    },
-    {
-      "id": "harness-sessions-volume",
-      "name": "Concurrent harness sessions fan out through the registry",
-      "surface": "agent-runtime",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/harness-sessions.scale.test.ts",
-      "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
-    },
-    {
-      "id": "blueprint-clones-volume",
-      "name": "Template cloning at multi-app catalog volume",
-      "surface": "blueprints",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/blueprint-clones.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "desktop-windows-volume",
-      "name": "Gateway state broadcast fans across many desktop windows",
-      "surface": "desktop",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/desktop-windows.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "web-tabs-volume",
-      "name": "One replica invalidation reaches many tab contexts",
-      "surface": "web",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/web-tabs.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "tunnel-pairs-volume",
-      "name": "Multi-pair allowlist persists and resolves at volume",
-      "surface": "tunnel-pairing",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "mobile-volume-proof",
-      "name": "Native mobile replica holds up on a volume vault",
-      "surface": "mobile",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
-      "minimumTests": 1
-    },
-    {
-      "id": "photos.scale-50k",
-      "name": "Photos media-asset queries hold up at 50k assets plus a 10k-one-day degenerate corpus",
-      "surface": "mobile",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/photos-timeline.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "photos.memories-scale-50k",
-      "name": "Memories v0 rebuildMemories sweep holds up at 50k assets over a 3-year span",
-      "surface": "vault-core",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/photos-memories.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "vault-atlas-census",
@@ -4847,16 +4794,16 @@
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
+      "owner": "packages/server/src/routes/placement-routes.test.ts",
       "minimumTests": 4
     },
     {
-      "id": "share-outbox-obligation",
-      "name": "Share effect outbox: one obligation, never lost, never spinning",
+      "id": "same-owner-placement",
+      "name": "A same-owner placement is one act: it lands whole or not at all",
       "surface": "gateway",
       "dimension": "durability",
       "tier": "contract",
-      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
+      "owner": "packages/vault/src/share/placement-move.test.ts",
       "minimumTests": 4
     },
     {

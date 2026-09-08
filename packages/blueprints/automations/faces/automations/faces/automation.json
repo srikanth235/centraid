@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads open face-consent requests and photograph previews, then writes validated face regions and drains only satisfied requests.",
     "scopes": [
       {

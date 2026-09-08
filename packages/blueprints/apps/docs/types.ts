@@ -12,15 +12,21 @@ export interface SharedMember {
   party_id: string;
   label: string;
   capability: "read" | "read+write";
-  /** `invited` until their vault accepts; a refuser is absent entirely. */
+  /** `invited` until the subject has reached their vault. */
   status: "invited" | "current";
 }
 
-/** A commons grant over the document itself or a folder above it (#821). */
+/**
+ * A standing answer over the document itself or a folder above it (#821,
+ * #929). The audience is ONE PERSON or ONE CIRCLE — `circle_id` is null in the
+ * first case, which is why `audience` and not the id is what a reader branches
+ * on.
+ */
 export interface SharedWith {
   grant_id: string;
-  circle_id: string;
-  /** The circle's name, or the recipients' for an implicit circle. */
+  circle_id: string | null;
+  audience: "person" | "circle";
+  /** The circle's name, or the person's. */
   label: string;
   via: "document" | "folder";
   /** The folder the rail names under `via: "folder"`, else the document. */

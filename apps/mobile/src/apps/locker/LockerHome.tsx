@@ -68,7 +68,6 @@ export default function LockerHome({
     pending: pendingCount,
     reauth: vault.reauth,
     rows: vault.rows.length,
-    stale: vault.stale,
   });
 
   const openItem = useCallback(
@@ -92,7 +91,6 @@ export default function LockerHome({
     if (destination === "watch") {
       return (
         <LockerReviewView
-          lastReadAt={vault.lastReadAt}
           onOpen={openItem}
           pending={pendingCount}
           rows={vault.rows}
@@ -127,7 +125,6 @@ export default function LockerHome({
     return (
       <LockerItemsView
         filter={filter}
-        lastReadAt={vault.lastReadAt}
         loaded={vault.loaded}
         offerDevice={vault.credentialId === null && lockerBiometricsSupported()}
         onEnrolDevice={() => void enrolLockerDevice()}
@@ -159,7 +156,6 @@ export default function LockerHome({
     vault.bag.searchResults,
     vault.bag.searchTerm,
     vault.credentialId,
-    vault.lastReadAt,
     vault.loaded,
     vault.rows,
     vault.truncated,

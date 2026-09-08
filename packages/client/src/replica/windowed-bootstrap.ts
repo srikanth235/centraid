@@ -160,11 +160,36 @@ async function attemptWindowedBootstrap(
    * Every exit is in this body: the abort, the page budget, a missing
    * continuation token, and the token running out.
    */
+  /*
+   * THE NEXT PAGE IS IN FLIGHT WHILE THIS ONE LANDS (#922 C5). A cold start
+   * is thousands of rows over dozens of pages; fetching and applying strictly
+   * in turn made the walk cost the SUM of both, with the network idle for
+   * every apply and the store idle for every fetch.
+   *
+   * A discarded prefetch has its rejection absorbed: an error on the page in
+   * hand is the one that must surface, and an unobserved sibling rejection
+   * would otherwise crash the process instead.
+   */
+  const fetchPage = (token: string): Promise<ReplicaBootstrapPage> =>
+    fetchReplicaBootstrapPage(options.gatewayAuth, {
+      after: token,
+      window,
+      ...fetchOptions,
+    });
+  let inflight: Promise<ReplicaBootstrapPage> | undefined =
+    after === null ? undefined : fetchPage(after);
+  const discard = (): void => {
+    inflight?.catch(() => undefined);
+    inflight = undefined;
+  };
   while (after !== null) {
-    if (signal.aborted)
+    if (signal.aborted) {
+      discard();
       throw new ReplicaProtocolError("Replica bootstrap was aborted");
+    }
     pages += 1;
     if (pages > maxPages) {
+      discard();
       throw new ReplicaProtocolError(
         "Replica bootstrap exceeded its page budget"
       );
@@ -172,12 +197,10 @@ async function attemptWindowedBootstrap(
     let page: ReplicaBootstrapPage;
     try {
       // oxlint-disable-next-line no-await-in-loop
-      page = await fetchReplicaBootstrapPage(options.gatewayAuth, {
-        after,
-        window,
-        ...fetchOptions,
-      });
+      page = await (inflight ?? fetchPage(after));
+      inflight = undefined;
     } catch (error) {
+      inflight = undefined;
       if (!restart && resume && isStaleResumeToken(error)) return undefined;
       throw error;
     }
@@ -195,6 +218,11 @@ async function attemptWindowedBootstrap(
       );
     }
     after = page.complete ? null : (page.next ?? null);
+    // Start N+1 BEFORE applying N: the fetch and the apply overlap instead of
+    // taking turns.
+    if (after !== null && !signal.aborted && pages < maxPages) {
+      inflight = fetchPage(after);
+    }
     // Rows and the position they leave the walk at commit together.
     // oxlint-disable-next-line no-await-in-loop
     await options.target.bootstrapPage(page.rows, {
@@ -204,6 +232,7 @@ async function attemptWindowedBootstrap(
     });
     options.onProgress?.(pages);
   }
+  discard();
 
   const outcomes = (await options.reconcileOutcomes?.(commitCursor)) ?? [];
   const cursor = await options.target.bootstrapCommit(
@@ -215,10 +244,17 @@ async function attemptWindowedBootstrap(
 }
 
 /**
- * Mandatory convergence: replay until the log stops advancing. Bounded, and
- * stopping early is safe rather than silent — the replica is already committed
- * and its stored cursor advanced with every applied batch, so the session's
- * ordinary feed catch-up continues from exactly where this returns.
+ * Mandatory convergence: replay the deltas the snapshot pages missed, and stop
+ * when the GATEWAY says there are none left. Stopping there is safe rather
+ * than silent — the replica is already committed and its stored cursor
+ * advanced with every applied batch, so the session's ordinary feed catch-up
+ * continues from exactly where this returns.
+ *
+ * `hasMore`, not "the log stopped advancing" (#922 E3): a vault that is being
+ * written to has no quiet moment, so the old rule made this loop run its whole
+ * pass budget on a live gateway — and `openReplicaShellSession` awaits it, so
+ * the seat sat on "Loading …" until the budget ran out. Draining to the head
+ * the gateway reports is the same rule the coordinator's own catch-up uses.
  */
 async function converge(
   options: RunWindowedBootstrapOptions,
@@ -235,6 +271,7 @@ async function converge(
     const applied = await options.target.applyChanges(batch);
     if (applied.epoch === at.epoch && applied.seq <= at.seq) return at;
     at = applied;
+    if (batch.hasMore !== true) return at;
   }
   return at;
 }

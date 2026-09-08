@@ -56,7 +56,6 @@ const SHAPES: ReplicaShape[] = [
   {
     shapeId: "tasks",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",

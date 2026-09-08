@@ -1,7 +1,7 @@
 import { existsSync, promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix is a single table of invariants; splitting it scatters the completeness argument
 // §10 responsibilities: polymorphic ref validation, contract version check,
-// retention sweeps, the view service, and file custody.
+// purge sweeps, the view service, and file custody.
 import path from "node:path";
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
@@ -10,7 +10,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { blobUriFor } from "../blob/store.js";
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
@@ -96,7 +96,6 @@ describe("duties", () => {
     const outcome = gw.invoke(owner, {
       command: "test.tag_anything",
       input: { target_type: "core.transaction", target_id: "no-such-txn" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -116,7 +115,6 @@ describe("duties", () => {
     const outcome = gw.invoke(owner, {
       command: "test.tag_anything",
       input: { target_type: "evil.table", target_id: "x" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -128,7 +126,6 @@ describe("duties", () => {
     const outcome = gw.invoke(owner, {
       command: "test.tag_anything",
       input: { target_type: "core.party", target_id: boot.ownerPartyId },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
   });
@@ -143,93 +140,10 @@ describe("duties", () => {
     const outcome = gw.invoke(owner, {
       command: "test.tag_anything",
       input: { target_type: "core.party", target_id: boot.ownerPartyId },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
     expect(outcome.reason).toContain("contract version 0.9 not served");
-  });
-
-  test("retention policy: sweep deletes rows past the window using the policy timestamp column", () => {
-    const now = new Date().toISOString();
-    db.vault
-      .prepare(
-        `INSERT INTO social_thread (thread_id, channel, created_at) VALUES ('th1', 'sms', ?)`
-      )
-      .run(now);
-    const mkContent = (id: string, sha: string) =>
-      db.vault
-        .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'text/plain', 'file:///x', ?, 1, ?)`
-        )
-        .run(id, sha, now);
-    mkContent("c1", "sha-old");
-    mkContent("c2", "sha-new");
-    db.vault
-      .prepare(
-        `INSERT INTO social_message (message_id, thread_id, sender_handle, sent_at, body_content_id, delivery)
-       VALUES ('m-old', 'th1', 'x@y.z', '2020-01-01T00:00:00Z', 'c1', 'read')`
-      )
-      .run();
-    db.vault
-      .prepare(
-        `INSERT INTO social_message (message_id, thread_id, sender_handle, sent_at, body_content_id, delivery)
-       VALUES ('m-new', 'th1', 'x@y.z', ?, 'c2', 'read')`
-      )
-      .run(now);
-    db.vault
-      .prepare(
-        `INSERT INTO access_policy (policy_id, kind, entity, rule_json, retention_days, effective_from, priority)
-       VALUES (?, 'retention', 'social.message', '{"timestamp_column":"sent_at"}', 365, '2020-01-01T00:00:00Z', 1)`
-      )
-      .run(uuidv7());
-    const result = gw.sweep(owner);
-    expect(result.retentionDeleted).toBe(1);
-    const remaining = db.vault
-      .prepare("SELECT message_id FROM social_message")
-      .all();
-    // node:sqlite hands back null-prototype rows; spreading compares column
-    // data without asserting the driver's prototype.
-    expect(remaining.map((row) => ({ ...row }))).toStrictEqual([
-      { message_id: "m-new" },
-    ]);
-  });
-
-  // THE SABOTAGE TARGET (#712): drop the media.asset entry from
-  // RETENTION_REFUSALS in duties.ts and this goes red — the policy would fall
-  // through to the missing-column skip and the refusal would lose its stated
-  // reason, which is exactly the "runs and silently retains nothing" duty the
-  // item exists to forbid.
-  test("retention policy on media.asset is refused with a stated reason, never silently skipped", () => {
-    db.vault
-      .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES ('c-ret', 'image/jpeg', 'file:///x', 'sha-ret', 1, '2019-01-01T00:00:00Z')`
-      )
-      .run();
-    db.vault
-      .prepare(
-        `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
-         VALUES ('a-ret', 'c-ret', 'photo', '2019-01-01T00:00:00Z')`
-      )
-      .run();
-    db.vault
-      .prepare(
-        `INSERT INTO access_policy (policy_id, kind, entity, rule_json, retention_days, effective_from, priority)
-       VALUES (?, 'retention', 'media_asset', '{}', 30, '2020-01-01T00:00:00Z', 1)`
-      )
-      .run(uuidv7());
-    const result = gw.sweep(owner);
-    expect(result.retentionDeleted).toBe(0);
-    expect(result.retentionRefused).toHaveLength(1);
-    expect(result.retentionRefused[0]?.entity).toBe("media.asset");
-    expect(result.retentionRefused[0]?.reason).toContain("trash lifecycle");
-    // The asset outlives the policy: retention never reaches it.
-    const kept = db.vault.prepare("SELECT asset_id FROM media_asset").all();
-    expect(kept.map((row) => ({ ...row }))).toStrictEqual([
-      { asset_id: "a-ret" },
-    ]);
   });
 
   test("lifecycle sweep purges lapsed trashed notes with their edges (issue #308 A6)", () => {
@@ -354,7 +268,7 @@ describe("duties", () => {
     const receipt = db.audit
       .prepare(
         `SELECT action, object_type, detail_json FROM access_receipt
-          WHERE grant_id = ? ORDER BY receipt_id DESC LIMIT 1`
+          WHERE authority_id = ? ORDER BY receipt_id DESC LIMIT 1`
       )
       .get(authorityId) as
       | { action: string; object_type: string; detail_json: string }
@@ -441,7 +355,7 @@ describe("duties", () => {
     const receipt = db.audit
       .prepare(
         `SELECT action, detail_json FROM access_receipt
-          WHERE grant_id = ? ORDER BY receipt_id DESC LIMIT 1`
+          WHERE authority_id = ? ORDER BY receipt_id DESC LIMIT 1`
       )
       .get(lapsed) as { action: string; detail_json: string } | undefined;
     expect(receipt?.action).toBe("act share.revoke");
@@ -771,8 +685,9 @@ describe("duties", () => {
   }
 
   /**
-   * One row past its window. Retention runs near the END of the sweep, so
-   * `retentionDeleted === 1` asserts the pass did not abort halfway.
+   * A thread whose `last_message_at` has drifted. The projection heal is the
+   * LAST vault duty of the sweep, so a healed value asserts the pass did not
+   * abort halfway through the purges before it.
    */
   function seedLaterDuty(): void {
     db.vault
@@ -787,12 +702,17 @@ describe("duties", () => {
          VALUES ('m-stale', 'th-late', 'x@y.z', ?, 'msg-body', 'read')`
       )
       .run(PAST);
-    db.vault
-      .prepare(
-        `INSERT INTO access_policy (policy_id, kind, entity, rule_json, retention_days, effective_from, priority)
-         VALUES (?, 'retention', 'social.message', '{"timestamp_column":"sent_at"}', 365, '2019-01-01T00:00:00Z', 1)`
-      )
-      .run(uuidv7());
+  }
+
+  /** The last duty of the sweep ran, so nothing aborted the pass. */
+  function expectLaterDutiesRan(): void {
+    expect(
+      db.vault
+        .prepare(
+          `SELECT last_message_at FROM social_thread WHERE thread_id = 'th-late'`
+        )
+        .get()
+    ).toMatchObject({ last_message_at: PAST });
   }
 
   test("lifecycle sweep skips a lapsed photograph whose derived edit is still live, and keeps sweeping (issue #711 S8)", () => {
@@ -818,7 +738,7 @@ describe("duties", () => {
       "the live edit the member never trashed must be untouched"
     ).toBeTruthy();
     // …and every duty after the purge still ran.
-    expect(result.retentionDeleted).toBe(1);
+    expectLaterDutiesRan();
     expect(result.receiptId).toBeTruthy();
   });
 
@@ -838,7 +758,7 @@ describe("duties", () => {
       remaining.n,
       "trashing a photograph and its edit together empties both in one sweep"
     ).toBe(0);
-    expect(result.retentionDeleted).toBe(1);
+    expectLaterDutiesRan();
   });
 
   test("a deep lapsed lineage drains in one pass, without re-asking per generation (#883 C2)", () => {
@@ -891,7 +811,7 @@ describe("duties", () => {
       statements,
       "the asset purge re-asked SQLite about lineage per generation"
     ).toBeLessThanOrEqual(depth + 1);
-    expect(result.retentionDeleted).toBe(1);
+    expectLaterDutiesRan();
   });
 
   test("a lapsed asset whose derived copy is NOT lapsed still blocks, one pass or many (#883 C2)", () => {
@@ -906,7 +826,7 @@ describe("duties", () => {
 
     expect(result.assetsPurged).toBe(1);
     expect(result.assetsBlockedByLineage).toStrictEqual(["keep-source"]);
-    expect(result.retentionDeleted).toBe(1);
+    expectLaterDutiesRan();
   });
 
   test("the thread projection heals what drifted and rewrites nothing else (#883 C2)", () => {
@@ -988,7 +908,7 @@ describe("duties", () => {
         .get(),
       "bytes stay put while the asset that rents them cannot go"
     ).toBeTruthy();
-    expect(result.retentionDeleted).toBe(1);
+    expectLaterDutiesRan();
   });
 
   test("lifecycle sweep purges lapsed trashed People/Tally rows and cleans their poly refs (issue #441 A4)", () => {
@@ -1146,31 +1066,17 @@ describe("duties", () => {
     // ext band: applied for the app, RETAINED (not dropped) when its last
     // grant is revoked — the data is the owner's; purging is a separate act.
     if (!fileDb) throw new Error("vault gone");
-    const app = enrollApp(fileDb, { name: "gen-app" });
-    const bootRow = fileDb.vault
-      .prepare("SELECT self_party_id FROM core_vault")
-      .get() as {
-      self_party_id: string;
-    };
-    const purpose = fileDb.vault
-      .prepare(
-        `SELECT concept_id FROM core_concept WHERE notation = 'dpv:ServiceProvision'`
-      )
-      .get() as { concept_id: string };
-    const grantId = createGrant(fileDb, {
-      appId: app.appId,
-      purposeConceptId: purpose.concept_id,
-      grantedByPartyId: bootRow.self_party_id,
-      scopes: [{ schema: "schedule", verbs: "read" }],
-    });
+    enrollApp(fileDb, { name: "gen-app" });
     gw2.applyAppExt(owner2, "gen-app", [
       {
         name: "scratch",
         columns: [{ name: "scratch_id", type: "text", primaryKey: true }],
       },
     ]);
-    const revocation = gw2.revokeGrant(owner2, grantId);
-    expect(revocation.extRetained).toStrictEqual(["scratch"]);
+    // The band goes with the INSTALL now (#928): an app holds no standing
+    // answer to lose, so uninstall is when its own tables stop being live.
+    const retirement = gw2.retainAppExt(owner2, "gen-app");
+    expect(retirement.retained).toStrictEqual(["scratch"]);
     const row = fileDb.vault
       .prepare(
         `SELECT status FROM access_app_ext WHERE app_id = 'gen-app' AND table_name = 'scratch'`

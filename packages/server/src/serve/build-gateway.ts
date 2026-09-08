@@ -95,18 +95,13 @@ import {
 } from "@centraid/tunnel";
 import {
   KeyStore,
-  recompileCommonsGrants,
   readBlobStoreSettings,
   readEnrichPolicyResolutionInput,
   custodyStateCounts,
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
 } from "@centraid/vault";
-import type {
-  FilterClause,
-  InvokeOutcome,
-  PreviewCodec,
-} from "@centraid/vault";
+import type { FilterClause, PreviewCodec } from "@centraid/vault";
 
 import type { BackupConfig } from "../backup/backup-config.js";
 import { BackupService } from "../backup/backup-service.js";
@@ -167,14 +162,6 @@ import {
 import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
 import { makeCaptureRouteHandler } from "../routes/capture-routes.js";
-import {
-  COMMONS_RECOVERY_PATH,
-  makeCommonsRecoveryRouteHandler,
-} from "../routes/commons-recovery-routes.js";
-import {
-  COMMONS_PATH,
-  makeCommonsRouteHandler,
-} from "../routes/commons-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
 import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
@@ -182,7 +169,6 @@ import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
-import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   ENRICH_PROFILES_PREFIX,
   makeEnrichProfilesRouteHandler,
@@ -208,6 +194,10 @@ import {
 } from "../routes/multiplex-replica-routes.js";
 import { makeOwnersRouteHandler } from "../routes/owners-routes.js";
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
+import {
+  EDGES_PATH,
+  makePlacementRouteHandler,
+} from "../routes/placement-routes.js";
 import {
   makePushRegistrationRouteHandler,
   PUSH_REGISTRATIONS_PATH,
@@ -254,8 +244,7 @@ import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
-import { commonsObservabilitySection } from "./commons-observability.js";
-import { companionRequestAllowed } from "./companion-access.js";
+import { companionAccess } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
 import { defaultLogger } from "./default-logger.js";
@@ -298,12 +287,6 @@ import {
 } from "./notifications-events.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
-import {
-  claimPeerCommonsInvitation,
-  invitePeerToCommons,
-  pullPeerCommons,
-  refusePeerCommonsInvitation,
-} from "./peer-commons-client.js";
 import type { PeerDial } from "./peer-link-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { announceLocalRoutes } from "./peer-route-announce.js";
@@ -322,6 +305,7 @@ import type { ResourceMode } from "./resource-mode.js";
 import { RouteLatencyMetrics } from "./route-latency.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
+import { pullShareShape } from "./share-subscriber.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
@@ -728,9 +712,16 @@ export async function buildGateway(
   process.env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB = String(
     hardwareProfile.workerMaxOldGenerationMb
   );
-  process.env.CENTRAID_WORKER_POOL_SIZE = String(
-    hardwareProfile.workerPoolSize
-  );
+  // NOT the resolved default (#922 B3): the warm-pool default has one source,
+  // `CONSTRAINED_WORKER_POOL_SIZE`/`DEFAULT_WORKER_POOL_SIZE` beside the pool,
+  // and boot used to overwrite it with a second number. Only a durable UI
+  // override still has to reach the engine this way — an operator env var is
+  // already in the environment the pool reads.
+  if (hardwareProfile.sources.workerPoolSize.source === "prefs") {
+    process.env.CENTRAID_WORKER_POOL_SIZE = String(
+      hardwareProfile.workerPoolSize
+    );
+  }
   process.env.CENTRAID_REPLICATION_CONCURRENCY = String(
     hardwareProfile.replicationConcurrency
   );
@@ -863,31 +854,12 @@ export async function buildGateway(
   let requestNotificationsWake: (vaultId: string) => void = (vaultId) => {
     pendingNotificationsWakes.add(vaultId);
   };
-  let nudgeCommonsSweep = (): void => undefined;
-  /**
-   * Seeded so a replayed command mints exactly the ids the steward minted
-   * (#750 invariant 7). Host-only: never reachable from member or app code,
-   * never serialized. An unmounted vault cannot replay, which the caller
-   * answers by re-projecting from the closure.
-   */
-  const commonsReplicaInvoke = (
-    vaultId: string,
-    command: string,
-    input: Record<string, unknown>,
-    invocationId: string
-  ): InvokeOutcome => {
-    const mounted = vaultRegistry.get(vaultId);
-    if (!mounted?.gateway || !mounted.ownerCredential)
-      throw new Error(`commons replica vault ${vaultId} is not mounted`);
-    return mounted.gateway.invokeCommonsCanonical(
-      mounted.ownerCredential,
-      { command, input, purpose: "dpv:ServiceProvision", invocationId },
-      { idSeed: invocationId }
-    );
-  };
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
+    ...(hardwareProfile.storageFsyncMs === null
+      ? {}
+      : { storageFsyncMs: hardwareProfile.storageFsyncMs }),
     replicationConcurrency: hardwareProfile.replicationConcurrency,
     footprintBudget:
       hardwareProfile.class === "constrained"
@@ -917,20 +889,6 @@ export async function buildGateway(
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
     onProvenanceCommitted: (vaultId, entityTypes) =>
       provenanceDoorbell(vaultId, entityTypes),
-    onCommonsCommandSequenced: (vaultId, grantId) => {
-      const steward = vaultRegistry.get(vaultId);
-      if (!steward) return;
-      recompileCommonsGrants({
-        steward: steward.db,
-        stewardVaultId: vaultId,
-        stewardPartyId: steward.boot.ownerPartyId,
-        grantId,
-        vaultFor: (memberVaultId) => vaultRegistry.get(memberVaultId)?.db,
-        invokeFor: commonsReplicaInvoke,
-        now: new Date().toISOString(),
-      });
-    },
-    onCommonsIntentQueued: () => nudgeCommonsSweep(),
     onNotificationsChanged: (vaultId, wake) => {
       notificationsEvents.publish(vaultId, wake);
       if (wake) requestNotificationsWake(vaultId);
@@ -1605,10 +1563,10 @@ export async function buildGateway(
       const raw = JSON.parse(
         await fs.readFile(path.join(dir, "app.json"), "utf8")
       ) as {
-        vault?: { purpose?: unknown; scopes?: unknown };
+        vault?: { scopes?: unknown };
       };
       const block = manifestScopeBlock(raw.vault);
-      if (block) plane.ensureAppInstallGrant(appId, block);
+      if (block) plane.recordAppInstall(appId, block);
     } catch (error) {
       logger.warn(
         `install-time grant for app "${appId}" failed: ` +
@@ -2995,7 +2953,6 @@ export async function buildGateway(
     }
     const common = {
       automationRef: input.automationRef,
-      purpose: row.manifest.vault.purpose,
       vault: vaultRegistry.agentBridgeFor(
         parsed.appId,
         executionScopeBlock(row.manifest.vault)
@@ -3648,11 +3605,6 @@ export async function buildGateway(
         paths,
         backup: options.backup,
         deviceAccessEnabled: Boolean(options.deviceAccess),
-        ...commonsObservabilitySection({
-          vaults: vaultRegistry
-            .planesList()
-            .map((plane) => ({ vaultId: plane.boot.vaultId, db: plane.db })),
-        }),
       },
     });
     return renderSupportBundle(input).text;
@@ -3903,7 +3855,6 @@ export async function buildGateway(
               plane.invoke(plane.ownerCredential, {
                 command,
                 input,
-                purpose: "dpv:ServiceProvision",
               }),
           };
         },
@@ -4160,117 +4111,12 @@ export async function buildGateway(
     vaultRegistry,
     enrollmentStore
   );
-  const edgesHandler = makeEdgesRouteHandler({
+  const placementHandler = makePlacementRouteHandler({
     gatewayDatabase,
     enrollments: enrollmentStore,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
-  });
-  const commonsHandler = makeCommonsRouteHandler({
-    enrollments: enrollmentStore,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
-    credentialFor: (vaultId) => {
-      const plane = vaultRegistry.get(vaultId);
-      return plane
-        ? {
-            kind: "device" as const,
-            deviceId: plane.boot.deviceId,
-            deviceKey: plane.boot.deviceKey,
-          }
-        : undefined;
-    },
-    ownerPartyFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
-    vaultPublicKeyFor: (vaultId) =>
-      vaultRegistry.vaultIdentity(vaultId)?.publicKey,
-    linkedVaultPublicKey: (localVaultId, peerVaultId) => {
-      const link = vaultLinksStore.findPair(localVaultId, peerVaultId);
-      if (
-        !link ||
-        link.revoked ||
-        link.approvedByA === null ||
-        link.approvedByB === null
-      )
-        return undefined;
-      // #750 invariant 1: identity lives in the vault directory, not the link.
-      return vaultLinksStore.directoryEntry(peerVaultId)?.publicKey;
-    },
-    invitePeer: async (invitation) => {
-      const { stewardVaultId, memberVaultId } = invitation;
-      const link = vaultLinksStore.peerForVault(memberVaultId, stewardVaultId);
-      const dial = options.peerPlane?.dial;
-      if (!link || !dial) return false;
-      return invitePeerToCommons({
-        dial,
-        route: link.route,
-        invitation,
-      });
-    },
-    acceptPeer: async ({
-      stewardVaultId,
-      memberVaultId,
-      grantId,
-      expectedSizeBytes,
-    }) => {
-      const member = vaultRegistry.get(memberVaultId);
-      const link = vaultLinksStore.peerForVault(stewardVaultId, memberVaultId);
-      const dial = options.peerPlane?.dial;
-      if (!member || !link || !dial) return false;
-      const result = await pullPeerCommons({
-        dial,
-        route: link.route,
-        stewardVaultId,
-        memberVaultId,
-        grantId,
-        seat: member.db,
-        acceptInvitation: true,
-        expectedSizeBytes,
-        ...(member.gateway && member.ownerCredential
-          ? { gateway: member.gateway, credential: member.ownerCredential }
-          : {}),
-      });
-      return result.state === "current";
-    },
-    claimPeer: async ({ stewardVaultId, memberVaultId, claimToken }) => {
-      const member = vaultRegistry.get(memberVaultId);
-      const link = vaultLinksStore.peerForVault(stewardVaultId, memberVaultId);
-      const dial = options.peerPlane?.dial;
-      if (!member || !link || !dial) return false;
-      return claimPeerCommonsInvitation({
-        dial,
-        route: link.route,
-        stewardVaultId,
-        memberVaultId,
-        claimToken,
-        seat: member.db,
-      });
-    },
-    refusePeer: async ({ stewardVaultId, memberVaultId, grantId }) => {
-      const link = vaultLinksStore.peerForVault(stewardVaultId, memberVaultId);
-      const dial = options.peerPlane?.dial;
-      if (!link || !dial) return false;
-      return refusePeerCommonsInvitation({
-        dial,
-        route: link.route,
-        stewardVaultId,
-        memberVaultId,
-        grantId,
-      });
-    },
-  });
-  const commonsRecoveryHandler = makeCommonsRecoveryRouteHandler({
-    enrollments: enrollmentStore,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    invitePeer: async (invitation) => {
-      const link = vaultLinksStore.peerForVault(
-        invitation.memberVaultId,
-        invitation.stewardVaultId
-      );
-      const dial = options.peerPlane?.dial;
-      if (!link || !dial) return false;
-      return invitePeerToCommons({ dial, route: link.route, invitation });
-    },
   });
   // Mounted OUTSIDE the prefix registry on purpose: every route there resolves
   // a proved DEVICE first, and a peer is not a device (#726).
@@ -4285,35 +4131,43 @@ export async function buildGateway(
         localRoute: options.peerPlane.localRoute,
         localLabel: () => os.hostname().replace(/\.local$/u, ""),
         budget: createTokenBucket(PEER_PLANE_BUDGET),
-        commonsVaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-        commonsGatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
-        commonsCredentialFor: (vaultId) => {
-          const plane = vaultRegistry.get(vaultId);
-          return plane
-            ? {
-                kind: "device" as const,
-                deviceId: plane.boot.deviceId,
-                deviceKey: plane.boot.deviceKey,
-              }
-            : undefined;
+        replica: {
+          vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+          gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
+          credentialFor: (vaultId) =>
+            vaultRegistry.get(vaultId)?.ownerCredential,
+          pullShape: async (input) => {
+            const dial = options.peerPlane?.dial;
+            const link = vaultLinksStore.peerForVault(
+              input.originVaultId,
+              input.audienceVaultId
+            );
+            if (!dial || !link)
+              return {
+                state: "unreachable" as const,
+                detail: `no link from ${input.audienceVaultId} to ${input.originVaultId}`,
+              };
+            return pullShareShape({
+              dial,
+              route: link.route,
+              originVaultId: input.originVaultId,
+              audienceVaultId: input.audienceVaultId,
+              shapeId: input.shapeId,
+              seat: input.seat,
+              now: () => new Date().toISOString(),
+            });
+          },
         },
       })
     : undefined;
-  // Drains the ONE share outbox on the gateway's clock: bounded rows per tick,
-  // backs off on failure, never throws out of the timer. `dial` is read LIVE,
-  // so a build that wires it later (or never) still behaves — the sweep idles.
   const peerPlaneSweep = createPeerPlaneSweep({
     db: gatewayDatabase,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
-    commonsVaults: () =>
-      vaultRegistry.planesList().map((plane) => ({
-        vaultId: plane.boot.vaultId,
-        db: plane.db,
-        gateway: plane.gateway,
-        credential: plane.ownerCredential,
-      })),
+    subscriptionVaults: () =>
+      vaultRegistry
+        .planesList()
+        .map((plane) => ({ vaultId: plane.boot.vaultId, db: plane.db })),
     dial: () => options.peerPlane?.dial,
     // The RETRY path for route re-assertion (#750 invariant 3): a no-op until
     // the endpoint changes, and armed while any linked peer has not heard it,
@@ -4342,7 +4196,6 @@ export async function buildGateway(
     shouldDefer: () => health.shouldDeferBackgroundWork(),
     logger,
   });
-  nudgeCommonsSweep = () => peerPlaneSweep.nudge();
   const pushRegistrationHandler =
     makePushRegistrationRouteHandler(gatewayDatabase);
   const pushWakeRelay = new PushWakeRelay(
@@ -4481,18 +4334,7 @@ export async function buildGateway(
       (await multiplexReplicaHandler(req, res))
     )
       return true;
-    if (url.pathname === EDGES_PATH && (await edgesHandler(req, res)))
-      return true;
-    if (
-      (url.pathname === COMMONS_PATH ||
-        url.pathname.startsWith(`${COMMONS_PATH}/`)) &&
-      (await commonsHandler(req, res))
-    )
-      return true;
-    if (
-      url.pathname === COMMONS_RECOVERY_PATH &&
-      (await commonsRecoveryHandler(req, res))
-    )
+    if (url.pathname === EDGES_PATH && (await placementHandler(req, res)))
       return true;
     if (
       url.pathname === PUSH_REGISTRATIONS_PATH &&
@@ -4521,22 +4363,31 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    if (enrollment?.grantProfile !== undefined) {
-      if (
-        !companionRequestAllowed(
-          req,
-          enrollment.grantProfile,
-          enrollment.enrollmentId
-        )
-      ) {
-        return sendJson(res, 403, {
-          error: "companion_profile",
-          message:
-            "this Companion device is not granted access to that gateway surface",
-        });
-      }
-      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(",");
-    }
+    const access = companionAccess({
+      attenuated: enrollment?.attenuated === true,
+      projected:
+        enrollment?.attenuated === true
+          ? enrollmentStore.projectedSurfaces(deviceKey, vaultId)
+          : undefined,
+      req,
+      enrollmentId: enrollment?.enrollmentId ?? "",
+    });
+    if (access.kind === "unreadable")
+      return sendJson(res, 403, {
+        error: "companion_attenuation_unavailable",
+        message:
+          "this Companion device's surface answer has not been read from the vault yet",
+      });
+    if (access.kind === "refused")
+      return sendJson(res, 403, {
+        error: "companion_profile",
+        message:
+          "this Companion device is not granted access to that gateway surface",
+      });
+    const companionSurfaces =
+      access.kind === "allowed" ? access.surfaces : undefined;
+    if (companionSurfaces !== undefined)
+      req.headers[COMPANION_GRANTS_HEADER] = companionSurfaces.join(",");
     return runWithVaultContext(
       {
         vaultId,
@@ -4547,9 +4398,7 @@ export async function buildGateway(
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
-        ...(enrollment?.grantProfile === undefined
-          ? {}
-          : { grantProfile: enrollment.grantProfile }),
+        ...(companionSurfaces === undefined ? {} : { companionSurfaces }),
       },
       () => dispatchChain(req, res)
     );
@@ -4557,19 +4406,6 @@ export async function buildGateway(
 
   let unsubscribeLateMount = (): void => undefined;
   const lateMountTasks = new Set<Promise<void>>();
-
-  const recompileMountedCommons = (): void => {
-    const now = new Date().toISOString();
-    for (const steward of vaultRegistry.planesList())
-      recompileCommonsGrants({
-        steward: steward.db,
-        stewardVaultId: steward.boot.vaultId,
-        stewardPartyId: steward.boot.ownerPartyId,
-        vaultFor: (memberVaultId) => vaultRegistry.get(memberVaultId)?.db,
-        invokeFor: commonsReplicaInvoke,
-        now,
-      });
-  };
 
   const start = async (publicBaseUrl: string): Promise<void> => {
     serverUrl = publicBaseUrl;
@@ -4594,7 +4430,7 @@ export async function buildGateway(
                 (error instanceof Error ? error.message : String(error))
             )
           ),
-      ]).then(() => recompileMountedCommons());
+      ]).then(() => undefined);
       lateMountTasks.add(task);
       void task.finally(() => lateMountTasks.delete(task));
     });
@@ -4611,8 +4447,6 @@ export async function buildGateway(
     await forEachSequentially(vaultRegistry.planesList(), (plane) =>
       hostFor(plane).then(() => undefined)
     );
-    recompileMountedCommons();
-
     vaultRegistry.start();
 
     scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);

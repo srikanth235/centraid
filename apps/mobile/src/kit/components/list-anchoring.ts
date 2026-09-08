@@ -1,6 +1,8 @@
 import type { FlashListProps } from "@shopify/flash-list";
 
-type Anchoring = NonNullable<
+/** Named so `SeatList` can REQUIRE it: a default would be the inheritance the
+ *  invariant below forbids. */
+export type ListAnchoring = NonNullable<
   FlashListProps<unknown>["maintainVisibleContentPosition"]
 >;
 
@@ -16,6 +18,6 @@ const TOP_FOLLOW_THRESHOLD_PX = 120;
  * as a document that vanished. Follow the top while the reader is at it, and
  * hold position once they have scrolled in, where an unrequested jump is worse.
  */
-export const NEWEST_FIRST_ANCHORING: Anchoring = {
+export const NEWEST_FIRST_ANCHORING: ListAnchoring = {
   autoscrollToTopThreshold: TOP_FOLLOW_THRESHOLD_PX,
 };

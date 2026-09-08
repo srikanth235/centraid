@@ -32,6 +32,7 @@ import {
   isDirectHostRequest,
   isLoopbackRequest,
 } from "../routes/route-helpers.js";
+import { recordCompanionAttenuation } from "../serve/companion-access.js";
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
@@ -69,6 +70,7 @@ function relayHintsOf(ticket: string): string[] {
   }
 }
 
+/** The surface set a Companion pairing request declares, validated. */
 function companionGrantProfile(value: unknown): string[] | undefined | null {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) return null;
@@ -227,11 +229,11 @@ export function makeDaemonDevicePlane(input: {
     ) {
       return { ok: false, error: "bad_request" };
     }
-    const grantProfile = companionGrantProfile(request.grantProfile);
-    if (request.platform === "extension" && grantProfile === undefined) {
+    const surfaces = companionGrantProfile(request.grantProfile);
+    if (request.platform === "extension" && surfaces === undefined) {
       return { ok: false, error: "missing_grant_profile" };
     }
-    if (grantProfile === null) {
+    if (surfaces === null) {
       return { ok: false, error: "bad_grant_profile" };
     }
     const registry = input.vaults();
@@ -247,7 +249,7 @@ export function makeDaemonDevicePlane(input: {
         ...(request.rememberDevice === undefined
           ? {}
           : { rememberDevice: request.rememberDevice }),
-        ...(grantProfile === undefined ? {} : { grantProfile }),
+        ...(surfaces === undefined ? {} : { surfaces }),
       }
     );
     const primary = enrolled?.[0];
@@ -263,10 +265,22 @@ export function makeDaemonDevicePlane(input: {
         ownerPartyId: granted.boot.ownerPartyId,
         name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
         ...(request.platform ? { platform: request.platform } : {}),
-        // `trust` only asks "may this device act" (#726); attenuation is
-        // grant_profile, orthogonal to it.
+        // `trust` only asks "may this device act" (#726); the attenuation
+        // below is orthogonal to it.
         trust: "full",
       });
+      // The ticket the owner minted IS the answer, so it is written into the
+      // vault as authority rows here and projected for the request path in the
+      // same act (#928 A6). A Companion enrolled into a vault that is not
+      // mounted gets no rows and no projection, and is refused until it is —
+      // the closed direction.
+      if (surfaces !== undefined) {
+        recordCompanionAttenuation(enrollments, granted, {
+          endpointId,
+          surfaces,
+          now: new Date().toISOString(),
+        });
+      }
     }
     logger.info(
       `device plane: enrolled ${endpointId.slice(0, 10)}… as owner ${primary.ownerLabel} into ` +

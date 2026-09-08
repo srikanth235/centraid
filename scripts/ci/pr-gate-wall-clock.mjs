@@ -9,12 +9,16 @@
  * against a docs claim of 12.3, and nothing in the repo could have noticed —
  * a budget nobody measures is a wish.
  *
- * WHAT IT MEASURES. The PR gate's wall clock is `max(completed_at) −
- * min(started_at)` across the jobs in `check`'s `needs:` list. Not the sum:
- * those jobs run in parallel and the sum would punish parallelism, which is the
- * one thing that makes the gate fast. Not `check`'s own duration either: it
- * starts last and would report five seconds. The span is what a human sits
- * through, so the span is what is budgeted.
+ * WHAT IT MEASURES. The union of the `started_at → completed_at` intervals of
+ * the jobs in `check`'s `needs:` list — the time during which at least one gate
+ * lane was running. Not the sum: those jobs run in parallel and the sum would
+ * punish parallelism, which is the one thing that makes the gate fast. Not
+ * `check`'s own duration either: it starts last and would report five seconds.
+ * And, since #931, not the raw `max(completed_at) − min(started_at)` span
+ * either: that charged the PR for the runner queue between one lane finishing
+ * and the next starting, which no diff can make shorter. The span is still
+ * reported beside the budgeted number, because the gap between them is the
+ * backlog and someone should be able to see it.
  *
  * The lane list is read from `ci.yml` itself rather than restated here, because
  * a second hand-maintained copy of `check.needs` is exactly the failure mode
@@ -106,28 +110,65 @@ export function selectGateJobs(jobs, needs) {
 }
 
 /**
- * Elapsed wall clock across the gate.
+ * The gate's WORK, and the span it sat inside.
+ *
+ * `ms` — the budgeted number — is the union of the jobs' `started_at →
+ * completed_at` intervals: the time during which at least one gate job was
+ * actually running on a runner. `spanMs` is the old `max(completed_at) −
+ * min(started_at)`, kept for the summary because the difference between the two
+ * IS the queue wait, and a reader deserves to see it.
+ *
+ * WHY IT CHANGED (#931 item 6). The span charged the PR for the account's
+ * runner backlog. #937 touched `packages/core` only, every lane green, and
+ * failed at 16.0 min against 15 because three workflows shared the pool and the
+ * coverage shards queued: the gap between one lane finishing and the next
+ * getting a runner is not work this gate can make faster, and it is not
+ * something the author of the diff did. Two PRs in a row from one program hit
+ * it, against a ladder whose own false-red target is ≤ 2 %. Pricing the union
+ * of busy intervals still refuses to reward serialising the lanes — overlapping
+ * work collapses into one interval exactly as it did before, so parallelism is
+ * as valuable as ever — and it still charges every minute a runner spent on
+ * this gate. What it stops charging is the minutes nobody spent on anything.
+ *
+ * The ceiling did NOT move: `tests/budgets.json` is untouched. This measures
+ * the same 900,000 ms more honestly.
  *
  * @param {{name: string, started_at?: string, completed_at?: string}[]} jobs Gate jobs.
- * @returns {{ms: number, firstStart: string, lastEnd: string, slowest: {name: string, ms: number}|null}|null} Null when nothing measurable ran.
+ * @returns {{ms: number, spanMs: number, queuedMs: number, firstStart: string, lastEnd: string, slowest: {name: string, ms: number}|null}|null} Null when nothing measurable ran.
  */
 export function wallClockMs(jobs) {
   if (!jobs.length) return null;
-  let min = Infinity;
-  let max = -Infinity;
+  const intervals = [];
   let slowest = null;
   for (const job of jobs) {
     const start = Date.parse(job.started_at ?? "");
     const end = Date.parse(job.completed_at ?? "");
     if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-    if (start < min) min = start;
-    if (end > max) max = end;
+    intervals.push([start, Math.max(start, end)]);
     const span = end - start;
     if (!slowest || span > slowest.ms) slowest = { name: job.name, ms: span };
   }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (intervals.length === 0) return null;
+  intervals.sort((a, b) => a[0] - b[0]);
+  let busy = 0;
+  let [openStart, openEnd] = intervals[0];
+  for (const [start, end] of intervals.slice(1)) {
+    if (start > openEnd) {
+      // A gap in which no gate job was running at all: runner queue, not work.
+      busy += openEnd - openStart;
+      openStart = start;
+      openEnd = end;
+    } else if (end > openEnd) {
+      openEnd = end;
+    }
+  }
+  busy += openEnd - openStart;
+  const min = intervals[0][0];
+  const max = Math.max(...intervals.map(([, end]) => end));
   return {
-    ms: max - min,
+    ms: busy,
+    spanMs: max - min,
+    queuedMs: max - min - busy,
     firstStart: new Date(min).toISOString(),
     lastEnd: new Date(max).toISOString(),
     slowest,
@@ -139,7 +180,7 @@ const fmt = (ms) => `${(ms / 60000).toFixed(1)} min`;
 /**
  * Markdown for the Job Summary.
  *
- * @param {{ms: number, slowest: {name: string, ms: number}|null}} measured What the run took.
+ * @param {{ms: number, spanMs?: number, queuedMs?: number, slowest: {name: string, ms: number}|null}} measured What the run took.
  * @param {number} budgetMs The ceiling.
  * @param {number} lanes How many gate jobs were measured.
  * @returns {string} Markdown.
@@ -154,8 +195,11 @@ export function renderWallClock(measured, budgetMs, lanes) {
     measured.slowest
       ? `Longest single lane: \`${measured.slowest.name}\` at ${fmt(measured.slowest.ms)}.`
       : "",
+    typeof measured.queuedMs === "number" && typeof measured.spanMs === "number"
+      ? `Elapsed from first start to last finish: ${fmt(measured.spanMs)}, of which ${fmt(measured.queuedMs)} was runner queue with no gate job running.`
+      : "",
     "",
-    "This is the span a person waits, not the sum of the lanes — the sum would punish the parallelism that makes the gate fast. Over budget, the fix is to move a lane to rung 3 or make it faster, never to widen the ceiling: `tests/suite-wall-clock.json` is tighten-only.",
+    "This is the union of the lanes' busy intervals, not their sum and not the raw elapsed span. The sum would punish the parallelism that makes the gate fast; the raw span charged the PR for the account's runner backlog (#931). Over budget, the fix is to move a lane to rung 3 or make it faster, never to widen the ceiling: `tests/budgets.json#suiteWallClock` is tighten-only.",
   ]
     .filter((line) => line !== "")
     .join("\n");
@@ -232,7 +276,7 @@ function main() {
   }
   if (measured.ms > budgetMs) {
     console.error(
-      `::error title=PR gate over budget::the rung-2 gate took ${fmt(measured.ms)} against a ${fmt(budgetMs)} ceiling. Move a lane to rung 3 (candidate.yml) or make it faster; tests/suite-wall-clock.json only tightens.`
+      `::error title=PR gate over budget::the rung-2 gate spent ${fmt(measured.ms)} of runner time against a ${fmt(budgetMs)} ceiling (queue wait excluded). Move a lane to rung 3 (candidate.yml) or make it faster; tests/budgets.json#suiteWallClock only tightens.`
     );
     process.exitCode = 1;
   }

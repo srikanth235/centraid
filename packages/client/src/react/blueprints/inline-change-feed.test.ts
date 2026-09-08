@@ -115,6 +115,43 @@ describe("inline change feed", () => {
     }
   });
 
+  // COUNTER-VERIFIED (#922 D1). The number an app is charged for one applied
+  // batch is counted at the host door, before `onDataChange`'s own window, so
+  // the count is the shell's and not the element layer's.
+  it("one applied batch costs the app ONE change event, whatever its size", () => {
+    const subscribers: Array<(inv: readonly ReplicaInvalidation[]) => void> =
+      [];
+    installInlineCentraid({
+      appId: "tasks",
+      session: fakeSession(subscribers),
+      queries: {},
+    });
+    try {
+      const host = (
+        window as {
+          centraid?: {
+            onChange: (cb: (detail: unknown) => void) => () => void;
+          };
+        }
+      ).centraid!;
+      const seen: unknown[] = [];
+      const stop = host.onChange((detail) => seen.push(detail));
+
+      subscribers[0]?.(
+        Array.from({ length: 40 }, () => ({
+          shapeId: "s",
+          entity: "schedule.task",
+          source: "canonical",
+        })) as ReplicaInvalidation[]
+      );
+
+      expect(seen).toHaveLength(1);
+      stop();
+    } finally {
+      delete (window as { centraid?: unknown }).centraid;
+    }
+  });
+
   // The empty list is the WILDCARD channel, not a coarse fallback: the
   // coordinator emits `entity: "*"` for bootstrap, commit, purge and scope
   // teardown, none of them a table and all of them every app's business.

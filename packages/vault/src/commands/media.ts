@@ -18,6 +18,7 @@ import {
 } from "./entity-revisions.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 
 /**
  * THE STAR IS ONE TAG ON THE ASSET (#916).
@@ -1207,14 +1208,19 @@ const CREATE_ALBUM: CommandDefinition = {
     type: "object",
     required: ["title"],
     additionalProperties: false,
-    properties: { title: { type: "string", minLength: 1 } },
+    properties: {
+      album_id: MINTED_ID_PROPERTY,
+      title: { type: "string", minLength: 1 },
+    },
   },
   outputSchema: {
     type: "object",
     required: ["album_id"],
     properties: { album_id: { type: "string" } },
   },
-  preconditions: [],
+  preconditions: [
+    mintedIdIsFree("core_collection", "album_id", "album", "collection_id"),
+  ],
   postconditions: [
     {
       name: "album_created",
@@ -1231,7 +1237,7 @@ const CREATE_ALBUM: CommandDefinition = {
 
 function createAlbum(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { title: string };
-  const albumId = ctx.newId();
+  const albumId = mintedId(ctx, "album_id");
   ctx.db
     .prepare(
       // An album is a top-level collection; sort_order is sibling-scoped

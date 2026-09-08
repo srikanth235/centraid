@@ -4,7 +4,7 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 export default nodeProject({
   test: {
     name: "@centraid/server",
-    include: ["src/**/*.test.ts", "scripts/check-import-boundary.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     // Gateway files bootstrap real SQLite vaults and bundled apps. Letting all
     // eight host cores start those fixtures at once pushed otherwise healthy
     // beforeEach hooks past the shared 30 s I/O budget during check:pr (the

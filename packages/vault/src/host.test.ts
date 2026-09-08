@@ -2,22 +2,21 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { bootstrapVault, createGrant } from "./bootstrap.js";
+import { bootstrapVault } from "./bootstrap.js";
 import { registerTaskCommands } from "./commands/tasks.js";
 import { openVaultDb } from "./db.js";
 import type { VaultDb } from "./db.js";
 import { createGateway } from "./gateway/gateway.js";
+import { automationAnswers } from "./grant/automation-authority.js";
+import { answerScopes } from "./grant/automation-principal.test-fixtures.js";
 import {
   ensureAgentEnrolled,
   ensureAppEnrolled,
   recoverVaultBootstrap,
-  listActiveAgentGrants,
-  listActiveGrants,
   listEnrolledAgents,
   lookupAgentByName,
   lookupAppByName,
   markAgentRevoked,
-  purposeConceptId,
 } from "./host.js";
 
 const cleanups: (() => void)[] = [];
@@ -41,9 +40,7 @@ describe("host", () => {
     expect(boot2.ownerPartyId).toBe(boot1.ownerPartyId);
     expect(boot2.deviceId).toBe(boot1.deviceId);
     expect(boot2.deviceKey).toBe(boot1.deviceKey);
-    expect(boot2.concepts["dpv:ServiceProvision"]).toBe(
-      boot1.concepts["dpv:ServiceProvision"]
-    );
+    expect(boot2.concepts["same-as"]).toBe(boot1.concepts["same-as"]);
     // The recovered credential authenticates: an owner read succeeds.
     const gw = createGateway(second);
     const cred = {
@@ -53,7 +50,6 @@ describe("host", () => {
     } as const;
     const result = gw.read(cred, {
       entity: "core.party",
-      purpose: "dpv:ServiceProvision",
     });
     expect(result.rows.length).toBeGreaterThan(0);
 
@@ -88,36 +84,46 @@ describe("host", () => {
     }).toStrictEqual({ display_name: "Expense Tracker" });
   });
 
-  test("listActiveGrants surfaces purpose notation and scopes", () => {
+  test("an automation's standing answers are one row per subject and verb", () => {
     const db = openVaultDb();
     cleanups.push(() => db.close());
     const boot = bootstrapVault(db, { ownerName: "Priya" });
-    const app = ensureAppEnrolled(db, "calendar");
-    expect(listActiveGrants(db, app.appId)).toStrictEqual([]);
-    const purpose = purposeConceptId(db, "dpv:ServiceProvision");
-    expect(purpose).toBe(boot.concepts["dpv:ServiceProvision"]);
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: purpose as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [
-        { schema: "schedule", verbs: "read+act" },
-        { schema: "core", table: "event", verbs: "read" },
-      ],
-    });
-    const grants = listActiveGrants(db, app.appId);
-    expect(grants).toHaveLength(1);
-    expect(grants[0]).toMatchObject({
-      purpose: "dpv:ServiceProvision",
-      expiresAt: null,
-    });
-    expect(grants[0]?.scopes).toStrictEqual([
-      { schema: "schedule", table: null, verbs: "read+act" },
+    ensureAgentEnrolled(db, "calendar");
+    expect(automationAnswers(db.vault, "calendar")).toStrictEqual([]);
+    answerScopes(db, boot, "calendar", [
+      { schema: "schedule", verbs: "read+act" },
       { schema: "core", table: "event", verbs: "read" },
+    ]);
+    expect(
+      automationAnswers(db.vault, "calendar").map((answer) => ({
+        subjectType: answer.subjectType,
+        subjectId: answer.subjectId,
+        verb: answer.verb,
+        decision: answer.decision,
+      }))
+    ).toStrictEqual([
+      {
+        subjectType: "agent.pack",
+        subjectId: "schedule",
+        verb: "act",
+        decision: "granted",
+      },
+      {
+        subjectType: "agent.pack",
+        subjectId: "schedule",
+        verb: "read",
+        decision: "granted",
+      },
+      {
+        subjectType: "core.entity",
+        subjectId: "core.event",
+        verb: "read",
+        decision: "granted",
+      },
     ]);
   });
 
-  test("ensureAgentEnrolled is idempotent per host-side name; grants match on the agent party", () => {
+  test("ensureAgentEnrolled is idempotent per host-side name; answers match on the automation id", () => {
     const db = openVaultDb();
     cleanups.push(() => db.close());
     const boot = bootstrapVault(db, { ownerName: "Priya" });
@@ -133,7 +139,7 @@ describe("host", () => {
     expect(lookupAgentByName(db, "briefing")?.agentId).toBe(first.agentId);
     expect(lookupAgentByName(db, "never-enrolled")).toBeUndefined();
 
-    // Deny-by-default: the enrolled agent reads nothing until a grant lands.
+    // Deny-by-default: the enrolled agent reads nothing until an answer lands.
     const cred = {
       kind: "agent",
       agentId: first.agentId,
@@ -143,30 +149,22 @@ describe("host", () => {
     expect(() =>
       gw.read(cred, {
         entity: "schedule.task",
-        purpose: "dpv:ServiceProvision",
       })
     ).toThrow(/deny/u);
 
-    createGrant(db, {
-      granteePartyId: first.partyId,
-      purposeConceptId: purposeConceptId(db, "dpv:ServiceProvision") as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "schedule", verbs: "read+act" }],
-    });
-    const grants = listActiveAgentGrants(db, first.partyId);
-    expect(grants).toHaveLength(1);
-    expect(grants[0]).toMatchObject({ purpose: "dpv:ServiceProvision" });
+    answerScopes(db, boot, "briefing", [
+      { schema: "schedule", verbs: "read+act" },
+    ]);
+    expect(automationAnswers(db.vault, "briefing")).toHaveLength(2);
 
-    // The grant covers reads AND typed commands under the schedule schema.
+    // The answer covers reads AND typed commands under the schedule pack.
     const read = gw.read(cred, {
       entity: "schedule.task",
-      purpose: "dpv:ServiceProvision",
     });
     expect(read.rows).toStrictEqual([]);
     const outcome = gw.invoke(cred, {
       command: "schedule.add_task",
       input: { title: "water the plants" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
 
@@ -176,7 +174,6 @@ describe("host", () => {
     expect(() =>
       gw.read(cred, {
         entity: "schedule.task",
-        purpose: "dpv:ServiceProvision",
       })
     ).toThrow(/unknown caller/u);
     expect(

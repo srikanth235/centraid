@@ -47,8 +47,7 @@ export function lockerFixture(): LockerFixture {
   const invoke = (
     command: string,
     input: Record<string, unknown>
-  ): InvokeOutcome =>
-    gw.invoke(owner, { command, input, purpose: "dpv:ServiceProvision" });
+  ): InvokeOutcome => gw.invoke(owner, { command, input });
   const out = <T = Record<string, unknown>>(outcome: InvokeOutcome): T => {
     expect(
       outcome.status,

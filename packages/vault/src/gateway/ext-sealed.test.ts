@@ -8,10 +8,11 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { ExtSpecError } from "../schema/ext.js";
 import type { ExtTableSpec } from "../schema/ext.js";
 import { isSealedValue, readSealKeyFingerprint } from "../schema/sealed.js";
@@ -22,7 +23,6 @@ import { resealVaultKey } from "./reseal.js";
 import type { Credential } from "./types.js";
 
 const APP = "keypass";
-const PURPOSE = "dpv:ServiceProvision";
 
 let db: VaultDb;
 let boot: BootstrapResult;
@@ -66,7 +66,6 @@ describe("ext-sealed", () => {
         table: "credential",
         values: { label: "GitHub", api_key: apiKey },
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { id: string } }).output.id;
@@ -122,21 +121,21 @@ describe("ext-sealed", () => {
   test("a default read shows the placeholder, not the ciphertext", () => {
     installApp();
     addCredential();
-    const app = enrollApp(db, { name: "reader" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts[PURPOSE] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: `ext.${APP}`, table: "credential", verbs: "read" }],
+    const app = enrollAgent(db, {
+      name: "reader",
+      modelRef: "test-automation",
     });
+    answerScopes(db, boot, "reader", [
+      { schema: `ext.${APP}`, table: "credential", verbs: "read" },
+    ]);
     const reader: Credential = {
-      kind: "app",
-      appId: app.appId,
-      signingKey: app.signingKey,
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
     };
     const res = gw.read(reader, {
       entity: `ext.${APP}.credential`,
-      purpose: PURPOSE,
     });
     expect(res.rows[0]?.["api_key"]).toBe("«sealed»");
     expect(res.rows[0]?.["label"]).toBe("GitHub");
@@ -149,7 +148,6 @@ describe("ext-sealed", () => {
       entity: `ext.${APP}.credential`,
       entityId: id,
       columns: ["api_key"],
-      purpose: PURPOSE,
     });
     expect(out.values["api_key"]).toBe("ghp_reveal_me");
   });
@@ -171,27 +169,27 @@ describe("ext-sealed", () => {
   test("a read scope cannot reveal an ext secret — the reveal verb is separate", () => {
     installApp();
     const id = addCredential();
-    const app = enrollApp(db, { name: "reader" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts[PURPOSE] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: `ext.${APP}`, table: "credential", verbs: "read" }],
+    const app = enrollAgent(db, {
+      name: "reader",
+      modelRef: "test-automation",
     });
+    answerScopes(db, boot, "reader", [
+      { schema: `ext.${APP}`, table: "credential", verbs: "read" },
+    ]);
     const reader: Credential = {
-      kind: "app",
-      appId: app.appId,
-      signingKey: app.signingKey,
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
     };
     expect(() =>
       gw.reveal(reader, {
         entity: `ext.${APP}.credential`,
         entityId: id,
         columns: ["api_key"],
-        purpose: PURPOSE,
       })
     ).toThrow(
-      /no grant_scope covers ext\.keypass\.credential for verb reveal/u
+      /no standing answer covers ext\.keypass\.credential for verb reveal/u
     );
   });
 
@@ -243,7 +241,6 @@ describe("ext-sealed", () => {
       entity: `ext.${APP}.credential`,
       entityId: id,
       columns: ["api_key"],
-      purpose: PURPOSE,
     });
     expect(out.values["api_key"]).toBe("plaintext_at_first");
   });
@@ -257,7 +254,6 @@ describe("ext-sealed", () => {
       entity: `ext.${APP}.credential`,
       entityId: id,
       columns: ["api_key"],
-      purpose: PURPOSE,
     });
     expect(out.values["api_key"]).toBe("rotate_this_key");
   });
@@ -272,7 +268,6 @@ describe("ext-sealed", () => {
         values: { label: "Draft", api_key: "draft_secret" },
         band: "draft",
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     const id = (out as { output: { id: string } }).output.id;

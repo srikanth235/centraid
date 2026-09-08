@@ -21,16 +21,15 @@ import {
 import type { Gateway as VaultGateway, VaultDb } from "@centraid/vault";
 
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
+import type { PeerReplicaDeps } from "../routes/peer-replica-route.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import { judgeEdgeCrossing } from "./link-crossing.js";
 import {
   encodeLinkTicket,
   parseLinkTicket,
   redeemLinkTicket,
 } from "./peer-link-client.js";
-import type { PeerDial, PeerRequest } from "./peer-link-client.js";
-import type { LinkRoute } from "./vault-link-row.js";
+import type { PeerRequest } from "./peer-link-client.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
 export interface Side {
@@ -171,8 +170,17 @@ function wireHandler(
   };
 }
 
-/** A peer request that lands on `side`'s real handler, as the relay would deliver it. */
-export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
+/**
+ * A peer request that lands on `side`'s real handler, as the relay would
+ * deliver it. `replica` mounts the subscription doors (#929); a caller that
+ * omits it gets a host whose peer plane serves no shape, which is the fixture
+ * for "this gateway does not carry subscriptions".
+ */
+export function transportTo(
+  side: Side,
+  callerEndpointId: string,
+  replica?: Omit<PeerReplicaDeps, "vaultFor">
+): PeerRequest {
   const handler = makePeerPlaneHandler({
     links: side.links,
     peerProof: side.proof,
@@ -182,19 +190,22 @@ export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
       vaultId === side.vaultId ? side.ownerPartyId : undefined,
     localRoute: () => ({ endpointId: side.endpointId, relayHints: [] }),
     localLabel: () => side.label,
-    commonsVaultFor: (vaultId) =>
-      vaultId === side.vaultId ? side.vault : undefined,
-    commonsGatewayFor: (vaultId) =>
-      vaultId === side.vaultId ? side.gateway : undefined,
-    commonsCredentialFor: (vaultId) =>
-      vaultId === side.vaultId ? side.ownerCredential : undefined,
+    ...(replica
+      ? {
+          replica: {
+            ...replica,
+            vaultFor: (vaultId: string) =>
+              vaultId === side.vaultId ? side.vault : undefined,
+          },
+        }
+      : {}),
   });
   return wireHandler(handler, callerEndpointId, side.proof);
 }
 
 /**
  * Like `transportTo`, but for two or more vaults co-hosted on one gateway:
- * `vaultFor`/`vaultPublicKey`/`gatewayFor` recognize ANY of `sides` as local;
+ * `vaultPublicKey`/`ownerPartyFor` recognize ANY of `sides` as local;
  * `links`/`gatewayDb`/`endpointId` are already shared, so any one side names them.
  */
 export function transportToHost(
@@ -211,18 +222,8 @@ export function transportToHost(
     ownerPartyFor: (vaultId) => sideFor(vaultId)?.ownerPartyId,
     localRoute: () => ({ endpointId: host.endpointId, relayHints: [] }),
     localLabel: () => host.label,
-    commonsVaultFor: (vaultId) => sideFor(vaultId)?.vault,
-    commonsGatewayFor: (vaultId) => sideFor(vaultId)?.gateway,
-    commonsCredentialFor: (vaultId) => sideFor(vaultId)?.ownerCredential,
   });
   return wireHandler(handler, callerEndpointId, host.proof);
-}
-
-export function dialFrom(caller: Side, callee: Side): PeerDial {
-  return {
-    request: transportTo(callee, caller.endpointId),
-    endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
-  };
 }
 
 function showTicket(side: Side): string {
@@ -252,21 +253,6 @@ export async function link(shower: Side, scanner: Side): Promise<void> {
   if (result.state !== "linked") {
     throw new Error(`expected a link, got ${result.state}`);
   }
-}
-
-export function routeFrom(from: Side, to: Side): LinkRoute {
-  const crossing = judgeEdgeCrossing(
-    {
-      links: from.links,
-      ownerOf: (vaultId) =>
-        vaultId === from.vaultId ? from.ownerId : undefined,
-    },
-    from.vaultId,
-    to.vaultId
-  );
-  if (crossing.state !== "linked" || !crossing.route)
-    throw new Error(`expected a routed link from ${from.label} to ${to.label}`);
-  return crossing.route;
 }
 
 export interface SeededPhoto {

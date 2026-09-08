@@ -1,7 +1,15 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
 /** tally.settle_up — contract in app.json. */
-const KEYS = ["from_party", "to_party", "amount_minor", "group_id", "paid_on"];
+const KEYS = [
+  // The seat mints the row's id and the origin honours it (#922 G2).
+  "settlement_id",
+  "from_party",
+  "to_party",
+  "amount_minor",
+  "group_id",
+  "paid_on",
+];
 export default async function settleUp({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   const cmdInput: Record<string, unknown> = {};

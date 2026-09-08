@@ -90,7 +90,7 @@ function tellScope(name: string): InlineAppModule["queries"] {
     [name]: {
       default: ({ ctx }: { ctx: unknown }) =>
         (ctx as { vault: { read: (r: unknown) => Promise<unknown> } }).vault
-          .read({ entity: "media.asset" })
+          .read({ entity: "media.asset", acceptTruncation: true })
           .then(() => ({ ok: true })),
     },
   } as unknown as InlineAppModule["queries"];

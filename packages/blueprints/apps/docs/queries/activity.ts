@@ -10,17 +10,16 @@ interface ProvenanceRow {
 }
 
 export default async function activityHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const documentId = String(input?.document_id ?? "");
   if (!documentId) return { events: [] };
   try {
     const result = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "access.provenance",
       where: [
         { column: "entity_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
         { column: "entity_id", op: "eq", value: documentId },
       ],
-      purpose,
     });
     // No ordering guarantee; sort here.
     const events = ((result.rows ?? []) as unknown as ProvenanceRow[])

@@ -100,6 +100,79 @@ describe("db", () => {
     expect(vaultAv.auto_vacuum).toBe(2);
   });
 
+  test("checkpointIfLargerThan: leaves a WAL under the threshold alone", () => {
+    const dir = tempDirSync();
+    const db = openVaultDb({ dir });
+    cleanups.push(() => db.close());
+    expect(db.checkpointIfLargerThan(64 * 1024 * 1024)).toMatchObject({
+      checkpointed: false,
+      busy: false,
+    });
+  });
+
+  test("checkpointIfLargerThan: bounds a WAL grown past the threshold while a client is reading", () => {
+    const dir = tempDirSync();
+    const db = openVaultDb({ dir, synchronous: "NORMAL" });
+    cleanups.push(() => db.close());
+    db.vault.exec("CREATE TABLE wal_growth(id INTEGER PRIMARY KEY, v TEXT)");
+    const grow = (rows: number) => {
+      const insert = db.vault.prepare("INSERT INTO wal_growth(v) VALUES (?)");
+      for (let index = 0; index < rows; index += 1)
+        insert.run("z".repeat(8000));
+    };
+    const reader = new DatabaseSync(path.join(dir, "vault.db"), {
+      readOnly: true,
+    });
+    cleanups.push(() => reader.close());
+    const read = () =>
+      reader.prepare("SELECT count(*) AS n FROM wal_growth").get();
+
+    grow(150);
+    read();
+    const grown = db.checkpointIfLargerThan(512 * 1024);
+    expect(grown.walBytes).toBeGreaterThan(512 * 1024);
+    expect(grown.checkpointed).toBe(true);
+    expect(grown.busy).toBe(false);
+
+    // The property the disk cares about: the checkpointed WAL is REUSED by
+    // the writes that follow instead of growing the file further.
+    grow(150);
+    read();
+    expect(db.checkpointIfLargerThan(512 * 1024).walBytes).toBeLessThanOrEqual(
+      grown.walBytes
+    );
+  });
+
+  test("checkpointIfLargerThan is PASSIVE because TRUNCATE stalls on the vault's own busy timeout while a client reads", () => {
+    const dir = tempDirSync();
+    const db = openVaultDb({ dir, synchronous: "NORMAL" });
+    cleanups.push(() => db.close());
+    db.vault.exec("CREATE TABLE wal_busy(id INTEGER PRIMARY KEY, v TEXT)");
+    const insert = db.vault.prepare("INSERT INTO wal_busy(v) VALUES (?)");
+    for (let index = 0; index < 150; index += 1) insert.run("z".repeat(8000));
+    const reader = new DatabaseSync(path.join(dir, "vault.db"), {
+      readOnly: true,
+    });
+    cleanups.push(() => reader.close());
+    reader.exec("BEGIN");
+    reader.prepare("SELECT count(*) AS n FROM wal_busy").get();
+
+    // The vault's busy_timeout is 30 s, so TRUNCATE here does not merely fail
+    // — it holds the gateway's connection for half a minute and then fails.
+    // Shortened so the test states the outcome without paying the stall.
+    db.vault.exec("PRAGMA busy_timeout = 50");
+    expect(
+      (
+        db.vault.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
+          busy: number;
+        }
+      ).busy
+    ).toBe(1);
+    db.vault.exec("PRAGMA busy_timeout = 30000");
+    expect(db.checkpointIfLargerThan(512 * 1024).busy).toBe(false);
+    reader.exec("COMMIT");
+  });
+
   test("openVaultDb: fresh databases use 8 KiB pages (#456 S7)", () => {
     const dir = tempDirSync();
     const db = openVaultDb({ dir });

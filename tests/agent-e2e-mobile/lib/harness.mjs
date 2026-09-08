@@ -1105,8 +1105,8 @@ ${retryableTapCommands("Enter Centraid")}
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
 
-  // Owner must be the flow FILE the matrix names, not the flow id — they
-  // differ for volume-proof.mjs (id "mobile-volume-proof"), and an id-derived
+  // Owner must be the flow FILE the matrix names, not the flow id: a flow is
+  // free to carry an id that does not match its filename, and an id-derived
   // path makes the evidence unmappable in the zero-grey report.
   const owner = path
     .relative(REPO_ROOT, path.resolve(process.argv[1] ?? ""))

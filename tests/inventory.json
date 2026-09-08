@@ -1,5 +1,5 @@
 {
-  "_comment": "THE INVENTORY LEDGER (#915 Wave 4). One of four ledgers under tests/; every count here is DOWN-ONLY and every named exception carries an issue and an expiry. Two shapes live here and the difference is deliberate. An EXCEPTION section (skips, envRed, advisory) names individual sites: each one needs `issue` and a deadline — `expires` (a date) or, for env-red, a `revisitTrigger` naming the event that retires it. A POPULATION section (sleeps, hygiene, commentDensity) budgets a whole measured count rather than a list of exemptions: there is no per-site row to attribute, so the SECTION carries `issue` and `expires`, the date by which the ratchet itself is re-argued. `naCells` is a reference to tests/claims.json#naCells, which carries its own 183-day re-verification ritual. Each scanner still owns its own detection and its own --write, and each writes only its own section; lint:ledgers owns the shared shape, the direction, and the deadlines. See TESTING.md 'The four ledgers'.",
+  "_comment": "THE INVENTORY LEDGER (#915 Wave 4). One of five ledgers under tests/; every count here is DOWN-ONLY and every named exception carries an issue and an expiry. Two shapes live here and the difference is deliberate. An EXCEPTION section (skips, envRed, advisory) names individual sites: each one needs `issue` and a deadline — `expires` (a date) or, for env-red, a `revisitTrigger` naming the event that retires it. A POPULATION section (sleeps, hygiene, commentDensity) budgets a whole measured count rather than a list of exemptions: there is no per-site row to attribute, so the SECTION carries `issue` and `expires`, the date by which the ratchet itself is re-argued. `naCells` is a reference to tests/claims.json#naCells, which carries its own 183-day re-verification ritual. Each scanner still owns its own detection and its own --write, and each writes only its own section; lint:ledgers owns the shared shape, the direction, and the deadlines. See TESTING.md 'The ledgers'.",
   "skips": {
     "_comment": "The skip budget (#656 Layer 2). Every deliberate hole in the suite — test.skip / describe.skipIf / .todo / runtime t.skip() / a CENTRAID_* or CLAWGNITION_* opt-in env gate — is inventoried here with an OPEN tracking issue and a reason. scripts/test-report/skip-inventory.mjs discovers the population by scanning; validate-matrix.mjs (in check:pr) fails on an uninventoried skip, on a stale entry, and whenever the count differs from _budget. _budget is DOWN-ONLY: deleting a skip must lower it in the same change, and adding one costs an explicit hand edit plus an issue. Keys are <path>#<ordinal> (nth skip site in that file) so they survive line drift; `line` is informational and refreshed by `node scripts/test-report/skip-inventory.mjs --write`. A skip site also forbids its file from backing a computed-solid matrix cell — see scripts/test-report/matrix-grades.mjs.",
     "_entries": "exceptions",
@@ -174,30 +174,6 @@
         "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall (rig lane split to #790 by #781; originally #659).",
         "expires": "2026-12-01"
       },
-      "tests/perf/pwa-waterfall.perf.test.ts#1": {
-        "kind": "conditional-skip",
-        "line": 71,
-        "snippet": "test.skipIf(!waterfall)(",
-        "issue": 864,
-        "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (rig lane split to #790 by #781; originally #659).",
-        "expires": "2026-12-01"
-      },
-      "tests/perf/tunnel-native.perf.test.ts#1": {
-        "kind": "conditional-skip",
-        "line": 32,
-        "snippet": "test.skipIf(!hasNative)(",
-        "issue": 864,
-        "reason": "Cold-load budget for the native QUIC dylib; skipped where the vendored module is not built (rig lane split to #790 by #781; originally #659).",
-        "expires": "2026-12-01"
-      },
-      "tests/perf/tunnel-native.perf.test.ts#2": {
-        "kind": "conditional-skip",
-        "line": 77,
-        "snippet": "test.skipIf(hasNative)(",
-        "issue": 864,
-        "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present (rig lane split to #790 by #781; originally #659).",
-        "expires": "2026-12-01"
-      },
       "tests/scale/restore-10gib.scale.test.ts#1": {
         "kind": "conditional-skip",
         "line": 115,
@@ -252,26 +228,6 @@
         "guard": "skipIf",
         "issue": 864,
         "revisitTrigger": "Revisit if CI gains a btrfs/xfs runner where reflink holds — the guard could then narrow from platform to filesystem capability (rig tracker: #790)."
-      },
-      "tests/perf/vault-write.perf.test.ts#1": {
-        "kind": "platform-guard",
-        "line": 115,
-        "snippet": "process.platform === \"linux\" &&",
-        "test": "journalled vault writes stay within the nightly latency and fsync budget",
-        "environment": "The fsync-per-write count is countable only via strace on linux; off linux the test asserts latency alone rather than failing on an unmeasurable law.",
-        "guard": "reduced-assertion",
-        "issue": 864,
-        "revisitTrigger": "Revisit if a darwin syscall counter usable without SIP friction (dtrace) becomes available to the perf lane; then the fsync gate can widen (rig tracker: #790)."
-      },
-      "tests/perf/vault-write.perf.test.ts#2": {
-        "kind": "platform-guard",
-        "line": 118,
-        "snippet": "if (process.env.CI && process.platform === \"linux\") {",
-        "test": "journalled vault writes stay within the nightly latency and fsync budget",
-        "environment": "The inverse arm of site #1: in linux CI, where strace is provisioned by e2e.yml, a missing strace throws rather than skipping the fsync gate into a false green.",
-        "guard": "hard-fail",
-        "issue": 864,
-        "revisitTrigger": "Stands as long as the nightly perf lane installs strace (.github/workflows/e2e.yml); revisit together with site #1 (rig tracker: #790)."
       }
     }
   },
@@ -4464,9 +4420,6 @@
       "packages/server/src/routes/devices-routes.test.ts": [832, 8576],
       "packages/server/src/routes/devices-routes.ts": [1099, 8585],
       "packages/server/src/routes/diagnostics-routes.ts": [677, 1358],
-      "packages/server/src/routes/edges-reconcile.ts": [580, 1951],
-      "packages/server/src/routes/edges-routes.test.ts": [1531, 10082],
-      "packages/server/src/routes/edges-routes.ts": [1297, 8357],
       "packages/server/src/routes/enrich-profiles-routes.test.ts": [175, 2768],
       "packages/server/src/routes/enrich-profiles-routes.ts": [112, 1109],
       "packages/server/src/routes/enrich-search-routes.test.ts": [489, 5720],
@@ -4500,6 +4453,8 @@
       "packages/server/src/routes/peer-commons-route.ts": [3201, 20298],
       "packages/server/src/routes/peer-plane.test.ts": [822, 12304],
       "packages/server/src/routes/peer-plane.ts": [1190, 9430],
+      "packages/server/src/routes/placement-routes.test.ts": [1537, 10966],
+      "packages/server/src/routes/placement-routes.ts": [1790, 7350],
       "packages/server/src/routes/push-wake-routes.test.ts": [1158, 15628],
       "packages/server/src/routes/push-wake-routes.ts": [826, 8753],
       "packages/server/src/routes/reminders-routes.ts": [513, 2432],
@@ -4590,8 +4545,8 @@
       "packages/server/src/serve/commons-observability.test.ts": [1103, 8941],
       "packages/server/src/serve/commons-observability.ts": [1622, 13271],
       "packages/server/src/serve/commons-recovery-invites.ts": [375, 3268],
-      "packages/server/src/serve/companion-access.test.ts": [0, 892],
-      "packages/server/src/serve/companion-access.ts": [245, 1031],
+      "packages/server/src/serve/companion-access.test.ts": [0, 3617],
+      "packages/server/src/serve/companion-access.ts": [963, 3390],
       "packages/server/src/serve/connection-broker.test.ts": [1512, 29102],
       "packages/server/src/serve/connection-broker.ts": [3426, 29825],
       "packages/server/src/serve/connection-limiter.test.ts": [110, 1943],
@@ -4734,20 +4689,7 @@
       "packages/server/src/serve/serve.test.ts": [2050, 12295],
       "packages/server/src/serve/serve.ts": [359, 2837],
       "packages/server/src/serve/share-access-receipts.ts": [183, 1293],
-      "packages/server/src/serve/share-coordinator.test.ts": [619, 4476],
-      "packages/server/src/serve/share-coordinator.ts": [401, 3111],
-      "packages/server/src/serve/share-edge-row.ts": [577, 1420],
-      "packages/server/src/serve/share-edge-store.ts": [926, 2637],
-      "packages/server/src/serve/share-effect-executor.ts": [472, 3422],
-      "packages/server/src/serve/share-effects-retire.ts": [1059, 2990],
-      "packages/server/src/serve/share-effects.ts": [426, 3119],
       "packages/server/src/serve/share-notices.ts": [345, 2386],
-      "packages/server/src/serve/share-outbox-obligation.contract.test.ts": [
-        973, 7030
-      ],
-      "packages/server/src/serve/share-receipt-authority.contract.test.ts": [
-        1457, 6245
-      ],
       "packages/server/src/serve/share-scope.test.ts": [213, 1645],
       "packages/server/src/serve/share-scope.ts": [226, 1856],
       "packages/server/src/serve/storage-latency.test.ts": [0, 556],
@@ -5123,7 +5065,10 @@
       "packages/vault/src/grant/authority-registry.ts": [922, 6254],
       "packages/vault/src/grant/channel.test.ts": [622, 4222],
       "packages/vault/src/grant/channel.ts": [519, 1443],
+      "packages/vault/src/grant/companion-surfaces.ts": [945, 3003],
       "packages/vault/src/grant/device-trust.ts": [315, 2421],
+      "packages/vault/src/grant/egress-authority.test.ts": [248, 3687],
+      "packages/vault/src/grant/egress-authority.ts": [1388, 4656],
       "packages/vault/src/grant/fulfillment-edit.test.ts": [782, 7356],
       "packages/vault/src/grant/fulfillment-edit.ts": [1069, 5144],
       "packages/vault/src/grant/fulfillment.roster.test.ts": [692, 7895],
@@ -5316,6 +5261,7 @@
       "packages/vault/src/share/party-vault-binding.ts": [1465, 3730],
       "packages/vault/src/share/placement-fixture.ts": [668, 3722],
       "packages/vault/src/share/placement-lifecycle.test.ts": [1441, 8207],
+      "packages/vault/src/share/placement-move.test.ts": [510, 4662],
       "packages/vault/src/share/placement.test.ts": [1697, 9120],
       "packages/vault/src/share/placement.ts": [1722, 6178],
       "packages/vault/src/share/project-closure.ts": [362, 11357],

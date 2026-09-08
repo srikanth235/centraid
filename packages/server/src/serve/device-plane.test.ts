@@ -243,7 +243,7 @@ describe("device-plane scenarios", () => {
     expect(path.basename(store.gatewayDatabase.file)).toBe("gateway.db");
   });
 
-  test("enrollment: remember and Companion grants persist across re-pair", async () => {
+  test("enrollment: remember and Companion attenuation persist across re-pair", async () => {
     const file = await tempFile("gateway.db");
     const store = EnrollmentStore.open(file);
     store.enroll({
@@ -251,40 +251,54 @@ describe("device-plane scenarios", () => {
       vaultIds: ["v1"],
       label: "borrowed tablet",
       rememberDevice: false,
-      grantProfile: ["locker", "notes"],
+      surfaces: ["locker", "notes"],
     });
+    // The SET lives in the vault; the enrollment carries the one fact the
+    // gateway needs before a vault opens, plus a projection of the answer.
     expect(EnrollmentStore.open(file).get("ep-session", "v1")).toMatchObject({
       rememberDevice: false,
-      grantProfile: ["locker", "notes"],
+      attenuated: true,
     });
+    expect(
+      EnrollmentStore.open(file).projectedSurfaces("ep-session", "v1")
+    ).toBeUndefined();
+    store.projectSurfaces("ep-session", "v1", ["locker", "notes"]);
+    expect(
+      EnrollmentStore.open(file).projectedSurfaces("ep-session", "v1")
+    ).toStrictEqual(["locker", "notes"]);
+    expect(store.attenuatedEndpointsFor("v1")).toStrictEqual(["ep-session"]);
     store.enroll({
       endpointId: "ep-session",
       vaultIds: ["v1"],
       label: "borrowed tablet",
-      grantProfile: ["tasks"],
+      surfaces: ["tasks"],
     });
-    expect(
-      EnrollmentStore.open(file).get("ep-session", "v1")?.grantProfile
-    ).toStrictEqual(["tasks"]);
+    expect(EnrollmentStore.open(file).get("ep-session", "v1")?.attenuated).toBe(
+      true
+    );
     expect(
       store.enroll({
         endpointId: "ep-default",
         vaultIds: ["v2"],
         label: "default device",
       })
-    ).toMatchObject({ rememberDevice: false });
+    ).toMatchObject({ rememberDevice: false, attenuated: false });
 
-    // Re-pairing the same endpoint as a non-extension full client clears a sticky
-    // companion allow-list (omit grantProfile must not leave the old clamp).
+    // Re-pairing the same endpoint as a non-extension full client clears a
+    // sticky companion clamp — and the projection with it.
     store.enroll({
       endpointId: "ep-session",
       vaultIds: ["v1"],
       label: "full desktop",
       platform: "desktop",
     });
+    expect(EnrollmentStore.open(file).get("ep-session", "v1")?.attenuated).toBe(
+      false
+    );
     expect(
-      EnrollmentStore.open(file).get("ep-session", "v1")?.grantProfile
+      EnrollmentStore.open(file).projectedSurfaces("ep-session", "v1")
     ).toBeUndefined();
+    expect(store.attenuatedEndpointsFor("v1")).toStrictEqual([]);
   });
 
   test("enrollment: obsolete JSON registries are not read or rewritten", async () => {

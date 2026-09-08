@@ -69,8 +69,7 @@ describe("replica projection doorbell-only mode", () => {
     since: ReturnType<typeof currentReplicaLogState>["watermark"];
   }> {
     const vault = await plane();
-    vault.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -163,13 +162,12 @@ describe("replica projection doorbell-only mode", () => {
     expect(doorbellOnly.batch.to).not.toStrictEqual(since);
   });
 
-  test("a consent change still rebootstraps identically in both modes", async () => {
+  test("an install-register change still rebootstraps identically in both modes", async () => {
     const { vault, since } = await mixedPage();
-    // Shape control: neither mode may advance past it as data.
-    vault.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
-      scopes: [{ schema: "schedule", table: "event", verbs: "read" }],
-    });
+    // Shape control: neither mode may advance past it as data. Since #928 the
+    // register — whether the app is installed — is what moves a shape, not a
+    // grant, and revoking the install is what takes the shape away.
+    vault.revokeApp("planner");
 
     const full = projectReplicaPage(vault.db.vault, access, since);
     const doorbellOnly = projectReplicaPage(
@@ -218,8 +216,7 @@ describe("replica projection under retention compaction", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => vault.stop()
     );
-    vault.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -230,8 +227,8 @@ describe("replica projection under retention compaction", () => {
         },
       ],
     });
-    // Consent settles before the replayed window; a grant change inside it
-    // would rebootstrap instead.
+    // The install settles before the replayed window; a register change inside
+    // it would rebootstrap instead.
     const granted = currentReplicaLogState(vault.db.vault).watermark;
     const insert = vault.db.vault.prepare(
       `INSERT INTO schedule_task
@@ -382,5 +379,68 @@ describe("replica projection under retention compaction", () => {
         (entity) => !REPLICA_COMPACTION_HELD_ENTITIES.includes(entity)
       )
     ).toStrictEqual([]);
+  });
+});
+
+// #922 0b, ruling SB-text: text a screen renders rides the replica lane in
+// FULL up to the ceiling its entity declares. Before this the projection
+// stripped any value over a flat 64 KiB and listed it as deferred, so a note
+// body past roughly 48 KiB of prose reached no device and nothing fetched it
+// back. `core.content_item` is where a note body actually lives — a `data:`
+// URI in `content_uri` — which is why it is the entity that declares.
+describe("replica projection of declared long text", () => {
+  afterEach(async () => {
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
+  });
+
+  test("a note body over the old 64 KiB cap reaches the device in full", async () => {
+    const dir = await tempDir(`replica-long-text-${crypto.randomUUID()}-`);
+    const vault = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger,
+      enableWalShipper: false,
+    });
+    cleanups.push(
+      () => fs.rm(dir, { recursive: true, force: true }),
+      () => vault.stop()
+    );
+    vault.recordAppInstall("planner", {
+      scopes: [
+        {
+          schema: "core",
+          table: "content_item",
+          verbs: "read",
+          fieldMask: ["title", "content_uri", "media_type"],
+        },
+      ],
+    });
+    const since = currentReplicaLogState(vault.db.vault).watermark;
+    const body = "a".repeat(200 * 1_024);
+    const uri = `data:text/markdown;base64,${Buffer.from(body, "utf8").toString("base64")}`;
+    vault.db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, title,
+            created_at)
+         VALUES ('long-note', 'text/markdown', ?, ?, ?, 'Long note',
+                 '2026-01-01T00:00:00.000Z')`
+      )
+      .run(uri, "f".repeat(64), Buffer.byteLength(body));
+
+    const page = projectReplicaPage(vault.db.vault, access, since);
+    const change = page.batch.changes.find(
+      (candidate) =>
+        candidate.op === "upsert" && candidate.entity === "core.content_item"
+    );
+    expect(change).toStrictEqual(
+      expect.objectContaining({
+        op: "upsert",
+        values: expect.objectContaining({ content_uri: uri }),
+      })
+    );
+    expect(change).not.toHaveProperty("oversizedFields");
   });
 });

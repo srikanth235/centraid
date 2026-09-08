@@ -55,7 +55,6 @@ describe("clusters", () => {
     const outcome = gw.invoke(owner, {
       command: "media.add_asset",
       input: { data_uri: PIXELS[index], phash },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { status: "executed"; output: { asset_id: string } })
@@ -89,7 +88,6 @@ describe("clusters", () => {
     gw.invoke(owner, {
       command: "media.delete_asset",
       input: { asset_id: a },
-      purpose: "dpv:ServiceProvision",
     });
     const result = recomputeDuplicateClusters(db.vault);
     expect(result.clusters).toBe(0);
@@ -118,7 +116,6 @@ describe("clusters", () => {
     const rows = gw.read(owner, {
       entity: "media.asset_phash",
       where: [{ column: "cluster_id", op: "not-null" }],
-      purpose: "dpv:ServiceProvision",
     }).rows;
     expect(rows.map((r) => r.asset_id).sort(compareStringValues)).toStrictEqual(
       [a, b].sort(compareStringValues)

@@ -30,6 +30,13 @@ export const styles = StyleSheet.create({
   },
   pillRow: { flexDirection: "row", gap: spacing[2] },
   reachState: t("annotLabelOn"),
+  ticket: { gap: spacing[2], marginTop: spacing[2] },
+  ticketCode: {
+    ...t("mono"),
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+  },
   reading: t("reading"),
   row: {
     alignItems: "center",

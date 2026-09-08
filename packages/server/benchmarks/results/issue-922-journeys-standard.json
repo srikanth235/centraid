@@ -1,0 +1,170 @@
+{
+  "schema": "centraid-gateway-journey-benchmark/1",
+  "generatedAt": "2026-09-03T15:24:42.997Z",
+  "host": {
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v22.22.2",
+    "cpus": 4,
+    "totalMemoryBytes": 16856092672,
+    "requestedHardwareProfile": "standard"
+  },
+  "profile": {
+    "requested": "standard",
+    "resolvedClass": "standard",
+    "sqliteSynchronous": "FULL",
+    "workerPoolSize": 2,
+    "detail": "mode=Auto (auto); class=standard; sqlite=FULL; workers=8x256MB; pool=2; replication=3; mount=eager; sweep=3600000ms",
+    "storageFsyncMs": 0.6902109999999766
+  },
+  "volume": {
+    "demoApps": [
+      {
+        "appId": "agenda",
+        "rows": 10
+      },
+      {
+        "appId": "docs",
+        "rows": 15
+      },
+      {
+        "appId": "notes",
+        "rows": 16
+      },
+      {
+        "appId": "people",
+        "rows": 29
+      },
+      {
+        "appId": "photos",
+        "rows": 67
+      },
+      {
+        "appId": "tally",
+        "rows": 20
+      },
+      {
+        "appId": "tasks",
+        "rows": 9
+      }
+    ],
+    "filledRows": 2000,
+    "seedDurationMs": 17568.987673000003
+  },
+  "journeys": {
+    "bootstrapPage": {
+      "durationMs": 316.1864089999981,
+      "rows": 2936,
+      "shapes": 8,
+      "bytes": 1355512,
+      "msPerRow": 0.1076929185967296,
+      "cursor": {
+        "epoch": "fffdab55-dea7-38d0-e67b-aa5ef61501f2",
+        "seq": 3123
+      },
+      "hasMore": false
+    },
+    "replicaIntent": {
+      "path": "single",
+      "batched": null,
+      "note": "one intent per HTTP round trip; the batch endpoint is #922 wave 3 (A6), so only the single path exists to measure",
+      "cold": 198.0659799999994,
+      "warm": {
+        "count": 19,
+        "p50Ms": 171.0456149999991,
+        "p99Ms": 189.98722899999848,
+        "maxMs": 189.98722899999848,
+        "meanMs": 171.8212131052634
+      },
+      "all": {
+        "count": 20,
+        "p50Ms": 171.0456149999991,
+        "p99Ms": 198.0659799999994,
+        "maxMs": 198.0659799999994,
+        "meanMs": 173.13345145000022
+      }
+    },
+    "handlerWorker": {
+      "note": "cold is the first blueprint handler invocation after boot; warm is every later one. With workerPoolSize 0 every invocation is a cold spawn (#922 B3).",
+      "coldMs": 198.0659799999994,
+      "warm": {
+        "count": 19,
+        "p50Ms": 171.0456149999991,
+        "p99Ms": 189.98722899999848,
+        "maxMs": 189.98722899999848,
+        "meanMs": 171.8212131052634
+      },
+      "workerPoolSize": 2
+    },
+    "sseProjection": [
+      {
+        "subscribers": 1,
+        "admitted": 1,
+        "refused": 0,
+        "refusalError": null,
+        "commits": 5,
+        "commit": {
+          "count": 5,
+          "p50Ms": 167.9252140000026,
+          "p99Ms": 179.4768409999997,
+          "maxMs": 179.4768409999997,
+          "meanMs": 154.67949360000057
+        },
+        "lastSubscriberDelivery": {
+          "count": 5,
+          "p50Ms": 168.21643200000108,
+          "p99Ms": 179.8701179999989,
+          "maxMs": 179.8701179999989,
+          "meanMs": 154.92053159999995
+        }
+      },
+      {
+        "subscribers": 10,
+        "admitted": 10,
+        "refused": 0,
+        "refusalError": null,
+        "commits": 5,
+        "commit": {
+          "count": 5,
+          "p50Ms": 120.8965019999996,
+          "p99Ms": 166.72170800000094,
+          "maxMs": 166.72170800000094,
+          "meanMs": 135.72614920000052
+        },
+        "lastSubscriberDelivery": {
+          "count": 5,
+          "p50Ms": 121.58287899999777,
+          "p99Ms": 167.63580000000002,
+          "maxMs": 167.63580000000002,
+          "meanMs": 136.55268199999992
+        }
+      },
+      {
+        "subscribers": 40,
+        "admitted": 32,
+        "refused": 8,
+        "refusalError": "sse_capacity",
+        "commits": 5,
+        "commit": {
+          "count": 5,
+          "p50Ms": 127.30628599999909,
+          "p99Ms": 175.39703500000178,
+          "maxMs": 175.39703500000178,
+          "meanMs": 143.86680080000005
+        },
+        "lastSubscriberDelivery": {
+          "count": 5,
+          "p50Ms": 129.72518299999865,
+          "p99Ms": 178.75674300000173,
+          "maxMs": 178.75674300000173,
+          "meanMs": 146.39092020000027
+        }
+      }
+    ]
+  },
+  "storage": {
+    "fsyncCalls": 61,
+    "fsyncPerIntent": 3.05,
+    "method": "strace -f on a second run of the intent phase only, bracketed by trace-epoch markers"
+  }
+}

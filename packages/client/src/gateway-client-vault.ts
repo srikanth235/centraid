@@ -84,14 +84,6 @@ export interface VaultScope {
   fieldMask?: string[] | null;
 }
 
-export interface VaultGrant {
-  grantId: string;
-  purposeConceptId: string;
-  purpose: string | null;
-  expiresAt: string | null;
-  scopes: VaultScope[];
-}
-
 export interface VaultAppEntry {
   appId: string;
   name: string;
@@ -99,7 +91,8 @@ export interface VaultAppEntry {
   origin: string;
   riskCeiling: string;
   installedAt: string;
-  grants: VaultGrant[];
+  /** The app's own build-time manifest — a declaration, never a grant (#928). */
+  scopes: VaultScope[];
 }
 
 export interface VaultAgentEntry {
@@ -109,7 +102,18 @@ export interface VaultAgentEntry {
   name: string;
   modelRef: string;
   enrolledAt: string;
-  grants: VaultGrant[];
+  answers: VaultAnswer[];
+}
+
+/** One standing answer the owner gave about this automation (#928 A3). */
+export interface VaultAnswer {
+  authorityId: string;
+  principalId: string;
+  subjectType: string;
+  subjectId: string;
+  verb: string;
+  decision: "granted" | "declined";
+  grantedAt: string;
 }
 
 export async function listAgents(): Promise<VaultAgentEntry[]> {
@@ -270,30 +274,6 @@ export async function vaultApps(): Promise<VaultAppEntry[]> {
     "list vault apps"
   );
   return body.apps;
-}
-
-/** The manifest's `vault` block verbatim — the UI invents no scopes. */
-export async function approveVaultGrant(input: {
-  appId: string;
-  purpose: string;
-  scopes: VaultScope[];
-  expiresAt?: string;
-}): Promise<{ grantId: string }> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/apps/${enc(input.appId)}/grants`,
-    {
-      method: "POST",
-      headers: authHeaders(token, "application/json"),
-      body: JSON.stringify({
-        purpose: input.purpose,
-        scopes: input.scopes,
-        ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
-      }),
-    }
-  );
-  return readJson<{ grantId: string }>(res, "approve vault grant");
 }
 
 export async function revokeVaultGrant(input: {

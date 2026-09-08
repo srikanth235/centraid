@@ -38,6 +38,14 @@ import {
   HOME_READY_MARKER,
   runFlow,
 } from "../lib/harness.mjs";
+import { screenshot } from "../lib/ui-impact.mjs";
+
+/** `artifacts/e2e/ui-impact/issue-922-mobile-notes-library.png` — the Notes
+ *  library, published as UI-impact evidence for #922 E.4 — the seat
+ *  whose places and version history now draw through the kit's one virtualised
+ *  list. Produced on the DEVICE RUNG; no container without a simulator emits
+ *  it, which is why the copy is a note and never an assertion. */
+const LIBRARY_FRAME = "issue-922-mobile-notes-library.png";
 
 await runFlow("notes-library", async (ctx) => {
   await ctx.ensureDemo("notes");
@@ -63,6 +71,15 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+# A write round-trip needs a reachable gateway. Reuse-paired can land with
+# the replica still showing Gateway asleep (the CI digest on both this PR
+# and origin/main carried that row plus Pending changes 1, and the capture
+# stayed in the outbox). Wake help is the product's own re-probe.
+- runFlow:
+    when:
+      visible: "Wake help"
+    commands:
+      - tapOn: "Wake help"
 # The row's own accessible name, built by the blueprint's promote().
 - assertVisible: "Open Mom's chili, written down properly"
 # …and the preview under it, which is the note's BODY. The row collapses the
@@ -158,6 +175,14 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
   ctx.note(
     `a note captured on device came back after an OS process restart: "${capturedNote}"`
   );
+
+  // PUBLISHING IS NOT ASSERTING: a failed copy is a note, never a second
+  // reason for this journey to go red.
+  try {
+    await screenshot(ctx, "notes-library", LIBRARY_FRAME);
+  } catch (error) {
+    ctx.note(`notes library frame not published: ${error.message}`);
+  }
 
   return {
     pass: true,

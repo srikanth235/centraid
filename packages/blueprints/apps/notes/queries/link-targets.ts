@@ -11,7 +11,6 @@ import {
 export default async function linkTargets({ input, ctx }: HandlerArgs) {
   const term = String(input?.term ?? "").trim();
   if (!term) return { targets: [] };
-  const purpose = "dpv:ServiceProvision";
   const settled = await Promise.allSettled(
     LINK_TARGET_KINDS.map(async (target) => {
       const isNotes = target.entity === NOTE_TARGET_ENTITY;
@@ -20,10 +19,9 @@ export default async function linkTargets({ input, ctx }: HandlerArgs) {
           entity: target.entity,
           query: term,
           limit: 8,
-          purpose,
         }),
         isNotes
-          ? readJournalNoteIds(ctx.vault, purpose)
+          ? readJournalNoteIds(ctx.vault)
           : Promise.resolve(new Set<string>()),
       ]);
       return linkTargetsFrom(target, result.rows ?? [], journalNoteIds);

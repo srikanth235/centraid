@@ -1,12 +1,11 @@
 /*
  * Anchor resolution for automation instructions (#541).
  *
- * Every read here goes through the vault's consent gateway with the OWNER
- * credential, a declared purpose, and therefore a receipt — the same door
- * `vault-picker.ts` drives. Reading `core_link_anchor` / the physical source
- * table / `core_content_item` straight off the `VaultDb` handle would open a
- * second, unreceipted read path around consent policy (minimization included),
- * which is exactly what the gateway exists to prevent.
+ * Every read here goes through the gateway with the OWNER credential and
+ * therefore a receipt — the same door `vault-picker.ts` drives. Reading
+ * `core_link_anchor` / the physical source table / `core_content_item`
+ * straight off the `VaultDb` handle would open a second, unreceipted read
+ * path around the plane, which is exactly what the gateway exists to prevent.
  */
 
 import { CARD_PK, SEARCHABLE } from "@centraid/vault";
@@ -18,8 +17,6 @@ import type {
 } from "@centraid/vault";
 
 export const AUTOMATION_ANCHOR_ENTITY = "core.link_anchor";
-/** DPV purpose every anchor read is receipted under. */
-export const AUTOMATION_ANCHOR_PURPOSE = "dpv:ServiceProvision";
 
 /** The consent-gateway door anchor resolution reads through. */
 export interface AnchorVaultReads {
@@ -37,7 +34,6 @@ function readRows(
     entity,
     where,
     ...(limit === undefined ? {} : { limit }),
-    purpose: AUTOMATION_ANCHOR_PURPOSE,
   }).rows;
 }
 

@@ -33,7 +33,6 @@ const SHAPES = [
   {
     shapeId: "docs-default",
     appId: "docs",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.document",
@@ -68,7 +67,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "tasks-default",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",
@@ -100,7 +98,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "tally-default",
     appId: "tally",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "tally.expense",
@@ -142,7 +139,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "agenda-default",
     appId: "agenda",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.event",
@@ -154,7 +150,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "notes-default",
     appId: "notes",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "knowledge.note",
@@ -724,14 +719,12 @@ describe(MultiVaultReplicaReader, () => {
         expect(expense.rows[0]?.values).toMatchObject({
           description: "Survives restart expense",
           [PENDING_OVERLAY_FIELDS.key]: "intent-2",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(task.rows[0]?.values).toMatchObject({
           project_id: "pending:intent-1:project",
           title: "Survives restart task",
           [PENDING_OVERLAY_FIELDS.key]: "intent-6",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(
@@ -740,21 +733,30 @@ describe(MultiVaultReplicaReader, () => {
         expect(taskSearch.rows[0]?.values).toMatchObject({
           title: "Survives restart task",
           [PENDING_OVERLAY_FIELDS.key]: "intent-6",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(agenda.rows[0]?.values).toMatchObject({
           summary: "Offline planning session",
           [PENDING_OVERLAY_FIELDS.key]: "intent-4",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(note.rows[0]?.values).toMatchObject({
           title: "Survives restart note",
           [PENDING_OVERLAY_FIELDS.key]: "intent-5",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
+        // The status left the row; the read's sidecar carries it (#922 G3).
+        for (const [result, intentId] of [
+          [expense, "intent-2"],
+          [task, "intent-6"],
+          [taskSearch, "intent-6"],
+          [agenda, "intent-4"],
+          [note, "intent-5"],
+        ] as const) {
+          expect(result.pending?.[intentId]).toMatchObject({
+            status: "queued",
+          });
+        }
       } finally {
         await session.close();
       }
@@ -1173,4 +1175,122 @@ describe(MultiVaultReplicaReader, () => {
     );
     reader.close();
   }, 45_000);
+});
+
+/**
+ * THE MOUNTED READER'S OWN TRUNCATION VERDICT (#922 0a, verifier follow-up 3).
+ *
+ * The reader answers with `page.truncated || rows.length > requested`, and the
+ * second half is not reachable from the store's tests: it is dedupe/badge
+ * composition leaving MORE than the caller asked for, which only a mounted
+ * plane can produce. Both halves are exercised here against real SQLite, with
+ * the short-page case beside them so a verdict that simply said `true` fails.
+ */
+describe("mounted read truncation", () => {
+  /** One mounted plane over the given vault files, in mount order. */
+  const mount = (
+    root: string,
+    ...vaults: Array<{ vaultId: string; label: string; file: string }>
+  ): MultiVaultReplicaReader =>
+    new MultiVaultReplicaReader(
+      new NodeSqliteDriver(path.join(root, "mounted.db")),
+      vaults.map((vault) => ({
+        vaultId: vault.vaultId,
+        label: vault.label,
+        canWrite: true,
+        databaseName: vault.file,
+      }))
+    );
+
+  const openBulk = (count: number): MultiVaultReplicaReader => {
+    const root = tempDirSync(`centraid-mounted-truncation-${count}-`);
+    const personal = path.join(root, "personal.db");
+    seedBulkDocuments(personal, "personal", count);
+    return mount(root, {
+      vaultId: "personal",
+      label: "Personal",
+      file: personal,
+    });
+  };
+
+  test("a window the statement fills is reported with the window applied", async () => {
+    const reader = openBulk(12);
+    const result = await reader.read("docs", {
+      entity: "core.document",
+      limit: 5,
+    });
+    expect(result.rows).toHaveLength(5);
+    expect(result.truncated).toBe(true);
+    expect(result.appliedLimit).toBe(5);
+    reader.close();
+  });
+
+  test("a page under the window hides nothing and says nothing", async () => {
+    const reader = openBulk(3);
+    const result = await reader.read("docs", {
+      entity: "core.document",
+      limit: 50,
+    });
+    // The bulk fixture's own seeded document rides along with the bulk rows.
+    expect(result.rows.length).toBeLessThan(50);
+    expect(result.truncated).toBeUndefined();
+    expect(result.appliedLimit).toBeUndefined();
+    reader.close();
+  });
+
+  test("badge composition leaving more than asked is truncation too", async () => {
+    // `core.content_item` carries `sha256`, so its limit is NOT pushed into
+    // SQLite: the reader reads the whole filtered set at the local ceiling and
+    // composes badges after. The statement's own probe therefore never fires,
+    // and the verdict can only come from `rows.length > requested` — the half
+    // no store-level test can reach.
+    const root = tempDirSync("centraid-mounted-badge-truncation-");
+    const personal = path.join(root, "personal.db");
+    const family = path.join(root, "family.db");
+    seed(personal, "personal", "p");
+    seed(family, "family", "f");
+    // A second content item, distinct bytes, so it cannot collapse into the
+    // badged pair the two vaults already share.
+    const extra = new DatabaseSync(personal);
+    extra
+      .prepare(
+        `INSERT INTO replica_row
+           (shape_id, entity, row_id, payload_json, oversized_json)
+         VALUES ('docs-default', 'core.content_item', ?, ?, '[]')`
+      )
+      .run(
+        "content-distinct",
+        JSON.stringify({
+          content_id: "content-distinct",
+          title: "Lease",
+          sha256: "other-bytes",
+          media_type: "application/pdf",
+          byte_size: 7,
+          created_at: "2026-01-01T00:00:00.000Z",
+          deleted_at: null,
+        })
+      );
+    extra.close();
+    const reader = mount(
+      root,
+      { vaultId: "personal", label: "Personal", file: personal },
+      { vaultId: "family", label: "Family", file: family }
+    );
+    // Two composed rows: the badged pair the vaults share, and the distinct one.
+    const whole = await reader.read("docs", {
+      entity: "core.content_item",
+      limit: 50,
+    });
+    expect(whole.rows).toHaveLength(2);
+    expect(whole.truncated).toBeUndefined();
+
+    const narrow = await reader.read("docs", {
+      entity: "core.content_item",
+      limit: 1,
+    });
+    expect(narrow.rows).toHaveLength(1);
+    expect(narrow.truncated).toBe(true);
+    expect(narrow.appliedLimit).toBe(1);
+    reader.close();
+  });
 });

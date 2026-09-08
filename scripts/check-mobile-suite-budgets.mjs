@@ -52,7 +52,7 @@ const MIN_SAMPLES = 3;
 // A budget may sit at most 1.5x above the observed p95. Wide enough that a
 // slow runner does not red the lane; narrow enough that the ceiling still
 // describes the suite. Deliberately the same multiplier as the rig drift gate
-// (`rigDriftBudgetMs`), because it answers the same question.
+// as every other budget, because it answers the same question.
 const SLACK = 1.5;
 
 /** `{ file, budgetMs, flows }` for every suite the roster declares.

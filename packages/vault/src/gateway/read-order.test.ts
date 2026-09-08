@@ -21,8 +21,6 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-const PURPOSE = "dpv:ServiceProvision";
-
 describe("read-order", () => {
   beforeEach(() => {
     ({ db, boot } = bootstrappedVault(
@@ -44,7 +42,6 @@ describe("read-order", () => {
       gw.invoke(owner, {
         command: "knowledge.create_note",
         input: { title, body_text: `body of ${title}` },
-        purpose: PURPOSE,
       });
       db.vault
         .prepare("UPDATE knowledge_note SET updated_at = ? WHERE title = ?")
@@ -57,7 +54,6 @@ describe("read-order", () => {
       entity: "knowledge.note",
       orderBy: { column: "updated_at", dir: "desc" },
       limit: 2,
-      purpose: PURPOSE,
     });
     expect(result.rows.map((r) => r.title)).toStrictEqual(["newest", "middle"]);
   });
@@ -66,7 +62,6 @@ describe("read-order", () => {
     const result = gw.read(owner, {
       entity: "knowledge.note",
       orderBy: { column: "updated_at" },
-      purpose: PURPOSE,
     });
     expect(result.rows.map((r) => r.title)).toStrictEqual([
       "oldest",
@@ -80,7 +75,6 @@ describe("read-order", () => {
       entity: "knowledge.note",
       orderBy: { column: "note_id", dir: "desc" },
       limit: 1,
-      purpose: PURPOSE,
     });
     // `middle` was created last (its timestamp was backdated after insert).
     expect(result.rows[0]?.title).toBe("middle");
@@ -94,14 +88,12 @@ describe("read-order", () => {
           column: "updated_at; DROP TABLE knowledge_note",
           dir: "desc",
         },
-        purpose: PURPOSE,
       })
     ).toThrow(/unknown order column/u);
     expect(() =>
       gw.read(owner, {
         entity: "knowledge.note",
         orderBy: { column: "updated_at", dir: "sideways" as "asc" },
-        purpose: PURPOSE,
       })
     ).toThrow(/unknown order direction/u);
   });
@@ -111,7 +103,6 @@ describe("read-order", () => {
       entity: "knowledge.note",
       where: [{ column: "title", op: "ne", value: "newest" }],
       orderBy: { column: "updated_at", dir: "desc" },
-      purpose: PURPOSE,
     });
     expect(result.rows.map((r) => r.title)).toStrictEqual(["middle", "oldest"]);
   });
@@ -131,7 +122,6 @@ describe("read-order", () => {
       entity: "knowledge.note",
       orderBy: { column: "updated_at", dir: "desc" },
       limit: 2,
-      purpose: PURPOSE,
     });
     expect(result.rows.map((row) => row.note_id)).toStrictEqual(expected);
   });

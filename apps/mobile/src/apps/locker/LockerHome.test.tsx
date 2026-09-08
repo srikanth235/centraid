@@ -103,7 +103,6 @@ function vault(
     denied: null,
     importBatches: null,
     importNote: "",
-    lastReadAt: "2026-08-30T09:00:00.000Z",
     limit: 50,
     loaded: phase === "open",
     masked: false,
@@ -115,7 +114,6 @@ function vault(
     reauth: false,
     rows: [...rows],
     session: { configured: phase !== "setup", phase },
-    stale: false,
     surfaceBusy: false,
     truncated: false,
   };

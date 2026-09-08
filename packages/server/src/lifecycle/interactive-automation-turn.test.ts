@@ -40,7 +40,6 @@ describe("interactive-automation-turn suite", () => {
         { connectionId: "gmail-work", kind: "pull.gmail", label: "Work" },
       ],
       vault: {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "core", table: "message", verbs: "read" }],
       },
       history: { keep: { count: 100 } },

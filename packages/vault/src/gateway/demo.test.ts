@@ -7,17 +7,12 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  enrollApp,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerTaskCommands } from "../commands/tasks.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { uuidv7 } from "../ids.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
@@ -31,12 +26,9 @@ let owner: Credential;
 function agentCredential(): Credential {
   const agent = enrollAgent(db, { name: "automation", modelRef: "model-x" });
   const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-  createGrant(db, {
-    granteePartyId: agent.partyId,
-    purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
-  });
+  answerScopes(db, boot, "automation", [
+    { schema: "schedule", table: "task", verbs: "read" },
+  ]);
   return {
     kind: "agent",
     agentId: agent.agentId,
@@ -49,7 +41,6 @@ function addTask(title: string, demo: boolean): InvokeOutcome {
   return gw.invoke(owner, {
     command: "schedule.add_task",
     input: { title },
-    purpose: "dpv:ServiceProvision",
     ...(demo ? { demo: { appId: "tasks" } } : {}),
   });
 }
@@ -95,22 +86,20 @@ describe("demo", () => {
     });
 
     test("non-owner demo invoke is a receipted deny", () => {
-      const app = enrollApp(db, { name: "tasks" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "act" }],
+      const app = enrollAgent(db, {
+        name: "tasks",
+        modelRef: "test-automation",
       });
+      answerScopes(db, boot, "tasks", [{ schema: "schedule", verbs: "act" }]);
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       const outcome = gw.invoke(cred, {
         command: "schedule.add_task",
         input: { title: "sneaky" },
-        purpose: "dpv:ServiceProvision",
         demo: { appId: "tasks" },
       });
       expect(outcome.status).toBe("denied");
@@ -150,13 +139,11 @@ describe("demo", () => {
       const agent = agentCredential();
       const agentRows = gw.read(agent, {
         entity: "schedule.task",
-        purpose: "dpv:ServiceProvision",
       }).rows;
       expect(agentRows).toHaveLength(1);
       expect(agentRows[0]?.title).toBe("Real errand");
       const ownerRows = gw.read(owner, {
         entity: "schedule.task",
-        purpose: "dpv:ServiceProvision",
       }).rows;
       expect(ownerRows).toHaveLength(2);
     });
@@ -164,14 +151,12 @@ describe("demo", () => {
     test("the change feed skips seed.demo provenance", () => {
       const bootstrap = gw.changes(owner, {
         entities: ["schedule.task"],
-        purpose: "dpv:ServiceProvision",
         cursor: null,
       });
       addTask("Demo change", true);
       addTask("Real change", false);
       const pull = gw.changes(owner, {
         entities: ["schedule.task"],
-        purpose: "dpv:ServiceProvision",
         cursor: bootstrap.cursor,
       });
       expect(pull.changes).toHaveLength(1);
@@ -212,7 +197,6 @@ describe("demo", () => {
       gw.invoke(owner, {
         command: "schedule.add_task",
         input: { title: "Agenda demo" },
-        purpose: "dpv:ServiceProvision",
         demo: { appId: "agenda" },
       });
       const result = gw.purgeDemo(owner, "agenda");

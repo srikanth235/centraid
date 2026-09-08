@@ -1,0 +1,6 @@
+# Custom labels for self-hosted runners actionlint does not ship.
+# `device-rung-gateway-pi` in .github/workflows/e2e.yml pins `centraid-pi`
+# so only a registered Pi-class machine takes that cell.
+self-hosted-runner:
+  labels:
+    - centraid-pi

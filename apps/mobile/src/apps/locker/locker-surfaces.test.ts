@@ -61,7 +61,6 @@ const wire = vi.hoisted(() => ({
   auth: vi.fn<Gateway["lockerAuth"]>(),
   batches: vi.fn<Gateway["lockerImportBatches"]>(),
   discard: vi.fn<Gateway["discardLockerImport"]>(),
-  items: vi.fn<Gateway["lockerItems"]>(),
   publish: vi.fn<Gateway["publishLockerImport"]>(),
   rows: vi.fn<Gateway["lockerImportRows"]>(),
   stage: vi.fn<Gateway["stageLockerImport"]>(),
@@ -69,22 +68,33 @@ const wire = vi.hoisted(() => ({
 vi.mock(import("./locker-gateway"), () => {
   const door = {
     ACCESS_WINDOW: 200,
-    ITEMS_WINDOW: 300,
-    ITEMS_WINDOW_MAX: 2000,
-    nextWindow: (current: number) => Math.min(2000, current + 300),
     discardLockerImport: wire.discard,
     lockerAccess: wire.access,
     lockerAuth: wire.auth,
     lockerImportBatches: wire.batches,
     lockerImportRows: wire.rows,
     lockerItem: vi.fn<Gateway["lockerItem"]>(),
-    lockerItems: wire.items,
-    lockerSearch: vi.fn<Gateway["lockerSearch"]>(),
-    lockerTrash: vi.fn<Gateway["lockerTrash"]>(),
     publishLockerImport: wire.publish,
     stageLockerImport: wire.stage,
   };
   return door as unknown as Gateway;
+});
+
+type Reads = typeof import("./locker-reads");
+const reads = vi.hoisted(() => ({
+  items: vi.fn<Reads["lockerItems"]>(),
+}));
+vi.mock(import("./locker-reads"), () => {
+  const plane = {
+    ITEMS_WINDOW: 300,
+    ITEMS_WINDOW_MAX: 2000,
+    nextWindow: (current: number) => Math.min(2000, current + 300),
+    attachLockerReadPlane: vi.fn<Reads["attachLockerReadPlane"]>(),
+    lockerItems: reads.items,
+    lockerSearch: vi.fn<Reads["lockerSearch"]>(),
+    lockerTrash: vi.fn<Reads["lockerTrash"]>(),
+  };
+  return plane as unknown as Reads;
 });
 
 // Replaced WHOLE, like the door above: the real module reaches
@@ -132,7 +142,7 @@ async function openSession(): Promise<void> {
     configured: true,
     sessionToken: "s1",
   });
-  wire.items.mockResolvedValue({ items: [], truncated: false });
+  reads.items.mockResolvedValue({ items: [], truncated: false });
   await unlockLocker("a-long-enough-passphrase");
 }
 

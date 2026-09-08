@@ -10,7 +10,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { DEFAULT_PURPOSE, uuidv7 } from "@centraid/vault";
+import { uuidv7 } from "@centraid/vault";
 
 import {
   ALIEN_SCHEMA,
@@ -20,12 +20,14 @@ import {
   PROBE_TABLE,
   VERBS,
   clampCovers,
+  clampDeclares,
   classifyDeny,
   closeSweepVault,
   decide,
   identityFor,
   openSweepVault,
   sweep,
+  noStandingAnswerSentence,
   undeclaredSentence,
 } from "./manifest-scope-denial.sweep.test-fixtures.js";
 import type {
@@ -57,7 +59,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
           return decision.decision === "allow"
             ? `${at} → allow`
             : `${at} → deny[${classifyDeny(decision.failing)}, grant=${
-                decision.grantId ?? "null"
+                decision.authorityId ?? "null"
               }] ${decision.failing}`;
         };
         /** What the clamp oracle says it MUST have said, to the exact sentence. */
@@ -67,8 +69,16 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
           verb: Verb
         ): string => {
           const at = `${schema}.${table}/${verb}`;
-          return clampCovers(manifest.scopes, schema, table, verb)
-            ? `${at} → allow`
+          if (clampCovers(manifest.scopes, schema, table, verb))
+            return `${at} → allow`;
+          // Two walls, two sentences: the clamp refuses what the manifest never
+          // named, the plane refuses a `reveal` the manifest DID name (#928).
+          return clampDeclares(manifest.scopes, schema, table, verb)
+            ? `${at} → deny[no-standing-answer, grant=null] ${noStandingAnswerSentence(
+                schema,
+                table,
+                verb
+              )}`
             : `${at} → deny[manifest-undeclared, grant=null] ${undeclaredSentence(
                 schema,
                 table,
@@ -162,7 +172,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
         ungranted.decision === "deny"
           ? classifyDeny(ungranted.failing)
           : "allow"
-      ).toBe("no-active-grant");
+      ).toBe("no-standing-answer");
     });
   });
 
@@ -205,36 +215,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       expect(classifyDeny(decision.failing)).toBe("acting-owner-not-owner");
     });
 
-    test("[policy-forbids-purpose] a standing purpose rule bites before any grant", () => {
-      sweep.db.vault
-        .prepare(
-          // R10 (#916): one dotted `entity`; a bare pack name is the whole pack.
-          `INSERT INTO access_policy
-             (policy_id, kind, entity, rule_json,
-              retention_days, effective_from, priority)
-           VALUES (?, 'purpose', 'social',
-                   '{"allowed_purposes":["dpv:Billing"]}',
-                   NULL, '2020-01-01T00:00:00Z', 1)`
-        )
-        .run(uuidv7());
-      const decision = decide(
-        identityFor(sweep.clampedAgent, [{ schema: "social", verbs: "read" }]),
-        "social",
-        "message",
-        "read"
-      );
-      expect(decision.decision).toBe("deny");
-      if (decision.decision !== "deny") return;
-      expect(decision.failing).toBe(
-        `policy forbids purpose ${DEFAULT_PURPOSE} on social.message`
-      );
-      expect(classifyDeny(decision.failing)).toBe("policy-forbids-purpose");
-      sweep.db.vault
-        .prepare(`DELETE FROM access_policy WHERE kind='purpose'`)
-        .run();
-    });
-
-    test("[manifest-undeclared] the clamp refuses before the grant chain is read", () => {
+    test("[manifest-undeclared] the clamp refuses before any answer is read", () => {
       const decision = decide(
         identityFor(sweep.clampedAgent, [
           { schema: "core", table: "event", verbs: "read" },
@@ -247,11 +228,11 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       if (decision.decision !== "deny") return;
       expect(decision.failing).toBe(undeclaredSentence("core", "task", "read"));
       expect(classifyDeny(decision.failing)).toBe("manifest-undeclared");
-      // grantId is null precisely because no grant was consulted.
-      expect(decision.grantId).toBeNull();
+      // authorityId is null precisely because no answer was consulted.
+      expect(decision.authorityId).toBeNull();
     });
 
-    test("[no-active-grant] a declared clamp over an unapproved automation still denies", () => {
+    test("[no-standing-answer] a declared clamp over an unanswered automation denies", () => {
       const decision = decide(
         identityFor(sweep.ungrantedAgent, [
           { schema: "core", table: "event", verbs: "read" },
@@ -263,12 +244,17 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       expect(decision.decision).toBe("deny");
       if (decision.decision !== "deny") return;
       expect(decision.failing).toBe(
-        `no active grant for purpose ${DEFAULT_PURPOSE}`
+        "no standing answer covers core.event for verb read"
       );
-      expect(classifyDeny(decision.failing)).toBe("no-active-grant");
+      expect(classifyDeny(decision.failing)).toBe("no-standing-answer");
+      expect(decision.authorityId).toBeNull();
     });
 
-    test("[no-grant-scope] a covering clamp over a grant that reaches elsewhere denies with the grant named", () => {
+    test("[no-standing-answer] an answer that reaches ELSEWHERE denies the same way", () => {
+      // One sentence for both: the plane holds one answer per subject and
+      // verb, so "never answered" and "answered about something else" are the
+      // same absence, and naming them apart invited a reader to think one of
+      // them was closer to an allow (#928).
       const decision = decide(
         identityFor(sweep.elsewhereAgent, [
           { schema: "core", table: "event", verbs: "read" },
@@ -280,15 +266,13 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       expect(decision.decision).toBe("deny");
       if (decision.decision !== "deny") return;
       expect(decision.failing).toBe(
-        "no grant_scope covers core.event for verb read"
+        "no standing answer covers core.event for verb read"
       );
-      expect(classifyDeny(decision.failing)).toBe("no-grant-scope");
-      // This is the one deny that names the grant it was refused against.
-      expect(decision.grantId).not.toBeNull();
+      expect(classifyDeny(decision.failing)).toBe("no-standing-answer");
     });
 
-    test("the six classes above are the whole vocabulary this sweep can produce", () => {
-      expect([...DENY_CLASSES]).toHaveLength(6);
+    test("the four classes above are the whole vocabulary this sweep can produce", () => {
+      expect([...DENY_CLASSES]).toHaveLength(4);
       expect(classifyDeny("something nobody wrote")).toBe("UNRECOGNISED");
     });
   });

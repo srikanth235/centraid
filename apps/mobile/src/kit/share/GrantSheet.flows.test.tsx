@@ -20,6 +20,9 @@ import GrantSheet from "./GrantSheet";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock(import("expo-clipboard"), () => ({
+  setStringAsync: () => Promise.resolve(true),
+}));
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const element = (
@@ -90,7 +93,12 @@ vi.mock(
 // so every test injects its own and stubs transport at the seam.
 vi.mock(
   import("./grant-seat"),
-  () => ({ nativeGrantDoor: () => undefined }) as never
+  () =>
+    ({
+      nativeGrantDoor: () => undefined,
+      nativeLinkTicketDoor: () => () =>
+        Promise.resolve({ ok: false, message: "no gateway in this test" }),
+    }) as never
 );
 
 vi.mock(

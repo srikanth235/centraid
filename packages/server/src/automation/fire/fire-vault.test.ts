@@ -77,9 +77,9 @@ describe("runFire + ctx.vault", () => {
       "filer",
       manifest(),
       `export default async ({ ctx }) => {
-         const rows = await ctx.vault.read({ entity: 'schedule.task', purpose: 'dpv:ServiceProvision' });
-         const one = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'a' }, purpose: 'dpv:ServiceProvision' });
-         const two = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'b' }, purpose: 'dpv:ServiceProvision' });
+         const rows = await ctx.vault.read({ entity: 'schedule.task' });
+         const one = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'a' } });
+         const two = await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: 'b' } });
          return { output: { rows, one, two } };
        };`
     );
@@ -152,7 +152,7 @@ describe("runFire + ctx.vault", () => {
       manifest(),
       `export default async ({ ctx }) => {
          try {
-           await ctx.vault.read({ entity: 'core.party', purpose: 'dpv:ServiceProvision' });
+           await ctx.vault.read({ entity: 'core.party' });
            return { output: { reached: true } };
          } catch (err) {
            return { output: { code: err.code, message: String(err.message) } };
@@ -179,7 +179,7 @@ describe("runFire + ctx.vault", () => {
       manifest(),
       `export default async ({ ctx }) => {
          try {
-           await ctx.vault.invoke({ command: 'social.send_message', input: {}, purpose: 'dpv:Billing' });
+           await ctx.vault.invoke({ command: 'social.send_message', input: {} });
            return { output: 'unexpected allow' };
          } catch (err) {
            return { output: { code: err.code } };

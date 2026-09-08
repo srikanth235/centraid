@@ -55,13 +55,15 @@ export const BUDGETS_PATH = "tests/budgets.json";
 export const INVENTORY_PATH = "tests/inventory.json";
 export const QUARANTINE_PATH = "tests/quarantine.json";
 export const CLAIMS_PATH = "tests/claims.json";
+export const JOURNEYS_PATH = "tests/journeys.json";
 export const ROSTER_PATH = "tests/agent-e2e-mobile/roster.json";
 
-const [F, B, I, Q] = [
+const [F, B, I, Q, J] = [
   FLOORS_PATH,
   BUDGETS_PATH,
   INVENTORY_PATH,
   QUARANTINE_PATH,
+  JOURNEYS_PATH,
 ];
 
 /**
@@ -91,14 +93,11 @@ export const SECTIONS = Object.freeze([
     base: "tests/suite-wall-clock.json",
   },
   { file: B, key: "rungs", direction: "down", budget: "*" },
-  {
-    file: B,
-    key: "qualityRigs",
-    direction: "down",
-    budget: "*",
-    base: "tests/quality-rig-budgets.json",
-  },
-  { file: B, key: "experience", direction: "reference" },
+  // #927 — the journey ledger. `entries` holds every user-facing ceiling keyed
+  // `surface / journey / volume / hardware`; `rigs` is the nightly rig register
+  // that produces them. Both down-only, each with its own waiver scope.
+  { file: J, key: "entries", direction: "down", budget: "*" },
+  { file: J, key: "rigs", direction: "down", budget: "*" },
   {
     file: B,
     key: "designTokenCss",
@@ -406,6 +405,7 @@ export function checkLedgers({
     BUDGETS_PATH,
     INVENTORY_PATH,
     QUARANTINE_PATH,
+    JOURNEYS_PATH,
   ]) {
     head[file] = readJson(file, root);
     if (!head[file]) errors.push(`${file} is missing from the working tree`);
@@ -606,7 +606,7 @@ function main() {
     return;
   }
   process.stdout.write(
-    `check-ledgers: ok — ${SECTIONS.length} sections across 4 ledgers hold against ${baseRef}\n`
+    `check-ledgers: ok — ${SECTIONS.length} sections across ${new Set(SECTIONS.map((section) => section.file)).size} ledgers hold against ${baseRef}\n`
   );
 }
 

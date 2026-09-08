@@ -191,7 +191,7 @@ const GRANT: CommandDefinition = {
     // stream "last used" is counted from (ruling V-receipts).
     if (created.outcome === "created") {
       ctx.receipt({
-        grantId: created.grantId,
+        authorityId: created.grantId,
         action: "act share.grant",
         objectType: "share.authority",
         objectId: created.grantId,
@@ -261,7 +261,7 @@ const REVOKE: CommandDefinition = {
     if (revoked.outcome === "revoked") {
       ctx.wrote("share.authority", input.grant_id);
       ctx.receipt({
-        grantId: input.grant_id,
+        authorityId: input.grant_id,
         action: "act share.revoke",
         objectType: "share.authority",
         objectId: input.grant_id,
@@ -332,7 +332,7 @@ const DECLINE: CommandDefinition = {
     ctx.wrote("share.authority", declined.authorityId);
     if (declined.outcome === "declined")
       ctx.receipt({
-        grantId: declined.authorityId,
+        authorityId: declined.authorityId,
         action: "act share.decline",
         objectType: "share.authority",
         objectId: declined.authorityId,

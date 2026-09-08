@@ -33,7 +33,10 @@ import {
   routeShareGrantEdit,
   shareGrantEditRefusal,
 } from "../grant/fulfillment-edit.js";
-import { resolveAudienceParties } from "../grant/grant-store.js";
+import {
+  LIVE_AUTHORITY_SQL,
+  resolveAudienceParties,
+} from "../grant/grant-store.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { importIcsEvents, importVcardParties } from "../ingest/import.js";
 import type { ImportResult } from "../ingest/import.js";
@@ -75,16 +78,6 @@ import {
 } from "../schema/sealed.js";
 import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { isCommonsCommandActable } from "../share/commons-routing.js";
-import {
-  appendCommonsOperation,
-  appendCommonsOperationInTransaction,
-  assertCommonsWithinMax,
-  CommonsMaxSizeError,
-  commonsGrantForCommand,
-  queueCommonsIntent,
-  sequenceCommonsCircleCommandInTransaction,
-} from "../share/commons.js";
 import { evaluateAccess } from "./access.js";
 import type { AccessAllow } from "./access.js";
 import { resolveRefCards } from "./cards.js";
@@ -94,9 +87,13 @@ import { backupVault, checkpointVault } from "./custody.js";
 import type { BackupResult } from "./custody.js";
 import { demoStatus, purgeDemoRows } from "./demo.js";
 import type { DemoPurgeResult } from "./demo.js";
-import { revokeGrantCascade, sweepLifecycle } from "./duties.js";
+import { revokeAuthorityCascade, sweepLifecycle } from "./duties.js";
 import type { RevocationResult, SweepResult } from "./duties.js";
-import { actingOwnerDetail, writeReceipt } from "./evidence.js";
+import {
+  actingOwnerDetail,
+  skipsAllowReceipt,
+  writeAuthorityReceipt,
+} from "./evidence.js";
 import {
   assertInvocationIdentity,
   insertInvocation,
@@ -155,7 +152,12 @@ import type {
   SearchRequest,
   SearchResult,
 } from "./types.js";
-import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
+import {
+  GATEWAY_DEFAULT_READ_ROWS,
+  GATEWAY_MAX_READ_ROWS,
+  GatewayError,
+} from "./types.js";
+import { instrumentVaultStatements } from "./work-counters.js";
 
 /** Non-owner provenance reads (#352) must scope to one (entity_type, entity_id) and hold read on that entity's table. */
 function provenanceScopeFailure(
@@ -183,32 +185,12 @@ function provenanceScopeFailure(
     identity,
     targetRef.schema,
     targetRef.table,
-    "read",
-    request.purpose
+    "read"
   );
   if (targetConsent.decision === "deny") {
     return `no read consent for ${targetType}: ${targetConsent.failing}`;
   }
   return null;
-}
-
-/** Human pending-copy for a member intent. The steward party is part of the
- * projected Commons closure; absence is tolerated for old/incomplete seats. */
-function commonsStewardDeviceLabel(
-  vault: DatabaseSync,
-  stewardPartyId: string
-): string {
-  const row = vault
-    .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
-    .get(stewardPartyId) as { display_name: string } | undefined;
-  const label = row?.display_name.trim().replace(/\s+/gu, " ");
-  if (!label) return "the commons steward's device";
-  const possessive = /['’]s$/iu.test(label)
-    ? label
-    : /['’]$/u.test(label)
-      ? `${label}s`
-      : `${label}'s`;
-  return `${possessive} device`;
 }
 
 /**
@@ -230,34 +212,11 @@ export interface GatewayDeps {
   onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
   /** Best-effort hint after the parked-decision projection changes. */
   onDecisionChanged?: (created: boolean) => void;
-  /** Runs only after the command/log transaction commits. */
-  onCommonsCommandSequenced?: (grantId: string) => void;
-  /** Doorbell emitted after a member intent is durably queued. */
-  onCommonsIntentQueued?: (grantId: string) => void;
 }
 
 export type InvocationBatchResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: unknown };
-
-/** A Commons failure is still inside the pre-commit batch and must roll back
- * the command marker and domain rows. */
-const commonsOperationErrors = new WeakSet<object>();
-function markCommonsOperationError(source: unknown): Error {
-  const error = new Error(
-    source instanceof Error ? source.message : String(source)
-  );
-  error.name = "CommonsOperationError";
-  commonsOperationErrors.add(error);
-  return error;
-}
-function isCommonsOperationError(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    commonsOperationErrors.has(value)
-  );
-}
 
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (#293). */
@@ -265,8 +224,6 @@ export class Gateway {
   private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
   private activeBatchDecisionChanges: boolean[] | undefined;
-  private activeBatchCommonsGrantIds: string[] | undefined;
-  private activeBatchCommonsIntentGrantIds: string[] | undefined;
 
   constructor(
     private readonly db: VaultDb,
@@ -360,12 +317,8 @@ export class Gateway {
     }
     const invocationIds: string[] = [];
     const decisionChanges: boolean[] = [];
-    const commonsGrantIds: string[] = [];
-    const commonsIntentGrantIds: string[] = [];
     this.activeBatchInvocationIds = invocationIds;
     this.activeBatchDecisionChanges = decisionChanges;
-    this.activeBatchCommonsGrantIds = commonsGrantIds;
-    this.activeBatchCommonsIntentGrantIds = commonsIntentGrantIds;
     try {
       // ONE FILE (#916): the vault and the audit band are the same handle, so
       // the batch is ONE transaction. Beginning twice is now an error, and the
@@ -377,8 +330,6 @@ export class Gateway {
         const savepoint = `gateway_batch_run_${index}`;
         const invocationLength = invocationIds.length;
         const decisionLength = decisionChanges.length;
-        const commonsLength = commonsGrantIds.length;
-        const commonsIntentLength = commonsIntentGrantIds.length;
         const markersBefore = new Set(
           (
             this.db.vault
@@ -400,20 +351,12 @@ export class Gateway {
               .prepare("SELECT invocation_id FROM replica_invocation_commit")
               .all() as { invocation_id: string }[]
           ).some((row) => !markersBefore.has(row.invocation_id));
-          // Commons byte-budget rejection is PRE-commit policy failure — no
-          // domain/op row may escape the batch.
-          const shouldRollback =
-            error instanceof CommonsMaxSizeError ||
-            isCommonsOperationError(error) ||
-            !committedAfterStart;
-          if (shouldRollback) {
+          if (!committedAfterStart) {
             this.db.vault.exec(`ROLLBACK TO ${savepoint}`);
           }
           this.db.vault.exec(`RELEASE ${savepoint}`);
           invocationIds.length = invocationLength;
           decisionChanges.length = decisionLength;
-          commonsGrantIds.length = commonsLength;
-          commonsIntentGrantIds.length = commonsIntentLength;
           return { ok: false, error };
         }
       });
@@ -430,10 +373,6 @@ export class Gateway {
       if (decisionChanges.length > 0) {
         this.emitDecisionChanged(decisionChanges.some(Boolean));
       }
-      for (const grantId of new Set(commonsGrantIds))
-        this.emitCommonsCommandSequenced(grantId);
-      for (const grantId of new Set(commonsIntentGrantIds))
-        this.emitCommonsIntentQueued(grantId);
       return results;
     } catch (error) {
       if (this.db.vault.isTransaction) this.db.vault.exec("ROLLBACK");
@@ -441,8 +380,6 @@ export class Gateway {
     } finally {
       this.activeBatchInvocationIds = undefined;
       this.activeBatchDecisionChanges = undefined;
-      this.activeBatchCommonsGrantIds = undefined;
-      this.activeBatchCommonsIntentGrantIds = undefined;
     }
   }
 
@@ -454,27 +391,6 @@ export class Gateway {
       this.activeBatchInvocationIds.push(outcome.invocationId);
     }
     return outcome;
-  }
-
-  /** Reconciliation is post-commit and must never turn durable success into a
-   * reported failure; mount/peer sweeps repair a missed hint. */
-  private emitCommonsCommandSequenced(grantId: string): void {
-    try {
-      this.deps.onCommonsCommandSequenced?.(grantId);
-    } catch {
-      // Restore reconciliation is the durable retry path, so this post-commit
-      // notification must not throw.
-    }
-  }
-
-  /** Recovered by the bounded sweep, so a prompt wake is best-effort and must
-   * not turn a durable queue write into a failure. */
-  private emitCommonsIntentQueued(grantId: string): void {
-    try {
-      this.deps.onCommonsIntentQueued?.(grantId);
-    } catch {
-      // A wake hook's throw must not fail the queueing it signals.
-    }
   }
 
   registerCommand(def: CommandDefinition): void {
@@ -597,19 +513,15 @@ export class Gateway {
 
   read(cred: Credential, rawRequest: ReadRequest): ReadResult {
     const identity = this.identify(cred);
-    const request = {
-      ...rawRequest,
-      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-    };
+    const request = { ...rawRequest };
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref) {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: null,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: null,
         invocationId: null,
         action: "read",
         objectType: request.entity,
         objectId: null,
-        purpose: request.purpose,
         decision: "deny",
         detail: { failing: "unknown entity" },
       });
@@ -623,17 +535,15 @@ export class Gateway {
       identity,
       ref.schema,
       ref.table,
-      "read",
-      request.purpose
+      "read"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: access.grantId,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: access.authorityId,
         invocationId: null,
         action: "read",
         objectType: request.entity,
         objectId: null,
-        purpose: request.purpose,
         decision: "deny",
         detail: { failing: access.failing },
       });
@@ -646,17 +556,16 @@ export class Gateway {
     if (
       ref.schema === "access" &&
       ref.table === "provenance" &&
-      identity.kind !== "owner-device"
+      (identity.kind !== "owner-device" || identity.surface !== undefined)
     ) {
       const failing = provenanceScopeFailure(this.db.vault, identity, request);
       if (failing) {
-        const receiptId = writeReceipt(this.db.audit, {
-          grantId: access.grantId,
+        const receiptId = writeAuthorityReceipt(this.db, {
+          authorityId: access.authorityId,
           invocationId: null,
           action: "read",
           objectType: request.entity,
           objectId: null,
-          purpose: request.purpose,
           decision: "deny",
           detail: { failing },
         });
@@ -704,7 +613,10 @@ export class Gateway {
       exposedPrimaryKey
     );
     const select = applyFieldMask(target, ref.physical, access.fieldMask);
-    const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
+    const limit = Math.min(
+      Math.max(request.limit ?? GATEWAY_DEFAULT_READ_ROWS, 1),
+      GATEWAY_MAX_READ_ROWS
+    );
     // The automation plane never sees demo data (#290): a fake "rent due" row
     // must not fire a real reminder. Narrows, never widens.
     const demoExclusion =
@@ -712,15 +624,20 @@ export class Gateway {
         ? ` AND NOT EXISTS (SELECT 1 FROM access_seed_row _s
              WHERE _s.target_type = ? AND _s.target_id = "${ref.physical}"."${pkColumn(target, ref.physical)}")`
         : "";
-    const rows = target
+    // One row past the window: TRUNCATION IS NEVER SILENT (#922 0a). A page of
+    // exactly `limit` rows is not evidence of anything — the probe row is, and
+    // it never reaches the caller.
+    const probed = target
       .prepare(
-        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${demoExclusion}${order} LIMIT ${limit}`
+        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${demoExclusion}${order} LIMIT ${limit + 1}`
       )
       .all(
         ...grantFilter.params,
         ...callerFilter.params,
         ...(demoExclusion ? [request.entity] : [])
       ) as Record<string, unknown>[];
+    const truncated = probed.length > limit;
+    const rows = truncated ? probed.slice(0, limit) : probed;
     // Sealed columns never ride a read (#293): reads show a placeholder;
     // plaintext takes the `reveal` verb and its per-item receipt.
     if (sealedCols.length > 0) {
@@ -731,17 +648,22 @@ export class Gateway {
         }
       }
     }
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: access.grantId,
-      invocationId: null,
-      action: "read",
-      objectType: request.entity,
-      objectId: null,
-      purpose: request.purpose,
-      decision: "allow",
-      detail: { filter: request.where ?? [], rowCount: rows.length },
-    });
-    return { rows, receiptId };
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(this.db, {
+          authorityId: access.authorityId,
+          invocationId: null,
+          action: "read",
+          objectType: request.entity,
+          objectId: null,
+          decision: "allow",
+          detail: { filter: request.where ?? [], rowCount: rows.length },
+        });
+    return {
+      rows,
+      ...(receiptId === undefined ? {} : { receiptId }),
+      ...(truncated ? { truncated: true, appliedLimit: limit } : {}),
+    };
   }
 
   /**
@@ -752,20 +674,19 @@ export class Gateway {
    */
   reveal(cred: Credential, rawRequest: RevealRequest): RevealResult {
     const identity = this.identify(cred);
-    const request = {
-      ...rawRequest,
-      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-    };
+    const request = { ...rawRequest };
     let context: { kind: "fill"; origin: string } | undefined;
-    const deny = (failing: string, grantId: string | null = null): never => {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId,
+    const deny = (
+      failing: string,
+      authorityId: string | null = null
+    ): never => {
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId,
         invocationId: null,
         action: "reveal",
         objectType: request.entity,
         objectId:
           request.entityId ?? (request.alias ? `@${request.alias}` : null),
-        purpose: request.purpose,
         decision: "deny",
         detail: { failing, ...(context ? { context } : {}) },
       });
@@ -851,10 +772,10 @@ export class Gateway {
       identity,
       ref.schema,
       ref.table,
-      "reveal",
-      request.purpose
+      "reveal"
     );
-    if (access.decision === "deny") return deny(access.failing, access.grantId);
+    if (access.decision === "deny")
+      return deny(access.failing, access.authorityId);
     const pk = pkColumn(this.db.vault, ref.physical);
     // The grant's row filter clamps WHICH items are revealable — how a
     // connector's grant names its specific locker items (#293 dec 8).
@@ -893,13 +814,12 @@ export class Gateway {
     // A successful unseal proves this key sealed this vault's secrets, so
     // stamp the fingerprint a pre-#298 vault never recorded.
     if (unsealedAny) stampSealKeyFingerprint(this.db.vault, this.db.sealKey);
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: access.grantId,
+    const receiptId = writeAuthorityReceipt(this.db, {
+      authorityId: access.authorityId,
       invocationId: null,
       action: "reveal",
       objectType: request.entity,
       objectId: entityId,
-      purpose: request.purpose,
       decision: "allow",
       detail: {
         columns,
@@ -923,15 +843,13 @@ export class Gateway {
    */
   sql(cred: Credential, request: VaultSqlRequest): VaultSqlResult {
     const identity = this.identify(cred);
-    const purpose = request.purpose ?? "owner-assistant";
     if (identity.kind !== "owner-device") {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: null,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: null,
         invocationId: null,
         action: "read",
         objectType: "vault.sql",
         objectId: null,
-        purpose,
         decision: "deny",
         detail: { failing: "whole-model sql is owner-only" },
       });
@@ -945,13 +863,12 @@ export class Gateway {
       request.sql,
       request.maxRows ?? VAULT_SQL_DEFAULT_ROWS
     );
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: null,
+    const receiptId = writeAuthorityReceipt(this.db, {
+      authorityId: null,
       invocationId: null,
       action: "read",
       objectType: "vault.sql",
       objectId: null,
-      purpose,
       decision: "allow",
       detail: {
         sql:
@@ -972,10 +889,7 @@ export class Gateway {
    */
   search(cred: Credential, rawRequest: SearchRequest): SearchResult {
     const identity = this.identify(cred);
-    const request = {
-      ...rawRequest,
-      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-    };
+    const request = { ...rawRequest };
     const result = searchEntity(this.db, identity, request);
     // Search-miss prioritization (#299): owner-plane only, deduped against
     // open requests, so enrichers drain the queue first.
@@ -1018,10 +932,7 @@ export class Gateway {
    */
   changes(cred: Credential, rawRequest: ChangesRequest): ChangesResult {
     const identity = this.identify(cred);
-    const request = {
-      ...rawRequest,
-      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-    };
+    const request = { ...rawRequest };
     if (request.entities.length === 0) {
       throw new GatewayError(
         "contract",
@@ -1031,27 +942,19 @@ export class Gateway {
     for (const entity of request.entities) {
       const ref = resolveEntity(entity, this.db.vault);
       const access = ref
-        ? evaluateAccess(
-            this.db.vault,
-            identity,
-            ref.schema,
-            ref.table,
-            "read",
-            request.purpose
-          )
+        ? evaluateAccess(this.db.vault, identity, ref.schema, ref.table, "read")
         : ({
             decision: "deny",
             failing: `unknown entity ${entity}`,
-            grantId: null,
+            authorityId: null,
           } as const);
       if (access.decision === "deny") {
-        const receiptId = writeReceipt(this.db.audit, {
-          grantId: access.grantId,
+        const receiptId = writeAuthorityReceipt(this.db, {
+          authorityId: access.authorityId,
           invocationId: null,
           action: "read",
           objectType: "access.provenance",
           objectId: null,
-          purpose: request.purpose,
           decision: "deny",
           detail: { failing: access.failing, entity },
         });
@@ -1104,17 +1007,22 @@ export class Gateway {
       if (last) cursor = last.provId;
       else if (watermark > cursor) cursor = watermark;
     }
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: null,
-      invocationId: null,
-      action: "read",
-      objectType: "access.provenance",
-      objectId: null,
-      purpose: request.purpose,
-      decision: "allow",
-      detail: { entities: request.entities, rowCount: changes.length },
-    });
-    return { changes, cursor, receiptId };
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(this.db, {
+          authorityId: null,
+          invocationId: null,
+          action: "read",
+          objectType: "access.provenance",
+          objectId: null,
+          decision: "allow",
+          detail: { entities: request.entities, rowCount: changes.length },
+        });
+    return {
+      changes,
+      cursor,
+      ...(receiptId === undefined ? {} : { receiptId }),
+    };
   }
 
   /**
@@ -1155,13 +1063,12 @@ export class Gateway {
     // not something the rail should carry to the steward.
     const refused = this.shareGrantRefusal(identity, rawRequest);
     if (refused) {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: null,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: null,
         invocationId: rawRequest.invocationId ?? null,
         action: `act ${rawRequest.command}`,
         objectType: "share.grant",
         objectId: refused.containerId,
-        purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
         decision: "deny",
         detail: {
           failing: refused.reason,
@@ -1170,171 +1077,7 @@ export class Gateway {
       });
       return { status: "denied", receiptId, reason: refused.reason };
     }
-    const grant = commonsGrantForCommand(
-      this.db.vault,
-      rawRequest.command,
-      rawRequest.input
-    );
-    if (!grant) return this.invokeCore(identity, rawRequest);
-    if (!isCommonsCommandActable(grant.containerType, rawRequest.command)) {
-      const reason = `command ${rawRequest.command} is not declared for ${grant.containerType}`;
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: grant.grantId,
-        invocationId: rawRequest.invocationId ?? null,
-        action: `act ${rawRequest.command}`,
-        objectType: "share.commons",
-        objectId: grant.grantId,
-        purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-        decision: "deny",
-        detail: { failing: reason },
-      });
-      return { status: "denied", receiptId, reason };
-    }
-    const local = this.db.vault
-      .prepare("SELECT vault_id, self_party_id FROM core_vault LIMIT 1")
-      .get() as { vault_id: string; self_party_id: string | null } | undefined;
-    if (!local?.self_party_id) return this.invokeCore(identity, rawRequest);
-    const grantActor = this.db.vault
-      .prepare(
-        `SELECT b.party_id FROM share_party_vault_binding b
-         JOIN social_circle_member m ON m.party_id = b.party_id
-         JOIN share_commons_member_state s
-           ON s.grant_id = ? AND s.party_id = b.party_id AND s.status = 'current'
-         WHERE b.vault_id = ? AND b.revoked_at IS NULL
-           AND m.circle_id = ? LIMIT 1`
-      )
-      .get(grant.grantId, local.vault_id, grant.circleId) as
-      | { party_id: string }
-      | undefined;
-    const actorPartyId = grantActor?.party_id ?? local.self_party_id;
-    if (grant.stewardPartyId !== actorPartyId) {
-      // Installed apps are the foreground door; only an enrolled agent is a
-      // background executor.
-      const background = cred.kind === "agent";
-      const stewardLabel = commonsStewardDeviceLabel(
-        this.db.vault,
-        grant.stewardPartyId
-      );
-      const reason = background
-        ? "commons automations execute only at the steward's seat"
-        : `waiting for ${stewardLabel}`;
-      if (!background)
-        queueCommonsIntent({
-          seat: this.db.vault,
-          ...(rawRequest.intentId ? { intentId: rawRequest.intentId } : {}),
-          grantId: grant.grantId,
-          actorPartyId,
-          command: rawRequest.command,
-          commandInput: rawRequest.input,
-          stewardLabel,
-          now: nowIso(),
-        });
-      if (!background) {
-        if (this.activeBatchCommonsIntentGrantIds)
-          this.activeBatchCommonsIntentGrantIds.push(grant.grantId);
-        else this.emitCommonsIntentQueued(grant.grantId);
-      }
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: grant.grantId,
-        invocationId: rawRequest.invocationId ?? null,
-        action: `act ${rawRequest.command}`,
-        objectType: "share.commons",
-        objectId: grant.grantId,
-        purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-        decision: "deny",
-        detail: { failing: reason, actorPartyId },
-      });
-      return { status: "denied", receiptId, reason };
-    }
-    if (!this.db.vault.isTransaction && !this.db.audit.isTransaction) {
-      const [settled] = this.invokeBatchSettled([
-        () => this.invoke(cred, rawRequest),
-      ]);
-      if (!settled)
-        throw new Error("commons invocation batch returned no result");
-      if (!settled.ok) {
-        if (settled.error instanceof CommonsMaxSizeError) {
-          const receiptId = writeReceipt(this.db.audit, {
-            grantId: grant.grantId,
-            invocationId: rawRequest.invocationId ?? null,
-            action: `act ${rawRequest.command}`,
-            objectType: "share.commons",
-            objectId: grant.grantId,
-            purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-            decision: "deny",
-            detail: { failing: settled.error.message, actorPartyId },
-          });
-          return {
-            status: "denied",
-            receiptId,
-            reason: settled.error.message,
-          };
-        }
-        throw settled.error;
-      }
-      return settled.value;
-    }
-    const outcome = this.invokeCore(identity, rawRequest);
-    const executed =
-      outcome.status === "executed" || outcome.status === "replayed";
-    if (executed)
-      assertCommonsWithinMax(this.db.vault, local.vault_id, grant.grantId);
-    const append = this.db.vault.isTransaction
-      ? appendCommonsOperationInTransaction
-      : appendCommonsOperation;
-    try {
-      append({
-        steward: this.db.vault,
-        grantId: grant.grantId,
-        actorPartyId,
-        kind: rawRequest.command.includes("delete") ? "delete" : "command",
-        command: rawRequest.command,
-        input: rawRequest.input,
-        outcome: executed ? "executed" : "refused",
-        ...(executed || !outcome.reason ? {} : { reason: outcome.reason }),
-        now: nowIso(),
-      });
-    } catch (error) {
-      throw markCommonsOperationError(error);
-    }
-    let reconciledGrantIds: string[] = [];
-    if (executed) {
-      try {
-        reconciledGrantIds = sequenceCommonsCircleCommandInTransaction({
-          steward: this.db.vault,
-          primaryGrantId: grant.grantId,
-          actorPartyId,
-          command: rawRequest.command,
-          commandInput: rawRequest.input,
-          now: nowIso(),
-        });
-      } catch (error) {
-        throw markCommonsOperationError(error);
-      }
-    }
-    if (executed)
-      for (const reconciledGrantId of reconciledGrantIds)
-        assertCommonsWithinMax(
-          this.db.vault,
-          local.vault_id,
-          reconciledGrantId
-        );
-    const changedGrantIds = new Set([grant.grantId, ...reconciledGrantIds]);
-    if (this.activeBatchCommonsGrantIds)
-      this.activeBatchCommonsGrantIds.push(...changedGrantIds);
-    else
-      for (const changedGrantId of changedGrantIds)
-        this.emitCommonsCommandSequenced(changedGrantId);
-    return outcome;
-  }
-
-  /** Explicit Commons rail already authorized and sequenced the command. */
-  invokeCommonsCanonical(
-    cred: Credential,
-    rawRequest: InvokeRequest,
-    options: { idSeed?: string } = {}
-  ): InvokeOutcome {
-    return this.invokeCore(this.identify(cred), rawRequest, options.idSeed);
+    return this.invokeCore(identity, rawRequest);
   }
 
   private invokeCore(
@@ -1344,20 +1087,16 @@ export class Gateway {
   ): InvokeOutcome {
     // Purposes are off the critical path (#306 decision 4): a caller naming
     // none rides the default, and the journal records what applied.
-    const request = {
-      ...rawRequest,
-      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
-    };
+    const request = { ...rawRequest };
     // The demo register is the OWNER loading a scenario: a granted caller
     // marking real-looking rows purgeable would be an integrity hole.
     if (request.demo && identity.kind !== "owner-device") {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: null,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: null,
         invocationId: null,
         action: `act ${request.command}`,
         objectType: "agent.command",
         objectId: null,
-        purpose: request.purpose,
         decision: "deny",
         detail: { failing: "demo register is owner-only" },
       });
@@ -1369,13 +1108,12 @@ export class Gateway {
     }
     const command = lookupCommand(this.db.vault, request.command);
     if (!command || !this.commands.has(request.command)) {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: null,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: null,
         invocationId: null,
         action: `act ${request.command}`,
         objectType: "agent.command",
         objectId: null,
-        purpose: request.purpose,
         decision: "deny",
         detail: { failing: "unknown command" },
       });
@@ -1391,17 +1129,15 @@ export class Gateway {
       identity,
       command.owner_schema,
       request.command.split(".")[1] ?? "",
-      "act",
-      request.purpose
+      "act"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: access.grantId,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: access.authorityId,
         invocationId: null,
         action: `act ${request.command}`,
         objectType: "agent.command",
         objectId: command.command_id,
-        purpose: request.purpose,
         decision: "deny",
         // A refusal is attributed too (#599 decisions 7–8): "the assistant,
         // acting for Sid, was refused" is the row an owner needs.
@@ -1413,7 +1149,7 @@ export class Gateway {
       return { status: "denied", receiptId, reason: access.failing };
     }
 
-    if (request.intentId && identity.kind === "app") {
+    if (request.intentId && identity.surface !== undefined) {
       const intent = this.db.vault
         .prepare(
           `SELECT outcome.device_id, app.app_id AS enrolled_app_id
@@ -1428,7 +1164,7 @@ export class Gateway {
         !intent ||
         !request.intentDeviceId ||
         intent.device_id !== request.intentDeviceId ||
-        intent.enrolled_app_id !== identity.callerId
+        intent.enrolled_app_id !== identity.surface
       ) {
         throw new GatewayError(
           "contract",
@@ -1443,7 +1179,7 @@ export class Gateway {
           request.invocationId,
           command.command_id,
           identity.callerId,
-          access.grantId
+          access.authorityId
         )
       : false;
     const replayed = request.invocationId
@@ -1454,15 +1190,24 @@ export class Gateway {
     if (replayed) return this.trackBatchInvocation(replayed);
 
     // Confirmation routing (#306 decision 2, amending #294 decision 4): risk
-    // never parks; only `confirm: true` does, for EVERY non-owner caller.
+    // never parks; only `confirm: true` does, for every caller but the owner's
+    // own unnamed hand.
     const sealedInput = this.commands.get(request.command)?.sealedInput ?? [];
     const capability = this.db.vault
       .prepare(
         `SELECT requires_confirmation FROM agent_capability WHERE command_id = ?`
       )
       .get(command.command_id) as { requires_confirmation: number } | undefined;
+    // A SURFACE STILL ASKS (#928 A1). A first-party app runs on the owner's own
+    // credential, but "loud on purpose" is about the ACT, not the plane: a
+    // command the owner must confirm is one they must confirm whoever raised
+    // it, and only the owner's OWN hand — a device with no surface named —
+    // skips the prompt. A member write the origin carries (#929) is not the
+    // owner's own act however owner-shaped the credential carrying it is.
     if (
-      identity.kind !== "owner-device" &&
+      (identity.kind !== "owner-device" ||
+        identity.surface !== undefined ||
+        request.onBehalfOfMember !== undefined) &&
       capability?.requires_confirmation === 1
     ) {
       const invocationId = request.invocationId ?? uuidv7();
@@ -1472,7 +1217,7 @@ export class Gateway {
           { ...request, invocationId },
           command,
           identity,
-          access.grantId,
+          access.authorityId,
           "proposed",
           invocationId,
           sealedInput
@@ -1485,7 +1230,7 @@ export class Gateway {
         ...(request.intentId ? { intentId: request.intentId } : {}),
         identity,
         request: { ...request, invocationId },
-        grantId: access.grantId,
+        grantId: access.authorityId,
         commandId: command.command_id,
         commandName: command.name,
         reason,
@@ -1506,7 +1251,7 @@ export class Gateway {
         request,
         command,
         identity,
-        access.grantId,
+        access.authorityId,
         "proposed",
         undefined,
         sealedInput
@@ -1517,7 +1262,7 @@ export class Gateway {
         { ...request, invocationId },
         command,
         identity,
-        access.grantId,
+        access.authorityId,
         "proposed",
         invocationId,
         sealedInput
@@ -1611,21 +1356,21 @@ export class Gateway {
         `handler missing for parked command ${entry.commandName}`
       );
     }
-    // A durable confirmation may outlive its grant — re-check at decision
-    // time or a revoked grant could still execute.
+    // A durable confirmation may outlive the answer it rode — re-check at
+    // decision time, or a withdrawn answer could still execute.
     const decisionAt = nowIso();
-    const grantStillActive =
+    const answerStillLive =
       entry.grantId === null ||
       this.db.vault
         .prepare(
-          `SELECT 1 AS active FROM access_grant
-            WHERE grant_id = ? AND status = 'active' AND revoked_at IS NULL
-              AND (expires_at IS NULL OR expires_at > ?)`
+          `SELECT 1 AS live FROM share_authority
+            WHERE authority_id = ? AND decision = 'granted'
+              AND ${LIVE_AUTHORITY_SQL}`
         )
-        .get(entry.grantId, decisionAt) !== undefined;
-    if (!approve || !grantStillActive) {
+        .get(entry.grantId) !== undefined;
+    if (!approve || !answerStillLive) {
       const denialReason = approve
-        ? "consent grant no longer active"
+        ? "standing answer no longer live"
         : "owner denied confirmation";
       const denial = recordDurableParkedDenial(this.db, {
         payload: entry,
@@ -1652,7 +1397,7 @@ export class Gateway {
     }
     const access: AccessAllow = {
       decision: "allow",
-      grantId: entry.grantId,
+      authorityId: entry.grantId,
       rowFilter: [],
       fieldMask: null,
     };
@@ -1689,47 +1434,48 @@ export class Gateway {
   }
 
   /** Owner-only, instant and total. */
-  revokeGrant(cred: Credential, grantId: string): RevocationResult {
+  revokeAuthority(cred: Credential, authorityId: string): RevocationResult {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
-      throw new GatewayError("access", "only the owner revokes grants");
-    const result = revokeGrantCascade(this.db, owner, grantId, (revoked) => {
-      let invocationIds: string[];
-      this.db.vault.exec("BEGIN IMMEDIATE");
-      let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-      try {
-        replicaCommit = beginReplicaCommit(this.db.vault);
-        const parked = listDurableParkedPayloads(this.db).filter(
-          (entry) => entry.grantId === revoked
-        );
-        invocationIds = deleteDurableParkedPayloadsForGrant(this.db, revoked);
-        for (const entry of parked) {
-          if (!entry.intentId) continue;
-          transitionReplicaIntentOutcomeInTransaction(
-            this.db.vault,
-            entry.intentId,
-            {
-              status: "failed",
-              invocationId: entry.invocationId,
-              reason: "consent grant revoked while awaiting confirmation",
-            }
+      throw new GatewayError("access", "only the owner withdraws an answer");
+    const result = revokeAuthorityCascade(
+      this.db,
+      owner,
+      authorityId,
+      (revoked: string) => {
+        let invocationIds: string[];
+        this.db.vault.exec("BEGIN IMMEDIATE");
+        let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
+        try {
+          replicaCommit = beginReplicaCommit(this.db.vault);
+          const parked = listDurableParkedPayloads(this.db).filter(
+            (entry) => entry.grantId === revoked
           );
+          invocationIds = deleteDurableParkedPayloadsForGrant(this.db, revoked);
+          for (const entry of parked) {
+            if (!entry.intentId) continue;
+            transitionReplicaIntentOutcomeInTransaction(
+              this.db.vault,
+              entry.intentId,
+              {
+                status: "failed",
+                invocationId: entry.invocationId,
+                reason: "consent grant revoked while awaiting confirmation",
+              }
+            );
+          }
+          endReplicaCommit(this.db.vault, replicaCommit);
+          this.db.vault.exec("COMMIT");
+        } catch (error) {
+          this.db.vault.exec("ROLLBACK");
+          throw error;
         }
-        endReplicaCommit(this.db.vault, replicaCommit);
-        this.db.vault.exec("COMMIT");
-      } catch (error) {
-        this.db.vault.exec("ROLLBACK");
-        throw error;
+        for (const invocationId of invocationIds) {
+          setInvocationStatus(this.db, invocationId, "failed");
+        }
+        return invocationIds.length;
       }
-      for (const invocationId of invocationIds) {
-        setInvocationStatus(this.db, invocationId, "failed");
-      }
-      return invocationIds.length;
-    });
-    // A retained band's write trio goes with the app's access.
-    if (result.extRetained.length > 0 && result.appId) {
-      this.deregisterExtCommands(result.appId);
-    }
+    );
     this.ringProvenance();
     if (result.parkedDropped > 0) this.ringDecisionChanged(false);
     return result;
@@ -1909,13 +1655,12 @@ export class Gateway {
     action: string,
     detail: Record<string, unknown>
   ): string {
-    return writeReceipt(this.db.audit, {
-      grantId: null,
+    return writeAuthorityReceipt(this.db, {
+      authorityId: null,
       invocationId: null,
       action: `act ${action}`,
       objectType: "access.app",
       objectId: appId,
-      purpose: null,
       decision: "allow",
       detail: { ...detail, by: owner.partyId },
     });
@@ -1999,26 +1744,23 @@ export class Gateway {
   resolveBlob(
     cred: Credential,
     contentId: string,
-    options: { variant?: string; purpose?: string } = {}
+    options: { variant?: string } = {}
   ): BlobResolveOutcome & { receiptId?: string } {
     const identity = this.identify(cred);
-    const purpose = options.purpose ?? "dpv:ServiceProvision";
     const access = evaluateAccess(
       this.db.vault,
       identity,
       "core",
       "content_item",
-      "read",
-      purpose
+      "read"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: access.grantId,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: access.authorityId,
         invocationId: null,
         action: "read",
         objectType: "core.content_item",
         objectId: contentId,
-        purpose,
         decision: "deny",
         detail: { failing: access.failing, surface: "blob" },
       });
@@ -2032,13 +1774,12 @@ export class Gateway {
       contentId,
       options.variant
     );
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: access.grantId,
+    const receiptId = writeAuthorityReceipt(this.db, {
+      authorityId: access.authorityId,
       invocationId: null,
       action: "read",
       objectType: "core.content_item",
       objectId: contentId,
-      purpose,
       decision: outcome.status === "ok" ? "allow" : "deny",
       detail: {
         surface: "blob",
@@ -2061,11 +1802,9 @@ export class Gateway {
       contentId: string;
       variant: string;
       maxBytes?: number;
-      purpose?: string;
     }
   ): Promise<AgentContentOutcome & { receiptId: string }> {
     const identity = this.identify(cred);
-    const purpose = request.purpose ?? "dpv:ServiceProvision";
     if (
       !(AGENT_CONTENT_VARIANTS as readonly string[]).includes(request.variant)
     ) {
@@ -2079,17 +1818,15 @@ export class Gateway {
       identity,
       "core",
       "content_item",
-      "read",
-      purpose
+      "read"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
-        grantId: access.grantId,
+      const receiptId = writeAuthorityReceipt(this.db, {
+        authorityId: access.authorityId,
         invocationId: null,
         action: "read",
         objectType: "core.content_item",
         objectId: request.contentId,
-        purpose,
         decision: "deny",
         detail: {
           failing: access.failing,
@@ -2108,13 +1845,12 @@ export class Gateway {
       request.variant as AgentContentVariant,
       request.maxBytes
     );
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: access.grantId,
+    const receiptId = writeAuthorityReceipt(this.db, {
+      authorityId: access.authorityId,
       invocationId: null,
       action: "read",
       objectType: "core.content_item",
       objectId: request.contentId,
-      purpose,
       decision: outcome.status === "ok" ? "allow" : "deny",
       detail: {
         surface: "agent-content",
@@ -2184,13 +1920,12 @@ export class Gateway {
     // sheds a tiny just made. Pinned tinies, staged bytes and un-replicated
     // last copies are untouchable.
     const evicted = this.db.blobs.evictAfterReconcile();
-    const receiptId = writeReceipt(this.db.audit, {
-      grantId: null,
+    const receiptId = writeAuthorityReceipt(this.db, {
+      authorityId: null,
       invocationId: null,
       action: "act access.blob_sweep",
       objectType: "core.content_item",
       objectId: null,
-      purpose: null,
       decision: "allow",
       detail: {
         orphansDeleted: result.orphansDeleted.length,
@@ -2273,10 +2008,13 @@ export class Gateway {
   }
 
   /**
-   * Refines `Identity['kind']`'s `'agent'` into `'assistant'` for the vault
-   * assistant's own enrolled identity (`_assistant`, `invokeAsAssistant`).
+   * Refines `Identity['kind']`: `'agent'` into `'assistant'` for the vault
+   * assistant's own enrolled identity (`_assistant`, `invokeAsAssistant`), and
+   * an owner device that NAMES a surface into `'app'` — the owner still wants
+   * to read "Planner is asking", not "your laptop is asking" (#928 A1).
    */
   private callerKind(identity: Identity): ParkedCallerKind {
+    if (identity.surface !== undefined) return "app";
     if (identity.kind !== "agent") return identity.kind;
     const row = this.db.vault
       .prepare("SELECT enrollment_key FROM access_agent WHERE agent_id = ?")
@@ -2286,13 +2024,18 @@ export class Gateway {
 
   /** WHO wants the act, for the owner. */
   private callerName(identity: Identity): string | null {
+    if (identity.surface !== undefined) {
+      const app = this.db.vault
+        .prepare(
+          "SELECT COALESCE(label, display_name, name) AS name FROM access_app WHERE app_id = ?"
+        )
+        .get(identity.surface) as { name: string } | undefined;
+      return app?.name ?? null;
+    }
     if (identity.kind === "owner-device") return "owner";
-    const byApp = identity.kind === "app";
     const row = this.db.vault
       .prepare(
-        byApp
-          ? "SELECT COALESCE(display_name, name) AS name FROM access_app WHERE app_id = ?"
-          : `SELECT p.display_name AS name FROM access_agent a
+        `SELECT p.display_name AS name FROM access_agent a
                JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`
       )
       .get(identity.callerId) as { name: string } | undefined;
@@ -2325,5 +2068,10 @@ export class Gateway {
 }
 
 export function createGateway(db: VaultDb, deps: GatewayDeps = {}): Gateway {
+  // #927 P2: the always-on work counters are counted at the statement layer,
+  // not here. Attaching once at construction means every gateway op — and the
+  // replica protocol and schema code that share the same handle (#916) — is
+  // counted by the same integers, with no call site to keep in sync.
+  instrumentVaultStatements(db.vault);
   return new Gateway(db, deps);
 }

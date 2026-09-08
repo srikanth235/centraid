@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { bootstrapVault, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
 import { registerLinkCommands } from "../commands/links.js";
@@ -25,8 +25,6 @@ let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
-
-const PURPOSE = "dpv:ServiceProvision";
 
 function setup(dir?: string): void {
   db = openVaultDb(dir ? { dir } : {});
@@ -132,11 +130,15 @@ describe("sql", () => {
     });
 
     test("only the owner-device credential may call it (receipted deny)", () => {
-      const app = enrollApp(db, { name: "snoop" });
+      const app = enrollAgent(db, {
+        name: "snoop",
+        modelRef: "test-automation",
+      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       expect(() => gw.sql(cred, { sql: "SELECT 1" })).toThrow(/owner/u);
       const deny = db.audit
@@ -168,7 +170,6 @@ describe("sql", () => {
           title: "Money things",
           body_text: "the quarterly budget plan",
         },
-        purpose: PURPOSE,
       });
       expect(outcome.status).toBe("executed");
       const result = gw.sql(owner, {

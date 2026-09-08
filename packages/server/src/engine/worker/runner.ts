@@ -1,10 +1,16 @@
 /**
- * Worker entry that executes one user handler. The app-handler sandbox is
+ * Worker entry that executes app handlers. The app-handler sandbox is
  * installed before the handler graph is imported (#842), so network reach
  * survives only as `ctx.fetch` and the only data door is `ctx.vault`. It is
  * still NOT an OS sandbox — read `../sandbox/install.ts`'s limits before
- * describing this boundary in a threat model. A worker runs EXACTLY ONE
- * handler and is discarded (#404), so no thread ever imports two.
+ * describing this boundary in a threat model.
+ *
+ * A THREAD SERVES MANY RUNS (#922 B3) and every run gets a fresh handler
+ * graph: the handler is imported under a per-run URL, so nothing a handler
+ * kept at module scope — a memo, a cursor, a captured `ctx` — is visible to
+ * the next run. The sandbox itself is installed ONCE and is one-way, so the
+ * pool only ever hands this thread runs in the lane it is already committed
+ * to (see `../handlers/worker-pool.ts`).
  */
 
 import { existsSync } from "node:fs";
@@ -12,6 +18,16 @@ import { register } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
+
+async function loadThreadReuse(): Promise<typeof import("./thread-reuse.js")> {
+  const js = path.join(import.meta.dirname, "thread-reuse.js");
+  const file = existsSync(js)
+    ? js
+    : path.join(import.meta.dirname, "thread-reuse.ts");
+  return (await import(
+    pathToFileURL(file).href
+  )) as typeof import("./thread-reuse.js");
+}
 
 async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
   const dir = path.join(import.meta.dirname, "..", "sandbox");
@@ -24,6 +40,9 @@ async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
 
 /** Captured BEFORE the sandbox revokes the global. */
 const hostFetch = globalThis.fetch;
+const { appRunSandboxKey, createThreadSession, handlerHostCtx, isAppSeedFile } =
+  await loadThreadReuse();
+const session = createThreadSession();
 
 let tsLoaderRegistered = false;
 function ensureTsLoader(): void {
@@ -88,6 +107,14 @@ interface ResultMessage {
   ok: boolean;
   value?: unknown;
   error?: string;
+  /** The thread has served its run budget: park nothing, terminate it. */
+  retire?: boolean;
+  /**
+   * The sandbox this THREAD is now committed to, as installed — not as the
+   * parent guessed. The pool parks under this, so a mis-hinted run can only
+   * cost a thread, never leak a lane's grant into the next run.
+   */
+  sandboxKey?: string;
 }
 
 if (!parentPort) {
@@ -179,15 +206,9 @@ const log = {
     port.postMessage({ type: "log", level: "error", msg } satisfies LogMessage),
 };
 
-const abortController = new AbortController();
-const baseCtx = {
-  fetch: (input: string, init?: RequestInit) =>
-    hostFetch(input, { ...init, signal: abortController.signal }),
-  abortSignal: abortController.signal,
-  vault,
-};
-
 function execute(req: WorkerRequest): void {
+  session.beginRun();
+  let sandboxKey: string | undefined;
   void (async () => {
     try {
       const unavailableTime = (): never => {
@@ -221,15 +242,16 @@ function execute(req: WorkerRequest): void {
       const { loadSandbox } = await loadSandboxBoot();
       const sandboxApi = await loadSandbox();
       // Lane chosen per file, so no handler inherits the seed's `fs` grant.
-      const isSeed = /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u.test(req.handlerFile);
       const sandbox = sandboxApi.installWorkerSandbox(
-        isSeed
+        isAppSeedFile(req.handlerFile)
           ? sandboxApi.appSeedPolicy(path.dirname(req.handlerFile))
           : sandboxApi.appHandlerPolicy(),
         { redactLaunchArgs: true }
       );
+      sandboxKey = appRunSandboxKey(req.handlerFile, sandbox.policy.lane);
+      session.scrub();
       sandbox.taint(pathToFileURL(req.handlerFile).href);
-      const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
+      const mod = (await import(session.importHref(req.handlerFile))) as {
         default?: (args: unknown) => Promise<unknown>;
       };
       if (typeof mod.default !== "function") {
@@ -238,13 +260,14 @@ function execute(req: WorkerRequest): void {
       const fullArgs = {
         ...(req.args as object),
         log,
-        ctx: { ...baseCtx, time },
+        ctx: { ...handlerHostCtx(hostFetch, session.signal, vault), time },
       };
       const value = await mod.default(fullArgs);
       port.postMessage({
         type: "result",
         ok: true,
         value,
+        ...session.resultFlags(sandboxKey),
       } satisfies ResultMessage);
     } catch (error) {
       port.postMessage({
@@ -254,9 +277,10 @@ function execute(req: WorkerRequest): void {
           error instanceof Error
             ? (error.stack ?? error.message)
             : String(error),
+        ...session.resultFlags(sandboxKey),
       } satisfies ResultMessage);
     } finally {
-      abortController.abort();
+      session.finish(pendingVaultCalls);
     }
   })();
 }

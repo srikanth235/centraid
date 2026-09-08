@@ -101,7 +101,6 @@ const DATA_AUTOMATION_JSON = JSON.stringify({
   triggers: [{ kind: "data", entities: ["core.party"] }],
   requires: {},
   vault: {
-    purpose: "dpv:ServiceProvision",
     scopes: [{ schema: "core", table: "party", verbs: "read" }],
   },
   history: { keep: { count: 100 } },
@@ -232,7 +231,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_party",
       input: { display_name: "Doorbell Test" },
-      purpose: "dpv:ServiceProvision",
     });
     // The commit is in-process and synchronous, so this is the instant the
     // scheduler's nudge window opens — and it is the same clock the turn
@@ -301,7 +299,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
       const burst = plane.gateway.invoke(plane.ownerCredential, {
         command: "core.add_party",
         input: { display_name: `Doorbell Burst ${i}` },
-        purpose: "dpv:ServiceProvision",
       });
       expect(burst.status).toBe("executed");
     }
@@ -329,7 +326,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
     const missed = droppedPlane.gateway.invoke(droppedPlane.ownerCredential, {
       command: "core.add_party",
       input: { display_name: "Restart Backstop Test" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(missed.status).toBe("executed");
     const missedProv = droppedPlane.db.audit

@@ -79,14 +79,6 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
   ["replica_intent_outcome", "device-scoped outcome of one submitted intent"],
   ["replica_invocation_commit", "the commit group one invocation wrote"],
   ["replica_parked_payload", "a sealed request awaiting the member's answer"],
-  // `share_commons_device_reach`, `_steward_contact`, `_supersession` and
-  // `_verified` LEFT this list (#916, R8 / review 6.4). They were here as
-  // "device observation", but they are Commons CONTROL truth: a restore
-  // without them hands back a seat that has forgotten which op hashes it
-  // verified, which recovery it is the successor of, and how far behind its
-  // steward it had fallen — and being unregistered also meant no replica
-  // change-log trigger, so none of it reached a second device. They are
-  // registered entities of the `share` band now.
   // By ruling (L-alias's neighbour, decisions.md): the locker's own unlock
   // credential is how THIS installation is opened, not a secret it holds.
   [

@@ -1,11 +1,13 @@
+import type { PendingOverlayFacts } from "@centraid/blueprints/apps/_shared/pending-overlay";
 // governance: allow-repo-hygiene file-size-limit (#738) the mounted-reader transaction boundary keeps attach, schema, overlay, FTS, provenance, and cursor composition in one audited class
 import {
   applyOptimisticMutations,
+  assertReplicaOrder,
   assertReplicaPage,
   assertReplicaTieCensus,
-  DEFAULT_REPLICA_PURPOSE,
   OnlineOnlyError,
   planComposedReplicaRead,
+  presentPendingIntentFacts,
   presentPendingIntentMutation,
   replicaFtsMatchExpression,
   replicaPendingSearchMatch,
@@ -14,7 +16,10 @@ import {
   replicaLocalSearchSpec,
   ReplicaProtocolError,
   REPLICA_DEFAULT_LOCAL_ROWS,
+  REPLICA_DEFAULT_SEARCH_ROWS,
   REPLICA_MAX_LOCAL_ROWS,
+  REPLICA_MAX_SEARCH_ROWS,
+  trimReplicaPage,
 } from "@centraid/client/replica/native";
 import type {
   OptimisticMutation,
@@ -23,6 +28,7 @@ import type {
   ReplicaEntitySchema,
   ReplicaIntent,
   ReplicaOverlayBinding,
+  ReplicaPage,
   ReplicaPlannedRow,
   ReplicaPlanSource,
   ReplicaReadRequest,
@@ -83,6 +89,13 @@ interface StoredEntitySchemaRow {
 
 interface ScopedEntitySchemaRow extends StoredEntitySchemaRow {
   scope_index: number;
+}
+
+/** One mounted read's overlay: the mutations per scope, and the one sidecar
+ *  the rows they project are explained by (#922 G3). */
+interface MountedOverlay {
+  byScope: Map<number, OptimisticMutation[]>;
+  sidecar: Record<string, PendingOverlayFacts>;
 }
 
 interface StoredIntentRow {
@@ -230,8 +243,7 @@ export class MultiVaultReplicaReader {
     appId: string,
     request: NativeReadRequest
   ): Promise<MountedReadResult> {
-    const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
-    const mounted = await this.schemasForAll(appId, purpose, request.entity);
+    const mounted = await this.schemasForAll(appId, request.entity);
     // Provenance is constant per database, so its equalities choose DATABASES
     // rather than rows — and never reach SQL, which has no value for them.
     const selection = selectMountedScopes(request, this.#scopes);
@@ -240,7 +252,7 @@ export class MultiVaultReplicaReader {
     );
     const shapeId = request.shapeId ?? mounted[0]?.shape_id;
     const dependency = {
-      shapeId: shapeId ?? `${appId}:${purpose}`,
+      shapeId: shapeId ?? appId,
       entity: request.entity,
     };
     if (schemas.length === 0) {
@@ -254,12 +266,12 @@ export class MultiVaultReplicaReader {
     }
     const [overlays, contentHashed] = await Promise.all([
       this.overlaysForAll(appId, request.entity, schemas),
-      this.contentHashed(appId, purpose, request.entity),
+      this.contentHashed(appId, request.entity),
     ]);
     const bindings = await this.overlayBindings(
       request.entity,
       schemas,
-      overlays
+      overlays.byScope
     );
     const schema = mergedSchema(request.entity, schemas);
     const planRequest: ReplicaReadRequest = {
@@ -290,12 +302,13 @@ export class MultiVaultReplicaReader {
     const badgeRisk = contentHashed && schemas.length > 1;
     const degraded: MountedReadDegradation[] = [];
     if (badgeRisk) degraded.push(mountedReadDegradation("content-hash-badges"));
-    let planned = await this.runPlan(
+    let page = await this.runPlan(
       schema,
       planRequest,
       sources,
       badgeRisk ? REPLICA_MAX_LOCAL_ROWS : requested
     );
+    let planned = page.rows;
     let rows = this.compose(planned, schemas);
     // A short page proves there is nothing more only when nothing was cut off.
     // One vault's own duplicates can collapse a full page; pay for the whole
@@ -307,12 +320,13 @@ export class MultiVaultReplicaReader {
       planned.length === requested
     ) {
       degraded.push(mountedReadDegradation("dedupe-collapse"));
-      planned = await this.runPlan(
+      page = await this.runPlan(
         schema,
         planRequest,
         sources,
         REPLICA_MAX_LOCAL_ROWS
       );
+      planned = page.rows;
       rows = this.compose(planned, schemas);
     }
     const aggregate = this.aggregateState();
@@ -322,12 +336,18 @@ export class MultiVaultReplicaReader {
     const clamped =
       (request.limit ?? 0) > REPLICA_MAX_LOCAL_ROWS &&
       planned.length === REPLICA_MAX_LOCAL_ROWS;
+    // Two ways this answer hides rows: the statement's own window filled, or
+    // dedupe/badge composition left more than the caller asked for. Either one
+    // is a truncation the surface must be able to say out loud (#922 0a).
+    const truncated = page.truncated || rows.length > requested;
     return {
       rows: rows.slice(0, requested),
       cursor: aggregate.cursor,
+      pending: overlays.sidecar,
       dependency: { shapeId: shapeId!, entity: request.entity },
       coverage: clamped ? "partial" : aggregate.coverage,
       ...(degraded.length > 0 ? { degraded } : {}),
+      ...(truncated ? { truncated: true, appliedLimit: requested } : {}),
     };
   }
 
@@ -337,17 +357,27 @@ export class MultiVaultReplicaReader {
     request: ReplicaReadRequest,
     sources: readonly ReplicaPlanSource[],
     limit: number
-  ): Promise<ReplicaPlannedRow[]> {
+  ): Promise<ReplicaPage<ReplicaPlannedRow>> {
     const plan = planComposedReplicaRead(
       schema,
       { ...request, limit },
       new Date(),
       sources
     );
-    const rows = await this.query<ReplicaPlannedRow>(plan.sql, plan.binds);
+    const probed = await this.query<ReplicaPlannedRow>(plan.sql, plan.binds);
     // Escalating rows sort ahead of the whole union, so one page proves every
     // mounted database clean or names the first refusal.
-    assertReplicaPage(rows, plan);
+    assertReplicaPage(probed, plan);
+    // The order guards ride their own statement since #922 C3, so the mounted
+    // reader runs it too — the escalation must not depend on which reader is
+    // asking.
+    if (plan.orderCensus && probed.length > 0) {
+      const census = await this.query<Record<string, number>>(
+        plan.orderCensus.sql,
+        plan.orderCensus.binds
+      );
+      assertReplicaOrder(census[0], plan);
+    }
     if (plan.tieCensus) {
       const census = await this.query<ReplicaTieCensusRow>(
         plan.tieCensus.sql,
@@ -355,7 +385,9 @@ export class MultiVaultReplicaReader {
       );
       if (census[0]) assertReplicaTieCensus(census[0]);
     }
-    return rows;
+    // The plan over-fetches by one; that probe is the exact evidence the window
+    // cut something off, and it never reaches a caller (#922 0a).
+    return trimReplicaPage(probed, plan);
   }
 
   /** The statement's order is the answer's order; dedupe preserves it. */
@@ -393,13 +425,12 @@ export class MultiVaultReplicaReader {
     appId: string,
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
-    const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
     if (this.#scopes.length === 0) {
       return {
         rows: [],
         cursor: { epoch: "mounted", seq: 0 },
         dependency: {
-          shapeId: request.shapeId ?? `${appId}:${purpose}`,
+          shapeId: request.shapeId ?? appId,
           entity: request.entity,
         },
         coverage: "partial",
@@ -412,28 +443,34 @@ export class MultiVaultReplicaReader {
     }
     const searchSpec = replicaLocalSearchSpec(request.entity);
     const required = replicaSearchRequiredColumns(searchSpec);
-    const schemas = await this.schemasForAll(appId, purpose, request.entity);
+    const schemas = await this.schemasForAll(appId, request.entity);
     const overlays = await this.overlaysForAll(appId, request.entity, schemas);
     const indexed = new Set(required);
-    const limit = Math.min(Math.max(request.limit ?? 100, 1), 1_000);
+    const limit = Math.min(
+      Math.max(request.limit ?? REPLICA_DEFAULT_SEARCH_ROWS, 1),
+      REPLICA_MAX_SEARCH_ROWS
+    );
     // Only a delete or an upsert that touches an INDEXED column can take a
     // canonical hit out of the composed page; every other pending mutation
     // leaves the FTS ranking alone. Over-fetch by that count rather than by the
     // whole outbox, and cap the page: a phone with ten thousand queued writes
     // keeps searching, because rows those writes address are pulled in by id
     // below instead of by inflating the ranked page.
-    const displacing = [...overlays.values()].reduce(
+    const displacing = [...overlays.byScope.values()].reduce(
       (count, mutations) =>
         count +
         mutations.filter((mutation) => displaces(mutation, indexed)).length,
       0
     );
-    const fetchLimit = Math.min(limit + displacing, MAX_SEARCH_FETCH_ROWS);
+    // `+ 1` is the truncation probe (#922 0a): a ranked page of exactly `limit`
+    // proves nothing, one hit past the window proves the window cut the answer
+    // short. It is dropped before the caller sees it.
+    const fetchLimit = Math.min(limit + 1 + displacing, MAX_SEARCH_FETCH_ROWS);
     const match = replicaFtsMatchExpression(request.query);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope, scopeIndex) => {
-        parameters.push(match, fetchLimit, appId, purpose, request.entity);
+        parameters.push(match, fetchLimit, appId, request.entity);
         return `SELECT ${scopeIndex} AS scope_index,
                        s.shape_id, s.row_id, r.payload_json, r.oversized_json,
                        r.server_version,
@@ -458,7 +495,7 @@ export class MultiVaultReplicaReader {
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = s.shape_id
                   JOIN (${cursorSql(scope)}) AS m
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND s.entity = ?`;
+                 WHERE sh.app_id = ? AND s.entity = ?`;
       })
       .join(" UNION ALL ");
     parameters.push(fetchLimit);
@@ -483,7 +520,7 @@ export class MultiVaultReplicaReader {
           `replica shape does not expose indexed column(s) ${missing.join(", ")}`
         );
       const hitIds = new Set(scopeRows.map((row) => row.row_id));
-      const mutations = overlays.get(schema.scope_index) ?? [];
+      const mutations = overlays.byScope.get(schema.scope_index) ?? [];
       const indexedRowIds = new Set(
         mutations
           .filter(
@@ -554,21 +591,24 @@ export class MultiVaultReplicaReader {
           .map((row) => replicaScopeEnvelope(scope, row))
       );
     }
-    const rows = dedupeReplicaRowsByContent(hits)
-      .sort(
-        (left, right) =>
-          Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
-      )
-      .slice(0, limit);
+    const ranked = dedupeReplicaRowsByContent(hits).sort(
+      (left, right) =>
+        Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
+    );
+    const rows = ranked.slice(0, limit);
     const aggregate = this.aggregateState();
     return {
       rows,
       cursor: aggregate.cursor,
+      pending: overlays.sidecar,
       dependency: {
-        shapeId: request.shapeId ?? `${appId}:${purpose}`,
+        shapeId: request.shapeId ?? appId,
         entity: request.entity,
       },
       coverage: aggregate.coverage,
+      ...(ranked.length > limit
+        ? { truncated: true, appliedLimit: limit }
+        : {}),
     };
   }
 
@@ -730,21 +770,20 @@ export class MultiVaultReplicaReader {
 
   private schemasForAll(
     appId: string,
-    purpose: string,
     entity: string
   ): Promise<ScopedEntitySchemaRow[]> {
     if (this.#scopes.length === 0) return Promise.resolve([]);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope, scopeIndex) => {
-        parameters.push(appId, purpose, entity);
+        parameters.push(appId, entity);
         return `SELECT ${scopeIndex} AS scope_index, es.shape_id,
                        es.primary_key, es.columns_json,
                        es.has_unavailable_fields
                   FROM ${scope.alias}.replica_entity_schema AS es
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = es.shape_id
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND es.entity = ?`;
+                 WHERE sh.app_id = ? AND es.entity = ?`;
       })
       .join(" UNION ALL ");
     return this.query<ScopedEntitySchemaRow>(
@@ -757,8 +796,9 @@ export class MultiVaultReplicaReader {
     appId: string,
     entity: string,
     schemas: readonly ScopedEntitySchemaRow[]
-  ): Promise<Map<number, OptimisticMutation[]>> {
+  ): Promise<MountedOverlay> {
     const result = new Map<number, OptimisticMutation[]>();
+    const sidecar: Record<string, PendingOverlayFacts> = {};
     await Promise.all(
       schemas.map(async (schema) => {
         const scope = this.#scopes[schema.scope_index]!;
@@ -782,27 +822,29 @@ export class MultiVaultReplicaReader {
         );
         const mutations = records.flatMap((row) => {
           const intent = JSON.parse(row.record_json) as ReplicaIntent;
-          return intent.optimistic
+          const projected = intent.optimistic
             .filter(
               (mutation) =>
                 mutation.entity === entity &&
                 mutation.shapeId === schema.shape_id
             )
             .map((mutation) => presentPendingIntentMutation(mutation, intent));
+          if (projected.length === 0) return projected;
+          // The rows carry the intent; the sidecar carries what is happening to
+          // it, once per read rather than once per row (#922 G3).
+          const facts = presentPendingIntentFacts(intent);
+          if (facts) sidecar[intent.intentId] = facts;
+          return projected;
         });
         if (mutations.length > 0) result.set(schema.scope_index, mutations);
       })
     );
-    return result;
+    return { byScope: result, sidecar };
   }
 
   /** Cacheable: shape metadata, stable until a scope is revoked. */
-  private async contentHashed(
-    appId: string,
-    purpose: string,
-    entity: string
-  ): Promise<boolean> {
-    const key = `${appId}\u0000${purpose}\u0000${entity}`;
+  private async contentHashed(appId: string, entity: string): Promise<boolean> {
+    const key = `${appId}\u0000${entity}`;
     const cached = this.#contentHashed.get(key);
     if (cached !== undefined) return cached;
     // Every scope revoked: there is no union to build, and the read itself
@@ -811,13 +853,13 @@ export class MultiVaultReplicaReader {
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope) => {
-        parameters.push(appId, purpose, entity);
+        parameters.push(appId, entity);
         return `SELECT es.shape_id, es.primary_key, es.columns_json,
                        es.has_unavailable_fields
                   FROM ${scope.alias}.replica_entity_schema AS es
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = es.shape_id
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND es.entity = ?`;
+                 WHERE sh.app_id = ? AND es.entity = ?`;
       })
       .join(" UNION ALL ");
     const schemas = await this.query<StoredEntitySchemaRow>(

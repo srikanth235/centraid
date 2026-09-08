@@ -22,7 +22,6 @@ import { runFire } from "./fire.js";
 import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
 
 const VAULT_BLOCK = {
-  purpose: "dpv:ServiceProvision",
   why: "stage pulled rows",
   scopes: [{ schema: "sync", verbs: "act" }],
 };

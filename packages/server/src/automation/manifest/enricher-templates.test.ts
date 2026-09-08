@@ -618,13 +618,11 @@ describe("recognition automation spine", () => {
         contentId: "c1",
         variant: "original",
         maxBytes: 64 * 1024 * 1024,
-        purpose: "dpv:ServiceProvision",
       },
       {
         contentId: "c2",
         variant: "original",
         maxBytes: 64 * 1024 * 1024,
-        purpose: "dpv:ServiceProvision",
       },
     ]);
   });

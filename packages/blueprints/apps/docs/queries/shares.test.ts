@@ -1,4 +1,4 @@
-// Who a document is shared with (#821), as the drive and search
+// Who a document is shared with (#821, #929), as the drive and search
 // projections ship it.
 //
 // Three rules are load-bearing here, and each one is a sentence a member would
@@ -11,8 +11,9 @@
 //   * a DENIAL of the (new, therefore parked-for-approval) share scopes leaves
 //     `shared_with: null` on every row and the drive otherwise whole — a
 //     regression here does not read as a bug, it reads as "shared with nobody";
-//   * an IMPLICIT circle is labelled by who is in it, because its stored name
-//     is a machine string nobody chose.
+//   * a ONE-PERSON audience is labelled by that person and names no circle,
+//     because since #929 a standing answer points at either, not at a
+//     machine-named circle standing in for someone.
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -23,8 +24,9 @@ import driveHandler from "./drive.ts";
 import searchHandler from "./search.ts";
 
 const SHARE_ENTITIES = new Set([
-  "share.circle_grant",
-  "share.commons_member_state",
+  "share.authority",
+  "share.fulfillment",
+  "share.party_vault_binding",
   "social.circle",
   "social.circle_member",
   "core.party",
@@ -89,53 +91,74 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
     { content_id: "content-lease", media_type: "application/pdf" },
     { content_id: "content-loose", media_type: "text/plain" },
   ],
-  "social.circle": [
-    { circle_id: "circle-family", name: "Family" },
-    { circle_id: "circle-adhoc", name: "commons:8f21c0" },
-  ],
+  "social.circle": [{ circle_id: "circle-family", name: "Family" }],
   "social.circle_member": [
-    {
-      circle_id: "circle-family",
-      party_id: "party-ana",
-      capability: "read+write",
-    },
-    { circle_id: "circle-family", party_id: "party-tom", capability: "read" },
-    { circle_id: "circle-adhoc", party_id: "party-ravi", capability: "read" },
+    { circle_id: "circle-family", party_id: "party-ana" },
+    { circle_id: "circle-family", party_id: "party-tom" },
   ],
   "core.party": [
     { party_id: "party-ana", display_name: "Ana" },
     { party_id: "party-tom", display_name: "Tom" },
     { party_id: "party-ravi", display_name: "Ravi" },
   ],
-  "share.circle_grant": [
-    // The grant is on the GRANDPARENT folder, not on the document.
+  "share.authority": [
+    // The answer is on the GRANDPARENT folder, not on the document.
     {
-      grant_id: "grant-property",
-      circle_id: "circle-family",
-      container_type: "docs.folder",
-      container_id: "c-property",
-      plane: "commons",
-      implicit_circle: 0,
+      authority_id: "grant-property",
+      principal_kind: "circle",
+      principal_id: "circle-family",
+      subject_type: "docs.folder",
+      subject_id: "c-property",
+      verb: "edit",
+      decision: "granted",
+      revoked_at: null,
+      expires_at: null,
     },
-    // A one-off recipient: the circle exists only to carry this share.
+    // A one-off recipient is ONE PERSON now, not a machine-named circle.
     {
-      grant_id: "grant-note",
-      circle_id: "circle-adhoc",
-      container_type: "core.document",
-      container_id: "doc-loose",
-      plane: "commons",
-      implicit_circle: 1,
+      authority_id: "grant-note",
+      principal_kind: "person",
+      principal_id: "party-ravi",
+      subject_type: "core.document",
+      subject_id: "doc-loose",
+      verb: "view",
+      decision: "granted",
+      revoked_at: null,
+      expires_at: null,
     },
   ],
-  "share.commons_member_state": [
-    { grant_id: "grant-property", party_id: "party-ana", status: "current" },
-    { grant_id: "grant-property", party_id: "party-tom", status: "invited" },
-    { grant_id: "grant-note", party_id: "party-ravi", status: "current" },
+  "share.party_vault_binding": [
+    { party_id: "party-ana", vault_id: "vault-ana", revoked_at: null },
+    { party_id: "party-tom", vault_id: "vault-tom", revoked_at: null },
+    { party_id: "party-ravi", vault_id: "vault-ravi", revoked_at: null },
+  ],
+  // Ana holds it; Tom's vault has never been reached.
+  "share.fulfillment": [
+    {
+      grant_id: "grant-property",
+      peer_vault_id: "vault-ana",
+      state: "delivered",
+      delivered_at: "2026-02-02T00:00:00Z",
+    },
+    {
+      grant_id: "grant-property",
+      peer_vault_id: "vault-tom",
+      state: "syncing",
+      delivered_at: null,
+    },
+    {
+      grant_id: "grant-note",
+      peer_vault_id: "vault-ravi",
+      state: "delivered",
+      delivered_at: "2026-01-02T00:00:00Z",
+    },
   ],
 };
 
 interface SharedWith {
   grant_id: string;
+  circle_id: string | null;
+  audience: "person" | "circle";
   label: string;
   via: string;
   container_id: string;
@@ -199,13 +222,13 @@ describe("the drive's shared_with (#821)", () => {
       {
         party_id: "party-tom",
         label: "Tom",
-        capability: "read",
+        capability: "read+write",
         status: "invited",
       },
     ]);
   });
 
-  it("labels an implicit circle by who is in it, not by its machine name", async () => {
+  it("labels a one-person audience by the person, and carries no circle", async () => {
     const result = (await driveHandler({
       input: {},
       ...ctxOf(false),
@@ -214,10 +237,11 @@ describe("the drive's shared_with (#821)", () => {
     const shares = rowFor(result.documents, "doc-loose");
     expect(shares?.[0]).toMatchObject({
       label: "Ravi",
+      audience: "person",
+      circle_id: null,
       via: "document",
       pending_count: 0,
     });
-    expect(JSON.stringify(shares)).not.toContain("commons:8f21c0");
   });
 
   it("degrades to null on a denial, and keeps the drive whole", async () => {

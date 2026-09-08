@@ -54,19 +54,21 @@ function decodeText(uri: string | undefined): string {
 }
 
 export default async function journalHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const [journalNoteIds, concepts, activityLinks] = await Promise.all([
-      readJournalNoteIds(ctx.vault, purpose),
-      ctx.vault.read({ entity: "core.concept", purpose }),
+      readJournalNoteIds(ctx.vault),
       ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq", value: "core.activity" },
           { column: "to_type", op: "eq", value: "core.party" },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
     ]);
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -79,45 +81,45 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
       await Promise.all([
         noteIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "knowledge.note",
               where: [
                 { column: "note_id", op: "in", value: noteIds },
                 { column: "deleted_at", op: "is-null" },
               ],
               orderBy: { column: "created_at", dir: "desc" },
-              purpose,
             })
           : Promise.resolve({ rows: [] }),
         activityIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "core.activity",
               where: [{ column: "activity_id", op: "in", value: activityIds }],
               orderBy: { column: "started_at", dir: "desc" },
-              purpose,
             })
           : Promise.resolve({ rows: [] }),
         activityIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "knowledge.annotation",
               where: [
                 { column: "target_type", op: "eq", value: "core.activity" },
                 { column: "target_id", op: "in", value: activityIds },
               ],
-              purpose,
             })
           : Promise.resolve({ rows: [] }),
         partyIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "core.party",
               where: [{ column: "party_id", op: "in", value: partyIds }],
-              purpose,
             })
           : Promise.resolve({ rows: [] }),
         partyIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "people.profile",
               where: [{ column: "party_id", op: "in", value: partyIds }],
-              purpose,
             })
           : Promise.resolve({ rows: [] }),
       ]);
@@ -126,9 +128,9 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] };
     const contentById = new Map(

@@ -204,7 +204,7 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
           ...entities.map((match) =>
             match[2] === "*"
               ? `- ${match[0]} => the ${match[1]} entity kind (read scope granted; query it via ctx.vault, do not resolve a single row)`
-              : `- ${match[0]} => await ctx.vault.resolve({ refs: [{ type: '${match[1]}', id: '${match[2]}' }], purpose: 'dpv:ServiceProvision' })`
+              : `- ${match[0]} => await ctx.vault.resolve({ refs: [{ type: '${match[1]}', id: '${match[2]}' }] })`
           ),
         ]
       : []),
@@ -275,7 +275,6 @@ export function finalizeCompiledManifest(
     ...(scopes.length > 0
       ? {
           vault: {
-            purpose: manifest.vault?.purpose ?? "dpv:ServiceProvision",
             ...(manifest.vault?.why ? { why: manifest.vault.why } : {}),
             scopes,
           },

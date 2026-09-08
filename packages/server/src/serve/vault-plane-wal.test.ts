@@ -58,7 +58,6 @@ describe("vault-plane WAL ownership + durability", () => {
         password: "protector-backed-secret",
         url: "https://example.com",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(added.status).toBe("executed");
     const itemId = (added as { output: { item_id: string } }).output.item_id;
@@ -80,7 +79,6 @@ describe("vault-plane WAL ownership + durability", () => {
         entity: "locker.item",
         entityId: itemId,
         columns: ["password"],
-        purpose: "dpv:ServiceProvision",
       }).values
     ).toStrictEqual({ password: "protector-backed-secret" });
     registry.stop();
@@ -295,7 +293,7 @@ describe("vault-plane WAL ownership + durability", () => {
     ]);
   });
 
-  test("the plane survives a restart: same identity, grants intact, ctx.vault still works", async () => {
+  test("the plane survives a restart: same identity, install register intact, ctx.vault still works", async () => {
     const dir = await tempDir();
     const first = fixture.openPlaneWith({
       bootstrap: true,
@@ -305,8 +303,7 @@ describe("vault-plane WAL ownership + durability", () => {
     expect(first.boot.fresh).toBe(true);
     // Enroll with a medium ceiling so the reopened plane executes directly.
     ensureAppEnrolled(first.db, "planner", { riskCeiling: "medium" });
-    first.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    first.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     const calendarId = seedCalendar(first);
@@ -320,7 +317,14 @@ describe("vault-plane WAL ownership + durability", () => {
     const apps = second.listApps();
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({ name: "planner" });
-    expect(apps[0]?.grants).toHaveLength(1);
+    // A DECLARATION IS NOT DURABLE STATE (#928 A1): an app's reach is its
+    // build-time manifest, which the mount pass re-reads from `app.json` on
+    // every boot. The reopened plane records it exactly as mounting would;
+    // without that the bridge reaches nothing, which is the fail-closed
+    // direction the install register is meant to have.
+    second.recordAppInstall("planner", {
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
 
     const outcome = await second.bridgeFor("planner")({
       op: "invoke",
@@ -332,7 +336,6 @@ describe("vault-plane WAL ownership + durability", () => {
           dtend: "2026-07-05T09:30:00Z",
           calendar_id: calendarId,
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(outcome.ok).toBe(true);

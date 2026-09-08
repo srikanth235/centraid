@@ -104,10 +104,9 @@ test("the step count backs the silent-no-op guard", () => {
   assert.equal(lintFlowSource('- tapOn: "Save"\n').steps, 1);
 });
 
-// ---- roster discovery (#842 W0.4). The five `photos-*` journeys and
-// `volume-proof` were invisible to this linter for their whole lives because the
-// roster was a hand-written FILES array nobody remembered to extend. These prove
-// the roster now comes from disk, so being new is not a way to escape a rule.
+// ---- roster discovery (#842 W0.4). A hand-written FILES array cannot catch a
+// journey nobody remembered to add to it. These prove the roster comes from
+// disk, so being new is not a way to escape a rule.
 
 const repoFile = (rel) => path.resolve(import.meta.dirname, "..", rel);
 const FLOW_DIR = "tests/agent-e2e-mobile/flows";
@@ -129,9 +128,8 @@ test("the roster IS the flows directory — a file dropped there is linted", () 
 });
 
 test("SABOTAGE: the linter names no flow file, so none can be forgotten", () => {
-  // The old roster was a hand-written FILES array; the five `photos-*` journeys
-  // and `volume-proof` were never added to it and went unlinted for their whole
-  // lives (#842 W0.4). Re-introducing ANY hardcoded journey path fails here.
+  // A hand-written roster leaves every journey missing from it unlinted
+  // (#842 W0.4). Re-introducing ANY hardcoded journey path fails here.
   const source = readFileSync(repoFile("scripts/lint-e2e-flows.mjs"), "utf8");
   const hardcoded = [...source.matchAll(/flows\/[\w.-]+\.mjs/gu)].map(
     (m) => m[0]

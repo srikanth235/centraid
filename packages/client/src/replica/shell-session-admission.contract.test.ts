@@ -21,7 +21,6 @@ describe("shell-session-admission", () => {
   const shape: ReplicaShape = {
     shapeId: "shape-todos",
     appId: "todos",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.task",

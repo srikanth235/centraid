@@ -4,14 +4,12 @@
  * and one outstanding debt. Runs under the demo register — `seed.demo` provenance,
  * one-click purge, never fires triggers or reminders.
  */
-const PURPOSE = "dpv:ServiceProvision";
 
 export default async function seedHandler({ log, ctx }) {
   const invoke = async (command, args) => {
     const out = await ctx.vault.invoke({
       command,
       input: args,
-      purpose: PURPOSE,
     });
     if (out.status !== "executed") {
       throw new Error(`${command} ${out.status}: ${out.reason ?? "no reason"}`);

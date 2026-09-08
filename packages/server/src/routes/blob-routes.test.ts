@@ -178,7 +178,6 @@ describe("blob-routes", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: staged.sha256, title: "pixel.png" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const contentId = (outcome as { output: { content_id: string } }).output
@@ -241,7 +240,6 @@ describe("blob-routes", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "media.add_asset",
       input: { staged_sha: staged.sha256, kind: "photo" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const output = (
@@ -302,7 +300,6 @@ describe("blob-routes", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: staged.sha256, title: "renewal.pdf" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const ids = (
@@ -330,7 +327,6 @@ describe("blob-routes", () => {
         .search(plane.ownerCredential, {
           entity: "core.document",
           query: "narwhal",
-          purpose: "dpv:ServiceProvision",
         })
         .rows.map((row) => row.document_id)
     ).toContain(ids.document_id);
@@ -362,7 +358,6 @@ describe("blob-routes", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: staged.sha256, title: "p.png" },
-      purpose: "dpv:ServiceProvision",
     });
     const contentId = (outcome as { output: { content_id: string } }).output
       .content_id;
@@ -447,7 +442,6 @@ describe("blob-routes", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: original.sha256, title: "Typed contributions" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const contentId = (outcome as { output: { content_id: string } }).output
@@ -474,7 +468,6 @@ describe("blob-routes", () => {
         .search(plane.ownerCredential, {
           entity: "core.document",
           query: "quasar",
-          purpose: "dpv:ServiceProvision",
         })
         .rows.map((row) => row.document_id)
     ).toContain(

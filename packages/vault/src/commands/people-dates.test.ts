@@ -31,7 +31,6 @@ describe("people important-date month_day", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 

@@ -11,22 +11,17 @@ import { describe, beforeEach, expect, test } from "vitest";
 import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { uuidv7 } from "../ids.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
 
-const PURPOSE = "dpv:ServiceProvision";
 const SID = "owner-1a2b-sid";
 
 let db: VaultDb;
@@ -66,12 +61,9 @@ describe("acting-owner suite", () => {
   }): Credential {
     const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
     const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-    createGrant(db, {
-      granteePartyId: agent.partyId,
-      purposeConceptId: boot.concepts[PURPOSE] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "schedule", verbs: "read+act" }],
-    });
+    answerScopes(db, boot, "assistant", [
+      { schema: "schedule", verbs: "read+act" },
+    ]);
     return {
       kind: "agent",
       agentId: agent.agentId,
@@ -101,7 +93,6 @@ describe("acting-owner suite", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.propose_event",
       input: proposeInput("School run"),
-      purpose: PURPOSE,
       actingOwnerId: SID,
     });
 
@@ -126,7 +117,6 @@ describe("acting-owner suite", () => {
     gw.invoke(owner, {
       command: "schedule.propose_event",
       input: proposeInput("Unattributed"),
-      purpose: PURPOSE,
     });
 
     expect(receiptDetail("act schedule.propose_event")).not.toHaveProperty(
@@ -140,7 +130,6 @@ describe("acting-owner suite", () => {
     const outcome = gw.invoke(cred, {
       command: "schedule.propose_event",
       input: proposeInput("Refused"),
-      purpose: PURPOSE,
       actingOwnerId: SID,
     });
 
@@ -164,7 +153,6 @@ describe("acting-owner suite", () => {
     const outcome = gw.invoke(cred, {
       command: "schedule.propose_event",
       input: proposeInput("Allowed"),
-      purpose: PURPOSE,
       actingOwnerId: SID,
     });
 
@@ -183,8 +171,6 @@ describe("acting-owner suite", () => {
   test("the cap bites reads never — an owner who cannot write still reads through their agent", () => {
     const cred = assistant({ ownerId: SID, mayAct: false });
 
-    expect(() =>
-      gw.read(cred, { entity: "schedule.calendar", purpose: PURPOSE })
-    ).not.toThrow();
+    expect(() => gw.read(cred, { entity: "schedule.calendar" })).not.toThrow();
   });
 });

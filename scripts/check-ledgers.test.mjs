@@ -63,7 +63,7 @@ function preMergeRepo() {
   return { root, write };
 }
 
-/** The merged four-file tree, with `overrides` folded into the sections. */
+/** The merged ledger tree, with `overrides` folded into the sections. */
 function writeMerged(write, overrides = {}) {
   write("tests/floors.json", {
     coverage: overrides.coverage ?? COVERAGE,
@@ -76,8 +76,6 @@ function writeMerged(write, overrides = {}) {
       lanes: { "pr-vitest": { budgetMs: 1000 } },
     },
     rungs: { 2: 900_000 },
-    qualityRigs: { rigs: {} },
-    experience: { files: ["tests/claims.json"] },
     designTokenCss: { budgets: {} },
     mobileSuites: { suites: overrides.mobileSuites ?? { "pr-gate": 480_000 } },
   });
@@ -116,6 +114,10 @@ function writeMerged(write, overrides = {}) {
     _policy: { maxDays: 30, budget: 0 },
     entries: [],
     lanes: overrides.lanes ?? {},
+  });
+  write("tests/journeys.json", {
+    entries: overrides.journeyEntries ?? {},
+    rigs: overrides.journeyRigs ?? {},
   });
 }
 

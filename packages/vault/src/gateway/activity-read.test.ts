@@ -9,11 +9,12 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
@@ -48,21 +49,20 @@ describe("activity-read", () => {
       verbs: "read" | "read+act" | "act";
     }[]
   ): Credential {
-    const app = enrollApp(db, { name });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes,
-    });
-    return { kind: "app", appId: app.appId, signingKey: app.signingKey };
+    const app = enrollAgent(db, { name, modelRef: "test-automation" });
+    answerScopes(db, boot, name, scopes);
+    return {
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   }
 
   function addDocument(): string {
     const outcome = gw.invoke(owner, {
       command: "core.add_document",
       input: { data_uri: TEXT, title: "Lease" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { output: { document_id: string } }).output.document_id;
@@ -81,7 +81,6 @@ describe("activity-read", () => {
           { column: "entity_type", op: "eq", value: "core.document" },
           { column: "entity_id", op: "eq", value: documentId },
         ],
-        purpose: "dpv:ServiceProvision",
       });
       expect(result.rows.length).toBeGreaterThan(0);
       expect(result.rows[0]).toMatchObject({
@@ -100,7 +99,6 @@ describe("activity-read", () => {
       expect(() =>
         gw.read(cred, {
           entity: "access.provenance",
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/scope to exactly one/u);
     });
@@ -120,7 +118,6 @@ describe("activity-read", () => {
             { column: "entity_type", op: "eq", value: "core.document" },
             { column: "entity_id", op: "eq", value: documentId },
           ],
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/no read consent for core\.document/u);
     });
@@ -137,7 +134,6 @@ describe("activity-read", () => {
             { column: "entity_type", op: "eq", value: "not.a.real.entity" },
             { column: "entity_id", op: "eq", value: "x" },
           ],
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/unknown entity/u);
     });
@@ -146,7 +142,6 @@ describe("activity-read", () => {
       addDocument();
       const result = gw.read(owner, {
         entity: "access.provenance",
-        purpose: "owner-assistant",
       });
       expect(result.rows.length).toBeGreaterThan(0);
     });

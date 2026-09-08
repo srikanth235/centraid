@@ -41,6 +41,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { turboEnv } from "./turbo.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
 const RUNS_DIR = path.join(root, ".turbo/runs");
 
@@ -192,7 +194,7 @@ function main() {
     const result = spawnSync(
       path.join(root, "node_modules/.bin/turbo"),
       ["run", args.task, "--summarize", ...args.passthrough],
-      { cwd: root, stdio: "inherit" }
+      { cwd: root, env: turboEnv(), stdio: "inherit" }
     );
     taskStatus = result.status ?? 1;
   }

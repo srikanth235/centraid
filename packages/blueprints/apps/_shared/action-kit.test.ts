@@ -6,12 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  ACTION_PURPOSE,
-  actionInput,
-  deniedResult,
-  runVaultAction,
-} from "./action-kit.ts";
+import { actionInput, deniedResult, runVaultAction } from "./action-kit.ts";
 
 type Ctx = Parameters<typeof runVaultAction>[0];
 
@@ -52,7 +47,6 @@ describe("the shared vault-action run", () => {
       {
         command: "schedule.add_task",
         input: { title: "Ship it" },
-        purpose: ACTION_PURPOSE,
       },
     ]);
     expect(result).toStrictEqual({

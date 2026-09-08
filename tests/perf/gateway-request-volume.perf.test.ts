@@ -11,14 +11,14 @@ import { sealAad, sealValue } from "@centraid/vault";
 
 import { serve } from "../../packages/server/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/server/src/serve/serve.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * GATEWAY REQUEST LATENCY AT VOLUME (issue #883 C1).
  *
  * `tests/perf/gateway-request.perf.test.ts` measures the same core routes
  * against an EMPTY vault in a forked child. Its budget entries said so, and
- * tests/experience-budgets/README.md is blunt about what that buys: "a budget
+ * tests/journeys.json is blunt about what that buys: "a budget
  * measured on an empty vault is a bundle/transport ratchet only and cannot
  * catch an O(vault-size) regression". Two of gateway.json's most-quoted
  * numbers — `requestToFirstByte` and `coreRouteP95Ms` — were in exactly that
@@ -60,13 +60,6 @@ const SEED_COUNTS = {
   turnsPerConversation: 12,
 } as const;
 
-interface BudgetFile {
-  metrics: {
-    coreRouteP95Ms: Record<keyof typeof CORE_ROUTES, number>;
-    gatewayColdStartMs: { ceilingMs: number };
-  };
-}
-
 function percentile(samples: readonly number[], fraction: number): number {
   const sorted = [...samples].sort((left, right) => left - right);
   const index = Math.min(
@@ -97,12 +90,18 @@ async function routeP95(
 
 describe("gateway-request-volume.perf", () => {
   test("core routes and cold start hold their ceilings on a year-3-shaped vault", async () => {
-    const budgets = JSON.parse(
-      await fs.readFile(
-        path.resolve("tests/experience-budgets/gateway.json"),
-        "utf8"
-      )
-    ) as BudgetFile;
+    /** The p95 ceiling for one core route; throws rather than defaulting. */
+    const routeCeilingMs = (identity: string): number =>
+      journeyCeiling(
+        "gateway/core-route/year3/ci-linux-x64-4c",
+        "coreRouteP95Ms",
+        identity
+      );
+    const coldStartCeilingMs = journeyCeiling(
+      "gateway/cold-open/year3/ci-linux-x64-4c",
+      "gatewayColdStartMs",
+      "ceilingMs"
+    );
     const dataDir = await tempDir("gateway-volume-perf-");
     const vaultDir = path.join(dataDir, "vault");
     const token = "gateway-volume-token";
@@ -179,31 +178,18 @@ describe("gateway-request-volume.perf", () => {
     expect(reopened.status).toBe(200);
 
     const slowestP95Ms = Math.max(...Object.values(routeP95s));
-    // Only the three route identities — `coreRouteP95Ms` also carries the
-    // entry's `status`/`volume`/`probe` prose, and a Math.max over those is NaN.
     const loosestCeilingMs = Math.max(
-      ...Object.keys(CORE_ROUTES).map(
-        (identity) =>
-          budgets.metrics.coreRouteP95Ms[identity as keyof typeof CORE_ROUTES]
-      )
+      ...Object.keys(CORE_ROUTES).map(routeCeilingMs)
     );
     const routesPassed = Object.entries(routeP95s).every(
-      ([identity, value]) =>
-        value <
-        budgets.metrics.coreRouteP95Ms[identity as keyof typeof CORE_ROUTES]
+      ([identity, value]) => value < routeCeilingMs(identity)
     );
-    const coldPassed =
-      coldStartMs < budgets.metrics.gatewayColdStartMs.ceilingMs;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
-    const withinDrift = drift === null || slowestP95Ms <= drift;
+    const coldPassed = coldStartMs < coldStartCeilingMs;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "core route p95 and cold start on a year-3-shaped vault",
-      status: routesPassed && coldPassed && withinDrift ? "passed" : "failed",
+      status: routesPassed && coldPassed ? "passed" : "failed",
       measurements: [
         {
           name: "slowest core route p95",
@@ -215,10 +201,7 @@ describe("gateway-request-volume.perf", () => {
           name: `${identity} p95`,
           value,
           unit: "ms",
-          budget:
-            budgets.metrics.coreRouteP95Ms[
-              identity as keyof typeof CORE_ROUTES
-            ],
+          budget: routeCeilingMs(identity),
         })),
         {
           name: "replica bootstrap page p95 (published, not gated)",
@@ -229,19 +212,13 @@ describe("gateway-request-volume.perf", () => {
           name: "cold start on seeded vault",
           value: coldStartMs,
           unit: "ms",
-          budget: budgets.metrics.gatewayColdStartMs.ceilingMs,
+          budget: coldStartCeilingMs,
         },
         { name: "seeded domain rows", value: domainRows, unit: "rows" },
         { name: "seed", value: seedMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${slowestP95Ms} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(routesPassed).toBe(true);
-    expect(coldStartMs).toBeLessThan(
-      budgets.metrics.gatewayColdStartMs.ceilingMs
-    );
+    expect(coldStartMs).toBeLessThan(coldStartCeilingMs);
   });
 });

@@ -33,7 +33,6 @@ interface RawParty {
 }
 
 export default async function faces({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const assetId = String(input?.asset_id ?? "");
   if (!assetId) return { status: 400, body: { error: "asset_id required" } };
   try {
@@ -42,13 +41,11 @@ export default async function faces({ input, ctx }: HandlerArgs) {
         entity: "media.face_region",
         where: [{ column: "asset_id", op: "eq", value: assetId }],
         limit: 50,
-        purpose,
       }),
       ctx.vault.read({
         entity: "core.party",
         orderBy: { column: "display_name", dir: "asc" },
         limit: 200,
-        purpose,
       }),
     ]);
     const persons = ((people.rows ?? []) as unknown as RawParty[]).filter(

@@ -69,7 +69,6 @@ export interface OutboxScopeRequest {
   requestId: string;
   plane: "app" | "agent";
   appId: string;
-  purpose: string;
   scopes: OutboxScopeTriple[];
   requestedAt: string;
 }

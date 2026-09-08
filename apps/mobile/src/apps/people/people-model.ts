@@ -525,7 +525,6 @@ export function projectPersonDetail(
     notes,
     interactions,
     vaults: input.shareLinks?.vaults ?? null,
-    pending_invites: input.shareLinks?.pending_invites ?? null,
     canWrite: input.person.canWrite,
     scopeLabels: input.person.scopeLabels,
     raw: input.person.raw,

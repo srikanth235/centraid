@@ -10,21 +10,19 @@ import { decorate, readTags, readStarred, readWatchtower } from "./items.ts";
 import type { RawItem } from "./items.ts";
 
 export default async function watchtowerHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const res = await ctx.vault.read({
       entity: "locker.item",
       where: [{ column: "deleted_at", op: "is-null" }],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: 2000,
-      purpose,
     });
     const rows = (res.rows ?? []) as unknown as RawItem[];
     const ids = rows.map((r) => r.item_id);
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
-      readTags(ctx, ids, purpose),
-      readStarred(ctx, ids, purpose),
-      readWatchtower(ctx, purpose),
+      readTags(ctx, ids),
+      readStarred(ctx, ids),
+      readWatchtower(ctx),
     ]);
     const decorated = decorate(rows, tagsByItem, starredIds, watchByItem);
     const affected = decorated.filter(

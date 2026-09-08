@@ -92,7 +92,6 @@ export function adversarialSnapshot(): ReplicaSnapshot {
   const shape: ReplicaShape = {
     shapeId: "shape-adversarial",
     appId: "parity",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.item",

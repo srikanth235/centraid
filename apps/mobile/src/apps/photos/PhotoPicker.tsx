@@ -24,6 +24,7 @@ import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { batchAddToAlbum, vaultAssets } from "./photos-selection-writes";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
@@ -43,13 +44,10 @@ export default function PhotoPicker({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session } = useReplica();
   const timeline = usePhotoTimeline();
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    PHOTO_ENTITY_READS.collectionEntries
   );
   const [picked, setPicked] = useState(new Set<string>());
   const [adding, setAdding] = useState(false);

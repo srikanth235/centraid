@@ -46,7 +46,6 @@ describe("media.set_place_gazetteer", () => {
     return gw.invoke(owner, {
       command: "media.set_place_gazetteer",
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 

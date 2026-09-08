@@ -32,11 +32,12 @@ describe("grant audiences — one roster mapping for every app", () => {
   });
 
   test("a person queued offline is never offered", () => {
-    // `pending:` is an overlay id no vault has settled — offering it would
-    // record a grant against an identity that does not exist yet.
+    // A queued row would record a grant against an identity no vault has
+    // agreed to yet. Since #922 G2 the ID is real from the moment the seat
+    // mints it, so the fact rides the row's OVERLAY, not its spelling.
     expect(
       grantAudiencesFrom(
-        [{ label: "Offline friend", partyId: "pending:intent-1:0" }],
+        [{ label: "Offline friend", partyId: "party-queued", pending: true }],
         []
       )
     ).toStrictEqual([]);
@@ -46,10 +47,9 @@ describe("grant audiences — one roster mapping for every app", () => {
     expect(grantAudiencesFrom([], [])).toStrictEqual([]);
   });
 
-  test("the native seat's own pending flag is honoured beside the id form", () => {
-    // The native roster settles the pending question itself and carries a real
-    // party id beside the flag; the web roster carries it in the id. One law
-    // reads both rather than each seat restating it.
+  test("both seats state the pending fact the same way", () => {
+    // Web reads it off the row's overlay and native off its own store; either
+    // way it arrives as a flag beside a real party id, and one law reads it.
     expect(
       grantAudiencesFrom(
         [

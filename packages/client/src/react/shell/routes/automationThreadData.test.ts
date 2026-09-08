@@ -210,7 +210,7 @@ describe(loadAutomationThreadData, () => {
         name: "Daily Digest",
         modelRef: "centraid-automation",
         enrolledAt: "2026-01-01T00:00:00Z",
-        grants: [],
+        answers: [],
       },
     ]);
 

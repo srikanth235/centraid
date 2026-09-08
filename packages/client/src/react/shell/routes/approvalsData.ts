@@ -158,7 +158,6 @@ export function buildScopeRequestRow(
   return {
     requestId: row.requestId,
     appId: row.appId,
-    purpose: row.purpose,
     scopeSummary: scopeSummary(row.scopes),
     requestedAgo: relativeTime(row.requestedAt),
   };

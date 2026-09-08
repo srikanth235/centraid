@@ -1,7 +1,10 @@
-// Consent as it is felt through the plane's bridges: deny-by-default until the
-// owner grants, allow while the grant lives, dark the moment the app or agent
-// is uninstalled — plus the owner's own HTTP routes for the same acts, the
-// sweep clock that lapses expired grants, and the feeds that ride the bridges.
+// AUTHORITY as it is felt through the plane's bridges: an automation is
+// deny-by-default until the owner answers, allowed while the answer stands,
+// and dark the moment it is uninstalled. A first-party app has no such
+// lifecycle (#928 A1) — it is not a principal, so installing it is the whole
+// of it — and that difference gets its own case below. Plus the owner's own
+// HTTP routes for the same acts, the sweep clock that lapses a time-boxed
+// answer, and the feeds that ride the bridges.
 import { describe, expect, test } from "vitest";
 
 import type { VaultBridge } from "@centraid/server/engine";
@@ -17,17 +20,17 @@ import {
 import { openVaultRegistry } from "./vault-registry.js";
 
 /**
- * The app plane and the agent plane are two doors onto ONE consent law. The
- * lifecycle below is that law; everything a single plane adds on top of it
- * (replay, parking, install-time top-ups) lives in its own test.
+ * ONE authority law, and since #928 exactly one plane answers to it: an
+ * automation. Everything the plane adds on top of it (replay, parking,
+ * install-time top-ups) lives in its own test.
  */
 interface ConsentLifecycleCase {
-  readonly plane: "app" | "agent";
+  readonly plane: "agent";
   readonly entity: string;
   /** Enroll the caller, then hand back its bridge. */
   readonly enroll: (plane: VaultPlane) => VaultBridge;
   readonly approve: (plane: VaultPlane) => void;
-  /** Grants visible to the owner once the approval lands. */
+  /** Standing answers visible to the owner once the approval lands. */
   readonly grantsAfterApprove: (plane: VaultPlane) => unknown[] | undefined;
   readonly uninstall: (plane: VaultPlane) => { grantsRevoked: number };
   /** Substring the deny must carry, where the plane promises one. */
@@ -37,29 +40,6 @@ interface ConsentLifecycleCase {
 }
 
 const consentLifecycle: readonly ConsentLifecycleCase[] = [
-  {
-    plane: "app",
-    entity: "core.event",
-    enroll: (plane) => {
-      plane.enrollApp("planner");
-      return plane.bridgeFor("planner");
-    },
-    approve: (plane) =>
-      void plane.approveGrant("planner", {
-        purpose: "dpv:ServiceProvision",
-        scopes: [
-          { schema: "schedule", verbs: "read+act" },
-          { schema: "core", table: "event", verbs: "read" },
-        ],
-      }),
-    grantsAfterApprove: (plane) =>
-      plane.listApps().find((app) => app.name === "planner")?.grants,
-    uninstall: (plane) => plane.revokeApp("planner"),
-    // The deny is receipted, and says so — a hang or a silent empty read would
-    // both pass a bare `ok === false`.
-    denyErrorIncludes: "receipt",
-    allowedRows: [],
-  },
   {
     plane: "agent",
     entity: "schedule.task",
@@ -74,7 +54,6 @@ const consentLifecycle: readonly ConsentLifecycleCase[] = [
     },
     approve: (plane) =>
       void plane.approveAgentGrant("briefing", {
-        purpose: "dpv:ServiceProvision",
         scopes: [
           { schema: "schedule", verbs: "read+act" },
           { schema: "social", verbs: "read+act" },
@@ -82,7 +61,7 @@ const consentLifecycle: readonly ConsentLifecycleCase[] = [
         ],
       }),
     grantsAfterApprove: (plane) =>
-      plane.listAgents().find((agent) => agent.name === "Briefing")?.grants,
+      plane.listAgents().find((agent) => agent.name === "Briefing")?.answers,
     uninstall: (plane) => plane.revokeApp("briefing"),
   },
 ];
@@ -90,8 +69,32 @@ const consentLifecycle: readonly ConsentLifecycleCase[] = [
 describe("vault-plane consent", () => {
   const fixture = usePlaneFixture();
 
+  test("app plane: installing IS the whole of it, and uninstall goes dark (#928 A1)", async () => {
+    const plane = fixture.openPlane(await tempDir());
+    plane.recordAppInstall("planner", {
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
+    const bridge = plane.bridgeFor("planner");
+    // No ceremony stands between an installed first-party app and the owner's
+    // own vault: it runs on the owner's device, and what it may touch was
+    // fixed at build time by its declared manifest and the entity tripwire.
+    const allowed = await bridge({
+      op: "read",
+      payload: { entity: "schedule.task" },
+    });
+    expect(allowed.ok).toBe(true);
+    // And it holds nothing to withdraw — uninstall retires the register row.
+    expect(plane.revokeApp("planner").grantsRevoked).toBe(0);
+    const dark = await bridge({
+      op: "read",
+      payload: { entity: "schedule.task" },
+    });
+    expect(dark.ok).toBe(false);
+    expect(dark.code).toBe("VAULT_NOT_ENROLLED");
+  });
+
   test.each(consentLifecycle)(
-    "$plane plane: deny-by-default → owner grant → allowed → uninstall goes dark",
+    "$plane plane: deny-by-default → owner answer → allowed → uninstall goes dark",
     async (scenario) => {
       const plane = fixture.openPlane(await tempDir());
       const bridge = scenario.enroll(plane);
@@ -100,7 +103,6 @@ describe("vault-plane consent", () => {
           op: "read",
           payload: {
             entity: scenario.entity,
-            purpose: "dpv:ServiceProvision",
           },
         });
 
@@ -117,15 +119,17 @@ describe("vault-plane consent", () => {
 
       // The owner approves the manifest-declared scopes.
       scenario.approve(plane);
-      expect(scenario.grantsAfterApprove(plane)).toHaveLength(1);
+      expect((scenario.grantsAfterApprove(plane) ?? []).length).toBeGreaterThan(
+        0
+      );
       const allowed = await read();
       expect(allowed.ok).toBe(true);
       expect(allowed.result).toMatchObject(
         scenario.allowedRows ? { rows: scenario.allowedRows } : {}
       );
 
-      // Uninstall: grants revoked (cascade), identity retired, calls go dark.
-      expect(scenario.uninstall(plane).grantsRevoked).toBe(1);
+      // Uninstall: answers withdrawn, identity retired, calls go dark.
+      expect(scenario.uninstall(plane).grantsRevoked).toBeGreaterThan(0);
       const dark = await read();
       expect(dark.ok).toBe(false);
       expect(dark.code).toBe("VAULT_NOT_ENROLLED");
@@ -136,7 +140,6 @@ describe("vault-plane consent", () => {
     const plane = fixture.openPlane(await tempDir());
     plane.enrollAutomationAgent("briefing");
     plane.approveAgentGrant("briefing", {
-      purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "schedule", verbs: "read+act" },
         { schema: "social", verbs: "read+act" },
@@ -151,7 +154,6 @@ describe("vault-plane consent", () => {
       payload: {
         command: "schedule.add_task",
         input: { title: "follow up with the plumber" },
-        purpose: "dpv:ServiceProvision",
         invocationId: "run-1:v0",
       },
     });
@@ -167,7 +169,6 @@ describe("vault-plane consent", () => {
       payload: {
         command: "schedule.add_task",
         input: { title: "follow up with the plumber" },
-        purpose: "dpv:ServiceProvision",
         invocationId: "run-1:v0",
       },
     });
@@ -185,7 +186,6 @@ describe("vault-plane consent", () => {
           recipient_party_id: ownerParty,
           body_text: "your day, summarized",
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(draft.ok).toBe(true);
@@ -196,7 +196,6 @@ describe("vault-plane consent", () => {
       payload: {
         command: "social.send_message",
         input: { message_id: messageId },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(send.ok).toBe(true);
@@ -217,28 +216,26 @@ describe("vault-plane consent", () => {
       )
       .run(uuidv7(), plane.boot.ownerPartyId);
 
-    plane.enrollApp("tasks");
-    const appBridge = plane.bridgeFor("tasks");
-    const deniedApp = await appBridge({
+    // An app that is not INSTALLED reaches nothing — the register is the
+    // whole of a first-party app's door (#928 A1).
+    const notEnrolled = await plane.bridgeFor("tasks")({
       op: "search",
       payload: {
         entity: "schedule.task",
         query: "budget",
-        purpose: "dpv:ServiceProvision",
       },
     });
-    expect(deniedApp.ok).toBe(false);
-    expect(deniedApp.code).toBe("VAULT_ACCESS");
-    plane.approveGrant("tasks", {
-      purpose: "dpv:ServiceProvision",
+    expect(notEnrolled.ok).toBe(false);
+    expect(notEnrolled.code).toBe("VAULT_NOT_ENROLLED");
+    plane.recordAppInstall("tasks", {
       scopes: [{ schema: "schedule", verbs: "read" }],
     });
+    const appBridge = plane.bridgeFor("tasks");
     const appHit = await appBridge({
       op: "search",
       payload: {
         entity: "schedule.task",
         query: "budg",
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(appHit.ok).toBe(true);
@@ -248,7 +245,6 @@ describe("vault-plane consent", () => {
 
     plane.enrollAutomationAgent("chaser");
     plane.approveAgentGrant("chaser", {
-      purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read" }],
     });
     const agentHit = await plane.agentBridgeFor("chaser")({
@@ -256,25 +252,37 @@ describe("vault-plane consent", () => {
       payload: {
         entity: "schedule.task",
         query: "finance budget",
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(agentHit.ok).toBe(true);
     expect((agentHit.result as { rows: unknown[] }).rows).toHaveLength(1);
   });
 
-  test("sweep clock: expired grants lapse on the interval", async () => {
+  test("sweep clock: a time-boxed answer lapses on the interval, and stays as history", async () => {
     const plane = fixture.openPlane(await tempDir());
-    plane.enrollApp("planner");
-    plane.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    plane.approveAgentGrant("planner", {
       scopes: [{ schema: "schedule", verbs: "read" }],
-      expiresAt: "2020-01-01T00:00:00Z",
     });
-    expect(plane.listApps()[0]?.grants).toHaveLength(1);
+    // Answers are minted `standing`; a time-boxed one is what the sweep ends.
+    plane.db.vault
+      .prepare(
+        `UPDATE share_authority
+            SET duration = 'until-date', expires_at = '2020-01-01T00:00:00Z'
+          WHERE principal_kind = 'automation' AND principal_id = 'planner'`
+      )
+      .run();
+    expect(plane.listAgents()[0]?.answers).toHaveLength(1);
     const result = plane.sweep();
-    expect(result.grantsExpired).toBe(1);
-    expect(plane.listApps()[0]?.grants).toHaveLength(0);
+    expect(result.authorityRevoked).toBe(1);
+    expect(plane.listAgents()[0]?.answers).toHaveLength(0);
+    expect(
+      plane.db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM share_authority
+            WHERE principal_id = 'planner' AND revoked_reason = 'expired'`
+        )
+        .get()
+    ).toMatchObject({ n: 1 });
   });
 
   test("agent changes feed + app parked surface ride the bridges", async () => {
@@ -284,7 +292,6 @@ describe("vault-plane consent", () => {
     // Agent side: watch core.event through the consented change feed.
     plane.enrollAutomationAgent("reconciler");
     plane.approveAgentGrant("reconciler", {
-      purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "schedule", verbs: "read+act" },
         { schema: "core", table: "event", verbs: "read" },
@@ -295,7 +302,6 @@ describe("vault-plane consent", () => {
       op: "changes",
       payload: {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: null,
       },
     });
@@ -304,9 +310,7 @@ describe("vault-plane consent", () => {
 
     // An app parks a confirm-gated booking request (#306: parking is a
     // property of the command, not of risk)…
-    plane.enrollApp("bookings");
-    plane.approveGrant("bookings", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("bookings", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     plane.db.vault
@@ -327,7 +331,6 @@ describe("vault-plane consent", () => {
           dtend: "2026-09-01T10:30:00Z",
           calendar_id: calendarId,
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(proposed.ok).toBe(true);
@@ -349,7 +352,6 @@ describe("vault-plane consent", () => {
       op: "changes",
       payload: {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor,
       },
     });
@@ -359,7 +361,7 @@ describe("vault-plane consent", () => {
     expect(changes.some((c) => c.entity === "core.event")).toBe(true);
   });
 
-  test("owner routes: status, apps, grant, parked confirm, revoke", async () => {
+  test("owner routes: status, apps, answer, parked confirm, withdraw", async () => {
     const dir = await tempDir();
     // The route handler speaks to the registry; the acts land on its active plane.
     const registry = openVaultRegistry({
@@ -371,28 +373,36 @@ describe("vault-plane consent", () => {
     fixture.push(() => registry.stop());
     const plane = registry.current();
     const calendarId = seedCalendar(plane);
-    plane.enrollApp("planner");
+    plane.recordAppInstall("planner", {
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
     const base = await fixture.serveOwnerRoutes(registry);
 
     const status = await (await fetch(`${base}/status`)).json();
     expect(status).toMatchObject({ vaultId: plane.boot.vaultId });
 
-    // Approve the requested scopes over HTTP — the owner act.
-    const grantRes = await fetch(`${base}/apps/planner/grants`, {
+    // Answer an AUTOMATION over HTTP — the owner act. There is no such route
+    // for an app: a first-party app is not a principal (#928 A1).
+    const answerRes = await fetch(`${base}/agents/digest/grants`, {
       method: "POST",
       body: JSON.stringify({
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "schedule", verbs: "read+act" }],
       }),
     });
-    expect(grantRes.status).toBe(200);
-    const { grantId } = (await grantRes.json()) as { grantId: string };
-
+    expect(answerRes.status).toBe(200);
+    expect((await answerRes.json()) as { written: number }).toMatchObject({
+      written: 2,
+    });
+    const agents = (await (await fetch(`${base}/agents`)).json()) as {
+      agents: Array<{ enrollmentKey: string; answers: unknown[] }>;
+    };
+    expect(
+      agents.agents.find((a) => a.enrollmentKey === "digest")?.answers
+    ).toHaveLength(2);
     const apps = (await (await fetch(`${base}/apps`)).json()) as {
-      apps: Array<{ name: string; grants: unknown[] }>;
+      apps: Array<{ name: string }>;
     };
     expect(apps.apps[0]).toMatchObject({ name: "planner" });
-    expect(apps.apps[0]?.grants).toHaveLength(1);
 
     // Park an invocation through the bridge, confirm it over HTTP. Parking
     // is confirm-gated (#306): mark the command loud-on-purpose first.
@@ -412,7 +422,6 @@ describe("vault-plane consent", () => {
           dtend: "2026-07-06T09:30:00Z",
           calendar_id: calendarId,
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     const invocationId = (parked.result as { invocationId: string })
@@ -441,22 +450,26 @@ describe("vault-plane consent", () => {
       "executed"
     );
 
-    // Revoke over HTTP; the app goes dark.
-    const revoke = await fetch(`${base}/grants/${grantId}`, {
-      method: "DELETE",
-    });
-    expect(revoke.status).toBe(200);
-    const dark = await plane.bridgeFor("planner")({
+    // Withdraw every answer over HTTP; the automation goes dark.
+    const digest = agents.agents.find((a) => a.enrollmentKey === "digest");
+    const answers = (digest?.answers ?? []) as Array<{ authorityId: string }>;
+    expect(answers.length).toBeGreaterThan(0);
+    const revoked = await Promise.all(
+      answers.map((answer) =>
+        fetch(`${base}/grants/${answer.authorityId}`, { method: "DELETE" })
+      )
+    );
+    for (const revoke of revoked) expect(revoke.status).toBe(200);
+    const dark = await plane.agentBridgeFor("digest")({
       op: "read",
-      payload: { entity: "core.event", purpose: "dpv:ServiceProvision" },
+      payload: { entity: "schedule.task" },
     });
     expect(dark.ok).toBe(false);
 
-    // Bad grant bodies are refused.
-    const bad = await fetch(`${base}/apps/planner/grants`, {
+    // Bad answer bodies are refused.
+    const bad = await fetch(`${base}/agents/digest/grants`, {
       method: "POST",
       body: JSON.stringify({
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "s", verbs: "write" }],
       }),
     });

@@ -89,8 +89,7 @@ describe("replica-intent-attribution suite", () => {
     vault: VaultPlane,
     access: { deviceId: string; ownerId?: string }
   ): Promise<string> {
-    vault.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     const input = { title: "buy milk" };

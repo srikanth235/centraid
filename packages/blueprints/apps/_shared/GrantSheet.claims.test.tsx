@@ -320,4 +320,87 @@ describe("the grant sheet, web seat — claims", () => {
       expect(container.textContent).toContain("Reachable");
     });
   });
+  // #929 S6. The refusal is not the finding here — #903's rule is right and
+  // stays. What was wrong is that the refusal was a DEAD END: the sheet named
+  // an act ("link them in People") and offered no way to perform it, so a
+  // member who came to share had to leave, find the link row, mint a ticket
+  // and come back. These pin the offer AND pin that it grants nothing.
+  describe("an unlinked person is offered the link ticket inline", () => {
+    const NEVER_REACHED = {
+      forParty: () =>
+        Promise.resolve({ known: true, channel: null, grants: [] }),
+    };
+    const ticketDoor =
+      (
+        ticket = "tkt-abc",
+        expiresAt = new Date(Date.now() + 9 * 60_000).toISOString()
+      ) =>
+      () =>
+        Promise.resolve({ ok: true as const, ticket: { ticket, expiresAt } });
+
+    test("the ticket is offered, and the share is still refused", async () => {
+      const { container } = await mount({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(pressing(container, "Send them a link ticket").disabled).toBe(
+        false
+      );
+      // The whole point of the slice: the offer does not soften #903.
+      expect(pressing(container, "Share").disabled).toBe(true);
+      expect(container.textContent).toContain("Not reached yet");
+    });
+
+    // A ticket nobody asked for is a live credential on screen; it exists
+    // only after the member presses.
+    test("no ticket exists until it is asked for", async () => {
+      const { container } = await mount({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(container.textContent).not.toContain("tkt-abc");
+
+      await act(async () => {
+        pressing(container, "Send them a link ticket").click();
+      });
+
+      expect(container.textContent).toContain("tkt-abc");
+      // The expiry is the TICKET'S, read off the ticket rather than a TTL this
+      // seat remembers — the gateway is free to change it.
+      expect(container.textContent).toContain("Good for 8 more minutes.");
+      // Still refused: a ticket is an invitation to link, not a link.
+      expect(pressing(container, "Share").disabled).toBe(true);
+    });
+
+    test("a refused mint says so in the door's own words", async () => {
+      const { container } = await mount({
+        door: stubDoor(NEVER_REACHED),
+        linkTicket: () =>
+          Promise.resolve({ ok: false as const, message: "no vault to link" }),
+      });
+
+      await act(async () => {
+        pressing(container, "Send them a link ticket").click();
+      });
+
+      expect(container.textContent).toContain("no vault to link");
+      expect(pressing(container, "Share").disabled).toBe(true);
+    });
+
+    test("a circle is never offered one — there is no person to link", async () => {
+      const { container } = await mount({
+        audiences: [
+          { kind: "circle" as const, id: "circle-1", label: "Family" },
+        ],
+        door: stubDoor({
+          forAudience: () => Promise.resolve({ known: true, grants: [] }),
+        }),
+        linkTicket: ticketDoor(),
+      });
+
+      expect(container.textContent).not.toContain("Send them a link ticket");
+    });
+  });
 });

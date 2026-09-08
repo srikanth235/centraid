@@ -12,8 +12,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+import {
+  bootstrapVault,
+  openVaultDb,
+  recordEnrichConsent,
+} from "@centraid/vault";
 
 import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
+import { readEnrichConsentForChain } from "../../enrich/egress-consent-lookup.js";
 import { readEngineProfile } from "../../enrich/engine-profiles.js";
 import type { Manifest } from "../manifest/manifest.js";
 import {
@@ -22,6 +29,7 @@ import {
 } from "./enrich-gate.js";
 import type {
   EnrichConsentRecord,
+  EnrichEgressClass,
   EnrichLane,
   EnrichTier,
   ResolveEnrichPolicy,
@@ -627,6 +635,57 @@ describe(decideEnrichmentGate, () => {
     );
     expect(decision.allowed === false && decision.reason).toContain(
       "sentiment"
+    );
+  });
+
+  // THE GATE READS THE ROW, not a stub (#928 A6): the egress answer it asks
+  // for is a `share_authority` row in the vault, so this case wires the real
+  // gateway-side lookup to a real vault and lets the absence of the row be the
+  // refusal — which is the failure mode the promise depends on.
+  it("refuses provider egress when the vault holds no answer row, and allows it once one is written", () => {
+    const fixture = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Enrichment owner" }
+    );
+    const lookup = (egress: EnrichEgressClass) =>
+      readEnrichConsentForChain(fixture.db.vault, {
+        capability: "faces",
+        egress,
+        scopeChain: [],
+      });
+    const request = {
+      ...base,
+      lane: "gateway" as const,
+      tier: "gateway" as const,
+      policy: resolved("gateway")!,
+      profileEgress: "provider" as const,
+      egressConsent: lookup,
+    };
+
+    const refused = decideEnrichmentGate(request);
+    expect(refused.allowed).toBe(false);
+    expect(refused.allowed === false && refused.reason).toContain(
+      "no egress consent"
+    );
+
+    recordEnrichConsent(fixture.db.vault, {
+      capability: "faces",
+      egress: "provider",
+      decision: "granted",
+      now: "2026-09-04T00:00:00.000Z",
+    });
+    expect(decideEnrichmentGate(request).allowed).toBe(true);
+
+    recordEnrichConsent(fixture.db.vault, {
+      capability: "faces",
+      egress: "provider",
+      decision: "declined",
+      now: "2026-09-04T00:01:00.000Z",
+    });
+    const declined = decideEnrichmentGate(request);
+    expect(declined.allowed).toBe(false);
+    expect(declined.allowed === false && declined.reason).toContain(
+      "was declined"
     );
   });
 

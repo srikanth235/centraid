@@ -40,6 +40,10 @@ export function humanStatus(status: PendingChangeStatus): string {
       return "permission changed";
     case "conflict":
       return "changed somewhere else";
+    case "conflict-base-missing":
+      return "the original is gone";
+    case "expired":
+      return "waited too long";
     case "failed":
       return "could not apply";
     case "executed":
@@ -58,6 +62,8 @@ const OVERLAY_STATUS: Readonly<
   parked: "parked",
   denied: "denied",
   conflict: "conflict",
+  "conflict-base-missing": "conflict-base-missing",
+  expired: "expired",
   failed: "failed",
 };
 

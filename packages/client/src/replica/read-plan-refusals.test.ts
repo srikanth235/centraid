@@ -34,7 +34,6 @@ describe("replica read pushdown refusals", () => {
     const shape: ReplicaShape = {
       shapeId: "shape-masked",
       appId: "parity",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "core.masked",
@@ -96,7 +95,6 @@ describe("replica read pushdown refusals", () => {
     const shape: ReplicaShape = {
       shapeId: "shape-opaque",
       appId: "parity",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "core.opaque",

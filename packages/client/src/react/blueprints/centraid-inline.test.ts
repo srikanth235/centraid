@@ -122,7 +122,7 @@ describe(settledPartyIdFromOutcome, () => {
     expect(() =>
       settledPartyIdFromOutcome({
         status: "executed",
-        output: { party_id: "pending:intent-1:0" },
+        output: { party_id: "" },
       })
     ).toThrow(/settled identity/u);
   });

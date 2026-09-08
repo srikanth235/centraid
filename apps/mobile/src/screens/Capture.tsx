@@ -41,15 +41,15 @@ export default function CaptureScreen({
   const [groupId, setGroupId] = useState("");
   const calendars = useReplicaQuery(
     "agenda",
-    useMemo(() => ({ entity: "schedule.calendar" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "schedule.calendar" }), [])
   );
   const groups = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "tally.group" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "tally.group" }), [])
   );
   const vault = useReplicaQuery(
     "tally",
-    useMemo(() => ({ entity: "core.vault" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.vault" }), [])
   );
 
   const classify = async (): Promise<void> => {

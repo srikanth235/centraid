@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { RuntimeLogger } from "@centraid/server/engine";
+import { revokeAllEgressAuthorities } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
 export interface QuarantineStatus {
@@ -53,16 +54,16 @@ export function applyRestoreQuarantine(
   const parked = db.vault
     .prepare(
       `UPDATE outbox_item
-         SET status = 'pending', decided_at = NULL, grant_id = NULL, staged_at = ?,
+         SET status = 'pending', decided_at = NULL, authority_id = NULL, staged_at = ?,
              note = 'restored from backup (source seq ${sourceSeq}) — reconfirm before it drains'
        WHERE status = 'approved'`
     )
     .run(quarantineAt);
-  const revoked = db.vault
-    .prepare(`UPDATE outbox_grant SET revoked_at = ? WHERE revoked_at IS NULL`)
-    .run(quarantineAt);
   const outboxParked = Number(parked.changes ?? 0);
-  const outboxGrantsRevoked = Number(revoked.changes ?? 0);
+  const outboxGrantsRevoked = revokeAllEgressAuthorities(
+    db.vault,
+    quarantineAt
+  );
 
   logger.warn(
     `vault plane: ${dir} was restored from a backup snapshot (source seq ${sourceSeq}, ` +

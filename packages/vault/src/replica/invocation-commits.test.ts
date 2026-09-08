@@ -29,8 +29,7 @@ function auditFor(invocationId: string): ReplicaInvocationAudit {
     commandName: "test.command",
     agentId: "device-1",
     agentKind: "owner",
-    grantId: null,
-    purpose: "dpv:ServiceProvision",
+    authorityId: null,
     preconditionCount: 0,
     postChecks: [],
     writes: [],
@@ -47,7 +46,7 @@ function recordJournalPrefix(db: VaultDb, invocationId: string): void {
   db.audit
     .prepare(
       `INSERT INTO agent_command_invocation (
-         invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at
+         invocation_id, command_id, caller_id, authority_id, input_json, status, requested_at
        ) VALUES (?, 'command-1', 'device-1', NULL, '{}', 'checked', ?)`
     )
     .run(invocationId, "2026-07-15T00:00:00.000Z");
@@ -221,12 +220,11 @@ describe("replica invocation commit receipt", () => {
       recordJournalPrefix(db, "invocation-handler-receipt");
       recordCommit(db, "invocation-handler-receipt");
       writeReceipt(db.audit, {
-        grantId: null,
+        authorityId: null,
         invocationId: "invocation-handler-receipt",
         action: "act test.command",
         objectType: "share.authority",
         objectId: "authority-1",
-        purpose: "dpv:ServiceProvision",
         decision: "allow",
         detail: { decisionRecorded: "granted" },
       });

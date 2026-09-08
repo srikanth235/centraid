@@ -8,6 +8,9 @@ export default async function add({
 }: HandlerArgs): Promise<ActionResult> {
   const raw = actionInput(body);
   const input: Record<string, unknown> = { title: String(raw.title ?? "") };
+  // The seat mints the row's id and the origin honours it (#922 G2), so a
+  // child write filed offline against it lands pointing at the same row.
+  if (raw.task_id) input.task_id = String(raw.task_id);
   if (raw.description) input.description = String(raw.description);
   if (raw.due_at) input.due_at = String(raw.due_at);
   if (raw.priority) input.priority = Number(raw.priority);

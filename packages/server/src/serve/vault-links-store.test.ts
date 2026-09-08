@@ -341,12 +341,12 @@ describe(VaultLinksStore, () => {
           .prepare(
             `SELECT name, sql FROM sqlite_schema
               WHERE type = 'table'
-                AND name IN ('vault_links', 'vault_directory', 'share_edges', 'share_access_receipts')`
+                AND name IN ('vault_links', 'vault_directory', 'share_access_receipts')`
           )
           .all() as unknown as Array<{ name: string; sql: string }>
       ).map((row) => [row.name, row.sql] as const)
     );
-    expect(ddl.size).toBe(4);
+    expect(ddl.size).toBe(3);
     for (const sql of ddl.values()) {
       for (const match of sql.matchAll(
         /^\s+(?<column>[a-z_]+)\s+(?:TEXT|INTEGER|REAL|BLOB)/gmu

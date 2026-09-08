@@ -47,6 +47,7 @@ import {
   grantOverSubject,
   grantRequestFor,
   liveGrants,
+  offersLinkTicket,
   reachBlocksSharing,
   subjectNoun,
 } from "@centraid/blueprints/apps/_shared/grant-plane";
@@ -56,14 +57,16 @@ import type {
   GrantChannel,
   GrantRecord,
   GrantSubject,
+  LinkTicketDoor,
 } from "@centraid/blueprints/apps/_shared/grant-plane";
+import { useLinkTicket } from "@centraid/blueprints/apps/_shared/link-ticket-panel";
 
 import { Text } from "../components/NativeText";
 import Tappable from "../components/Tappable";
 import TopSafeArea from "../components/TopSafeArea";
 import { useReplica } from "../replica/ReplicaProvider";
 import { useTheme } from "../theme";
-import { nativeGrantDoor } from "./grant-seat";
+import { nativeGrantDoor, nativeLinkTicketDoor } from "./grant-seat";
 import {
   audienceLabelFor,
   subjectKey,
@@ -72,6 +75,7 @@ import {
 import { styles } from "./GrantSheet.styles";
 import { GrantSheetConfirm } from "./GrantSheetConfirm";
 import { GrantSheetStanding } from "./GrantSheetStanding";
+import { GrantSheetTicket } from "./GrantSheetTicket";
 
 export interface GrantSheetProps {
   visible: boolean;
@@ -83,6 +87,8 @@ export interface GrantSheetProps {
   audienceId?: string;
   onStatus: (message: string) => void;
   door?: GrantDoor;
+  /** The link-ticket ceremony, injectable for the same reason `door` is. */
+  linkTicket?: LinkTicketDoor;
 }
 
 export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
@@ -93,6 +99,12 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     () => props.door ?? nativeGrantDoor(gatewayBase),
     [props.door, gatewayBase]
   );
+  const ticketDoor = useMemo(
+    () =>
+      props.linkTicket ?? nativeLinkTicketDoor(gatewayBase, replica.vaultId),
+    [props.linkTicket, gatewayBase, replica.vaultId]
+  );
+  const ticket = useLinkTicket(ticketDoor, props.visible);
 
   // `null` = unread; an empty registry is a claim, so do not paint it early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
@@ -455,6 +467,13 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                       <Text style={[styles.note, { color: colors.textSoft }]}>
                         {reachNote(reach)}
                       </Text>
+                    ) : null}
+                    {/* The one act that would make this share possible,
+                        offered where the refusal is said — never a control
+                        that grants. #903's rule is untouched: the submit
+                        above still refuses until the link is live. */}
+                    {offersLinkTicket(audience.kind, reach) ? (
+                      <GrantSheetTicket panel={ticket} colors={colors} />
                     ) : null}
                   </View>
                 ) : null}

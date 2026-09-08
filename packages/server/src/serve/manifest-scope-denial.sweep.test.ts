@@ -11,8 +11,6 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { DEFAULT_PURPOSE } from "@centraid/vault";
-
 import {
   ALIEN_SCHEMA,
   ALIEN_TABLE,
@@ -54,14 +52,11 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // scopes that named the dead table (`read` and `reveal`) became one
       // `core.entity_revision` read. Nothing may reveal a revision, so the
       // reveal scope did not move — it is gone.
-      declaredScopes: 277,
+      // 277 → 279 (#928): People declares `share.authority_use` and
+      // `share.authority_request` so Settings → Access can date every answer
+      // and draw an automation's undecided ask on the same screen.
+      declaredScopes: 279,
     });
-    // Every scope-carrying manifest rides the one defaulted DPV purpose.
-    expect([
-      ...new Set(
-        MANIFESTS.filter((m) => m.scopes.length > 0).map((m) => m.purpose)
-      ),
-    ]).toStrictEqual([DEFAULT_PURPOSE]);
   });
 
   test("the negative probes really are undeclared everywhere", () => {
@@ -76,29 +71,41 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     expect(tables.has(PROBE_TABLE)).toBe(false);
   });
 
-  describe("every declared scope × verb is evaluable and allowed", () => {
+  describe("every declared scope × verb is evaluable, and read/act are allowed", () => {
     test.each(MANIFESTS.map((m) => [m.label, m] as const))(
       "%s",
       (_label, manifest) => {
         const identity = identityFor(sweep.clampedAgent, manifest.scopes);
         let allowed = 0;
+        let revealsRefused = 0;
         for (const scope of manifest.scopes) {
           const table = scope.table ?? PROBE_TABLE;
           for (const verb of verbsOf(scope.verbs)) {
             const decision = decide(identity, scope.schema, table, verb);
+            // A declared `reveal` scope is refused whatever the owner
+            // answered: reveal rides Locker's permit, never a standing answer
+            // (#873, #928). Anything else must be allowed.
+            const want = verb === "reveal" ? "deny" : "allow";
             expect(
               decision.decision,
-              `${manifest.label} declares ${scope.schema}.${table} for ${verb} but consent said ` +
+              `${manifest.label} declares ${scope.schema}.${table} for ${verb} but the plane said ` +
                 `${decision.decision === "deny" ? decision.failing : "allow"}`
-            ).toBe("allow");
+            ).toBe(want);
             if (decision.decision === "allow") allowed += 1;
+            else revealsRefused += 1;
           }
         }
         // Counted, not merely looped: a manifest whose scopes vanished must
         // say so as a number, not as a silently empty loop body.
-        expect(allowed).toBe(
-          manifest.scopes.reduce((n, s) => n + verbsOf(s.verbs).length, 0)
+        const declared = manifest.scopes.reduce(
+          (n, s) => n + verbsOf(s.verbs).length,
+          0
         );
+        const reveals = manifest.scopes.filter(
+          (s) => s.verbs === "reveal"
+        ).length;
+        expect(allowed).toBe(declared - reveals);
+        expect(revealsRefused).toBe(reveals);
       }
     );
 

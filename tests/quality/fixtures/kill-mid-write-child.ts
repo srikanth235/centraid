@@ -135,7 +135,6 @@ if (faultPoint === "journal-after-append") {
   const result = await plane.invoke(plane.ownerCredential, {
     command: "locker.add_item",
     input: { type: "note", title: "checkpoint canary", content: "durable" },
-    purpose: "dpv:ServiceProvision",
   });
   if (result.status !== "executed")
     throw new Error(`checkpoint canary was not acknowledged: ${result.status}`);

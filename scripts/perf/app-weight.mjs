@@ -8,7 +8,7 @@
  * BROWSER transfers from the e2e harness, not what ships.
  *
  * This script weighs a built directory and asserts it against the `appWeight`
- * entry in the surface's file under `tests/experience-budgets/`. Those ceilings
+ * entry on the surface's `app-weight` entry in `tests/journeys.json`. Those ceilings
  * are tighten-only (PERF_BUDGET_SOURCES in scripts/test-report/ratchet-floors.mjs),
  * so a "just bump it" fix is a reviewed edit rather than a quiet one.
  *
@@ -33,8 +33,10 @@
  *   node scripts/perf/app-weight.mjs --surface web
  *   node scripts/perf/app-weight.mjs --surface desktop --report   # print, never fail
  */
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
+
+import { journeyMetric } from "../lib/journey-ledger.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -42,7 +44,8 @@ const root = path.resolve(import.meta.dirname, "../..");
 const DEBUG_SUFFIXES = [".map", ".txt", ".LICENSE.txt"];
 
 /**
- * Where each surface's shipped bytes live, and which budget file owns them.
+ * Where each surface's shipped bytes live, and which journey-ledger entry
+ * owns their ceiling (tests/journeys.json).
  * A surface may name several roots (mobile exports ios and android separately);
  * every root must exist or the run fails — a silently-absent directory would
  * weigh 0 bytes and pass, which is the failure mode this whole script exists
@@ -50,12 +53,12 @@ const DEBUG_SUFFIXES = [".map", ".txt", ".LICENSE.txt"];
  */
 const SURFACES = {
   desktop: {
-    budgetFile: "tests/experience-budgets/desktop.json",
+    ledgerKey: "desktop/app-weight/build-artifact/any",
     roots: ["apps/desktop/dist/renderer"],
     builtBy: "bun run --cwd apps/desktop build",
   },
   mobile: {
-    budgetFile: "tests/experience-budgets/mobile.json",
+    ledgerKey: "mobile/app-weight/build-artifact/any",
     roots: ["dist/mobile-bundle-smoke/ios", "dist/mobile-bundle-smoke/android"],
     builtBy: "bun run --cwd apps/mobile ci:bundle",
   },
@@ -65,7 +68,7 @@ const SURFACES = {
   // only the routes those journeys load); this weighs what `bun run web:build`
   // actually ships, the same claim the desktop/mobile entries make.
   web: {
-    budgetFile: "tests/experience-budgets/web.json",
+    ledgerKey: "web/app-weight/build-artifact/any",
     roots: ["apps/web/dist"],
     builtBy: "bun run web:build",
     // `precompress.mjs` emits .br/.gz sidecars beside every static asset.
@@ -167,10 +170,7 @@ async function main() {
     return;
   }
 
-  const budgets = JSON.parse(
-    await readFile(path.join(root, surface.budgetFile), "utf8")
-  );
-  const budget = budgets.metrics?.appWeight ?? {};
+  const budget = journeyMetric(surface.ledgerKey, "appWeight");
 
   const errors = [];
   const weighed = await Promise.all(
@@ -213,7 +213,7 @@ async function main() {
   console.log(
     `ceilings: total ${budget.maxTotalBytes ?? "none"} B, largest chunk ${
       budget.maxLargestChunkBytes ?? "none"
-    } B  (${surface.budgetFile})`
+    } B  (tests/journeys.json ${surface.ledgerKey})`
   );
   console.log("=====================================================\n");
 
@@ -221,7 +221,7 @@ async function main() {
   if (errors.length) {
     for (const error of errors) console.error(`app-weight: ${error}`);
     console.error(
-      `app-weight: tighten the build or raise the ceiling in ${surface.budgetFile} — that raise is a tighten-only ratchet edit and needs approvedDeviation.`
+      `app-weight: tighten the build or raise the ceiling on ${surface.ledgerKey} in tests/journeys.json — that raise is a tighten-only ratchet edit and needs approvedDeviation.`
     );
     process.exitCode = 1;
     return;

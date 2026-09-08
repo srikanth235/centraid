@@ -14,6 +14,7 @@ import {
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
 import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
 import {
   projectDashboard,
   projectPersonDetail,
@@ -51,16 +52,23 @@ export interface PeopleData extends RosterProjection {
 export function usePeople(): PeopleData {
   const profiles = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "people.profile" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "people.profile" }),
+      []
+    )
   );
   const parties = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.party" }),
+      []
+    )
   );
   const tags = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -71,20 +79,36 @@ export function usePeople(): PeopleData {
   );
   const concepts = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.concept" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.concept" }),
+      []
+    )
   );
   const schemes = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.concept_scheme" }), [])
+    useMemo(
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "core.concept_scheme",
+      }),
+      []
+    )
   );
   const dates = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "people.important_date" }), [])
+    useMemo(
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "people.important_date",
+      }),
+      []
+    )
   );
   const partyNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -97,6 +121,7 @@ export function usePeople(): PeopleData {
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq" as const, value: "core.activity" },
@@ -108,12 +133,16 @@ export function usePeople(): PeopleData {
   );
   const activities = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.activity" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.activity" }),
+      []
+    )
   );
   const activityNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.activity" },
@@ -125,7 +154,13 @@ export function usePeople(): PeopleData {
   // The one share read the roster needs. NOT in the combined state below.
   const bindings = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "share.party_vault_binding" }), [])
+    useMemo(
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "share.party_vault_binding",
+      }),
+      []
+    )
   );
 
   const queryState = combineReplicaQueryStates([
@@ -227,12 +262,19 @@ export function usePerson(partyId: string): PersonData {
   const people = usePeople();
   const channels = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "social.contact_channel" }), [])
+    useMemo(
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "social.contact_channel",
+      }),
+      []
+    )
   );
   const partyNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -246,6 +288,7 @@ export function usePerson(partyId: string): PersonData {
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq" as const, value: "core.activity" },
@@ -258,12 +301,16 @@ export function usePerson(partyId: string): PersonData {
   );
   const activities = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.activity" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.activity" }),
+      []
+    )
   );
   const activityNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.activity" },
@@ -274,16 +321,23 @@ export function usePerson(partyId: string): PersonData {
   );
   const concepts = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.concept" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.concept" }),
+      []
+    )
   );
   const parties = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.party" }),
+      []
+    )
   );
   const dates = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "people.important_date",
         where: [{ column: "party_id", op: "eq" as const, value: partyId }],
       }),
@@ -296,13 +350,14 @@ export function usePerson(partyId: string): PersonData {
   // live in `PersonGrants.tsx`.
   const bindings = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "share.party_vault_binding" }), [])
+    useMemo(
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "share.party_vault_binding",
+      }),
+      []
+    )
   );
-  const invitations = useReplicaQuery(
-    APP,
-    useMemo(() => ({ entity: "share.commons_invitation" }), [])
-  );
-
   const queryState = combineReplicaQueryStates([
     channels,
     partyNotes,
@@ -316,15 +371,13 @@ export function usePerson(partyId: string): PersonData {
   const loading = people.loading || queryState.loading;
 
   const bindingRows = shareRows(bindings);
-  const invitationRows = shareRows(invitations);
   const shareLinks = useMemo(
     () =>
       projectShareLinks({
         partyId,
         bindings: bindingRows,
-        invitations: invitationRows,
       }),
-    [bindingRows, invitationRows, partyId]
+    [bindingRows, partyId]
   );
 
   const partyNames = useMemo(() => {

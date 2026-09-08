@@ -62,7 +62,7 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
 } {
   return {
     vaultSql: () => (sql: string) => {
-      const result = vaults.current().sqlAsOwner(sql);
+      const result = vaults.current().sqlAsAssistant(sql);
       // Receipt id stays gateway-side; the model gets rows + caps only.
       const { receiptId: _receiptId, ...rows } = result;
       return rows;
@@ -71,7 +71,6 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
       vaults.current().invokeAsAssistant({
         command: call.command,
         input: call.input,
-        purpose: "dpv:ServiceProvision",
       }),
     vaultContent: () => async (call) => {
       const result = (await vaults.current().contentAsOwner(call)) as Record<

@@ -11,9 +11,9 @@ import path from "node:path";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 import {
-  DEFAULT_PURPOSE,
   bootstrapVault,
-  createGrant,
+  automationSubjectsOf,
+  recordAutomationAnswers,
   enrollAgent,
   evaluateAccess,
   openVaultDb,
@@ -48,7 +48,6 @@ export interface LoadedManifest {
   readonly label: string;
   readonly kind: "apps" | "automations";
   readonly id: string;
-  readonly purpose: string | null;
   readonly scopes: readonly ClampScope[];
 }
 
@@ -95,21 +94,12 @@ function loadAppManifest(id: string): LoadedManifest {
     label: `apps/${id}`,
     kind: "apps",
     id,
-    purpose: manifest.vault?.purpose ?? null,
     scopes: toClampScopes(manifest.vault?.scopes ?? []),
   };
 }
 
 /** The vault block lives in `automation.json`, not the gallery `app.json` (#98). */
 function loadAutomationManifest(id: string): LoadedManifest {
-  const appManifest = validateAppManifest(
-    JSON.parse(
-      readFileSync(
-        path.join(BLUEPRINTS_ROOT, "automations", id, "app.json"),
-        "utf8"
-      )
-    )
-  );
   const innerRoot = path.join(
     BLUEPRINTS_ROOT,
     "automations",
@@ -121,7 +111,6 @@ function loadAutomationManifest(id: string): LoadedManifest {
     .map((entry) => entry.name)
     .toSorted();
   const scopes: ClampScope[] = [];
-  let purpose: string | null = appManifest.vault?.purpose ?? null;
   for (const automationId of inner) {
     const manifest = parseManifest(
       readFileSync(
@@ -130,14 +119,12 @@ function loadAutomationManifest(id: string): LoadedManifest {
       )
     );
     if (!manifest.vault) continue;
-    purpose = manifest.vault.purpose;
     scopes.push(...toClampScopes(manifest.vault.scopes));
   }
   return {
     label: `automations/${id}`,
     kind: "automations",
     id,
-    purpose,
     scopes,
   };
 }
@@ -160,7 +147,8 @@ function verbCoveredBy(
   return declared === "act" || declared === "read+act";
 }
 
-export function clampCovers(
+/** Does the RUN's manifest name this entity for this verb at all? */
+export function clampDeclares(
   scopes: readonly ClampScope[],
   schema: string,
   table: string,
@@ -174,6 +162,22 @@ export function clampCovers(
   );
 }
 
+/**
+ * Does it END IN AN ALLOW? REVEAL IS NOT AN AUTOMATION VERB (#873, #928): a
+ * sealed reveal is Locker's one-time permit, never a standing answer, so a
+ * manifest that declares `reveal` still gets past the clamp and is then
+ * refused by the plane. The oracle keeps the two refusals apart, because they
+ * are different sentences and a reader must be able to tell which wall said no.
+ */
+export function clampCovers(
+  scopes: readonly ClampScope[],
+  schema: string,
+  table: string,
+  verb: Verb
+): boolean {
+  return verb !== "reveal" && clampDeclares(scopes, schema, table, verb);
+}
+
 export function verbsOf(declared: ClampScope["verbs"]): Verb[] {
   if (declared === "read+act") return ["read", "act"];
   if (declared === "reveal") return ["reveal"];
@@ -185,13 +189,19 @@ export function verbsOf(declared: ClampScope["verbs"]): Verb[] {
  * of these six, and an unrecognised string fails. That is what CLOSED means.
  */
 
+/**
+ * FOUR, not six, since #928. `policy-forbids-purpose` left with the
+ * `access_policy` table, and `no-active-grant` / `no-grant-scope` were the
+ * same refusal said twice — the plane holds one standing answer per subject
+ * and verb, so "no answer at all" and "an answer that reaches elsewhere" are
+ * one sentence. A shorter grammar is a tighter one: every deny the sweep can
+ * produce is still named here, verbatim.
+ */
 export const DENY_CLASSES = [
   "device-readonly",
   "acting-owner-not-owner",
-  "policy-forbids-purpose",
   "manifest-undeclared",
-  "no-active-grant",
-  "no-grant-scope",
+  "no-standing-answer",
 ] as const;
 export type DenyClass = (typeof DENY_CLASSES)[number] | "UNRECOGNISED";
 
@@ -203,16 +213,21 @@ export function classifyDeny(failing: string): DenyClass {
   ) {
     return "acting-owner-not-owner";
   }
-  if (failing.startsWith("policy forbids purpose ")) {
-    return "policy-forbids-purpose";
-  }
   if (failing.startsWith("execution manifest does not declare ")) {
     return "manifest-undeclared";
   }
-  if (failing.startsWith("no active grant for purpose "))
-    return "no-active-grant";
-  if (failing.startsWith("no grant_scope covers ")) return "no-grant-scope";
+  if (failing.startsWith("no standing answer covers "))
+    return "no-standing-answer";
   return "UNRECOGNISED";
+}
+
+/** The plane's refusal when the clamp let it through. Verbatim, never a substring. */
+export function noStandingAnswerSentence(
+  schema: string,
+  table: string,
+  verb: Verb
+): string {
+  return `no standing answer covers ${schema}.${table} for verb ${verb}`;
 }
 
 /** Asserted verbatim, never by substring. */
@@ -227,6 +242,8 @@ export function undeclaredSentence(
 interface SweepAgent {
   readonly agentId: string;
   readonly partyId: string;
+  /** The automation's own id — the principal a `share_authority` row names. */
+  readonly principalId: string;
 }
 
 interface SweepState {
@@ -234,20 +251,22 @@ interface SweepState {
   close: () => void;
   clampedAgent: SweepAgent;
   ungrantedAgent: SweepAgent;
-  /** Granted where no manifest names — isolates `no grant_scope covers`. */
+  /** Answered where no manifest names — isolates `no-standing-answer`. */
   elsewhereAgent: SweepAgent;
 }
 
 export const sweep = {} as SweepState;
 
 export function identityFor(
-  agent: { agentId: string; partyId: string },
+  agent: { agentId: string; partyId: string; principalId: string },
   scopeClamp?: readonly ClampScope[],
   over: Partial<Identity> = {}
 ): Identity {
   return {
     kind: "agent",
     callerId: agent.agentId,
+    // The automation's own id: what a `share_authority` answer keys on (#928).
+    principalId: agent.principalId,
     provAgentKind: "ai_agent",
     partyId: agent.partyId,
     mayAct: true,
@@ -260,10 +279,9 @@ export function decide(
   identity: Identity,
   schema: string,
   table: string,
-  verb: Verb,
-  purpose = DEFAULT_PURPOSE
+  verb: Verb
 ): AccessDecision {
-  return evaluateAccess(sweep.db.vault, identity, schema, table, verb, purpose);
+  return evaluateAccess(sweep.db.vault, identity, schema, table, verb);
 }
 
 export function openSweepVault(): void {
@@ -273,22 +291,30 @@ export function openSweepVault(): void {
   );
   sweep.db = db;
   sweep.close = close;
-  const purposeConceptId = boot.concepts[DEFAULT_PURPOSE] as string;
-  sweep.clampedAgent = enrollAgent(db, {
-    name: "sweep-clamped",
-    modelRef: "centraid-automation",
-  });
-  sweep.ungrantedAgent = enrollAgent(db, {
-    name: "sweep-ungranted",
-    modelRef: "centraid-automation",
-  });
-  sweep.elsewhereAgent = enrollAgent(db, {
-    name: "sweep-elsewhere",
-    modelRef: "centraid-automation",
-  });
+  sweep.clampedAgent = {
+    ...enrollAgent(db, {
+      name: "sweep-clamped",
+      modelRef: "centraid-automation",
+    }),
+    principalId: "sweep-clamped",
+  };
+  sweep.ungrantedAgent = {
+    ...enrollAgent(db, {
+      name: "sweep-ungranted",
+      modelRef: "centraid-automation",
+    }),
+    principalId: "sweep-ungranted",
+  };
+  sweep.elsewhereAgent = {
+    ...enrollAgent(db, {
+      name: "sweep-elsewhere",
+      modelRef: "centraid-automation",
+    }),
+    principalId: "sweep-elsewhere",
+  };
 
-  // Maximal grant (see header): whole-schema rows so a schema-wide scope has
-  // something to cut against, per-table rows so a `minimization` policy cannot
+  // Maximal ANSWER (see header): whole-pack rows so a pack-wide clamp scope
+  // has something to cut against, per-entity rows so no narrower answer can
   // masquerade as a manifest refusal.
   const schemas = new Set<string>();
   const tables = new Set<string>();
@@ -311,17 +337,22 @@ export function openSweepVault(): void {
       { schema, table, verbs: "reveal" }
     );
   }
-  createGrant(db, {
-    granteePartyId: sweep.clampedAgent.partyId,
-    purposeConceptId,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes: superset,
+  const now = new Date().toISOString();
+  recordAutomationAnswers(db.vault, {
+    principalId: "sweep-clamped",
+    ownerPartyId: boot.ownerPartyId,
+    subjects: automationSubjectsOf(superset),
+    decision: "granted",
+    now,
   });
-  createGrant(db, {
-    granteePartyId: sweep.elsewhereAgent.partyId,
-    purposeConceptId,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes: [{ schema: ALIEN_SCHEMA, verbs: "read+act" }],
+  recordAutomationAnswers(db.vault, {
+    principalId: "sweep-elsewhere",
+    ownerPartyId: boot.ownerPartyId,
+    subjects: automationSubjectsOf([
+      { schema: ALIEN_SCHEMA, verbs: "read+act" },
+    ]),
+    decision: "granted",
+    now,
   });
 }
 

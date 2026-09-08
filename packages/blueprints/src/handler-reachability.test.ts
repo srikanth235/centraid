@@ -195,8 +195,8 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   // The phone DOES issue these eight (`apps/mobile/.../locker-writes.ts`, the
   // Backup surface included); the scan cannot see them because the names are
   // literals in the shared builders (`apps/locker/writes.ts`), where the
-  // one-computation rule wants them. No query is listed: the phone's gateway
-  // door names search, trash and access itself.
+  // one-computation rule wants them. No query is listed: the phone RUNS
+  // `queries/{items,search,trash}.ts` and its gateway door names access.
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -364,6 +364,23 @@ function hasDispatch(source: string, value: string): boolean {
   return false;
 }
 
+/**
+ * A seat that RUNS the handler module reaches it more directly than one that
+ * names it in a request: the phone imports `apps/<id>/queries/<name>` and runs
+ * it against its own replica (#922 E7), so the name is a module specifier
+ * rather than a string in a payload. Comments are stripped first — a file that
+ * merely talks about `queries/dashboard.ts` dispatches nothing.
+ */
+function runsQueryModule(source: string, appId: string, name: string): boolean {
+  const escaped = `${appId}/queries/${name}`.replace(
+    /[.*+?^${}()|[\]\\]/gu,
+    "\\$&"
+  );
+  return new RegExp(`["'][^"']*apps/${escaped}(?:\\.[jt]sx?)?["']`, "u").test(
+    withoutComments(source)
+  );
+}
+
 function handlers(manifest: AppManifest): Array<{ kind: Kind; name: string }> {
   return [
     ...(manifest.actions ?? []).map((entry) => ({
@@ -477,6 +494,11 @@ describe("manifest handler reachability", () => {
         );
       return handlers(manifest).filter(({ kind, name }) => {
         if (hasDispatch(mobileSource, name)) return false;
+        if (
+          kind === "query" &&
+          runsQueryModule(mobileSource, manifest.id, name)
+        )
+          return false;
         if (
           kind === "query" &&
           (NATIVE_QUERY_UI[manifest.id] ?? []).includes(name)

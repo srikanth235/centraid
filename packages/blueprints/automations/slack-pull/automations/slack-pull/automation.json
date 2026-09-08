@@ -16,7 +16,6 @@
     "label": "personal"
   },
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Stages recent Slack conversations into the vault review band.",
     "scopes": [
       {

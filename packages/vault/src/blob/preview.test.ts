@@ -84,7 +84,6 @@ describe("preview", () => {
     const out = gw.invoke(owner, {
       command: "media.add_asset",
       input: { staged_sha: staged.sha256 },
-      purpose: "dpv:ServiceProvision",
     });
     expect((out as { status: string }).status).toBe("executed");
     return (out as { output: { content_id: string } }).output.content_id;

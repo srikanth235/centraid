@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 // FORMAT.md restore rule 4 ("side-effect quarantine"): a vault dir adopted
 // from a backup restore carries `RESTORE_QUARANTINE.json`. Mounting it
@@ -11,6 +10,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { isLiveEgressAuthority, recordEgressAuthority } from "@centraid/vault";
 
 import { openVaultPlane } from "./vault-plane.js";
 import type { VaultPlane } from "./vault-plane.js";
@@ -82,18 +82,19 @@ describe("vault-quarantine", () => {
       throw new Error(`stage failed: ${JSON.stringify(staged)}`);
     const itemId = (staged as { output: { item_id: string } }).output.item_id;
 
-    // Simulate an owner approval + a standing grant — both live states the
-    // quarantine gesture must neutralize (park the item, revoke the grant).
-    const grantId = crypto.randomUUID();
+    // Simulate an owner approval + a standing egress answer — both live states
+    // the quarantine gesture must neutralize (park the item, end the answer).
+    const grantId = recordEgressAuthority(plane.db.vault, {
+      actorId: "owner",
+      actorKind: "owner",
+      verb: "gmail.send",
+      target: "ravi@example.com",
+      grantedBy: plane.boot.ownerPartyId,
+      now: new Date().toISOString(),
+    });
     plane.db.vault
       .prepare(
-        `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`
-      )
-      .run(grantId, new Date().toISOString());
-    plane.db.vault
-      .prepare(
-        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`
+        `UPDATE outbox_item SET status = 'approved', decided_at = ?, authority_id = ? WHERE item_id = ?`
       )
       .run(new Date().toISOString(), grantId, itemId);
     return { itemId, grantId };
@@ -134,24 +135,21 @@ describe("vault-quarantine", () => {
 
     const item = second.db.vault
       .prepare(
-        "SELECT status, grant_id, decided_at, staged_at FROM outbox_item WHERE item_id = ?"
+        "SELECT status, authority_id, decided_at, staged_at FROM outbox_item WHERE item_id = ?"
       )
       .get(itemId) as {
       status: string;
-      grant_id: string | null;
+      authority_id: string | null;
       decided_at: string | null;
       staged_at: string;
     };
     expect(item.status).toBe("pending");
-    expect(item.grant_id).toBeNull();
+    expect(item.authority_id).toBeNull();
     expect(item.decided_at).toBeNull();
     expect(item.staged_at).not.toBe(previousEpisode);
     expect(notificationsChanges).toContain(true);
 
-    const grant = second.db.vault
-      .prepare("SELECT revoked_at FROM outbox_grant WHERE grant_id = ?")
-      .get(grantId) as { revoked_at: string | null };
-    expect(grant.revoked_at).not.toBeNull();
+    expect(isLiveEgressAuthority(second.db.vault, grantId)).toBe(false);
 
     // The marker is deliberately left in place — automations were NOT
     // auto-disabled, so this vault is not fully "resolved" yet.

@@ -33,7 +33,6 @@ function rowHash(row: Record<string, unknown>): string {
 export interface ReadConditionCursorOptions {
   automationRef: string;
   trigger: ConditionTrigger;
-  purpose: string;
   vault: VaultBridge;
   positionJson?: string;
   limit: number;
@@ -64,7 +63,6 @@ export async function readConditionCursor(
     payload: {
       entity: options.trigger.entity,
       ...(options.trigger.where ? { where: options.trigger.where } : {}),
-      purpose: options.purpose,
       limit: 1000,
     },
   });
@@ -108,7 +106,6 @@ export async function readConditionCursor(
 export interface ReadDataCursorOptions {
   automationRef: string;
   trigger: DataTrigger;
-  purpose: string;
   vault: VaultBridge;
   positionJson?: string;
   limit: number;
@@ -157,7 +154,6 @@ export async function readDataCursor(
     op: "changes",
     payload: {
       entities: [...options.trigger.entities],
-      purpose: options.purpose,
       cursor,
       limit: options.limit,
     },

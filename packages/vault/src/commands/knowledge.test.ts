@@ -32,7 +32,6 @@ describe("knowledge", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 

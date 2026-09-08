@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  fieldNotOnThisDevice,
+  truncatedListNotice,
+} from "@centraid/blueprints/apps/_shared/shared-copy";
+import { UnboundedReplicaReadError } from "@centraid/client/replica/native";
 import type {
+  ReplicaInvalidation,
   ReplicaRow,
   ReplicaReadWireResult,
 } from "@centraid/client/replica/native";
 
 import { coalesceWork } from "../../lib/coalesce";
 import type { NativeReadRequest } from "../../lib/replica/native-session";
+import { postStatus } from "../components/status-line";
 import { useReplica } from "../replica/ReplicaProvider";
 import type { ReplicaContextValue } from "../replica/ReplicaProvider";
 import { replicaQueryConnection } from "./replica-query-state";
@@ -33,18 +41,72 @@ function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
     .sort((a, b) => b.localeCompare(a))[0];
 }
 
+/** Columns this device does not hold, carried on the mapped row (#922 E2). */
+export const REPLICA_OVERSIZED_FIELDS = "__oversizedFields";
+
 /**
  * Project a wire result into `{ ...values, __rowId }` rows. Pure and exported
  * so the identity-stability contract (one mapped array per underlying result,
  * memoized in the hook) is unit-testable without a renderer.
+ *
+ * Every row carries the read's ONE pending sidecar (#922 G3) — one object for
+ * the whole result, so a row a queued write projected can be read with
+ * `readPendingOverlay(row, pendingSidecarOf(row))` wherever it lands.
+ *
+ * It also carries the envelope's `oversizedFields`. Dropping them (as this did)
+ * is how a lazily-loaded column reads as `undefined` on a hook-based screen —
+ * indistinguishable from an empty value, which is the silent absence 0a exists
+ * to refuse. `replicaFieldUnavailable` turns it back into a sentence.
  */
 export function mapReplicaRows(
   result: ReplicaReadWireResult | undefined
 ): Array<ReplicaRow & { __rowId: string }> {
-  return (result?.rows ?? []).map((row) => ({
-    ...row.values,
-    __rowId: row.rowId,
-  }));
+  const sidecar = result?.pending ?? {};
+  return (result?.rows ?? []).map((row) =>
+    attachPendingSidecar(
+      {
+        ...row.values,
+        __rowId: row.rowId,
+        ...(row.oversizedFields.length > 0
+          ? { [REPLICA_OVERSIZED_FIELDS]: [...row.oversizedFields] }
+          : {}),
+      },
+      sidecar
+    )
+  );
+}
+
+/**
+ * Why a column on a mapped row is absent, or undefined when it is simply not
+ * set. A screen reading a lazy field asks this before drawing a blank.
+ */
+export function replicaFieldUnavailable(
+  row: Readonly<Record<string, unknown>> | undefined,
+  column: string
+): string | undefined {
+  const oversized = row?.[REPLICA_OVERSIZED_FIELDS];
+  return Array.isArray(oversized) && oversized.includes(column)
+    ? fieldNotOnThisDevice(column)
+    : undefined;
+}
+
+/**
+ * Does this read depend on what just changed (#922 E3)?
+ *
+ * A mounted session reports every invalidation the whole APP produced, so a
+ * screen holding eleven reads used to re-run all eleven when one entity moved
+ * — the phone's own read amplification, paid once per invalidation batch. A
+ * read depends on its own entity and on nothing else; a purge is the exception
+ * because it removes the plane every read stands on.
+ */
+export function readDependsOn(
+  request: NativeReadRequest,
+  invalidations: readonly ReplicaInvalidation[]
+): boolean {
+  return invalidations.some(
+    (invalidation) =>
+      invalidation.source === "purge" || invalidation.entity === request.entity
+  );
 }
 
 export function useReplicaQuery(
@@ -67,10 +129,29 @@ export function useReplicaQuery(
     };
   }, []);
 
+  // THE PHONE'S BOUNDARY (#922 0a). A screen that declares no window and does
+  // not accept the default one is refused before the read runs: a page silently
+  // capped at 1,000 renders a roster the member believes is complete. The
+  // refusal is state, not a crash — this hook's consumers already render
+  // `error`, and a thrown exception here would blank the screen instead of
+  // naming the entity and the fix.
+  const refusal = useMemo(
+    () =>
+      request.limit === undefined && request.acceptTruncation !== true
+        ? new UnboundedReplicaReadError(request.entity)
+        : undefined,
+    [request]
+  );
+
   const refresh = useCallback(async () => {
     // Nothing to read without a session; `loading` is derived from the session's
     // presence below, so there is no state to settle here either.
     if (!session) return;
+    if (refusal) {
+      setError(refusal.message);
+      setLoading(false);
+      return;
+    }
     const ticket = (sequence.current += 1);
     const current = (): boolean =>
       mounted.current && ticket === sequence.current;
@@ -79,6 +160,11 @@ export function useReplicaQuery(
       if (!current()) return;
       setResult(next);
       setError(undefined);
+      // The one status line both seats own carries the truncation; a member
+      // never counts a capped list and believes it is the whole set.
+      if (next.truncated && next.appliedLimit !== undefined) {
+        postStatus(truncatedListNotice(next.appliedLimit));
+      }
     } catch (caughtError) {
       if (!current()) return;
       setError(
@@ -87,7 +173,7 @@ export function useReplicaQuery(
     } finally {
       if (current()) setLoading(false);
     }
-  }, [appId, request, session]);
+  }, [appId, refusal, request, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -99,12 +185,15 @@ export function useReplicaQuery(
     // as many re-renders; the burst says nothing an individual signal doesn't,
     // so it collapses into one read after the batch settles.
     const coalesced = coalesceWork(refresh, REPLICA_INVALIDATION_WINDOW_MS);
-    const unsubscribe = session.subscribe(appId, coalesced.signal);
+    // One entity change re-runs only the reads that depend on it (#922 E3).
+    const unsubscribe = session.subscribe(appId, (invalidations) => {
+      if (readDependsOn(request, invalidations)) coalesced.signal();
+    });
     return () => {
       coalesced.cancel();
       unsubscribe();
     };
-  }, [appId, refresh, session]);
+  }, [appId, refresh, request, session]);
 
   // Map once per underlying result — a fresh array identity every render would
   // defeat every downstream memo (a 50k merge/re-sort on each selection tap).
@@ -120,6 +209,8 @@ export function useReplicaQuery(
   // Dropping it (as this hook did) is how an offline relaunch mid-backfill
   // rendered a truncated library that claimed to be the whole thing.
   const coverage = result?.coverage ?? replica.coverage;
+  const truncated = result?.truncated === true;
+  const appliedLimit = result?.appliedLimit;
 
   return {
     rows,
@@ -128,6 +219,13 @@ export function useReplicaQuery(
     ...(!session && replica.error ? { unavailableReason: replica.error } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),
     ...(coverage ? { coverage } : {}),
+    // Structural for a list that wants to render the fact itself (E6), worded
+    // once so no screen can phrase it differently.
+    ...(truncated ? { truncated } : {}),
+    ...(appliedLimit === undefined ? {} : { appliedLimit }),
+    ...(truncated && appliedLimit !== undefined
+      ? { truncationNotice: truncatedListNotice(appliedLimit) }
+      : {}),
     ...(error ? { error } : {}),
     refresh,
   };

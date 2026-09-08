@@ -20,12 +20,16 @@ import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
  * a live answer whose audience no longer exists, which is exactly what the
  * trigger says must not happen.
  *
- * The two kinds NOT here are not rows: a `harness` principal is an engine
- * class (its ids are a closed vocabulary, see the CHECK below), and a `device`
+ * The three kinds NOT here are not rows: a `harness` principal is an engine
+ * class (its ids are a closed vocabulary, see the CHECK below), a `device`
  * lives in the access plane, which is machinery rather than an ontology pack
- * and so has no `core_entity` row to purge. `authority-principals.test.ts`
- * holds the CHECK's vocabulary to being exactly this map plus those two, so a
- * fifth principal kind cannot be added without answering the question.
+ * and so has no `core_entity` row to purge, and an `automation` is named by
+ * its MANIFEST REF (`<app_id>/<automation_id>`, `automation/manifest/ref.ts`)
+ * — a compiled manifest, not a row of any table in this file; the closest
+ * thing it has to storage is `automation_state`, keyed by that same ref with
+ * no foreign key. `ontology-shape.test.ts` holds the CHECK's vocabulary to
+ * being exactly this map plus that set, so a further principal kind cannot be
+ * added without answering the question.
  */
 export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
   ["person", "core.party"],
@@ -36,13 +40,67 @@ export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
 export const NON_ENTITY_PRINCIPAL_KINDS: ReadonlySet<string> = new Set([
   "harness",
   "device",
+  "automation",
 ]);
+
+// Ask + last-used sidecars of the authority plane (#928). `CREATE TABLE IF NOT
+// EXISTS` so a file that already has them (rung 1, or a later climb) can take
+// the same text as a new rung without failing. Rung 5 re-runs this because
+// SHARE_AUTHORITY_DDL is composed into the baseline, and a file that has
+// climbed a rung never climbs it again.
+export const SHARE_AUTHORITY_ASK_DDL = `
+-- WHAT HAS NOT BEEN PUT TO THE MEMBER YET (#308 A4, re-homed by #928). An
+-- automation whose published manifest asks for more than the member ever
+-- answered parks here instead of auto-granting: automations author their own
+-- manifests, so "install was the answer" must not be bypassable by the actor
+-- the answer contains. Deliberately NOT a \`share_authority\` row — that table
+-- records what the member SAID, and a parked ask is not an answer.
+--
+-- One open ask per automation; a re-publish replaces its scope set; deciding
+-- it stamps \`decided_at\` and writes the real answer next door.
+CREATE TABLE IF NOT EXISTS share_authority_request (
+  request_id   TEXT PRIMARY KEY,
+  -- The automation's own id (its enrolment key), the same principal id
+  -- \`share_authority.principal_id\` carries for an 'automation' row.
+  principal_id TEXT NOT NULL,
+  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
+  requested_at TEXT NOT NULL,
+  decided_at   TEXT,
+  decision     TEXT CHECK (decision IN ('approved','denied'))
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS share_authority_request_open
+  ON share_authority_request(principal_id) WHERE decided_at IS NULL;
+
+-- WHEN AN ANSWER WAS LAST USED (#928). A row of its OWN, deliberately not a
+-- column on \`share_authority\`: that row is the member's answer and is
+-- immutable except for \`revoked_at\`, so stamping a timestamp on it on every
+-- use would rewrite the answer — and push a replica change — every time an
+-- automation read anything. One row per authority, upserted beside the receipt
+-- that cites it, so the cost is O(1) per receipt and there is no history to
+-- grow. Absent row = never used, which is what the Access dashboard draws.
+-- \`authority_id\` carries NO foreign key, for the same reason
+-- \`share_authority.receipt_id\` carries none: this row is derived from the
+-- AUDIT BAND, whose \`authority_id\` is a value rather than a key (#916), and
+-- the commons rail receipts acts under authority ids that are not rows of this
+-- table at all. A key here would turn "an act was receipted" into "the act is
+-- refused", which is the wrong direction for evidence.
+CREATE TABLE IF NOT EXISTS share_authority_use (
+  authority_id TEXT PRIMARY KEY,
+  last_used_at TEXT NOT NULL
+) STRICT;
+`;
 
 export const SHARE_AUTHORITY_DDL = `
 CREATE TABLE share_authority (
   authority_id   TEXT PRIMARY KEY,
+  -- 'automation' is ACCEPTED here with no writer yet: #928 wave 3 writes it,
+  -- when an automation's compiled manifest mints one row per (pack or entity
+  -- x read|act) and the owner's refusals become 'declined' rows. Accepting it
+  -- a wave early is what lets that wave land without a schema change. The
+  -- 'app' kind is deliberately NOT here — first-party apps are not principals
+  -- (#928 A1), and a third-party door would be a new answer, not a new value.
   principal_kind TEXT NOT NULL CHECK (principal_kind IN
-    ('person','circle','harness','device')),
+    ('person','circle','harness','device','automation')),
   principal_id   TEXT NOT NULL,
   subject_type   TEXT NOT NULL,
   -- '' where the subject is the whole of something the principal is already
@@ -79,6 +137,9 @@ CREATE TABLE share_authority (
   -- never a second copy of it.
   receipt_id     TEXT,
   CHECK ((duration = 'until-date') = (expires_at IS NOT NULL)),
+  -- 'automation' is deliberately NOT exempted: the owner APPROVES an
+  -- automation's manifest, so there is always a party who answered, and a row
+  -- minted without one would be an automation that granted itself (#928 A3).
   CHECK (granted_by IS NOT NULL OR principal_kind IN ('harness','device')),
   -- The one principal whose id is a closed vocabulary rather than a row id:
   -- a harness principal is an ENGINE CLASS, and an egress class outside the
@@ -107,6 +168,8 @@ CREATE INDEX IF NOT EXISTS share_authority_principal
   ON share_authority(principal_kind, principal_id);
 CREATE INDEX IF NOT EXISTS share_authority_granted_by
   ON share_authority(granted_by);
+
+${SHARE_AUTHORITY_ASK_DDL}
 
 -- Per-grant DELIVERY-strategy configuration, keyed by the authority row it
 -- serves (ruling V-delivery: \`max_size_bytes\` belongs to delivery-strategy
@@ -147,4 +210,33 @@ CREATE TABLE share_fulfillment (
   PRIMARY KEY (grant_id, peer_vault_id)
 ) STRICT;
 ${touchUpdatedAt("share_fulfillment", ["grant_id", "peer_vault_id"])}
+`;
+
+/**
+ * `share_delivery_config` RE-CUT with the rail's second half (#929, rung three).
+ *
+ * A grant's delivery config now carries `departure_policy` beside its ceiling:
+ * what a departing audience leaves behind in the REMAINING audiences'
+ * projections — `remove-member-only` scrubs their rows, `retain-ledger-history`
+ * keeps them so an accounting group's balances stay computable (SECURITY.md
+ * § departure). It is the commons rail's own column, carried across by
+ * `migrateCommonsToSubscriptions` before the rail is dropped.
+ *
+ * A RE-CUT, not an `ALTER … ADD COLUMN`: SQLite appends an added column to the
+ * table's STORED text, so a migrated file would carry DDL no fresh build can
+ * produce, and `golden-vault.test.ts` compares exactly that. Rebuilding the
+ * table leaves one text for both.
+ */
+export const SHARE_DELIVERY_CONFIG_RECUT_DDL = `
+ALTER TABLE share_delivery_config RENAME TO share_delivery_config_pre929;
+CREATE TABLE share_delivery_config (
+  grant_id         TEXT PRIMARY KEY
+    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
+  max_size_bytes   INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0),
+  departure_policy TEXT NOT NULL DEFAULT 'remove-member-only'
+    CHECK (departure_policy IN ('remove-member-only','retain-ledger-history'))
+) STRICT;
+INSERT INTO share_delivery_config (grant_id, max_size_bytes)
+  SELECT grant_id, max_size_bytes FROM share_delivery_config_pre929;
+DROP TABLE share_delivery_config_pre929;
 `;
