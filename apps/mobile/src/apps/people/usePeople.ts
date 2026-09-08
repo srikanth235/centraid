@@ -9,11 +9,9 @@ import { useMemo } from "react";
 
 import type { DashboardData } from "@centraid/blueprints/apps/people/types";
 
-import {
-  combineReplicaQueryStates,
-  useReplicaQuery,
-} from "../../kit/hooks/useReplicaQuery";
+import { combineReplicaQueryStates } from "../../kit/hooks/useReplicaQuery";
 import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import { useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
 import {
   projectDashboard,
@@ -26,9 +24,28 @@ import type {
   RosterProjection,
   Row,
 } from "./people-model";
+import {
+  activityLinksTo,
+  annotationsOn,
+  datesFor,
+  PEOPLE_ACTIVITIES,
+  PEOPLE_BINDINGS,
+  PEOPLE_CHANNELS,
+  PEOPLE_CONCEPTS,
+  PEOPLE_DATES,
+  PEOPLE_PARTIES,
+  PEOPLE_PARTY_TAGS,
+  PEOPLE_PROFILES,
+  PEOPLE_SCHEMES,
+} from "./people-queries";
 import { projectShareLinks } from "./people-share-model";
 
 const APP = "people";
+
+/** The year-3 window, named once for every read on this screen. */
+function window(entity: string, rowIdColumn: string) {
+  return { entity, rowIdColumn, limit: MOBILE_ENTITY_READ_WINDOW };
+}
 
 /** Share rows, or null while unanswered — loading and denial draw ABSENT, never "nobody". */
 function shareRows(state: ReplicaQueryState): Row[] | null {
@@ -50,117 +67,61 @@ export interface PeopleData extends RosterProjection {
 /** Roster window, trash shelf, keep-in-touch and note search in one hook:
  * one screen, shared underlying reads. */
 export function usePeople(): PeopleData {
-  const profiles = useReplicaQuery(
+  const profiles = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "people.profile" }),
-      []
-    )
+    PEOPLE_PROFILES,
+    window("people.profile", "profile_id")
   );
-  const parties = useReplicaQuery(
+  const parties = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.party" }),
-      []
-    )
+    PEOPLE_PARTIES,
+    window("core.party", "party_id")
   );
-  const tags = useReplicaQuery(
+  const tags = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq" as const, value: "core.party" },
-        ],
-      }),
-      []
-    )
+    PEOPLE_PARTY_TAGS,
+    window("core.tag", "tag_id")
   );
-  const concepts = useReplicaQuery(
+  const concepts = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.concept" }),
-      []
-    )
+    PEOPLE_CONCEPTS,
+    window("core.concept", "concept_id")
   );
-  const schemes = useReplicaQuery(
+  const schemes = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "core.concept_scheme",
-      }),
-      []
-    )
+    PEOPLE_SCHEMES,
+    window("core.concept_scheme", "scheme_id")
   );
-  const dates = useReplicaQuery(
+  const dates = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "people.important_date",
-      }),
-      []
-    )
+    PEOPLE_DATES,
+    window("people.important_date", "date_id")
   );
-  const partyNotes = useReplicaQuery(
+  const partyNotes = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "knowledge.annotation",
-        where: [
-          { column: "target_type", op: "eq" as const, value: "core.party" },
-        ],
-      }),
-      []
-    )
+    useMemo(() => annotationsOn("core.party"), []),
+    window("knowledge.annotation", "annotation_id")
   );
-  const activityLinks = useReplicaQuery(
+  const activityLinks = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "core.link",
-        where: [
-          { column: "from_type", op: "eq" as const, value: "core.activity" },
-          { column: "to_type", op: "eq" as const, value: "core.party" },
-        ],
-      }),
-      []
-    )
+    useMemo(() => activityLinksTo(), []),
+    window("core.link", "link_id")
   );
-  const activities = useReplicaQuery(
+  const activities = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.activity" }),
-      []
-    )
+    PEOPLE_ACTIVITIES,
+    window("core.activity", "activity_id")
   );
-  const activityNotes = useReplicaQuery(
+  const activityNotes = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "knowledge.annotation",
-        where: [
-          { column: "target_type", op: "eq" as const, value: "core.activity" },
-        ],
-      }),
-      []
-    )
+    useMemo(() => annotationsOn("core.activity"), []),
+    window("knowledge.annotation", "annotation_id")
   );
   // The one share read the roster needs. NOT in the combined state below.
-  const bindings = useReplicaQuery(
+  const bindings = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "share.party_vault_binding",
-      }),
-      []
-    )
+    PEOPLE_BINDINGS,
+    window("share.party_vault_binding", "binding_id")
   );
 
   const queryState = combineReplicaQueryStates([
@@ -260,103 +221,54 @@ export interface PersonData {
  * cadence, plus per-person tables. */
 export function usePerson(partyId: string): PersonData {
   const people = usePeople();
-  const channels = useReplicaQuery(
+  const channels = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "social.contact_channel",
-      }),
-      []
-    )
+    PEOPLE_CHANNELS,
+    window("social.contact_channel", "channel_id")
   );
-  const partyNotes = useReplicaQuery(
+  const partyNotes = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "knowledge.annotation",
-        where: [
-          { column: "target_type", op: "eq" as const, value: "core.party" },
-          { column: "target_id", op: "eq" as const, value: partyId },
-        ],
-      }),
-      [partyId]
-    )
+    useMemo(() => annotationsOn("core.party", partyId), [partyId]),
+    window("knowledge.annotation", "annotation_id")
   );
-  const activityLinks = useReplicaQuery(
+  const activityLinks = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "core.link",
-        where: [
-          { column: "from_type", op: "eq" as const, value: "core.activity" },
-          { column: "to_type", op: "eq" as const, value: "core.party" },
-          { column: "to_id", op: "eq" as const, value: partyId },
-        ],
-      }),
-      [partyId]
-    )
+    useMemo(() => activityLinksTo(partyId), [partyId]),
+    window("core.link", "link_id")
   );
-  const activities = useReplicaQuery(
+  const activities = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.activity" }),
-      []
-    )
+    PEOPLE_ACTIVITIES,
+    window("core.activity", "activity_id")
   );
-  const activityNotes = useReplicaQuery(
+  const activityNotes = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "knowledge.annotation",
-        where: [
-          { column: "target_type", op: "eq" as const, value: "core.activity" },
-        ],
-      }),
-      []
-    )
+    useMemo(() => annotationsOn("core.activity"), []),
+    window("knowledge.annotation", "annotation_id")
   );
-  const concepts = useReplicaQuery(
+  const concepts = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.concept" }),
-      []
-    )
+    PEOPLE_CONCEPTS,
+    window("core.concept", "concept_id")
   );
-  const parties = useReplicaQuery(
+  const parties = useSeatWindow(
     APP,
-    useMemo(
-      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.party" }),
-      []
-    )
+    PEOPLE_PARTIES,
+    window("core.party", "party_id")
   );
-  const dates = useReplicaQuery(
+  const dates = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "people.important_date",
-        where: [{ column: "party_id", op: "eq" as const, value: partyId }],
-      }),
-      [partyId]
-    )
+    useMemo(() => datesFor(partyId), [partyId]),
+    window("people.important_date", "date_id")
   );
 
   // Sharing plane tables: each degrades alone; `projectShareLinks` nulls when
   // either is missing. No commons-grant join (#825); standing grants read
   // live in `PersonGrants.tsx`.
-  const bindings = useReplicaQuery(
+  const bindings = useSeatWindow(
     APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "share.party_vault_binding",
-      }),
-      []
-    )
+    PEOPLE_BINDINGS,
+    window("share.party_vault_binding", "binding_id")
   );
   const queryState = combineReplicaQueryStates([
     channels,

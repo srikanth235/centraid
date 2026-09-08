@@ -59,18 +59,22 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   })),
 }));
 
-vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
+// The seat's windows (#996 wave 5): every People read is a statement now, and
+// the seam keys on the entity the read DECLARES rather than on the request.
+vi.mock(import("../../kit/hooks/useSeatPages"), async (importOriginal) => {
   const actual = await importOriginal();
-  return {
-    ...actual,
-    useReplicaQuery: (_appId: string, request: { entity?: string }) => ({
-      connection: "current" as const,
-      error: undefined,
-      loading: false,
-      refresh: async () => undefined,
-      rows: replicaRows.byEntity.get(request.entity ?? "") ?? [],
-    }),
-  };
+  const state = (
+    _appId: string,
+    _query: unknown,
+    options: { entity?: string }
+  ) => ({
+    connection: "current" as const,
+    error: undefined,
+    loading: false,
+    refresh: async () => undefined,
+    rows: replicaRows.byEntity.get(options.entity ?? "") ?? [],
+  });
+  return { ...actual, useSeatPages: state, useSeatWindow: state };
 });
 
 /** A profile and the party row the roster projection reads its name from. */

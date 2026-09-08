@@ -8369,3 +8369,60 @@ the same fact in the place the seat hook carries it.
   joins members to memories in JavaScript; a window on either side produces a
   memory that is silently short, which is the failure `acceptTruncation` used
   to produce and the reason it went.
+
+## Wave 5g — People's twenty reads (#996)
+
+### One module of statements, and the narrowing that was never in the SQL
+
+`people-queries.ts` holds all eleven shapes the roster, the dashboard and one
+person in full are made of. Two of them were doing work the old plane could not
+express and the screen paid for afterwards:
+
+- `usePerson`'s activity edges asked for EVERY activity→party link in the
+  household and filtered to one party in JavaScript. The statement narrows on
+  `to_id` — the whole point of a per-person read is that it costs that person's
+  edges.
+- The same for that person's notes (`target_id = ?`) and important dates
+  (`party_id = ?`).
+
+### The year-3 window stays, and it is a window
+
+These are pages, not walks: a roster is a set a member scrolls, and
+`MOBILE_ENTITY_READ_WINDOW` is the phone's declared ceiling on how much of a
+household it draws at once. What changes is that `useSeatWindow` reports
+`truncated` from the page's own cursor, so a household past the window says so
+instead of handing back a short list that reads as complete.
+
+Every statement orders on its PRIMARY KEY, because `people-model.ts` folds and
+re-sorts all eleven sets against each other; a sort column nobody reads would
+only be an index to keep in step.
+
+### Census floor: 4
+
+Twenty reads left. `PeopleHome.test.tsx`'s seam keys on the entity each read
+DECLARES, which is the same fact in the place the seat hook carries it.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,442 tests, 0 failed.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/apps/people/people-queries.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/people/PeopleHome.test.tsx`
+- `apps/mobile/src/apps/people/usePeople.ts`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the per-person read
+
+- **A filter the screen applies afterwards belongs in the statement.** The old
+  plane could express it and did not; a per-person screen that reads the
+  household's edges is a per-person screen in name only.
