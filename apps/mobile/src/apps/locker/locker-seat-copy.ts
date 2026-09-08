@@ -25,10 +25,6 @@ export const DEVICE_FORGET = "Forget this vault's key";
 export const DEVICE_NOTE =
   "This phone holds this vault's key behind Face ID, Touch ID or your passcode · secrets are opened here, never on the gateway.";
 
-/** The enrolment offer, on the list, once a session is open — enrolling needs
- *  one, so the offer cannot stand on the lock wall that asks for it. */
-export const DEVICE_OFFER = "This phone can hold a device credential.";
-
 /** The switcher mask. A hidden window ends the session at once; this is what
  *  the OS screenshots instead of a list of titles. */
 export const MASKED_LABEL = "Locker is hidden while Centraid is away";

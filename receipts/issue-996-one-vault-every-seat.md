@@ -8692,3 +8692,21 @@ the ONT-ladder reading `CONTENT_TEXT_DDL` already stands under, and
   was predicted.
 - **A duplicated tiebreaker is a statement-builder bug, not an index gap.** No
   index can remove `ORDER BY id, id`; stating the column once does.
+
+## Wave 5k — `DEVICE_OFFER` was dead copy (#996)
+
+`bun run knip` has reported one unused export since `4a7d70229`:
+`DEVICE_OFFER` in `apps/mobile/src/apps/locker/locker-seat-copy.ts`. Measured
+rather than assumed — `grep -rn DEVICE_OFFER` over every `.ts`/`.tsx` in the
+repo finds the declaration and nothing else. No screen, no test and no snapshot
+reads it, so it is a sentence the product does not say. Deleted.
+
+`bun run knip` — **exit 0**, no unused exports.
+`bun run --cwd apps/mobile test locker` — 17 files, 126 tests, 0 failed.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/apps/locker/locker-seat-copy.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
