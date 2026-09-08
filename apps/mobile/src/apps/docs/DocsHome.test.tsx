@@ -60,19 +60,23 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
 
 // The device database seam. `useDocs`, `applyFilters`, `sortDocuments` and
 // every copy table above them stay real.
-vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    useReplicaQuery: (_appId: string, request: { entity?: string }) => ({
-      connection: "current" as const,
-      error: undefined,
-      loading: false,
-      refresh: async () => undefined,
-      rows: replicaRows.byEntity.get(request.entity ?? "") ?? [],
-    }),
-  };
-});
+//
+// The seam moved with the reads (#996 wave 4b): a Docs read is a page over the
+// seat's own file now, so what is substituted is the walk, still keyed by the
+// entity the read declares. The rows a screen sees are unchanged.
+vi.mock(import("../../kit/hooks/useSeatPages"), () => ({
+  useSeatPages: (
+    _appId: string,
+    _query: unknown,
+    options: { entity: string }
+  ) => ({
+    connection: "current" as const,
+    error: undefined,
+    loading: false,
+    refresh: async () => undefined,
+    rows: replicaRows.byEntity.get(options.entity) ?? [],
+  }),
+}));
 
 /** A document plus the content row the drive projection joins it to. */
 function seedDocuments(rows: readonly { id: string; title: string }[]): void {

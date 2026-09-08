@@ -7190,3 +7190,76 @@ it implicitly.
   that declared truncation were all whole sets; each states its ceiling now.
 - **A missing copy is a stated connection, not an empty list.** The phone
   answers the same way the browser that holds no file does.
+
+## Wave 4l — Docs: the drive's fifteen reads, and a chain that stops reading the library (#996)
+
+### The drive
+
+`docs-queries.ts` holds the fifteen statements `useDocs` used to make as
+fifteen `acceptTruncation: true` entity requests. A drive of 1,200 documents
+rendered 1,000 of them and said nothing.
+
+Three of the fifteen are the interesting ones. Content items, representations
+and custody rows are the drive's DECORATION of the documents it is showing;
+read whole they are the entire library of bytes, most of which no document on
+the screen names. They are bounded by
+`content_id IN (SELECT current_content_id FROM core_document …)` — a subquery
+rather than a JOIN, because the keyset compares the ORDER BY's own two columns
+BY NAME, and a join that has to alias `created_at` past a collision is a keyset
+predicate that no longer says what it seems to.
+
+`share_fulfillment`, `share_subscription`, `share_subscription_lineage` and
+`share_party_vault_binding` have composite or absent single-column keys. The
+keyset needs a unique `(sort, pk)` pair, so for those the two columns the ORDER
+BY names ARE the key rather than one of them plus a tiebreak that does not
+break the tie.
+
+### The version chain
+
+Four reads over four whole tables to answer one document's history: every
+document in the vault to find one, every revision of every entity to walk one
+chain, and the entire library of bytes to size a handful. They are the
+document's own rows now — the document by `document_id`, its occurrences by
+`entity_id`, and the bytes and their representations by `inList` over the
+content ids those occurrences actually name. `snapshot_json` is no longer
+selected: the chain reads the occurrence's edges and its instant, and that
+column is the whole row it was written from.
+
+`inList` refuses an empty set, so the two content reads are ABSENT until the
+chain has ids — a read that has not been made, which the hook holds as loading
+rather than as an empty answer.
+
+| handler | table | bounded by |
+| --- | --- | --- |
+| `phone.docs.version-document` | `core_document` | `document_id = ?` |
+| `phone.docs.version-revisions` | `core_entity_revision` | `entity_type, entity_id` |
+| `phone.docs.version-contents` | `core_content_item` | the chain's content ids |
+| `phone.docs.version-representations` | `core_content_representation` | the chain's content ids |
+
+### Gates
+
+- `bunx vitest run apps/mobile/src/apps/docs` — 14 files, 126 passed.
+- `bun run --cwd apps/mobile test` — 286 passed / 3 failed (10 tests), the same
+  three inherited at `d0064644e`; no new failure.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/apps/docs/docs-queries.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/docs/DocsHome.test.tsx`
+- `apps/mobile/src/apps/docs/useDocs.ts`
+- `apps/mobile/src/apps/docs/useVersionChain.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — Docs on pages
+
+- **A decoration read is bounded by what it decorates.** Bytes, representations
+  and custody rows follow the drive's documents, never the library.
+- **A composite key orders on itself.** Where there is no single-column id, the
+  ORDER BY's two columns are the key.
