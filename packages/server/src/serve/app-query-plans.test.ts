@@ -222,7 +222,7 @@ describe("every app handler's query plan, committed (#996 R8)", () => {
   });
 
   test.each(APP_IDS.map((appId) => [appId] as const))(
-    "%s reads no table its manifest does not declare",
+    "%s reads no table its manifest does not declare [law:app-entity-tripwire]",
     (appId) => {
       const scopes = manifestOf(appId).vault.scopes;
       const undeclared = [

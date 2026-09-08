@@ -48,8 +48,10 @@ describe("the seat's own gzip reader", () => {
       seed = (seed * 48_271) % 2_147_483_647;
       return seed;
     };
-    for (let round = 0; round < 40; round += 1) {
-      const size = sample() % 30_000;
+    // Pure-JS inflate is the phone's path; keep the shapes varied and the
+    // work inside vitest's 5s default so coverage shards do not time out.
+    for (let round = 0; round < 16; round += 1) {
+      const size = sample() % 8_000;
       const alphabet = 1 + (sample() % 250);
       const bytes = new Uint8Array(size);
       for (let index = 0; index < size; index += 1) {

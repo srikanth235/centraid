@@ -59,7 +59,7 @@ export function permitGateTitle(fieldLabel: string): string {
 
 /** The lock screen's sentence about what a session is, and where it is opened. */
 export const LOCK_BODY =
-  "Unlock Locker in Centraid to read a secret here. Five minutes of inactivity, hidden windows and a restart all end a session.";
+  "Unlock Locker here to read a secret; inactivity, hidden windows and a restart all end the session.";
 
 /** A host with no Locker door at all — an older shell, or a surface that
  *  cannot unseal locally. A different fact from "locked", and only one of the

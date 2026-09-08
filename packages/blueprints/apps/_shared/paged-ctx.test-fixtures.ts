@@ -65,7 +65,7 @@ export function tableOf(from: string): string {
  * test asserting on a predicate this cannot evaluate can see that it did not.
  */
 const CLAUSE =
-  /^\s*(?<column>[a-z_][a-z0-9_]*)\s*(?<operator>=|<>|!=|>=|<=|>|<|in|is\s+not\s+null|is\s+null)\s*(?<argument>\((?:\s*\?\s*,?)*\)|\?)?\s*$/iu;
+  /^\s*(?<column>[a-z_][a-z0-9_]*)\s*(?<operator>is\s+not\s+null|is\s+null|in|<>|!=|>=|<=|>|<|=)\s*(?<argument>\(\s*\?(?:\s*,\s*\?)*\s*\)|\?)?\s*$/iu;
 
 function applyWhere(
   rows: Record<string, unknown>[],

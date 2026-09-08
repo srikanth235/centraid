@@ -58,7 +58,14 @@ describe("the base versions a seat captures", () => {
         upsert("schedule.task", "t1"),
         upsert("schedule.task", "t2"),
       ]);
-      expect(captured.map((v) => [v.rowId, v.version]).sort()).toStrictEqual([
+      expect(
+        captured
+          .map((v) => [v.rowId, v.version] as const)
+          .toSorted(
+            (left, right) =>
+              left[0].localeCompare(right[0]) || left[1] - right[1]
+          )
+      ).toStrictEqual([
         ["t1", 4],
         ["t2", 9],
       ]);

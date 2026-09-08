@@ -27,6 +27,8 @@
 
 import type { PageQuery } from "@centraid/core/page";
 
+export { DOCS_CUSTODY } from "../../kit/storage/custody-pages";
+
 /** The bytes some document on this drive currently reads as its own. */
 const CURRENT_DOCUMENT_BYTES = (column: string): string =>
   `${column} IN (SELECT current_content_id FROM core_document
@@ -65,18 +67,6 @@ export const DOCS_REPRESENTATIONS: PageQuery = {
   order: {
     sortColumn: "content_id",
     pkColumn: "representation_id",
-    descending: false,
-  },
-};
-
-export const DOCS_CUSTODY: PageQuery = {
-  name: "phone.docs.custody",
-  select: "content_id, sha256, custody_state, checked_at",
-  from: "blob_custody_state",
-  where: CURRENT_DOCUMENT_BYTES("content_id"),
-  order: {
-    sortColumn: "content_id",
-    pkColumn: "content_id",
     descending: false,
   },
 };

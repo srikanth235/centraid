@@ -197,7 +197,7 @@ describe("embedded-gateway-layout scenarios", () => {
         ).toStrictEqual(["Personal"]);
 
         const bootstrap = await fetch(
-          `${gateway.url}/centraid/_vault/replica/bootstrap?window=100`,
+          `${gateway.url}/centraid/_vault/seat/snapshot`,
           { headers: { Authorization: "Bearer desktop-autofound-token" } }
         );
         const bootstrapBody = await bootstrap.text();
