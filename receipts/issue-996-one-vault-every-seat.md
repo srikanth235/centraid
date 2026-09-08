@@ -7546,3 +7546,51 @@ Photos change and was repaired rather than loosened.
 - **A register entry states why a string is in it.** A filter value that reads
   like a reference is named as one, or the register becomes the hiding place it
   exists to prevent.
+
+## Wave 4p — the phone's shipped bytes, measured on both sides of this lane (#996)
+
+`bun run --cwd apps/mobile ci:bundle` then `bun run perf:app-weight -- --surface
+mobile`, on this Linux worktree, at the lane's start and at its head:
+
+| tree | iOS largest chunk | Android largest chunk |
+| --- | --- | --- |
+| `d0064644e` (this lane's start) | 8,326,559 B | 8,354,352 B |
+| `3a8d8ee95` (this lane's head) | 8,338,619 B | 8,366,810 B |
+| ceiling (`mobile/app-weight/build-artifact/any`) | 8,220,000 B | 8,220,000 B |
+
+**Both trees are over, and the overage is inherited**: the branch head was
+already 106,559 B (iOS) / 134,352 B (Android) past the ceiling before this lane
+opened. This lane's five commits add 12,060 B (iOS) and 12,458 B (Android).
+
+The import that carries them is
+`@centraid/blueprints/apps/_shared/paged-reads` — `readPages`, `inList` and the
+fan-out bound, which the phone had no need of until its screen reads became
+walks. The rest is the statements themselves: `useSeatPages.ts`,
+`docs-queries.ts`, `notes-queries.ts`, `capture-queries.ts` and the query
+constants inside the four Photos screens, which are SQL text where the deleted
+`useMemo` request objects were.
+
+**The ceiling is not raised.** The journeys entry records 0.6% headroom against
+CI's own artifact (8,168,314 B observed 2026-09-05, before waves 3 and 4b landed
+on the phone at all), and this host's export is not CI's — the same entry
+records a darwin export differing from CI's by 1.8 MB in the other direction.
+What is over on this host may or may not be over on the CI artifact the
+consumer weighs; that is the number the umbrella must close on, and it has not
+been taken since 2026-09-05. **This is an open item for the umbrella, with a
+lane-attributable delta of 12 KB.**
+
+### Gates at the lane's head
+
+- `bun run typecheck` — 25/25.
+- `bun run governance < /dev/null` — 21 passed, 1 failed: `bcf17bd3f`, the known
+  inherited violation the brief names.
+- `bun run knip` — 1 unused export, `DEVICE_OFFER` in
+  `apps/mobile/src/apps/locker/locker-seat-copy.ts`, inherited from `4a7d70229`
+  (wave 6's lane) and untouched here.
+- `bun run check:push:static` — 4/4 on every committed tree.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `receipts/issue-996-one-vault-every-seat.md`
