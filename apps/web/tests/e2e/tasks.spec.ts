@@ -366,6 +366,19 @@ test("Tasks hides a queued delete and shows a minted pending add", async ({
       { timeout: 60_000 }
     )
     .toBe(true);
+  // THE TASK MUST HAVE SETTLED before the seat goes offline. A delete whose
+  // creation is still in the outbox is a HELD DEPENDENT (R23) — correctly so,
+  // and not what this test is about, which is a LANDED task deleted offline.
+  await expect
+    .poll(
+      async () =>
+        (await page
+          .locator("[data-task-id]:not([data-pending='true'])")
+          .filter({ hasText: DELETE_TITLE })
+          .count()) > 0,
+      { timeout: 60_000 }
+    )
+    .toBe(true);
   const landedId = await landed.first().getAttribute("data-task-id");
   expect(typeof landedId).toBe("string");
   if (typeof landedId !== "string") throw new Error("landed task has no id");

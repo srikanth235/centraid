@@ -8118,6 +8118,43 @@ the phone's bundle because forty-four screen reads still call it:
 source that the seat store has replaced and nothing but those forty-four reads
 still needs. Its shipped byte cost cannot be attributed exactly until it is
 removed, which is the deletion this wave exists to make possible.
+## Wave 4t — `tasks.spec.ts:325` measured after W4-D3, and what is left in it (#996)
+
+`PATH=…/v24.4.1/bin CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e --
+tasks.spec.ts` on this tree: **2 passed, 1 failed**, and the failure has moved
+twice.
+
+- At the lane's head it failed at its FIRST assertion — a task added with no
+  date from the Today shelf appeared on no shelf. W4-D3 answers that: both adds
+  now go through the shelf's own capture, the task is stamped due today, and
+  the board draws it (`Today 4`, the row `Queued delete target · today` in the
+  page snapshot).
+- It then failed waiting for the queued DELETE to take the row off the board.
+  One cause was the spec's own: the delete was issued while the creation could
+  still be in the outbox, and a delete whose creation has not settled is a HELD
+  DEPENDENT (R23) — correct, and not what this test is about. The spec now
+  waits for a SETTLED row (`[data-task-id]:not([data-pending='true'])`) before
+  going offline.
+- It still fails there, and this is a finding, not a shelf question:
+  **a delete queued on an offline seat leaves the row on the board wearing no
+  badge.** The page snapshot after 60s shows the row present with no
+  `data-pending`, so the destructive projection (#922 G1 — "a landed task
+  deleted while the gateway is down must LEAVE the board") is not reaching the
+  seat's overlay at all. It is the same plane wave 4n repaired for the pending
+  ADD path (`seatPendingOverlay`), and the DELETE half has no evidence it ever
+  ran on the seat store. **Named for the umbrella; it belongs to the seat
+  overlay lane, not to this one.**
+
+### Gates
+
+- `bun run typecheck` — 25/25.
+- `bun run knip` — 1 unused export, `DEVICE_OFFER` in
+  `apps/mobile/src/apps/locker/locker-seat-copy.ts`, inherited from `4a7d70229`.
+- `bun run governance < /dev/null` — 21 passed, 1 failed: `bcf17bd3f`, known.
+- `bun run lint:ledgers` — red on six `tests/journeys.json` entries removed by
+  waves 2 and 3 (`mobile/search/year3-replica`, `gateway/footprint/year3-household`);
+  inherited, and none of them is a ledger this lane touched.
+- `bun run check:push:static` — 4/4.
 
 ### Every file this commit touches
 
@@ -8136,3 +8173,11 @@ removed, which is the deletion this wave exists to make possible.
   the `page` shape, and that is what these two files hold now.
 - **A measured number goes in the receipt, never an intended one.** Wave 5b's
   count was written from the plan; the correction is appended, not edited in.
+- `apps/web/tests/e2e/tasks.spec.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the spec
+
+- **A spec that names two claims must reach the second one.** Waiting for the
+  creation to settle is not a workaround: an unsettled creation makes the
+  delete a held dependent, which is a different (and correct) behaviour.
