@@ -9854,3 +9854,63 @@ bunx vitest run apps/desktop/src/main/embedded-gateway-layout.test.ts \
 ```
 
 Follow-up on `4e9956764`: oxlint `prefer-export-from` on the Docs custody re-export, and `lint:law-registry` — the tripwire's owner is `app-query-plans.test.ts` but no title there carried `[law:app-entity-tripwire]`. The tag sits on the test that asserts each app reads no undeclared table.
+
+## The owner's CI pass — four files not yet named by a receipt (#996)
+
+Merged into the close-pass branch from `origin/claude/checkout-remote-main-70f7lb`
+after the cut. These four files were changed by the owner's CI commits
+`4e9956764` (static, gates, coverage and Sonar findings for the seat) and
+`e196e1d7e` (the oxlint re-export and the app-entity-tripwire law tag), and no
+receipt section named them, which is what `receipt-per-issue`'s file-coverage
+rule fails on. They are named here by full path rather than waived — a waiver
+would hide exactly the scope the rule exists to show.
+
+- `apps/mobile/src/kit/storage/custody-pages.ts` — **added.** The seat-file half
+  of the custody projection, as a `PageQuery` (`phone.docs.custody`): per
+  content-id `blob_custody_state` for the bytes some document on this drive
+  currently reads as its own. `blob_custody_state` is named here and nowhere
+  else under `apps/`, which is what engine B
+  (`scripts/lint-engine-conformance.mjs`) requires — Docs imports the query and
+  never names the table; `custody-status.ts` stays the gateway rollup door.
+- `packages/server/src/serve/manifest-scope-denial.fuzz.test.ts` — the two
+  `toSorted()` calls over the declared schema and table sets take an explicit
+  `localeCompare` comparator, so the fuzz corpus is ordered by a stated rule
+  rather than by the default string coercion.
+- `tests/mobile-resource-evidence.json` — the first-sync payload row is
+  **re-measured** for the seat: `at` moves 2026-08-21 → 2026-09-08 and the note
+  now says the number is the serialized size of the **replica log** captured by
+  the session extension, re-measured when the log replaced `replica_change`.
+  What the number bounds is unchanged, and so is what it still does not model
+  (radio wake cost, retry amplification, compression).
+- `tests/quality/unbounded-query-waivers.json` — **emptied, and the list may
+  only shrink.** The five phone debts #880 seeded when the P3 gate first reached
+  `apps/mobile/src` are gone: those screens now walk `readPages` / `readById`
+  or an id-filtered request instead of an unbounded SELECT. The
+  `approvedDeviation` and `_why` are rewritten to say so, because a stale entry
+  is a lie and an unbounded growth-entity read with no entry still fails.
+
+- `packages/blueprints/manifest.json` — **regenerated**, not hand-edited
+  (`bun run --cwd packages/blueprints build:manifest`, i.e.
+  `packages/blueprints/scripts/build-manifest.mjs`). The diff is exactly two
+  deletions: `actions/toggle-task.js` under people and `queries/auth.js` under
+  locker. Neither file exists in the tree. They entered the manifest with
+  `8d1d9cbf1`, where the generator ran in a container holding untracked
+  COMPILED output beside the TypeScript sources and listed it as if it were
+  source. On a clean clone the push gate regenerates the manifest and removes
+  both lines, so the checked-in file was failing the gate for a reason nothing
+  in the tree explained.
+
+**For the sweep:** the manifest generator lists whatever it finds on disk, so
+untracked build output beside a blueprint's sources lands in a checked-in
+manifest and is only caught later, on a clean clone. Whether the generator
+should read the tracked file list rather than the directory is the sweep's
+call — it is a generator change, not a doc one. The footgun itself is doc state
+and lands here as `docs/traps/generated-manifest-untracked-output.md`, with its
+row in `docs/traps/README.md`.
+
+### Every file this commit touches
+
+- `docs/traps/README.md`
+- `docs/traps/generated-manifest-untracked-output.md`
+- `packages/blueprints/manifest.json`
+- `receipts/issue-996-one-vault-every-seat.md`
