@@ -25,7 +25,7 @@ import type { SeatCarryOver } from "./carry-over.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { openSeatFile } from "./driver.js";
 import { createSeatOutbox } from "./outbox.js";
-import { overlaySeatRows, seatPendingMutations } from "./read-overlay.js";
+import { overlaySeatRows, seatPendingOverlay } from "./read-overlay.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import {
   SeatIntentStore,
@@ -219,7 +219,7 @@ export class SeatWorkerCore {
     if (!request.overlay) return rows;
     return overlaySeatRows(
       rows,
-      seatPendingMutations(driver, request.overlay.entity),
+      seatPendingOverlay(driver, request.overlay.entity),
       request.overlay.rowIdColumn
     );
   }

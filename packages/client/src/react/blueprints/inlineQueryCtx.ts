@@ -2,6 +2,7 @@ import {
   PENDING_OVERLAY_FIELDS,
   attachPendingSidecar,
   pendingRowIntentId,
+  pendingSidecarOf,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
@@ -251,7 +252,15 @@ export function buildInlineCtx(
                       row as Record<string, unknown>,
                       request.query.order.pkColumn
                     );
-                    if (marker) pendingRows.push(marker);
+                    if (!marker) continue;
+                    pendingRows.push(marker);
+                    // The row's own sidecar IS this read's answer to "what is
+                    // happening to these writes" (#996 wave 4b). Without it the
+                    // marker names an intent the sidecar cannot describe, and
+                    // `readPendingOverlay` refuses to draw a badge with no
+                    // facts behind it — which is a queued row rendering as a
+                    // settled one.
+                    sidecars.push(pendingSidecarOf(row));
                   }
                   return page;
                 }),

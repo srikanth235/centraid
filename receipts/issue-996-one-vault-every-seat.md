@@ -7382,3 +7382,82 @@ somewhere new. The census that remains is 57 windowed reads, down from 101.
 - **A read of a deleted column is silence, not an error.** PhotosSearch asked
   bytes for a title 0b had moved to the wrapper, and the empty map rendered as
   "these captures have no names".
+
+## Wave 4n — the seat's overlay could not draw a badge, and what `tasks.spec.ts:325` actually is (#996)
+
+### The overlay carried the row and lost the write
+
+`overlaySeatRows` merged a pending write's VALUES over a seat read and stopped
+there. A row a member is waiting on needs two more things before any surface can
+draw it as pending — the intent KEY, which is a column and survives every
+projection a handler makes of the row, and the read's FACTS, which are one
+object per read and ride the sidecar. The seat supplied neither, so
+`readPendingOverlay(row, pendingSidecarOf(row))` answered `undefined` for every
+row on every seat-read screen, and a queued write rendered as a settled one:
+`data-pending` never true, no chip, no "not in the vault yet".
+
+The shell's half was already built — `pageRowMarker` in `inlineQueryCtx.ts`
+exists precisely to pick the key off a page row — and had nothing to pick up.
+
+`seatPendingMutations` becomes `seatPendingOverlay`: it reads the outbox's
+`intent_id`, `action`, `state`, `attempts` and `enqueued_at` alongside the
+record, decorates each mutation with `decoratePendingMutation`, and returns the
+facts beside the rows. The facts cross the worker boundary as an ordinary field
+(`SEAT_PENDING_FACTS`) because a symbol does not survive `postMessage`, and
+`seat-page-reader.ts` — the first code on the other side — lifts them off onto
+the sidecar so no handler ever sees the field.
+
+### `tasks.spec.ts:325` is two defects, and only one of them is the seat's
+
+Measured, not inferred (`bun run --cwd apps/web e2e -- tasks.spec.ts`, the
+failing run's `error-context.md`):
+
+- the board's page is CORRECT. `All 498`, `Inbox 498`, and the window note
+  `498 of 500 · this is a window, not everything open` — a full 500-row page,
+  498 top-level after `nestTaskFamilies` nests two children. The year-3 seed is
+  the volume; nothing is missing from the read;
+- the three rows that paint are the Today shelf: `Overdue 2`, `Today 1`. The
+  spec adds a task with NO due date and then asserts `[data-task-id]` for it
+  page-wide. `todayGroups` is overdue plus today; an undated task is in
+  `anytimeGroups` (`Anytime 1` in the same nav), which is a different shelf and
+  not in the DOM. **The seat's tail is not involved**, and wave 4b's reading of
+  this failure — "the board paints three rows where the vault holds twenty-one"
+  — mistook the Today shelf for the whole board.
+
+So the badge half of the spec is fixed here and the first half is not, and it
+is not a read to convert:
+
+**OWNER DECISION — a task added with no due date, from the Today shelf, appears
+on no shelf the member is looking at.** Options: (a) the Today shelf gains an
+"Added just now" group for the session's own writes; (b) adding an undated task
+moves the member to Anytime; (c) the add sheet requires a date from Today. This
+is what `tasks.spec.ts:325` has been asserting all along, and it is a product
+question about where a save lands, not a paging one.
+
+### Gates
+
+- `bunx vitest run packages/client/src/replica/seat` — 12 files, 83 passed
+  (`worker-core.test.ts` red first on the un-stamped row, then green).
+- `bun run --cwd packages/client test` — 293 files, 2,645 passed.
+- `bun run --cwd apps/web e2e -- tasks.spec.ts` — 2 passed, 1 failed
+  (`:325`, on the shelf question above, at its FIRST assertion; unchanged).
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/replica/seat/read-overlay.ts`
+- `packages/client/src/replica/seat/seat-page-reader.ts`
+- `packages/client/src/replica/seat/worker-core.test.ts`
+- `packages/client/src/replica/seat/worker-core.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the overlay
+
+- **A merged value is not a pending row.** Without the key and the facts, the
+  member's own unsettled write is indistinguishable from the vault's answer.
+- **A symbol does not cross `postMessage`.** The facts travel as a field and
+  stop at the first module on the other side, so no handler can spread them
+  into a view model or onto JSON.

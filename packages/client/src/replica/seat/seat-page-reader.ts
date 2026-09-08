@@ -22,10 +22,13 @@
  * own unsettled write missing (R23–R25).
  */
 
+import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pageCursorOf, pageOf, pageStatement } from "@centraid/core/page";
 import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
 
 import { countSeatPageWork } from "./paged-handler.js";
+import { SEAT_PENDING_FACTS } from "./read-overlay.js";
 import type { SeatReadOverlay } from "./read-overlay.js";
 import type { SeatWorkerQuery } from "./worker-protocol.js";
 
@@ -38,6 +41,25 @@ import type { SeatWorkerQuery } from "./worker-protocol.js";
  */
 export interface SeatQueryPort {
   query: <T extends object>(request: SeatWorkerQuery) => Promise<T[]>;
+}
+
+/**
+ * Lift the read's pending facts off the rows and back onto the sidecar.
+ *
+ * They crossed the worker boundary as an ordinary field because a symbol does
+ * not survive `postMessage` (`SEAT_PENDING_FACTS`). This is the first code on
+ * the other side, so it is where the field stops: a handler receives rows that
+ * carry their intent KEY — a column, and one it may project — and a sidecar it
+ * never has to know about.
+ */
+function liftPendingFacts(rows: readonly object[]): void {
+  for (const row of rows) {
+    const held = row as Record<string, unknown>;
+    const facts = held[SEAT_PENDING_FACTS];
+    if (!facts) continue;
+    delete held[SEAT_PENDING_FACTS];
+    attachPendingSidecar(held, facts as PendingOverlaySidecar);
+  }
 }
 
 /** One page of a handler, read across the worker boundary. */
@@ -54,6 +76,7 @@ export async function seatWorkerPage<Row extends object>(
     ...(overlay ? { overlay } : {}),
   });
   countSeatPageWork(rows.length);
+  liftPendingFacts(rows);
   return pageOf(rows, request, (row) =>
     pageCursorOf(row as Record<string, unknown>, query.order)
   );

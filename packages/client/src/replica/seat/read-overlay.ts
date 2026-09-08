@@ -16,9 +16,40 @@
 // Three pending edits cost three rows however large the library, because only
 // the addressed row ids are touched.
 
+import {
+  decoratePendingMutation,
+  pendingOverlayFacts,
+  PENDING_OVERLAY_FIELDS,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type {
+  PendingOverlayFacts,
+  PendingOverlaySidecar,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 import { OVERLAY_STATES } from "../intent-verdict.js";
-import type { OptimisticMutation, ReplicaIntent } from "../types.js";
+import type {
+  IntentState,
+  OptimisticMutation,
+  ReplicaIntent,
+} from "../types.js";
 import type { SeatSqliteDriver } from "./driver.js";
+
+/**
+ * THE FACTS RIDE ON THE ROW, AND ONLY AS FAR AS THE SEAM (#996 wave 4b).
+ *
+ * A row a member is still waiting on needs two things to draw its badge: the
+ * intent key, which is a column and survives every projection a handler makes
+ * of it, and the read's FACTS — what is happening to that write — which are one
+ * object per read and belong on the sidecar, not on a row.
+ *
+ * The sidecar is a SYMBOL, and a symbol does not survive `postMessage`. So the
+ * seat carries the facts across the worker boundary as an ordinary field, and
+ * the first thing on the other side lifts them off: `seat-page-reader.ts` for
+ * the shell, the ctx for a handler. No handler ever sees this key, which is
+ * why it is not the sidecar itself — a field a handler could spread into its
+ * view model is a field that leaks onto JSON.
+ */
+export const SEAT_PENDING_FACTS = "__seatPendingFacts";
 
 /**
  * How a seat read is overlaid. The seat's file holds PHYSICAL tables and an
@@ -40,19 +71,53 @@ export interface SeatReadOverlay {
  * the member is still waiting on, and drawing it over a read would show a
  * change that is not happening.
  */
-export function seatPendingMutations(
+export interface SeatPendingOverlay {
+  /** The rows to draw, each stamped with the intent that projected it. */
+  readonly mutations: readonly OptimisticMutation[];
+  /** What is happening to each of those intents, keyed by intent id. */
+  readonly facts: PendingOverlaySidecar;
+}
+
+export function seatPendingOverlay(
   driver: SeatSqliteDriver,
   entity: string
-): OptimisticMutation[] {
-  const rows = driver.all<{ record_json: string }>(
-    `SELECT record_json FROM seat_outbox
+): SeatPendingOverlay {
+  const rows = driver.all<{
+    intent_id: string;
+    action: string;
+    state: string;
+    attempts: number;
+    enqueued_at: string;
+    record_json: string;
+  }>(
+    `SELECT intent_id, action, state, attempts, enqueued_at, record_json
+       FROM seat_outbox
       WHERE state IN (${[...OVERLAY_STATES].map(() => "?").join(", ")})
       ORDER BY created_order`,
     [...OVERLAY_STATES]
   );
-  return rows
-    .flatMap((row) => (JSON.parse(row.record_json) as ReplicaIntent).optimistic)
-    .filter((mutation) => mutation.entity === entity);
+  const mutations: OptimisticMutation[] = [];
+  const facts: Record<string, PendingOverlayFacts> = {};
+  for (const row of rows) {
+    const intent = {
+      intentId: row.intent_id,
+      state: row.state as IntentState,
+      action: row.action,
+      attempts: row.attempts,
+      enqueuedAt: row.enqueued_at,
+    };
+    const answer = pendingOverlayFacts(intent);
+    if (answer) facts[row.intent_id] = answer;
+    for (const mutation of (JSON.parse(row.record_json) as ReplicaIntent)
+      .optimistic) {
+      if (mutation.entity !== entity) continue;
+      // The row carries the intent that projected it — its ONE pending column
+      // (#922 G3) — so a handler's own projection of it can still be traced
+      // back to the write the member is waiting on.
+      mutations.push(decoratePendingMutation(mutation, intent));
+    }
+  }
+  return { mutations, facts };
 }
 
 /**
@@ -72,9 +137,10 @@ export function seatPendingMutations(
  */
 export function overlaySeatRows(
   rows: readonly object[],
-  mutations: readonly OptimisticMutation[],
+  overlay: SeatPendingOverlay,
   rowIdColumn: string
 ): object[] {
+  const { mutations, facts } = overlay;
   if (mutations.length === 0) return [...rows];
   const byId = new Map<string, Record<string, unknown>>();
   const order: string[] = [];
@@ -98,6 +164,11 @@ export function overlaySeatRows(
   }
   return order.flatMap((id) => {
     const row = byId.get(id);
-    return row === undefined ? [] : [row];
+    if (row === undefined) return [];
+    // Only a row the member is waiting on carries the read's facts: the sidecar
+    // is bounded by the outbox, and a canonical row has nothing to say.
+    if (typeof row[PENDING_OVERLAY_FIELDS.key] === "string")
+      row[SEAT_PENDING_FACTS] = facts;
+    return [row];
   });
 }

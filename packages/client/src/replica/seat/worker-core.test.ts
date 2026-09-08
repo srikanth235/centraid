@@ -188,10 +188,33 @@ describe("the seat worker core", () => {
 
     // BEFORE THE ECHO. The file holds only the gateway's row; the list the
     // member reads holds theirs too, or the save looks like it was swallowed.
+    //
+    // AND THE MEMBER'S OWN ROW SAYS SO (#996 wave 4b). It carries the intent
+    // that projected it — the one pending column a handler's projection can
+    // carry through (#922 G3) — and the read's facts about that intent. Without
+    // both, `readPendingOverlay` refuses to draw a badge, and a queued row
+    // renders as a settled one: exactly the swallowed save this test is about,
+    // one step later.
     expect(worker.query(NOTES)).toStrictEqual([
       { note_id: "n1", title: "from the gateway" },
-      { note_id: "n2", title: "written on the train" },
+      {
+        note_id: "n2",
+        title: "written on the train",
+        __centraid_pending_key: "intent-note",
+        __seatPendingFacts: {
+          "intent-note": {
+            status: "sending",
+            action: "create_note",
+            reason: "Sending this change.",
+            attempts: 0,
+            enqueuedAt: expect.any(String) as unknown as string,
+          },
+        },
+      },
     ]);
+    // The canonical row beside it carries neither: the sidecar is bounded by
+    // the outbox, not by the page.
+    expect(worker.query(NOTES)[0]).not.toHaveProperty("__seatPendingFacts");
     // The canonical read — the one that measures the file — still says one.
     expect(
       worker.query({ sql: `SELECT count(*) AS n FROM note` })
