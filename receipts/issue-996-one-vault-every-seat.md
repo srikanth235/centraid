@@ -7119,3 +7119,74 @@ Tasks cases. That is the wave's exit condition for the app half.
 **Changed:**
 
 - `receipts/issue-996-one-vault-every-seat.md`
+
+## Wave 4k — the phone's screen reads become pages: the hook, and Tasks (#996)
+
+### `useSeatPages`: what the forty-four flags become
+
+`apps/mobile/src/kit/hooks/useSeatPages.ts` is the phone's end of R8. A screen
+read is now the same `PageQuery` a blueprint handler writes, run by the same
+host, against the seat's `vault.db` — not `replica_row`/`payload_json` and not
+a declared willingness to be cut off at a window nobody chose.
+
+What the hook had to get right, and what the flag never stated:
+
+- **The walk reaches the end of the set.** `readPages` continues from the last
+  row's cursor and THROWS at its stated fan-out bound. A short list that reads
+  as a whole one is exactly what `acceptTruncation` produced.
+- **The page, not the seat, is the dependency.** A provider that rebuilds its
+  wrapper object must not re-walk every screen; the hook keys on `seat.page`.
+- **No copy of the vault is not an empty set.** A phone mid-bootstrap has no
+  `page`, and `connection` carries that — the same answer a browser holding no
+  file gives (R9, W4-D2). No screen learns a new state.
+- **One entity's change re-runs one read** (#922 E3), and a purge re-runs all
+  of them, because a purge removes the plane every read stands on.
+
+### Tasks: three walks, and the board that was silently a fragment
+
+The board's three reads — tasks, projects, sections — were all
+`acceptTruncation: true`. Above a thousand tasks the board was a fragment, and
+`nestTaskFamilies` nested families over that fragment as if it were the set, so
+a child whose parent fell outside the window was promoted onto the open board.
+All three are walks rather than single pages for that reason: the nesting is
+over the whole set, so a page boundary inside a family orphans children.
+
+| handler | table | order | walk |
+| --- | --- | --- | --- |
+| `phone.tasks.board` | `schedule_task` | `created_at DESC, task_id` | to the end |
+| `phone.tasks.projects` | `schedule_project` | `sort_order, project_id` | to the end |
+| `phone.tasks.sections` | `schedule_section` | `sort_order, section_id` | to the end |
+
+`deleted_at IS NULL` is now stated in SQL where the old store's shape carried
+it implicitly.
+
+### Gates
+
+- `bunx vitest run apps/mobile/src/kit/hooks apps/mobile/src/apps/tasks` —
+  13 files, 95 passed.
+- `bun run --cwd apps/mobile test` — 286 files passed, 3 failed (10 tests), all
+  three INHERITED at `d0064644e` and reproduced there: `locker-airplane`,
+  `tally-airplane` and `inline-query-ctx.native` seed the OLD store and hand
+  the handlers a read plane with no `page`, so the converted Tally and Locker
+  handlers answer `OnlineOnlyError`. Not caused here; named as the next fix.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/kit/hooks/useSeatPages.ts`
+- `apps/mobile/src/kit/hooks/useSeatPages.test.tsx`
+
+**Changed:**
+
+- `apps/mobile/src/apps/tasks/useTasks.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the phone's read plane
+
+- **A screen read is a walk or a window, never a flag.** The forty-four reads
+  that declared truncation were all whole sets; each states its ceiling now.
+- **A missing copy is a stated connection, not an empty list.** The phone
+  answers the same way the browser that holds no file does.
