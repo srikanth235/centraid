@@ -256,12 +256,12 @@ export const tallyPendingProjection = definePendingProjection({
     "accept-match": {
       excluded: true,
       reason:
-        "An answer is a link between two rows, and the only surface that shows it is the list of proposals that have none — so there is no row to patch, only one that leaves when the answer lands.",
+        "No pending row: the proposal list is unanswered pairs, and the answer removes the pair.",
     },
     "reject-match": {
       excluded: true,
       reason:
-        "The same as accept-match: the proposal list shows unanswered pairs, and a pair leaves it when the judgment is in the vault, not when it is queued.",
+        "Same as accept-match: the pair leaves the list when the vault has the judgment.",
     },
   },
 });

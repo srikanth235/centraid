@@ -198,7 +198,10 @@ export function valuate(
   }
   return {
     state: "valued",
-    total: converted.reduce(addMoney, zeroMoney(wanted)),
+    total: converted.reduce(
+      (sum, amount) => addMoney(sum, amount),
+      zeroMoney(wanted)
+    ),
     rates: used,
     components: bag,
   };

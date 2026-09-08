@@ -292,8 +292,12 @@ describe("shell↔app conformance", () => {
 
   it("sweeps exactly the apps the launcher builds", () => {
     // No-op guard: a drifted manifest sweeps the wrong set, greenly.
-    expect(CONFORMANCE.map(([id]) => id).sort()).toStrictEqual(
-      [...everyLauncherId].sort()
+    expect(
+      CONFORMANCE.map(([id]) => id).sort((left, right) =>
+        left.localeCompare(right)
+      )
+    ).toStrictEqual(
+      [...everyLauncherId].sort((left, right) => left.localeCompare(right))
     );
   });
 

@@ -91,7 +91,9 @@ const host: SeatWorkerHost = {
       directory: await stagingDirectory(open),
       pool: await poolFor(open),
       dbName: open.dbName,
-      ...(options.expansion === undefined ? {} : {}),
+      ...(options.expansion === undefined
+        ? {}
+        : { expansion: options.expansion }),
     });
   },
   // THE FILE, GONE (#996, R9 and the revocation path). A closed seat still has

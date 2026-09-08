@@ -9600,3 +9600,25 @@ way. None of them names a file this commit touches.
 - **A pin asserts the constant, not a copy of it.** Both schema-epoch pins are
   the reason: a literal `2` beside a `REPLICA_SCHEMA_EPOCH` of 3 is a gate that
   has stopped gating.
+
+## CI close — static, gates, coverage, SonarCloud (PR #1002)
+
+The four named PR lanes were red on `b07bf9a9f`. Each finding was a real
+drift from this branch's own rulings, not a flaky runner.
+
+- **static (`lint:types`)** — `require-array-sort-compare` on the seat base-version capture and three other `.sort()` / `.toSorted()` call sites that landed without a compare.
+- **gates (`lint:engine-conformance`)** — Docs on the phone named `blob_custody_state`. Engine B's door is `kit/storage`; the page query moved to `custody-pages.ts`.
+- **coverage** — the chaos lease insert still wrote `core_content_item.media_type` (gone in the representation split); T3 still expected gateway `reveal` to unseal Locker (R13 / W6-D2 forbids it); P3 still treated `select:` on `readPages` / `readById` as an unbounded SELECT and held five stale phone waivers; U4 flagged new two-sentence copy; the gunzip fuzz timed out under the 5s default; `host-sync-bytes-per-pass` was still the `replica_change` measurement; the embed test still hit the deleted shaped bootstrap.
+- **SonarCloud** — ReDoS in the paged-fixture WHERE grammar, curl without `--proto '=https'`, a no-op `expansion` spread, `addMoney` passed straight to `reduce`, a `for` whose incrementer was not the stop condition, and a `try` wrapping a `.catch()` on Cache Storage.
+
+```
+bun run lint:types
+node scripts/lint-engine-conformance.mjs
+bunx vitest run --config vitest.quality.config.ts \
+  tests/quality/user-facing-qualities.test.ts \
+  tests/quality/mobile-resource-evidence.test.ts \
+  tests/quality/component-chaos.integration.test.ts
+bunx vitest run apps/desktop/src/main/embedded-gateway-layout.test.ts \
+  packages/client/src/replica/seat/gunzip.test.ts \
+  packages/client/src/replica/seat/base-versions.test.ts
+```
