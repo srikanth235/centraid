@@ -9922,3 +9922,67 @@ The two deviation notes `check-quality-knobs` requires quoted here, verbatim:
 > #880 W0.1 seeded the mobile replica-read waivers as the P3 gate extended over apps/mobile/src. #996 wave 4 replaced those reads with paged walks, so the list is empty: a stale entry is a lie, and the list may only shrink.
 
 > #996 W5 re-pins tests/claims.json after retargeting flow `replica-multi-writer` onto `packages/client/src/replica/intents.contract.test.ts` (the IndexedDB tab-coordinator suite died with that store) and re-pins `packages/server/src/routes/route-security.ts` whose fingerprint drifted with the seat doors. No claim row, severity, evidence selector or demonstrated-red date moves, so claimsGovernanceFingerprint is unchanged. Prior: #927. #927 re-pins the tests/claims.json whole-file fingerprint (e8a89064… → 2354dd6f…) after the pin drifted from the file with no claim-row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests change — claimsGovernanceFingerprint is unchanged. Prior: #929. #929 re-pins the tests/claims.json whole-file fingerprint after retiring the commons-rail law `commons-steward-ordered-convergence`, retargeting joinLaws and `commons-grant-plane-simulation` onto `packages/vault/src/share/subscription-sim.test.ts` (floor 6→3 with an `approvedMinimumTestsDeviation`: the dropped cases named the rail), retargeting `commons-convergence-properties` onto `subscription.test.ts`, and pointing `scope-commons` at `subscription-seat.ts`. No claim row, severity, evidence selector or demonstrated-red date moves, so claimsGovernanceFingerprint is unchanged. Prior: #922. #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #922 re-pins tests/claims.json after registering ONE new flow, `pending-destructive-projection` (owner packages/blueprints/src/pending-projection-tripwire.test.ts, flow blueprint-pending-overlay-law). Flow registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law or minimumTests floor moves, and claimsGovernanceFingerprint (digest of claims.claims alone) stays byte-identical.
+
+## The owner's CI pass, second round — nine files not yet named (#996)
+
+Merged from `origin/claude/checkout-remote-main-70f7lb`. `7ecec54c8` (retarget
+`replica-multi-writer` and prune stale vault-sql allowances) and `17b967fed`
+(cover temporal, occurrence and replica-log JSON) changed these; no receipt
+section named them, which is what `receipt-per-issue`'s file-coverage rule
+fails on. Named by full path, not waived. Fetched again immediately before this
+commit: `HEAD..FETCH_HEAD` is empty, so this row is the whole outstanding set.
+
+- `packages/core/src/protocol/row-json.test.ts` — **added.** Covers the wire
+  row codec the seat log is made of: `encodeWireValue` / `decodeWireValue` and
+  the row-level pair around them, plus `applyRowSql` and `deleteRowSql`. This is
+  R5's JSON row image at its narrowest seam — BLOBs as base64, 64-bit integers
+  as strings, SQL `NULL` told apart from an absent column — and it had no direct
+  suite of its own.
+- `packages/core/src/protocol/seat-log.test.ts` — **added.** Pins the seat
+  doors' constants against `ROUTES`: the three snapshot headers
+  (`SEAT_SNAPSHOT_EPOCH_HEADER`, `…_SCHEMA_EPOCH_HEADER`, `…_SEQ_HEADER`) and
+  `SEAT_LOG_MAX_PAGE`. A header the transport reads and the door never sets is
+  the failure this catches.
+- `packages/core/src/time/occurrence.test.ts` — **added.** Covers R21's one
+  typed recurrence-occurrence key end to end: `occurrenceKey`,
+  `occurrenceKeysEqual`, `occurrenceKeyToken`, `occurrenceSearchWindow`,
+  `overrideAt`, and the exception readers. This is the value R21 says every
+  reader must consume through one adapter, so `original_start_local` /
+  `original_start` and `tz` / `time_zone` cannot drift apart again.
+- `packages/core/src/time/temporal.test.ts` — **added.** Covers
+  `classifyTemporal`, `isTemporal` and `temporalRefusal` — the boundary R21
+  requires to tell an instant from a floating local datetime from a date from a
+  yearless month-day, rather than letting an unsupported imported rule pass as
+  an executable one.
+- `scripts/lint-vault-sql.mjs` — the allow-list is pruned and re-aimed at the
+  seat. Out go the six entries whose files the cut deleted or whose reason named
+  `replica_row` (`sqlite-intent-store.ts`, `store-core.ts`, `replica-routes.ts`,
+  `vault-plane.test-fixtures.ts`, and the Locker and Tally replica fixture
+  builders that "seed `replica_row` directly"). In go four seat entries — the
+  phone's Docs, Notes and Photos page statements and `kit/storage/custody-pages.ts`
+  — each because the statement runs against the seat's own `vault.db` (W4-D2).
+  `SKIP_DIRS` also gains `.claude` and `.grok`, so an agent's own working
+  directory is not linted as product source.
+- `tests/quality/classification-ratchet.json` — re-pinned twice, with the reason
+  written into `approvedDeviation` ahead of the prior chain: the whole-file
+  `tests/claims.json` digest, and `packages/server/src/routes/route-security.ts`,
+  whose fingerprint drifted when the seat doors landed. `claimsGovernanceFingerprint`
+  is unchanged, which is the assertion that no claim row, severity, evidence
+  selector or demonstrated-red date moved.
+- `tests/claims.json` — flow `replica-multi-writer` is retargeted from the
+  deleted `multi-writer.contract.test.ts` onto
+  `packages/client/src/replica/intents.contract.test.ts`, with an
+  `approvedMinimumTestsDeviation` saying why the floor stays 3: the three
+  tab-coordinator cases died with the IndexedDB outbox, and the queue-level
+  contract they named — one canonical intent id, a concurrent retry serialised
+  to one successor, the Web Lock boundary — is in the surviving suite. This
+  closes item 3 of the doc step's `### Left for the sweep and the PR steps`.
+- `tests/journeys.json` — registers `tests/scale/mobile-offline-chain.scale.test.ts`
+  in the `scale` lane over the four `mobile/*` offline-chain entries
+  (durable-save, pending-render, restart-recovery, reconnect-drain), with
+  `_noBudgetMs` stated: the rig's ceilings ARE those four entries' `ceilingMs`,
+  and its own setup is opening a file.
+
+### Every file this commit touches
+
+- `receipts/issue-996-one-vault-every-seat.md`
