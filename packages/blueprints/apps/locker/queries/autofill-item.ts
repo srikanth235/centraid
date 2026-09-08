@@ -6,6 +6,7 @@
  * to the reveal receipt for the Approvals/audit surface.
  */
 
+import { LOCKER_ITEM_COLUMNS } from "./items.ts";
 import { matchesOrigin, pageOrigin } from "./origin-matching.ts";
 
 interface LoginRow {
@@ -33,16 +34,22 @@ export default async function autofillItem({
       reason: "A login id and normalized page origin are required.",
     };
   try {
-    const response = await ctx.vault.read({
-      entity: "locker.item",
-      where: [
-        { column: "item_id", op: "eq", value: itemId },
-        { column: "type", op: "eq", value: "login" },
-        { column: "deleted_at", op: "is-null" },
-      ],
+    const response = await ctx.vault.page<LoginRow>({
+      query: {
+        name: "locker.autofill.item",
+        select: LOCKER_ITEM_COLUMNS,
+        from: "locker_item",
+        where: "item_id = ? AND type = ? AND deleted_at IS NULL",
+        bind: [itemId, "login"],
+        order: {
+          sortColumn: "item_id",
+          pkColumn: "item_id",
+          descending: false,
+        },
+      },
       limit: 1,
     });
-    const row = ((response.rows ?? []) as unknown as LoginRow[])[0];
+    const row = response.rows[0];
     if (!row) return { fill: null };
     if (typeof row.url !== "string" || !row.url) {
       return {

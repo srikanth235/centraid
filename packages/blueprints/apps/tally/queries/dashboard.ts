@@ -32,6 +32,7 @@ import {
   tallyGroupNet,
 } from "../../../src/tally-balance.ts";
 import { DAY_MS } from "../../_shared/format-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   PENDING_OVERLAY_FIELDS,
   pendingOverlayCopy,
@@ -42,6 +43,25 @@ import {
   ownerKey,
   readRepresentations,
 } from "../../_shared/representation-reads.ts";
+
+/**
+ * THE LEDGER'S WINDOWS, NAMED (#996 wave 4, R8).
+ *
+ * These numbers were already in this file; they were inline arguments to reads
+ * that could be short without saying so. A balance derived from a silently
+ * short ledger is a WRONG NUMBER — not a slow screen — so each is a stated
+ * window or a stated fan-out, and the walks throw at their ceiling.
+ */
+const LEDGER_ROWS = 2000;
+const TRASH_ROWS = 100;
+const RECURRING_ROWS = 500;
+const EXCEPTION_ROWS = 2000;
+
+/** A split, payer or line row exists per (expense, person): 8,000 of them. */
+const LEDGER_FAN_OUT = { pageSize: 1000, fanOutPages: 8 };
+
+/** An allocation exists per (line, person), so its ceiling is four times that. */
+const ALLOCATION_FAN_OUT = { pageSize: 1000, fanOutPages: 32 };
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -190,122 +210,237 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     receiptAllocationsRes,
     nudgesRes,
   ] = await Promise.all([
-    ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
-    ctx.vault.read({ acceptTruncation: true, entity: "tally.friend" }),
-    ctx.vault.read({ acceptTruncation: true, entity: "tally.group" }),
-    ctx.vault.read({
-      acceptTruncation: true,
-      entity: "social.circle",
+    // THE LEDGER'S OWN WINDOWS (#996 wave 4, R8). Every one of these numbers
+    // was already here; what they lacked was a name and a cursor. A balance
+    // computed from a silently short ledger is a WRONG NUMBER, not a slow one,
+    // which is why these throw at their ceiling rather than shortening.
+    readPages<Record<string, unknown>>(ctx, {
+      name: "tally.dashboard.vault",
+      select: "vault_id, self_party_id, base_currency",
+      from: "core_vault",
+      order: {
+        sortColumn: "vault_id",
+        pkColumn: "vault_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      acceptTruncation: true,
-      entity: "social.circle_member",
+    readPages<FriendRow>(ctx, {
+      name: "tally.dashboard.friends",
+      select: "friend_id, party_id, created_at",
+      from: "tally_friend",
+      order: {
+        sortColumn: "friend_id",
+        pkColumn: "friend_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      entity: "tally.expense",
-      // Trashed expenses (#441) drop out of every balance and ledger —
-      // their splits are read below but never consumed once the expense is gone.
-      where: [{ column: "deleted_at", op: "is-null" }],
-      orderBy: { column: "spent_on", dir: "desc" },
-      limit: 2000,
+    readPages<GroupRow>(ctx, {
+      name: "tally.dashboard.groups",
+      select:
+        "group_id, circle_id, icon, color, simplify_opt_in, archived_at, currency",
+      from: "tally_group",
+      order: {
+        sortColumn: "group_id",
+        pkColumn: "group_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({ entity: "tally.expense_split", limit: 8000 }),
-    ctx.vault.read({ entity: "tally.expense_payer", limit: 8000 }),
-    ctx.vault.read({
-      entity: "tally.settlement",
-      where: [{ column: "deleted_at", op: "is-null" }],
-      limit: 2000,
+    readPages<Record<string, unknown>>(ctx, {
+      name: "tally.dashboard.circles",
+      select: "circle_id, owner_party_id, name, kind",
+      from: "social_circle",
+      order: {
+        sortColumn: "circle_id",
+        pkColumn: "circle_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      entity: "tally.obligation",
-      where: [
-        { column: "settled_at", op: "is-null" },
-        { column: "deleted_at", op: "is-null" },
-      ],
-      limit: 2000,
+    readPages<{ party_id: string }>(ctx, {
+      name: "tally.dashboard.circleMembers",
+      select: "member_id, circle_id, party_id",
+      from: "social_circle_member",
+      order: {
+        sortColumn: "member_id",
+        pkColumn: "member_id",
+        descending: false,
+      },
+    }),
+    // Trashed expenses (#441) drop out of every balance and ledger —
+    // their splits are read below but never consumed once the expense is gone.
+    ctx.vault.page<ExpenseRowRaw>({
+      query: {
+        name: "tally.dashboard.expenses",
+        select:
+          "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, split_params_json, spent_on, category, txn_id, created_at, updated_at",
+        from: "tally_expense",
+        where: "deleted_at IS NULL",
+        order: {
+          sortColumn: "spent_on",
+          pkColumn: "expense_id",
+          descending: true,
+        },
+      },
+      limit: LEDGER_ROWS,
+    }),
+    // THE KEYSET IS THE TABLE'S OWN PAIR. A split is keyed on
+    // (expense_id, party_id) — one expense splits across several people — so a
+    // cursor on `expense_id` alone stops at the first sharer.
+    readPages<{ expense_id: string; party_id: string; share_minor: number }>(
+      ctx,
+      {
+        name: "tally.dashboard.splits",
+        select: "expense_id, party_id, share_minor",
+        from: "tally_expense_split",
+        order: {
+          sortColumn: "expense_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      },
+      LEDGER_FAN_OUT
+    ),
+    readPages<{ expense_id: string; party_id: string; paid_minor: number }>(
+      ctx,
+      {
+        name: "tally.dashboard.payers",
+        select: "expense_id, party_id, paid_minor",
+        from: "tally_expense_payer",
+        order: {
+          sortColumn: "expense_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      },
+      LEDGER_FAN_OUT
+    ),
+    readPages<SettlementRow>(ctx, {
+      name: "tally.dashboard.settlements",
+      select:
+        "settlement_id, group_id, from_party, to_party, amount_minor, currency, paid_on, txn_id, created_at",
+      from: "tally_settlement",
+      where: "deleted_at IS NULL",
+      order: {
+        sortColumn: "settlement_id",
+        pkColumn: "settlement_id",
+        descending: false,
+      },
+    }),
+    readPages<ObligationRow>(ctx, {
+      name: "tally.dashboard.obligations",
+      select:
+        "obligation_id, from_party, to_party, amount_minor, currency, reason, incurred_on, settled_at",
+      from: "tally_obligation",
+      where: "settled_at IS NULL AND deleted_at IS NULL",
+      order: {
+        sortColumn: "obligation_id",
+        pkColumn: "obligation_id",
+        descending: false,
+      },
     }),
     // A receipt IS the `role='receipt'` attachment on the expense (#883,
     // ruling O-attach).
-    ctx.vault.read({
-      entity: "core.attachment",
-      where: [
-        { column: "target_type", op: "eq", value: "tally.expense" },
-        { column: "role", op: "eq", value: "receipt" },
-      ],
-      limit: 2_000,
+    readPages<Record<string, unknown>>(ctx, {
+      name: "tally.dashboard.receipts",
+      select:
+        "attachment_id, target_type, target_id, content_id, role, is_primary",
+      from: "core_attachment",
+      where: "target_type = ? AND role = ?",
+      bind: ["tally.expense", "receipt"],
+      order: {
+        sortColumn: "attachment_id",
+        pkColumn: "attachment_id",
+        descending: false,
+      },
     }),
-    ctx.vault.read({
-      entity: "tally.expense_line_item",
-      limit: 8_000,
-    }),
-    ctx.vault.read({
-      entity: "tally.expense_line_allocation",
-      limit: 32_000,
-    }),
-    ctx.vault.read({
-      entity: "tally.nudge",
-      orderBy: { column: "prepared_at", dir: "desc" },
-      limit: 500,
+    readPages<Record<string, unknown>>(
+      ctx,
+      {
+        name: "tally.dashboard.receiptLines",
+        select:
+          "line_item_id, expense_id, receipt_id, kind, description, amount_minor, sort_order",
+        from: "tally_expense_line_item",
+        order: {
+          sortColumn: "line_item_id",
+          pkColumn: "line_item_id",
+          descending: false,
+        },
+      },
+      LEDGER_FAN_OUT
+    ),
+    readPages<Record<string, unknown>>(
+      ctx,
+      {
+        name: "tally.dashboard.receiptAllocations",
+        select: "line_item_id, party_id, share_minor",
+        from: "tally_expense_line_allocation",
+        order: {
+          sortColumn: "line_item_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      },
+      ALLOCATION_FAN_OUT
+    ),
+    readPages<NudgeRow>(ctx, {
+      name: "tally.dashboard.nudges",
+      select:
+        "nudge_id, party_id, group_id, as_of_minor, note, prepared_at, created_at",
+      from: "tally_nudge",
+      order: {
+        sortColumn: "prepared_at",
+        pkColumn: "nudge_id",
+        descending: true,
+      },
     }),
   ]);
 
-  const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
+  const vaultRow = vaultRes[0] ?? {};
   const me = (vaultRow.self_party_id as string | undefined) ?? null;
   const currency = (vaultRow.base_currency as string | undefined) ?? "USD";
 
-  const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];
+  const friends = friendsRes;
   const friendPartyIds = friends.map((f) => f.party_id);
   // Circle membership is current state, the ledger durable history: a member
   // who left must stay nameable wherever an expense or settlement still refers
   // to them, so query every ledger party rather than today's roster.
+  const expenseRowsRaw = expensesRes.rows;
   const activeExpenseIds = new Set(
-    ((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
-      (expense) => expense.expense_id
-    )
+    expenseRowsRaw.map((expense) => expense.expense_id)
   );
   const ledgerPartyIds = [
-    ...((membersRes.rows ?? []) as unknown as Array<{ party_id: string }>).map(
-      (member) => member.party_id
-    ),
-    ...((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
-      (expense) => expense.paid_by
-    ),
+    ...membersRes.map((member) => member.party_id),
+    ...expenseRowsRaw.map((expense) => expense.paid_by),
     // A co-payer who is no longer a member still has to be nameable.
-    ...(
-      (payersRes.rows ?? []) as unknown as Array<{
-        expense_id: string;
-        party_id: string;
-      }>
-    )
+    ...payersRes
       .filter((payer) => activeExpenseIds.has(payer.expense_id))
       .map((payer) => payer.party_id),
-    ...(
-      (splitsRes.rows ?? []) as unknown as Array<{
-        expense_id: string;
-        party_id: string;
-      }>
-    )
+    ...splitsRes
       .filter((split) => activeExpenseIds.has(split.expense_id))
       .map((split) => split.party_id),
-    ...((settlesRes.rows ?? []) as unknown as SettlementRow[]).flatMap(
-      (settlement) => [settlement.from_party, settlement.to_party]
-    ),
+    ...settlesRes.flatMap((settlement) => [
+      settlement.from_party,
+      settlement.to_party,
+    ]),
   ];
   const partyIds = [
     ...new Set([me, ...friendPartyIds, ...ledgerPartyIds].filter(Boolean)),
   ] as string[];
-  const partiesRes =
-    partyIds.length > 0
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.party",
-          where: [{ column: "party_id", op: "in", value: partyIds }],
-        })
-      : { rows: [] as Record<string, unknown>[] };
-  const partyRows = (partiesRes.rows ?? []) as unknown as Array<{
-    party_id: string;
-    display_name?: string;
-  }>;
+  const ledgerPartyIn =
+    partyIds.length > 0 ? inList("party_id", partyIds) : null;
+  const partyRows = ledgerPartyIn
+    ? await readPages<{ party_id: string; display_name?: string }>(ctx, {
+        name: "tally.dashboard.parties",
+        select: "party_id, display_name",
+        from: "core_party",
+        where: ledgerPartyIn.sql,
+        bind: ledgerPartyIn.bind,
+        order: {
+          sortColumn: "party_id",
+          pkColumn: "party_id",
+          descending: false,
+        },
+      })
+    : [];
   const nameById = new Map(partyRows.map((p) => [p.party_id, p.display_name]));
   // THE PARTY HUE, not `identityColor` (#883, ruling O-identity): the person
   // wheel has eight places, and the vault wheel's ninth is the ink brand —
@@ -346,20 +481,18 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     });
   }
 
-  const circleRows = (circlesRes.rows ?? []) as unknown as Array<{
+  const circleRows = circlesRes as unknown as Array<{
     circle_id: string;
     name: string;
   }>;
   const circleName = new Map(circleRows.map((c) => [c.circle_id, c.name]));
-  const groups: DecoratedGroup[] = (
-    (groupsRes.rows ?? []) as unknown as GroupRow[]
-  ).map((g) => ({
+  const groups: DecoratedGroup[] = groupsRes.map((g) => ({
     ...g,
     name: circleName.get(g.circle_id) ?? "Group",
   }));
 
   const membersByCircle = new Map<string, string[]>();
-  for (const m of (membersRes.rows ?? []) as unknown as Array<{
+  for (const m of membersRes as unknown as Array<{
     circle_id: string;
     party_id: string;
   }>) {
@@ -371,7 +504,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     membersByGroup.set(g.group_id, membersByCircle.get(g.circle_id) ?? []);
 
   const splitsByExpense = new Map<string, Record<string, number>>();
-  for (const s of (splitsRes.rows ?? []) as unknown as Array<{
+  for (const s of splitsRes as unknown as Array<{
     expense_id: string;
     party_id: string;
     share_minor: number;
@@ -381,7 +514,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     splitsByExpense.get(s.expense_id)![s.party_id] = s.share_minor;
   }
   const receiptRows = (
-    (receiptsRes.rows ?? []) as unknown as Array<{
+    receiptsRes as unknown as Array<{
       attachment_id: string;
       target_id: string;
       content_id: string;
@@ -394,14 +527,24 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   const receiptContentIds = [
     ...new Set(receiptRows.map((row) => row.content_id)),
   ];
-  const receiptContents =
+  const receiptContentIn =
     receiptContentIds.length > 0
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.content_item",
-          where: [{ column: "content_id", op: "in", value: receiptContentIds }],
-        })
-      : { rows: [] as Record<string, unknown>[] };
+      ? inList("content_id", receiptContentIds)
+      : null;
+  const receiptContents = receiptContentIn
+    ? await readPages<Record<string, unknown>>(ctx, {
+        name: "tally.dashboard.receiptContents",
+        select: "content_id, content_uri, byte_size",
+        from: "core_content_item",
+        where: receiptContentIn.sql,
+        bind: receiptContentIn.bind,
+        order: {
+          sortColumn: "content_id",
+          pkColumn: "content_id",
+          descending: false,
+        },
+      })
+    : [];
   // Bytes carry no media type since #996 (R20(b)) — the receipt attachment's
   // own representation says what it reads them as.
   const receiptRepresentations = await readRepresentations({
@@ -410,15 +553,14 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   });
   const contentsById = new Map(
     (
-      (receiptContents.rows ?? []) as unknown as Array<{
+      receiptContents as unknown as Array<{
         content_id: string;
         content_uri?: string;
       }>
     ).map((row) => [row.content_id, row] as const)
   );
   const allocationsByLine = new Map<string, Record<string, number>>();
-  for (const allocation of (receiptAllocationsRes.rows ??
-    []) as unknown as Array<{
+  for (const allocation of receiptAllocationsRes as unknown as Array<{
     line_item_id: string;
     party_id: string;
     share_minor: number;
@@ -431,7 +573,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   // Lines hang off the EXPENSE, the receipt an optional decoration, so the
   // "By line" division has typed lines and no photo.
   const linesByExpense = new Map<string, ReceiptLineFact[]>();
-  for (const line of (receiptLinesRes.rows ?? []) as unknown as Array<{
+  for (const line of receiptLinesRes as unknown as Array<{
     line_item_id: string;
     expense_id: string;
     receipt_id: string | null;
@@ -478,7 +620,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     });
   }
   const payersByExpense = new Map<string, Record<string, number>>();
-  for (const payer of (payersRes.rows ?? []) as unknown as Array<{
+  for (const payer of payersRes as unknown as Array<{
     expense_id: string;
     party_id: string;
     paid_minor: number;
@@ -507,9 +649,9 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     groups,
     membersByGroup,
     expenses,
-    settlements: (settlesRes.rows ?? []) as unknown as SettlementRow[],
-    obligations: (obligationsRes.rows ?? []) as unknown as ObligationRow[],
-    nudges: (nudgesRes.rows ?? []) as unknown as NudgeRow[],
+    settlements: settlesRes,
+    obligations: obligationsRes,
+    nudges: nudgesRes,
   };
 }
 
@@ -802,27 +944,50 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
   try {
     const data = await loadTally(ctx);
     const [trashRes, recurringRes, exceptionRes] = await Promise.all([
-      ctx.vault.read({
-        entity: "tally.expense",
-        where: [{ column: "deleted_at", op: "not-null" }],
-        orderBy: { column: "deleted_at", dir: "desc" },
-        limit: 100,
-      }),
-      ctx.vault.read({
-        entity: "tally.recurring_expense",
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: 500,
-      }),
-      ctx.vault.read({
-        entity: "schedule.recurrence_exception",
-        where: [
-          {
-            column: "target_type",
-            op: "eq",
-            value: "tally.recurring_expense",
+      ctx.vault.page<Record<string, unknown>>({
+        query: {
+          name: "tally.dashboard.trash",
+          select:
+            "expense_id, group_id, description, amount_minor, currency, paid_by, spent_on, category, deleted_at, purge_at",
+          from: "tally_expense",
+          where: "deleted_at IS NOT NULL",
+          order: {
+            sortColumn: "deleted_at",
+            pkColumn: "expense_id",
+            descending: true,
           },
-        ],
-        limit: 2000,
+        },
+        limit: TRASH_ROWS,
+      }),
+      ctx.vault.page<RecurringRow>({
+        query: {
+          name: "tally.dashboard.recurring",
+          select:
+            "template_id, group_id, description, original_amount_minor, original_currency, settlement_currency, paid_by, category, rrule, anchor_start, tz, rate_scaled, rate_scale, rate_source, rate_date, status, last_materialized_start",
+          from: "tally_recurring_expense",
+          order: {
+            sortColumn: "updated_at",
+            pkColumn: "template_id",
+            descending: true,
+          },
+        },
+        limit: RECURRING_ROWS,
+      }),
+      ctx.vault.page<Record<string, unknown>>({
+        query: {
+          name: "tally.dashboard.recurringExceptions",
+          select:
+            "exception_id, target_type, target_id, original_start_local, recurrence_semantics, scope, action, override_json",
+          from: "schedule_recurrence_exception",
+          where: "target_type = ?",
+          bind: ["tally.recurring_expense"],
+          order: {
+            sortColumn: "exception_id",
+            pkColumn: "exception_id",
+            descending: false,
+          },
+        },
+        limit: EXCEPTION_ROWS,
       }),
     ]);
     const bal = pairwise(data);

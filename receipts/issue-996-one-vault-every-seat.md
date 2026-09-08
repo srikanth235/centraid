@@ -83,7 +83,7 @@ bun run format:check
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-07 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-08 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## Wave 0a — rulings, drift rows, and the two corrected sentences
 
@@ -6978,3 +6978,97 @@ is what "the photos domain's tier" always was.
   now named where it is spent.
 - **A column that ties is not a cursor.** `ordinal` is the memory's display
   order and shares values on purpose; the keyset is the table's own key.
+
+## Wave 4i — Tally and Locker, and `person.ts` splits at the seam (#996)
+
+### `packages/blueprints/apps` has no `acceptTruncation` left
+
+`grep -rl acceptTruncation packages/blueprints/apps` now matches one file, and
+it is the prose of `_shared/representation-reads.paged.test.ts` explaining what
+the flag was. Every handler in all eight apps reads through `ctx.vault.page`.
+
+### Tally: a short ledger is a wrong number
+
+Fourteen reads built the dashboard, and the arithmetic on top of them is money.
+`2000`, `8000`, `32000` were inline arguments to reads that could come back
+short without saying so — and a balance derived from a silently short ledger is
+a WRONG NUMBER, not a slow screen. They are `LEDGER_ROWS`, `LEDGER_FAN_OUT` and
+`ALLOCATION_FAN_OUT` now, and the walks throw at their ceiling.
+
+`tally_expense_split`, `tally_expense_payer` and
+`tally_expense_line_allocation` are all keyed on a PAIR — one expense splits
+across several people — so each walks `(expense_id, party_id)` rather than a
+cursor that would stop at the first sharer.
+
+### Locker: one list of columns, and no sealed cell on it
+
+`LOCKER_ITEM_COLUMNS` is the browsable half of an item, written once and
+projected by every shelf — live, archived, trash, watchtower, search, autofill.
+`password`, `otp_seed`, `card_number`, `cvv` and `content` are absent BY
+CONSTRUCTION rather than stripped after the fact, which is a stronger statement
+than the read that used to take the row whole.
+
+`rowsOf` is one walk given a table, its projection and its own key: the five
+sidecars were the same read five times.
+
+### `person.ts` split at 632 lines, and the seam is a real one
+
+The push gate caught it at 632 against the 625 limit. `person-contacts.ts`
+takes the contact rail and its collision search — one question the sheet asks
+("these are the addresses, and this number is on someone else's card too"),
+which the sheet's other twenty reads do not touch. It is also where the
+whole-table channel read lived, so the file that explains why that read was two
+reads is the file that makes them.
+
+### The manifest reachability check sees both doors
+
+`app-manifest-reads.test.ts` matched `entity: "schema.table"` only. A paged
+statement names the PHYSICAL table, so an app could have read a table it never
+declared simply by asking for it as a page — the opposite of what that file is
+for. It now recovers the entity from `<schema>_<table>` as well, in both
+directions: what an app reads, and what it declared and never reaches for.
+
+### Gates
+
+- `bun run --cwd packages/blueprints test` — 215 files, 7,104 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `repo-hygiene` check.sh — ✓ (the 625-line limit, over the whole tree).
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/apps/people/queries/person-contacts.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/locker/queries-reveal-access.test.ts`
+- `packages/blueprints/apps/locker/queries.test-fixtures.ts`
+- `packages/blueprints/apps/locker/queries.test.ts`
+- `packages/blueprints/apps/locker/queries/access.ts`
+- `packages/blueprints/apps/locker/queries/autofill-candidates.ts`
+- `packages/blueprints/apps/locker/queries/autofill-item.ts`
+- `packages/blueprints/apps/locker/queries/item-sidecars.ts`
+- `packages/blueprints/apps/locker/queries/item.ts`
+- `packages/blueprints/apps/locker/queries/items.ts`
+- `packages/blueprints/apps/locker/queries/search.ts`
+- `packages/blueprints/apps/locker/queries/trash.ts`
+- `packages/blueprints/apps/locker/queries/watchtower.ts`
+- `packages/blueprints/apps/people/queries/person.ts`
+- `packages/blueprints/apps/tally/queries/dashboard.ts`
+- `packages/blueprints/apps/tally/queries/export.test.ts`
+- `packages/blueprints/apps/tally/queries/group-departed.test.ts`
+- `packages/blueprints/src/app-manifest-reads.test.ts`
+- `packages/blueprints/src/query-handlers.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — Tally, Locker, the split
+
+- **A projection list is a security statement.** Locker's shelves name the
+  columns they carry, so no sealed cell can ride one by accident.
+- **A file splits at a question, not at a line count.** The contact rail and
+  its collision search are one answer; the rest of the person sheet is others.
+- **A reachability check must see every door**, or the door it cannot see is
+  the one an undeclared read goes through.

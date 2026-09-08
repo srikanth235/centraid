@@ -16,6 +16,7 @@
  * back as the placeholders they are at rest.
  */
 
+import { readById } from "../../_shared/paged-reads.ts";
 import {
   readAddresses,
   readAlias,
@@ -24,7 +25,7 @@ import {
   readHistory,
   readPasskey,
 } from "./item-sidecars.ts";
-import { readTags, readStarred } from "./items.ts";
+import { LOCKER_ITEM_COLUMNS, readStarred, readTags } from "./items.ts";
 import { degradeType } from "./type-degradation.ts";
 
 interface FullRow {
@@ -66,12 +67,16 @@ export default async function itemHandler({
   const itemId = String(input?.item_id ?? "");
   if (!itemId) return { item: null };
   try {
-    const res = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "locker.item",
-      where: [{ column: "item_id", op: "eq", value: itemId }],
-    });
-    const row = ((res.rows ?? []) as unknown as FullRow[])[0];
+    const row = await readById<FullRow>(
+      ctx,
+      {
+        name: "locker.item.row",
+        select: LOCKER_ITEM_COLUMNS,
+        from: "locker_item",
+        idColumn: "item_id",
+      },
+      itemId
+    );
     if (!row) return { item: null };
     // NO REVEAL HERE (#996, rulings R13 and W6-D2). This query used to hand
     // the gateway a session token and an item token and take plaintext off the

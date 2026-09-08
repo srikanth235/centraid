@@ -161,15 +161,16 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
     const { default: access } = await import("./queries/access.ts");
     const ctx = ctxOf({ "access.receipt": receipts });
     await access({ input: { item_id: "item-1" }, ctx });
-    expect(
-      ctx.calls.find((call) => call.entity === "access.receipt")?.where
-    ).toStrictEqual([
-      {
-        column: "object_type",
-        op: "in",
-        value: ["locker.item", "locker.auth"],
-      },
-      { column: "object_id", op: "eq", value: "item-1" },
+    // The narrowing is the statement's own text and binds since #996 wave 4:
+    // Locker's two object types, then the one item asked for.
+    const statement = ctx.calls.find(
+      (call) => call.entity === "access.receipt"
+    )?.statement;
+    expect(statement?.where).toBe("object_type IN (?, ?) AND object_id = ?");
+    expect(statement?.bind).toStrictEqual([
+      "locker.item",
+      "locker.auth",
+      "item-1",
     ]);
   });
 

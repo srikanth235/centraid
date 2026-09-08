@@ -6,18 +6,35 @@
  * stored breach flag. Only non-trashed items are reviewed.
  */
 
-import { decorate, readTags, readStarred, readWatchtower } from "./items.ts";
+import {
+  LOCKER_ITEM_COLUMNS,
+  decorate,
+  readStarred,
+  readTags,
+  readWatchtower,
+} from "./items.ts";
 import type { RawItem } from "./items.ts";
+
+/** How many items this shelf shows. */
+const WATCH_ROWS = 2000;
 
 export default async function watchtowerHandler({ ctx }: HandlerArgs) {
   try {
-    const res = await ctx.vault.read({
-      entity: "locker.item",
-      where: [{ column: "deleted_at", op: "is-null" }],
-      orderBy: { column: "updated_at", dir: "desc" },
-      limit: 2000,
+    const res = await ctx.vault.page<RawItem>({
+      query: {
+        name: "locker.watchtower.items",
+        select: LOCKER_ITEM_COLUMNS,
+        from: "locker_item",
+        where: "deleted_at IS NULL",
+        order: {
+          sortColumn: "updated_at",
+          pkColumn: "item_id",
+          descending: true,
+        },
+      },
+      limit: WATCH_ROWS,
     });
-    const rows = (res.rows ?? []) as unknown as RawItem[];
+    const rows = res.rows;
     const ids = rows.map((r) => r.item_id);
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids),

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import groupHandler from "./group.ts";
 
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
@@ -57,10 +58,11 @@ describe("Tally group departed participants", () => {
         rows: Array<Record<string, unknown>>;
       }>
     >(async ({ entity }) => ({ rows: ROWS[entity] ?? [] }));
+    const { page, statements } = pagedFixture(ROWS);
 
     const result = await groupHandler({
       input: { group_id: "group-trip" },
-      ctx: { vault: { read } },
+      ctx: { vault: { page, read } },
     } as unknown as HandlerArgs);
 
     expect(result.members.map((member) => member.party_id)).toStrictEqual([
@@ -78,15 +80,15 @@ describe("Tally group departed participants", () => {
         departed: true,
       })
     );
-    expect(read).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entity: "core.party",
-        where: [
-          expect.objectContaining({
-            value: expect.arrayContaining(["party-departed"]),
-          }),
-        ],
-      })
-    );
+    // The party read is a paged statement since #996 wave 4: the departed
+    // participant's id is in its binds, which is the claim that matters —
+    // a member who left is still nameable wherever the ledger refers to them.
+    expect(
+      statements.some(
+        (statement) =>
+          statement.from === "core_party" &&
+          (statement.bind ?? []).includes("party-departed")
+      )
+    ).toBe(true);
   });
 });

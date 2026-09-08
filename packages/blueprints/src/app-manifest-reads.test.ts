@@ -298,12 +298,36 @@ function sourcesFor(id: string): string {
   ].join("\n");
 }
 
-/** Read CALL SITES, precisely: `entity: "schema.table"`. */
+/**
+ * Read CALL SITES, precisely — through BOTH doors (#996 wave 4, R8).
+ *
+ * `entity: "schema.table"` is the declarative read's spelling. A paged
+ * statement names the PHYSICAL table instead (`from: "access_receipt"`),
+ * because the same statement runs on a seat's own file and on the gateway's
+ * paged door, and the first underscore is what separates the two halves.
+ * Missing the second spelling would let an app read a table it never declared
+ * simply by asking for it as a page, which is the opposite of what this file
+ * is for.
+ */
 function entitiesRead(source: string): Set<string> {
-  return new Set(
-    [...source.matchAll(/entity:\s*"(?<entity>[a-z_]+\.[a-z_]+)"/gu)].map(
-      (match) => match.groups!.entity!
-    )
+  const declarative = [
+    ...source.matchAll(/entity:\s*"(?<entity>[a-z_]+\.[a-z_]+)"/gu),
+  ].map((match) => match.groups!.entity!);
+  const paged = [
+    ...source.matchAll(/from:\s*"(?<table>[a-z_]+_[a-z_]+)"/gu),
+  ].map((match) => {
+    const table = match.groups!.table!;
+    const cut = table.indexOf("_");
+    return `${table.slice(0, cut)}.${table.slice(cut + 1)}`;
+  });
+  return new Set([...declarative, ...paged]);
+}
+
+/** Whichever spelling a source reaches for the entity by. */
+function namesEntity(source: string, entity: string): boolean {
+  return (
+    source.includes(`"${entity}"`) ||
+    source.includes(`"${entity.replace(".", "_")}"`)
   );
 }
 
@@ -343,7 +367,7 @@ describe("manifest reads", () => {
     (id) => {
       const source = sourcesFor(id);
       const unused = READS[id]!.filter(
-        (entity) => !source.includes(`"${entity}"`)
+        (entity) => !namesEntity(source, entity)
       );
       expect(
         unused,

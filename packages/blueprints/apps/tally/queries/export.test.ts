@@ -6,6 +6,7 @@
 // the range rather than the group.
 import { describe, expect, it, vi } from "vitest";
 
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import exportHandler from "./export.ts";
 
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
@@ -119,7 +120,7 @@ function run(input: Record<string, unknown>) {
   }));
   return exportHandler({
     input,
-    ctx: { vault: { read } },
+    ctx: { vault: { page: pagedFixture(ROWS).page, read } },
   } as unknown as HandlerArgs);
 }
 

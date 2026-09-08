@@ -22,6 +22,11 @@ import { inList, readById, readPages } from "../../_shared/paged-reads.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readPersonShareLinks } from "./_shared.ts";
+import {
+  contactEntries,
+  readChannelCollisions,
+  readChannels,
+} from "./person-contacts.ts";
 
 interface RawProfile {
   party_id: string;
@@ -39,17 +44,6 @@ interface RawParty {
   party_id: string;
   display_name: string;
   kind?: string;
-}
-
-interface RawContactChannel {
-  channel_id: string;
-  party_id: string;
-  kind: "phone" | "email" | "address" | "handle";
-  label?: string | null;
-  value: string;
-  normalized_value: string;
-  is_preferred: number;
-  provenance_json?: string | null;
 }
 
 interface RawLink {
@@ -135,18 +129,6 @@ interface RawScheme {
   scheme_id: string;
 }
 
-interface ContactEntry {
-  channel_id?: string;
-  kind: "phone" | "email" | "address" | "handle";
-  label?: string | null;
-  value: string;
-  normalized_value?: string;
-  preferred?: boolean;
-  provenance?: Record<string, unknown> | null;
-  duplicate_party_ids?: string[];
-  duplicate_names?: string[];
-}
-
 export default async function personHandler({ input, ctx }: HandlerArgs) {
   const partyId = String(input?.party_id ?? "");
   if (!partyId) return { person: null };
@@ -201,26 +183,10 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       // O-contact): reachability has one store, and the read-time fold of
       // legacy `tel`/`email` identifier rows back into this list went with the
       // rung that moved them onto channels.
-      // ONE PERSON'S CHANNELS, ASKED FOR AS ONE PERSON'S (#996 wave 4). This
-      // read took the WHOLE TABLE with a window of 2,000 — for two reasons at
-      // once: this person's channels, and everyone else's, to find the
-      // duplicates. Both are now asked for by what they are. The second is
-      // below, `in`-bounded by the normalized values this one returned, which
-      // is the set that can possibly collide; a household past 2,000 channels
-      // used to lose both answers silently and in the same read.
-      readPages<RawContactChannel>(ctx, {
-        name: "people.person.channels",
-        select:
-          "channel_id, party_id, kind, label, value, normalized_value, is_preferred, provenance_json",
-        from: "social_contact_channel",
-        where: "party_id = ?",
-        bind: [partyId],
-        order: {
-          sortColumn: "channel_id",
-          pkColumn: "channel_id",
-          descending: false,
-        },
-      }),
+      // The contact rail and its collision search live in
+      // `./person-contacts.ts` — one question, and the read that used to
+      // answer it took the whole table (#996 wave 4).
+      readChannels(ctx, partyId),
       readPages<RawLink>(ctx, {
         name: "people.person.outgoingLinks",
         select:
@@ -373,41 +339,11 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const activityIds = incoming
       .filter((link) => link.from_type === "core.activity")
       .map((link) => link.from_id);
-    // A COLLISION IS ONLY POSSIBLE ON A VALUE THIS PERSON HOLDS, so the search
-    // for one is bounded by those values rather than by the table.
-    const normalizedValues = [
-      ...new Set(channelRows.map((channel) => channel.normalized_value)),
-    ];
-    const otherChannelRows =
-      normalizedValues.length === 0
-        ? []
-        : await readPages<RawContactChannel>(ctx, {
-            name: "people.person.duplicateChannels",
-            select:
-              "channel_id, party_id, kind, label, value, normalized_value, is_preferred, provenance_json",
-            from: "social_contact_channel",
-            where: `${inList("normalized_value", normalizedValues).sql} AND party_id <> ?`,
-            bind: [
-              ...inList("normalized_value", normalizedValues).bind,
-              partyId,
-            ],
-            order: {
-              sortColumn: "channel_id",
-              pkColumn: "channel_id",
-              descending: false,
-            },
-          });
-    const duplicatesOf = (channel: RawContactChannel): string[] =>
-      otherChannelRows
-        .filter(
-          (other) =>
-            other.kind === channel.kind &&
-            other.normalized_value === channel.normalized_value
-        )
-        .map((other) => other.party_id);
-    const duplicatePartyIds = [
-      ...new Set(channelRows.flatMap((channel) => duplicatesOf(channel))),
-    ];
+    const { duplicatesOf, duplicatePartyIds } = await readChannelCollisions(
+      ctx,
+      partyId,
+      channelRows
+    );
     const [
       relatedParties,
       duplicateParties,
@@ -515,37 +451,11 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const duplicateNameById = new Map(
       duplicatePartyRows.map((row) => [row.party_id, row.display_name])
     );
-    const contact: ContactEntry[] = channelRows
-      .toSorted(
-        (a, b) =>
-          b.is_preferred - a.is_preferred ||
-          a.kind.localeCompare(b.kind) ||
-          a.channel_id.localeCompare(b.channel_id)
-      )
-      .map((channel) => {
-        const duplicateIds = duplicatesOf(channel);
-        let provenance: Record<string, unknown> | null = null;
-        try {
-          provenance = channel.provenance_json
-            ? (JSON.parse(channel.provenance_json) as Record<string, unknown>)
-            : null;
-        } catch {
-          provenance = { source: "unreadable provenance" };
-        }
-        return {
-          channel_id: channel.channel_id,
-          kind: channel.kind,
-          label: channel.label ?? null,
-          value: channel.value,
-          normalized_value: channel.normalized_value,
-          preferred: Boolean(channel.is_preferred),
-          provenance,
-          duplicate_party_ids: duplicateIds,
-          duplicate_names: duplicateIds.map(
-            (id: string) => duplicateNameById.get(id) ?? id
-          ),
-        };
-      });
+    const contact = contactEntries(
+      channelRows,
+      duplicatesOf,
+      duplicateNameById
+    );
     const person = {
       // Stamps ride along: the detail draws the roster's chip (#864).
       ...Object.fromEntries(

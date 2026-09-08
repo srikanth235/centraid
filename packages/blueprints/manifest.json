@@ -382,6 +382,7 @@
         "queries/journal.ts",
         "queries/people-roster.test.ts",
         "queries/people.ts",
+        "queries/person-contacts.ts",
         "queries/person.ts",
         "queries/search.ts",
         "queries/share-links.test.ts",

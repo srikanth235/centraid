@@ -13,13 +13,17 @@
  */
 
 import {
+  LOCKER_ITEM_COLUMNS,
   decorate,
-  readTags,
   readStarred,
+  readTags,
   readWatchtower,
   rethrowIfLocalReadRefused,
 } from "./items.ts";
 import type { RawItem } from "./items.ts";
+
+/** How many items this shelf shows. */
+const SEARCH_ROWS = 500;
 
 export default async function searchHandler({
   input,
@@ -33,13 +37,21 @@ export default async function searchHandler({
     .toLowerCase();
   if (!term) return { items: [] };
   try {
-    const res = await ctx.vault.read({
-      entity: "locker.item",
-      where: [{ column: "deleted_at", op: "is-null" }],
-      orderBy: { column: "updated_at", dir: "desc" },
-      limit: 500,
+    const res = await ctx.vault.page<RawItem>({
+      query: {
+        name: "locker.search.items",
+        select: LOCKER_ITEM_COLUMNS,
+        from: "locker_item",
+        where: "deleted_at IS NULL",
+        order: {
+          sortColumn: "updated_at",
+          pkColumn: "item_id",
+          descending: true,
+        },
+      },
+      limit: SEARCH_ROWS,
     });
-    const matched = ((res.rows ?? []) as unknown as RawItem[]).filter((it) => {
+    const matched = res.rows.filter((it) => {
       return (
         String(it.title || "")
           .toLowerCase()

@@ -115,7 +115,8 @@ describe("Locker Companion queries (#462)", () => {
     const invoke = vi.fn<VaultInvokeTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
+        // `autofill-item` reads its one login as a PAGE since #996 wave 4.
+        page: async () => ({
           rows: [
             {
               item_id: "login-1",
@@ -158,7 +159,7 @@ describe("Locker Companion queries (#462)", () => {
     const reveal = vi.fn<VaultRevealTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
+        page: async () => ({
           rows: [
             {
               item_id: "login-1",

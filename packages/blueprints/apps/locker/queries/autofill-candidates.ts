@@ -6,6 +6,11 @@
  * this handler.
  */
 
+import { LOCKER_ITEM_COLUMNS } from "./items.ts";
+
+/** How many logins the picker considers. */
+const LOGIN_ROWS = 2000;
+
 interface LoginRow {
   item_id: string;
   title: string;
@@ -39,14 +44,20 @@ export default async function autofillCandidates({
     // that holds no vault has to be gated. Raised in the wave-6 receipt as an
     // open question rather than settled here.
     const [response, watchtower] = await Promise.all([
-      ctx.vault.read({
-        entity: "locker.item",
-        where: [
-          { column: "type", op: "eq", value: "login" },
-          { column: "deleted_at", op: "is-null" },
-        ],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: 2000,
+      ctx.vault.page<LoginRow>({
+        query: {
+          name: "locker.autofill.logins",
+          select: LOCKER_ITEM_COLUMNS,
+          from: "locker_item",
+          where: "type = ? AND deleted_at IS NULL",
+          bind: ["login"],
+          order: {
+            sortColumn: "updated_at",
+            pkColumn: "item_id",
+            descending: true,
+          },
+        },
+        limit: LOGIN_ROWS,
       }),
       ctx.vault.invoke({ command: "locker.watchtower", input: {} }),
     ]);
