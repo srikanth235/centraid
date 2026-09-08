@@ -9600,3 +9600,99 @@ way. None of them names a file this commit touches.
 - **A pin asserts the constant, not a copy of it.** Both schema-epoch pins are
   the reason: a literal `2` beside a `REPLICA_SCHEMA_EPOCH` of 3 is a gate that
   has stopped gating.
+
+## Close pass — the doc step, slice 1: state docs to current (#996)
+
+The cut deleted the plane and touched two docs; every other state doc still
+described the shaped store as a current mechanism. This slice brings them to
+current state and turns what cannot be rewritten into supersession markers with
+the issue link. No sweep, no PR-readiness, no issue-body reconciliation — those
+are the owner's later steps and what this slice noticed for them is listed
+under `### Left for the sweep and the PR steps` below.
+
+### Evidence
+
+The stale-term grep the slice ran against, before and after:
+
+```
+grep -rn -i "coordinator\|replica_row\|payload_json\|vault\.read\|read-plan\|row-key\|declarative read\|replica store" \
+  docs *.md packages/*/README.md apps/*/README.md
+```
+
+Before: 26 hits describing live mechanisms across nine files. After: every
+surviving hit is either an unrelated meaning (`row-keyed` as the contrast term
+in the shape-keyed provenance argument, the Atlas census, the shared-CSS census,
+the config-ownership sense of "declarative", the give-plane coordinator #928
+deleted) or an explicit supersession marker carrying the #996 link.
+
+A second grep proved which cited paths no longer exist, and every one of them
+was repaired or removed:
+
+```
+grep -rhoE '`(packages|apps|tests|scripts)/[A-Za-z0-9_./*-]+`' docs *.md \
+  | tr -d '`' | while read p; do [ -e "$p" ] || echo "MISSING $p"; done
+```
+
+### What changed
+
+- `ARCHITECTURE.md` — the **Device replicas** section is rewritten: a seat holds
+  the vault rather than a consent-scoped shape, the two doors (`seat/snapshot`,
+  `seat/log`) replace the shaped bootstrap-and-delta prose, the epoch pair is
+  stated as compatibility versus additive progress, and the local read is the
+  vault ⊕ an outbox that is a table in the same file. The **App render path**
+  bullet says a read is the app's own paged handler; `origin_row_version` is
+  named as the origin's `row_version` (R6) rather than a change sequence.
+- `docs/mobile-offline.md` — the mounted-plane framing goes: the intro, the
+  read-plane heading, bootstrap (a file copy resumable by byte range, not a
+  windowed newest-first walk), the value bullet (no text ceilings, no lazy
+  fields), the outbox paragraph (`SeatIntentStore` over the seat's own file),
+  the storage screen, the at-rest decision, Locker's boundary (W6-D2, not the
+  permit tier), Tally's reads, the performance envelope (the old numbers kept,
+  labelled as the superseded store's provenance) and the truncation rules (the
+  `acceptTruncation` flag and `ctx.vault.read` are grep-enforced gone).
+- `docs/decisions.md` — five #996 rulings that lived only in this receipt are
+  now dated decisions: **W5-D1** (search on the seat; the declarative call sites
+  convert before the cut), **W6-D1** (the §293 sealed-column class survives the
+  Locker gate), **W6-D2** (`window.centraid.locker`; blueprint code never holds
+  `K`), **W6-D3** (the Companion fills through that door; the bridge is a named
+  seam) and the owner's W5 timing ruling (opened before the emulator gate; the
+  four `mobile/*` rows stay open with provenance `emulator`). The #922 section
+  gains one supersession paragraph covering SB-text, SB-replica-sync, SB-overlay-1
+  and the `synchronous=FULL` register row; **D-order** is marked superseded;
+  `coordinator.applyChanges` and the `access_app` row-key HMAC are restated.
+- `docs/logs.md` — the `invalidations` / `reReads` counter row now says both have
+  **no writer**: `LiveQuery` and `LiveQueryRegistry` lost their last consumer in
+  the cut, so the counters read zero and whether to delete two protocol counters
+  is an owner decision.
+- `docs/vault-ontology.md` — ONT-21's `access_app` line no longer describes its
+  signing key as the replica row-key HMAC's, which is deleted.
+- `TESTING.md` — cataloged contract 4 named `multi-writer.contract.test.ts`,
+  deleted by the cut; it is `offline-chain.contract.test.ts`.
+- `QUALITY.md` — the open `evaluateReplicaRead` observation is resolved: the
+  open decision (the proof or the function) was answered by deleting both with
+  the plane.
+
+### Correction to an earlier row in this receipt
+
+The cut's `**Deleted (59):**` list names
+`docs/traps/expression-index-spelling.md`. It was **modified**, not deleted —
+the same section's prose says so ("It is REWRITTEN as a supersession marker"),
+and the file is present at `b07bf9a9f`. The list is the entry that is wrong.
+
+### Every file this commit touches
+
+- `ARCHITECTURE.md`
+- `QUALITY.md`
+- `TESTING.md`
+- `docs/decisions.md`
+- `docs/logs.md`
+- `docs/mobile-offline.md`
+- `docs/vault-ontology.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Gates
+
+```
+bun run format
+bash .governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh
+```

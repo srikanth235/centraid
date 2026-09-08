@@ -135,15 +135,6 @@
   `SELECT *` walk; here is what would break if it stopped") in the file and move
   the per-issue audit trail to the receipts that already exist.
 
-- **`evaluateReplicaRead` has no production caller on any host.**
-  `packages/client/src/replica/query.ts` still exports it, but the store compiles
-  the grammar to SQL in `read-plan.ts` and mobile's multi-vault reader composes a
-  plan; the function survives only as the oracle the pushdown parity suites
-  execute against. That is a legitimate use — an independent implementation is
-  what makes a parity proof mean anything — but it is not what the file says it
-  is, and a second implementation nobody runs drifts. Whether the proof or the
-  function should go is the open decision.
-
 - **The phone's Access history cannot narrow to one item.**
   `lockerAccess` (`apps/mobile/src/apps/locker/locker-gateway.ts`) never sends
   `item_id`, so the phone always reads the newest receipts across every item
@@ -371,6 +362,14 @@
   which makes every `.tsx` number in that file wrong in the same direction.
 
 ## Resolved
+
+- #996 — **`evaluateReplicaRead` had no production caller on any host.** It was
+  filed open while `packages/client/src/replica/query.ts` still exported it and
+  the store compiled the read grammar to SQL elsewhere, leaving a second
+  implementation nobody ran except the pushdown parity oracle. The open decision
+  — the proof or the function — was answered by deleting both with the plane
+  they belonged to: a seat runs an app handler's own statement over the vault's
+  real tables, so there is no grammar to evaluate twice.
 
 - #922 — **Two surfaces #882 added to the phone were unvirtualized.**
   `apps/mobile/src/apps/notes/NotesPlaces.tsx` kept one hand-wired `ScrollView`
