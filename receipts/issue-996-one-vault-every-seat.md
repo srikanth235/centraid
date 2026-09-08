@@ -8501,3 +8501,112 @@ it through `useSeatWindow`.
 - **A refusal keeps its own sentence.** An online-only browser seat says it
   holds no copy of the vault rather than drawing an empty list, and the missing
   door is named here rather than papered over with a window.
+
+## Wave 5i — where the phone stands, measured, and what Part B still is (#996)
+
+### The declarative plane has no callers left, and that is the whole of it
+
+Waves 5e–5h converted the last forty-four screen reads. Measured at this head:
+
+- `grep -rn "useReplicaQuery(" apps/mobile/src packages/client/src`, outside the
+  hook's own file and its own tests — EMPTY.
+- `grep -rn shape_id packages/client apps/ tests/` — **51**, in five files:
+  `read-plan.ts`, `store-core.ts`, `store-core-storage-lifecycle.test.ts`,
+  `sqlite-store.test.ts` and `tests/schema-export-fingerprint.json`. Every one
+  of them is the OLD PLANE ITSELF. No screen, no app and no shell route reaches
+  it any more.
+
+That is exactly the precondition wave 5b named as "the whole of what blocks
+W5's deletions", and it now holds.
+
+### Gates at this lane's head
+
+- `bun run typecheck` — 25/25.
+- `bun run knip` — 1 unused export, `DEVICE_OFFER` in
+  `apps/mobile/src/apps/locker/locker-seat-copy.ts`, inherited from `4a7d70229`
+  and untouched here.
+- `bun run governance < /dev/null` — 21 passed, 1 failed: `bcf17bd3f`, the known
+  inherited violation.
+- `bun run --cwd apps/mobile ci:native-state` — Pod lock, project paths and
+  iOS/Android fingerprints agree; no native input changed, nothing regenerated.
+- `bun run check:push:static` — 4/4 on every committed tree.
+- `bun run --cwd apps/mobile test` — 289 files, 2,442 tests, 0 failed.
+- `bun run --cwd packages/client test` — 293 files, 2,646 tests, 0 failed.
+
+### App weight, measured on this Linux worktree
+
+| tree | iOS largest chunk | Android largest chunk |
+| --- | --- | --- |
+| wave 5c's head | 8,338,639 B | 8,367,348 B |
+| this lane's head | 8,347,464 B | 8,368,281 B |
+| ceiling (`mobile/app-weight/build-artifact/any`) | 8,220,000 B | 8,220,000 B |
+
+**The ceiling is not raised.** Both trees are over and the overage is inherited:
+the branch head was already past it before wave 4 opened. These four commits add
+**8,825 B (iOS) and 933 B (Android)** — the statement modules, minus the request
+objects and the `home-tile-reads` request builders they replaced.
+
+**The import that carries the overage is the old plane, and it is now
+UNREACHED**: `@centraid/client/replica/native` re-exports `store-core.ts`
+(1,873 lines), `read-plan.ts` (478), `read-plan-clauses.ts` (339), `query.ts`
+(397), `coordinator.ts` (911) and `windowed-bootstrap.ts` (285) — 4,283 lines of
+source that no screen read reaches. Its shipped byte cost cannot be attributed
+exactly until it is removed, which is Part B.
+
+### What is NOT done: Part B, and why it is not half-done here
+
+Part B (issue line 165) is ONE cut, and this lane did not make it. What it
+requires, measured against the tree rather than the plan:
+
+- `read-plan.ts`, `read-plan-clauses.ts`, `query.ts`, `store-core.ts` (1,873
+  lines), `sqlite-store.ts`, `worker-client.ts`, `sqlite-worker.ts`,
+  `windowed-bootstrap.ts`, the wasm driver and statement cache, and their
+  fourteen test files.
+- `coordinator.ts` is NOT on the brief's delete list, and it is where the cut
+  is genuinely hard: `ReplicaShellSession` and `NativeReplicaSession` reach it
+  for the INTENT rail — enqueue, revise, retry, settle, `applyChanges`,
+  `status`, `catalog`, `purge` — not only for `readWire`/`searchWire`. Deleting
+  the store under it means the intent rail moves onto the seat in the same
+  commit, and `apps/mobile/src/lib/replica/native-replica-store.ts`,
+  `vault-read-plane.ts` and `native-session.ts`'s read half move with it.
+- `inline-query-ctx.native.ts` and `inlineQueryCtx.ts` still compose a `reads`
+  half beside `page`; every handler they serve is paged since wave 4, so that
+  half goes with the grammar — and Locker's and Tally's `*-reads.ts` run
+  through it.
+- The server half — `replica-routes.ts`'s shaped snapshot/delta and
+  `buildReplicaShapes` — plus the per-app row-key HMAC, the census probes, the
+  deferred values, `unavailable-columns.ts`'s masking half, one `schema_epoch`
+  bump, the composite indexes for the 36 temp-B-tree sorts, a plan-snapshot
+  re-run and a re-frozen golden corpus.
+
+**Deliberately not started rather than partly done.** The brief's own words are
+"one cut, no rungs, no compatibility paths", and a tree with half the plane
+deleted is precisely a compatibility path — the shape the umbrella has been
+removing for five waves. The 36 composite indexes were measured here (30
+distinct `(table, ORDER BY)` groups; four of them order on the primary key
+alone and take an index the table already has, so those need the PREDICATE
+looked at rather than a `(sort, pk)` pair) and left unwritten for the same
+reason: the brief binds them to the same baseline DDL edit and the same single
+`schema_epoch` bump as the deletion, and writing them alone would force a
+second bump.
+
+### The owner ruling this wave ran under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+`mobile/*` rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head `a1e8c4390` stand as v0 evidence; the rows stay open
+ledger rows with provenance `emulator`.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the cut
+
+- **A measured number goes in the receipt, never an intended one.** The
+  `shape_id` count, the app weight and the temp-B-tree groups are all read off
+  this tree.
+- **A cut whose contract is atomicity is not started until it can be finished.**
+  Half a deletion is the compatibility path the deletion exists to remove.
