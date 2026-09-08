@@ -27,9 +27,7 @@
 
 import type { PageQuery } from "@centraid/core/page";
 
-import { DOCS_CUSTODY } from "../../kit/storage/custody-pages";
-
-export { DOCS_CUSTODY };
+export { DOCS_CUSTODY } from "../../kit/storage/custody-pages";
 
 /** The bytes some document on this drive currently reads as its own. */
 const CURRENT_DOCUMENT_BYTES = (column: string): string =>

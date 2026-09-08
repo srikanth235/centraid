@@ -9622,3 +9622,5 @@ bunx vitest run apps/desktop/src/main/embedded-gateway-layout.test.ts \
   packages/client/src/replica/seat/gunzip.test.ts \
   packages/client/src/replica/seat/base-versions.test.ts
 ```
+
+Follow-up on `4e9956764`: oxlint `prefer-export-from` on the Docs custody re-export, and `lint:law-registry` — the tripwire's owner is `app-query-plans.test.ts` but no title there carried `[law:app-entity-tripwire]`. The tag sits on the test that asserts each app reads no undeclared table.
