@@ -15,7 +15,6 @@ import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -33,7 +32,7 @@ import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { usePhotoGrantEntry } from "./photo-grants";
 import {
   batchAddToAlbum,
@@ -61,11 +60,8 @@ export default function AlbumDetail({
   const { session } = replica;
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
-  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
-  const entries = useReplicaQuery(
-    "photos",
-    PHOTO_ENTITY_READS.collectionEntries
-  );
+  const collections = usePhotoEntity("collections");
+  const entries = usePhotoEntity("collectionEntries");
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);
   const [residentAlbumId, setResidentAlbumId] = useState<string>();

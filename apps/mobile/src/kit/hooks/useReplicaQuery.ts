@@ -129,15 +129,21 @@ export function useReplicaQuery(
     };
   }, []);
 
-  // THE PHONE'S BOUNDARY (#922 0a). A screen that declares no window and does
-  // not accept the default one is refused before the read runs: a page silently
-  // capped at 1,000 renders a roster the member believes is complete. The
-  // refusal is state, not a crash — this hook's consumers already render
+  // THE PHONE'S BOUNDARY (#922 0a, tightened by #996 wave 4b). A screen that
+  // declares no window is refused before the read runs: a page silently capped
+  // at 1,000 renders a roster the member believes is complete.
+  //
+  // There is no longer a way to opt INTO that cap. `acceptTruncation` said "the
+  // default window is fine" for forty-four reads that were whole sets, and
+  // every one of them is a page over the seat now (`useSeatPages`), so the only
+  // reads left here are the ones that always named their own window.
+  //
+  // The refusal is state, not a crash — this hook's consumers already render
   // `error`, and a thrown exception here would blank the screen instead of
   // naming the entity and the fix.
   const refusal = useMemo(
     () =>
-      request.limit === undefined && request.acceptTruncation !== true
+      request.limit === undefined
         ? new UnboundedReplicaReadError(request.entity)
         : undefined,
     [request]

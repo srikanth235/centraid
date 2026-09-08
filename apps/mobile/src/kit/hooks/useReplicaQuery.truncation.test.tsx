@@ -5,9 +5,10 @@
  * The phone is the seat the correctness hole hurt most: a roster silently
  * capped at 1,000 is a screen a member counts and believes. So this suite
  * exercises the hook end to end — an undeclared window is refused before the
- * read runs, an accepted default is answered and its truncation surfaced, and
- * a declared window is answered plainly — plus the one render that proves the
- * phrase reaches a screen rather than only a state object.
+ * read runs — and since #996 wave 4b there is no way to opt INTO the default
+ * one, so a read that names the flag is refused exactly as a read that names
+ * nothing is — and a declared window is answered plainly, plus the one render
+ * that proves the phrase reaches a screen rather than only a state object.
  */
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -106,7 +107,8 @@ async function settle(): Promise<void> {
 // exactly as every screen's `useMemo` does; a literal rebuilt per render would
 // re-read forever and this file would be measuring that instead.
 const UNBOUNDED = { entity: "core.party" };
-const ACCEPTED = { entity: "core.party", acceptTruncation: true };
+/** The dead flag. Nothing on the phone reads it; nothing is admitted by it. */
+const FLAGGED = { entity: "core.party", acceptTruncation: true };
 const WINDOWED = { entity: "core.party", limit: 5000 };
 
 describe("useReplicaQuery read boundary", () => {
@@ -121,19 +123,20 @@ describe("useReplicaQuery read boundary", () => {
     await settle();
     const message = text(container, "error");
     expect(message).toContain("core.party");
-    expect(message).toContain("acceptTruncation");
+    expect(message).toContain("limit");
     expect(reads).toHaveLength(0);
     unmount();
   });
 
-  it("answers an accepted default and surfaces the truncation", async () => {
-    answer = { truncated: true, appliedLimit: 1000 };
-    const { container, unmount } = mountBlock(<Probe request={ACCEPTED} />);
+  it("refuses a read that names the dead flag instead of a window", async () => {
+    // The forty-four reads that took the default window are pages over the seat
+    // now (#996 wave 4b). What is left here always named its own window, so the
+    // flag admits nothing and the read never runs.
+    const { container, unmount } = mountBlock(<Probe request={FLAGGED} />);
     await settle();
-    expect(reads).toHaveLength(1);
-    expect(text(container, "error")).toBe("");
-    expect(text(container, "notice")).toBe(truncatedListNotice(1000));
-    expect(readStatus()?.text).toBe(truncatedListNotice(1000));
+    expect(reads).toHaveLength(0);
+    expect(text(container, "error")).toContain("core.party");
+    expect(text(container, "notice")).toBe("");
     unmount();
   });
 

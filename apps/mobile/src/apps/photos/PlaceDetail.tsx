@@ -8,7 +8,6 @@ import { StyleSheet, View } from "react-native";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -18,7 +17,7 @@ import {
 } from "../../kit/replica/write-outcome";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { assetsAtPlace, placeNameAt, unnamedPlaceAt } from "./places-model";
@@ -33,7 +32,7 @@ export default function PlaceDetail({
   const { refreshing, refreshNow } = useReplicaRefresh();
   const { session } = useReplica();
   const { assets: timelineAssets } = usePhotoTimeline();
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const places = usePhotoEntity("places");
   const { placeKey, placeName } = route.params;
   const [naming, setNaming] = useState(false);
   const [typed, setTyped] = useState("");

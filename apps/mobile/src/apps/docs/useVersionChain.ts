@@ -9,7 +9,7 @@
 // the history".
 //
 // FOUR TABLES, ONE DOCUMENT (#996 wave 4b). All four reads were
-// `acceptTruncation: true` over the whole table — every document in the vault
+// the truncation flag over the whole table — every document in the vault
 // to find one, every revision of every entity to walk one chain, and the entire
 // library of bytes to size a handful of them. They are the document's own rows
 // now: the document by its id, its revisions by `entity_id`, and the bytes and

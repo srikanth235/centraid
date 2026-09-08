@@ -27,11 +27,12 @@ import {
 
 import { PHOTOS_SEARCH_PLACEHOLDER } from "@centraid/blueprints/apps/photos/shared-copy";
 import { OnlineOnlyError } from "@centraid/client/replica/native";
+import type { PageQuery } from "@centraid/core/page";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -40,7 +41,7 @@ import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import type { PhotosScreenProps } from "../../navigation";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
 import PhotosSearchRestingState from "./PhotosSearchRestingState";
 import PhotoTimeline from "./PhotoTimeline";
@@ -48,6 +49,23 @@ import { groupedSearchHits, reachableAssetIds } from "./search-hits";
 import type { SearchHit } from "./search-hits";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+
+/*
+ * THE TITLES SEARCH SHOWS, FROM WHERE THEY LIVE (#996 R20(b), wave 4b).
+ *
+ * This read was `core.content_item`, whole, for `row.title` — and bytes have
+ * carried no title since 0b split the representation off the wrapper. The
+ * column is gone, so the map was empty and every hit had been rendering without
+ * the name its capture was given, silently. A title belongs to the WRAPPER, and
+ * for a photo the wrapper is the asset; only the assets that have one are read.
+ */
+const TITLED_ASSETS: PageQuery = {
+  name: "phone.photos.titled-assets",
+  select: "asset_id, content_id, title",
+  from: "media_asset",
+  where: "deleted_at IS NULL AND title IS NOT NULL AND title <> ''",
+  order: { sortColumn: "content_id", pkColumn: "asset_id", descending: false },
+};
 
 /** Verbatim proto:4269, and the same five the web shell offers — examples that
  *  differ per surface teach that the surfaces search different things. */
@@ -122,18 +140,15 @@ export function PhotosSearchView({
   // query rather than navigating the member away.
   const [attempt, setAttempt] = useState(0);
 
-  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
-  const entries = useReplicaQuery(
-    "photos",
-    PHOTO_ENTITY_READS.collectionEntries
-  );
-  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
-  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
-  const contentItems = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.content_item" }), [])
-  );
+  const collections = usePhotoEntity("collections");
+  const entries = usePhotoEntity("collectionEntries");
+  const faces = usePhotoEntity("faceRegions");
+  const parties = usePhotoEntity("parties");
+  const places = usePhotoEntity("places");
+  const titledAssets = useSeatPages("photos", TITLED_ASSETS, {
+    entity: "media.asset",
+    rowIdColumn: "asset_id",
+  });
 
   // `searching` is set in the handler, never in the effect, so no effect writes
   // state synchronously during a render commit.
@@ -231,7 +246,7 @@ export function PhotosSearchView({
 
   const contentTitles = useMemo(() => {
     const titles = new Map<string, string>();
-    for (const row of contentItems.rows) {
+    for (const row of titledAssets.rows) {
       const id = row.content_id;
       const title = row.title;
       if (id != null && title != null && String(title).trim()) {
@@ -239,7 +254,7 @@ export function PhotosSearchView({
       }
     }
     return titles;
-  }, [contentItems.rows]);
+  }, [titledAssets.rows]);
 
   const hits = useMemo(
     () =>

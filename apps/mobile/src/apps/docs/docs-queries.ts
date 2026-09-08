@@ -1,7 +1,7 @@
 /*
  * THE DRIVE'S READS, AS STATEMENTS (#996 wave 4b, R8).
  *
- * Fifteen reads used to be fifteen `acceptTruncation: true` entity requests —
+ * Fifteen reads used to be fifteen the truncation flag entity requests —
  * "the whole table, and whatever window you have", which was 1,000 rows nobody
  * chose. A drive of 1,200 documents rendered 1,000 of them and said nothing.
  *

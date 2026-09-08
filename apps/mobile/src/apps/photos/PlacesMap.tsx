@@ -14,13 +14,12 @@ import type { MenuGroup } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import {
   mapModeNote,
   MAP_MODE_CHIP,
@@ -48,7 +47,7 @@ export default function PlacesMap({
     anchorRef: modeAnchorRef,
     measureAnchor,
   } = useMenuAnchor();
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const places = usePhotoEntity("places");
   const { assets } = usePhotoTimeline();
 
   // Id→row lookup stays inside the memo: hoisted out, it rebuilt every render

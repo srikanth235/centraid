@@ -27,7 +27,7 @@ import { ConsentGate } from "../kit/components/ConsentGate";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
 import TopSafeArea from "../kit/components/TopSafeArea";
-import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../kit/hooks/useSeatPages";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -41,6 +41,13 @@ import {
   backupReceiptExpense,
 } from "../lib/upload/media-producer";
 import type { ScanScreenProps } from "../navigation";
+import {
+  CAPTURE_CIRCLES,
+  CAPTURE_CIRCLE_MEMBERS,
+  CAPTURE_GROUPS,
+  CAPTURE_PARTIES,
+  CAPTURE_VAULT,
+} from "./capture-queries";
 import {
   answerScanOcrConsent,
   hydrateScanOcrConsent,
@@ -113,29 +120,26 @@ export default function ScanScreen({
     };
   }, []);
 
-  const groups = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ acceptTruncation: true, entity: "tally.group" }), [])
-  );
-  const circles = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ acceptTruncation: true, entity: "social.circle" }), [])
-  );
-  const members = useReplicaQuery(
-    "tally",
-    useMemo(
-      () => ({ acceptTruncation: true, entity: "social.circle_member" }),
-      []
-    )
-  );
-  const parties = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
-  );
-  const vault = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.vault" }), [])
-  );
+  const groups = useSeatPages("tally", CAPTURE_GROUPS, {
+    entity: "tally.group",
+    rowIdColumn: "group_id",
+  });
+  const circles = useSeatPages("tally", CAPTURE_CIRCLES, {
+    entity: "social.circle",
+    rowIdColumn: "circle_id",
+  });
+  const members = useSeatPages("tally", CAPTURE_CIRCLE_MEMBERS, {
+    entity: "social.circle_member",
+    rowIdColumn: "member_id",
+  });
+  const parties = useSeatPages("tally", CAPTURE_PARTIES, {
+    entity: "core.party",
+    rowIdColumn: "party_id",
+  });
+  const vault = useSeatPages("tally", CAPTURE_VAULT, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+  });
   const activeGroupId = groupId || String(groups.rows[0]?.group_id ?? "");
   const activeCircleId = String(
     groups.rows.find((row) => String(row.group_id) === activeGroupId)

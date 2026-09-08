@@ -163,6 +163,30 @@ vi.mock(
     }) as unknown as Partial<ThemeModule>
 );
 
+// The seat's paged reads (#996 wave 4b). Photos' five shared sets and the
+// screen-local ones are walks over this phone's own copy now; the double keys
+// on the entity the read declares, exactly as the old one keyed on the request.
+vi.mock(
+  import("../../kit/hooks/useSeatPages"),
+  () =>
+    ({
+      useSeatPages: (
+        _app: string,
+        _query: unknown,
+        read: { entity: string }
+      ): { loading: boolean; rows: unknown[] } => ({
+        loading: false,
+        rows:
+          read.entity === "media.face_region"
+            ? mocks.faces
+            : read.entity === "media.face_cluster"
+              ? mocks.clusters
+              : read.entity === "core.party"
+                ? mocks.parties
+                : mocks.policies,
+      }),
+    }) as never
+);
 vi.mock(
   import("../../kit/hooks/useReplicaQuery"),
   () =>

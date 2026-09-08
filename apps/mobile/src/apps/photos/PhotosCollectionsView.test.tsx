@@ -85,6 +85,22 @@ vi.mock(import("../../kit/components/NativeText"), async () => {
   } as never;
 });
 
+// The seat's paged reads (#996 wave 4b). Photos' five shared sets and the
+// screen-local ones are walks over this phone's own copy now; the double keys
+// on the entity the read declares, exactly as the old one keyed on the request.
+vi.mock(
+  import("../../kit/hooks/useSeatPages"),
+  () =>
+    ({
+      useSeatPages: (
+        _appId: string,
+        _query: unknown,
+        read: { entity: string }
+      ): { rows: unknown[] } => ({
+        rows: read.entity === "core.place" ? mocks.places : [],
+      }),
+    }) as never
+);
 vi.mock(
   import("../../kit/hooks/useReplicaQuery"),
   () =>

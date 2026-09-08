@@ -39,7 +39,7 @@ import type {
   SimilarMemory,
   TripMemory,
 } from "./memories-model";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { usePhotosRung } from "./photos-rung-store";
 import { rungHeight } from "./photos-rungs";
 import { useVaultFacts } from "./photos-vaults";
@@ -253,7 +253,7 @@ export default function MemoriesView({
     "photos",
     useMemo(() => ({ entity: "media.memory_member", limit: 20_000 }), [])
   );
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const places = usePhotoEntity("places");
 
   const placeFacts = useMemo(
     () => memoryPlacesById(places.rows as readonly RawPlaceRow[]),

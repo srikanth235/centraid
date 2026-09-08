@@ -55,15 +55,16 @@ const REPLICA = {
   ready: true,
   reachability: "current" as const,
   scopes: [],
-  session: {
-    read: (_appId: string, request: { entity: string }) => {
-      reads.push(request.entity);
-      return Promise.resolve({
-        rows: [],
-        cursor: { epoch: "e", seq: 1 },
-        dependency: { shapeId: "s", entity: request.entity },
-      });
+  // The seat's paged read (#996 wave 4b). Every screen read on the phone is a
+  // walk over this phone's own copy now, so the census counts pages: one page,
+  // no continuation, and the statement's name IS the entity it stands for.
+  seat: {
+    page: (request: { query: { name: string } }) => {
+      reads.push(request.query.name);
+      return Promise.resolve({ rows: [] });
     },
+  },
+  session: {
     subscribe: (
       _appId: string,
       listener: (invalidations: readonly ReplicaInvalidation[]) => void
@@ -80,12 +81,9 @@ vi.mock(import("../replica/ReplicaProvider"), () => ({
   useReplica: () => REPLICA as unknown as ReplicaContextValue,
 }));
 
-const {
-  useReplicaQuery,
-  mapReplicaRows,
-  readDependsOn,
-  replicaFieldUnavailable,
-} = await import("./useReplicaQuery");
+const { mapReplicaRows, readDependsOn, replicaFieldUnavailable } =
+  await import("./useReplicaQuery");
+const { useSeatPages } = await import("./useSeatPages");
 
 /**
  * The read set each app's home screen holds, taken from its own read layer
@@ -179,13 +177,21 @@ function Screen(props: {
 }
 
 function Read(props: { appId: string; entity: string }): React.JSX.Element {
-  // Exactly the shape every screen's own `useMemo` produces: one stable request
-  // object per entity, so the hook's effect keys on identity as it does live.
-  const request = React.useMemo(
-    () => ({ acceptTruncation: true, entity: props.entity }),
+  // Exactly the shape every screen's own module constant has: one stable
+  // statement per entity, so the hook's effect keys on identity as it does live.
+  const query = React.useMemo(
+    () => ({
+      name: props.entity,
+      select: "id",
+      from: props.entity.replace(".", "_"),
+      order: { sortColumn: "id", pkColumn: "id", descending: false },
+    }),
     [props.entity]
   );
-  const state = useReplicaQuery(props.appId, request as never);
+  const state = useSeatPages(props.appId, query, {
+    entity: props.entity,
+    rowIdColumn: "id",
+  });
   return <span data-testid={props.entity}>{state.rows.length}</span>;
 }
 
@@ -286,7 +292,7 @@ describe("one write, one re-read", () => {
 
   it("counts the reads a whole app screen costs per invalidation batch", () => {
     // The predicate under the counter, stated once without a renderer.
-    const request = { acceptTruncation: true, entity: "core.event" } as never;
+    const request = { entity: "core.event", limit: 100 } as never;
     expect(
       readDependsOn(request, [
         { entity: "core.party", shapeId: "s", source: "canonical" },

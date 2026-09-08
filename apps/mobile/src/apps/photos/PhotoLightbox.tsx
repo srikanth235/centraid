@@ -41,7 +41,6 @@ import {
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { postStatus } from "../../kit/components/status-line";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -59,7 +58,7 @@ import { MediaPage } from "./MediaPage";
 import { EDITOR_TITLE, editorMeta } from "./photo-edit-model";
 import { saveEditAsNewPhotograph } from "./photo-edit-save";
 import type { EditPlan } from "./photo-edit-save";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { PhotoEditor } from "./PhotoEditor";
 import { PhotoFilmstrip } from "./PhotoFilmstrip";
 import { PhotoInfoSheet } from "./PhotoInfoSheet";
@@ -109,14 +108,11 @@ export default function PhotoLightbox({
   // Live: switching from wifi to cellular mid-session must gate the next photo.
   const networkType = useNetworkState().type;
   const { assets } = usePhotoTimeline();
-  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
-  const entries = useReplicaQuery(
-    "photos",
-    PHOTO_ENTITY_READS.collectionEntries
-  );
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
-  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
-  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
+  const collections = usePhotoEntity("collections");
+  const entries = usePhotoEntity("collectionEntries");
+  const places = usePhotoEntity("places");
+  const faces = usePhotoEntity("faceRegions");
+  const parties = usePhotoEntity("parties");
   // By asset identity, never raw index: this timeline is still loading, so
   // device pages land after mount and shift every index.
   const [currentId, setCurrentId] = useState(route.params.assetId);

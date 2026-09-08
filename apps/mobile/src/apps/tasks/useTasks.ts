@@ -30,7 +30,7 @@ const APP_ID = "tasks";
 /*
  * THE BOARD'S THREE READS, AS PAGES OVER THIS PHONE'S OWN COPY (#996 wave 4b).
  *
- * All three used to be `acceptTruncation: true` — "give me the entity and
+ * All three used to be the truncation flag — "give me the entity and
  * whatever window you have", which was 1,000 rows nobody chose. A member with
  * more than a thousand tasks got a board that was silently missing the rest,
  * and the board arithmetic below (`nestTaskFamilies`) ran over the fragment as

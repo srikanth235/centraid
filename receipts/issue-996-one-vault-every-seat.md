@@ -7263,3 +7263,122 @@ rather than as an empty answer.
   and custody rows follow the drive's documents, never the library.
 - **A composite key orders on itself.** Where there is no single-column id, the
   ORDER BY's two columns are the key.
+
+## Wave 4m — Notes, Photos, the two capture screens, and the flag leaves the phone (#996)
+
+### Notes
+
+Nine of Notes' ten reads declared the truncation flag. The tenth — the note
+bodies — carried the comment that condemns the other nine: *"an unbounded read
+is capped at 1000 rows server-side, so at photo-scale vaults most note bodies
+fall outside the window and render blank."* The same was true of the notes, the
+links, the anchors, the tags and the notebooks; only the bodies had been
+noticed.
+
+Two are newly bounded rather than merely paged. `core_link` carries every
+relation in the vault — a photo's place, a task's reference, a person's
+activity — and Notes reads it to draw the edges BETWEEN NOTES; it is bounded to
+notes on both ends now, and the anchors to those links.
+
+### Photos
+
+`photo-entity-reads.ts` held five requests with a comment admitting what they
+were: *"each takes the default window knowingly … the flag is the greppable debt
+marker."* They are statements now, and the module carries the hook, so a screen
+names the set it wants rather than assembling a read. Fourteen screens changed
+call site; none changed behaviour.
+
+Four screen-local reads were the interesting ones:
+
+- **FaceReview's assets** were the whole library. Face review needs a face's
+  asset; a hundred thousand captures with no face in them were read to find the
+  few hundred that have one. `asset_id IN (SELECT asset_id FROM
+  media_face_region)` is the queue.
+- **PhotoStateView's trash lineage** is two columns over the trash, not over
+  the library.
+- **PhotosSearch's titles read was reading a column that does not exist.** It
+  asked `core.content_item` for `row.title`, and bytes have carried no title
+  since 0b split the representation off the wrapper (R20(b)). The map was
+  always empty, so every search hit had been rendering without the name its
+  capture was given — silently, for as long as 0b has been in. Titles come from
+  the WRAPPER now (`media_asset.title`), and only from the assets that have one.
+- **PhotosPeopleView's clusters** and the enrichment tier both name their rows.
+
+### Capture and Scan
+
+Six picker reads over `schedule_calendar`, `tally_group`, `social_circle`,
+`social_circle_member`, `core_party` and `core_vault`. `capture-queries.ts` is
+shared by both screens because they share four of the six, and a picker that
+lists groups one way on one screen and another way on the other is a bug nobody
+would find. Archived groups are excluded in SQL: an archived group is not
+somewhere to file a capture.
+
+### The flag is gone from the phone
+
+`useReplicaQuery`'s boundary no longer has a second way to be admitted. Every
+remaining call site on the phone names its own `limit`; the forty-four that did
+not are walks over the seat. `replica-read-windows.test.ts` gains the TRIPWIRE
+— `acceptTruncation:` and `UNBOUNDED_READ` appear nowhere under `apps/mobile/src`
+— which is the only assertion a read cannot satisfy by reintroducing the flag
+somewhere new. The census that remains is 57 windowed reads, down from 101.
+
+### Gates
+
+- `bunx vitest run apps/mobile/src/apps/photos` — 55 files, 620 passed.
+- `bun run --cwd apps/mobile test` — 286 passed / 3 failed (10 tests), the same
+  three inherited at `d0064644e`; no new failure.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/apps/notes/notes-queries.ts`
+- `apps/mobile/src/screens/capture-queries.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/notes/NotesHome.test.tsx`
+- `apps/mobile/src/apps/notes/useNotes.ts`
+- `apps/mobile/src/apps/photos/AlbumDetail.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.test.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.tsx`
+- `apps/mobile/src/apps/photos/MemoriesView.test.tsx`
+- `apps/mobile/src/apps/photos/MemoriesView.tsx`
+- `apps/mobile/src/apps/photos/photo-entity-reads.ts`
+- `apps/mobile/src/apps/photos/photo-grants.test.tsx`
+- `apps/mobile/src/apps/photos/photo-grants.ts`
+- `apps/mobile/src/apps/photos/PhotoLightbox.tsx`
+- `apps/mobile/src/apps/photos/PhotoPicker.tsx`
+- `apps/mobile/src/apps/photos/PhotoStateView.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx`
+- `apps/mobile/src/apps/photos/PhotosHome.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosHome.tsx`
+- `apps/mobile/src/apps/photos/PhotosLibrary.tsx`
+- `apps/mobile/src/apps/photos/PhotosPeopleView.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosPeopleView.tsx`
+- `apps/mobile/src/apps/photos/PhotosSearch.tsx`
+- `apps/mobile/src/apps/photos/PlaceDetail.test.tsx`
+- `apps/mobile/src/apps/photos/PlaceDetail.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.tsx`
+- `apps/mobile/src/apps/photos/PlacesView.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesView.tsx`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.ts`
+- `apps/mobile/src/lib/replica/offline-budgets.ts`
+- `apps/mobile/src/screens/Capture.tsx`
+- `apps/mobile/src/screens/Scan.tsx`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the flag's last day on the phone
+
+- **A grep is the tripwire; a census is not.** A per-site rule is satisfiable by
+  a new site; the absence of the word is not.
+- **A read of a deleted column is silence, not an error.** PhotosSearch asked
+  bytes for a title 0b had moved to the wrapper, and the empty map rendered as
+  "these captures have no names".
