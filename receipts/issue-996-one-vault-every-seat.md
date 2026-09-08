@@ -8426,3 +8426,78 @@ DECLARES, which is the same fact in the place the seat hook carries it.
 - **A filter the screen applies afterwards belongs in the statement.** The old
   plane could express it and did not; a per-person screen that reads the
   household's edges is a per-person screen in name only.
+
+## Wave 5h — the last four: Agenda, and Settings → Access on both seats (#996)
+
+### `useReplicaQuery` has no callers
+
+Agenda's eleven sets (`agenda-queries.ts`) and Settings → Access's three are
+the last of the forty-four. `grep -rn "useReplicaQuery(" apps/mobile/src
+packages/client/src` outside the hook's own file and its tests is EMPTY.
+
+### The Access dashboard is one plane on both seats, and it walks
+
+`access-lens.ts` is shared between the phone and the shell, so converting it
+converted both. `AccessReader` was `read(appId, {entity, limit})`; it is a
+`page` now, and `loadAccessLens` walks all three statements to their end.
+
+**A walk and not a window, deliberately.** A standing answer this dashboard did
+not draw is an answer the member believes they never gave — the exact failure
+"absent is never empty" exists to refuse, one level down. The 2,000-row window
+the three reads carried was a number nobody chose.
+
+**The shell's adapter is the whole of the seat difference.**
+`ReplicaShellSession.page` is POSITIONAL (statement, request, overlay) and the
+walk takes one request object; `settingsAccessData.ts` is where the two meet,
+exactly as the phone's own ctx builder does it.
+
+**Consequence, recorded rather than hidden**: a browser seat that holds NO copy
+of the vault refuses `page` with `OnlineOnlyError`, so the dashboard reads
+`unreadable` naming that refusal. That is the same answer the declarative read
+gave such a seat, and it is the true one — "we could not ask" is not "nobody
+has access". A shell-chrome fallback to the gateway's paged door does not exist
+(the door is reached by re-running an APP handler, and this dashboard is not
+one); if the owner wants that seat to draw the dashboard, that door is the work,
+and it is named here rather than assumed.
+
+### The census becomes the tripwire it was heading for
+
+`replica-read-windows.test.ts` counted the population down — 55, 44, 32, 24, 4.
+A floor cannot express "none", and one that reached zero would still admit a
+read coming back, so the assertion is now the claim itself: NO `useReplicaQuery`
+call site anywhere under `src`. The year-3 window test survives, re-aimed: it
+holds that People and Agenda still declare `MOBILE_ENTITY_READ_WINDOW` and take
+it through `useSeatWindow`.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,442 tests, 0 failed.
+- `bun run --cwd packages/client test` — 293 files, 2,646 tests, 0 failed.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `apps/mobile/src/apps/agenda/agenda-queries.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/agenda/AgendaHome.test.tsx`
+- `apps/mobile/src/apps/agenda/useAgenda.ts`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/screens/settings/AccessSection.tsx`
+- `packages/client/src/access-lens.test.ts`
+- `packages/client/src/access-lens.ts`
+- `packages/client/src/react/shell/routes/settingsAccessData.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the dashboard
+
+- **A dashboard of standing answers walks.** A window on it is a member told
+  they gave fewer answers than they gave, which is the one thing this screen
+  exists not to do.
+- **A refusal keeps its own sentence.** An online-only browser seat says it
+  holds no copy of the vault rather than drawing an empty list, and the missing
+  door is named here rather than papered over with a window.

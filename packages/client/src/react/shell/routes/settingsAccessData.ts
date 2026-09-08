@@ -23,9 +23,29 @@ export async function accessRegistryReader(): Promise<AccessRegistryReader> {
   return grantBridge(() => window.CentraidApi.getGatewayAuth());
 }
 
-/** The shell's own reader: the replica session, mounted on People's scope. */
+/**
+ * The shell's own reader: the seat's page, over this browser's copy of the
+ * vault (#996 wave 5, R8). `ReplicaShellSession.page` is POSITIONAL and the
+ * walk takes one request object, so this is where the two are adapted — the
+ * same difference the phone's own ctx builder carries.
+ *
+ * A SEAT WITH NO COPY REFUSES, and the dashboard draws `unreadable` with that
+ * refusal's own sentence. "We could not ask" and "nobody has access" are
+ * opposite facts, and this is the one that is true.
+ */
 export async function accessReader(): Promise<AccessReader> {
   const { getReplicaShellSession } =
     await import("../../../replica/shell-session.js");
-  return getReplicaShellSession();
+  const session = await getReplicaShellSession();
+  return {
+    page: (request) =>
+      session.page(
+        request.query,
+        {
+          limit: request.limit,
+          ...(request.after ? { after: request.after } : {}),
+        },
+        request.overlay
+      ),
+  };
 }

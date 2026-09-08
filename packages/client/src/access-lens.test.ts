@@ -7,33 +7,41 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  ACCESS_ENTITY,
-  ACCESS_REQUEST_ENTITY,
-  ACCESS_SCOPE,
-  ACCESS_USE_ENTITY,
-  groupAnswers,
-  loadAccessLens,
-  parseLociBody,
-} from "./access-lens.js";
-import type { AccessAnswer } from "./access-lens.js";
+import { groupAnswers, loadAccessLens, parseLociBody } from "./access-lens.js";
+import type { AccessAnswer, AccessReader } from "./access-lens.js";
 
-function row(values: Record<string, unknown>): {
-  values: Record<string, unknown>;
-} {
+function row(values: Record<string, unknown>): Record<string, unknown> {
   return {
-    values: {
-      authority_id: "a1",
-      principal_kind: "person",
-      principal_id: "p1",
-      subject_type: "core.document",
-      subject_id: "d1",
-      verb: "view",
-      duration: "standing",
-      decision: "granted",
-      granted_at: "2026-08-01T00:00:00.000Z",
-      revoked_at: null,
-      ...values,
+    authority_id: "a1",
+    principal_kind: "person",
+    principal_id: "p1",
+    subject_type: "core.document",
+    subject_id: "d1",
+    verb: "view",
+    duration: "standing",
+    decision: "granted",
+    granted_at: "2026-08-01T00:00:00.000Z",
+    revoked_at: null,
+    ...values,
+  };
+}
+
+/**
+ * A seat whose page answers by TABLE. `readPages` walks, so a single page with
+ * no cursor is the whole set — which is what every fixture here is.
+ */
+function seatOf(
+  byTable: Record<string, Record<string, unknown>[] | (() => never)>,
+  asked?: string[]
+): AccessReader {
+  return {
+    page: <Row extends object>(request: {
+      query: { name: string; from: string };
+    }): Promise<{ rows: Row[] }> => {
+      asked?.push(request.query.from);
+      const answer = byTable[request.query.from];
+      if (typeof answer === "function") answer();
+      return Promise.resolve({ rows: (answer ?? []) as Row[] });
     },
   };
 }
@@ -53,40 +61,38 @@ const REGISTRY = {
 
 describe("the Access lens", () => {
   it("reads every principal kind out of the one table, through People's scope", async () => {
-    const asked: unknown[] = [];
+    const asked: string[] = [];
     const lens = await loadAccessLens(
-      {
-        read: (appId, request) => {
-          asked.push([appId, request.entity]);
-          return Promise.resolve({
-            rows: [
-              row({ authority_id: "a1", principal_kind: "person" }),
-              row({ authority_id: "a2", principal_kind: "circle" }),
-              row({
-                authority_id: "a3",
-                principal_kind: "harness",
-                subject_type: "enrich.scope",
-                subject_id: "",
-              }),
-              row({
-                authority_id: "a4",
-                principal_kind: "automation",
-                subject_type: "agent.pack",
-                subject_id: "media",
-                verb: "read",
-              }),
-            ],
-          });
+      seatOf(
+        {
+          share_authority: [
+            row({ authority_id: "a1", principal_kind: "person" }),
+            row({ authority_id: "a2", principal_kind: "circle" }),
+            row({
+              authority_id: "a3",
+              principal_kind: "harness",
+              subject_type: "enrich.scope",
+              subject_id: "",
+            }),
+            row({
+              authority_id: "a4",
+              principal_kind: "automation",
+              subject_type: "agent.pack",
+              subject_id: "media",
+              verb: "read",
+            }),
+          ],
         },
-      },
+        asked
+      ),
       REGISTRY
     );
     // Three reads, one plane: the answers, when each was last used, and what
     // is still waiting on the member (#928).
     expect(asked).toStrictEqual([
-      [ACCESS_SCOPE, "share.authority"],
-      [ACCESS_SCOPE, "share.authority_use"],
-      [ACCESS_SCOPE, "share.authority_request"],
+      "share_authority",
+      "share_authority_use",
+      "share_authority_request",
     ]);
     expect(lens.status).toBe("ready");
     if (lens.status !== "ready") return;
@@ -108,56 +114,35 @@ describe("the Access lens", () => {
   // pending question, and never blanks the dashboard.
   it("dates every answer it can, and draws an automation's open ask", async () => {
     const lens = await loadAccessLens(
-      {
-        read: (_appId, request) => {
-          if (request.entity === ACCESS_ENTITY)
-            return Promise.resolve({
-              rows: [
-                row({ authority_id: "a1", principal_kind: "automation" }),
-                row({ authority_id: "a2", principal_kind: "automation" }),
-              ],
-            });
-          if (request.entity === ACCESS_USE_ENTITY)
-            return Promise.resolve({
-              rows: [
-                {
-                  values: {
-                    authority_id: "a1",
-                    last_used_at: "2026-09-03T06:05:00.000Z",
-                  },
-                },
-              ],
-            });
-          if (request.entity === ACCESS_REQUEST_ENTITY)
-            return Promise.resolve({
-              rows: [
-                {
-                  values: {
-                    request_id: "r1",
-                    principal_id: "receipts",
-                    scopes_json: JSON.stringify([
-                      { schema: "tally", table: "expense", verbs: "read" },
-                      { schema: "core", verbs: "read" },
-                    ]),
-                    requested_at: "2026-09-01T08:00:00.000Z",
-                    decided_at: null,
-                  },
-                },
-                // Decided is an ANSWER next door, not a question here.
-                {
-                  values: {
-                    request_id: "r0",
-                    principal_id: "digest",
-                    scopes_json: "[]",
-                    requested_at: "2026-08-01T08:00:00.000Z",
-                    decided_at: "2026-08-02T08:00:00.000Z",
-                  },
-                },
-              ],
-            });
-          return Promise.resolve({ rows: [] });
-        },
-      },
+      seatOf({
+        share_authority: [
+          row({ authority_id: "a1", principal_kind: "automation" }),
+          row({ authority_id: "a2", principal_kind: "automation" }),
+        ],
+        share_authority_use: [
+          { authority_id: "a1", last_used_at: "2026-09-03T06:05:00.000Z" },
+        ],
+        share_authority_request: [
+          {
+            request_id: "r1",
+            principal_id: "receipts",
+            scopes_json: JSON.stringify([
+              { schema: "tally", table: "expense", verbs: "read" },
+              { schema: "core", verbs: "read" },
+            ]),
+            requested_at: "2026-09-01T08:00:00.000Z",
+            decided_at: null,
+          },
+          // Decided is an ANSWER next door, not a question here.
+          {
+            request_id: "r0",
+            principal_id: "digest",
+            scopes_json: "[]",
+            requested_at: "2026-08-01T08:00:00.000Z",
+            decided_at: "2026-08-02T08:00:00.000Z",
+          },
+        ],
+      }),
       REGISTRY
     );
     expect(lens.status).toBe("ready");
@@ -178,12 +163,15 @@ describe("the Access lens", () => {
 
   it("a use table this seat cannot read leaves every row undated, not absent", async () => {
     const lens = await loadAccessLens(
-      {
-        read: (_appId, request) =>
-          request.entity === ACCESS_ENTITY
-            ? Promise.resolve({ rows: [row({ principal_kind: "harness" })] })
-            : Promise.reject(new Error("not in this replica")),
-      },
+      seatOf({
+        share_authority: [row({ principal_kind: "harness" })],
+        share_authority_use: () => {
+          throw new Error("not in this replica");
+        },
+        share_authority_request: () => {
+          throw new Error("not in this replica");
+        },
+      }),
       REGISTRY
     );
     expect(lens.status).toBe("ready");
@@ -196,7 +184,11 @@ describe("the Access lens", () => {
 
   it("an unreadable plane is never an empty one", async () => {
     const lens = await loadAccessLens(
-      { read: () => Promise.reject(new Error("no replica store")) },
+      seatOf({
+        share_authority: () => {
+          throw new Error("no replica store");
+        },
+      }),
       REGISTRY
     );
     expect(lens).toStrictEqual({
@@ -206,10 +198,9 @@ describe("the Access lens", () => {
   });
 
   it("shows what it could read when the vault's copy is unavailable", async () => {
-    const lens = await loadAccessLens(
-      { read: () => Promise.resolve({ rows: [row({})] }) },
-      { subjects: () => Promise.reject(new Error("out of reach")) }
-    );
+    const lens = await loadAccessLens(seatOf({ share_authority: [row({})] }), {
+      subjects: () => Promise.reject(new Error("out of reach")),
+    });
     expect(lens.status).toBe("ready");
     if (lens.status !== "ready") return;
     expect(lens.groups[0]!.answers).toHaveLength(1);
@@ -219,16 +210,13 @@ describe("the Access lens", () => {
 
   it("drops a row it could not describe, and keeps refusals", async () => {
     const lens = await loadAccessLens(
-      {
-        read: () =>
-          Promise.resolve({
-            rows: [
-              row({ authority_id: "", principal_kind: "person" }),
-              row({ principal_kind: "somebody" }),
-              row({ authority_id: "a9", decision: "declined" }),
-            ],
-          }),
-      },
+      seatOf({
+        share_authority: [
+          row({ authority_id: "", principal_kind: "person" }),
+          row({ principal_kind: "somebody" }),
+          row({ authority_id: "a9", decision: "declined" }),
+        ],
+      }),
       REGISTRY
     );
     expect(lens.status).toBe("ready");
