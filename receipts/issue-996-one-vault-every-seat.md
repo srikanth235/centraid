@@ -7754,6 +7754,60 @@ fixture gains `page` over `Gateway.page`, and the four pass.
   `acp/backends/acp/launch.test.ts` `IS_SANDBOX` cases — all three are this
   container's environment, untouched here and red at the lane's head too.
 - `bun run governance < /dev/null` — 21 passed, 1 failed: `bcf17bd3f`, known.
+## Wave 5a — the airplane oracles re-seeded on the seat (#996)
+
+### The owner ruling this wave opens under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+`mobile/*` rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head `a1e8c4390` stand as v0 evidence; the rows stay open
+ledger rows with provenance `emulator`.
+
+### Ten tests were red, and the seed was why
+
+Tally's and Locker's airplane oracles, and the Metro-loader spike beside them,
+seeded the OLD store: one `replica_row` table of `payload_json` blobs keyed by
+a shape id. Every read those three files prove has since become a handler's
+plain SQL over the vault's own tables (`ctx.vault.page`, R8, W4-D2), and plain
+SQL cannot run on a JSON blob at all — so all ten failed with `page is
+online-only` or a denial derived from it.
+
+The seed moves with the reads. `seat-fixture.test-fixtures.ts` writes the same
+rows into the tables the gateway names them in — `tally.expense` IS
+`tally_expense`, the entity name with its dot replaced — and hands back the
+seat's own `page`, assembled by `seatWorkerPage`, the same function the phone
+runs. What differs between the fixture and a device is the distance to the
+driver, and nothing else.
+
+**The physical table is wider than the fixture's rows, and it says so.**
+`seatColumns` is the table's whole column list where a handler's `SELECT` names
+columns this ledger has no value for. A column left out of the table is `no
+such column`, which reads as a broken handler; a column present and null is
+what a real vault has. `LOCKER_ITEM_COLUMNS` is reproduced whole for exactly
+this reason: every Locker shelf projects the whole list.
+
+**`read` and `search` refuse on these planes.** `seatOnlyReadPlane` throws from
+both, so a handler that reached back for the declarative store would name
+itself at the call rather than pass quietly through the old file.
+
+### The row-array reference is gone, and what replaced it
+
+`inline-query-ctx.native.test.ts` compared the seat's answer byte-for-byte
+against a ctx that re-implemented the declarative `where`/`orderBy`/`limit`
+grammar in JavaScript. **That grammar is deleted in this wave**, and a
+reference that had to parse SQL to answer would be a second SQLite. Ruled here:
+the row-array reference dies with the grammar it implements; the spike's
+surviving claims are the two it was actually for — the same module file,
+unmodified, answers a complete dashboard over the phone's own copy, and the
+payload carries none of this seat's own bookkeeping. The web-vs-phone oracle
+one program over (`tests/integration-mobile/`) is untouched here and is a
+cutover item, not a fixture item.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,436 tests, 0 failed (2 failed
+  before this commit; 8 more in the two airplane files).
+- `bun run --cwd apps/mobile typecheck` — clean.
 - `bun run check:push:static` — 4/4.
 
 ### Every file this commit touches
@@ -7852,6 +7906,82 @@ account.
 - `bun run --cwd packages/blueprints test` — 216 files, 7,097 passed, 2
   expected-fail.
 - `bun run --cwd packages/vault test` — 209 files, 1,743 passed.
+- `apps/mobile/src/lib/replica/seat-fixture.test-fixtures.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/locker/locker-airplane.test.ts`
+- `apps/mobile/src/apps/tally/tally-airplane.test.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`
+- `apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts`
+- `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the seed
+
+- **A fixture seeds the store the reads run on.** Two stores in the tree is not
+  a reason to seed the one the code no longer reads.
+- **A reference plane that re-implements a deleted grammar is deleted with it**,
+  not kept as the last program that can still answer the old questions.
+
+## Wave 5b — the share and grant sheets read the seat (#996)
+
+### Eleven roster reads, one statement each, in one file
+
+Five sheets asked the same question — who can this be shared with — as
+thirteen declarative entity requests spread across five files, each with its
+own hand-picked window (500 parties here, 2,000 members there, `limit: 1` for
+the vault row). They drifted, because nothing held them together.
+
+`kit/share/share-audience-queries.ts` is the answer they now share: five
+`PageQuery` statements over `core_party`, `core_vault`, `social_circle`,
+`social_circle_member` and `tally_group`, read through `useSeatPages` — the
+walk, so the set is the set rather than a number somebody guessed. A sheet that
+needs a column nobody selected changes it where every other sheet sees the
+change.
+
+Converted: `ShareSheet.tsx` (parties, vault), `named-circles.ts` (circles,
+members, groups), `photo-grants.ts` (all five), `useDocsGrantAudiences.ts`
+(parties, vault), `TallyShareGroup.tsx` (groups).
+
+**Every statement carries its ordering columns.** `created_at`/`added_at` with
+the primary key as tie-break: the keyset compares the two by name, so a select
+that omits them cannot produce a cursor.
+
+### The census floor moved DOWN, and only down
+
+`replica-read-windows.test.ts` counts the phone's remaining declarative reads.
+Eleven left in this commit, so the floor is 44 rather than 55. It tracks the
+population down as reads convert and never up — a read that comes back wearing
+no window is caught by `undeclared` and by the `acceptTruncation` /
+`UNBOUNDED_READ` tripwire beside it, neither of which this number can excuse.
+
+### What is NOT done, and what it blocks
+
+**Forty-four declarative reads remain on the phone** — Home's springboard and
+search recents, People's twenty-three, Photos' memories, Notes' versions,
+Agenda, and Settings → Access (whose reads run through
+`packages/client/src/access-lens.ts`, shared with the web shell). Each one goes
+`useReplicaQuery` → `session.read` → `ReplicaCoordinator.readWire` →
+`ReplicaSqliteStore` → `read-plan.ts`.
+
+That is the whole of what blocks W5's deletions. `sqlite-store.ts`,
+`store-core.ts`, `read-plan.ts`, `ReplicaWorkerClient` and its worker,
+`replica_row`/`payload_json`, the census probes, the deferred values,
+`unavailable-columns.ts`'s masking half, the per-app row-key HMAC and the
+device half of shape composition (`replica-routes.ts`, `buildReplicaShapes`,
+~9,000 lines under `packages/server/src/routes/replica-*`) are all downstream
+of one fact: the phone still reads and still bootstraps from the old store.
+None of them can be deleted while it does, and no part of the list can be
+deleted independently of the rest — they are one plane.
+
+`grep -rn shape_id packages/client apps/` is 42 (down from 53): the three
+fixture and test files that carried it are re-seeded, and what remains is
+`read-plan.ts` and `store-core.ts` themselves.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,436 tests, all passing.
 - `bun run check:push:static` — 4/4.
 
 ### Every file this commit touches
@@ -7894,3 +8024,24 @@ account.
   UNANSWERED pairs; patching it optimistically would remove the row before the
   vault agreed, and a queued answer that is later refused would vanish without
   ever having been made.
+- `apps/mobile/src/kit/share/share-audience-queries.ts`
+
+**Changed:**
+
+- `apps/mobile/src/apps/docs/useDocsGrantAudiences.test.tsx`
+- `apps/mobile/src/apps/docs/useDocsGrantAudiences.ts`
+- `apps/mobile/src/apps/photos/photo-grants.ts`
+- `apps/mobile/src/apps/tally/TallyShareGroup.test.tsx`
+- `apps/mobile/src/apps/tally/TallyShareGroup.tsx`
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/kit/share/ShareSheet.test.tsx`
+- `apps/mobile/src/kit/share/ShareSheet.tsx`
+- `apps/mobile/src/kit/share/named-circles.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the roster
+
+- **A question five screens ask is one statement, not five.** The windows
+  drifted precisely because nothing made them the same read.
+- **A census floor is a population count, not a budget.** It moves down when
+  reads legitimately leave and never up to admit one.

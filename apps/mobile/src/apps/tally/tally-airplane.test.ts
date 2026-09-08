@@ -21,15 +21,15 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Valuation } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { NativeReplicaStore } from "../../lib/replica/native-replica-store";
-import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
+import {
+  SeatPageFixture,
+  seatOnlyReadPlane,
+} from "../../lib/replica/seat-fixture.test-fixtures";
 import {
   FRIENDS,
   OWNER,
-  VAULT_ID,
-  seedScope,
+  seedSeatScope,
 } from "../../lib/replica/tally-ledger.test-fixtures";
-import { VaultReadPlane } from "../../lib/replica/vault-read-plane";
 import { attachTallyReadPlane } from "./tally-reads";
 import {
   loadTallyActivity,
@@ -49,7 +49,7 @@ vi.mock(import("../../lib/gateway"), () => {
   return new Proxy({} as never, { get: () => refuse });
 });
 
-let reader: VaultReadPlane | undefined;
+let seat: SeatPageFixture | undefined;
 
 /** The absolute size of a valuation, for "is there anything here" assertions —
  *  never a figure a surface would render (#996, ruling R22). */
@@ -66,21 +66,15 @@ describe("Tally on a plane", () => {
   beforeEach(() => {
     const root = tempDirSync("centraid-tally-airplane-");
     const databaseName = path.join(root, "personal.db");
-    seedScope(databaseName);
-    reader = new VaultReadPlane(
-      NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
-      { vaultId: VAULT_ID, label: "Personal", canWrite: true }
-    );
-    attachTallyReadPlane({
-      read: reader.read.bind(reader),
-      search: reader.search.bind(reader),
-    });
+    seedSeatScope(databaseName);
+    seat = new SeatPageFixture(databaseName);
+    attachTallyReadPlane(seatOnlyReadPlane(seat.page));
   });
 
   afterEach(() => {
     attachTallyReadPlane(undefined);
-    reader?.close();
-    reader = undefined;
+    seat?.close();
+    seat = undefined;
     resetTallyVault();
   });
 

@@ -18,6 +18,8 @@ import { DatabaseSync } from "node:sqlite";
 import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 
 import { NodeSqliteDriver } from "./node-sqlite-driver";
+import { seedSeatTables } from "./seat-fixture.test-fixtures";
+import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 export const VAULT_ID = "personal";
 export const SHAPE_ID = "locker-default";
@@ -38,12 +40,39 @@ export const LIVE_TITLES = [
 export const ARCHIVED_TITLE = "Broadband";
 export const TRASHED_TITLE = "Old forum";
 
-export interface SeedEntity {
-  entity: string;
-  primaryKey: string;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-}
+export type { SeedEntity } from "./seat-fixture.test-fixtures";
+
+/**
+ * `locker_item` as the gateway declares it (`LOCKER_ITEM_COLUMNS`). Every
+ * shelf projects the whole list, so the seat's table carries the whole list;
+ * the columns this ledger has no value for are null, which is what they are on
+ * a real vault too.
+ */
+const LOCKER_ITEM_TABLE_COLUMNS = [
+  "item_id",
+  "type",
+  "title",
+  "username",
+  "url",
+  "url_match_policy",
+  "notes",
+  "cardholder",
+  "expiry",
+  "brand",
+  "fullname",
+  "email",
+  "phone",
+  "address",
+  "network",
+  "connection_id",
+  "compromised",
+  "password_set_at",
+  "created_at",
+  "updated_at",
+  "archived_at",
+  "deleted_at",
+  "purge_at",
+] as const;
 
 function item(
   index: number,
@@ -71,6 +100,7 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "locker.item",
       primaryKey: "item_id",
+      seatColumns: LOCKER_ITEM_TABLE_COLUMNS,
       columns: [
         "item_id",
         "type",
@@ -220,4 +250,14 @@ export function seedScope(file: string): void {
       );
   database.exec("COMMIT");
   database.close();
+}
+
+/**
+ * The same ledger, in the tables a handler's SQL names (#996 wave 5).
+ *
+ * `seedScope` writes the old store's one blob table; this writes the vault's
+ * own, which is what `ctx.vault.page` reads. Both exist while both stores do.
+ */
+export function seedSeatScope(file: string): void {
+  seedSeatTables(file, seedEntities());
 }

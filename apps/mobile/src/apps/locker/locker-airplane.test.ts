@@ -24,12 +24,12 @@ import {
   ARCHIVED_TITLE,
   LIVE_TITLES,
   TRASHED_TITLE,
-  VAULT_ID,
-  seedScope,
+  seedSeatScope,
 } from "../../lib/replica/locker-vault.test-fixtures";
-import { NativeReplicaStore } from "../../lib/replica/native-replica-store";
-import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
-import { VaultReadPlane } from "../../lib/replica/vault-read-plane";
+import {
+  SeatPageFixture,
+  seatOnlyReadPlane,
+} from "../../lib/replica/seat-fixture.test-fixtures";
 import {
   attachLockerReadPlane,
   lockerItems,
@@ -50,7 +50,7 @@ vi.mock(import("../../lib/gateway"), () => {
   });
 });
 
-let reader: VaultReadPlane | undefined;
+let seat: SeatPageFixture | undefined;
 
 const titles = (rows: ReadonlyArray<{ title: string }> = []): string[] =>
   rows.map((row) => row.title);
@@ -59,21 +59,15 @@ describe("Locker on a plane", () => {
   beforeEach(() => {
     const root = tempDirSync("centraid-locker-airplane-");
     const databaseName = path.join(root, "personal.db");
-    seedScope(databaseName);
-    reader = new VaultReadPlane(
-      NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
-      { vaultId: VAULT_ID, label: "Personal", canWrite: true }
-    );
-    attachLockerReadPlane({
-      read: reader.read.bind(reader),
-      search: reader.search.bind(reader),
-    });
+    seedSeatScope(databaseName);
+    seat = new SeatPageFixture(databaseName);
+    attachLockerReadPlane(seatOnlyReadPlane(seat.page));
   });
 
   afterEach(() => {
     attachLockerReadPlane(undefined);
-    reader?.close();
-    reader = undefined;
+    seat?.close();
+    seat = undefined;
   });
 
   test("the window lands complete, with no gateway at all", async () => {
