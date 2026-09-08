@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — Locker's authentication, its inactivity and background erasure, and the mutable UI state around them are ONE lifecycle (#872); splitting those invariants across owners is how secret cleanup comes to fail open.
 // Locker — the sealed room, query-free React tree (rebuilt for #872). Holds
 // `Root` plus everything it needs that does NOT depend on the node-side
 // `./queries/*` handler modules; `app-inline.tsx` pairs it with those.

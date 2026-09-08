@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #738 cohesive intent lifecycle contract
 import { describe, expect, test, vi } from "vitest";
 
 import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";

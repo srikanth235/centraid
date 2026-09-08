@@ -1,8 +1,6 @@
 // main.ts — bootstrap: renderer, camera, controls, picking, camera tweens, frame loop.
 // Content (copy + city plan) comes from ./core/content.ts. Rendering lives in world/world.ts,
 // the economy in sim/sim.ts, the DOM in ui/ui.ts.
-// governance: allow-repo-hygiene file-size-limit — 709 lines against a 625 cap; the
-// bootstrap is one linear wiring sequence and an early split would just add indirection.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";

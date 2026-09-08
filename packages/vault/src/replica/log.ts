@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#996) capture, decode and append are one transactional invariant
-// THE GATEWAY LOG: CAPTURE, DECODE, APPEND (#996, ruling R5).
 //
 // WHAT THIS REPLACES, AND WHY. Until now every replicated table carried three
 // AFTER triggers that wrote a row into `replica_change` — 288 of them on a

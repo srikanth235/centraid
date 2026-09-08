@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #864 keyed save flush and lazy history belong with the other writes
-// Every vault read and write Notes performs, and nothing that draws.
 // `createLogic()` closes over the orchestrator's `state`/`data` (mutated in
 // place, never reassigned) plus `render`/`refresh`/`status`. EVERY WRITE IS
 // OPTIMISTIC: the pending projection paints at intent, a park is a designed

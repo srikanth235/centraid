@@ -1,63 +1,23 @@
 version: '2'
 packs:
 - id: governance-kit/audit
-  version: 0.10.0
+  version: 0.11.0
   source: gh
-  ref: gh:duaility/governance-kit/packs/audit@audit/v0.10.0
-  sha: 4eb3dd9300e4892bac758306130f1a76337ee83a
+  ref: gh:duaility/governance-kit/packs/audit@audit/v0.11.0
+  sha: 05fe4202738188f4da65ca809183dbe9eceda7a6
   subpath: packs/audit
   min_governance_kit: 0.13.0
-  installed_at: '2026-08-08T12:56:03Z'
-  directives:
-  - agent-session-identity
-  - commit-issue-receipt-match
-  - doc-integrity
-  - issue-templates
-  - issues-tracked
-  - receipt-per-issue
-  - toolchain-config-protection
-  digest:
-    agent-session-identity: c32b32cd1f3f7b6875980ab9d30d4cd975b46c3f0746c4588f47bb62db3551b0
-    commit-issue-receipt-match: 20f0236fa38c42ff6858d5a26df79f995677056308b2222dd06010b79531103a
-    doc-integrity: 946c68a3fc7f5c1b93132876844b456121063eecba1f6291b7986d96d062f1df
-    issue-templates: 36bdfc64fc9503b11d7445a7c91a0e80b468ee1566d45ba647760caa45fdc16b
-    issues-tracked: 32ef002236945c4d630da1781af815afeda5f23949157bca63d90e3c03b9c1d9
-    receipt-per-issue: 834a490115e4f3b0f35776e2e1ae52a9947ed6ff1e2330a164080db98f91cbad
-    toolchain-config-protection: 942b43fd337277ae2c9dc815eef6afbd4f0199efad8e7342b3c1ed1937bbe1c4
-- id: governance-kit/commits
-  version: 0.4.0
-  source: gh
-  ref: gh:duaility/governance-kit/packs/commits@commits/v0.4.0
-  sha: 6fecfca565153a0fc9f2e00d139fb08506aeb8f1
-  subpath: packs/commits
-  min_governance_kit: 0.6.0
-  installed_at: '2026-08-08T12:56:51Z'
+  installed_at: '2026-09-08T17:18:51Z'
   directives:
   - commit-message-format
-  - no-orphan-todos
-  - no-unjustified-suppressions
-  digest:
-    commit-message-format: 33a3cef9bfc5c74cc56975a39a2fcd5270c8757776f7cf7aef0bde44681c838e
-    no-orphan-todos: a02ab229d3f673c1fd8b8776aa17e6c0be144591c072e5ab7b02e9da56eeedbd
-    no-unjustified-suppressions: c241473878e6fba721829af48b39373f6fe1d8266e3c1150c95f1a65815ff163
-- id: governance-kit/foundation
-  version: 0.7.0
-  source: gh
-  ref: gh:duaility/governance-kit/packs/foundation@foundation/v0.7.0
-  sha: aa410d765d21f21a5b39c29a0d0e7ed186ab72bc
-  subpath: packs/foundation
-  min_governance_kit: 0.6.0
-  installed_at: '2026-08-08T12:57:22Z'
-  directives:
-  - internal-doc-links
+  - doc-integrity
   - managed-tree-integrity
-  - repo-hygiene
-  - required-docs
+  - receipt-per-issue
   digest:
-    internal-doc-links: 51b7c08249e0e78c14b60a3e567c2c63136a45aa2788a77499ff157cf0b90397
-    managed-tree-integrity: 1a63396bf4ec68a31c2676af7a9c9f918e3e7e4ee57ad68b658a0a425a1272a7
-    repo-hygiene: c0d230a60f2659811ad94a5ca3a597e917af29ea84648ee66ba78634f8ba01f8
-    required-docs: a9fd804dd17b2e83ef1b2aa4b18328e7e97c6b4964f273a136507aaa3bdd8dc3
+    commit-message-format: aaefac8208331cd2486785ec09dbf14307bab654fe5efa86e493496a6b6e4bbe
+    doc-integrity: 0d8b6066fc95b12cf9719aae00f1288844863f33c3ec3301eee6001dab7e734a
+    managed-tree-integrity: 5d793a3011bde1cddf2fe850f9cc03a08b610e4e0319393fed1657c660a911bd
+    receipt-per-issue: b24ee648f2cf170efd064c0ca8f1986b2cae48c44c0aeb8224831d41a07d4522
 - id: srikanth235/centraid
   version: '0.1'
   source: local

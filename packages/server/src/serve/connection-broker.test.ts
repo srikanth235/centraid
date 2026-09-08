@@ -4,7 +4,6 @@ import type * as TypeImport_1cs0ag8 from "node:net";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
 // The connection broker (#304): token custody correctness. The three
 // rot points each get a scenario — rotated pair persisted before use,
 // single-flight refresh under concurrency, invalid_grant flips needs-auth

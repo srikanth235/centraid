@@ -1,10 +1,6 @@
 /*
  * Gateway device enrollments (issues #555, #599, #726).
  *
- * governance: allow-repo-hygiene file-size-limit (#608) cohesive enrollment aggregate owns atomic owner, device, ownership, checkpoint, and rename invariants
- *
- * A `devices` row is a pure BINDING of a proved iroh EndpointId to an owner,
- * and authority is ownership: a `DeviceEnrollment` is a DERIVED view over the
  * (device, owner's vaults) pairs, not a stored row. Deleting a device cascades
  * its durable web sessions and replica checkpoints.
  */

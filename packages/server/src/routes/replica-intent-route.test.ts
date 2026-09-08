@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing cohesive route regression suite; decomposition is outside issue #417
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";

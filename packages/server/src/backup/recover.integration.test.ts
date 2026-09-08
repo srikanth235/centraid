@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#679) one end-to-end recovery suite shares the same encrypted-kit, provider, vault-plane, and residue-cleanup harness; splitting the HTTP erase/recover proof would duplicate its security-critical fixture
 import crypto, { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import http from "node:http";

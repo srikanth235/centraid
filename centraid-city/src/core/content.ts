@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — data, not logic: the city plan and
-// every word of copy. Length here is content volume. #704 gives it a schema type.
 // Centraid City — content.ts
 //
 // ALL text content + city geometry for the Centraid City visualization.

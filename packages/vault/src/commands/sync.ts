@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
-// Agent staging (#290): `sync.stage_rows` is low-risk; `sync.publish_batch` is
-// high and parks. Credentials stay harness-ambient.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { PUBLISHERS } from "../ingest/publishers.js";

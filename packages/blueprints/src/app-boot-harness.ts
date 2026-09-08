@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit cohesive jsdom boot harness; the fetch/module shims, .module.css-as-JS rewrite, and per-app boot assertions must move together to mirror the shell bundle path
 /* oxlint-disable typescript-eslint/ban-ts-comment -- no DOM lib in this
    node-side tsconfig, but jsdom makes DOM globals runtime-real here. */
 // @ts-nocheck

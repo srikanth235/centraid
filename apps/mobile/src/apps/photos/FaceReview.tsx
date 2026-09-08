@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit The #712 face-review handoff remains one cohesive stateful screen; #716 only adds its testability contract.
 //
 // WHAT THIS SCREEN MAY NOT DO (#711). Web twin: blueprints' FaceReview.tsx.
 //   1. Titled "Face review", never "People review"; say "photographs".

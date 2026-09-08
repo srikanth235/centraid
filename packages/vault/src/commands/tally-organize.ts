@@ -1,8 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one Tally fixed-point + recurring-materialization contract whose idempotency must stay reviewable together
-// Tally time/currency contract (#630). Rates are fixed-point integers and
-// recurring materialization is deterministic and idempotent, so two offline
-// devices may enqueue one occurrence without duplicates.
-
 import {
   describeRecurrence,
   expandRecurrence,

@@ -1,10 +1,10 @@
-// oxlint-disable-next-line typescript-eslint/triple-slash-reference -- consumer tsconfigs follow this source without including sibling declarations; governance: allow-no-unjustified-suppressions Vite asset type boundary (#414)
+// oxlint-disable-next-line typescript-eslint/triple-slash-reference -- consumer tsconfigs follow this source without including sibling declarations
 /// <reference path="./vite-assets.d.ts" />
 
 // Idle-device compute adapters (#414 D11/D13); transcription NOT here (#724).
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
-// oxlint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
+// oxlint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 // Blueprints-side: blueprints must never import `@centraid/client`.
@@ -42,7 +42,7 @@ function readBlobBytes(source: Blob): Promise<ArrayBuffer> {
         once: true,
       }
     );
-    // oxlint-disable-next-line unicorn/prefer-blob-reading-methods -- older WebViews/jsdom lack Blob.arrayBuffer(); governance: allow-no-unjustified-suppressions runtime compatibility fallback (#414)
+    // oxlint-disable-next-line unicorn/prefer-blob-reading-methods -- older WebViews/jsdom lack Blob.arrayBuffer()
     reader.readAsArrayBuffer(source);
   });
 }

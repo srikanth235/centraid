@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 // THE LEDGER VALIDATOR (#915 Wave 4) — `bun run lint:ledgers`.
 //
-// governance: allow-repo-hygiene file-size-limit (#915) one validator for four
-// ledgers: splitting the section table from the rules it drives would put the
-// direction of a ratchet in a different file from its enforcement, which is
-// exactly the drift the merge existed to remove.
 //
 // Twenty tighten-only JSON ledgers under `tests/` became four, and the twenty
 // hard-coded directions became this table. Every section declares:
@@ -147,6 +143,11 @@ export const SECTIONS = Object.freeze([
     entries: "population",
     base: "tests/comment-density-ratchet.json",
   },
+  // The file-length exemptions (`max-lines`, oxlint.config.ts). `_budget` is
+  // the row count and is down-only, so the set of files allowed past the
+  // 625-line ceiling can only shrink; scripts/lint-oversized-files.mjs refuses
+  // to build the override list if the two ever disagree.
+  { file: I, key: "fileSize", direction: "down", budget: "_budget" },
   { file: I, key: "naCells", direction: "reference" },
   {
     file: I,

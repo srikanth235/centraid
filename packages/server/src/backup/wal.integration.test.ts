@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#408) one acceptance story sharing one fixture vocabulary — loop, PITR, multi-process break, offline drain, restore-verification, O(change)
 /*
  * System-level acceptance tests for the WAL segment shipper (#408). Capture-
  * level G1-G7 live in `packages/vault/src/wal-shipper*.test.ts`, format-level

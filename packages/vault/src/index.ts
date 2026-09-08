@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#418) the package barrel is intentionally the single public API inventory; splitting exports would make consumers depend on internal paths
-// @centraid/vault — the Duaility ontology and its sole gateway; consumers
-// import it namespaced (`import * as vault from '@centraid/vault'`).
-
 export {
   openVaultDb,
   readBlobStoreSettings,

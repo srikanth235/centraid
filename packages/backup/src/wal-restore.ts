@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#408) WAL restore is one integrity boundary: authenticated planning, checksum-verified spooling, SQLite replay, and marked-cut validation must remain auditable as one pipeline
 /*
  * WAL replay (#408). SQLITE does the replay: concatenate `vault.db-wal`, open,
  * TRUNCATE-checkpoint, close. Never apply pages here. The cut is the newest

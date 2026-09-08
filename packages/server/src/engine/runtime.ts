@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
-// governance: allow-repo-hygiene file-size-limit pending split into changes-feed / app-routes modules
 import path from "node:path";
 
 import { ChangeBus } from "./changes/change-bus.js";

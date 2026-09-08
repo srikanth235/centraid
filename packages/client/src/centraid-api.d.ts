@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit ipc-types-bridge pending split into per-feature type modules
 /**
  * Renderer-side typings for the IPC bridge exposed by `preload.ts` under
  * `window.CentraidApi`. The shapes here mirror the public types of

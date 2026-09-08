@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the one-door pipeline (§10) — identity → consent → contract → execution → evidence must stay one auditable unit
-// Gateway (§10): one door. Identity → consent → contract → execution → evidence. No domain logic. Byte custody (#296) rides the same door.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { pageCursorOf, pageOf, pageStatement } from "@centraid/core/page";

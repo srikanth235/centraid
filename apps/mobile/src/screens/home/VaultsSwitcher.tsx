@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit cohesive Vaults switcher sheet (identity list + add/switch/forget + pair entry); decompose in a follow-up (#498)
-// The Vaults switcher — the phone's picker over its device-local (gateway,
-// vault) tuples (lib/vault-links). Reached by tapping the identity head in the VaultLink
-// drawer. It is the ONE surface that does add / switch / delete of Vaults:
 //
 //   • switch — tap a saved VaultLink; the whole app (app grid, replica, every vault
 //     fetch) re-points at it (phone-link.switchVaultLink restarts the tunnel when

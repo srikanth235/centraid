@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#630) — the bounded dashboard
-// projection and balance derivation intentionally stay together so every
-// monetary view uses the same fixed-point source rows and allocation rules.
 /**
  * The dashboard, and the shared balance engine every Tally query reads through.
  * Balances are DERIVED here, never stored: loadTally() pulls the ground facts

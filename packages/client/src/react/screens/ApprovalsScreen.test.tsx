@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#765) one suite per screen — staged write, waiting queue, grants, ledger, history and the five states all exercise the single ApprovalsScreen contract and share its mount fixtures
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";

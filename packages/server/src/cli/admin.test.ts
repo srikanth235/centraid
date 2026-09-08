@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#639) — the stopped-daemon
-// admin scenarios share one fixture and command-dispatch contract.
 import crypto from "node:crypto";
 /*
  * Stopped-daemon filesystem maintenance (#289):

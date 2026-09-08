@@ -386,7 +386,7 @@ async function shot(page, name) {
   await page.waitForTimeout(450);
   const file = path.join(OUT_DIR, `${name}.png`);
   await page.screenshot({ path: file });
-  console.log(`wrote ${file}`); // governance: allow-repo-hygiene dev-only CLI prints output path
+  console.log(`wrote ${file}`);
 }
 
 async function main() {
@@ -518,7 +518,7 @@ async function main() {
   } catch {
     console.log(
       "builder-flow capture skipped (builder did not settle in mock harness)"
-    ); // governance: allow-repo-hygiene dev-only CLI status line
+    );
   }
 
   await app.close();

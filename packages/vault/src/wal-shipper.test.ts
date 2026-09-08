@@ -1,8 +1,4 @@
 import { createHash } from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#408) one real-vault capture suite — every case drives the same openVaultDb + bootstrapVault + real-WAL fixture through a different guarantee; sharding it would clone that fixture per file and let the copies drift
-// WAL shipper capture correctness (#408): G1/G2/G3 capture, G4
-// backpressure, rollover + closers, and the end-to-end capture→seal→replay
-// round-trip over a REAL vault (openVaultDb + bootstrapVault, real
 // node:sqlite, real files — no mocks). Detector (G5), crash-ordering (G7)
 // and generation-lifecycle tests live in wal-shipper-detectors.test.ts.
 import {

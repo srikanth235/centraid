@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// governance: allow-repo-hygiene file-size-limit (#738) one cross-tree scanner owns every shared-engine reach-past rule and its demonstrated-red pending-overlay tripwire
-// ENGINE CONFORMANCE — one gate per shared engine (issue #712 E1).
 //
 // docs/blueprint-seats.md "Shared engines" says four things are built once and
 // never per app: placement (A), custody (B), consent (C) and triage (D), plus

@@ -1,9 +1,6 @@
 /**
  * Floors-up-only ratchet (#496 E4, extended #532).
  *
- * governance: allow-repo-hygiene file-size-limit (#532) pure comparison helpers
- * for coverage, mutation, minimumTests, and perf budgets share one module so
- * unit tests and the CLI entry share a single source of truth.
  *
  * Diffs against a git merge-base (default: origin/main):
  *   - `tests/floors.json#coverage` (up-only)

@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the per-entity publishers are one closed vocabulary sharing the provenance-stamping contract (#290)
-// Per-entity publishers (#290): only this code turns a staged payload into
-// vault rows. `probe` adopts; `create`/`update` write and report touched rows.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { inspectRrule } from "@centraid/core/time";

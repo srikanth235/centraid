@@ -120,7 +120,7 @@ async function main() {
   await fs
     .rm(workspace, { recursive: true, force: true })
     .catch(() => undefined);
-  console.log(`wrote ${OUT_FILE}`); // governance: allow-repo-hygiene dev-only CLI prints output path for the caller
+  console.log(`wrote ${OUT_FILE}`);
 }
 
 function seedAutomations(dbFile) {

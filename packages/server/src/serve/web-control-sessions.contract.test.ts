@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#608) cohesive browser-session contract shares one production gateway and app fixture
 import { promises as fs } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import path from "node:path";

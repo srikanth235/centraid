@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#679) the seven-quality contract is deliberately one cross-surface completeness suite so registry and matrix omissions cannot hide in independently selected shards
 import { access, glob, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";

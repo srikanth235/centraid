@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one cohesive plane (mount + both bridge planes + workspace accessors, #280; #282 adds anchorAsOwner, a one-line delegation like its link/unlink siblings); pending split of the bridge executors into a sibling module
 /*
  * The vault plane (duality §12) — the gateway's mount of the owner's vault.
  *

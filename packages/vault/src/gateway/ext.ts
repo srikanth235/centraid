@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the ext band is one lifecycle (apply/diff, draft seed/drop, retain/purge, the write trio) sharing the registry-row and fk-resolver internals — splitting would export private seams
-// Ext band imperative half (#286): DDL apply/diff, draft lifecycle,
-// retain-by-default uninstall, typed write trio keeping R04 ("typed commands
-// are the only write path") true for ext tables.
 //
 // DDL is gateway-driven from manifest specs. Diffing is deliberately narrow
 // for v0 (no compat): add/drop tables/columns, index + searchable changes.

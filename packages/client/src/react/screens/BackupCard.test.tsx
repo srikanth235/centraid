@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#436) one suite per screen — the five-metric surface, diagnostics disclosure, recovery-kit gate, and policy/inventory cases all exercise the single BackupCard contract and share its render/bridge fixtures
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";

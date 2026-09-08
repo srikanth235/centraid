@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the notifications/decision endpoints); pending split of the notifications client into a sibling module
-// Mobile gateway client (#263). Base URL: (a) paired tunnel (desktop attaches
-// the bearer); (b) manual Settings → Advanced URL (RN-side token).
-
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
 

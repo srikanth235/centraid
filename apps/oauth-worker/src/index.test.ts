@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 
-// governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { expectedRefreshCapability } from "./refresh-capability-test-support.js";

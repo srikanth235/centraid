@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#608) cohesive automation-update route suite shares one real gateway and compiler-failover harness
 /*
  * `POST /centraid/_automations/update?ref=` — the instructions-first
  * editor's save path (automations UI revamp). Boots a real gateway and

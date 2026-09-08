@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
-// governance: allow-repo-hygiene file-size-limit (#608) cohesive gateway-construction suite shares one production graph harness
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 

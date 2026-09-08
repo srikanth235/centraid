@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
 import { promises as fs } from "node:fs";
 /*
  * Automation fire spine (#147, Concern 2). The per-fire orchestration

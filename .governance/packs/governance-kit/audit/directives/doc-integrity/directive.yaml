@@ -2,7 +2,7 @@
 category: AgentDiscipline
 recommended: true
 always_install: true
-summary: "System-of-record documents are integrity-protected against the default-branch baseline: receipts (including session identity rows) are immutable once on the trunk, historical ledgers are sealed in place, opted-in append-only files may only grow, and frozen sections keep their baseline lines verbatim."
+summary: "Receipts freeze once on the trunk; the constitution Evolution Log keeps its baseline lines verbatim. Overlay may add freeze/append rules."
 surface: change-set
 hook: commit-msg
 triggers: [commit-msg, schedule]
@@ -12,9 +12,6 @@ config:
     doc: Integrity rules in mode-path-argument form.
     default:
       - "frozen-files receipts/*.md"
-      - "frozen-files COSTS.md"
-      - "frozen-files STEERING.md"
-      - "frozen-section QUALITY.md Resolved"
       - "frozen-section CONSTITUTION.md Evolution Log"
     tunable: true
   - name: SCHEDULE_CMD

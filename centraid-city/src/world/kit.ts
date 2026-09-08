@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — a flat catalog of 69 independent
-// geometry primitives with no internal coupling; splitting it would scatter one lookup
-// table across files without reducing what a reader has to hold. Revisit in #704.
 // kit.ts — shared landmark geometry kit. See KIT_API.md for the full contract.
 //
 // Aesthetic: precision architectural model — basswood-and-brass massing on a blueprint

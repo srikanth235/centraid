@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#567) the Assistant screen is one stateful composition over the shared composer/status primitives; splitting its bridge state would duplicate fallible control coordination
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 

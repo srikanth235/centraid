@@ -4,8 +4,6 @@ import {
   readRepresentations,
 } from "../../_shared/representation-reads.ts";
 import type { RepresentationIndex } from "../../_shared/representation-reads.ts";
-// governance: allow-repo-hygiene file-size-limit cohesive agenda projection query; the event/calendar/proposal SELECTs and their row shaping are one read path against the vault
-// Agenda projection: non-cancelled canonical events plus candidate calendars.
 // `{ from, to }` optional (default: today forward); events fetched from
 // BEFORE `from` so multi-day spans arrive — the filter below re-applies the
 // true lower bound.

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit renderer HTTP-client hub pending split per-surface (apps, templates, vault, automations) once the thin-client surface stabilizes
 /*
  * Renderer-side HTTP client for the gateway's runtime/data plane. Electron main
  * still owns the credential and hands it over once via `getGatewayAuth()`,

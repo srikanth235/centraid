@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#420) the retry-collapsing transcript fold belongs beside the record/CRUD API it mirrors; the pure helpers already live in transcript.ts
 /*
  * Conversation-history facade over the per-vault `ConversationStore`. A chat
  * session IS a `conversations` row, bound to its vault at creation — so a

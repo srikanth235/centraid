@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit shared shell relocation keeps this cohesive route intact; split later under #392
 import {
   useCallback,
   useEffect,

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — the normative role table and its profile totality checks are intentionally co-located so every role name, meaning, contrast obligation, and lowering remains reviewable as one contract.
 // Product-grammar role registry — the Binding Layer.
 //
 // A token is a role only when its name, meaning, contrast obligation, and

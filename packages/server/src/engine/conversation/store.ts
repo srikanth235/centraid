@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #190 — one ConversationStore class; its SQL and row mappers already live in store-sql.ts and schema.ts
 /*
  * The per-vault conversation ledger + automation KV, in the vault's
  * `vault.db`. A conversation binds to its vault at creation, and app scoping

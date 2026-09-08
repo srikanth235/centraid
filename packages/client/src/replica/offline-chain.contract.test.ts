@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#996) one offline-chain contract, three outboxes
-//
-// THE OFFLINE CHAIN, AGAINST EVERY OUTBOX THAT WILL RUN IT (#996, R23–R25).
 //
 // Three outboxes exist since W5 — an in-memory one, the seat's SQLite table,
 // and that same table across the browser's WORKER BOUNDARY — and the chain has

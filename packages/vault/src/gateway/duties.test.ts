@@ -1,7 +1,4 @@
 import { existsSync, promises as fs } from "node:fs";
-// governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix is a single table of invariants; splitting it scatters the completeness argument
-// §10 responsibilities: polymorphic ref validation, contract version check,
-// purge sweeps, the view service, and file custody.
 import path from "node:path";
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";

@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/turn/item/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
-// HTTP surface for automation runtime ops (#141), so the desktop is a thin
-// client for local AND remote gateways alike rather than reading local files.
 //
 // Refs and turn ids carry `/` and `:`, so they ride QUERY PARAMS, never path
 // segments. Manifests resolve from the materialized `main`, ledgers from the

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); People owns the whole keep-in-touch loop, so it is large by design.
 // People commands (schema `people`): the personal-CRM write surface. A person
 // is a canonical core.party (kind='person') plus a 1:1 people_profile holding
 // the keep-in-touch facts — role, avatar hue, cadence, last-contacted, how you

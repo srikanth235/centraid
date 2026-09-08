@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#408) the WAL wire format is one normative unit — the key codecs, the sealing AAD/nonce derivations, the frame-boundary math, and the replay planner that consumes all three are a single argument about what a restore may trust; splitting them lets the format drift from the planner that enforces it
 /*
  * WAL segment format (FORMAT.md, #408). A segment is `[start, end)` of a `-wal`
  * file, ending on a COMMIT boundary, captured between checkpoints the shipper

@@ -1,8 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#387) one cohesive lifecycle handler family (create/update/set-enabled/rotate/delete) sharing the same session+stage+publish plumbing; splitting duplicates the shared helpers
-// Automation lifecycle handlers for the gateway-owned builder (#141),
-// dispatched from `makeLifecycleRouteHandler`. Webhook secrets are minted
-// here: the plaintext is returned once, only the hash persists.
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";

@@ -3,8 +3,6 @@
  * administration (#289). Pair mints a one-line ticket via the daemon's
  * host-custody bearer; offline mutations take gateway.db's exclusive lock,
  * refusing while the daemon runs. Tickets redeem only through the iroh ceremony.
- *
- * governance: allow-repo-hygiene file-size-limit (#608) cohesive device-admin command family shares parsing, host-custody auth, and output contracts
  */
 
 import { handshakeGateway } from "@centraid/core/protocol";

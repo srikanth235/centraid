@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — one flat glyph registry, on the same ground roles.ts is waived: it is a normative TABLE, and every consumer (desktop renderer, mobile <Path>, the icon resolver) reads the whole map. A split would put half the product's marks in a second file with no rule for which half, and a mark landing in the wrong half is a lookup that silently returns nothing.
 // Lucide-style icons as raw SVG path data, viewBox 24x24. One ordered list of
 // `<path>` definitions per entry, read by the desktop renderer and mobile alike.
 

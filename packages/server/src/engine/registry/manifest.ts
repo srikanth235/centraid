@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the manifest types, their JSON meta-schema and the validator only ever change together
 /**
  * App manifest — the per-app contract on disk as `app.json`, and the single
  * source of truth for what handlers exist and what they accept (handler files

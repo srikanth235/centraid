@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#807) one gate suite — tier ranks, the scoped cascade, profile egress and the consent step are one decision and share the real fire spine, policy seam and dispatch fixtures
 /*
  * The enrichment gate — the privacy promise as behaviour: refused with a stated
  * reason under `off`, under `device` when it needs the `gateway` lane, and when

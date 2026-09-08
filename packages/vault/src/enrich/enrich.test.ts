@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one suite over the enrichment spine — staging, attribution injection, owner auto-publish, and the content primitive share the one bootstrapped vault (#299)
-// Enrichment spine, vault side (#299): derived rows through staging;
-// attribution injected server-side; owner assertions terminal; auto-publish
-// trust lets captions land without a review click; visual originals stay
 // unreachable while bounded AV sources serve ASR.
 
 import { DatabaseSync } from "node:sqlite";

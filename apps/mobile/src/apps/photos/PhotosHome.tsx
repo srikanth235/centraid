@@ -1,5 +1,4 @@
 // Photos' home surface on the phone (v4 §3.1, §4, §14, §15). Wiring only — shaped UI lives in siblings.
-// governance: allow-repo-hygiene file-size-limit The #712 screen intentionally retains its cohesive data/routing orchestration; #716 extracts only independently testable UI bodies.
 
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";

@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-// governance: allow-repo-hygiene file-size-limit unit tests for one module — splitting by topic would scatter the shared helpers
 import { describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";

@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #864 cohesive security property suite for one module
-// Authority-chain property suite (#864 M4, re-based on the one plane by #928).
 // These laws are the invariants `evaluateAccess`'s own doc comments claim,
 // driven over generated standing answers and execution clamps rather than
 // hand-picked fixtures. The per-decision behaviours are pinned by name in the

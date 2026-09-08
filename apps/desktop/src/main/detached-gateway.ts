@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#468) one cohesive detached spawn/adopt/poll/stop owner — splitting would scatter lock/probe/CLI resolve that must stay in lockstep
 /*
  * Impure detached-gateway glue (#468, H2–H7): CLI resolve, detached spawn,
  * lock inspection, loopback-token mint, stopping only processes we own. Pure

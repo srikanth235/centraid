@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one file per life domain (§08) — the knowledge commands share the note-over-content-item mechanism and its dedup invariants
-// Knowledge domain commands (§08): notes are references over canonical
-// content — a knowledge_note row points at a core_content_item body, it
-// never stores prose itself. Bodies follow the social.draft_message
 // mechanism exactly: sha256-deduped, inlined as data: URIs (rent the bytes,
 // own the reference). A notebook is a surface view over core_collection,
 // the one owner-curation mechanism (#274) — these commands keep their

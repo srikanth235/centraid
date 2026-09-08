@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); Tally's write surface is one file by design.
 // Tally commands (schema `tally`): the expense-splitting write surface. A
 // friend is a canonical core.party plus a tally_friend row; the owner is the
 // implicit `me` and never a friend. A group is an AUDIENCE (#310) — a

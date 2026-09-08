@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#406) one protocol route keeps bootstrap, pull/SSE, lazy-row, checkpoint, and intent admission semantics together
 /* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type * as TypeImport_18fk7n9 from "node:sqlite";

@@ -107,6 +107,7 @@ function writeMerged(write, overrides = {}) {
       expires: "2099-01-01",
       files: {},
     },
+    fileSize: { _budget: 0, sites: {} },
     naCells: { source: "tests/claims.json#naCells" },
     advisory: { _entries: "exceptions", steps: {} },
   });

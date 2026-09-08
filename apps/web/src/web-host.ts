@@ -17,7 +17,6 @@ import {
   watchServiceWorkerUpdates,
 } from "./sw-lifecycle.js";
 import { HEALTH_POLL_INTERVAL_MS, healthSnapshot } from "./web-health.js";
-// governance: allow-repo-hygiene file-size-limit (#406) cohesive web host bridge owns connection identity, lifecycle events, and storage-consent teardown together
 import {
   decodeTicket,
   gatewayJson,

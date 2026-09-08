@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit cohesive tunnel protocol; splitting would obscure issue #417 review
-// Cache-bucket versioning. Single source is apps/web/src/sw-version.ts —
-// `bun run build` runs scripts/stamp-sw-version.mjs which rewrites this line
-// (issue #468 K8). Do not hand-bump here.
 (() => {
   const VERSION = 'v13';
   const SHELL_CACHE = `centraid-shell-${VERSION}`;

@@ -2,9 +2,6 @@ import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
-// governance: allow-repo-hygiene file-size-limit #181 — cohesive
-// conversation-history suite; the build-kind coverage tips it just over 500
-// lines, not worth a split.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";

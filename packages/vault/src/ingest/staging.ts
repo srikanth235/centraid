@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the staging spine is one pipeline — source→candidates→band→review→publish share the disposition + provenance invariants (#290)
-// The staging spine (#290): source → candidates → band → review → publish.
 // Candidates land as sync_import_row rows with a computed disposition; publish
 // applies them in one transaction, with provenance and one batch receipt.
 //

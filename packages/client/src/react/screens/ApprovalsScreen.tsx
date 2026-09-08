@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#765) single cohesive screen component (one consent surface: staged write, waiting queue, standing grants, store ledger, history); splitting would fragment one block list
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 

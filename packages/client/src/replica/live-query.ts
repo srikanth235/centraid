@@ -47,7 +47,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
     void this.run();
   }
 
-  // oxlint-disable-next-line unicorn/no-thenable -- (#406) read() stays awaitable alongside subscribe(); governance: allow-no-unjustified-suppressions contract
+  // oxlint-disable-next-line unicorn/no-thenable -- (#406) read() stays awaitable alongside subscribe()
   then<TResult1 = T, TResult2 = never>(
     onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null

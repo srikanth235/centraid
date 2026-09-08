@@ -1,6 +1,5 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-// governance: allow-repo-hygiene file-size-limit (#608) cohesive availability-probe contract shares executable fixtures and cache timing seams
 
 import { describe, afterEach, expect, test } from "vitest";
 

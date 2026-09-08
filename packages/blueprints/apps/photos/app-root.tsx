@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — the app's orchestration is one React tree by design (#505); splitting it further would split one closure across files.
 // Photos — query-free React tree (#505), a route inside the frame (v4 §3).
 // Multi-scope (#599, §H): N scopes as one timeline; albums/places/trash stay
 // own-scope (ids collide). Timeline merges, then filters by `vaultsOn`.

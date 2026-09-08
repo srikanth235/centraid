@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// governance: allow-repo-hygiene file-size-limit (#567) one scripted JSON-RPC fixture covers the shared ACP lifecycle; splitting modes would duplicate protocol state and weaken cross-mode parity
 /*
  * Scripted fake ACP harness — a test fixture, not shipped code.
  *

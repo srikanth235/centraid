@@ -3,8 +3,6 @@ import type * as TypeImport_11i4z7t from "@playwright/test";
 
 import { SERVICE_WORKER_VERSION } from "../../src/sw-version.js";
 
-// governance: allow-repo-hygiene file-size-limit (#608) cohesive service-worker upgrade suite shares one synthetic tunnel-cache harness
-
 const ASSET_CACHE = `centraid-tunnel-assets-${SERVICE_WORKER_VERSION}`;
 const BLOB_CACHE = `centraid-tunnel-blobs-${SERVICE_WORKER_VERSION}`;
 const SHELL_CACHE = `centraid-shell-${SERVICE_WORKER_VERSION}`;

@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
 // Media commands (§08). Asset = meaning over bytes (`media_asset` on `core_content_item`). Last remaining renter decides byte soft-delete (#274). Purge (#711) ends grace early.
 
 import type { DatabaseSync } from "node:sqlite";

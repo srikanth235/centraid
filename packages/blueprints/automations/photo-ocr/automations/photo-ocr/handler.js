@@ -2,7 +2,6 @@ import { existsSync as bq } from "node:fs";
 import { readFile as uq } from "node:fs/promises";
 import _ from "node:path";
 import E from "node:path";
-// governance: allow-repo-hygiene file-size-limit (#731) the self-contained OCR/PDF handler is one deployable runtime unit; splitting its bundled model/runtime rail would duplicate the content-resolution and bounded-batch invariants.
 // Generated recognition automation. Source: packages/model-runtime/automation-handlers.
 import { pathToFileURL as oq } from "node:url";
 var Nq = E.resolve(import.meta.dirname, ".."),

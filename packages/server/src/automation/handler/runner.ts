@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — delegate/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
 /**
  * Parent-side orchestrator for automation handlers (#98). Only
  * `delegateDispatcher` (the one billed rail) comes from the host; the rest of

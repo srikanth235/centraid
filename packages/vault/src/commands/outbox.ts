@@ -1,8 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set validating each other's risk and state invariants (#306)
-// The outbox commands (#306): external writes as artifacts. `stage` is INERT;
-// `decide` is the owner's act on the thing itself; `record_result` is one
-// drain's receipt. The read-only ceiling on connector fires (#304) stands.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import {

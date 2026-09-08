@@ -1,6 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — provider writeback extends
-// the same end-to-end broker/executor harness so auth loss, reconnect, reviewed
-// outbox state, and emitted HTTP can be asserted as one lifecycle (#630).
 import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";

@@ -1,7 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#363) single Docker-orchestration harness for the pairing e2e rig; the network/boot/exec/teardown surface is one cohesive unit
-// Docker-backed harness for the cross-network-relay flow — see
-// flows/cross-network-relay.mjs / .md for the ceremony itself. This module
-// only knows how to stand up two non-interconnected Docker networks, boot
 // the real daemon in one of them, and run the device role in the other; the
 // mint/redeem/assert logic stays in the flow file, same split as
 // lib/harness.mjs vs flows/*.mjs.

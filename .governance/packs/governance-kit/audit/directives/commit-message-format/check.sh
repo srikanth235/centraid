@@ -3,7 +3,7 @@
 #   <type>(<optional-scope>)!?: <subject> (#123)
 # Default allowed types ship in the sibling manifest config (feat, fix, chore,
 # docs, refactor, test, perf, build, ci, revert, style). Customize per repo via
-# the overlay `.governance/conf/governance-kit/commits/commit-message-format.conf`: add a type on its
+# the overlay `.governance/conf/governance-kit/audit/commit-message-format.conf`: add a type on its
 # own line, or `!<type>` to disallow a default.
 #
 # Usage modes:

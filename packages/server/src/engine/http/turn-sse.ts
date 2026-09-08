@@ -1,8 +1,4 @@
 /*
- * governance: allow-repo-hygiene file-size-limit (#567) transport, durable lock, hydration, artifact fold, and ledger settlement form one turn transaction whose cleanup ordering must stay visible together
- *
- * The transport-and-ledger half of every `_turn`-shaped route: the stream, the
- * accumulator, the per-(appId, conversationId) lock, `recordTurn`, the `end`
  * frame. Routes keep only their own lookups and prompt assembly.
  */
 

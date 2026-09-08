@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-// governance: allow-repo-hygiene file-size-limit (#408) the detector suite shares real SQLite race hooks, restore helpers, and restart fixtures whose correctness depends on one common lifecycle harness
-// WAL shipper detectors (#408): real sqlite, no mocks; capture correctness lives in wal-shipper.test.ts.
 import {
   closeSync,
   copyFileSync,

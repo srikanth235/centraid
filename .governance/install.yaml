@@ -2,9 +2,9 @@ version: '3'
 generated_at: 2026-05-14T23:15:00Z
 owner: srikanth235
 repo: centraid
-kit_version: "0.14.0"
-kit_sha: 4c8efcbba99f14223f9a068555a513c23fb7427f
-kit_ref: gh:duaility/governance-kit/kit@kit/v0.14.0
+kit_version: "0.15.0"
+kit_sha: b00eab20d68b772e07e1563759a95e8a598f4137
+kit_ref: gh:duaility/governance-kit/kit@kit/v0.15.0
 hook_strategy: githooks
 constitution: true
 ci_workflow: .github/workflows/governance.yml
@@ -21,6 +21,6 @@ install_assets_seeded:
   - .governance/integrity.conf
 collisions: []
 managed_digests:
-  .github/workflows/governance.yml: e0c96e010e2e952793f380f6c09c5daa58de411a9136f9301c4ddc67b5588497
-  .governance/lib.sh: e230d1608e917948c5642f12dfd6bce37024e7512ca1981aad985e6aaebfa95a
-  .governance/run.sh: 05655289d539f264d0c2151b58b6da106ed3f49f1978d0215d0f79f4ba194d75
+  .github/workflows/governance.yml: 220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb
+  .governance/lib.sh: 19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37
+  .governance/run.sh: f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4

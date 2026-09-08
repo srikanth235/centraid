@@ -1,4 +1,3 @@
-/*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its places, its list and its one write door in a single focus-contained screen so a write outcome cannot be silently orphaned. */
 // Notes, the native cover (Notes spec §1, §2; #882).
 //
 // WHAT THIS SEAT IS. A native cover over the SAME replica the web app reads,

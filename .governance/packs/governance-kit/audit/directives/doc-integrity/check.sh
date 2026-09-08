@@ -54,7 +54,7 @@ cd "$ROOT" || exit 1
 # Effective rule set = manifest RULES default layered with the user overlay
 # (.governance/conf/governance-kit/audit/doc-integrity.conf): bare lines add rules, `!<rule>` drops an
 # optional default. Receipts are always protected because commit traceability
-# and session identity depend on the shared receipts convention.
+# depends on the shared receipts convention.
 RULES="$(conf_list doc-integrity "$(dirname "$0")/directive.yaml" RULES)"
 if ! printf '%s\n' "$RULES" | grep -qxF 'frozen-files receipts/*.md'; then
     RULES="${RULES}${RULES:+$'\n'}frozen-files receipts/*.md"

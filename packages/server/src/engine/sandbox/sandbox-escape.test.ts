@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#865) every escape case runs a real hostile handler in a real worker; splitting the lanes would scatter the one enforcement story.
 /**
  * ESCAPE TESTS for the handler sandbox (#842).
  *

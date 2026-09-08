@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#404) one performance-waterfall suite sharing a single timing vocabulary and browser fixture; splitting the assertions would obscure the cross-flow budget comparison
 import { promises as fs } from "node:fs";
 import path from "node:path";
 

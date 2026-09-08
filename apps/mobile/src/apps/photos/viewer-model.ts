@@ -1,5 +1,4 @@
 // What the phone viewer *is*, as data — separate from what draws it.
-// governance: allow-repo-hygiene file-size-limit The #712 declarative viewer catalog is intentionally kept together so ordering and capability invariants stay auditable.
 //
 // The phone REARRANGES the desktop viewer; it does not water it down. Same five
 // actions, same names, same order, same marks. Every such decision is a value

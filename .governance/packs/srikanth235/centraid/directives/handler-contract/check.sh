@@ -8,7 +8,7 @@
 # actions-declare-table-writes, data-runtime-sqlite-separation, and
 # handler-uses-ctx-primitives). They scan the same file set, share one
 # rationale, and none is a load-bearing axis on its own — the same reason
-# governance-kit ships repo-hygiene and required-docs as single directives.
+# governance-kit consolidates rather than splitting a catalog by sub-check.
 #
 # Sub-checks:
 #   query-read-only    — no stmt.run()/db.exec() in queries/*.js|ts. The

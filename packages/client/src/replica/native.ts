@@ -7,7 +7,7 @@
  * Every re-export below must have a DOM-free transitive graph. Native code
  * composes them over an expo-sqlite driver and an `expo/fetch` change feed.
  */
-/* oxlint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath; governance: allow-no-unjustified-suppressions stable cross-platform API boundary */
+/* oxlint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath */
 export * from "./digest.js";
 export * from "./errors.js";
 export * from "./inline-query-ctx-core.js";

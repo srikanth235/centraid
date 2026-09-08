@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit one suite per pure core module (#665): NDJSON round-trip, capping, and outage derivation are one behavioural surface — splitting the suite would split the invariants that only fail together
 import { describe, expect, it } from "vitest";
 
 import { initialRuntimeState } from "./gateway-monitor-core.js";
