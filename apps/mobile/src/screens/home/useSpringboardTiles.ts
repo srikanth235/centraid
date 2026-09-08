@@ -1,14 +1,18 @@
-// Per-app data plumbing for the Home springboard (#708 A).
+// Per-app data plumbing for the Home springboard (#708 A; #996 wave 5, R8).
 //
 // Home has no grant of its own: every read goes out under the OWNING app's id,
-// so a tile shows only what its app may already read offline. The requests
-// themselves — and the reasons each one is bounded in WORK and not merely in
-// rows returned — live in ./home-tile-reads, where they are pinned against the
-// mounted reader's SQL. Locker issues NO read: its items sit behind an online,
-// session-gated RPC. A request handed to `useReplicaQuery` must keep a stable
-// identity across renders or the tile re-reads on every one: the module
-// constants already do, and the two that depend on render state (the month's
-// expenses, the body lookups) are memoized here.
+// so a tile shows only what its app may already read offline. The statements
+// themselves live in ./home-tile-reads, where they are pinned against the
+// seat's own page reader. Locker issues NO read: its items sit behind an
+// online, session-gated RPC. A statement handed to a seat hook must keep a
+// stable identity across renders or the tile re-reads on every one: the module
+// constants already do, and the three that depend on render state (the month's
+// expenses, the body and party lookups) are memoized here.
+//
+// A TILE IS A WINDOW, so each takes `useSeatWindow` and its `truncated` IS
+// `countCapped` — the fact that the library ran past the window, told by the
+// page's own cursor instead of inferred from a row count that happened to
+// equal the limit.
 
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
@@ -17,16 +21,18 @@ import { formatCurrencyMinor } from "@centraid/client/capture";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 import { occurrenceExceptionsOf } from "@centraid/core/time";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useSeatPages, useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { expandEvent } from "../../kit/schedule/recurrence";
 import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
 import {
   expenseTileRead,
+  HOME_BODY_LOOKUP,
   HOME_ORDERED_TILE_READS,
+  HOME_PARTY_LOOKUP,
   HOME_TILE_LIMITS,
   HOME_TILE_READS,
-  idFilter,
+  idList,
 } from "./home-tile-reads";
 import {
   combineTileStatus,
@@ -48,10 +54,6 @@ const AGENDA_COUNT_DAYS = 7;
 
 const BODY_LOOKUP_ROWS = 12;
 
-function capped(rows: readonly unknown[], limit: number): boolean {
-  return rows.length >= limit;
-}
-
 function topIds(rows: readonly ReplicaRow[], column: string): string[] {
   const ids = new Set<string>();
   for (const row of rows.slice(0, BODY_LOOKUP_ROWS)) {
@@ -65,7 +67,7 @@ const str = (value: unknown): string => (value == null ? "" : String(value));
 
 /** The selection logic lives in ./tile-model, where it is tested. */
 export function useSpringboardTiles(): Map<string, TileData> {
-  const { gatewayBase, online } = useReplica();
+  const { gatewayBase, online, vaultId } = useReplica();
   // `gatewayBase` stays cached while the tunnel is down; it is not proof the
   // bytes can be fetched, so remote-only photos wait rather than fail to load.
   const photoGatewayBase = online ? gatewayBase : undefined;
@@ -78,69 +80,108 @@ export function useSpringboardTiles(): Map<string, TileData> {
     }, [])
   );
 
-  const photos = useReplicaQuery("photos", HOME_ORDERED_TILE_READS.photos);
+  const photos = useSeatWindow("photos", HOME_ORDERED_TILE_READS.photos, {
+    entity: "media.asset",
+    rowIdColumn: "asset_id",
+    limit: HOME_TILE_LIMITS.photos,
+  });
 
-  const documents = useReplicaQuery("docs", HOME_ORDERED_TILE_READS.documents);
+  const documents = useSeatWindow("docs", HOME_ORDERED_TILE_READS.documents, {
+    entity: "core.document",
+    rowIdColumn: "document_id",
+    limit: HOME_TILE_LIMITS.documents,
+  });
   const docBodyIds = useMemo(
     () => topIds(documents.rows, "current_content_id"),
     [documents.rows]
   );
-  const docContents = useReplicaQuery(
+  const docContents = useSeatPages(
     "docs",
-    useMemo(
-      () => idFilter("core.content_item", "content_id", docBodyIds),
-      [docBodyIds]
-    )
+    useMemo(() => idList(HOME_BODY_LOOKUP, docBodyIds), [docBodyIds]),
+    { entity: "core.content_item", rowIdColumn: "content_id" }
   );
 
-  const notes = useReplicaQuery("notes", HOME_ORDERED_TILE_READS.notes);
+  const notes = useSeatWindow("notes", HOME_ORDERED_TILE_READS.notes, {
+    entity: "knowledge.note",
+    rowIdColumn: "note_id",
+    limit: HOME_TILE_LIMITS.notes,
+  });
   const noteBodyIds = useMemo(
     () => topIds(notes.rows, "body_content_id"),
     [notes.rows]
   );
-  const noteContents = useReplicaQuery(
+  const noteContents = useSeatPages(
     "notes",
-    useMemo(
-      () => idFilter("core.content_item", "content_id", noteBodyIds),
-      [noteBodyIds]
-    )
+    useMemo(() => idList(HOME_BODY_LOOKUP, noteBodyIds), [noteBodyIds]),
+    { entity: "core.content_item", rowIdColumn: "content_id" }
   );
 
-  const events = useReplicaQuery("agenda", HOME_TILE_READS.events);
-  const exceptions = useReplicaQuery("agenda", HOME_TILE_READS.exceptions);
+  const events = useSeatWindow("agenda", HOME_TILE_READS.events, {
+    entity: "core.event",
+    rowIdColumn: "event_id",
+    limit: HOME_TILE_LIMITS.events,
+  });
+  const exceptions = useSeatWindow("agenda", HOME_TILE_READS.exceptions, {
+    entity: "schedule.recurrence_exception",
+    rowIdColumn: "exception_id",
+    limit: HOME_TILE_LIMITS.exceptions,
+  });
 
-  const profiles = useReplicaQuery("people", HOME_TILE_READS.profiles);
+  const profiles = useSeatWindow("people", HOME_TILE_READS.profiles, {
+    entity: "people.profile",
+    rowIdColumn: "profile_id",
+    limit: HOME_TILE_LIMITS.profiles,
+  });
   const partyIds = useMemo(
     () => topIds(profiles.rows, "party_id"),
     [profiles.rows]
   );
-  const parties = useReplicaQuery(
+  const parties = useSeatPages(
     "people",
-    useMemo(() => idFilter("core.party", "party_id", partyIds), [partyIds])
+    useMemo(() => idList(HOME_PARTY_LOOKUP, partyIds), [partyIds]),
+    { entity: "core.party", rowIdColumn: "party_id" }
   );
 
-  const tasks = useReplicaQuery("tasks", HOME_TILE_READS.tasks);
+  const tasks = useSeatWindow("tasks", HOME_TILE_READS.tasks, {
+    entity: "schedule.task",
+    rowIdColumn: "task_id",
+    limit: HOME_TILE_LIMITS.tasks,
+  });
 
   const monthStart = monthStartDate(now);
-  const expenses = useReplicaQuery(
+  const expenses = useSeatWindow(
     "tally",
-    useMemo(() => expenseTileRead(monthStart), [monthStart])
+    useMemo(() => expenseTileRead(monthStart), [monthStart]),
+    {
+      entity: "tally.expense",
+      rowIdColumn: "expense_id",
+      limit: HOME_TILE_LIMITS.expenses,
+    }
   );
-  const vault = useReplicaQuery("tally", HOME_TILE_READS.vault);
+  const vault = useSeatWindow("tally", HOME_TILE_READS.vault, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+    limit: HOME_TILE_LIMITS.vaults,
+  });
 
   return useMemo(() => {
     const tiles = new Map<string, TileData>();
 
+    // THE SEAT'S OWN VAULT IS THE SCOPE. A page row is the table's columns, so
+    // it carries no `__centraidScopeId`; a seat holds ONE file, and that file's
+    // vault is the scope every blob address on this tile belongs to. Without
+    // it the address is built on an empty scope and no thumbnail resolves.
     const mosaic = selectPhotoMosaic(
       photos.rows,
       photoGatewayBase,
-      pinnedThumbnailUri
+      pinnedThumbnailUri,
+      vaultId ?? ""
     );
     tiles.set("photos", {
       appId: "photos",
       status: combineTileStatus([photos], mosaic.length > 0),
       count: photos.rows.length,
-      countCapped: capped(photos.rows, HOME_TILE_LIMITS.photos),
+      countCapped: photos.truncated === true,
       countLabel: "photos",
       body: { kind: "photos", photos: mosaic },
     });
@@ -150,7 +191,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "docs",
       status: combineTileStatus([documents, docContents], docRows.length > 0),
       count: documents.rows.length,
-      countCapped: capped(documents.rows, HOME_TILE_LIMITS.documents),
+      countCapped: documents.truncated === true,
       countLabel: "documents",
       body: { kind: "docs", rows: docRows },
     });
@@ -160,7 +201,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "notes",
       status: combineTileStatus([notes, noteContents], note !== undefined),
       count: notes.rows.length,
-      countCapped: capped(notes.rows, HOME_TILE_LIMITS.notes),
+      countCapped: notes.truncated === true,
       countLabel: "notes",
       body: {
         kind: "notes",
@@ -200,7 +241,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "people",
       status: combineTileStatus([profiles, parties], faces.length > 0),
       count: peopleTotal,
-      countCapped: capped(profiles.rows, HOME_TILE_LIMITS.profiles),
+      countCapped: profiles.truncated === true,
       countLabel: "people",
       body: {
         kind: "people",
@@ -214,7 +255,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "tasks",
       status: combineTileStatus([tasks], taskRows.length > 0),
       count: openTasks(tasks.rows).length,
-      countCapped: capped(tasks.rows, HOME_TILE_LIMITS.tasks),
+      countCapped: tasks.truncated === true,
       countLabel: "open",
       body: { kind: "tasks", rows: taskRows },
     });
@@ -223,7 +264,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "tally",
       status: combineTileStatus([expenses, vault], expenses.rows.length > 0),
       count: expenses.rows.length,
-      countCapped: capped(expenses.rows, HOME_TILE_LIMITS.expenses),
+      countCapped: expenses.truncated === true,
       countLabel: "this month",
       body: {
         kind: "tally",
@@ -252,6 +293,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     exceptions,
     expenses,
     photoGatewayBase,
+    vaultId,
     noteContents,
     notes,
     now,

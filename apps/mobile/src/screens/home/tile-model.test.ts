@@ -85,6 +85,32 @@ describe(selectPhotoMosaic, () => {
     ).toStrictEqual([]);
   });
 
+  it("addresses a seat page row by the seat's own vault", () => {
+    // A SEAT PAGE ROW IS THE TABLE'S COLUMNS (#996 wave 5), so it carries no
+    // `__centraidScopeId`. A seat holds ONE file; that file's vault is the
+    // scope. Without the fallback the address is built on an empty scope and
+    // the tile draws four cells that can never resolve.
+    const mosaic = selectPhotoMosaic(
+      [row({ asset_id: "s", content_id: "c-s", captured_at: "2026-01-01" })],
+      "https://gw",
+      () => undefined,
+      "vault-personal"
+    );
+    expect(mosaic[0]?.uri).toBe(
+      "https://gw/centraid/_gateway/blobs/vault-personal/c-s?variant=thumb"
+    );
+  });
+
+  it("a row that names its own scope keeps it", () => {
+    const mosaic = selectPhotoMosaic(
+      assets,
+      "https://gw",
+      () => undefined,
+      "other"
+    );
+    expect(mosaic[0]?.uri).toContain("/blobs/v1/");
+  });
+
   it("asks for a video poster instead of a photo thumb", () => {
     const mosaic = selectPhotoMosaic(
       [row({ asset_id: "v", content_id: "c-v", kind: "video" })],

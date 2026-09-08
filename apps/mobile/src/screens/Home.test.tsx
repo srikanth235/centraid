@@ -1,5 +1,5 @@
 // Home's springboard COMPOSITION (#905). Both units stayed green through the
-// defect; only the composition saw it. Seam: `useReplicaQuery` alone, so the
+// defect; only the composition saw it. Seam: the seat hooks alone, so the
 // real tiles, grading and catalog run. Rationale: receipts/issue-905-*.md.
 // Also the conformance sweep; see scripts/lint-app-conformance.mjs.
 
@@ -26,7 +26,7 @@ type ThemeModule = typeof import("../kit/theme");
 type GatewayModule = typeof import("../lib/gateway");
 type VaultLinksModule = typeof import("../lib/vault-links");
 type ThumbnailPackModule = typeof import("../lib/replica/thumbnail-pack");
-type ReplicaQueryModule = typeof import("../kit/hooks/useReplicaQuery");
+type SeatPagesModule = typeof import("../kit/hooks/useSeatPages");
 type ReplicaProviderModule = typeof import("../kit/replica/ReplicaProvider");
 type OriginHealthModule = typeof import("./home/useOriginHealth");
 type LauncherGridModule = typeof import("./home/LauncherGrid");
@@ -123,22 +123,27 @@ vi.mock(
     }) as unknown as Partial<ReplicaProviderModule>
 );
 
-// THE SEAM: `unavailable` is what a phone with no replica session reports.
-vi.mock(import("../kit/hooks/useReplicaQuery"), async (importOriginal) => {
+// THE SEAM: `unavailable` is what a phone holding no copy of the vault
+// reports, and every Home tile reads the seat through these two hooks (#996
+// wave 5). One state stands for both — what this file composes is the tile
+// grading, and a window and a walk grade identically.
+vi.mock(import("../kit/hooks/useSeatPages"), async (importOriginal) => {
   const actual = await importOriginal();
+  const state = (): ReturnType<SeatPagesModule["useSeatPages"]> => ({
+    connection: reads.readable
+      ? ("current" as const)
+      : ("unavailable" as const),
+    error: undefined,
+    lastSyncedAt: reads.synced ? "2026-09-01T05:20:00.000Z" : undefined,
+    loading: false,
+    refresh: async () => undefined,
+    rows: [],
+  });
   return {
     ...actual,
-    useReplicaQuery: (): ReturnType<ReplicaQueryModule["useReplicaQuery"]> => ({
-      connection: reads.readable
-        ? ("current" as const)
-        : ("unavailable" as const),
-      error: undefined,
-      lastSyncedAt: reads.synced ? "2026-09-01T05:20:00.000Z" : undefined,
-      loading: false,
-      refresh: async () => undefined,
-      rows: [],
-    }),
-  } as unknown as Partial<ReplicaQueryModule>;
+    useSeatPages: state,
+    useSeatWindow: state,
+  } as unknown as Partial<SeatPagesModule>;
 });
 
 vi.mock(

@@ -96,7 +96,7 @@ vi.mock(import("../replica/ReplicaProvider"), () => ({
   useReplica: () => REPLICA as unknown as ReplicaContextValue,
 }));
 
-const { useSeatPages } = await import("./useSeatPages");
+const { useSeatPages, useSeatWindow } = await import("./useSeatPages");
 
 const TASKS: PageQuery = {
   name: "phone.tasks",
@@ -104,6 +104,21 @@ const TASKS: PageQuery = {
   from: "schedule_task",
   order: { sortColumn: "created_at", pkColumn: "task_id", descending: true },
 };
+
+function Window(props: { limit: number }): React.JSX.Element {
+  const state = useSeatWindow("tasks", TASKS, {
+    entity: "schedule.task",
+    rowIdColumn: "task_id",
+    limit: props.limit,
+  });
+  return (
+    <span data-testid="board">
+      {`${state.connection}|${String(state.rows.length)}|${String(
+        state.truncated === true
+      )}|${String(state.appliedLimit)}|${state.truncationNotice ?? ""}`}
+    </span>
+  );
+}
 
 function Board(props: {
   bound?: { pageSize: number; fanOutPages: number };
@@ -195,6 +210,41 @@ describe("a screen read as a page over the seat", () => {
     await settle();
     expect(boardText(container)).toBe("unavailable|0||");
     expect(statements).toStrictEqual([]);
+    unmount();
+  });
+});
+
+describe("a screen read as ONE window over the seat", () => {
+  afterEach(() => {
+    statements.length = 0;
+    listeners = [];
+    libraryRows = 7;
+    seatPresent = true;
+  });
+
+  it("takes one page and never walks past the window it named", async () => {
+    const { container, unmount } = mountBlock(<Window limit={PAGE_ROWS} />);
+    await settle();
+    // ONE statement, not a walk: the window is the screen's own claim.
+    expect(statements).toStrictEqual([{ name: "phone.tasks" }]);
+    expect(boardText(container)).toContain("current|3|true|3|");
+    unmount();
+  });
+
+  it("says the rows ran past it rather than swallowing the fact", async () => {
+    const { container, unmount } = mountBlock(<Window limit={PAGE_ROWS} />);
+    await settle();
+    // The notice both seats word, not a phrase this screen invented.
+    expect(boardText(container)).toContain("3");
+    expect(boardText(container).split("|")[4]).not.toBe("");
+    unmount();
+  });
+
+  it("a window the set fits inside is not truncated", async () => {
+    libraryRows = 2;
+    const { container, unmount } = mountBlock(<Window limit={PAGE_ROWS} />);
+    await settle();
+    expect(boardText(container)).toBe("current|2|false|3|");
     unmount();
   });
 });

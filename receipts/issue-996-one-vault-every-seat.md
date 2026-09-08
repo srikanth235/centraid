@@ -8238,3 +8238,83 @@ add. **The finding stands open, relocated: it is not the seat overlay.**
 - **A finding is relocated with evidence, never with an argument.** The seat's
   delete arm is pinned by a test that would go red if it stopped running; that
   is what moves the question off this lane rather than a reading of the code.
+
+## Wave 5e — the Home springboard on the seat (#996)
+
+### The owner ruling this wave continues under
+
+W5 opened 2026-09-07 by the owner before the emulator gate measured the four
+`mobile/*` rows; the Linux-measured rows plus the Android release build linking
+and Maestro running on head `a1e8c4390` stand as v0 evidence; the rows stay open
+ledger rows with provenance `emulator`.
+
+### Twelve reads, and the two shapes a screen read actually has
+
+Home fired twelve declarative reads at open. Converting them named a
+distinction `useSeatPages` did not have: **a walk is not a window**.
+
+- `useSeatPages` walks a bounded set to its end and throws at the fan-out
+  bound. That is right for a set the screen already bounded — the bodies of the
+  twelve documents a tile named.
+- A TILE IS A WINDOW. "The newest 200 photographs" is what the tile draws and
+  what its count means; walking a real library to the end to render four
+  thumbnails would read the whole library on every focus. `useSeatWindow` is
+  that read: ONE page, the window the screen named, and the fact that the rows
+  ran past it carried back as `truncated` from the page's own cursor.
+
+`countCapped` was `rows.length >= limit` — a guess that reads a set which
+happens to be exactly 200 rows as a capped one. It is `truncated` now, which is
+the probe row's answer and not an inference.
+
+### The seat's own vault is the scope, and without it no thumbnail resolves
+
+`selectPhotoMosaic` built its blob address from `__centraidScopeId`, a column
+the OLD store added to every row. A page row IS the table's columns, so the
+address would have been built on an empty scope and the tile would have drawn
+four cells that can never resolve. A seat holds ONE file; that file's vault is
+the scope, and it is passed in as the fallback (red first —
+`tile-model.test.ts` "addresses a seat page row by the seat's own vault").
+
+### `home-tile-reads.test.ts` holds the same claim on the new plane
+
+The old file seeded `replica_row` blobs across four vault arms and read the SQL
+back off the mounted reader. It is rewritten against a real file through
+`seatWorkerPage`, the same assembler the phone runs, and holds what it always
+held: one statement per tile, `limit + 1` rows crossing the driver (the window
+plus the one probe row), "the newest N" ordered by SQLite rather than re-sorted
+after the fact, and a body lookup that costs the ids it asks for.
+
+### The census floor moved DOWN to 32
+
+Twelve reads left, so `replica-read-windows.test.ts` counts 32. `SHARED_REQUESTS`
+is now EMPTY and the assertion that read it is deleted with it: every remaining
+shared read module is statements, and a statement has no window to declare.
+
+### Gates
+
+- `bun run --cwd apps/mobile test` — 289 files, 2,442 tests, 0 failed.
+- `bun run --cwd apps/mobile typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`
+- `apps/mobile/src/kit/hooks/useSeatPages.test.tsx`
+- `apps/mobile/src/kit/hooks/useSeatPages.ts`
+- `apps/mobile/src/screens/Home.test.tsx`
+- `apps/mobile/src/screens/home/home-tile-reads.test.ts`
+- `apps/mobile/src/screens/home/home-tile-reads.ts`
+- `apps/mobile/src/screens/home/tile-model.test.ts`
+- `apps/mobile/src/screens/home/tile-model.ts`
+- `apps/mobile/src/screens/home/useSpringboardTiles.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the two shapes
+
+- **A window is not a short walk.** The walk states where it stops and throws;
+  the window states what it drew and says the rows ran past it. Collapsing the
+  two would make every tile pay for the library it is a glance at.
+- **A cap that is inferred from a row count is a guess.** The probe row already
+  knows; `countCapped` reads it now.

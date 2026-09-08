@@ -13,8 +13,12 @@
  * names. `readPages` walks to the end of it and THROWS at the stated fan-out
  * bound, so a set that turned out to be unbounded is a failure with the
  * handler's name in it rather than a short list that reads as a complete one.
- * A read that is genuinely a window (the timeline, the roster) takes one page
- * and keeps its cursor; those never came through here.
+ *
+ * A READ THAT IS GENUINELY A WINDOW takes `useSeatWindow` instead: one page,
+ * the window the screen named, and the fact that the rows ran past it carried
+ * back as `truncated` rather than swallowed. The springboard's newest 200
+ * photographs and People's year-3 roster window are windows; walking either to
+ * the end of a real library would read the whole library to draw a tile.
  *
  * NO SEAT IS NOT AN ERROR. A phone that has not finished copying the vault has
  * no `page` at all, and the honest answer is the one the browser gives when it
@@ -30,6 +34,7 @@ import {
 } from "@centraid/blueprints/apps/_shared/paged-reads";
 import type { FanOutBound } from "@centraid/blueprints/apps/_shared/paged-reads";
 import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { PageQuery } from "@centraid/core/page";
 
 import { coalesceWork } from "../../lib/coalesce";
@@ -39,6 +44,14 @@ import type { ReplicaQueryState } from "./replica-query-state";
 
 /** The same window `useReplicaQuery` collapses an invalidation burst into. */
 const SEAT_INVALIDATION_WINDOW_MS = 120;
+
+/** What a page of the seat hands back, as this module needs to read it. */
+type SeatPage = <Row extends object>(request: {
+  query: PageQuery<Row>;
+  limit: number;
+  after?: { sortKey: string; pk: string };
+  overlay?: { entity: string; rowIdColumn: string };
+}) => Promise<{ rows: Row[]; next?: { sortKey: string; pk: string } }>;
 
 export interface SeatPagesOptions {
   /**
@@ -51,6 +64,13 @@ export interface SeatPagesOptions {
   rowIdColumn: string;
   /** How far the walk may go before the set it joins over is not bounded. */
   bound?: FanOutBound;
+}
+
+export interface SeatWindowOptions {
+  entity: string;
+  rowIdColumn: string;
+  /** The window this screen named. One page of it, and no more. */
+  limit: number;
 }
 
 /** A row as the screens read it: the table's columns plus `__rowId`. */
@@ -68,26 +88,36 @@ function withRowId(
   });
 }
 
+/** What one run of a seat read produced. */
+interface SeatAnswer {
+  rows: readonly object[];
+  /** The rows ran past the window this read named. */
+  truncated: boolean;
+}
+
 /**
- * Read a bounded set as pages over the seat.
+ * The plumbing both seat reads share: the ticket, the invalidation
+ * subscription, and the connection the screens already know how to draw.
  *
- * `query` may be `undefined` for the read a screen has not got its input for
- * yet — the id it was opened on, the filter it is waiting on. That is a read
- * that has not been made, not an empty one, so it holds `loading` rather than
- * claiming an empty set.
+ * Held in ONE place because the difference between a walk and a window is the
+ * three lines that call `page`, and two copies of the rest would be two
+ * subscription lifetimes to keep in step.
  */
-export function useSeatPages(
+function useSeatRead(
   appId: string,
   query: PageQuery | undefined,
-  options: SeatPagesOptions
+  entity: string,
+  rowIdColumn: string,
+  run: (page: SeatPage, query: PageQuery) => Promise<SeatAnswer>
 ): ReplicaQueryState {
   const replica = useReplica();
   // The PAGE, not the seat object: what this read depends on is the function
   // that runs its statement, and a provider that rebuilds its wrapper must not
   // re-walk every screen.
-  const page = replica.seat?.page;
+  const page = replica.seat?.page as SeatPage | undefined;
   const { session } = replica;
   const [rows, setRows] = useState<ReplicaQueryState["rows"]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const mounted = useRef(true);
@@ -101,21 +131,16 @@ export function useSeatPages(
     };
   }, []);
 
-  const { entity, rowIdColumn, bound } = options;
   const refresh = useCallback(async () => {
     if (!page || !query) return;
     const ticket = (sequence.current += 1);
     const current = (): boolean =>
       mounted.current && ticket === sequence.current;
     try {
-      const walked = await readPages(
-        { vault: { page } },
-        query,
-        bound ?? JOIN_FAN_OUT,
-        { entity, rowIdColumn }
-      );
+      const answer = await run(page, query);
       if (!current()) return;
-      setRows(withRowId(walked, rowIdColumn));
+      setRows(withRowId(answer.rows, rowIdColumn));
+      setTruncated(answer.truncated);
       setError(undefined);
     } catch (caughtError) {
       if (!current()) return;
@@ -125,7 +150,7 @@ export function useSeatPages(
     } finally {
       if (current()) setLoading(false);
     }
-  }, [bound, entity, page, query, rowIdColumn]);
+  }, [page, query, rowIdColumn, run]);
 
   useEffect(() => {
     if (!page || !query) return;
@@ -165,7 +190,77 @@ export function useSeatPages(
     connection,
     ...(!page && replica.error ? { unavailableReason: replica.error } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),
+    ...(truncated ? { truncated } : {}),
     ...(error ? { error } : {}),
     refresh,
+  };
+}
+
+/**
+ * Read a bounded set as pages over the seat.
+ *
+ * `query` may be `undefined` for the read a screen has not got its input for
+ * yet — the id it was opened on, the filter it is waiting on. That is a read
+ * that has not been made, not an empty one, so it holds `loading` rather than
+ * claiming an empty set.
+ */
+export function useSeatPages(
+  appId: string,
+  query: PageQuery | undefined,
+  options: SeatPagesOptions
+): ReplicaQueryState {
+  const { entity, rowIdColumn, bound } = options;
+  const run = useCallback(
+    async (page: SeatPage, statement: PageQuery): Promise<SeatAnswer> => ({
+      rows: await readPages(
+        { vault: { page } },
+        statement,
+        bound ?? JOIN_FAN_OUT,
+        {
+          entity,
+          rowIdColumn,
+        }
+      ),
+      // A walk that reached the end is the whole set; one that did not threw.
+      truncated: false,
+    }),
+    [bound, entity, rowIdColumn]
+  );
+  return useSeatRead(appId, query, entity, rowIdColumn, run);
+}
+
+/**
+ * Read ONE page of the window a screen named.
+ *
+ * The window is the screen's own claim — the newest 200 photographs, the
+ * year-3 roster — so it is not a walk and never becomes one. What the old
+ * store hid and this does not: whether the rows ran PAST the window.
+ * `truncated` says so, `appliedLimit` says what cut it, and the notice is the
+ * one sentence both seats word (#922 0a).
+ */
+export function useSeatWindow(
+  appId: string,
+  query: PageQuery | undefined,
+  options: SeatWindowOptions
+): ReplicaQueryState {
+  const { entity, rowIdColumn, limit } = options;
+  const run = useCallback(
+    async (page: SeatPage, statement: PageQuery): Promise<SeatAnswer> => {
+      const answer = await page({
+        query: statement,
+        limit,
+        overlay: { entity, rowIdColumn },
+      });
+      return { rows: answer.rows, truncated: answer.next !== undefined };
+    },
+    [entity, limit, rowIdColumn]
+  );
+  const state = useSeatRead(appId, query, entity, rowIdColumn, run);
+  return {
+    ...state,
+    appliedLimit: limit,
+    ...(state.truncated
+      ? { truncationNotice: truncatedListNotice(limit) }
+      : {}),
   };
 }

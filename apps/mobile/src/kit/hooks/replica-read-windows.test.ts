@@ -70,16 +70,10 @@ function readSites(): ReadSite[] {
 
 /**
  * Request modules a call site may name instead of declaring the window inline.
- * Each is asserted below to declare a window on EVERY entry, so naming one is
- * not a way around the census. Photos' five shared reads are no longer here:
- * they are statements over the seat, and a statement has no window to declare.
+ * EMPTY since wave 5: Photos' five shared reads and Home's twelve tile reads
+ * are statements over the seat, and a statement has no window to declare.
  */
-const SHARED_REQUESTS: Record<string, string> = {
-  HOME_TILE_READS: "screens/home/home-tile-reads.ts",
-  HOME_ORDERED_TILE_READS: "screens/home/home-tile-reads.ts",
-  expenseTileRead: "screens/home/home-tile-reads.ts",
-  idFilter: "screens/home/home-tile-reads.ts",
-};
+const SHARED_REQUESTS: Record<string, string> = {};
 
 function declaresWindow(text: string): boolean {
   if (text.includes("limit")) return true;
@@ -106,25 +100,16 @@ describe("the phone's screen reads", () => {
     const sites = readSites();
     // A census, not a sample: if this number moves, a screen gained or lost a
     // read and the counter suite beside this file has a new number to hold.
-    // Forty-four left for the seat in wave 4b, and the eleven roster reads the
-    // share and grant sheets made left in wave 5 (#996). The floor tracks the
+    // Forty-four left for the seat in wave 4b; the eleven roster reads and the
+    // twelve Home tile reads left in wave 5 (#996). The floor tracks the
     // population DOWN as reads convert and never up: a read that comes back
     // wearing no window is caught by `undeclared` below and by the tripwire
     // above, neither of which this number can excuse.
-    expect(sites.length).toBeGreaterThanOrEqual(44);
+    expect(sites.length).toBeGreaterThanOrEqual(32);
     const undeclared = sites.filter((site) => !declaresWindow(site.text));
     expect(
       undeclared.map((site) => `${site.file}: ${site.text.slice(0, 80)}`)
     ).toStrictEqual([]);
-  });
-
-  test("a shared request module declares a window on every entry", () => {
-    for (const file of new Set(Object.values(SHARED_REQUESTS))) {
-      const source = readFileSync(path.join(SRC, file), "utf8");
-      const entities = [...source.matchAll(/entity:/gu)].length;
-      const windows = [...source.matchAll(/limit|acceptTruncation/gu)].length;
-      expect(windows).toBeGreaterThanOrEqual(entities);
-    }
   });
 
   test("People and Agenda declare the year-3 window, not the default one", () => {
