@@ -9,7 +9,11 @@
 // band is append-only and outlives its subjects, so a pointer into it is a
 // VALUE, not a key (#916; see `audit.ts`).
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 // THE SELF PARTY, AND WHERE AUTHORITY IS NOT (#916, ruling ONT-05).
 // `core_vault`'s party column is the vault's OWN party: the person as DATA,
@@ -35,6 +39,7 @@ CREATE TABLE core_vault (
   settings_json   TEXT NOT NULL CHECK (json_valid(settings_json)),
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (vault_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_vault_self_party ON core_vault(self_party_id);
@@ -48,6 +53,7 @@ CREATE TABLE core_party (
   avatar_content_id TEXT REFERENCES core_content_item(content_id),
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   -- No \`ontology_version\` (#916, ruling ONT-04): the ontology version is a
   -- property of the FILE (\`PRAGMA user_version\`) and of the CONTRACT
   -- (\`agent_command.ontology_version\`), never of a row.
@@ -75,12 +81,24 @@ CREATE TABLE core_party_identifier (
   -- person at is a \`social.contact_channel\`, not an identity register entry.
   scheme        TEXT NOT NULL CHECK (scheme IN ('url','did','handle','iban','other')),
   value         TEXT NOT NULL,
+  -- THE NAMESPACE THE VALUE IS UNIQUE WITHIN (#996, ruling R20(e)). A short
+  -- handle is not globally unique: \`@alice\` on two services is two people,
+  -- and an account number means nothing without the institution that issued
+  -- it. NULL means "globally unique by construction" — a DID, an IBAN, a URL —
+  -- and the live index below folds NULL to the empty string so those keep the
+  -- one namespace they always had.
+  issuer        TEXT,
   label         TEXT,
   is_primary    INTEGER NOT NULL CHECK (is_primary IN (0,1)),
   verified_at   TEXT,
   valid_from    TEXT NOT NULL,
   valid_to      TEXT,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
+  -- AN INTERVAL RUNS FORWARD (#996, R20(e)). \`valid_to < valid_from\` was
+  -- representable, and an inverted interval makes every "was this live then"
+  -- question unanswerable. Table-level because it names two columns.
+  CHECK (valid_to IS NULL OR valid_to >= valid_from),
   FOREIGN KEY (identifier_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
   -- No UNIQUE (scheme, value) (#916, R3 / review 2.3). The constraint covered
   -- HISTORICAL rows too, so an address one person stopped using could never be
@@ -90,9 +108,13 @@ CREATE TABLE core_party_identifier (
   -- rows and nothing else.
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS core_party_identifier_live_idx
-  ON core_party_identifier(scheme, value) WHERE valid_to IS NULL;
+  ON core_party_identifier(scheme, COALESCE(issuer, ''), value) WHERE valid_to IS NULL;
+-- CURRENT PREFERENCE IS NOT HISTORY (#996, ruling R20(e)). The value index has
+-- been partial on the LIVE rows since #916; this one was not, so an end-dated
+-- primary — the row that says "this WAS my main handle" — went on blocking a
+-- new one forever. Both indexes now ask the same question of the same rows.
 CREATE UNIQUE INDEX idx_party_identifier_primary
-  ON core_party_identifier(party_id, scheme) WHERE is_primary = 1;
+  ON core_party_identifier(party_id, scheme) WHERE is_primary = 1 AND valid_to IS NULL;
 
 CREATE TABLE core_place (
   place_id        TEXT PRIMARY KEY,
@@ -106,6 +128,7 @@ CREATE TABLE core_place (
   parent_place_id TEXT REFERENCES core_place(place_id),
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (place_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_place_parent_place ON core_place(parent_place_id);
@@ -130,6 +153,16 @@ CREATE TABLE core_event (
   recurrence_semantics TEXT NOT NULL DEFAULT 'zoned'
     CHECK (recurrence_semantics IN ('zoned','floating','all-day')),
   rrule              TEXT,
+  -- AN UNSUPPORTED RULE IS RETAINED, NOT EXECUTED (#996, ruling R21; drift
+  -- ONT-31). A rule outside the expander's subset — \`BYSETPOS\`, \`BYMONTHDAY\`,
+  -- an hourly frequency, or plain nonsense — used to be stored as if it were
+  -- executable and then expanded to nothing, which reads at every surface
+  -- exactly like "this event does not repeat". A COMMAND refuses such a rule
+  -- outright; an IMPORT keeps the provider's text and says so here, because
+  -- discarding what the calendar sent would lose the only record of what the
+  -- series actually is.
+  rrule_support      TEXT NOT NULL DEFAULT 'supported'
+    CHECK (rrule_support IN ('supported','unsupported')),
   status             TEXT NOT NULL CHECK (status IN ('confirmed','tentative','cancelled')),
   location_place_id  TEXT REFERENCES core_place(place_id),
   -- ATTRIBUTION, not authority: who convened the event. The event survives the
@@ -138,6 +171,7 @@ CREATE TABLE core_event (
   sequence           INTEGER NOT NULL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   -- WHAT dtstart MEANS SWITCHES ON recurrence_semantics (#916, R2 / review
   -- 3.3), and until now nothing said so in the file. 'zoned' means dtstart is
   -- a real INSTANT expanded in start_tz, so both halves must be there: a zone
@@ -185,28 +219,49 @@ CREATE TABLE core_transaction (
   counterparty_party_id TEXT REFERENCES core_party(party_id),
   description           TEXT,
   category_concept_id   TEXT REFERENCES core_concept(concept_id),
-  -- GLOBAL uniqueness, deliberately (#916, R2 / review 2.3). The right key is
-  -- (connection_id, external_id) — two connectors may legitimately mint the
-  -- same provider id — but \`core_transaction\` carries no connection column:
-  -- the connector that imported a row is recorded in \`sync_external_entity\`,
-  -- not on the row. Narrowing the key would mean adding a column no writer
-  -- fills, so the key stays global until a transaction knows its connection.
-  external_id           TEXT UNIQUE,
+  -- NO GLOBAL UNIQUE (#996, ruling R20(c)). A provider-local id is scoped to
+  -- its SOURCE: the authoritative key is \`sync_external_entity
+  -- (connection_id, external_id)\`, which \`stageCandidates\` consults before
+  -- any publisher probe. The comment this replaces admitted the right key and
+  -- kept the global one anyway, so two institutions' \`ref-1\` were one
+  -- transaction — the second bank's statement line silently merged into the
+  -- first's, and the money was gone from the ledger. Two sources may both mint
+  -- \`ref-1\`; a cross-source match is explicit reviewable evidence, never an
+  -- equal reference string.
+  external_id           TEXT,
   created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (txn_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_transaction_account ON core_transaction(account_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_counterparty_party ON core_transaction(counterparty_party_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_category_concept ON core_transaction(category_concept_id);
+-- The pair the sync map keys on, asked of the transaction side: "which rows
+-- did this provider id produce" is a real question once it is no longer unique.
+CREATE INDEX IF NOT EXISTS core_transaction_external_idx
+  ON core_transaction(external_id) WHERE external_id IS NOT NULL;
 
+-- BYTES, AND NOTHING THAT INTERPRETS THEM (#996, ruling R20(b), drift ONT-28).
+-- \`media_type\` and \`title\` used to live here, on the row the sha256 UNIQUE
+-- dedupes — so the first import of a byte string fixed its media type and its
+-- caption for every later owner of those bytes, and the same HTML filed twice
+-- was text/html forever. An interpretation belongs to whoever is doing the
+-- interpreting: it lives on \`core_content_representation\` below, one row per
+-- owner. The authored title lives on the wrapper (\`core_document.title\`,
+-- \`knowledge_note.title\`, \`media_asset.title\`) and a GENERATED caption is a
+-- derived row (\`knowledge.annotation\` on the representation, OQ-9).
 CREATE TABLE core_content_item (
   content_id       TEXT PRIMARY KEY,
-  media_type       TEXT NOT NULL,
   content_uri      TEXT NOT NULL,
-  sha256           TEXT NOT NULL UNIQUE,
+  -- A HASH IS SIXTY-FOUR HEX CHARACTERS (#996, ruling R21; drift ONT-26).
+  -- Nothing held the shape, so a writer could put anything in the column that
+  -- IS the dedupe key for every owner of those bytes. The "unchanged bytes"
+  -- half is the \`core_content_item_hash_follows_bytes\` trigger below: a
+  -- summary cannot change while what it summarises stays where it is.
+  sha256           TEXT NOT NULL UNIQUE
+    CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
-  title            TEXT,
   language         TEXT,
   creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   origin_device_id TEXT REFERENCES access_device(device_id),
@@ -214,30 +269,103 @@ CREATE TABLE core_content_item (
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL,
   updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (content_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_content_item_creator_party ON core_content_item(creator_party_id);
 CREATE INDEX IF NOT EXISTS idx_content_item_origin_device ON core_content_item(origin_device_id);
 CREATE INDEX IF NOT EXISTS core_content_item_purge_idx
   ON core_content_item(purge_at) WHERE purge_at IS NOT NULL;
+-- CONTENT WRITE IS ONE OPERATION OVER HASH, SIZE AND BYTES (#996, ruling R21;
+-- drift ONT-26). Atlas could set \`sha256\` to sixty-four zeroes while
+-- \`content_uri\` and \`byte_size\` stayed exactly where they were — a hash of
+-- nothing, over bytes that had not moved, silently re-pointing every dedupe
+-- decision the vault would ever make. Re-pointing an owner at DIFFERENT bytes
+-- is a real write and still passes: the uri or the size moves with the hash.
+CREATE TRIGGER core_content_item_hash_follows_bytes
+BEFORE UPDATE OF sha256 ON core_content_item
+WHEN NEW.sha256 <> OLD.sha256
+ AND NEW.content_uri = OLD.content_uri
+ AND NEW.byte_size = OLD.byte_size
+BEGIN
+  SELECT RAISE(ABORT, 'core.content_item: the hash of a content item is the identity of its bytes — it cannot change while the bytes stay where they are (issue #996, ruling R21)');
+END;
+
+-- THE INTERPRETATION, OWNED (#996, ruling R20(b)). One row per (owner, bytes):
+-- the document, note, asset, attachment or message that is USING this content
+-- says what it takes the bytes to BE. Two owners of one sha may disagree —
+-- the same bytes are text/html to one document and text/plain to another —
+-- and byte dedupe is untouched, because the disagreement is no longer stored
+-- on the byte row.
+--
+-- \`UNIQUE (owner_type, owner_id)\`: an owner has exactly one reading of its
+-- content. Re-pointing an owner at different bytes UPDATEs this row.
+--
+-- It is an ENTITY, not a projection, because a generated caption is a derived
+-- row KEYED TO THE REPRESENTATION (OQ-9) and \`knowledge_annotation\` targets
+-- \`core_entity(entity_type, entity_id)\` — a caption cannot point at something
+-- that is not one.
+--
+-- Deletion: the owned-child role (R22). The representation has no life apart
+-- from the owner that holds it, so the owner's delete takes it; and it is not
+-- a RENTER of the bytes (it is deliberately absent from CONTENT_REFERENCES),
+-- so it never keeps a content item alive on its own.
+CREATE TABLE core_content_representation (
+  representation_id TEXT PRIMARY KEY,
+  content_id        TEXT NOT NULL
+    REFERENCES core_content_item(content_id) ON DELETE CASCADE,
+  -- The owner, polymorphic through the supertype: core.document,
+  -- knowledge.note, media.asset, core.attachment, social.message — or
+  -- core.content_item itself for bytes a connector staged with no wrapper yet.
+  owner_type        TEXT NOT NULL,
+  owner_id          TEXT NOT NULL,
+  -- RFC 6838. NOT NULL: a representation exists BECAUSE something is being
+  -- read as something, and "no interpretation" is the absence of the row.
+  media_type        TEXT NOT NULL,
+  -- The text encoding this owner reads the bytes in (RFC 2978), when the
+  -- media type does not already carry it.
+  charset           TEXT,
+  -- What the owner does with them beyond the type: 'body', 'original',
+  -- 'attachment', 'avatar', … NULL where the owner has only one use.
+  interpretation    TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
+  UNIQUE (owner_type, owner_id),
+  FOREIGN KEY (representation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (owner_type, owner_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_content_representation_content
+  ON core_content_representation(content_id);
 
 -- A document's identity is separate from its bytes (issue #352): the
 -- wrapper is the row apps and links address; current_content_id repoints on
 -- edit exactly like knowledge_note.body_content_id. NOT UNIQUE — two
 -- documents may legitimately share identical bytes (a template re-used
--- twice). Version lineage is a 'revises' core.link between content items,
--- never a column here — content_item is the version, core.link is history.
+-- twice). Version lineage is the chain of core_entity_revision OCCURRENCES
+-- walked from current_revision_id (#996, R20(a)) — a revision is a MOMENT, not
+-- a content id, which is why two documents made of the same bytes have
+-- independent histories.
 CREATE TABLE core_document (
   document_id         TEXT PRIMARY KEY,
   title               TEXT NOT NULL,
   current_content_id  TEXT NOT NULL REFERENCES core_content_item(content_id),
+  -- THE NEWEST REVISION OCCURRENCE (#996, ruling R20(a)). History is the chain
+  -- of \`core_entity_revision\` rows walked from here through
+  -- \`parent_revision_id\`, each naming the content that became current at that
+  -- moment. ON DELETE SET NULL: a pointer into history must never be the thing
+  -- that wedges a delete.
+  current_revision_id TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   deleted_at          TEXT,
   purge_at            TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   FOREIGN KEY (document_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_document_current_content ON core_document(current_content_id);
+CREATE INDEX IF NOT EXISTS idx_document_current_revision ON core_document(current_revision_id);
 CREATE INDEX IF NOT EXISTS core_document_purge_idx
   ON core_document(purge_at) WHERE purge_at IS NOT NULL;
 
@@ -286,6 +414,7 @@ CREATE TABLE core_link (
   -- the audit outlives its subject (#916).
   provenance_id       TEXT,
   updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (link_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (from_type, from_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE,
@@ -323,12 +452,36 @@ CREATE TABLE core_concept (
   alt_labels_json    TEXT CHECK (alt_labels_json IS NULL OR json_valid(alt_labels_json)),
   broader_concept_id TEXT REFERENCES core_concept(concept_id),
   definition         TEXT,
+  -- CONCEPT IDENTITY (#996, ruling R20(d)). A concept's LABEL was its identity:
+  -- The ASCII slug lowercased a label and stripped everything outside
+  -- \`[a-z0-9]\`, so \`猫\`, \`犬\`, \`कुत्ता\` and \`बिल्ली\` all normalised to
+  -- \`untitled\` and selected ONE concept — four animals filed as one idea, on
+  -- every vault that does not write in Latin script. Three columns separate the
+  -- three jobs the notation was doing at once:
+  --   \`stable_id\` — the source vocabulary's OWN concept id where it has one;
+  --   \`normalized_key\` — a UNICODE-PRESERVING key (NFKC, collapsed
+  --     whitespace, case-folded) for schemes where only labels exist, which is
+  --     what \`ensureConcept\` selects on;
+  --   \`pref_label_lang\` — the label's language tag, so "the label" is
+  --     answerable in the language it was written in.
+  -- \`notation\` goes back to being the 64-character ASCII SLUG it always
+  -- looked like, with collision cases given a suffix rather than a shared row.
+  stable_id          TEXT,
+  normalized_key     TEXT,
+  pref_label_lang    TEXT,
   created_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (scheme_id, notation),
   FOREIGN KEY (concept_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_concept_broader_concept ON core_concept(broader_concept_id);
+-- Both partial: a row that carries no stable id, or no key yet, constrains
+-- nothing.
+CREATE UNIQUE INDEX IF NOT EXISTS core_concept_stable_idx
+  ON core_concept(scheme_id, stable_id) WHERE stable_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS core_concept_key_idx
+  ON core_concept(scheme_id, normalized_key) WHERE normalized_key IS NOT NULL;
 
 CREATE TABLE core_tag (
   tag_id             TEXT PRIMARY KEY,
@@ -337,15 +490,53 @@ CREATE TABLE core_tag (
   concept_id         TEXT NOT NULL REFERENCES core_concept(concept_id),
   tagged_by_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   confidence         REAL CHECK (confidence BETWEEN 0 AND 1),
+  -- A MACHINE ASSERTION LINKS TO ITS EVIDENCE (#996, ruling R22). A tag with
+  -- no asserting party is a machine's claim, and until now it carried a
+  -- confidence and nothing else: no way to ask which model said it, from what
+  -- input, or what a second model said instead. \`derivation_id\` names the
+  -- \`enrich_derivation\` row that produced it — which carries the profile, the
+  -- model and the payload — and \`input_revision_id\` names the revision of the
+  -- target the claim was made ABOUT, so a claim about superseded content can
+  -- be told from one about what is there now.
+  --
+  -- ON DELETE SET NULL on both: losing the evidence must never be the thing
+  -- that deletes the claim, and a claim whose evidence is gone reads as an
+  -- unattributed machine tag, which is what it is.
+  derivation_id      TEXT REFERENCES enrich_derivation(derivation_id) ON DELETE SET NULL,
+  input_revision_id  TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   tagged_at          TEXT NOT NULL,
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  UNIQUE (target_type, target_id, concept_id),
+  ${ROW_VERSION_COLUMN},
+  -- Evidence belongs to a MACHINE assertion. An owner does not cite a model.
+  CHECK (tagged_by_party_id IS NULL
+         OR (derivation_id IS NULL AND input_revision_id IS NULL)),
   FOREIGN KEY (tag_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (target_type, target_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
+  -- NO TABLE-LEVEL \`UNIQUE (target_type, target_id, concept_id)\` (#996, R22).
+  -- It made COMPETING CONFIDENCES unrepresentable: two engine profiles could
+  -- not both say "beach" about one photo with different confidence, so the
+  -- second write silently replaced the first and the disagreement — the thing
+  -- a member would want to see — could not exist. The two partial indexes
+  -- below keep every uniqueness that is still true.
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_tag_concept ON core_tag(concept_id);
 CREATE INDEX IF NOT EXISTS idx_tag_tagged_by_party ON core_tag(tagged_by_party_id);
+CREATE INDEX IF NOT EXISTS idx_tag_derivation ON core_tag(derivation_id);
+CREATE INDEX IF NOT EXISTS idx_tag_input_revision ON core_tag(input_revision_id);
+-- ONE OWNER ASSERTION per (target, concept). The member does not say a thing
+-- twice, and an owner-asserted tag is terminal for the enrichment publishers.
+CREATE UNIQUE INDEX IF NOT EXISTS core_tag_owner_assertion_idx
+  ON core_tag(target_type, target_id, concept_id)
+  WHERE tagged_by_party_id IS NOT NULL;
+-- ONE MACHINE ASSERTION PER DERIVATION. Two profiles are two rows — that is
+-- the competing confidence — and a re-run of the SAME derivation replaces its
+-- own row rather than growing a second. \`COALESCE\` folds the unstamped
+-- machine tags (those written before the evidence link) to one row each, which
+-- is exactly the uniqueness they had.
+CREATE UNIQUE INDEX IF NOT EXISTS core_tag_machine_assertion_idx
+  ON core_tag(target_type, target_id, concept_id, COALESCE(derivation_id, ''))
+  WHERE tagged_by_party_id IS NULL;
 
 -- One curation mechanism (issue #274): an owner-curated, ordered, typed
 -- container. Albums and notebooks are surface views over this one table —
@@ -361,6 +552,7 @@ CREATE TABLE core_collection (
   sort_order           INTEGER NOT NULL,
   created_at           TEXT NOT NULL,
   updated_at           TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (collection_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_collection_owner_party ON core_collection(owner_party_id);
@@ -391,29 +583,10 @@ ${touchUpdatedAt("core_place", "place_id")}
 ${touchUpdatedAt("core_event", "event_id")}
 ${touchUpdatedAt("core_transaction", "txn_id")}
 ${touchUpdatedAt("core_content_item", "content_id")}
+${touchUpdatedAt("core_content_representation", "representation_id")}
 ${touchUpdatedAt("core_document", "document_id")}
 ${touchUpdatedAt("core_link", "link_id")}
 ${touchUpdatedAt("core_concept", "concept_id")}
 ${touchUpdatedAt("core_tag", "tag_id")}
 ${touchUpdatedAt("core_collection", "collection_id")}
-`;
-
-// Standoff anchor for inline references (#282). An anchor is a LOCATOR
-// for an existing core.link judgment, not a second judgment (rule 10): it
-// points into the from-endpoint's plain body text with a W3C-style selector
-// {exact, prefix, suffix, start} so the read view can render the edge as an
-// inline chip. Bodies stay canonical deduped bytes — the anchor lives outside
-// them. One anchor per link (an inline mention IS one edge); no independent
-// lifecycle: resolution only considers live links, so anchors of ended links
-// are simply never resolved, and the dangling-link sweep needs no extension.
-export const LINK_ANCHOR_DDL = `
-CREATE TABLE core_link_anchor (
-  anchor_id     TEXT PRIMARY KEY,
-  link_id       TEXT NOT NULL UNIQUE REFERENCES core_link(link_id),
-  selector_json TEXT NOT NULL CHECK (json_valid(selector_json)),
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  FOREIGN KEY (anchor_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-${touchUpdatedAt("core_link_anchor", "anchor_id")}
 `;

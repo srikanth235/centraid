@@ -7,9 +7,10 @@ function entry(
   key: string,
   bytes: number,
   lastUsedAt: number,
-  pinned = false
+  pinned = false,
+  extra: Partial<StoredContentEntry> = {}
 ): StoredContentEntry {
-  return { key, bytes, lastUsedAt, pinned };
+  return { key, bytes, lastUsedAt, pinned, kind: "original", ...extra };
 }
 
 describe(planContentEviction, () => {
@@ -84,5 +85,57 @@ describe(planContentEviction, () => {
     );
     expect(first.evict).toStrictEqual(["a"]);
     expect(second.evict).toStrictEqual(first.evict);
+  });
+});
+
+// #996 R7/R25: two more things the LRU may not touch, and both are promises
+// this seat has already made rather than preferences it holds.
+describe("what the phone's byte policy protects beyond a pin", () => {
+  test("a capture this phone made is not a candidate", () => {
+    // It may be the only copy anywhere until the gateway verifies it.
+    const plan = planContentEviction(
+      [
+        entry("kept", 100, 1, false, { capturedHere: true }),
+        entry("old", 100, 2),
+      ],
+      100
+    );
+    expect(plan.evict).toStrictEqual(["old"]);
+    expect(plan.pinnedBytes).toBe(100);
+  });
+
+  test("bytes a queued intent needs are not a candidate", () => {
+    // The gateway executes an attachment-dependent intent only once those
+    // hashes are uploaded and verified; evicting them makes the member's own
+    // queued work unsendable from the one device that has it.
+    const plan = planContentEviction(
+      [
+        entry("needed", 100, 1, false, { referencedByPendingIntent: true }),
+        entry("old", 100, 2),
+      ],
+      100
+    );
+    expect(plan.evict).toStrictEqual(["old"]);
+  });
+
+  test("a store made entirely of protected bytes evicts nothing and says so", () => {
+    // The overage is real and reported; silently evicting a promise to meet a
+    // budget is the one thing this planner must not do.
+    const plan = planContentEviction(
+      [
+        entry("a", 100, 1, true),
+        entry("b", 100, 2, false, { capturedHere: true }),
+      ],
+      50
+    );
+    expect(plan.evict).toStrictEqual([]);
+    expect(plan.pinnedBytes).toBe(200);
+    expect(plan.overBudgetBy).toBe(150);
+  });
+
+  test("a thumb is refused rather than planned: it is a row, not a file", () => {
+    expect(() =>
+      planContentEviction([entry("t", 2_048, 1, false, { kind: "thumb" })], 1)
+    ).toThrow(/thumb is a replicated row/u);
   });
 });

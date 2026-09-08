@@ -6,8 +6,9 @@ import { Pressable, View } from "react-native";
 import { formatBytes } from "@centraid/design";
 
 import { Text } from "../kit/components/NativeText";
+import { custodyDurability } from "../kit/storage/custody-status";
 import type {
-  CustodyBucket,
+  CustodyDurability,
   CustodyStatus,
 } from "../kit/storage/custody-status";
 import {
@@ -24,36 +25,27 @@ import { styles } from "./BackupHealth.styles";
 // Locker and record-only apps are absent: locker bytes ARE the secret; record-only hold no originals.
 export const FREE_UP_APPS: readonly string[] = ["photos", "docs"];
 
+/**
+ * TWO STATES AND A CACHE BIT (#996, R7). This was five rows, one per custody
+ * state, and a member reading them had to work out which of "on the home
+ * machine and off it", "on the remote tier only", "queued for the remote tier"
+ * and "on the home machine and nowhere else" meant their photograph was safe.
+ * All four mean the gateway's CAS holds it; only `missing` does not.
+ */
 const CUSTODY_ROWS: ReadonlyArray<{
-  bucket: CustodyBucket;
+  key: keyof CustodyDurability;
   label: string;
   sub: string;
   net?: true;
 }> = [
   {
-    bucket: "replicated",
+    key: "backedUp",
     label: "Backed up",
-    sub: "on your vault's home machine and off it — nothing more to do for these",
+    sub: "your vault holds these, verified — nothing more to do for them",
   },
   {
-    bucket: "remote-only",
-    label: "Held elsewhere",
-    sub: "on the remote tier only; this machine let its copy go",
-  },
-  {
-    bucket: "pending-offsite",
-    label: "Waiting to leave",
-    sub: "queued for the remote tier; nothing wrong yet",
-  },
-  {
-    bucket: "local-only",
+    key: "notBackedUp",
     label: "Not backed up",
-    sub: "on your vault's home machine and nowhere else",
-    net: true,
-  },
-  {
-    bucket: "missing",
-    label: "Missing",
     sub: "in neither tier — an integrity gap, never a rounding error",
     net: true,
   },
@@ -87,13 +79,14 @@ export function CustodyBlock({
         {FREE_UP_UNCOUNTED}
       </Text>
     );
+  const durability = custodyDurability(custody);
   return (
     <>
       {CUSTODY_ROWS.map((row) => {
-        const totals = custody.buckets[row.bucket];
+        const totals = durability[row.key];
         return (
           <View
-            key={row.bucket}
+            key={row.key}
             style={[
               styles.fact,
               { borderBottomColor: colors.line },
@@ -119,6 +112,13 @@ export function CustodyBlock({
           </View>
         );
       })}
+      {/* The cache bit, said as a bit and not as a state: it answers "what
+          could this vault let go", never "what is at risk". */}
+      <Text style={[styles.note, { color: colors.textFaint }]}>
+        {durability.releasable.count > 0
+          ? `${durability.releasable.count} of them are cached copies this vault could release · ${formatBytes(durability.releasable.bytes)}`
+          : "No cached copies are releasable right now."}
+      </Text>
       <Text style={[styles.note, { color: colors.textFaint }]}>
         Counted {formatSyncTime(custody.computedAt)}
         {custody.uncounted.length > 0

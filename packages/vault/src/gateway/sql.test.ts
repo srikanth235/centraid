@@ -163,7 +163,7 @@ describe("sql", () => {
       rmSync(dir, { recursive: true, force: true });
     });
 
-    test("reads (including FTS MATCH + vault_content_text) work", () => {
+    test("reads (including FTS MATCH over decoded body text) work", () => {
       const outcome = gw.invoke(owner, {
         command: "knowledge.create_note",
         input: {

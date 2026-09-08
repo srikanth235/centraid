@@ -28,11 +28,13 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+import { ROUTES } from "../../packages/core/src/protocol/index.js";
 import { recipeFor } from "./lib/apps.js";
 import type { AppRecipe } from "./lib/apps.js";
-import { serverCreate } from "./lib/boot-conditions.js";
+import { seatStatus, serverCreate } from "./lib/boot-conditions.js";
 import { bootMobileGateway } from "./lib/gateway.js";
 import type { MobileGateway } from "./lib/gateway.js";
+import { readEntity } from "./lib/reads.js";
 import { openSeat } from "./lib/seat.js";
 import type { MobileSeat } from "./lib/seat.js";
 
@@ -41,7 +43,8 @@ const RETRY_BASE_MS = 40;
 const SETTLE_TIMEOUT_MS = 5_000;
 const POLL_MS = 20;
 
-const BOOTSTRAP_ROUTE = "/centraid/_vault/replica/bootstrap";
+/** A bootstrap is a snapshot download since #996 W5, not a walk of shaped pages. */
+const BOOTSTRAP_ROUTE = ROUTES.vaultSeatSnapshot;
 
 function notes(): AppRecipe {
   const recipe = recipeFor("notes");
@@ -94,7 +97,7 @@ describe("a phone that mounted before its gateway was reachable", () => {
 
   test("recovers the library after its first bootstrap is refused", async () => {
     const recipe = notes();
-    const mounted = await seat.session.status();
+    const mounted = seatStatus(seat);
     expect(
       mounted.cursor,
       "the offline mount took a cursor, so this suite never reaches the state it exists for"
@@ -103,13 +106,15 @@ describe("a phone that mounted before its gateway was reachable", () => {
 
     // The vault gains a row the phone has never seen.
     await serverCreate(gateway, seat, recipe, "written-before-the-phone-woke");
-    // Page one IS the shape catalog, so a session that never bootstrapped cannot
-    // answer this read at all. It REFUSES rather than reporting zero — "absent is
-    // never empty" (docs/mobile-offline.md), and the refusal is what the screen
-    // above it should have been drawing all along.
-    await expect(
-      seat.session.read(recipe.appId, { entity: recipe.entity })
-    ).rejects.toThrow(/No offline shape/u);
+    // A seat with no copy REFUSES rather than reporting zero — "absent is never
+    // empty" (docs/mobile-offline.md), and the refusal is what the screen above
+    // it should have been drawing all along. Since #996 W5 the trap is sharper
+    // than it was: the seat's file carries the vault's DDL from the baseline, so
+    // every table exists and an unguarded read would answer an entirely
+    // believable empty page over a vault holding rows.
+    await expect(readEntity(seat, recipe.entity)).rejects.toThrow(
+      /holds no copy/u
+    );
 
     // The wake arrives while the transport is still refusing — the ordinary
     // shape of a tunnel that has not finished coming up. One real attempt, one
@@ -123,7 +128,7 @@ describe("a phone that mounted before its gateway was reachable", () => {
     );
     const refusedAfter = bootstrapAttempts(seat);
     expect(
-      (await seat.session.status()).cursor,
+      seatStatus(seat).cursor,
       "the refused bootstrap took a cursor anyway"
     ).toBeNull();
 
@@ -132,16 +137,14 @@ describe("a phone that mounted before its gateway was reachable", () => {
     // does not exist.
     seat.restore();
     await until(
-      async () => (await seat.session.status()).cursor !== null,
+      async () => seatStatus(seat).cursor !== null,
       [
         "the session to retry the bootstrap it was refused —",
         "it asked once, was told no, and never asked again",
       ].join(" ")
     );
 
-    const recovered = await seat.session.read(recipe.appId, {
-      entity: recipe.entity,
-    });
+    const recovered = await readEntity(seat, recipe.entity);
     expect(
       recovered.rows,
       "the session took a cursor but the row the vault held never landed"
@@ -164,19 +167,17 @@ describe("a phone that mounted before its gateway was reachable", () => {
       retryDelayMs: RETRY_BASE_MS,
     });
     try {
-      expect((await second.session.status()).cursor).toBeNull();
+      expect(seatStatus(second).cursor).toBeNull();
       // The wake lands on a working transport, so the FIRST attempt succeeds.
       // Without this half, "the rows arrived" could be a retry rescuing a vault
       // that was never reachable in the first place.
       secondReachable = true;
       second.session.notifyReachable();
       await until(
-        async () => (await second.session.status()).cursor !== null,
+        async () => seatStatus(second).cursor !== null,
         "a bootstrap on a live transport to take a cursor"
       );
-      const read = await second.session.read(recipe.appId, {
-        entity: recipe.entity,
-      });
+      const read = await readEntity(second, recipe.entity);
       expect(
         read.rows.length,
         "a wake on a live transport did not land the rows either, so the first seat's emptiness says nothing about retries"

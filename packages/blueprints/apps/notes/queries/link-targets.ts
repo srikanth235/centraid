@@ -20,9 +20,7 @@ export default async function linkTargets({ input, ctx }: HandlerArgs) {
           query: term,
           limit: 8,
         }),
-        isNotes
-          ? readJournalNoteIds(ctx.vault)
-          : Promise.resolve(new Set<string>()),
+        isNotes ? readJournalNoteIds(ctx) : Promise.resolve(new Set<string>()),
       ]);
       return linkTargetsFrom(target, result.rows ?? [], journalNoteIds);
     })

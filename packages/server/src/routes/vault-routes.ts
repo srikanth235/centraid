@@ -29,6 +29,7 @@ import {
   browseRefSearch,
   browseDependents,
   BrowseError,
+  destroyLockerKeys,
   BROWSE_MAX_LIMIT,
   listVaultEntities,
   mediaLocationPolicy,
@@ -65,7 +66,6 @@ import type {
 } from "../serve/vault-plane.js";
 import { VaultRegistryError } from "../serve/vault-registry.js";
 import type { VaultInfo, VaultRegistry } from "../serve/vault-registry.js";
-import { COMPANION_MODULES, companionModuleState } from "./companion-grants.js";
 import { readJson, sendJson, sendJsonConditional } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 import {
@@ -265,6 +265,10 @@ export function makeVaultRouteHandler(
         // leftover makes a re-created vault of the same id unopenable.
         options.keys.destroy(`${vaultId}.identity`);
         options.keys.destroy(`${vaultId}.identity.pub`);
+        // And the Locker keys (#996, R13). An erase that destroyed the DEK and
+        // left `K` behind would leave the one key that still opens this
+        // vault's secrets sitting beside the rubble.
+        destroyLockerKeys({ store: options.keys, vaultId });
         options.gatewayDatabase.transaction(() => {
           options
             .gatewayDatabase!.db.prepare(
@@ -596,16 +600,6 @@ export function makeVaultRouteHandler(
       }
 
       if (method === "GET" && segments[0] === "apps" && segments.length === 1) {
-        const companionProfile = vaultContext()?.companionSurfaces;
-        if (companionProfile !== undefined) {
-          const allowed = new Set(companionProfile);
-          const installed = new Set(plane.listApps().map((app) => app.name));
-          const modules = COMPANION_MODULES.map((id) => ({
-            id,
-            state: companionModuleState(allowed, id, installed.has(id)),
-          }));
-          return sendJson(res, 200, { modules });
-        }
         return sendJson(res, 200, { apps: plane.listApps() });
       }
 
@@ -823,15 +817,6 @@ export function makeVaultRouteHandler(
         segments.length === 1
       ) {
         const blocking = plane.blocking();
-        if (vaultContext()?.companionSurfaces !== undefined) {
-          return sendJson(res, 200, {
-            count:
-              blocking.outbox.length +
-              blocking.needsAuth.length +
-              blocking.parked.length +
-              blocking.scopeRequests.length,
-          });
-        }
         return sendJson(res, 200, {
           ...blocking,
           outbox: withCanEdit(blocking.outbox),
@@ -846,13 +831,6 @@ export function makeVaultRouteHandler(
         const notifications = plane.notificationsSummary(
           url.searchParams.get("include_archived") === "true"
         );
-        // Each projection ETags its OWN body (#659), so a grant-profiled
-        // caller can never revalidate into the other shape's cached response.
-        if (vaultContext()?.companionSurfaces !== undefined) {
-          return sendJsonConditional(req, res, 200, {
-            count: notifications.decisions.count,
-          });
-        }
         return sendJsonConditional(req, res, 200, {
           ...notifications,
           decisions: {
@@ -1367,6 +1345,9 @@ async function handleVaultsRoute(
       } catch (error) {
         vaults.delete(created.vaultId);
         options.keys?.destroy(`${created.vaultId}.sealkey`);
+        if (options.keys) {
+          destroyLockerKeys({ store: options.keys, vaultId: created.vaultId });
+        }
         throw error;
       }
       return sendJson(res, 201, created);

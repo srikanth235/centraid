@@ -205,13 +205,20 @@ export function enforceRevisionRetention(
   if (!declaration) return;
   const policy = revisionPolicyOf(declaration);
   if (policy.retain === "forever") return;
+  // A CAPTURE SNAPSHOT IS NOT AN AUTHORED VERSION (#996, OQ-11). The N-snapshot
+  // default bounds what the ENGINE took on a command's behalf; the OCCURRENCES
+  // a member authored (`operation = 'revise'`, the rows the wrapper's
+  // `current_revision_id` chain walks) are unbounded, with a size-based prune
+  // the owner triggers. Pruning one would also truncate the chain, so this is
+  // a correctness bound as much as a ruling.
   vault
     .prepare(
       `DELETE FROM core_entity_revision
         WHERE entity_type = ? AND entity_id = ?
+          AND operation <> 'revise'
           AND revision_id NOT IN (
             SELECT revision_id FROM core_entity_revision
-             WHERE entity_type = ? AND entity_id = ?
+             WHERE entity_type = ? AND entity_id = ? AND operation <> 'revise'
              ORDER BY recorded_at DESC, revision_id DESC
              LIMIT ?
           )`

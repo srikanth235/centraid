@@ -69,7 +69,6 @@ export interface GatewayPairRequest {
   platform: string;
   rememberDevice?: boolean;
   /* No owner or vault field: a joining device never names its own reach. */
-  grantProfile?: string[];
 }
 
 export interface GatewayPairResponse {

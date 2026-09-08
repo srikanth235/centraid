@@ -1,12 +1,14 @@
 import {
   applyRecurrenceExceptions,
   expandRecurrence,
+  overrideAt,
   parseWallIso,
+  recurrenceExceptionsOf,
   shiftTemporal,
   wallEpoch,
 } from "@centraid/core/time";
 import type {
-  RecurrenceException,
+  OccurrenceException,
   RecurrenceSemantics,
 } from "@centraid/core/time";
 
@@ -93,37 +95,25 @@ function overlapsWindow(
   return startMs < to.getTime() && endMs > from.getTime();
 }
 
-type NativeException = RecurrenceException & {
+/** The shadow occurrence's own values, carried in `override_json`. */
+export interface NativeOverride {
+  start?: string;
+  end?: string;
   summary?: string;
   description?: string;
-  end?: string;
   recurrence_semantics?: RecurrenceSemantics;
   calendar_id?: string;
-};
-
-function extraOverride(
-  exceptions: readonly NativeException[],
-  originalStart: string
-): NativeException | undefined {
-  const occurrence = exceptions.find(
-    (item) =>
-      item.originalStart === originalStart &&
-      item.action === "override" &&
-      (item.scope ?? "occurrence") === "occurrence"
-  );
-  if (occurrence) return occurrence;
-  return exceptions
-    .filter(
-      (item) =>
-        item.action === "override" &&
-        item.scope === "future" &&
-        item.originalStart <= originalStart
-    )
-    .slice()
-    .sort((left, right) =>
-      right.originalStart.localeCompare(left.originalStart)
-    )[0];
+  scope?: "occurrence" | "future";
 }
+
+/**
+ * The phone's exceptions, as OCCURRENCE KEYS (#996, ruling R21; drift ONT-25).
+ * The "which override is in force here" walk used to be written out again in
+ * this file, in the web agenda and in Tally's dashboard — three copies, three
+ * slightly different comparisons. It is `overrideAt` in the shared adapter
+ * now, and the stored column is named in exactly one place in the repo.
+ */
+export type NativeException = OccurrenceException<NativeOverride>;
 
 /** Materialize the same timezone-aware recurrence contract as web handlers. */
 export function expandEvent(
@@ -172,11 +162,13 @@ export function expandEvent(
             overlap: false,
           },
         ],
-    exceptions
+    recurrenceExceptionsOf(exceptions)
   );
   return instances
     .map((instance) => {
-      const extra = extraOverride(exceptions, instance.originalStart);
+      // The occurrence key is the series-local wall clock (#996, R21).
+      const occurrenceKey = instance.wallStart;
+      const extra = overrideAt(exceptions, occurrenceKey);
       const end =
         extra?.end ??
         (semantics === "zoned"
@@ -186,9 +178,9 @@ export function expandEvent(
         ...event,
         start: instance.start,
         end,
-        originalStart: instance.originalStart,
-        instanceKey: `${event.id}:${instance.originalStart}`,
-        isRecurrenceInstance: instance.originalStart !== event.start,
+        originalStart: occurrenceKey,
+        instanceKey: `${event.id}:${occurrenceKey}`,
+        isRecurrenceInstance: instance.start !== event.start,
         overlap: instance.overlap,
         ...(extra?.summary === undefined ? {} : { summary: extra.summary }),
         ...(extra?.description === undefined

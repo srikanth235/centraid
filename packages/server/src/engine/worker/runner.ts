@@ -72,6 +72,9 @@ interface VaultCallMessage {
   type: "vault";
   id: number;
   op:
+    // One page of one handler's statement-as-data (#996 W4-D2). The gateway
+    // serves it through the paged door for a seat that holds no vault file.
+    | "page"
     | "read"
     | "search"
     | "invoke"
@@ -80,7 +83,6 @@ interface VaultCallMessage {
     | "changes"
     | "resolve"
     | "reveal"
-    | "authenticate"
     | "content";
   payload: unknown;
 }
@@ -166,6 +168,18 @@ function vaultCall(
 }
 
 const vault = {
+  /**
+   * ONE PAGE OF THIS HANDLER'S OWN STATEMENT (#996 wave 4, W4-D2).
+   *
+   * The same call a seat holding the vault file answers locally. Here it
+   * crosses to the parent, which runs it through the paged door under this
+   * app's credential — `evaluateAccess`, the R17 field mask and the manifest
+   * row filters applied. No SQL is executed in this thread and none could be:
+   * the statement is data on the way out and rows on the way back.
+   */
+  page(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall("page", request);
+  },
   read(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("read", request);
   },
@@ -188,9 +202,6 @@ const vault = {
   },
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
-  },
-  authenticate(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall("authenticate", request);
   },
   content(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("content", request);
@@ -220,6 +231,9 @@ function execute(req: WorkerRequest): void {
             collapseMissedOccurrences: (...args: unknown[]) => unknown;
             describeRecurrence: (...args: unknown[]) => unknown;
             expandRecurrence: (...args: unknown[]) => unknown;
+            occurrenceExceptionsOf: (...args: unknown[]) => unknown;
+            overrideAt: (...args: unknown[]) => unknown;
+            recurrenceExceptionsOf: (...args: unknown[]) => unknown;
             shiftTemporal: (...args: unknown[]) => unknown;
           })
         : {
@@ -227,6 +241,9 @@ function execute(req: WorkerRequest): void {
             collapseMissedOccurrences: unavailableTime,
             describeRecurrence: unavailableTime,
             expandRecurrence: unavailableTime,
+            occurrenceExceptionsOf: unavailableTime,
+            overrideAt: unavailableTime,
+            recurrenceExceptionsOf: unavailableTime,
             shiftTemporal: unavailableTime,
           };
       const time = Object.freeze({
@@ -234,6 +251,12 @@ function execute(req: WorkerRequest): void {
         collapseMissedOccurrences: timeModule.collapseMissedOccurrences,
         describeRecurrence: timeModule.describeRecurrence,
         expandRecurrence: timeModule.expandRecurrence,
+        // THE OCCURRENCE-KEY ADAPTER (#996, ruling R21; drift ONT-25). A
+        // handler never names the stored column again: it hands the rows to
+        // the adapter and gets keys back.
+        occurrenceExceptionsOf: timeModule.occurrenceExceptionsOf,
+        overrideAt: timeModule.overrideAt,
+        recurrenceExceptionsOf: timeModule.recurrenceExceptionsOf,
         shiftTemporal: timeModule.shiftTemporal,
       });
       if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();

@@ -26,7 +26,12 @@ const mocks = vi.hoisted(() => ({
   containers: [] as Record<string, unknown>[],
   parties: [] as Record<string, unknown>[],
   links: [] as Record<string, unknown>[],
-  share: vi.fn<(input: unknown) => Promise<{ claims: unknown[] }>>(),
+  // A share is an HTTP call to the gateway now (#996 wave 3), not a session
+  // verb: the placement plane that made it one is deleted.
+  share:
+    vi.fn<
+      (baseUrl: string, input: unknown) => Promise<{ claims: unknown[] }>
+    >(),
 }));
 
 vi.mock(import("react-native"), async () => {
@@ -155,19 +160,25 @@ vi.mock(import("../components/AnchoredMenu"), async () => {
   } as never;
 });
 
+// The roster reads are pages over the seat now (#996 wave 5); the entity a
+// read depends on rides the hook's options, so that is what this keys on.
 vi.mock(
-  import("../hooks/useReplicaQuery"),
+  import("../hooks/useSeatPages"),
   () =>
     ({
-      useReplicaQuery: (_appId: string, request: { entity: string }) => ({
+      useSeatPages: (
+        _appId: string,
+        _query: unknown,
+        options: { entity: string }
+      ) => ({
         rows:
-          request.entity === "core.party"
+          options.entity === "core.party"
             ? mocks.parties
-            : request.entity === "core.vault"
+            : options.entity === "core.vault"
               ? [{ self_party_id: "owner" }]
-              : request.entity === "social.circle"
+              : options.entity === "social.circle"
                 ? mocks.circles
-                : request.entity === "social.circle_member"
+                : options.entity === "social.circle_member"
                   ? mocks.circleMembers
                   : mocks.containers,
       }),
@@ -181,7 +192,7 @@ vi.mock(
       useReplica: () => ({
         gatewayBase: "http://gateway.local",
         scopes: [],
-        session: { share: mocks.share },
+        session: {},
       }),
     }) as never
 );
@@ -189,6 +200,11 @@ vi.mock(
 vi.mock(
   import("../../lib/replica/links-transport"),
   () => ({ listLinks: () => Promise.resolve(mocks.links) }) as never
+);
+
+vi.mock(
+  import("../../lib/replica/commons-transport"),
+  () => ({ postCommons: mocks.share }) as never
 );
 
 vi.mock(
@@ -373,7 +389,8 @@ describe("ShareSheet role", () => {
     expect(buttonWithText("Share").getAttribute("aria-disabled")).toBe("true");
     await setRole("Ben", "Editor");
     await press(buttonWithText("Share with 1"));
-    const [submitted] = mocks.share.mock.calls[0] as [
+    const [, submitted] = mocks.share.mock.calls[0] as [
+      string,
       { members: Record<string, unknown>[] },
     ];
     expect(submitted.members).toStrictEqual([
@@ -420,7 +437,10 @@ describe("ShareSheet preferred circle", () => {
       button("Select the group Sitwell Road").getAttribute("aria-selected")
     ).toBe("true");
     await press(buttonWithText("Share with 1"));
-    const [submitted] = mocks.share.mock.calls[0] as [Record<string, unknown>];
+    const [, submitted] = mocks.share.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(submitted["circleId"]).toBe("c1");
     expect(submitted["members"]).toStrictEqual([
       { partyId: "ana", vaultId: "ana-vault", capability: "read" },
@@ -437,7 +457,10 @@ describe("ShareSheet preferred circle", () => {
     await render("c1");
     await setRole("Ana", "Editor");
     await press(buttonWithText("Share with 1"));
-    const [submitted] = mocks.share.mock.calls[0] as [Record<string, unknown>];
+    const [, submitted] = mocks.share.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(submitted["circleId"]).toBeUndefined();
     expect(submitted["members"]).toStrictEqual([
       { partyId: "ana", vaultId: "ana-vault", capability: "read+write" },

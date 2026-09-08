@@ -4,6 +4,12 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { currentReplicaLogState, readReplicaChanges } from "./change-log.js";
 import {
+  expiredOutcomeRecovery,
+  pruneReplicaIntentOutcomes,
+  replicaDependencyVerdict,
+} from "./intent-chain.js";
+import {
+  REPLICA_IDEMPOTENCY_WINDOW_DAYS,
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
   readReplicaIntentOutcome,
@@ -83,6 +89,11 @@ describe("intents", () => {
       }))
     ).toStrictEqual([
       { entity: "replica.intent", rowId: "intent-1", op: "insert" },
+      // TWO entries for the one status change: the write itself, then the
+      // touch trigger's own UPDATE bumping `row_version` (#996, R6). A reader
+      // takes the LAST entry's row state, which is why the projector coalesces
+      // by (entity, row) rather than counting entries.
+      { entity: "replica.intent", rowId: "intent-1", op: "update" },
       { entity: "replica.intent", rowId: "intent-1", op: "update" },
     ]);
   });
@@ -175,5 +186,95 @@ describe("intents", () => {
         op: "delete",
       }),
     ]);
+  });
+
+  test("the idempotency window defaults to the retention floor, and expiry is an answer", () => {
+    db = openVaultDb();
+    const recorded = recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "executed",
+    });
+    // THE WINDOW IS STATED, not left to whatever a sweep happens to do: a
+    // client needs to know how long "retry is safe" lasts.
+    const days =
+      (new Date(recorded.expiresAt!).getTime() -
+        new Date(recorded.createdAt).getTime()) /
+      86_400_000;
+    expect(Math.round(days)).toBe(REPLICA_IDEMPOTENCY_WINDOW_DAYS);
+    expect(expiredOutcomeRecovery(db.vault, identity.intentId)).toBeUndefined();
+    expect(
+      expiredOutcomeRecovery(
+        db.vault,
+        identity.intentId,
+        new Date(new Date(recorded.expiresAt!).getTime() + 1)
+      )
+    ).toMatchObject({ recovery: "resubmit-as-new-intent" });
+  });
+
+  test("a lapsed outcome is held while a seat's cursor is still behind it (OQ-13)", () => {
+    db = openVaultDb();
+    const lapsed = "2020-01-01T00:00:00.000Z";
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "executed",
+      expiresAt: lapsed,
+    });
+    db.vault
+      .prepare(
+        `UPDATE replica_intent_outcome SET commit_seq = 40 WHERE intent_id = ?`
+      )
+      .run(identity.intentId);
+
+    // The seat has applied up to 30: the outcome answers a projection it has
+    // not cleared yet, so pruning it would turn a badge that WOULD have
+    // cleared into one that never does.
+    expect(
+      pruneReplicaIntentOutcomes(db.vault, { holdAtOrAbove: 30 }).pruned
+    ).toBe(0);
+    expect(
+      readReplicaIntentOutcome(db.vault, identity.intentId, identity.deviceId)
+    ).toBeDefined();
+
+    // Once the seat is past it, the window's far edge applies.
+    expect(
+      pruneReplicaIntentOutcomes(db.vault, { holdAtOrAbove: 40 }).pruned
+    ).toBe(1);
+  });
+
+  test("a predecessor's verdict distinguishes waiting from abandoned", () => {
+    db = openVaultDb();
+    // Unknown: the create may still be in flight, and waiting resolves it.
+    expect(replicaDependencyVerdict(db.vault, ["intent-1"])).toMatchObject({
+      kind: "waiting",
+      on: "intent-1",
+    });
+    recordReplicaIntentOutcome(db.vault, { ...identity, status: "sending" });
+    expect(replicaDependencyVerdict(db.vault, ["intent-1"])).toMatchObject({
+      kind: "waiting",
+    });
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "denied",
+      reason: "the vault refused it",
+    });
+    // Terminal and NOT executed: this dependent will never run, and saying so
+    // — with the predecessor's own reason — is the difference between a queue
+    // that drains and one that quietly stops.
+    expect(replicaDependencyVerdict(db.vault, ["intent-1"])).toStrictEqual({
+      kind: "abandoned",
+      on: "intent-1",
+      reason: "the vault refused it",
+    });
+    recordReplicaIntentOutcome(db.vault, {
+      intentId: "intent-2",
+      deviceId: identity.deviceId,
+      appId: identity.appId,
+      action: identity.action,
+      payloadHash: identity.payloadHash,
+      status: "executed",
+    });
+    expect(replicaDependencyVerdict(db.vault, ["intent-2"])).toStrictEqual({
+      kind: "ready",
+    });
   });
 });

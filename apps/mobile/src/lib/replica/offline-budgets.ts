@@ -1,17 +1,26 @@
-/** Not a local budget: the gateway caps a subscription here too (#880). */
-export { MAX_MULTIPLEX_REPLICA_SCOPES as MAX_MOUNTED_NATIVE_SCOPES } from "@centraid/core/protocol";
-
-export const MOBILE_REPLICA_BOOTSTRAP_WINDOW = 5_000;
+/**
+ * Mounts the BACKGROUND pass keeps current in one radio (#880, #996 wave 3).
+ *
+ * Not a local budget: the gateway caps a subscription at the same number, and
+ * the phone attaches the same N — one wire agreement, not two. It is no longer
+ * a READ cap: a seat opens one file, and the vault switcher offers every vault
+ * the gateway granted. What it still bounds is how many of those files one
+ * background pass keeps in step.
+ */
+export { MAX_REPLICA_FEED_MOUNTS as MAX_BACKGROUND_FEED_MOUNTS } from "@centraid/core/protocol";
 
 /**
  * THE WINDOW A SCREEN'S WHOLE-ENTITY READ DECLARES (#922 E2).
  *
- * `acceptTruncation` says "the default window is fine"; the default is 1,000,
- * which at the year-3 roster of 5,000 people silently becomes a screen the
- * member counts. A screen that draws a whole entity declares the year-3 volume
- * instead, so the page it renders is the page the vault holds — and a library
- * past it still says so on the one status line, because a declared window that
- * fills is still a truncation.
+ * A screen that draws a whole entity declares the year-3 volume, so the page it
+ * renders is the page the vault holds — and a library past it still says so on
+ * the one status line, because a declared window that fills is still a
+ * truncation.
+ *
+ * The reads that declared no window at all are gone (#996 wave 4b): they were
+ * whole sets taking a 1,000-row default nobody chose, and each is a walk over
+ * the seat now. What is left here is the window of the reads that were always
+ * a window.
  */
 export const MOBILE_ENTITY_READ_WINDOW = 5_000;
 export const THUMBNAIL_SOURCE_BUDGET_BYTES = 128 * 1024 * 1024;

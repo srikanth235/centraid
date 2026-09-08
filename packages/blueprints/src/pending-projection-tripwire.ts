@@ -8,7 +8,7 @@
  * tombstone (`deleted_at` and its siblings) — or be excluded IN WRITING, with
  * a reason, in the app's `pending-projection.ts`.
  *
- * No filesystem here on purpose, matching `app-entity-tripwire.ts`: the caller
+ * No filesystem here on purpose: the caller
  * supplies action names and projection text, so a seeded violation is provable
  * red against a synthetic app without touching the tree.
  *

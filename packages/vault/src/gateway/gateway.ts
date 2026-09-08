@@ -3,6 +3,9 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { pageCursorOf, pageOf, pageStatement } from "@centraid/core/page";
+import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
+
 import { refreshCustodyRollup } from "../blob/custody-rollup.js";
 import { refreshCustodyState } from "../blob/custody.js";
 import type { ReconcileResult } from "../blob/custody.js";
@@ -51,6 +54,7 @@ import type { PublishResult } from "../ingest/staging.js";
 import { archivedSegmentShas } from "../journal-archive.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
+import { stampReplicaOutcomeCommitsInTransaction } from "../replica/intent-chain.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "../replica/intents.js";
 import {
   reclaimProvenOrdinaryInvocationCommitsInTransaction,
@@ -121,8 +125,7 @@ import {
   scalarPrimaryKeyColumn,
 } from "./filters.js";
 import { authenticate } from "./identity.js";
-import { LockerAuthentication } from "./locker-auth.js";
-import type { LockerAuthRequest, LockerAuthResult } from "./locker-auth.js";
+import { planPagedDoor } from "./paged-door.js";
 import { exportVault } from "./portability.js";
 import type { VaultExport } from "./portability.js";
 import { exportPortableVault } from "./portable-export.js";
@@ -193,20 +196,6 @@ function provenanceScopeFailure(
   return null;
 }
 
-/**
- * Locker's sealed SIDECAR entities (#873): rows that hang off an item and
- * carry secret material of their own. Their reveal spends the OWNING item's
- * one-time permit — a permit is minted per item, never per field/revision.
- */
-// `locker.item_history` is NOT one of them any more (#916, D2): the table is
-// gone and a previous value lives in a `core_entity_revision` snapshot, which
-// records that a sealed column changed and never what it changed to. There is
-// no secret in a revision to spend a permit on.
-const LOCKER_SIDECAR_ENTITIES = new Set([
-  "locker.item_field",
-  "locker.item_passkey",
-]);
-
 export interface GatewayDeps {
   /** Best-effort hint emitted only after audit-band provenance is durable. */
   onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
@@ -221,73 +210,13 @@ export type InvocationBatchResult<T> =
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (#293). */
   private readonly commands = new Map<string, RegisteredCommand>();
-  private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
   private activeBatchDecisionChanges: boolean[] | undefined;
 
   constructor(
     private readonly db: VaultDb,
     private readonly deps: GatewayDeps = {}
-  ) {
-    this.lockerAuthentication = new LockerAuthentication(db);
-  }
-
-  /**
-   * Host-only Locker authentication plane; app bridges restrict the caller.
-   * ASYNC (#659 G11): the scrypt derivation runs on the threadpool rather than
-   * blocking the gateway's event loop, so callers must await.
-   */
-  authenticateLocker(request: LockerAuthRequest): Promise<LockerAuthResult> {
-    return this.lockerAuthentication.handle(request);
-  }
-
-  /** Consume the one-time permit before a Locker UI reveal. */
-  authorizeLockerReveal(
-    authentication: RevealRequest["authentication"],
-    itemId: string
-  ): void {
-    this.lockerAuthentication.authorizeReveal(authentication, itemId, "ui");
-  }
-
-  /**
-   * Data-keyed Locker reveal gate (#630 review). Lives on the gateway so every
-   * reveal arm — app bridge, agent bridge, tests — hits the same lock.
-   */
-  private enforceLockerReveal(
-    request: RevealRequest,
-    entityId: string,
-    isFill: boolean
-  ): void {
-    this.lockerAuthentication.authorizeReveal(
-      request.authentication,
-      entityId,
-      isFill ? "fill" : "ui"
-    );
-  }
-
-  /**
-   * The item whose permit a Locker reveal spends (#873). `locker.item` spends
-   * its own; a sealed sidecar row spends the item it hangs off, resolved from
-   * the requested row. Null when that row is gone or its item is trashed —
-   * the caller then refuses with the SAME shape a missing item gets, after
-   * the permit gate has already run, so the sidecars are no existence oracle.
-   */
-  private lockerOwningItemId(
-    entity: string,
-    physical: string,
-    entityId: string
-  ): string | null {
-    if (!LOCKER_SIDECAR_ENTITIES.has(entity)) return entityId;
-    const pk = pkColumn(this.db.vault, physical);
-    const row = this.db.vault
-      .prepare(
-        `SELECT i.item_id FROM "${physical}" s
-           JOIN locker_item i ON i.item_id = s.item_id
-          WHERE s."${pk}" = ? AND i.deleted_at IS NULL`
-      )
-      .get(entityId) as { item_id: string } | undefined;
-    return row?.item_id ?? null;
-  }
+  ) {}
 
   /**
    * One short arrival window inside a shared vault + journal commit pair. Each
@@ -366,7 +295,17 @@ export class Gateway {
           invocationId
         );
       }
-      endReplicaCommit(this.db.vault, replicaCommit);
+      const captured = endReplicaCommit(this.db.vault, replicaCommit);
+      // THE OUTCOME LEARNS WHERE IT LANDED (#996, R24). The BATCH owns the
+      // transaction, so this is the only place the log position and the
+      // produced rows exist — and it is still inside it, so the stamp can
+      // never name a commit that rolled back or one a later write moved past.
+      if (captured)
+        stampReplicaOutcomeCommitsInTransaction(
+          this.db.vault,
+          invocationIds,
+          captured
+        );
       this.db.vault.exec("COMMIT");
       // Publish only runs now durable.
       notifyReplicaCommit(this.db.vault);
@@ -446,6 +385,8 @@ export class Gateway {
     }
     this.commands.set(def.name, {
       handler: def.handler,
+      preconditions: def.preconditions,
+      postconditions: def.postconditions,
       sealedInput: def.sealedInput ?? [],
       unseals: def.unseals ?? [],
       transcriptSensitive: def.transcriptSensitive ?? false,
@@ -667,6 +608,61 @@ export class Gateway {
   }
 
   /**
+   * ONE PAGE OF ONE APP HANDLER, FOR A SEAT THAT HOLDS NO FILE (#996 wave 4,
+   * ruling W4-D2).
+   *
+   * The same statement-as-data a seat with the file runs on the seat. It never
+   * runs here as raw SQL: `planPagedDoor` resolves the tables it names, takes
+   * an `evaluateAccess` decision on each, refuses any column the R17 field mask
+   * does not carry or that is sealed, and hands back the manifest row filters
+   * of EVERY table, compiled and ANDed. The assembler then splices those in
+   * beside the handler's own predicate, and the keyset, the probe row and the
+   * LIMIT are the host's as they are on the seat.
+   *
+   * This is the whole of R9's second half: a browser that chose to be a remote
+   * client reads through the same handlers as one holding the file, so an app
+   * has exactly one read path and neither seat has an answer the other cannot
+   * give.
+   */
+  page(
+    cred: Credential,
+    query: PageQuery,
+    request: PageRequest
+  ): Page<Record<string, unknown>> & { receiptId?: string } {
+    const identity = this.identify(cred);
+    const plan = planPagedDoor(this.db.vault, identity, query, nowIso());
+    const statement = pageStatement(query, request, {
+      sql: plan.where,
+      bind: plan.bind,
+    });
+    const fetched = this.db.vault
+      .prepare(statement.sql)
+      .all(...statement.bind) as Record<string, unknown>[];
+    // THE PROBE ROW IS THE HOST'S, ON THIS SIDE TOO. The statement asked for
+    // one row more than the window; that row is what separates "the window
+    // filled" from "the rows ended", and it must be dropped here rather than
+    // handed to a handler — a handler that received `limit + 1` rows and no
+    // cursor would report a full set as a short one, which is exactly the
+    // announcement `truncated` used to make and got wrong.
+    const page = pageOf(fetched, request, (row) =>
+      pageCursorOf(row, query.order)
+    );
+    const rows = page.rows;
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(this.db, {
+          authorityId: plan.tables[0]?.authorityId ?? null,
+          invocationId: null,
+          action: "read",
+          objectType: plan.tables.map((table) => table.entity).join(","),
+          objectId: null,
+          decision: "allow",
+          detail: { handler: query.name, rowCount: rows.length },
+        });
+    return { ...page, ...(receiptId === undefined ? {} : { receiptId }) };
+  }
+
+  /**
    * Reveal (#293): plaintext of one entity's sealed columns under the `reveal`
    * verb — never `read`, never `read+act`. Owner devices pass unless readonly.
    * Every reveal writes a receipt naming the item and columns, so "what looked
@@ -739,33 +735,23 @@ export class Gateway {
       entityId = hit.item_id;
     }
     if (!entityId) return deny("reveal needs an entityId or alias");
-    // Locker lock is data-keyed: fill needs an unlocked session; UI/agent
-    // reveals consume a one-time item permit. EVERY locker.* sealed entity is
-    // gated (#873) — a sidecar reveal spends its owning item's permit, and an
-    // unresolvable owner is gated on the requested id (which no permit names)
-    // so "row missing" and "no permit" refuse identically.
-    let owningItemId: string | null = null;
+    // THE SERVER NEVER UNSEALS A LOCKER ROW FOR A CLIENT AGAIN (#996, rulings
+    // R13 and W6-D2). This arm used to be the whole Locker boundary — a
+    // one-shot item permit for a UI reveal, an unlocked session for a fill,
+    // and the gateway handing plaintext back over the wire. The key is on the
+    // seat now: a seat decrypts what it already holds, behind its own unlock,
+    // and what reaches the gateway is the reveal RECEIPT rather than a request
+    // for a value.
+    //
+    // The door itself stays, because it is not Locker's (W6-D1). The §293
+    // sealed-column class still carries `sync.connection_credential`'s broker
+    // tokens and the ext band's declared sealed lists, and the broker must
+    // still be able to inject a token it is holding for the member. What is
+    // refused here is the SCHEMA, not the mechanism.
     if (ref.schema === "locker") {
-      owningItemId = this.lockerOwningItemId(
-        request.entity,
-        ref.physical,
-        entityId
+      return deny(
+        "Locker secrets are opened on the seat that holds the vault key, never by the gateway — this door does not unseal locker rows"
       );
-      try {
-        this.enforceLockerReveal(
-          request,
-          owningItemId ?? entityId,
-          context !== undefined
-        );
-      } catch (error) {
-        return deny(
-          error instanceof Error
-            ? error.message
-            : "Locker authentication required"
-        );
-      }
-      if (owningItemId === null)
-        return deny(`no revealable ${request.entity} row ${entityId}`);
     }
     const access = evaluateAccess(
       this.db.vault,
@@ -823,11 +809,6 @@ export class Gateway {
       decision: "allow",
       detail: {
         columns,
-        // A sidecar reveal names the row it opened AND the item whose permit
-        // it spent, so "what looked at my secrets" stays answerable per item.
-        ...(owningItemId !== null && owningItemId !== entityId
-          ? { itemId: owningItemId }
-          : {}),
         ...(request.alias === undefined ? {} : { alias: request.alias }),
         ...(context ? { context } : {}),
       },
@@ -1056,8 +1037,21 @@ export class Gateway {
     return { reason, containerId: route.containerId, actorPartyId };
   }
 
-  /** The only write path (rule R04). */
-  invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
+  /**
+   * The only write path (rule R04).
+   *
+   * `deterministicIdSeed` makes the ids a handler mints reproducible: they are
+   * derived from the seed and the mint ORDER rather than from the clock, which
+   * is what lets a scripted fixture (#996's ontology scenarios) be replayed and
+   * compared row for row. It is a FIXTURE seam — the seed must differ per
+   * invocation, since the mint order restarts inside each one — and ordinary
+   * callers pass nothing and get UUIDv7.
+   */
+  invoke(
+    cred: Credential,
+    rawRequest: InvokeRequest,
+    deterministicIdSeed?: string
+  ): InvokeOutcome {
     const identity = this.identify(cred);
     // BEFORE the commons rail: a refusal here is about the STANDING GRANT,
     // not something the rail should carry to the steward.
@@ -1077,7 +1071,7 @@ export class Gateway {
       });
       return { status: "denied", receiptId, reason: refused.reason };
     }
-    return this.invokeCore(identity, rawRequest);
+    return this.invokeCore(identity, rawRequest, deterministicIdSeed);
   }
 
   private invokeCore(
@@ -2017,7 +2011,9 @@ export class Gateway {
     if (identity.surface !== undefined) return "app";
     if (identity.kind !== "agent") return identity.kind;
     const row = this.db.vault
-      .prepare("SELECT enrollment_key FROM access_agent WHERE agent_id = ?")
+      .prepare(
+        "SELECT enrollment_key FROM access_agent_secret WHERE agent_id = ?"
+      )
       .get(identity.callerId) as { enrollment_key: string } | undefined;
     return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
   }

@@ -7,6 +7,12 @@ import { REPLICA_SCHEMA_EPOCH } from "../schema/replica.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import { formatReplicaCursor, parseReplicaCursor } from "./cursor.js";
 import type { ReplicaCursor, ReplicaCursorInput } from "./cursor.js";
+import {
+  captureReplicaCommit,
+  closeReplicaCapture,
+  openReplicaCapture,
+} from "./log.js";
+import type { ReplicaCaptureResult } from "./log.js";
 import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
 
 export const REPLICA_RETENTION_DAYS = 30;
@@ -399,10 +405,28 @@ function ensureReplicaCommitColumns(vault: DatabaseSync): void {
 export interface ReplicaCommitHandle {
   commitId: string;
   owner: boolean;
+  /** What produced the commit, carried onto every `replica_log` row. */
+  producer?: string;
 }
 
-/** Mark the caller's transaction so its triggers share one group id. */
-export function beginReplicaCommit(vault: DatabaseSync): ReplicaCommitHandle {
+/**
+ * Mark the caller's transaction so its triggers share one group id — and open
+ * the session capture the gateway log is decoded from (#996, R5).
+ *
+ * THIS PAIR IS THE ONLY CHOKE POINT THERE IS. Every canonical write path
+ * already brackets its transaction with `beginReplicaCommit` /
+ * `endReplicaCommit`, which is what makes session capture possible at all
+ * without a commit hook `node:sqlite` does not expose: the sessions open here,
+ * inside the caller's transaction, and are decoded in `endReplicaCommit`,
+ * still inside it. A write outside the pair is captured by the next pair's
+ * sessions and lands with that commit's position — converging, but attributed
+ * to a later producer, which is why the pair is a contract and not a
+ * convenience.
+ */
+export function beginReplicaCommit(
+  vault: DatabaseSync,
+  options: { producer?: string } = {}
+): ReplicaCommitHandle {
   const current = prepared(
     vault,
     `SELECT active_commit_id FROM replica_meta WHERE singleton = 1`
@@ -414,18 +438,41 @@ export function beginReplicaCommit(vault: DatabaseSync): ReplicaCommitHandle {
     vault,
     `UPDATE replica_meta SET active_commit_id = ? WHERE singleton = 1`
   ).run(commitId);
-  return { commitId, owner: true };
+  openReplicaCapture(vault, options.producer ?? "gateway");
+  return {
+    commitId,
+    owner: true,
+    ...(options.producer === undefined ? {} : { producer: options.producer }),
+  };
 }
 
 export function endReplicaCommit(
   vault: DatabaseSync,
   handle: ReplicaCommitHandle
-): void {
-  if (!handle.owner) return;
+): ReplicaCaptureResult | undefined {
+  if (!handle.owner) return undefined;
+  // Decode BEFORE the marker clears: the capture reads rows back, and a read
+  // is still a statement in this transaction.
+  const captured =
+    handle.producer === undefined
+      ? captureReplicaCommit(vault)
+      : captureReplicaCommit(vault, { producer: handle.producer });
   prepared(
     vault,
     `UPDATE replica_meta SET active_commit_id = NULL WHERE singleton = 1`
   ).run();
+  return captured;
+}
+
+/**
+ * Drop the open sessions without decoding — the ROLLBACK path.
+ *
+ * A rolled-back transaction's changes are undone in the file, but the session
+ * that was watching them is not: it still holds them, and the next commit
+ * would decode work that never happened. Rollback paths call this.
+ */
+export function abandonReplicaCommit(vault: DatabaseSync): void {
+  closeReplicaCapture(vault);
 }
 
 function currentSchemaEpoch(vault: DatabaseSync): number {

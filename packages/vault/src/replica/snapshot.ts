@@ -188,6 +188,21 @@ function publicRow(
   };
 }
 
+/**
+ * THE VERSION OF A ROW IS THE ROW'S OWN COLUMN (#996, R6) — here too.
+ *
+ * This is the PRODUCING half of the same rule the gateway's conflict check
+ * states (`routes/replica-intent-shape.ts#currentRowVersion`). It answered
+ * `MAX(seq)` over `replica_change`, so a seat stored a LOG POSITION as the
+ * version of its row and sent that back as an intent's base version, while the
+ * gateway compared it against `row_version` — 432 against 2, and every offline
+ * edit of a row the projector had ever touched came back conflicted. The two
+ * halves have to read the same column or the check is comparing units.
+ *
+ * The projector remains the fallback for an entity with no `row_version`
+ * column — the append-only bands — and for a composite key, whose `rowId` is a
+ * JSON tuple that no single-column `WHERE` can match.
+ */
 function latestRowVersions(
   vault: DatabaseSync,
   entity: string,
@@ -195,10 +210,27 @@ function latestRowVersions(
   epoch: string
 ): Map<string, number> {
   const versions = new Map<string, number>();
+  const shape = shapeOf(vault, entity);
+  const key =
+    shape.primaryKey.length === 1 && hasRowVersion(vault, shape.physical)
+      ? shape.primaryKey[0]
+      : undefined;
   for (let offset = 0; offset < rowIds.length; offset += 500) {
     const chunk = rowIds.slice(offset, offset + 500);
     if (chunk.length === 0) continue;
     const placeholders = chunk.map(() => "?").join(", ");
+    if (key !== undefined) {
+      const rows = vault
+        .prepare(
+          `SELECT ${quoteIdentifier(key)} AS row_id, row_version AS v
+             FROM ${quoteIdentifier(shape.physical)}
+            WHERE ${quoteIdentifier(key)} IN (${placeholders})`
+        )
+        .all(...chunk) as { row_id: string; v: number | null }[];
+      for (const row of rows)
+        if (row.v !== null) versions.set(String(row.row_id), row.v);
+      continue;
+    }
     const rows = vault
       .prepare(
         `SELECT row_id, MAX(seq) AS seq FROM replica_change
@@ -210,6 +242,26 @@ function latestRowVersions(
       if (row.seq !== null) versions.set(row.row_id, row.seq);
   }
   return versions;
+}
+
+/** `PRAGMA table_info` per table, once per connection. */
+const ROW_VERSION_TABLES = new WeakMap<DatabaseSync, Map<string, boolean>>();
+
+function hasRowVersion(vault: DatabaseSync, physical: string): boolean {
+  let cache = ROW_VERSION_TABLES.get(vault);
+  if (!cache) {
+    cache = new Map();
+    ROW_VERSION_TABLES.set(vault, cache);
+  }
+  const hit = cache.get(physical);
+  if (hit !== undefined) return hit;
+  const present = (
+    vault.prepare(`PRAGMA table_info(${quoteIdentifier(physical)})`).all() as {
+      name: string;
+    }[]
+  ).some((column) => column.name === "row_version");
+  cache.set(physical, present);
+  return present;
 }
 
 function validateOptions(options: ReadReplicaRowsOptions): {
@@ -346,17 +398,19 @@ export function readReplicaRow(
     | undefined;
   if (!raw) return undefined;
   const canonicalRowId = rowIdOf(raw, shape.primaryKey);
-  const version = prepared(
-    vault,
-    `SELECT MAX(seq) AS seq FROM replica_change
-        WHERE epoch = ? AND entity = ? AND row_id = ?`
-  ).get(
-    options.epoch ?? currentReplicaLogState(vault).epoch,
-    entity,
-    canonicalRowId
-  ) as { seq: number | null };
+  // The row's own column, through the one answerer (#996, R6). A change wire
+  // carries this number to the seat, the seat stores it, and the seat sends it
+  // back as an intent's base version — so it has to be the same column the
+  // gateway's conflict check reads.
+  const version =
+    latestRowVersions(
+      vault,
+      entity,
+      [canonicalRowId],
+      options.epoch ?? currentReplicaLogState(vault).epoch
+    ).get(canonicalRowId) ?? 0;
   const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
-  return publicRow(raw, shape, ceilingBytes, policy, version.seq ?? 0);
+  return publicRow(raw, shape, ceilingBytes, policy, version);
 }
 
 export interface ReplicaSnapshotReader {

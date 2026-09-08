@@ -150,7 +150,7 @@ describe("People and Tally organization contracts", () => {
 
     const input = {
       template_id: template.output.template_id,
-      original_start: "2026-02-15T09:00:00.000Z",
+      original_start_local: "2026-02-15T09:00:00",
     };
     const first = invoke("tally.materialize_recurring_expense", input);
     const second = invoke("tally.materialize_recurring_expense", input);
@@ -181,7 +181,7 @@ describe("People and Tally organization contracts", () => {
     expect(
       invoke("tally.edit_recurring_expense_occurrence", {
         template_id: template.output.template_id,
-        original_start: "2026-03-15T09:00:00.000Z",
+        original_start_local: "2026-03-15T09:00:00",
         scope: "occurrence",
         action: "skip",
       }).status
@@ -189,7 +189,7 @@ describe("People and Tally organization contracts", () => {
     expect(
       invoke("tally.materialize_recurring_expense", {
         template_id: template.output.template_id,
-        original_start: "2026-03-15T09:00:00.000Z",
+        original_start_local: "2026-03-15T09:00:00",
       })
     ).toMatchObject({
       status: "executed",

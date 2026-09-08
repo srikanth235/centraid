@@ -37,7 +37,11 @@ const ADD_INTENT = "tasks-e2e-add-task";
 // open tasks is the smallest set that provably fills a window a caller chose.
 const TRUNCATION_WINDOW = 20;
 const TRUNCATION_SEED = TRUNCATION_WINDOW + 1;
-const TRUNCATION_NOTICE = "Showing the newest 20; more not loaded";
+// The window that filled is the PAGE's own answer now (#996 wave 4, R8): the
+// board returns `truncated` because its page carried a cursor, not because a
+// reader announced after the fact that it had cut the rows off. The decaying
+// status note it replaces could only say that the answer was short; a
+// continuation says where the next one starts.
 const UI_IMPACT_DIR = "artifacts/e2e/ui-impact";
 const UI_IMPACT_SHOT = "issue-922-web-truncation-status.png";
 const UI_IMPACT_PENDING_SHOT = "issue-922-web-queued-pending-task.png";
@@ -45,6 +49,25 @@ const DELETE_TITLE = "Queued delete target";
 const MINTED_TITLE = "Queued minted task";
 const MINTED_ID_RE =
   /^[\da-f]{8}-[\da-f]{4}-8[\da-f]{3}-8[\da-f]{3}-[\da-f]{12}$/iu;
+
+/**
+ * CAPTURE, FROM THE TODAY SHELF (#996, W4-D3).
+ *
+ * A shelf is a filter, and an item created inside it belongs to it: the app
+ * stamps a task captured on Today with today's date
+ * (`quickAddInput`/`shelfDue`), so the row the member just added is on the
+ * board they are looking at. Driving the overlay rather than
+ * `window.centraid.write` is what makes this spec assert THAT rule — a raw
+ * rail write carries no shelf, lands undated, and belongs to the Inbox.
+ */
+async function addFromTodayShelf(page: Page, title: string): Promise<void> {
+  await page.getByRole("button", { name: "Add", exact: true }).first().click();
+  const panel = page.getByRole("dialog", { name: "Add" });
+  await expect(panel).toBeVisible();
+  await panel.getByLabel("Add", { exact: true }).fill(title);
+  await panel.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(panel).toBeHidden();
+}
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
   // Re-click until the palette actually opens: right after a reload the Search
@@ -233,7 +256,7 @@ test("Tasks files a dated task under Overdue and keeps it across a PWA reload", 
 // seats print (`truncatedListNotice`). Twenty-one open tasks against a window
 // of twenty is the smallest honest way to reach it: real writes through the
 // app's own rail, the real board query, the real replica read.
-test("Tasks says so on the status line when a read's window cuts the board short", async ({
+test("Tasks says the board has more when its window fills", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -281,26 +304,23 @@ test("Tasks says so on the status line when a read's window cuts the board short
   expect(seeded).toHaveLength(TRUNCATION_SEED - 1);
   expect(new Set(seeded)).toStrictEqual(new Set(["executed"]));
 
-  // The board query's own door, with the window the caller chooses. The read
-  // fills it, and the read itself — not the app — posts the line, which is the
-  // whole point: no screen can forget to.
-  //
-  // A note decays after six seconds, so the read is re-issued inside the poll
-  // rather than once before it; the poll can never race its own evidence away.
-  const statusLine = page.getByRole("status");
-  await expect
+  // The board query's own door, with the window the caller chooses. The page
+  // fills, so the answer carries a continuation — and the count is exactly the
+  // window, never "whatever the reader felt like".
+  const answered = await expect
     .poll(
-      async () => {
-        await page.evaluate(async (limit: number) => {
-          await window.centraid.read({ query: "board", input: { limit } });
-        }, TRUNCATION_WINDOW);
-        return (await statusLine.first().textContent()) ?? "";
-      },
+      async () =>
+        page.evaluate(async (limit: number) => {
+          const board = (await window.centraid.read({
+            query: "board",
+            input: { limit },
+          })) as { open: unknown[]; truncated?: boolean };
+          return { rows: board.open.length, truncated: board.truncated };
+        }, TRUNCATION_WINDOW),
       { timeout: 60_000 }
     )
-    .toContain(TRUNCATION_NOTICE);
-
-  await expect(statusLine.first()).toContainText(TRUNCATION_NOTICE);
+    .toMatchObject({ truncated: true });
+  void answered;
 
   const evidenceDir = path.resolve(
     import.meta.dirname,
@@ -321,6 +341,9 @@ test("Tasks says so on the status line when a read's window cuts the board short
 // while the gateway is down must LEAVE the board — a plain patch would leave
 // it wearing a badge. A task added on that same rail must appear at once with
 // the id the seat minted (canonical UUIDv8, not `pending:…`) and say so.
+//
+// Both adds are made through the TODAY SHELF's own capture, so the rows are
+// stamped due today (W4-D3) and land on the board this test is looking at.
 test("Tasks hides a queued delete and shows a minted pending add", async ({
   page,
 }) => {
@@ -328,27 +351,7 @@ test("Tasks hides a queued delete and shows a minted pending add", async ({
   await connectPwa(page);
   await openFirstParty(page, "Tasks");
 
-  await expect
-    .poll(
-      () =>
-        page.evaluate(
-          async ({ title, intentId }) => {
-            try {
-              const outcome = await window.centraid.write({
-                action: "add",
-                input: { title },
-                intentId,
-              });
-              return outcome.status;
-            } catch {
-              return "replica-not-ready";
-            }
-          },
-          { title: DELETE_TITLE, intentId: "tasks-e2e-queued-delete-target" }
-        ),
-      { timeout: 60_000 }
-    )
-    .toBe("executed");
+  await addFromTodayShelf(page, DELETE_TITLE);
 
   const landed = page
     .locator("[data-task-id]")
@@ -360,6 +363,19 @@ test("Tasks hides a queued delete and shows a minted pending add", async ({
         await page.evaluate(() => window.dispatchEvent(new Event("focus")));
         return (await landed.count()) > 0;
       },
+      { timeout: 60_000 }
+    )
+    .toBe(true);
+  // THE TASK MUST HAVE SETTLED before the seat goes offline. A delete whose
+  // creation is still in the outbox is a HELD DEPENDENT (R23) — correctly so,
+  // and not what this test is about, which is a LANDED task deleted offline.
+  await expect
+    .poll(
+      async () =>
+        (await page
+          .locator("[data-task-id]:not([data-pending='true'])")
+          .filter({ hasText: DELETE_TITLE })
+          .count()) > 0,
       { timeout: 60_000 }
     )
     .toBe(true);
@@ -390,15 +406,7 @@ test("Tasks hides a queued delete and shows a minted pending add", async ({
     )
     .toBe(true);
 
-  await page.evaluate(
-    async ({ title, intentId }) =>
-      window.centraid.write({
-        action: "add",
-        input: { title },
-        intentId,
-      }),
-    { title: MINTED_TITLE, intentId: "tasks-e2e-queued-minted-add" }
-  );
+  await addFromTodayShelf(page, MINTED_TITLE);
   const pendingRow = page
     .locator("[data-task-id][data-pending='true']")
     .filter({ hasText: MINTED_TITLE });

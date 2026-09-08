@@ -25,13 +25,16 @@ import {
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
-import { CORE_DDL, LINK_ANCHOR_DDL } from "./core.js";
+import { CONTENT_TEXT_DDL, LINK_ANCHOR_DDL } from "./core-side-tables.js";
+import { CORE_DDL } from "./core.js";
 import {
   LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,
   LOCKER_AUTH_DDL,
+  LOCKER_AUTH_DROP_DDL,
   LOCKER_DDL,
   LOCKER_FIELD_DDL,
+  LOCKER_KEY_DDL,
   LOCKER_PASSKEY_DDL,
 } from "./domains-locker.js";
 import { PEOPLE_DDL } from "./domains-people.js";
@@ -55,6 +58,10 @@ import { LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { SHARE_PARTY_BINDING_DDL } from "./party-vault-binding.js";
+import {
+  READ_PATH_INDEX_DDL,
+  SUBSCRIPTION_READ_PATH_INDEX_DDL,
+} from "./read-path-indexes.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
@@ -112,6 +119,11 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
     CORE_ENTITY_DDL,
+    // The decoded-body-text side table (#996, rulings R4 / R8). Stated in the
+    // baseline like every other shape: pre-1.0, with no release since the
+    // corpus froze, a baseline change is made in place and the corpus is
+    // re-frozen in the same slice (ONT-ladder).
+    CONTENT_TEXT_DDL,
     LINK_ANCHOR_DDL,
     ACCESS_DDL,
     SEED_DDL,
@@ -142,6 +154,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     ENRICH_DDL,
     OUTBOX_DDL,
     REPLICA_DDL,
+    // The paged door's ordering indexes (#996, W5 / R8). Last of the base
+    // tables' DDL: every column they name is in place by here, including the
+    // ALTERs TIME_ORGANIZE_DDL adds and the sidecar ENRICH_DDL creates.
+    READ_PATH_INDEX_DDL,
     FTS_DDL,
     BLOB_TRANSFER_DDL,
     BLOB_DDL,
@@ -165,6 +181,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // is JS and therefore cannot be a rung — it runs on open, right after this.
   [
     SHARE_SUBSCRIPTION_DDL,
+    SUBSCRIPTION_READ_PATH_INDEX_DDL,
     // The purge trigger loses its clause over the rail's own grant table, so a
     // file frozen with the old body is re-cut here. `refreshEntityTriggers`
     // does not own this one — it is stated DDL, and stated DDL migrates.
@@ -194,6 +211,21 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // own rung or it reaches nothing. `CREATE TABLE IF NOT EXISTS` because a
   // fresh file already created them on rung 1.
   SHARE_AUTHORITY_ASK_DDL,
+  // RUNG SIX (#996, ruling R13) — the Locker key plane. `locker_key` and the
+  // `key_id` column on the three tables that hold ciphertext. Its own rung,
+  // not an addition to the frozen baseline, for the reason rung five gives:
+  // a file that has climbed a rung never climbs it again, so a shape change
+  // made after the #929 freeze is a new rung or it reaches nothing. It is
+  // pure DDL — minting `K` and encrypting existing plaintext are the key
+  // plane's job on open, not a rung's, because a rewrite over every secret is
+  // exactly what the batched-rewrite primitive below exists for.
+  LOCKER_KEY_DDL,
+  // RUNG SEVEN (#996, rulings R13 and W6-D2) — `locker_auth_credential` goes.
+  // The gateway-side unlock verifier it held has no reader left: the gateway
+  // no longer unseals a Locker row, so no permit is minted and nothing checks
+  // a passphrase here. See the DDL's own note for why a dormant verifier is
+  // worse than none.
+  LOCKER_AUTH_DROP_DDL,
 ];
 
 /**

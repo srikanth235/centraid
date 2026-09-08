@@ -151,6 +151,32 @@ export default function createExpoConfig({
             "Centraid uses the camera to scan pairing QR codes, documents, cards, and receipts you choose to capture.",
         },
       ],
+      // The seat's engine (#996 wave 3). `useSQLCipher` is what makes the
+      // phone's SQLite 3.49.1 — `SEAT_SQLITE_FLOOR` — rather than the 3.50.3
+      // vendored beside it, and every byte the gateway ships has to clear that
+      // floor. `enableFTS` keeps fts5 compiled in: the sanitised snapshot's
+      // only surviving triggers are its FTS sync triggers, so a build without
+      // fts5 cannot open the file at all.
+      //
+      // `withSQLiteVecExtension` is now BOTH platforms. 57.0.2 pre-bundles
+      // sqlite-vec for Android only — `android/vec/<abi>/vec.so`, no
+      // `vec.xcframework` — so iOS builds the framework from the same upstream
+      // tag in `scripts/build-sqlite-vec-ios.sh`, which the macOS lock lane and
+      // the EAS `eas-build-pre-install` hook run before any pod work. The flag
+      // is what makes the podspec vendor it and compile the module with
+      // `-DWITH_SQLITE_VEC`; without the framework beside it the flag would
+      // point `bundledExtensions["sqlite-vec"]` at a bundle that is not there,
+      // which is why the two land together. It is not auto-loaded on either
+      // platform — `probeSqliteVec` stays the gate before a vector table is
+      // touched.
+      [
+        "expo-sqlite",
+        {
+          useSQLCipher: true,
+          enableFTS: true,
+          withSQLiteVecExtension: true,
+        },
+      ],
       "expo-video",
       // Photos' map (#816): MapKit iOS + MapLibre/OpenFreeMap Android; NO location permission.
       "expo-maps",

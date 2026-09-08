@@ -210,6 +210,8 @@ function decodeTextDataUri(
 
 function textForField(
   vault: AnchorVaultReads,
+  ownerType: string,
+  ownerId: string,
   field: string,
   value: unknown
 ): string | undefined {
@@ -221,9 +223,19 @@ function textForField(
     [{ column: "content_id", op: "eq", value }],
     1
   )[0];
-  return content
-    ? decodeTextDataUri(content.media_type, content.content_uri)
-    : undefined;
+  if (!content) return undefined;
+  // What the OWNER reads those bytes as (#996, ruling R20(b)): the byte row
+  // carries no media type, so a decode has to ask the row that anchored here.
+  const representation = readRows(
+    vault,
+    "core.content_representation",
+    [
+      { column: "owner_type", op: "eq", value: ownerType },
+      { column: "owner_id", op: "eq", value: ownerId },
+    ],
+    1
+  )[0];
+  return decodeTextDataUri(representation?.media_type, content.content_uri);
 }
 
 function selectorMatches(
@@ -278,7 +290,7 @@ function sourceFieldFor(
     );
   }
   const matches = searchable.maskColumns.filter((field) => {
-    const text = textForField(vault, field, row[field]);
+    const text = textForField(vault, sourceType, sourceId, field, row[field]);
     return text !== undefined && selectorMatches(text, selector);
   });
   if (matches.length !== 1) {

@@ -107,6 +107,16 @@
 // which is right: who a parked write waits on is a fact about this device's
 // queue, not about the vault's data.
 
+// Schema/export audit #996 (W5, the old-store cut): NOTHING enters or leaves
+// the walk. `schema/read-path-indexes.ts` adds thirty INDEXES over tables the
+// walk already carries, and an index is derived — `exportVault` does `SELECT *`
+// over rows, and a restore rebuilds every index from the baseline DDL, so an
+// index in a bundle would be a second copy of a fact the schema already states.
+// `REPLICA_SCHEMA_EPOCH` moves 2 -> 3, which is a seat-compatibility number and
+// not vault data: it is minted fresh by `REPLICA_DDL` in the restored file, and
+// carrying the source vault's would tell a new vault's seats they are current
+// when they hold nothing.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

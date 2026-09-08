@@ -64,8 +64,8 @@ describe("daily brief", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'image/jpeg', 'data:image/jpeg;base64,AA==', ?, 1, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'data:image/jpeg;base64,AA==', ?, 1, ?)`
       )
       .run(uuidv7(), "a".repeat(64), now);
     const content = db.vault

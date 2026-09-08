@@ -1,5 +1,6 @@
 import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault, enrollApp } from "../bootstrap.js";
@@ -164,10 +165,10 @@ describe("portability", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'text/plain', 'data:text/plain,x', ?, 1, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'data:text/plain,x', ?, 1, ?)`
       )
-      .run(contentId, `sha-${contentId}`.padEnd(64, "0"), now);
+      .run(contentId, fixtureSha(contentId), now);
     db.vault
       .prepare(
         `INSERT INTO core_document
@@ -206,24 +207,24 @@ describe("portability", () => {
       state: "delivered",
       updatedAt: now,
     });
-    const shapeId = `@share:${grant.grantId}`;
+    const authorityId = grant.grantId;
     db.vault
       .prepare(
         `INSERT INTO share_subscription
-           (shape_id, audience_vault_id, grant_id, origin_vault_id,
-            subject_type, cursor_epoch, cursor_seq, structure_digest, state,
+           (authority_id, audience_vault_id, origin_vault_id,
+            subject_type, cursor_epoch, cursor_seq, state,
             subscribed_at, removed_at, detail)
-         VALUES (?, 'remote-vault', ?, ?, 'core.document', 'epoch-1', 4,
-                 'digest', 'subscribed', ?, NULL, NULL)`
+         VALUES (?, 'remote-vault', ?, 'core.document', 'epoch-1', 4,
+                 'subscribed', ?, NULL, NULL)`
       )
-      .run(shapeId, grant.grantId, boot.vaultId, now);
+      .run(authorityId, boot.vaultId, now);
     db.vault
       .prepare(
         `INSERT INTO share_subscription_lineage
-           (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+           (authority_id, target_type, target_id, origin_item_id, origin_row_version)
          VALUES (?, 'core.document', ?, ?, 7)`
       )
-      .run(shapeId, documentId, documentId);
+      .run(authorityId, documentId, documentId);
 
     const { artifact } = gw.exportVault(owner);
     const shareEntities = [

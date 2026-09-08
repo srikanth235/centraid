@@ -15,6 +15,7 @@ import { AppState } from "react-native";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { coalesceWork } from "../../lib/coalesce";
+import { seatReadPlane } from "../../lib/replica/inline-query-ctx.native";
 import { attachLockerReadPlane } from "./locker-reads";
 import {
   onLockerAppState,
@@ -56,9 +57,11 @@ export function useLockerVault(): LockerVaultState {
  * the burst a delta pull produces collapses into one re-read.
  */
 export function useLockerBoundary(): void {
-  const { session } = useReplica();
+  const { session, seat } = useReplica();
   useEffect(() => {
-    attachLockerReadPlane(session);
+    // The seat's paged read composed over the session's rows: one plane, two
+    // files, until W5 leaves only the seat's (#996 wave 4b).
+    attachLockerReadPlane(session ? seatReadPlane(session, seat) : undefined);
     if (!session) return;
     const coalesced = coalesceWork(refreshLockerItems, INVALIDATION_WINDOW_MS);
     const unsubscribe = session.subscribe("locker", coalesced.signal);
@@ -67,7 +70,7 @@ export function useLockerBoundary(): void {
       unsubscribe();
       attachLockerReadPlane(undefined);
     };
-  }, [session]);
+  }, [session, seat]);
 
   useEffect(() => {
     void openLocker();

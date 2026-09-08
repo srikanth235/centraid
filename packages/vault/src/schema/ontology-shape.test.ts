@@ -160,6 +160,8 @@ describe("D3 — recurring splits are rows", () => {
       "share_minor",
       "created_at",
       "updated_at",
+      // The conflict comparator every mutable table carries (#996, R6).
+      "row_version",
     ]);
     expect(onDeleteOf(db, "tally_recurring_expense_split", "template_id")).toBe(
       "CASCADE"

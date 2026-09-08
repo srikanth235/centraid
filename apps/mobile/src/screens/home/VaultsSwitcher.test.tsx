@@ -254,7 +254,7 @@ function rowSubs(): string[] {
   );
 }
 
-describe("what the switcher says about the four-vault cap (#880)", () => {
+describe("what the switcher says about the Vaults this phone holds (#880)", () => {
   beforeEach(() => {
     registry.activeId = "link-1";
     replicaMock.scopes = [];
@@ -268,53 +268,25 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
     container.remove();
   });
 
-  it("names which saved Vaults this phone is carrying and which it is not", async () => {
+  // THE CAP DISCLOSURE IS GONE (#996 wave 3). It existed because the mounted
+  // read plane held four vaults at once and the switcher had to say which
+  // saved Vaults were actually on the phone. A seat opens ONE file and
+  // switching IS the remount, so every saved Vault on this gateway is one tap
+  // from being the open one — and a row saying otherwise would describe a
+  // mechanism that no longer exists.
+  it("says nothing about a limit, however many Vaults are saved", async () => {
     enrol(6);
-    replicaMock.scopes = ["vault-1", "vault-2", "vault-3", "vault-4"].map(
-      (vaultId) => ({ vaultId })
-    );
-
-    await render();
-
-    expect(container.textContent).toContain(
-      "Four vaults stay on this phone at a time."
-    );
-    const subs = rowSubs();
-    // Four mounted, so two of the five switchable rows say so and three do not.
-    expect(subs.filter((text) => text === "On this phone")).toHaveLength(3);
-    expect(
-      subs.filter((text) => text === "Over the four-vault limit")
-    ).toHaveLength(2);
-  });
-
-  // Sabotage target: drop the `> MAX_MOUNTED_NATIVE_SCOPES` guard and every
-  // ordinary two- or three-vault household grows a limit notice it never hits.
-  it("says nothing about a limit a household is nowhere near", async () => {
-    enrol(3);
-    replicaMock.scopes = ["vault-1", "vault-2", "vault-3"].map((vaultId) => ({
-      vaultId,
-    }));
 
     await render();
 
     expect(container.textContent).not.toContain("four-vault limit");
+    expect(container.textContent).not.toContain("stay on this phone");
     expect(container.textContent).not.toContain("On this phone");
   });
 
-  // A replica still mounting has no mounted set to report. Labelling from an
-  // empty one would paint every saved Vault as evicted on every cold start.
-  it("stays silent while the mounted set is still unknown", async () => {
-    enrol(6);
-    replicaMock.scopes = [];
-
-    await render();
-
-    expect(container.textContent).not.toContain("four-vault limit");
-  });
-
-  // A Vault on another desktop is absent for a different reason entirely, and
-  // this gateway's mounted set says nothing about it.
-  it("judges only the active gateway's own saved Vaults", async () => {
+  // A Vault on another desktop still reads as its own desktop's, which is the
+  // one thing the row's subtitle was ever really for.
+  it("names the desktop a Vault on another gateway belongs to", async () => {
     enrol(6);
     registry.links = [
       ...registry.links,
@@ -326,16 +298,9 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
         desktopName: "Cabin",
       },
     ];
-    replicaMock.scopes = ["vault-1", "vault-2", "vault-3", "vault-4"].map(
-      (vaultId) => ({ vaultId })
-    );
 
     await render();
 
-    const subs = rowSubs();
-    expect(subs).toContain("Cabin");
-    expect(
-      subs.filter((text) => text === "Over the four-vault limit")
-    ).toHaveLength(2);
+    expect(rowSubs()).toContain("Cabin");
   });
 });

@@ -13,14 +13,10 @@
  * and the phone-vs-web comparison in
  * `tests/integration-mobile/locker-rows-parity.integration.test.ts`.
  */
-import { DatabaseSync } from "node:sqlite";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
+import { seedSeatTables } from "./seat-fixture.test-fixtures";
+import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
-import { NodeSqliteDriver } from "./node-sqlite-driver";
-
-export const VAULT_ID = "personal";
-export const SHAPE_ID = "locker-default";
 export const FLAGS_SCHEME = "https://centraid.dev/schemes/flags";
 export const TAGS_SCHEME = "https://centraid.dev/schemes/locker-tags";
 
@@ -38,12 +34,39 @@ export const LIVE_TITLES = [
 export const ARCHIVED_TITLE = "Broadband";
 export const TRASHED_TITLE = "Old forum";
 
-export interface SeedEntity {
-  entity: string;
-  primaryKey: string;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-}
+export type { SeedEntity } from "./seat-fixture.test-fixtures";
+
+/**
+ * `locker_item` as the gateway declares it (`LOCKER_ITEM_COLUMNS`). Every
+ * shelf projects the whole list, so the seat's table carries the whole list;
+ * the columns this ledger has no value for are null, which is what they are on
+ * a real vault too.
+ */
+const LOCKER_ITEM_TABLE_COLUMNS = [
+  "item_id",
+  "type",
+  "title",
+  "username",
+  "url",
+  "url_match_policy",
+  "notes",
+  "cardholder",
+  "expiry",
+  "brand",
+  "fullname",
+  "email",
+  "phone",
+  "address",
+  "network",
+  "connection_id",
+  "compromised",
+  "password_set_at",
+  "created_at",
+  "updated_at",
+  "archived_at",
+  "deleted_at",
+  "purge_at",
+] as const;
 
 function item(
   index: number,
@@ -71,6 +94,7 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "locker.item",
       primaryKey: "item_id",
+      seatColumns: LOCKER_ITEM_TABLE_COLUMNS,
       columns: [
         "item_id",
         "type",
@@ -180,44 +204,13 @@ export function seedEntities(): SeedEntity[] {
   ];
 }
 
-export function seedScope(file: string): void {
-  const entities = seedEntities();
-  const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), VAULT_ID);
-  store.bootstrap({
-    protocolVersion: 1,
-    vaultId: VAULT_ID,
-    schemaEpoch: "1",
-    cursor: { epoch: "epoch-1", seq: 1 },
-    shapes: [
-      {
-        shapeId: SHAPE_ID,
-        appId: "locker",
-        entities: entities.map((entity) => ({
-          entity: entity.entity,
-          primaryKey: entity.primaryKey,
-          columns: [...entity.columns],
-        })),
-      },
-    ],
-    rows: [],
-  });
-  store.close();
-
-  const database = new DatabaseSync(file);
-  const insert = database.prepare(
-    `INSERT INTO replica_row
-       (shape_id, entity, row_id, payload_json, oversized_json)
-     VALUES (?, ?, ?, ?, '[]')`
-  );
-  database.exec("BEGIN IMMEDIATE");
-  for (const entity of entities)
-    for (const row of entity.rows)
-      insert.run(
-        SHAPE_ID,
-        entity.entity,
-        String(row[entity.primaryKey]),
-        JSON.stringify(row)
-      );
-  database.exec("COMMIT");
-  database.close();
+/**
+ * The same ledger, in the tables a handler's SQL names (#996 wave 5).
+ *
+ * The old store's one blob table had no callers left once the airplane oracles
+ * and the two parity oracles moved, so it is gone; what a fixture writes is
+ * the vault's own tables, which is what `ctx.vault.page` reads.
+ */
+export function seedSeatScope(file: string): void {
+  seedSeatTables(file, seedEntities());
 }

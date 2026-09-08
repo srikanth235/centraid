@@ -35,7 +35,7 @@ function fakeSession(
   subscribers: Array<(inv: readonly ReplicaInvalidation[]) => void>
 ) {
   return {
-    read: vi.fn<InlineSession["read"]>(),
+    page: (async () => ({ rows: [] })) as InlineSession["page"],
     search: vi.fn<InlineSession["search"]>(),
     write: vi.fn<InlineSession["write"]>(),
     subscribe: vi.fn<InlineSession["subscribe"]>((_appId, _deps, listener) => {

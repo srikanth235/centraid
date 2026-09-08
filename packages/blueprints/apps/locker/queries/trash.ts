@@ -5,22 +5,34 @@
  */
 
 import {
+  LOCKER_ITEM_COLUMNS,
   decorate,
-  readTags,
   readStarred,
+  readTags,
   rethrowIfLocalReadRefused,
 } from "./items.ts";
 import type { RawItem } from "./items.ts";
 
+/** How many items this shelf shows. */
+const TRASH_ROWS = 2000;
+
 export default async function trash({ ctx }: HandlerArgs) {
   try {
-    const res = await ctx.vault.read({
-      entity: "locker.item",
-      where: [{ column: "deleted_at", op: "not-null" }],
-      orderBy: { column: "updated_at", dir: "desc" },
-      limit: 2000,
+    const res = await ctx.vault.page<RawItem>({
+      query: {
+        name: "locker.trash.items",
+        select: LOCKER_ITEM_COLUMNS,
+        from: "locker_item",
+        where: "deleted_at IS NOT NULL",
+        order: {
+          sortColumn: "updated_at",
+          pkColumn: "item_id",
+          descending: true,
+        },
+      },
+      limit: TRASH_ROWS,
     });
-    const rows = (res.rows ?? []) as unknown as RawItem[];
+    const rows = res.rows;
     const ids = rows.map((r) => r.item_id);
     const [tagsByItem, starredIds] = await Promise.all([
       readTags(ctx, ids),

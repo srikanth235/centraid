@@ -1,3 +1,8 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 /**
  * Task search as a vault projection: the FTS5 index inside the vault does
  * the matching (title + description), so the app never pulls the whole
@@ -37,7 +42,8 @@ interface DecoratedAttachment {
   role?: string;
   is_primary?: number;
   media_type: string;
-  title: string | null;
+  /** Bytes have no title of their own since #996 (R20(b)); an attachment is
+   *  not a wrapper, so there is nothing here to carry one. */
   content_uri: string;
   byte_size: number;
 }
@@ -56,26 +62,38 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const taskIds = hits.map((t) => t.task_id);
     // Attachments only for the matched tasks — the join stays as narrow as
     // the match set, never a whole-table pull.
-    const attachments = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.attachment",
-      where: [
-        { column: "target_type", op: "eq", value: "schedule.task" },
-        { column: "target_id", op: "in", value: taskIds },
-      ],
+    const attachmentRows = await readPages<RawAttachment>(ctx, {
+      name: "tasks.search.attachments",
+      select:
+        "attachment_id, target_type, target_id, content_id, role, is_primary",
+      from: "core_attachment",
+      where: `target_type = ? AND ${inList("target_id", taskIds).sql}`,
+      bind: ["schedule.task", ...taskIds],
+      order: {
+        sortColumn: "attachment_id",
+        pkColumn: "attachment_id",
+        descending: false,
+      },
     });
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as RawAttachment[];
     const contentIds = [...new Set(attachmentRows.map((a) => a.content_id))];
-    const contents =
+    const contentRows =
       contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
+        ? await readPages<RawContent>(ctx, {
+            name: "tasks.search.contents",
+            select: "content_id, content_uri, byte_size",
+            from: "core_content_item",
+            where: inList("content_id", contentIds).sql,
+            bind: [...contentIds],
+            order: {
+              sortColumn: "content_id",
+              pkColumn: "content_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
-    const contentRows = (contents.rows ?? []) as unknown as RawContent[];
+        : [];
+    // Bytes carry no media type since #996 (R20(b)) — the attachment's own
+    // representation says what it reads them as.
+    const representations = await readRepresentations({ ctx, contentIds });
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
     // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: RawContent | undefined): string | undefined =>
@@ -91,8 +109,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         content_id: a.content_id,
         role: a.role,
         is_primary: a.is_primary,
-        media_type: content?.media_type ?? "application/octet-stream",
-        title: content?.title ?? null,
+        // The ATTACHMENT's own reading of the bytes (#996, R20(b)).
+        media_type:
+          representations.byOwner.get(
+            ownerKey("core.attachment", a.attachment_id)
+          ) ??
+          representations.byContent.get(a.content_id) ??
+          "application/octet-stream",
         content_uri: srcOf(content) ?? "",
         byte_size: content?.byte_size ?? 0,
       });

@@ -9,7 +9,7 @@ import {
 
 import { LiveQueryRegistry } from "./live-query-registry.js";
 import { LiveQuery } from "./live-query.js";
-import { fetchReplicaBootstrap } from "./shell-transport.js";
+import { postReplicaIntent } from "./shell-transport.js";
 import { ClientTraceRing, ClientTracer } from "./trace.js";
 import { clientWorkCounters } from "./work-counters.js";
 
@@ -180,21 +180,28 @@ describe("the transport round-trip counter", () => {
   it("counts one round trip per call into the fetcher, injected or default", async () => {
     const before = clientWorkCounters();
     const auth = { baseUrl: "http://gateway.local", token: "t" };
-    const ok = (body: unknown): Response =>
-      new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    const snapshot = {
-      protocolVersion: 1,
-      vaultId: "v",
-      schemaEpoch: "1",
-      cursor: { epoch: "e", seq: 1 },
-      shapes: [],
-      rows: [],
+    const ok = (): Promise<Response> =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            outcome: { intentId: "intent-1", status: "executed" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    const intent = {
+      intentId: "intent-1",
+      payloadHash: "a".repeat(64),
+      appId: "todos",
+      action: "complete",
+      input: {},
+      state: "sending" as const,
+      createdOrder: 1,
+      attempts: 1,
+      optimistic: [],
     };
-    await fetchReplicaBootstrap(auth, async () => ok(snapshot));
-    await fetchReplicaBootstrap(auth, async () => ok(snapshot));
+    await postReplicaIntent(auth, intent, ok);
+    await postReplicaIntent(auth, intent, ok);
     expect(diffCounters(before, clientWorkCounters()).httpRoundTrips).toBe(2);
   });
 });

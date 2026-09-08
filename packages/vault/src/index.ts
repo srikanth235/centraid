@@ -21,13 +21,34 @@ export {
   type AppliedVaultFootprint,
 } from "./vault-footprint.js";
 export {
-  LockerAuthentication,
-  LOCKER_ITEM_PERMIT_MS,
-  LOCKER_PRIMARY_CREDENTIAL_ID,
-  LOCKER_SESSION_TIMEOUT_MS,
-  type LockerAuthRequest,
-  type LockerAuthResult,
-} from "./gateway/locker-auth.js";
+  LOCKER_CIPHERTEXT_PREFIX,
+  LOCKER_ENCRYPTED_COLUMNS,
+  LOCKER_KEY_BYTES,
+  LockerKeyError,
+  assertLiveLockerKeyId,
+  decryptUnderLockerKey,
+  destroyLockerKeys,
+  encryptUnderLockerKey,
+  ephemeralLockerKeyId,
+  foundLockerKey,
+  isLockerCiphertext,
+  liveLockerKeyFiles,
+  lockerKeyFilesInCustody,
+  liveLockerKeyId,
+  loadLockerKey,
+  lockerAad,
+  lockerKeyCustody,
+  lockerKeyDirFor,
+  lockerKeyFileName,
+  lockerKeyRows,
+  rotateLockerKey,
+  stampLockerKeyOnWrite,
+  sweepRetiredLockerKeys,
+  vaultIdOf,
+  type LockerKeyCustody,
+  type LockerKeyRow,
+  type LockerRotation,
+} from "./gateway/locker-key-plane.js";
 export * from "./backup-policy.js";
 export {
   isDiskFullError,
@@ -102,25 +123,57 @@ export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
-// A share is a subscription (#929): the origin composes a grant-keyed shape,
-// a transport carries it, and the audience seat ingests it through the same
-// door an authored row takes.
+// SHARING IS THE SAME LOG UNDER A CLOSURE PREDICATE (#996, R10). The grant's
+// membership is explicit state on the origin, and the difference between two
+// member sets — plus the log for what merely changed — is the three outputs.
 export {
-  composeShareShape,
-  shareShapeSizeBytes,
-  ShareShapeMaxSizeError,
-  SHARE_SHAPE_DEFAULT_MAX_SIZE_BYTES,
-  SHARE_SHAPE_FORMAT_VERSION,
-  type ComposeShareShapeInput,
-  type ShareShapeFrame,
-  type ShareShapeRowVersion,
-} from "./share/subscription-frame.js";
+  memberKey,
+  memberPrimaryKey,
+  readShareMembers,
+  shareClosureMembers,
+  writeShareMembers,
+  SHARE_DERIVED_TABLES,
+  type ShareMemberRow,
+  type ShareMemberSet,
+  type StoredShareMember,
+} from "./share/closure-members.js";
 export {
-  ingestShareShape,
+  commitShareClosureDiff,
+  diffShareClosure,
+  shareOutputsAreEmpty,
+  type DiffShareClosureInput,
+  type ShareClosureOutputs,
+  type ShareRowImage,
+} from "./share/closure-outputs.js";
+// A share is a subscription (#929) under a CLOSURE PREDICATE (#996, R10): the
+// origin serves the three outputs since the audience's cursor, a transport
+// carries them, and the audience applies them as rows.
+export {
+  assertSealedColumnsStaySealed,
+  assertShareCeiling,
+  shareClosureSizeBytes,
+  ShareSizeCeilingError,
+  SHARE_DEFAULT_MAX_SIZE_BYTES,
+} from "./share/share-ceiling.js";
+export {
+  ingestShareTail,
   purgeShareShape,
-  type IngestShareShapeResult,
   type PurgeShareShapeResult,
 } from "./share/subscription-seat.js";
+export {
+  composeShareTail,
+  SHARE_TAIL_FORMAT_VERSION,
+  type ComposeShareTailInput,
+  type ShareTailFrame,
+  type ShareTailPass,
+} from "./share/subscription-tail.js";
+export {
+  applyShareOutputs,
+  forwardProjectedEdit,
+  shareOutputsAreApplicable,
+  type ApplyShareOutputsResult,
+  type ProjectedEditRoute,
+} from "./share/apply-outputs.js";
 export {
   readSubscription,
   readSubscriptionLineage,
@@ -137,12 +190,6 @@ export {
   type MemberIntentEnvelope,
   type MemberIntentVerdict,
 } from "./share/subscription-intent.js";
-export {
-  planShareShapeIngest,
-  shareShapeStructureDigest,
-  type ShapeFieldUpdate,
-  type ShareShapePlan,
-} from "./share/subscription-delta.js";
 export {
   isContainerCommandActable,
   containerRoutesForCommand,
@@ -269,11 +316,13 @@ export {
   type EgressAuthorityKey,
   type EgressAuthorityRecord,
 } from "./grant/egress-authority.js";
+// THE PRINCIPAL VOCABULARY IS PUBLIC (#996, R17): the deny matrix in
+// `packages/server` enumerates the kinds the authority plane will answer about,
+// and a matrix that cannot see a class of principal cannot notice a hole in it.
 export {
-  listCompanionSurfaces,
-  readCompanionSurfaces,
-  setCompanionSurfaces,
-} from "./grant/companion-surfaces.js";
+  NON_ENTITY_PRINCIPAL_KINDS,
+  PRINCIPAL_ENTITY_KINDS,
+} from "./schema/authority.js";
 export {
   closeObsoleteScopeRequest,
   getOpenScopeRequest,
@@ -283,15 +332,13 @@ export {
   type ScopeRequestSummary,
 } from "./grant/authority-request.js";
 // Keeping a grant true is START and STOP over a subscription (#929): the
-// origin composes a grant-keyed shape and a transport carries it, so a
-// co-hosted audience and one on another gateway take the same delivery path.
+// origin serves each audience its three outputs and a transport carries them,
+// so a co-hosted audience and one on another gateway take the same path.
 export {
-  createGrantProjectionMemory,
   shareGrantShapeId,
   startShareSubscription,
   stopShareSubscription,
   NOTHING_DELIVERED_DETAIL,
-  type GrantProjectionMemory,
   type ShareDeliveryOutcome,
   type ShareRemovalOutcome,
   type ShareShapeTransport,
@@ -553,9 +600,12 @@ export {
   REPLICA_RETENTION_DAYS,
   REPLICA_RETENTION_MAX_ENTRIES,
   ReplicaRebootstrapRequiredError,
+  abandonReplicaCommit,
   appendReplicaChange,
+  beginReplicaCommit,
   bumpReplicaEpoch,
   currentReplicaLogState,
+  endReplicaCommit,
   initializeReplicaProtocol,
   pruneReplicaChanges,
   readReplicaChanges,
@@ -567,10 +617,61 @@ export {
   type ReplicaChangeEntry,
   type ReplicaChangeOp,
   type ReplicaChangePage,
+  type ReplicaCommitHandle,
   type ReplicaLogState,
   type ReplicaPruneResult,
   type ReplicaRebootstrapReason,
 } from "./replica/change-log.js";
+
+export {
+  captureReplicaCommit,
+  closeReplicaCapture,
+  openReplicaCapture,
+  primaryKeyOf,
+  readReplicaLog,
+  replicaCaptureOpen,
+  lowestSeatCursor,
+  pruneReplicaLog,
+  replicaLogState,
+  seatLogRowWire,
+  REPLICA_DEFER_THRESHOLD_BYTES,
+  REPLICA_LOG_RETENTION_DAYS,
+  REPLICA_LOG_RETENTION_MAX_ROWS,
+  REPLICA_PRODUCER_MAX_ROWS,
+  ReplicaRebootstrapRequiredError as ReplicaLogRebootstrapRequiredError,
+  type ReplicaCaptureResult,
+  type ReplicaLogCursor,
+  type ReplicaLogOp,
+  type ReplicaLogPage,
+  type ReplicaLogRow,
+  // `ReplicaLogState` is still taken by the mechanism this replaces; the
+  // alias goes away with `replica_change`.
+  type ReplicaLogPruneResult,
+  type ReplicaLogState as GatewayLogState,
+} from "./replica/log.js";
+export { applyReplicaLog, type ReplicaApplyResult } from "./replica/apply.js";
+export {
+  buildSeatSnapshot,
+  fileContains,
+  namesPrivateTable,
+  withoutSqlComments,
+  type SeatSnapshotResult,
+} from "./replica/seat-snapshot.js";
+export {
+  parseChangeset,
+  type ChangesetChange,
+  type ChangesetOp,
+} from "./replica/changeset.js";
+export {
+  isPrivateTable,
+  PRIVATE_TABLES,
+  PRIVATE_TABLE_NAMES,
+  replicatedReferencesToPrivate,
+  replicatedTablesOf,
+  type PrivateTableDeclaration,
+  type PrivateTableKind,
+} from "./schema/private-tables.js";
+export { SEAT_SQLITE_FLOOR, REPLICA_DDL_VERSION } from "./schema/replica.js";
 export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
 // The engine-computed cascade every purge runs, exported so the
 // declared-writes gate unions it rather than have a manifest restate it.
@@ -597,6 +698,7 @@ export {
 } from "./replica/snapshot.js";
 export { replicaUnavailableColumnsOf } from "./replica/unavailable-columns.js";
 export {
+  REPLICA_IDEMPOTENCY_WINDOW_DAYS,
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
   readReplicaIntentOutcome,
@@ -607,8 +709,19 @@ export {
   type RecordReplicaIntentOutcomeInput,
   type ReplicaIntentOutcome,
   type ReplicaIntentStatus,
+  type ReplicaProducedRowWire,
   type TransitionReplicaIntentOutcomeInput,
 } from "./replica/intents.js";
+export {
+  expiredOutcomeRecovery,
+  pruneReplicaIntentOutcomes,
+  replicaDependencyVerdict,
+  resolvePredecessorReferences,
+  stampReplicaOutcomeCommitInTransaction,
+  stampReplicaOutcomeCommitsInTransaction,
+  type ExpiredOutcomeRecovery,
+  type ReplicaDependencyVerdict,
+} from "./replica/intent-chain.js";
 export {
   DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE,
   ReplicaInvocationRepairError,
@@ -925,7 +1038,7 @@ export {
   type PhotoEmbeddingHit,
   type PhotoRankOptions,
 } from "./enrich/photo-search.js";
-export { ENRICH_PUBLISHERS, tagNotation } from "./ingest/enrich-publishers.js";
+export { ENRICH_PUBLISHERS } from "./ingest/enrich-publishers.js";
 export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from "./schema/enrich.js";
 
 export { parseIcs, type IcsEvent } from "./ingest/ics.js";
@@ -1160,3 +1273,23 @@ export {
   type BatchedRewrite,
   type BatchedMigrationResult,
 } from "./schema/migrate.js";
+
+// THE DOMAIN OPERATION LAYER (#996, wave 0c; rulings R21, R23, R25). One
+// invariant boundary for every writer, each operation carrying the read-set it
+// decided on and the offline contract it promises.
+export {
+  assertCanonicalWrite,
+  cancelTask,
+  completeTask,
+  domainOperation,
+  DOMAIN_OPERATIONS,
+  operationReadSet,
+  OPERATION_OF_TABLE,
+  reopenTask,
+  OperationRefusalError,
+  type CanonicalRefusal,
+  type CanonicalWrite,
+  type DomainOperation,
+  type OfflineDeclaration,
+  type ReadSetEntry,
+} from "./operations/index.js";

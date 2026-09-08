@@ -93,12 +93,10 @@ export interface SettleScreenProps {
 function Proposal({
   simplification,
   names,
-  currency,
   onSimplify,
 }: {
   simplification: Simplification;
   names: ReadonlyMap<string, string>;
-  currency: string;
   onSimplify: (simplify: boolean) => void;
 }): ReactNode {
   const on = simplification.opted_in;
@@ -121,13 +119,13 @@ function Proposal({
           </p>
           {simplification.transfers.map((transfer) => (
             <p
-              key={`${transfer.from}-${transfer.to}-${transfer.amount_minor}`}
+              key={`${transfer.from}-${transfer.to}-${transfer.amount.amount_minor}`}
               className={styles.value}
             >
               {transferLine(
                 names.get(transfer.from) ?? transfer.from,
                 names.get(transfer.to) ?? transfer.to,
-                money(transfer.amount_minor, currency)
+                money(transfer.amount.amount_minor, transfer.amount.currency)
               )}
             </p>
           ))}
@@ -235,7 +233,6 @@ export function SettleScreen(props: SettleScreenProps): ReactNode {
         <Proposal
           simplification={props.simplification}
           names={props.names}
-          currency={props.currency}
           onSimplify={props.onSimplify}
         />
       ) : null}

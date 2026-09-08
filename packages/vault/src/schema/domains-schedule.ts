@@ -6,7 +6,11 @@
 // `schedule.availability_rule` with them: no surface produced a row, and the
 // measurement spine only health reached (`core.observation`) went too.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const SCHEDULE_DDL = `
 CREATE TABLE schedule_calendar (
@@ -32,6 +36,7 @@ CREATE TABLE schedule_event_ext (
   travel_buffer_min INTEGER CHECK (travel_buffer_min >= 0),
   created_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (event_ext_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_event_ext_calendar ON schedule_event_ext(calendar_id);
@@ -45,6 +50,7 @@ CREATE TABLE schedule_attendee (
   responded_at TEXT,
   created_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   UNIQUE (event_id, party_id),
   FOREIGN KEY (attendee_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -93,10 +99,28 @@ CREATE TABLE schedule_task (
   description    TEXT,
   status         TEXT NOT NULL CHECK (status IN ('needs-action','in-process','completed','cancelled')),
   priority       INTEGER NOT NULL CHECK (priority BETWEEN 0 AND 9),
-  due_at         TEXT,
+  -- TEMPORAL MEANING IS CHECKED WHERE IT IS STORED (#996, ruling R21; drift
+  -- ONT-31). \`due_at: "banana"\` used to store, and completion then had
+  -- nothing to advance — an unreadable due date is indistinguishable from no
+  -- due date at read time, so a repeating task simply stopped and nothing said
+  -- why. The round-trip on the date part is what refuses February 31:
+  -- \`date()\` NORMALISES a bad day rather than rejecting it, so
+  -- \`date('2026-02-31')\` is \`'2026-03-02'\` and only the comparison notices.
+  -- A CHECK because it is a simple invariant (R21) and therefore true for
+  -- every writer, Atlas and the seat's local apply included.
+  due_at         TEXT CHECK (
+    due_at IS NULL
+    OR (datetime(due_at) IS NOT NULL
+        AND date(substr(due_at, 1, 10)) = substr(due_at, 1, 10))
+  ),
   completed_at   TEXT,
   effort_min     INTEGER CHECK (effort_min > 0),
-  parent_task_id TEXT REFERENCES schedule_task(task_id),
+  -- A TASK IS NOT ITS OWN PARENT (#996, R21; drift ONT-26). Atlas accepted it;
+  -- the domain command never checked it. Longer loops are the
+  -- \`schedule_task_hierarchy_is_acyclic\` trigger in \`time-organize.ts\`,
+  -- which needs the recursive walk this CHECK cannot do.
+  parent_task_id TEXT REFERENCES schedule_task(task_id)
+    CHECK (parent_task_id IS NULL OR parent_task_id <> task_id),
   rrule          TEXT,
   remind_before_min INTEGER CHECK (remind_before_min >= 0),
   -- The trash pair (#883, ruling O-trash): a task the member deleted leaves
@@ -105,6 +129,7 @@ CREATE TABLE schedule_task (
   purge_at       TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (task_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_task_owner_party ON schedule_task(owner_party_id);

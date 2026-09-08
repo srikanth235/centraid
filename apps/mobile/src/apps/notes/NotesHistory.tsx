@@ -27,9 +27,7 @@ import { useNoteVersions } from "./useNoteVersions";
 export interface NotesHistoryProps {
   note: NativeNote;
   chainRows: {
-    links: readonly VaultRow[];
-    concepts: readonly VaultRow[];
-    schemes: readonly VaultRow[];
+    revisions: readonly VaultRow[];
   };
   /** The edge read failed: the chain is UNKNOWN, not empty. */
   unreadable: boolean;
@@ -45,6 +43,8 @@ export default function NotesHistory({
   const { colors } = useTheme();
   const versions = useNoteVersions({
     headContentId: note.bodyContentId,
+    currentRevisionId: note.currentRevisionId,
+    noteId: note.rawId,
     createdAt: note.createdAt,
     ...chainRows,
   });

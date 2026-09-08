@@ -1,7 +1,7 @@
 // The DOWN-direction byte store: where a pinned document or a downloaded
 // photo original lives on this phone. Scoped by vault — content ids are minted
 // per vault and collide across them. Eviction runs `eviction.ts`'s plan, which
-// never selects a pin (#883).
+// selects only what the seat's byte policy says is evictable (#883, #996 R7).
 
 import { Directory, File } from "expo-file-system";
 
@@ -156,7 +156,23 @@ export function offlineContentBytes(scopeId?: string): number {
   return listFiles(directory).reduce((sum, file) => sum + file.size, 0);
 }
 
-export function storedContentEntries(): StoredContentEntry[] {
+/**
+ * What the LRU may not touch beyond a pin (#996 R7/R25).
+ *
+ * A SEAM, not a lookup this module does. Whether this phone CAPTURED a
+ * content id is the upload queue's fact, and whether a queued intent needs its
+ * hash is the outbox's; a store that answered either from its own filenames
+ * would be guessing. Absent, both read false — which is exactly the behaviour
+ * before the policy landed, pins and nothing else.
+ */
+export interface ContentProtections {
+  capturedHere?: (ref: ContentRef) => boolean;
+  referencedByPendingIntent?: (ref: ContentRef) => boolean;
+}
+
+export function storedContentEntries(
+  protections: ContentProtections = {}
+): StoredContentEntry[] {
   const usedAt = readUsedAt();
   const root = storeRoot();
   if (!root?.exists) return [];
@@ -168,22 +184,31 @@ export function storedContentEntries(): StoredContentEntry[] {
       if (!(file instanceof File)) continue;
       const contentId = decodeURIComponent(file.name);
       const key = `${scope.name}/${file.name}`;
+      const ref = { scopeId, contentId };
       entries.push({
         key,
         bytes: file.size,
         lastUsedAt: usedAt[key] ?? file.modificationTime ?? 0,
-        pinned: isPinned({ scopeId, contentId }),
+        pinned: isPinned(ref),
+        // Everything in this store is a whole file the member asked for or
+        // opened — never the ~2 KB inline thumb, which is a replicated row.
+        kind: "original",
+        capturedHere: protections.capturedHere?.(ref) === true,
+        referencedByPendingIntent:
+          protections.referencedByPendingIntent?.(ref) === true,
       });
     }
   }
   return entries;
 }
 
-/** Under budget without touching a pin; the plan carries a pins-only overage. */
+/** Under budget without touching what may not be evicted; the plan carries the
+ *  overage that protection leaves behind. */
 export function enforceOfflineContentBudget(
-  budgetBytes: number = OFFLINE_CONTENT_BUDGET_BYTES
+  budgetBytes: number = OFFLINE_CONTENT_BUDGET_BYTES,
+  protections: ContentProtections = {}
 ): ReturnType<typeof planContentEviction> {
-  const entries = storedContentEntries();
+  const entries = storedContentEntries(protections);
   const plan = planContentEviction(entries, budgetBytes);
   if (plan.evict.length === 0) return plan;
   const root = storeRoot();

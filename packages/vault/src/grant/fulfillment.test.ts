@@ -6,6 +6,7 @@ import { nowIso, uuidv7 } from "../ids.js";
 import {
   closeOpenVaults,
   household,
+  inCommit,
   seedPhoto,
 } from "../share/placement-fixture.js";
 import { loopbackShareTransports } from "../share/subscription-transport.js";
@@ -71,10 +72,9 @@ describe("grant/fulfillment", () => {
       state: "delivered",
       peerVaultId: AUDIENCE_VAULT,
     });
-    expect(delivered.steps[0]).toMatchObject({
-      route: "loopback",
-      apply: "bootstrap",
-    });
+    // The three outputs' own counts, not a re-projection's path (#996, R10).
+    expect(delivered.steps[0]).toMatchObject({ route: "loopback", left: 0 });
+    expect(delivered.steps[0]!.entered).toBeGreaterThan(0);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
       // `updated_at` is the touch trigger's since #916.
@@ -84,9 +84,15 @@ describe("grant/fulfillment", () => {
     // The origin edits the caption. Divergence is a bug, not the resting
     // state: the next pass re-projects and the audience replica follows.
     const later = "2026-08-19T10:00:00.000Z";
-    home.origin.vault
-      .prepare("UPDATE core_content_item SET title = ? WHERE content_id = ?")
-      .run("Sunset at last", first.contentId);
+    // INSIDE A REPLICA COMMIT, as every gateway write is: the `update` half of
+    // the three outputs is the LOG's (#996, R10), so an edit made behind the
+    // log is an edit the subscription cannot see — which is a property of the
+    // transport, not a gap in it.
+    inCommit(home.origin, () =>
+      home.origin.vault
+        .prepare(`UPDATE media_asset SET title = ? WHERE content_id = ?`)
+        .run("Sunset at last", first.contentId)
+    );
     startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,

@@ -1,16 +1,17 @@
-// Search overlay empty state: RECENTS + suggestion chips from real replica
-// rows (#708), following the useSpringboardTiles idiom — bounded `limit`,
-// `orderBy` only where "newest" is the actual claim, one memoized request per
-// read. Locker is absent: no mobile replica shape at all.
+// Search overlay empty state: RECENTS + suggestion chips from real vault rows
+// (#708; #996 wave 5, R8), following the useSpringboardTiles idiom — five
+// statements over the seat, each ONE page of the window the shelf draws, and
+// an order only where "newest" is the actual claim. Locker is absent: its
+// items sit behind an online, session-gated RPC.
 
 import { useMemo } from "react";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
+import type { PageQuery } from "@centraid/core/page";
 import { apps } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
-import type { NativeReadRequest } from "../../lib/replica/native-session";
+import { useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { selectSearchRecents, selectSuggestionChips } from "./search-model";
 import type { RecentSourceRow } from "./search-model";
 
@@ -60,67 +61,85 @@ export interface SearchRecentsResult {
   suggestions: string[];
 }
 
+/** The five shelves, as statements. Module constants: a statement handed to a
+ *  seat hook must keep one identity across renders or the shelf re-reads. */
+const RECENT_READS = {
+  notes: {
+    name: "phone.search.notes",
+    select: "note_id, title, updated_at",
+    from: "knowledge_note",
+    where: "deleted_at IS NULL",
+    order: { sortColumn: "updated_at", pkColumn: "note_id", descending: true },
+  },
+  documents: {
+    name: "phone.search.documents",
+    select: "document_id, title, updated_at",
+    from: "core_document",
+    where: "deleted_at IS NULL",
+    order: {
+      sortColumn: "updated_at",
+      pkColumn: "document_id",
+      descending: true,
+    },
+  },
+  expenses: {
+    name: "phone.search.expenses",
+    select: "expense_id, description, spent_on",
+    from: "tally_expense",
+    where: "deleted_at IS NULL",
+    order: {
+      sortColumn: "spent_on",
+      pkColumn: "expense_id",
+      descending: true,
+    },
+  },
+  photos: {
+    name: "phone.search.photos",
+    select: "asset_id, kind, captured_at",
+    from: "media_asset",
+    where: "deleted_at IS NULL",
+    order: {
+      sortColumn: "captured_at",
+      pkColumn: "asset_id",
+      descending: true,
+    },
+  },
+  // Chips only: `core_party` has no edit timestamp, so people never enter
+  // RECENTS, and the page orders on the key it already has.
+  parties: {
+    name: "phone.search.parties",
+    select: "party_id, display_name",
+    from: "core_party",
+    order: { sortColumn: "party_id", pkColumn: "party_id", descending: false },
+  },
+} satisfies Record<string, PageQuery>;
+
 export function useSearchRecents(): SearchRecentsResult {
-  const notes = useReplicaQuery(
-    "notes",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "knowledge.note",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: READ_LIMIT,
-      }),
-      []
-    )
-  );
-  const documents = useReplicaQuery(
-    "docs",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "core.document",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: READ_LIMIT,
-      }),
-      []
-    )
-  );
-  const expenses = useReplicaQuery(
-    "tally",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "tally.expense",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "spent_on", dir: "desc" },
-        limit: READ_LIMIT,
-      }),
-      []
-    )
-  );
-  const photos = useReplicaQuery(
-    "photos",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "media.asset",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "captured_at", dir: "desc" },
-        limit: READ_LIMIT,
-      }),
-      []
-    )
-  );
-  // Chips only: `core.party` has no edit timestamp, so people never enter
-  // RECENTS. Read directly (not profiles) to keep it one bounded read.
-  const parties = useReplicaQuery(
-    "people",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "core.party",
-        limit: READ_LIMIT,
-      }),
-      []
-    )
-  );
+  const notes = useSeatWindow("notes", RECENT_READS.notes, {
+    entity: "knowledge.note",
+    rowIdColumn: "note_id",
+    limit: READ_LIMIT,
+  });
+  const documents = useSeatWindow("docs", RECENT_READS.documents, {
+    entity: "core.document",
+    rowIdColumn: "document_id",
+    limit: READ_LIMIT,
+  });
+  const expenses = useSeatWindow("tally", RECENT_READS.expenses, {
+    entity: "tally.expense",
+    rowIdColumn: "expense_id",
+    limit: READ_LIMIT,
+  });
+  const photos = useSeatWindow("photos", RECENT_READS.photos, {
+    entity: "media.asset",
+    rowIdColumn: "asset_id",
+    limit: READ_LIMIT,
+  });
+  const parties = useSeatWindow("people", RECENT_READS.parties, {
+    entity: "core.party",
+    rowIdColumn: "party_id",
+    limit: READ_LIMIT,
+  });
 
   return useMemo(() => {
     const noteRows = toRows(

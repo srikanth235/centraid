@@ -13,14 +13,13 @@ import { radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { TEST_ID_PREFIXES, TEST_IDS } from "../../kit/test-ids";
 import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import CollectionShelfBody from "./CollectionShelfBody";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import { buildCollectionSections } from "./photos-collections";
 import type {
   CollectionSection,
@@ -190,16 +189,13 @@ export default function PhotosCollectionsView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { assets } = usePhotoTimeline();
 
-  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
-  const entries = useReplicaQuery(
-    "photos",
-    PHOTO_ENTITY_READS.collectionEntries
-  );
-  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
-  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const collections = usePhotoEntity("collections");
+  const entries = usePhotoEntity("collectionEntries");
+  const places = usePhotoEntity("places");
+  const faces = usePhotoEntity("faceRegions");
   // A face row carries a party ID, never a name; `PhotosPeopleView` must
   // resolve it the same way.
-  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
+  const parties = usePhotoEntity("parties");
 
   const sections = useMemo(() => {
     // `target_id`, not `asset_id`: collection entries are polymorphic, and the

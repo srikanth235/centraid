@@ -5,8 +5,28 @@
 
 import { describe, expect, it } from "vitest";
 
+import { CUSTODY_BUCKETS } from "../storage/custody-durability";
+import type {
+  CustodyBucket,
+  CustodyStatus,
+} from "../storage/custody-durability";
 import { backupVerdict, backupVerdictCopy } from "./backup-verdict";
 import type { TransferQueueCounts } from "./transfer-queue";
+
+/** A swept rollup with the named buckets filled and the rest at zero. */
+const rollup = (
+  counts: Partial<Record<CustodyBucket, number>>,
+  computedAt: string | null = "2026-09-07T00:00:00Z"
+): CustodyStatus => ({
+  computedAt,
+  uncounted: [],
+  buckets: Object.fromEntries(
+    CUSTODY_BUCKETS.map((bucket) => [
+      bucket,
+      { count: counts[bucket] ?? 0, bytes: (counts[bucket] ?? 0) * 1_000 },
+    ])
+  ) as CustodyStatus["buckets"],
+});
 
 const queue = (
   fields: Partial<TransferQueueCounts> = {}
@@ -20,8 +40,38 @@ const queue = (
 });
 
 describe(backupVerdict, () => {
-  it("an empty, readable queue is complete", () => {
-    expect(backupVerdict(queue())).toBe("complete");
+  // #996 R7: an empty queue is this phone's claim, and "backed up" is the
+  // gateway's answer. The two are different sentences and the phone can only
+  // make the first, so `complete` needs both.
+  it("an empty queue with a verified rollup is complete", () => {
+    expect(backupVerdict(queue(), rollup({ replicated: 12 }))).toBe("complete");
+  });
+
+  it("an empty queue with NO rollup is unverified, never complete", () => {
+    // Offline, or a gateway that would not answer. Reading it as complete puts
+    // "Backup is complete" on screen on the strength of a claim nobody checked.
+    expect(backupVerdict(queue())).toBe("unverified");
+    expect(backupVerdict(queue(), null)).toBe("unverified");
+    expect(backupVerdict(queue(), rollup({}, null))).toBe("unverified");
+  });
+
+  it("an empty queue over a gap at the gateway is failing", () => {
+    // The phone sent everything it had and the bytes are in neither tier.
+    expect(backupVerdict(queue(), rollup({ replicated: 4, missing: 1 }))).toBe(
+      "failing"
+    );
+  });
+
+  it("counts every state that means the gateway holds it as backed up", () => {
+    // Four spellings of one fact. A member cannot act on the difference, and
+    // R7 says they see two states.
+    for (const bucket of [
+      "replicated",
+      "remote-only",
+      "local-only",
+      "pending-offsite",
+    ] as const)
+      expect(backupVerdict(queue(), rollup({ [bucket]: 3 }))).toBe("complete");
   });
 
   it("rows still waiting are pending, not a fault", () => {
@@ -64,6 +114,9 @@ describe(backupVerdictCopy, () => {
   });
 
   it("only failing takes the net ink", () => {
+    expect(
+      backupVerdictCopy(queue(), undefined, rollup({ replicated: 1 })).net
+    ).toBe(false);
     expect(backupVerdictCopy(queue()).net).toBe(false);
     expect(backupVerdictCopy(queue({ pending: 2 })).net).toBe(false);
     expect(backupVerdictCopy(queue({ readable: false })).net).toBe(false);

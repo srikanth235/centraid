@@ -11,7 +11,6 @@
 import { DatabaseSync } from "node:sqlite";
 
 import { refreshEntityTriggers } from "./entity.js";
-import { registerContentTextFn } from "./fts.js";
 import { VAULT_MIGRATIONS } from "./migrate.js";
 
 /**
@@ -27,7 +26,6 @@ export const BASELINE_NOW = "2026-09-02T10:00:00.000Z";
 
 export function baselineVault(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
-  registerContentTextFn(db);
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(VAULT_MIGRATIONS[0] ?? "");
   refreshEntityTriggers(db);

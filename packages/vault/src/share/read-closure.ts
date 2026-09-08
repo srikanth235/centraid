@@ -7,10 +7,10 @@ import type { DatabaseSync } from "node:sqlite";
 import { mediaLocationPolicyForVault } from "../blob/staging.js";
 import { isBlobUri } from "../blob/store.js";
 import { VaultShareError } from "../errors.js";
+import { contentMediaTypeSql } from "../schema/representation.js";
 import type {
   BlobManifestEntry,
   ContentItemRow,
-  DerivativeRow,
   DocumentRow,
   MediaAssetRow,
   ShareableItemType,
@@ -26,17 +26,19 @@ import { CLOSURE_FORMAT_VERSION } from "./closure.js";
 import { readTallyGroup } from "./read-tally.js";
 import { one } from "./sql.js";
 
-const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_size, title,
+// `media_type` is READ OFF THE REPRESENTATION at the query boundary (#996,
+// ruling R20(b)) — the byte row has none — and `title` is not sent at all: a
+// caption belongs to a wrapper, and a GENERATED one is a derived row that
+// never projects (R10).
+const CONTENT_ITEM_COLUMNS = `content_id, ${contentMediaTypeSql("content_id")} AS media_type,
+       content_uri, sha256, byte_size,
        language, deleted_at, purge_at, created_at`;
-
-const DERIVATIVE_COLUMNS = `derivative_id, content_id, variant, sha256, media_type,
-       byte_size, text_content, created_at`;
 
 // The STAR does not travel (#916). It was a `favorite` column on the asset and
 // rode the closure like any other field; it is now one `starred` flags tag,
 // and a tag is the ORIGIN member's judgment about their own copy. An audience
 // receives the photograph, not the sender's opinion of it.
-const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_min,
+const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, title, captured_at, tz_offset_min,
        capture_group_id, width, height, duration_s, exif_json,
        archived_at, deleted_at, purge_at`;
 
@@ -49,7 +51,6 @@ const COLLECTION_ENTRY_TYPES = new Set<ShareableItemType>([
 /** The pooled row tables, keyed by primary key while the read runs. */
 interface ClosureDraft {
   contentItems: Map<string, ContentItemRow>;
-  derivatives: Map<string, DerivativeRow>;
   mediaAssets: Map<string, MediaAssetRow>;
   documents: Map<string, DocumentRow>;
   docsFolders: Map<string, WireDocsFolder>;
@@ -62,7 +63,6 @@ interface ClosureDraft {
 function draft(): ClosureDraft {
   return {
     contentItems: new Map(),
-    derivatives: new Map(),
     mediaAssets: new Map(),
     documents: new Map(),
     docsFolders: new Map(),
@@ -74,10 +74,16 @@ function draft(): ClosureDraft {
 }
 
 /**
- * Pool one content item, its derivatives, and their CAS addresses (only
- * blob-backed items earn a manifest entry, same rule as `liveBlobShas`).
- * False when the origin lacks the row — a fact for a Tally receipt; an error
- * when asked for by name.
+ * Pool one content item and its CAS address (only blob-backed items earn a
+ * manifest entry, same rule as `liveBlobShas`). False when the origin lacks
+ * the row — a fact for a Tally receipt; an error when asked for by name.
+ *
+ * DERIVATIVES DO NOT COME (#996, R10). A thumbnail, a transcript, an OCR pass,
+ * an embedding and a generated caption are all rows of one derived table, and
+ * a derived row never projects: the audience re-derives from the bytes under
+ * ITS OWN egress answers (R18), which is what makes "no vault-private
+ * reference can leak" a property of the table rule rather than of a reviewer
+ * checking each variant. `projection-ingest.ts` enqueues that work.
  */
 function poolContent(
   origin: DatabaseSync,
@@ -97,23 +103,6 @@ function poolContent(
       sha256: item.sha256,
       rung: "original",
       size: item.byte_size,
-    });
-  }
-  const derivatives = origin
-    .prepare(
-      `SELECT ${DERIVATIVE_COLUMNS} FROM core_content_derivative
-        WHERE content_id = ? ORDER BY variant`
-    )
-    .all(contentId) as unknown as DerivativeRow[];
-  for (const derivative of derivatives) {
-    into.derivatives.set(derivative.derivative_id, derivative);
-    // Binary variants live in the CAS; semantic ones are inline text.
-    if (derivative.sha256 === null || into.blobs.has(derivative.sha256))
-      continue;
-    into.blobs.set(derivative.sha256, {
-      sha256: derivative.sha256,
-      rung: derivative.variant,
-      size: derivative.byte_size,
     });
   }
   return true;
@@ -369,7 +358,6 @@ export function readShareClosure(
   });
   const rowTables: WireRows = {
     contentItems: [...into.contentItems.values()],
-    derivatives: [...into.derivatives.values()],
     mediaAssets: [...into.mediaAssets.values()],
     documents: [...into.documents.values()],
     docsFolders: [...into.docsFolders.values()],

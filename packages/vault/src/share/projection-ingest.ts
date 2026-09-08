@@ -62,41 +62,68 @@ function linkProjectedPlace(
 }
 
 /**
- * EMBEDDING ONLY: captions and faces are consent-gated, and a placement must
- * never manufacture an owner's consent. `required_capability` stays NULL,
- * since a device-lease row would hand gateway work to a paired device.
+ * THE RECIPIENT'S OWN ENRICHMENT (#996, R10/R18). Derived rows never project:
+ * the thumbnail, the decoded text, the transcript, the embedding and the
+ * generated caption used to ride the closure as `core_content_derivative`
+ * rows, and every one of them was the SENDER's answer crossing a vault
+ * boundary. They are now enqueued here instead, so the copy is enriched by the
+ * receiving vault under the RECIPIENT's egress answers — which is what "a copy
+ * is the recipient's" means in machinery rather than in prose.
+ *
+ * CAPTIONS AND FACES ARE STILL NOT ENQUEUED: they are consent-gated, and a
+ * projection must never manufacture an owner's consent. `required_capability`
+ * stays NULL, since a device-lease row would hand gateway work to a paired
+ * device.
  */
 function requestProjectedEnrichment(
   audience: DatabaseSync,
-  assetId: string,
+  target: { type: ShareableItemType; id: string },
+  variants: readonly string[],
   ctx: ProjectionIngestContext
 ): void {
-  const open = audience
-    .prepare(
-      `SELECT 1 AS present FROM enrich_request
-        WHERE target_type = 'media.asset' AND target_id = ?
-          AND contribution_variant = 'embedding' AND drained_at IS NULL`
-    )
-    .get(assetId);
-  if (open) return;
-  audience
-    .prepare(
-      `INSERT INTO enrich_request
-         (request_id, target_type, target_id, reason, detail, required_capability,
-          contribution_variant, capability, requested_at, drained_at)
-       VALUES (?, 'media.asset', ?, 'projected', NULL, NULL,
-               'embedding', NULL, ?, NULL)`
-    )
-    .run(uuidv7(), assetId, ctx.now);
+  const open = audience.prepare(
+    `SELECT 1 AS present FROM enrich_request
+      WHERE target_type = ? AND target_id = ?
+        AND contribution_variant = ? AND drained_at IS NULL`
+  );
+  const write = audience.prepare(
+    `INSERT INTO enrich_request
+       (request_id, target_type, target_id, reason, detail, required_capability,
+        contribution_variant, capability, requested_at, drained_at)
+     VALUES (?, ?, ?, 'projected', NULL, NULL, ?, NULL, ?, NULL)`
+  );
+  for (const variant of variants) {
+    if (open.get(target.type, target.id, variant)) continue;
+    write.run(uuidv7(), target.type, target.id, variant, ctx.now);
+  }
 }
 
 const projectedAsset: ProjectionIngestHook = (audience, item, ctx) => {
   linkProjectedPlace(audience, item.itemId, ctx);
-  requestProjectedEnrichment(audience, item.itemId, ctx);
+  requestProjectedEnrichment(
+    audience,
+    { type: "media.asset", id: item.itemId },
+    // The three the origin's derivatives used to carry for a photograph: what
+    // it looks like small, what it looks like to a search, and what it hashes
+    // to for near-duplicate detection.
+    ["thumb", "embedding", "phash"],
+    ctx
+  );
+};
+
+/** A projected document's text is the audience's decode of its own bytes. */
+const projectedDocument: ProjectionIngestHook = (audience, item, ctx) => {
+  requestProjectedEnrichment(
+    audience,
+    { type: "core.document", id: item.itemId },
+    ["text", "embedding"],
+    ctx
+  );
 };
 
 const HOOKS = new Map<ShareableItemType, ProjectionIngestHook>([
   ["media.asset", projectedAsset],
+  ["core.document", projectedDocument],
 ]);
 
 export function projectionIngest(

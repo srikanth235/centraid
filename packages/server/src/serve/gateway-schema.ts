@@ -57,14 +57,14 @@ export function installGatewaySchema(db: DatabaseSync): void {
       platform TEXT,
       remember_device INTEGER NOT NULL CHECK (remember_device IN (0, 1)),
       /*
-       * Is this device confined to a subset of the owner's surfaces (#928 A6)?
-       * The SET of surfaces is not here — it is share_authority rows in the
-       * vault, principal 'device' over subject type 'app.surface'. This flag
-       * is the one fact the gateway must know BEFORE any vault is open, and
-       * it is the reason a missing projection can deny instead of guessing:
-       * attenuated with nothing projected is a refusal, not a full device.
+       * ENROLLMENT IS FULL TRUST (#996, R11). There was an 'attenuated' flag
+       * here, and a 'device_surface_projection' table beside it, for the
+       * confined Companion tier: a device answered about in the authority
+       * plane, principal kind 'device' over subject type 'app.surface'. Both
+       * are gone with the tier and with the 'device' principal kind. A seat
+       * either holds this vault or it does not, and that is what a row in this
+       * table means.
        */
-      attenuated INTEGER NOT NULL DEFAULT 0 CHECK (attenuated IN (0, 1)),
       compute_json TEXT,
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       added_at TEXT NOT NULL
@@ -73,21 +73,6 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * Replica checkpoints are the one genuinely per-(device, vault) fact, so
      * they keep their own table now that 'devices' no longer fans out.
      */
-    /*
-     * The PROJECTION of a Companion device's attenuation (#928 A6), per
-     * (device, vault) because the answer lives in a vault and a device may be
-     * enrolled in several. The authority rows are the source of truth; this
-     * table exists only because the gateway authorizes a Companion request
-     * BEFORE it opens a vault. It is rebuilt from those rows whenever the
-     * vault opens or the answer changes, and an absent row denies.
-     */
-    CREATE TABLE IF NOT EXISTS device_surface_projection (
-      endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      vault_id TEXT NOT NULL,
-      surfaces_json TEXT NOT NULL,
-      projected_at TEXT NOT NULL,
-      PRIMARY KEY (endpoint_id, vault_id)
-    ) STRICT;
     CREATE TABLE IF NOT EXISTS device_checkpoints (
       endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       vault_id TEXT NOT NULL,
@@ -285,7 +270,21 @@ export function installGatewaySchema(db: DatabaseSync): void {
       vault_b TEXT NOT NULL,
       approved_by_a TEXT,
       approved_by_b TEXT,
-      permissions_json TEXT NOT NULL DEFAULT '{}',
+      /*
+       * WHO EACH SIDE IS, not what either may do (#996, ruling R17, open
+       * question 7). This was permissions_json, an open bag, and the answer to
+       * "what consumes permissions" turned out to be: nothing. The only key
+       * ever read out of it was commonsPartyIds -- a vaultId to partyId map,
+       * which is link IDENTITY. Since #903 a link is a CHANNEL and not a
+       * permission slip, so a column called permissions on it was an
+       * invitation for the next reader to put a permission there.
+       *
+       * It was also writable by the far side: both hello handlers spread the
+       * peer's inbound permissions object into this column verbatim. Nothing
+       * read the extra keys, which is the only reason that was not a hole --
+       * and "nothing reads it yet" is not a property worth keeping.
+       */
+      party_ids_json TEXT NOT NULL DEFAULT '{}',
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       created_at TEXT NOT NULL,
       UNIQUE (vault_a, vault_b),

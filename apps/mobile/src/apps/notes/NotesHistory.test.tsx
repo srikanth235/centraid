@@ -47,7 +47,7 @@ const NOTE = {
   updatedAt: "2026-08-20T09:00:00.000Z",
 } as NativeNote;
 
-const EMPTY_CHAIN = { concepts: [], links: [], schemes: [] };
+const EMPTY_CHAIN = { revisions: [] };
 
 describe("Notes version history", () => {
   it("names the closed door when the chain could not be read", () => {

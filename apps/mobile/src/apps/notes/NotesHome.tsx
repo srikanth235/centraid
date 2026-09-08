@@ -253,10 +253,9 @@ export default function NotesHome({
     }
     try {
       const request = { action, input: input as ReplicaValue };
-      const result =
-        note?.sourceVaultId && session.writeTo
-          ? await session.writeTo(note.sourceVaultId, "notes", request)
-          : await session.write("notes", request);
+      // One open vault, so one write target (#996 wave 3). The read-only
+      // refusal above is still the gate — it is the row's own answer.
+      const result = await session.write("notes", request);
       return surfaceWriteOutcome(result, {
         onParked: () => {
           closeEditor();

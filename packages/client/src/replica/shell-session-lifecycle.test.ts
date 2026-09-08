@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { replicaScopeDisposition } from "./shell-session.js";
+import { replicaScopeDisposition } from "./shell-session-scopes.js";
 
 // THE SCOPE'S SURVIVAL LAW (#922 C6). A replica session survives 30 s idle —
 // `warm` is that grace — and gives its storage back when the page is hidden or

@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 /**
  * Face review queue (#711): vault-wide, one entry at a time.
  * `queries/faces.ts` stays the per-asset lightbox read.
@@ -14,6 +15,10 @@
  * @type {import('@centraid/server/engine').QueryHandler}
  */
 import { srcOf } from "./_shared.ts";
+
+/** The review queue considers this many regions, and this many people. */
+const REGION_ROWS = 4000;
+const PARTY_ROWS = 500;
 
 const QUEUE_LIMIT = 60;
 
@@ -46,17 +51,36 @@ interface RawContent {
 export default async function faceQueue({ ctx }: HandlerArgs) {
   try {
     const [regionsResult, partiesResult] = await Promise.all([
-      ctx.vault.read({ entity: "media.face_region", limit: 4000 }),
-      ctx.vault.read({
-        entity: "core.party",
-        orderBy: { column: "display_name", dir: "asc" },
-        limit: 500,
+      ctx.vault.page<RawRegion>({
+        query: {
+          name: "photos.faceQueue.regions",
+          select:
+            "region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id, review_state, created_at",
+          from: "media_face_region",
+          order: {
+            sortColumn: "region_id",
+            pkColumn: "region_id",
+            descending: false,
+          },
+        },
+        limit: REGION_ROWS,
+      }),
+      ctx.vault.page<RawParty>({
+        query: {
+          name: "photos.faceQueue.parties",
+          select: "party_id, display_name, kind",
+          from: "core_party",
+          order: {
+            sortColumn: "display_name",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        },
+        limit: PARTY_ROWS,
       }),
     ]);
-    const regions = (regionsResult.rows ?? []) as unknown as RawRegion[];
-    const persons = (
-      (partiesResult.rows ?? []) as unknown as RawParty[]
-    ).filter((p) => p.kind === "person");
+    const regions = regionsResult.rows;
+    const persons = partiesResult.rows.filter((p) => p.kind === "person");
     const nameOf = new Map(
       persons.map((p) => [p.party_id, p.display_name] as const)
     );
@@ -77,31 +101,41 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
 
     const assetIds = [...new Set(queueSlice.map((r) => r.asset_id))];
     const assetsResult = assetIds.length
-      ? await ctx.vault.read({
-          entity: "media.asset",
-          where: [{ column: "asset_id", op: "in", value: assetIds }],
-          limit: assetIds.length,
+      ? await readPages<RawAsset>(ctx, {
+          name: "photos.faceQueue.assets",
+          select: "asset_id, content_id, kind, title, captured_at",
+          from: "media_asset",
+          where: inList("asset_id", assetIds).sql,
+          bind: inList("asset_id", assetIds).bind,
+          order: {
+            sortColumn: "asset_id",
+            pkColumn: "asset_id",
+            descending: false,
+          },
         })
-      : { rows: [] };
+      : [];
     const assetById = new Map(
-      ((assetsResult.rows ?? []) as unknown as RawAsset[]).map(
-        (a) => [a.asset_id, a] as const
-      )
+      assetsResult.map((a) => [a.asset_id, a] as const)
     );
     const contentIds = [
       ...new Set([...assetById.values()].map((a) => a.content_id)),
     ];
     const contentsResult = contentIds.length
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.content_item",
-          where: [{ column: "content_id", op: "in", value: contentIds }],
+      ? await readPages<RawContent>(ctx, {
+          name: "photos.faceQueue.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: inList("content_id", contentIds).sql,
+          bind: inList("content_id", contentIds).bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
         })
-      : { rows: [] };
+      : [];
     const contentById = new Map(
-      ((contentsResult.rows ?? []) as unknown as RawContent[]).map(
-        (c) => [c.content_id, c] as const
-      )
+      contentsResult.map((c) => [c.content_id, c] as const)
     );
 
     const assetIdsByParty = new Map<string, Set<string>>();

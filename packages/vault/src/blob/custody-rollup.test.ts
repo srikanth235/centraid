@@ -52,8 +52,8 @@ function addContent(
   db.vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'image/png', ?, ?, ?, ?)`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, ?, ?, ?, ?)`
     )
     .run(options.id, `blob:sha256:${sha}`, sha, options.bytes.length, nowIso());
   db.vault

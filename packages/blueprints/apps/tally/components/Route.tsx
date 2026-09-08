@@ -29,6 +29,8 @@ import {
 import type { ShelfId } from "../shelves.ts";
 import type {
   ActivityData,
+  MatchProposalRow,
+  MatchesData,
   DashboardData,
   FriendData,
   GroupData,
@@ -51,6 +53,8 @@ export interface RouteProps {
   group: GroupData | null;
   friend: FriendData | null;
   activity: ActivityData | null;
+  /** Unanswered cross-source match proposals, above the feed (#996, OQ-12). */
+  matches: MatchesData | null;
   search: { query: string; status: SearchStatus; data: SearchData | null };
   compose: ComposeView;
   now: string;
@@ -64,6 +68,8 @@ export interface RouteProps {
   onOpenFriend: (partyId: string) => void;
   onOpenExpense: (entry: LedgerEntry) => void;
   onShowMore: () => void;
+  /** The owner's answer to one match proposal. Never automatic (OQ-12). */
+  onAnswerMatch: (answer: "accept" | "reject", row: MatchProposalRow) => void;
   onAskLeave: (groupId: string) => void;
   onAskArchive: (groupId: string, archived: boolean) => void;
   /** Turn simplification on or off for the open group. */
@@ -124,7 +130,10 @@ export function Route(props: RouteProps): ReactNode {
             partyId: friend.party_id,
             name: friend.name,
             groupId: null,
-            asOfMinor: friend.net_minor,
+            // A reminder is about ONE balance; the surface picks the first
+            // currency the friend is in, which is the only one there is
+            // unless the position spans several (#996, R22).
+            asOfMinor: friend.balances[0]?.amount_minor ?? 0,
           })
         }
       />
@@ -135,10 +144,12 @@ export function Route(props: RouteProps): ReactNode {
     return props.activity ? (
       <Activity
         data={props.activity}
+        matches={props.matches}
         now={props.now}
         window={props.activityWindow}
         narrow={props.narrow}
         onShowMore={props.onShowMore}
+        onAnswerMatch={props.onAnswerMatch}
       />
     ) : null;
   }

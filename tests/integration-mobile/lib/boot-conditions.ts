@@ -19,14 +19,38 @@
  *   it.
  */
 
-import { fetchReplicaChanges } from "../../../packages/client/src/replica/shell-transport.js";
-import type { ReplicaCursor } from "../../../packages/client/src/replica/types.js";
+import { ROUTES } from "../../../packages/core/src/protocol/index.js";
+import type { SeatLogPageWire } from "../../../packages/core/src/protocol/index.js";
 import { isBlocked, recipeFor } from "./apps.js";
 import type { ActionCall, AppRecipe, SeededRow } from "./apps.js";
 import type { MobileGateway } from "./gateway.js";
 import { appsDesigning, unknownDesignedStates } from "./manifests.js";
 import type { AppState } from "./manifests.js";
+import { entityIdColumn, readEntity } from "./reads.js";
 import type { MobileSeat } from "./seat.js";
+
+/**
+ * WHAT "HOW CURRENT AM I" MEANS ON A SEAT (#996, W5).
+ *
+ * It used to be a store `status()` — a mode, a shaped cursor and a coverage
+ * that a windowed bootstrap could leave half-true. A seat holds the file or it
+ * does not, so the honest answer is the WATERMARK: a log position, or nothing
+ * at all before the copy has landed.
+ */
+export interface SeatStatus {
+  /** The applied log position, or `null` before this seat holds a copy. */
+  cursor: number | null;
+  /** "complete" once the file is here; there is no half-here. */
+  coverage: string | undefined;
+}
+
+export function seatStatus(seat: MobileSeat): SeatStatus {
+  const watermark = seat.session.watermark();
+  return {
+    cursor: watermark ? watermark.applied : null,
+    coverage: watermark ? "complete" : undefined,
+  };
+}
 
 /** What `pendingChanges()` reports, reduced to what these suites read. */
 export interface PendingEntry {
@@ -107,14 +131,15 @@ export async function seedRow(
 ): Promise<SeededRow> {
   await serverCreate(gateway, seat, recipe, label);
   await seat.session.pullNow();
-  const read = await seat.session.read(recipe.appId, { entity: recipe.entity });
+  const read = await readEntity(seat, recipe.entity);
   const row = read.rows.at(-1);
   if (!row) {
     throw new Error(
       `${recipe.appId} create executed but ${recipe.entity} is still empty on the replica`
     );
   }
-  return { rowId: row.rowId, values: row.values as Record<string, unknown> };
+  const idColumn = entityIdColumn(recipe.entity);
+  return { rowId: String(row[idColumn]), values: row };
 }
 
 export async function queuedCall(
@@ -139,20 +164,16 @@ export async function arrangeDayone(
   recipe: AppRecipe
 ): Promise<{
   emptyRows: number;
-  cursor: ReplicaCursor | null;
+  cursor: number | null;
   coverage: string | undefined;
   seededRows: number;
 }> {
-  const empty = await seat.session.read(recipe.appId, {
-    entity: recipe.entity,
-  });
-  const status = await seat.session.status();
+  const empty = await readEntity(seat, recipe.entity);
+  const status = seatStatus(seat);
   // The negative: the same read, on the same session, after the vault really
   // holds one row. Without it, "empty" could be a read that never works.
   await seedRow(gateway, seat, recipe, "dayone-negative");
-  const seeded = await seat.session.read(recipe.appId, {
-    entity: recipe.entity,
-  });
+  const seeded = await readEntity(seat, recipe.entity);
   return {
     emptyRows: empty.rows.length,
     cursor: status.cursor,
@@ -167,18 +188,16 @@ export async function arrangeOffline(
   seat: MobileSeat,
   recipe: AppRecipe
 ): Promise<{
-  cutPullError: string | undefined;
+  cutPullLanded: boolean;
   rowsWhileCut: number;
-  cursorWhileCut: ReplicaCursor | null;
+  cursorWhileCut: number | null;
   restoredPull: boolean;
   rowsAfterRestore: number;
 }> {
   await seedRow(gateway, seat, recipe, "offline-seed");
-  const seededRows = (
-    await seat.session.read(recipe.appId, { entity: recipe.entity })
-  ).rows.length;
+  const seededRows = (await readEntity(seat, recipe.entity)).rows.length;
   seat.cut();
-  let cutPullError: string | undefined;
+  let cutPullLanded: boolean;
   let whileCutRows: number;
   let cutStatus;
   try {
@@ -186,26 +205,22 @@ export async function arrangeOffline(
     // pull has something to land — otherwise "the pull worked again" would be
     // indistinguishable from "nothing happened either way".
     await serverCreate(gateway, seat, recipe, "offline-while-cut");
-    try {
-      await seat.session.pullNow();
-    } catch (error) {
-      cutPullError = error instanceof Error ? error.message : String(error);
-    }
-    whileCutRows = (
-      await seat.session.read(recipe.appId, { entity: recipe.entity })
-    ).rows.length;
-    cutStatus = await seat.session.status();
+    // NOT A THROW, AND DELIBERATELY (#996, W5). A seat that could not reach the
+    // gateway is a seat with a slightly older copy, which is the normal state
+    // of the thing; the outage is REPORTED, as the boolean the refresh spinner
+    // reads, rather than raised as an error a screen would have to catch.
+    cutPullLanded = await seat.session.pullNow();
+    whileCutRows = (await readEntity(seat, recipe.entity)).rows.length;
+    cutStatus = seatStatus(seat);
   } finally {
     // A cut that outlives its own arrangement poisons every later app in the
     // file, and the failure then names the wrong test.
     seat.restore();
   }
   const restoredPull = (await seat.session.pullNow()) !== false;
-  const restored = await seat.session.read(recipe.appId, {
-    entity: recipe.entity,
-  });
+  const restored = await readEntity(seat, recipe.entity);
   return {
-    cutPullError,
+    cutPullLanded,
     // The offline claim in one number: the cut read still serves what the
     // replica already had.
     rowsWhileCut: whileCutRows - (seededRows - 1),
@@ -227,21 +242,15 @@ export async function arrangeStale(
   freshChangesAhead: number;
 }> {
   await seedRow(gateway, seat, recipe, "stale-seed");
-  const baseline = (
-    await seat.session.read(recipe.appId, { entity: recipe.entity })
-  ).rows.length;
+  const baseline = (await readEntity(seat, recipe.entity)).rows.length;
   // A second device writes and this session does NOT pull. Its cursor is now
   // behind the gateway's, which is the whole of what stale means here.
   await serverCreate(gateway, seat, recipe, "stale-behind");
-  const stale = await seat.session.read(recipe.appId, {
-    entity: recipe.entity,
-  });
+  const stale = await readEntity(seat, recipe.entity);
   const staleChangesAhead = await changesAhead(gateway, seat);
   // The negative: one pull on the same session, and the same two questions.
   await seat.session.pullNow();
-  const fresh = await seat.session.read(recipe.appId, {
-    entity: recipe.entity,
-  });
+  const fresh = await readEntity(seat, recipe.entity);
   return {
     staleRows: stale.rows.length - baseline,
     staleChangesAhead,
@@ -259,15 +268,23 @@ export async function changesAhead(
   gateway: MobileGateway,
   seat: MobileSeat
 ): Promise<number> {
-  const status = await seat.session.status();
-  if (!status.cursor) throw new Error("the session has no cursor to compare");
-  const batch = await fetchReplicaChanges(
-    { baseUrl: gateway.url, token: gateway.token, vaultId: gateway.vaultId },
-    status.cursor,
-    new AbortController().signal,
-    seat.session.catalog().map((shape) => shape.shapeId)
-  );
-  return batch.changes.length;
+  const status = seatStatus(seat);
+  if (status.cursor === null)
+    throw new Error("the session has no cursor to compare");
+  // THE SEAT'S OWN DOOR, not a shaped changes route: one page of the log from
+  // where this file stands. What is ahead of the phone is what the log holds
+  // past its applied position, and nothing about shapes enters into it.
+  const url = new URL(ROUTES.vaultSeatLog, gateway.url);
+  url.searchParams.set("since", String(status.cursor));
+  url.searchParams.set("limit", "500");
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${gateway.token}`,
+      Accept: "application/json",
+    },
+  });
+  const page = (await response.json()) as SeatLogPageWire;
+  return page.rows.length;
 }
 
 export function intentIdOf(result: unknown): string {

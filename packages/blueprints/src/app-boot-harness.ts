@@ -415,6 +415,38 @@ export function describeAppBoot(
 
         window.centraid = {
           appId: app,
+          // THE SHELL'S LOCKER DOOR (#996, W6-D2). The harness stands in for a
+          // shell, so it has to offer what a shell offers: Locker draws its
+          // "this device cannot open secrets" screen against a host with no
+          // door, which is correct and is not what a boot test is asking
+          // about. Unlocked, and every reveal answers from the stub.
+          locker: {
+            reveal: (opts: { rowId: string; columns?: readonly string[] }) =>
+              Promise.resolve({
+                ok: true as const,
+                rowId: opts.rowId,
+                values: Object.fromEntries(
+                  (opts.columns ?? ["password"]).map((column) => [
+                    column,
+                    "app-boot-revealed-secret",
+                  ])
+                ),
+                receiptId: "app-boot-reveal-receipt",
+              }),
+            state: () => ({
+              status: "unlocked" as const,
+              remainingMs: 300_000,
+            }),
+            subscribeLock: (
+              listener: (state: {
+                status: "locked" | "unlocked";
+                remainingMs: number;
+              }) => void
+            ) => {
+              listener({ status: "unlocked", remainingMs: 300_000 });
+              return () => undefined;
+            },
+          },
           read: (request?: {
             query?: string;
             input?: Record<string, unknown>;
@@ -427,14 +459,6 @@ export function describeAppBoot(
                 birthdays: [],
                 due: [],
                 holidays: [],
-              });
-            }
-            if (app === "locker" && request?.query === "auth") {
-              return Promise.resolve({
-                ok: true,
-                configured: true,
-                authenticated: true,
-                sessionToken: "app-boot-user-present-session",
               });
             }
             const error = nextReadError;

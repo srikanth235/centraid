@@ -255,7 +255,7 @@ describe("golden year-3 vault", () => {
     ).not.toBe(key);
     // The version is IN the key, which is what makes a bump an invalidation
     // rather than a note in a changelog.
-    expect(YEAR3_FIXTURE_VERSION).toBe(3);
+    expect(YEAR3_FIXTURE_VERSION).toBe(4);
   });
 
   test("materializing hits the cache the second time and misses after a bump", async () => {

@@ -1,12 +1,18 @@
-// Version chain over THIS DEVICE'S replica (#821). Follow live `revises` OUT
-// (NEW → OLD); a restore can cycle. Date is the edge's assertion time.
-// No provenance on this replica — withhold rather than guess. No diff.
+// Version chain over THIS DEVICE'S replica (#821), re-cut by #996 (R20(a)).
+//
+// The chain is the document's own REVISION OCCURRENCES, walked from
+// `current_revision_id` through `parent_revision_id`. Each occurrence names the
+// content that became current at that moment, so a document restored to bytes
+// it already held reads as an extra version rather than a node the walk has to
+// collapse. Dates are the occurrence's own `recorded_at`.
+//
+// It was a `revises` `core.link` walk that first had to resolve a concept out
+// of two more replicated tables — three reads and a taxonomy lookup to answer
+// "what did this used to say". No provenance on this replica — withhold rather
+// than guess. No diff.
 
 import type { EntityRow } from "./docs-projection";
 
-const RELATIONS_SCHEME_URI = "urn:duaility:relations";
-const REVISES_RELATION = "revises";
-const CONTENT_TYPE = "core.content_item";
 const MAX_CHAIN_STEPS = 500;
 
 const str = (row: EntityRow, key: string): string | null => {
@@ -25,7 +31,7 @@ export interface MobileVersionEntry {
   media_type: string | null;
   byte_size: number | null;
   current: boolean;
-  /** The revises edge's own valid_from; the oldest entry dates from its mint. */
+  /** The occurrence's own instant; a document with none dates from its mint. */
   asserted_at: string;
 }
 
@@ -37,10 +43,12 @@ export interface VersionChain {
 
 export interface VersionChainRows {
   document: EntityRow | undefined;
-  links: readonly EntityRow[];
+  revisions: readonly EntityRow[];
   contents: readonly EntityRow[];
-  concepts: readonly EntityRow[];
-  schemes: readonly EntityRow[];
+  /** The document's reading of its bytes (#996, ruling R20(b)). A SUPERSEDED
+   *  version has no representation of its own — the document's moved with the
+   *  head — and an edit changes the words, never the format. */
+  representations: readonly EntityRow[];
 }
 
 export function projectVersionChain(
@@ -50,56 +58,40 @@ export function projectVersionChain(
   if (!doc) return null;
   const currentContentId = str(doc, "current_content_id");
   if (!currentContentId) return null;
+  const documentId = str(doc, "document_id");
 
-  const relSchemeId =
-    rows.schemes.flatMap((scheme) =>
-      str(scheme, "uri") === RELATIONS_SCHEME_URI
-        ? [str(scheme, "scheme_id") ?? ""]
-        : []
-    )[0] ?? null;
-  const revisesConceptId =
-    relSchemeId === null
-      ? null
-      : (rows.concepts.flatMap((concept) =>
-          str(concept, "scheme_id") === relSchemeId &&
-          str(concept, "notation") === REVISES_RELATION
-            ? [str(concept, "concept_id") ?? ""]
-            : []
-        )[0] ?? null);
+  const revisionById = new Map(
+    rows.revisions.flatMap((revision) => {
+      // The replica carries every entity's revisions; this walk is one
+      // document's, so the rows are filtered before they are indexed.
+      if (str(revision, "entity_type") !== "core.document") return [];
+      if (documentId !== null && str(revision, "entity_id") !== documentId)
+        return [];
+      const id = str(revision, "revision_id");
+      return id ? [[id, revision] as const] : [];
+    })
+  );
 
-  // Live revises edges out of a content item, newest assertion first.
-  const edgesFrom = new Map<string, { to: string; valid_from: string }[]>();
-  if (revisesConceptId !== null) {
-    for (const link of rows.links) {
-      if (str(link, "from_type") !== CONTENT_TYPE) continue;
-      if (str(link, "to_type") !== CONTENT_TYPE) continue;
-      if (str(link, "relation_concept_id") !== revisesConceptId) continue;
-      if (str(link, "valid_to") !== null) continue;
-      const from = str(link, "from_id");
-      const to = str(link, "to_id");
-      const validFrom = str(link, "valid_from");
-      if (!from || !to || !validFrom) continue;
-      const list = edgesFrom.get(from);
-      const entry = { to, valid_from: validFrom };
-      if (list) list.push(entry);
-      else edgesFrom.set(from, [entry]);
-    }
-    for (const list of edgesFrom.values())
-      list.sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-  }
-
-  const chainIds = [currentContentId];
+  const chainIds: string[] = [];
   const assertedAtOf = new Map<string, string>();
-  const seen = new Set([currentContentId]);
-  let at = currentContentId;
-  for (let step = 0; step < MAX_CHAIN_STEPS; step += 1) {
-    const next = edgesFrom.get(at)?.[0];
-    if (!next || seen.has(next.to)) break;
-    assertedAtOf.set(at, next.valid_from);
-    chainIds.push(next.to);
-    seen.add(next.to);
-    at = next.to;
+  const seen = new Set<string>();
+  let at = str(doc, "current_revision_id");
+  for (let step = 0; at !== null && step < MAX_CHAIN_STEPS; step += 1) {
+    if (seen.has(at)) break;
+    seen.add(at);
+    const revision = revisionById.get(at);
+    if (!revision) break;
+    const contentId = str(revision, "content_id");
+    if (contentId === null) break;
+    chainIds.push(contentId);
+    // A content id can appear twice; the date shown is that occurrence's.
+    if (!assertedAtOf.has(contentId))
+      assertedAtOf.set(contentId, str(revision, "recorded_at") ?? "");
+    at = str(revision, "parent_revision_id");
   }
+  // A document minted before the wrapper carried a pointer still has one
+  // version: the bytes it is currently made of.
+  if (chainIds.length === 0) chainIds.push(currentContentId);
 
   const contentById = new Map(
     rows.contents.flatMap((content) => {
@@ -108,19 +100,33 @@ export function projectVersionChain(
     })
   );
 
+  const mediaTypeByContent = new Map<string, string>();
+  let documentMediaType: string | null = null;
+  for (const representation of rows.representations) {
+    const mediaType = str(representation, "media_type");
+    const contentId = str(representation, "content_id");
+    if (!mediaType) continue;
+    if (contentId) mediaTypeByContent.set(contentId, mediaType);
+    if (
+      str(representation, "owner_type") === "core.document" &&
+      str(representation, "owner_id") === documentId
+    )
+      documentMediaType = mediaType;
+  }
+
   const count = chainIds.length;
   const entries = chainIds.map((id, index): MobileVersionEntry => {
     const content = contentById.get(id);
     return {
       n: count - index,
       content_id: id,
-      media_type: content ? str(content, "media_type") : null,
+      media_type: mediaTypeByContent.get(id) ?? documentMediaType,
       byte_size: content ? num(content, "byte_size") : null,
       current: index === 0,
       asserted_at:
-        assertedAtOf.get(id) ??
-        (content ? str(content, "created_at") : null) ??
-        str(doc, "created_at") ??
+        assertedAtOf.get(id) ||
+        (content ? str(content, "created_at") : null) ||
+        str(doc, "created_at") ||
         "",
     };
   });

@@ -20,13 +20,16 @@
  * writers are mirrored rather than imported; the column lists are held honest
  * by `year3-vault.test.ts` running them against a real bootstrapped schema.
  */
-import { seededRandom } from "./random.js";
-import { YEAR3_NOTE_NEEDLE, YEAR3_NOTE_NEEDLE_INDEX } from "./year3-shape.js";
+import { seededRandom } from "@centraid/test-kit/random";
+import {
+  YEAR3_NOTE_NEEDLE,
+  YEAR3_NOTE_NEEDLE_INDEX,
+} from "@centraid/test-kit/year3-shape";
 import type {
   Year3Distributions,
   Year3VaultProfile,
   Year3VaultTarget,
-} from "./year3-shape.js";
+} from "@centraid/test-kit/year3-shape";
 
 export interface Year3SeedContext {
   readonly at: (index: number) => string;
@@ -82,11 +85,32 @@ export function seedYear3Distributions(
   //    Mirrors what `knowledge.create_note` writes: the body is a data: URI on
   //    a `core_content_item` (rent the bytes, own the reference — schema/fts.ts)
   //    and the note row points at it.
+  // BYTES, AND A READING OWNED BY THE NOTE (#996, ruling R20(b)). The media
+  // type and the title used to sit on the content row; the byte row is bytes
+  // now, the note carries its own title, and `core_content_representation`
+  // carries the note's reading of them.
   const insertContent = target.vault.prepare(
     `INSERT INTO core_content_item
-       (content_id, media_type, content_uri, sha256, byte_size, title,
-        created_at)
-     VALUES (?, 'text/markdown', ?, ?, ?, ?, ?)`
+       (content_id, content_uri, sha256, byte_size, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  // THE DECODED BODY, AS A COLUMN (#996, ruling R4). The FTS sync triggers
+  // stopped calling an application-defined decode function in wave 1 and now
+  // read `core_content_text`, so a seeder that writes the bytes and skips the
+  // text produces a corpus whose notes are simply not searchable — which is
+  // exactly what the needle assertion in `year3-vault.test.ts` catches. The
+  // seeder mirrors what `setRepresentation` writes on the gateway; it cannot
+  // CALL it, because `test-kit` deliberately does not depend on the vault.
+  const insertContentText = target.vault.prepare(
+    `INSERT INTO core_content_text
+       (content_id, body_text, decoder, byte_size, created_at, updated_at)
+     VALUES (?, ?, 'data-uri/v1', ?, ?, ?)`
+  );
+  const insertNoteRepresentation = target.vault.prepare(
+    `INSERT INTO core_content_representation
+       (representation_id, content_id, owner_type, owner_id, media_type,
+        charset, interpretation, created_at)
+     VALUES (?, ?, 'knowledge.note', ?, 'text/markdown', 'utf-8', 'original', ?)`
   );
   const insertNote = target.vault.prepare(
     `INSERT INTO knowledge_note
@@ -121,16 +145,31 @@ export function seedYear3Distributions(
       `data:text/markdown;base64,${Buffer.from(withNeedle, "utf8").toString("base64")}`,
       digest(contentId),
       Buffer.byteLength(withNeedle),
-      `Year 3 note ${index}`,
       timestamp
     );
+    // Before the note and its representation, not after: the representation's
+    // own FTS trigger is what puts the index in step, and it reads this row.
+    insertContentText.run(
+      contentId,
+      withNeedle,
+      Buffer.byteLength(withNeedle),
+      timestamp,
+      timestamp
+    );
+    const noteId = id("year3-note", index);
     insertNote.run(
-      id("year3-note", index),
+      noteId,
       ownerPartyId,
       `Year 3 note ${index}`,
       contentId,
       index % 50 === 0 ? 1 : 0,
       timestamp,
+      timestamp
+    );
+    insertNoteRepresentation.run(
+      id("year3-note-representation", index),
+      contentId,
+      noteId,
       timestamp
     );
   }

@@ -1,21 +1,21 @@
 import { createHash } from "node:crypto";
 
-import { seedYear3Distributions } from "./year3-distributions.js";
+import { seedYear3Distributions } from "@centraid/test-kit/year3-distributions";
 import {
   YEAR3_CONTACT_NEEDLE,
   YEAR3_CONTACT_NEEDLE_INDEX,
   YEAR3_DISTRIBUTIONS,
-} from "./year3-shape.js";
+} from "@centraid/test-kit/year3-shape";
 import type {
   Year3SeedCounts,
   Year3VaultProfile,
   Year3VaultTarget,
-} from "./year3-shape.js";
+} from "@centraid/test-kit/year3-shape";
 
 // One public subpath: `./year3-vault` stays the whole vocabulary's front door,
 // so splitting the module changed no import anywhere else in the tree.
-export * from "./year3-fixture-cache.js";
-export * from "./year3-shape.js";
+export * from "@centraid/test-kit/year3-fixture-cache";
+export * from "@centraid/test-kit/year3-shape";
 
 /** The one seed every golden artifact is generated from. */
 export const YEAR3_DEFAULT_SEED = 679_003;
@@ -43,10 +43,16 @@ export function seedYear3Vault(
     "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES (?, 'person', ?, ?, ?)"
   );
   const content = target.vault.prepare(
-    "INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, title, created_at) VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)"
+    "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at) VALUES (?, ?, ?, 4096, ?)"
   );
   const photo = target.vault.prepare(
-    "INSERT INTO media_asset (asset_id, content_id, kind, captured_at) VALUES (?, ?, 'photo', ?)"
+    "INSERT INTO media_asset (asset_id, content_id, kind, title, captured_at) VALUES (?, ?, 'photo', ?, ?)"
+  );
+  // The reading of the bytes, on the owner (#996, ruling R20(b)).
+  const representation = target.vault.prepare(
+    `INSERT INTO core_content_representation
+       (representation_id, content_id, owner_type, owner_id, media_type, charset, interpretation, created_at)
+     VALUES (?, ?, 'media.asset', ?, 'image/jpeg', NULL, 'original', ?)`
   );
   // The star is a flags-scheme tag on the ASSET (#916) — `media_asset.favorite`
   // is gone. One in fifty photos carries it, so the fixture still exercises the
@@ -90,11 +96,16 @@ export function seedYear3Vault(
       contentId,
       `file:///year3/photo-${index}.jpg`,
       digest(contentId),
-      `Year 3 photo ${index}`,
       timestamp
     );
     const assetId = id("year3-photo", index);
-    photo.run(assetId, contentId, timestamp);
+    photo.run(assetId, contentId, `Year 3 photo ${index}`, timestamp);
+    representation.run(
+      id("year3-representation", index),
+      contentId,
+      assetId,
+      timestamp
+    );
     if (index % 50 === 0)
       star.run(id("year3-star", index), starredConceptId, assetId, timestamp);
   }

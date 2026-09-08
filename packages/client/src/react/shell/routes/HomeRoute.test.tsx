@@ -41,7 +41,7 @@ vi.mock(import("./homeTileContent.js"), () => ({
   // The tiles' content is stubbed wholesale, so the reader is never asked
   // anything — it exists only to satisfy the seam.
   homeTileReader: () =>
-    Promise.resolve({ read: () => Promise.resolve({ rows: [] }) }),
+    Promise.resolve({ page: () => Promise.resolve({ rows: [] }) }),
 }));
 
 const getLocalStorageUsage =

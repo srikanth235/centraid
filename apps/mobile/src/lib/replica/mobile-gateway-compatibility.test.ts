@@ -29,22 +29,23 @@ const base = {
 };
 
 describe("mobile gateway compatibility", () => {
-  test("admits only a gateway advertising both issue-628 contracts", () => {
+  test("admits only a gateway that serves the seat doors (#996 F1)", () => {
     expect(
       supportsMobileOfflineGateway({
         capabilities: {
           ...base,
-          multiVaultReplica: true,
-          crossVaultPlacements: true,
+          seatReplica: true,
         },
       })
     ).toBe(true);
     expect(supportsMobileOfflineGateway({ capabilities: { ...base } })).toBe(
       false
     );
+    // A present-but-false flag is a gateway that HAS the doors and has them
+    // switched off — the same wall, and not a malformed map.
     expect(
       supportsMobileOfflineGateway({
-        capabilities: { ...base, multiVaultReplica: true },
+        capabilities: { ...base, seatReplica: false },
       })
     ).toBe(false);
   });
@@ -55,8 +56,7 @@ describe("mobile gateway compatibility", () => {
   test("reads the experimental feature flags off the same capability map", () => {
     const supported = {
       ...base,
-      multiVaultReplica: true,
-      crossVaultPlacements: true,
+      seatReplica: true,
     };
     expect(
       readMobileGatewayFeatures({ capabilities: supported })
@@ -86,7 +86,7 @@ describe("mobile gateway compatibility", () => {
     expect(MOBILE_COMPATIBILITY_WALL_COPY["update-gateway"].title).toMatch(
       /Update the gateway/u
     );
-    expect(MOBILE_GATEWAY_UPDATE_MESSAGE).toMatch(/multi-vault offline sync/u);
+    expect(MOBILE_GATEWAY_UPDATE_MESSAGE).toMatch(/serves the whole vault/u);
     expect(MOBILE_APP_UPDATE_MESSAGE).toMatch(/App Store or Google Play/u);
     expect(MOBILE_COMPATIBILITY_WALL_COPY["update-app"].action).toMatch(
       /retry/iu

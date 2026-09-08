@@ -6,6 +6,7 @@
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
 interface NoteRow {
@@ -71,23 +72,31 @@ function checkOf(body: string): { total: number; done: number } {
 export default async function journalHandler({ input, ctx }: HandlerArgs) {
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    const journalNoteIds = await readJournalNoteIds(ctx.vault);
+    const journalNoteIds = await readJournalNoteIds(ctx);
     if (journalNoteIds.size === 0)
       return { entries: [], truncated: false, window };
 
-    const ids = [...journalNoteIds];
-    const notes = await ctx.vault.read({
-      entity: "knowledge.note",
-      where: [
-        { column: "note_id", op: "in", value: ids },
-        { column: "deleted_at", op: "is-null" }, // live rows, not the library's trash shelf
-      ],
-      orderBy: { column: "updated_at", dir: "desc" },
+    const journalIn = inList("note_id", [...journalNoteIds]);
+    const notes = await ctx.vault.page<NoteRow>({
+      query: {
+        name: "notes.journal.entries",
+        select:
+          "note_id, title, format, body_content_id, created_at, updated_at, deleted_at",
+        from: "knowledge_note",
+        // live rows, not the library's trash shelf
+        where: `${journalIn.sql} AND deleted_at IS NULL`,
+        bind: journalIn.bind,
+        order: {
+          sortColumn: "updated_at",
+          pkColumn: "note_id",
+          descending: true,
+        },
+      },
       limit: window,
     });
     // INCLUDE-ONLY is this query's whole contract: re-narrow in memory so an
     // over-wide read cannot put a non-journal note in the Journal place.
-    const rows = ((notes.rows ?? []) as unknown as NoteRow[]).filter(
+    const rows = notes.rows.filter(
       (note) => journalNoteIds.has(note.note_id) && note.deleted_at == null
     );
     if (rows.length === 0) return { entries: [], truncated: false, window };
@@ -95,19 +104,24 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
     const contentIds = [
       ...new Set(rows.map((note) => note.body_content_id)),
     ].filter((id): id is string => Boolean(id));
-    const contents =
-      contentIds.length > 0
-        ? await ctx.vault.read({
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
-            limit: contentIds.length,
-          })
-        : { rows: [] };
+    const contentIn =
+      contentIds.length > 0 ? inList("content_id", contentIds) : null;
+    const contents = contentIn
+      ? await readPages<ContentRow>(ctx, {
+          name: "notes.journal.bodies",
+          select: "content_id, content_uri",
+          from: "core_content_item",
+          where: contentIn.sql,
+          bind: contentIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
+        })
+      : [];
     const uriById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((content) => [
-        content.content_id,
-        content.content_uri,
-      ])
+      contents.map((content) => [content.content_id, content.content_uri])
     );
 
     return {
@@ -124,8 +138,8 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
           check: checkOf(body),
         };
       }),
-      // A full slice means there is more behind it.
-      truncated: ((notes.rows ?? []) as unknown[]).length >= window,
+      // The page's own cursor, not a guess off the row count (#996 wave 4).
+      truncated: notes.next !== undefined,
       window,
     };
   } catch (error) {

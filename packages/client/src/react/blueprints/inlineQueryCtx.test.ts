@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  attachPendingSidecar,
   PENDING_OVERLAY_FIELDS,
   pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
+import searchQuery from "@centraid/blueprints/apps/tasks/queries/search";
 import { seededRandom } from "@centraid/test-kit/random";
 
 import { OnlineOnlyGuard } from "../../replica/errors.js";
-import type { ShellReplicaReadRequest } from "../../replica/shell-session.js";
 import type {
-  ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "../../replica/types.js";
@@ -55,33 +56,45 @@ const OPEN_TASKS = [
   },
 ];
 
-/** A replica-session double: seeded open tasks; everything else empty. */
+/**
+ * A replica-session double: seeded open tasks; everything else empty.
+ *
+ * It answers PAGES now (#996 wave 4). The board's reads are statements-as-data
+ * through `ctx.vault.page`, keyed by the handler name the statement carries, so
+ * a double that only knew `read` would leave the board on the online-only stub
+ * — which is the one thing this test exists to prove does not happen.
+ */
 function seededSession(
   overrides?: Partial<InlineReplicaSession>
 ): InlineReplicaSession {
   return {
-    async read(
-      _appId: string,
-      request: ShellReplicaReadRequest
-    ): Promise<ReplicaReadWireResult> {
-      const statusClause = (request.where ?? []).find(
-        (clause) => clause.column === "status"
-      );
-      const statusValue = statusClause?.value;
-      const wantsOpen =
-        request.entity === "schedule.task" &&
-        Array.isArray(statusValue) &&
-        (statusValue as string[]).includes("needs-action");
-      return {
-        rows: wantsOpen ? OPEN_TASKS.map((task) => envelope(task)) : [],
-        cursor,
-        dependency,
-      };
-    },
+    page: (async (query: { name: string }) => ({
+      rows: query.name === "tasks.board.open" ? OPEN_TASKS : [],
+    })) as unknown as NonNullable<InlineReplicaSession["page"]>,
     async search(): Promise<ReplicaSearchWireResult> {
       return { rows: [], cursor, dependency };
     },
     ...overrides,
+  };
+}
+
+/** A page door whose rows are whatever the test says, with their sidecar. */
+function pageDoor(
+  rowsFor: (name: string) => Array<Record<string, unknown>>,
+  sidecar: PendingOverlaySidecar
+): NonNullable<InlineReplicaSession["page"]> {
+  return (async (query: { name: string }) => ({
+    rows: rowsFor(query.name).map((row) => attachPendingSidecar(row, sidecar)),
+  })) as unknown as NonNullable<InlineReplicaSession["page"]>;
+}
+
+/** The one field of a `PageQuery` these tests need: the handler's key. */
+function pageQuery(name: string, pkColumn: string): unknown {
+  return {
+    name,
+    select: "*",
+    from: name,
+    order: { sortColumn: pkColumn, pkColumn, direction: "asc" },
   };
 }
 
@@ -149,8 +162,13 @@ describe("inlineQueryCtx", () => {
   });
 
   it("marks the online-only guard when a query reads an undisclosed field", async () => {
+    // THE BOARD NO LONGER PROVES THIS, AND THAT IS THE POINT (#996 wave 4, R8).
+    // Its rows come off the seat's own file with every column present, so
+    // there is nothing on that path for the mask to withhold. The guard is
+    // still exactly as live for a handler that READS, and Tasks' search is one:
+    // the ranked hits arrive as envelopes, and the handler touches `.title`.
     const undisclosed = seededSession({
-      async read(): Promise<ReplicaReadWireResult> {
+      async search(): Promise<ReplicaSearchWireResult> {
         return {
           rows: [
             envelope(
@@ -163,61 +181,53 @@ describe("inlineQueryCtx", () => {
         };
       },
     });
-    // board reads `.title`/`.due_at` which are undisclosed here → guard fires →
-    // runInlineQuery rejects with the fallback code.
     await expect(
       runInlineQuery(
-        { default: boardQuery },
-        { session: undisclosed, appId: "tasks", input: {} }
+        { default: searchQuery },
+        { session: undisclosed, appId: "tasks", input: { term: "ferry" } }
       )
     ).rejects.toMatchObject({ code: "ONLINE_ONLY" });
   });
 
   it("carries shell-owned pending metadata through an app's decorated row", async () => {
+    // #922 G3, on the page door (#996 W5): the seat's worker drew the outbox
+    // over these rows, so the key is ON the row and the facts ride the
+    // sidecar the page carried — the app copies neither by hand.
     const pendingSession = seededSession({
-      async read(): Promise<ReplicaReadWireResult> {
-        return {
-          rows: [
-            {
-              rowId: "party-pending",
-              values: {
-                party_id: "party-pending",
-                display_name: "Asha",
-                [PENDING_OVERLAY_FIELDS.key]: "intent-person",
-              },
-              oversizedFields: [],
-              hasUnavailableFields: false,
-            },
-          ],
-          cursor,
-          dependency,
-          pending: {
-            "intent-person": {
-              status: "conflict",
-              action: "edit-person",
-              reason: "The person changed.",
-            },
+      page: pageDoor(
+        () => [
+          {
+            party_id: "party-pending",
+            display_name: "Asha",
+            [PENDING_OVERLAY_FIELDS.key]: "intent-person",
           },
-        };
-      },
+        ],
+        {
+          "intent-person": {
+            status: "conflict",
+            action: "edit-person",
+            reason: "The person changed.",
+          },
+        }
+      ),
     });
     const result = (await runInlineQuery(
       {
         default: async ({ ctx }: { ctx: unknown }) => {
           const local = ctx as {
             vault: {
-              read: (request: {
-                entity: string;
-                acceptTruncation?: boolean;
+              page: (request: {
+                query: unknown;
+                limit: number;
               }) => Promise<{ rows: Record<string, unknown>[] }>;
             };
           };
-          const read = await local.vault.read({
-            entity: "schedule.task",
-            acceptTruncation: true,
+          const page = await local.vault.page({
+            query: pageQuery("people.roster", "party_id"),
+            limit: 50,
           });
           return {
-            people: read.rows.map((row) => ({
+            people: page.rows.map((row) => ({
               party_id: row.party_id,
               name: row.display_name,
             })),
@@ -238,7 +248,7 @@ describe("inlineQueryCtx", () => {
       [PENDING_OVERLAY_FIELDS.key]: "intent-person",
       __centraidScopeId: "family-vault",
     });
-    // The facts ride the read's sidecar, carried with the row (#922 G3).
+    // The facts ride the page's sidecar, carried with the row (#922 G3).
     expect(readPendingOverlay(person, pendingSidecarOf(person))).toMatchObject({
       key: "intent-person",
       status: "conflict",
@@ -256,43 +266,29 @@ describe("inlineQueryCtx", () => {
     const taskId = "1f2e3d4c-0000-8000-8000-00000000000a";
     const projectId = "1f2e3d4c-0000-8000-8000-00000000000b";
     const pendingSession = seededSession({
-      async read(
-        _appId: string,
-        request: ShellReplicaReadRequest
-      ): Promise<ReplicaReadWireResult> {
-        const row: ReplicaRowEnvelope =
-          request.entity === "schedule.project"
-            ? {
-                rowId: projectId,
-                values: {
+      page: pageDoor(
+        (name) =>
+          name === "tasks.projects"
+            ? [
+                {
                   project_id: projectId,
                   name: "Pending project",
                   [PENDING_OVERLAY_FIELDS.key]: "intent-project",
                 },
-                oversizedFields: [],
-                hasUnavailableFields: false,
-              }
-            : {
-                rowId: taskId,
-                values: {
+              ]
+            : [
+                {
                   task_id: taskId,
                   project_id: projectId,
                   title: "Child task",
                   [PENDING_OVERLAY_FIELDS.key]: "intent-task",
                 },
-                oversizedFields: [],
-                hasUnavailableFields: false,
-              };
-        return {
-          rows: [row],
-          cursor,
-          dependency,
-          pending: {
-            "intent-project": { status: "queued", action: "save-project" },
-            "intent-task": { status: "failed", action: "add" },
-          },
-        };
-      },
+              ],
+        {
+          "intent-project": { status: "queued", action: "save-project" },
+          "intent-task": { status: "failed", action: "add" },
+        }
+      ),
     });
 
     const result = (await runInlineQuery(
@@ -300,19 +296,20 @@ describe("inlineQueryCtx", () => {
         default: async ({ ctx }: { ctx: unknown }) => {
           const local = ctx as {
             vault: {
-              read: (
-                request: ShellReplicaReadRequest
-              ) => Promise<{ rows: Record<string, unknown>[] }>;
+              page: (request: {
+                query: unknown;
+                limit: number;
+              }) => Promise<{ rows: Record<string, unknown>[] }>;
             };
           };
           const [tasks, projects] = await Promise.all([
-            local.vault.read({
-              entity: "schedule.task",
-              acceptTruncation: true,
+            local.vault.page({
+              query: pageQuery("tasks.board", "task_id"),
+              limit: 50,
             }),
-            local.vault.read({
-              entity: "schedule.project",
-              acceptTruncation: true,
+            local.vault.page({
+              query: pageQuery("tasks.projects", "project_id"),
+              limit: 50,
             }),
           ]);
           const task = tasks.rows[0]!;

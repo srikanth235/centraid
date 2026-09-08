@@ -57,13 +57,19 @@ export function permitGateTitle(fieldLabel: string): string {
     : `Reveal the ${fieldLabel.toLowerCase()}?`;
 }
 
-/** The lock screen's sentence about what a session is. */
+/** The lock screen's sentence about what a session is, and where it is opened. */
 export const LOCK_BODY =
-  "Five minutes of inactivity, hidden windows and a restart all end a session.";
+  "Unlock Locker here to read a secret; inactivity, hidden windows and a restart all end the session.";
 
-/** The first-run gate's sentence. */
-export const SETUP_BODY =
-  "Twelve characters at least, the only way in that cannot be revoked, and nothing here is browsable until it exists.";
+/** A host with no Locker door at all — an older shell, or a surface that
+ *  cannot unseal locally. A different fact from "locked", and only one of the
+ *  two is fixed by unlocking. */
+export const LOCK_UNAVAILABLE_BODY =
+  "This device cannot open secrets. Titles, addresses and usernames are still here; the values need a device that holds this vault's key.";
+
+/** A reveal asked for on a host that offers no Locker door. */
+export const REVEAL_NO_DOOR =
+  "This device cannot open secrets — it does not hold this vault’s key.";
 
 /** What Search does not search, and why it is a design rather than an omission. */
 export const SEARCH_NOTE =
@@ -152,31 +158,18 @@ export const COPY = "Copy";
 export const SHOW_CODE = "Show the code";
 
 /** The permit gate's own controls. */
-export const PERMIT_CONFIRM = "Confirm";
-export const PERMIT_CANCEL = "Cancel";
+/** The one confirm's way out. */
+export const CONFIRM_CANCEL = "Cancel";
 
 /** The window's foot. */
 export const SHOW_MORE = "Show more";
-
-/** The lock screen's controls. */
-export const UNLOCK = "Unlock";
-export const CREATE_PASSPHRASE = "Create it";
-export const SETUP_PLACEHOLDER = "At least 12 characters";
-export const LOCK_PLACEHOLDER = "Passphrase";
-
-/** The setup gate's own rule, enforced before the write leaves the field. */
-export const PASSPHRASE_MINIMUM = 12;
-export const PASSPHRASE_TOO_SHORT = "Twelve characters at least.";
 
 /** The lock screen's facts table (README-Locker §2, drawn as the design does). */
 export const LOCK_FACTS: readonly (readonly [string, string])[] = [
   ["Session", "5 minutes, sliding · memory only"],
   ["On hiding", "locks at once · revealed values wiped, clipboard cleared"],
-  ["Per item", "a fresh confirmation, one shot, about 30 seconds"],
-  [
-    "Failures",
-    "rate limited, backing off · the receipt records the refusal too",
-  ],
+  ["Per item", "one receipt per value revealed · about 30 seconds on screen"],
+  ["Where", "on this device, with this vault’s key · never on the gateway"],
   ["Recovery", "the vault’s, not Locker’s · it lives in Settings"],
 ];
 
@@ -337,7 +330,6 @@ export const ROUTE_TITLE = {
   export: "Export",
   fill: "Companion",
   lock: "Locker",
-  setup: "Locker",
 } as const;
 
 /** Each route's ambient status sentence — the one line, never a second. */
@@ -357,12 +349,11 @@ export const ROUTE_STATUS: Readonly<Record<string, string>> = {
   trash: "Restores are lossless · purge is irreversible and confirmed",
   export: "Plaintext · the warning is the design",
   fill: "Origin-matched, https only, secret-free until the fill",
-  lock: "The app boots locked and locks when hidden · the session is five minutes, in memory only",
-  setup: "Nothing is browsable until there is a passphrase",
+  lock: "The app boots locked and locks when hidden · unlock Locker in Centraid, where this vault’s key lives",
 };
 
 /**
- * The word a permit gate uses for the field it is being asked about. One table,
+ * The word the app uses for the field being revealed. One table,
  * so the gate's question, the sealed row's key column and the copy outcome all
  * name the same field the same way — a gate that said "Reveal the content?"
  * over a row labelled "Note" would be asking about something else.

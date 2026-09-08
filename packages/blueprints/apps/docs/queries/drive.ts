@@ -15,14 +15,19 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   readCustodyByContent,
   readLabelsByDocument,
-  readOriginsByDocument,
   readSharesByDocument,
 } from "./_shared.ts";
 import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
+import { readOriginsByDocument } from "./document-origins.ts";
 
 const DOCUMENT_TARGET_TYPE = "core.document";
 
@@ -37,7 +42,6 @@ interface DocumentRow {
 }
 interface ContentRow {
   content_id: string;
-  media_type?: string | null;
   byte_size?: number | null;
   content_uri?: string | null;
 }
@@ -46,11 +50,9 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Owner-curated and small, so unbounded; they bound the rest.
-    const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault)
-    );
-    const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
-    const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
+    const [concepts, schemes] = await Promise.all(conceptTaxonomyReads(ctx));
+    const conceptRows = concepts as unknown as ConceptRow[];
+    const schemeRows = schemes as unknown as SchemeRow[];
 
     const scheme = findScheme(schemeRows, FOLDER_SCHEME_URI);
     const schemeConcepts = conceptsInScheme(conceptRows, scheme);
@@ -83,19 +85,30 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
 
     // An `in` filter with an empty array throws; no scheme, no filed documents.
     const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
-    const tags =
+    // THE DRIVE'S WINDOW IS A PAGE (#996 wave 4, R8). This is the read that
+    // DISCOVERS the rows; everything below joins over what it returned.
+    const conceptIn =
       folderConceptIds.length === 0
-        ? { rows: [] as Record<string, unknown>[] }
-        : await ctx.vault.read({
-            entity: "core.tag",
-            where: [
-              { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
-              { column: "concept_id", op: "in", value: folderConceptIds },
-            ],
-            orderBy: { column: "tagged_at", dir: "desc" },
-            limit: window,
-          });
-    const tagRows = (tags.rows ?? []) as unknown as TagRow[];
+        ? null
+        : inList("concept_id", folderConceptIds);
+    const tagPage = conceptIn
+      ? await ctx.vault.page<TagRow>({
+          query: {
+            name: "docs.drive.filed",
+            select: "tag_id, target_id, concept_id, target_type, tagged_at",
+            from: "core_tag",
+            where: `target_type = ? AND ${conceptIn.sql}`,
+            bind: [DOCUMENT_TARGET_TYPE, ...conceptIn.bind],
+            order: {
+              sortColumn: "tagged_at",
+              pkColumn: "tag_id",
+              descending: true,
+            },
+          },
+          limit: window,
+        })
+      : { rows: [] as TagRow[] };
+    const tagRows = tagPage.rows;
 
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
@@ -123,65 +136,82 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
 
     // A share denial returns `null`, not an error: the drive still answers
     // while those scopes park for approval (#821).
-    const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.document",
-        where: [{ column: "document_id", op: "in", value: windowedIds }],
-      }),
-      starredConcept
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.tag",
-            where: [
-              {
-                column: "concept_id",
-                op: "eq",
-                value: starredConcept.concept_id,
+    const windowedIn = inList("document_id", windowedIds);
+    const starredIn = inList("target_id", windowedIds);
+    const [documentRows, starTagRows, tagsByDoc, sharesByDoc] =
+      await Promise.all([
+        // Bounded by the window's own ids, and walked to the end of that set.
+        readPages<DocumentRow>(ctx, {
+          name: "docs.drive.documents",
+          select:
+            "document_id, current_content_id, title, created_at, updated_at, deleted_at, purge_at",
+          from: "core_document",
+          where: windowedIn.sql,
+          bind: windowedIn.bind,
+          order: {
+            sortColumn: "document_id",
+            pkColumn: "document_id",
+            descending: false,
+          },
+        }),
+        starredConcept
+          ? readPages<TagRow>(ctx, {
+              name: "docs.drive.starred",
+              select: "tag_id, target_id, concept_id",
+              from: "core_tag",
+              where: `concept_id = ? AND target_type = ? AND ${starredIn.sql}`,
+              bind: [
+                starredConcept.concept_id,
+                DOCUMENT_TARGET_TYPE,
+                ...starredIn.bind,
+              ],
+              order: {
+                sortColumn: "tag_id",
+                pkColumn: "tag_id",
+                descending: false,
               },
-              { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
-              { column: "target_id", op: "in", value: windowedIds },
-            ],
-          })
-        : { rows: [] as Record<string, unknown>[] },
-      readLabelsByDocument({
-        ctx,
-        documentIds: windowedIds,
-        schemes: schemeRows,
-        concepts: conceptRows,
-      }),
-      readSharesByDocument({
-        ctx,
-        documentIds: windowedIds,
-        folderByDoc,
-        folderConcepts: schemeConcepts,
-      }),
-    ]);
-    const starredIds = new Set(
-      ((starTags.rows ?? []) as unknown as TagRow[]).map((t) => t.target_id)
-    );
+            })
+          : Promise.resolve([] as TagRow[]),
+        readLabelsByDocument({
+          ctx,
+          documentIds: windowedIds,
+          schemes: schemeRows,
+          concepts: conceptRows,
+        }),
+        readSharesByDocument({
+          ctx,
+          documentIds: windowedIds,
+          folderByDoc,
+          folderConcepts: schemeConcepts,
+        }),
+      ]);
+    const starredIds = new Set(starTagRows.map((t) => t.target_id));
 
     // Bounded by the wrappers' current_content_id set (#352).
-    const documentRows = (documentsRes.rows ?? []) as unknown as DocumentRow[];
     const contentIds = [
       ...new Set(documentRows.map((d) => d.current_content_id)),
     ];
-    const [contents, custodyByContent] = await Promise.all([
+    const [contentRows, custodyByContent, representations] = await Promise.all([
       contentIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
+        ? readPages<ContentRow>(ctx, {
+            name: "docs.drive.contents",
+            select: "content_id, byte_size, content_uri",
+            from: "core_content_item",
+            where: inList("content_id", contentIds).sql,
+            bind: inList("content_id", contentIds).bind,
+            order: {
+              sortColumn: "content_id",
+              pkColumn: "content_id",
+              descending: false,
+            },
           })
-        : { rows: [] as Record<string, unknown>[] },
+        : Promise.resolve([] as ContentRow[]),
       readCustodyByContent({ ctx, contentIds }),
+      // The byte row carries no media type since #996 (R20(b)) — THIS
+      // document's representation says what it reads those bytes as.
+      readRepresentations({ ctx, contentIds }),
     ]);
-    const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
-        c.content_id,
-        c,
-      ])
-    );
+    const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
 
     // Blob bytes (#296) serve as same-origin URLs so Range and caching work;
     // data: URIs pass through.
@@ -202,7 +232,10 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           document_id: d.document_id,
           content_id: d.current_content_id,
           title: d.title,
-          media_type: c?.media_type ?? null,
+          media_type:
+            representations.byOwner.get(
+              ownerKey(DOCUMENT_TARGET_TYPE, d.document_id)
+            ) ?? null,
           byte_size: c?.byte_size ?? null,
           content_uri: srcOf(c),
           poster_uri: posterOf(c),
@@ -229,8 +262,10 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         String(b.created_at).localeCompare(String(a.created_at))
       );
 
-    // A full window means older documents may lie beyond.
-    const truncated = tagRows.length >= window;
+    // THE PAGE ANSWERS THIS, NOT A GUESS AT IT (#996 wave 4). `length >= window`
+    // cannot tell a window that filled exactly from one that ran out; a cursor
+    // exists or it does not, and it is also where to carry on from.
+    const truncated = "next" in tagPage && tagPage.next !== undefined;
     return {
       folders,
       documents,

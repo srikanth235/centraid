@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import {
@@ -11,7 +11,7 @@ import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
 import Tappable from "../kit/components/Tappable";
 import TopSafeArea from "../kit/components/TopSafeArea";
-import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
+import { useSeatPages } from "../kit/hooks/useSeatPages";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -22,6 +22,11 @@ import type { ThemeColors } from "../kit/theme";
 import { authHeader } from "../lib/gateway";
 import type { NativeWriteResult } from "../lib/replica/native-session";
 import type { CaptureScreenProps } from "../navigation";
+import {
+  CAPTURE_CALENDARS,
+  CAPTURE_GROUPS,
+  CAPTURE_VAULT,
+} from "./capture-queries";
 
 const KINDS: CaptureKind[] = ["task", "expense", "note", "event"];
 
@@ -39,18 +44,18 @@ export default function CaptureScreen({
   const [busy, setBusy] = useState(false);
   const [calendarId, setCalendarId] = useState("");
   const [groupId, setGroupId] = useState("");
-  const calendars = useReplicaQuery(
-    "agenda",
-    useMemo(() => ({ acceptTruncation: true, entity: "schedule.calendar" }), [])
-  );
-  const groups = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ acceptTruncation: true, entity: "tally.group" }), [])
-  );
-  const vault = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.vault" }), [])
-  );
+  const calendars = useSeatPages("agenda", CAPTURE_CALENDARS, {
+    entity: "schedule.calendar",
+    rowIdColumn: "calendar_id",
+  });
+  const groups = useSeatPages("tally", CAPTURE_GROUPS, {
+    entity: "tally.group",
+    rowIdColumn: "group_id",
+  });
+  const vault = useSeatPages("tally", CAPTURE_VAULT, {
+    entity: "core.vault",
+    rowIdColumn: "vault_id",
+  });
 
   const classify = async (): Promise<void> => {
     if (!text.trim()) return;

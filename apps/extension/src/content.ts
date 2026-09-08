@@ -56,13 +56,12 @@ function installCompanion(): void {
     const status = await send<{
       paired: boolean;
       locked: boolean;
-      pairing?: { grantProfile?: readonly string[] };
+      pairing?: { modules?: readonly string[] };
     }>({ type: "status" }).catch(() => undefined);
     if (
       !status?.paired ||
       status.locked ||
-      (status.pairing?.grantProfile &&
-        !status.pairing.grantProfile.includes("locker"))
+      (status.pairing?.modules && !status.pairing.modules.includes("locker"))
     ) {
       remove();
       return;

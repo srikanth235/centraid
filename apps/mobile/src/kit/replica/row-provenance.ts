@@ -1,13 +1,16 @@
-// What a mounted row says about its own source (#880).
+// What a row says about its own source (#880, narrowed by #996 wave 3).
 //
-// AN UNSTAMPED ROW IS WRITABLE: a single-vault replica, a locally projected
-// pending row and a test fixture carry no provenance at all, and a missing
-// stamp is not a refusal.
+// AN UNSTAMPED ROW IS WRITABLE: a locally projected pending row and a test
+// fixture carry no stamp at all, and a missing stamp is not a refusal.
+//
+// The stamp used to be composed by the mounted reader across four attached
+// databases; a seat opens ONE file, so the session stamps its own vault's
+// answer on every row it returns (`lib/replica/vault-source.ts`).
 
 import {
   REPLICA_CAN_WRITE,
-  REPLICA_SCOPE_LABELS,
-} from "../../lib/replica/multi-vault-provenance";
+  REPLICA_SCOPE_LABEL,
+} from "../../lib/replica/vault-source";
 
 /** The ONE sentence for this truth on the phone, read by five apps. */
 export const READ_ONLY_SOURCE_REASON =
@@ -19,12 +22,16 @@ export function rowCanWrite(row: object | undefined | null): boolean {
   return row ? fieldOf(row, REPLICA_CAN_WRITE) !== false : true;
 }
 
-/** Every source carrying the row, for a DETAIL surface's source line. */
+/**
+ * The source carrying the row, for a DETAIL surface's source line.
+ *
+ * Still a LIST, and still called `labels`, because a detail surface renders a
+ * set and a one-element set is a set. It cannot hold two now — a seat opens
+ * one file — but the shape is the one every caller already draws.
+ */
 export function rowScopeLabels(row: object | undefined | null): string[] {
-  const labels = row ? fieldOf(row, REPLICA_SCOPE_LABELS) : undefined;
-  return Array.isArray(labels)
-    ? labels.filter((entry): entry is string => typeof entry === "string")
-    : [];
+  const label = row ? fieldOf(row, REPLICA_SCOPE_LABEL) : undefined;
+  return typeof label === "string" && label.length > 0 ? [label] : [];
 }
 
 function fieldOf(row: object, field: string): unknown {

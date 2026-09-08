@@ -22,7 +22,7 @@ import { SEALED_RUN } from "@centraid/blueprints/apps/locker/item-fields";
 import {
   concealsInSeconds,
   revealedForSeconds,
-} from "@centraid/blueprints/apps/locker/permits";
+} from "@centraid/blueprints/apps/locker/reveal";
 import { strength, useTotp } from "@centraid/blueprints/apps/locker/totp";
 import {
   CONCEAL,

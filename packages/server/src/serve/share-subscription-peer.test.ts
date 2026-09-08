@@ -194,7 +194,6 @@ describe("a share is a subscription, across two gateways", () => {
     expect(result.steps[0]).toMatchObject({
       state: "delivered",
       route: "loopback",
-      apply: "bootstrap",
     });
     expect(held(audience, { table: "media_asset", column: "" })).toBe(1);
     // Nothing is left for the sweep: the loopback settled in this pass.

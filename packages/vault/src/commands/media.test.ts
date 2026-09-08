@@ -151,8 +151,9 @@ describe("media", () => {
       title: "Christmas morning",
     });
     expect(outcome.status).toBe("executed");
+    // The AUTHORED title is the asset's since #996 (R20(b)).
     const content = db.vault
-      .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
+      .prepare("SELECT title FROM media_asset WHERE content_id = ?")
       .get(content_id) as { title: string };
     expect(content.title).toBe("Christmas morning");
   });

@@ -7,6 +7,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { queueMissingDeviceEnrichmentRequests } from "../enrich/leases.js";
+import { mediaTypeForContent } from "../schema/representation.js";
 import {
   isBinaryDerivative,
   validateDerivativeContribution,
@@ -27,12 +28,18 @@ export interface PromoteDeps {
 
 export interface PromotedContent {
   contentId: string;
+  /** What the STAGING BAND read these bytes as on this arrival (#996 R20(b)). */
   mediaType: string;
+  /** The uploaded filename, when the staging row carried one. */
+  originalName: string | null;
   byteSize: number;
   meta: BlobMeta;
   /** 1 when the sha already had a live content item (restore/dedup). */
   deduped: 0 | 1;
 }
+
+/** The RFC 6838 answer for bytes nothing described. */
+const DEFAULT_MEDIA_TYPE = "application/octet-stream";
 
 /**
  * Claim one staged sha into a canonical content item. Idempotent over dedup:
@@ -44,8 +51,7 @@ export interface PromotedContent {
  */
 export function promoteStagedBlob(
   deps: PromoteDeps,
-  sha256: string,
-  options: { title?: string } = {}
+  sha256: string
 ): PromotedContent {
   const { vault } = deps;
   const staged = vault
@@ -62,12 +68,11 @@ export function promoteStagedBlob(
     | undefined;
   const existing = vault
     .prepare(
-      "SELECT content_id, media_type, byte_size, deleted_at FROM core_content_item WHERE sha256 = ?"
+      "SELECT content_id, byte_size, deleted_at FROM core_content_item WHERE sha256 = ?"
     )
     .get(sha256) as
     | {
         content_id: string;
-        media_type: string;
         byte_size: number;
         deleted_at: string | null;
       }
@@ -81,13 +86,16 @@ export function promoteStagedBlob(
   const meta: BlobMeta = staged
     ? (JSON.parse(staged.meta_json) as BlobMeta)
     : {};
+  // WHAT THE UPLOAD SAID, not what the deduped row once said (#996, ruling
+  // R20(b)): the staging band sniffed THESE bytes on THIS arrival, and the
+  // claiming command puts the answer on its own representation. Re-claiming
+  // known bytes with nothing staged means the claimer supplies the reading.
   let contentId: string;
-  let mediaType: string;
+  const mediaType = staged?.media_type ?? null;
   let byteSize: number;
   let deduped: 0 | 1;
   if (existing) {
     contentId = existing.content_id;
-    mediaType = existing.media_type;
     byteSize = existing.byte_size;
     deduped = 1;
     if (existing.deleted_at !== null) {
@@ -98,29 +106,21 @@ export function promoteStagedBlob(
         .run(contentId);
       deps.wrote("core.content_item", contentId);
     }
-    if (options.title) {
-      vault
-        .prepare("UPDATE core_content_item SET title = ? WHERE content_id = ?")
-        .run(options.title, contentId);
-    }
   } else {
     contentId = deps.newId();
-    mediaType = staged!.media_type;
     byteSize = staged!.byte_size;
     deduped = 0;
     vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
+           (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+         VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
       )
       .run(
         contentId,
-        mediaType,
         blobUriFor(sha256),
         sha256,
         byteSize,
-        options.title ?? staged!.original_name ?? null,
         deps.creatorPartyId,
         deps.now
       );
@@ -128,10 +128,12 @@ export function promoteStagedBlob(
   }
 
   promoteVariants(deps, sha256, contentId, meta);
+  const resolved =
+    mediaType ?? mediaTypeForContent(vault, contentId) ?? DEFAULT_MEDIA_TYPE;
   for (const requestId of queueMissingDeviceEnrichmentRequests(vault, {
     contentId,
     sha256,
-    mediaType,
+    mediaType: resolved,
     newId: () => deps.newId(),
     requestedAt: deps.now,
   })) {
@@ -140,7 +142,14 @@ export function promoteStagedBlob(
   vault
     .prepare("DELETE FROM blob_staging WHERE sha256 = ? AND variant IS NULL")
     .run(sha256);
-  return { contentId, mediaType, byteSize, meta, deduped };
+  return {
+    contentId,
+    mediaType: resolved,
+    originalName: staged?.original_name ?? null,
+    byteSize,
+    meta,
+    deduped,
+  };
 }
 
 /** Staged derivatives + extracted text → core_content_derivative rows. */

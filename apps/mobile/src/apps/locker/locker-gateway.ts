@@ -1,10 +1,12 @@
-// THE SECRET HALF'S ONLY DOOR, and it is the gateway's — never the replica's.
+// THE ONLINE HALF'S DOOR, and it is the gateway's — never the replica's.
 //
-// A passphrase, a memory-session token, a one-shot permit and a revealed field
-// are the four things this seat must never hand a durable store
+// A revealed field is the one thing this seat must never hand a durable store
 // (docs/mobile-offline.md, "Locker is stricter than the ordinary replica
 // plane"), so every call here is a direct online request with no queue behind
-// it. The browsable half does NOT come through this file: the list, the
+// it. The passphrase, the session token and the one-shot permit that used to
+// be three more are GONE (#996, ruling W6-D2): the boundary is the OS prompt
+// over `K` and the unseal happens in `locker-door.ts`, on this device, with
+// the radio off if need be. The browsable half does NOT come through this file: the list, the
 // shelves and the search are the app grant's to read and run against this
 // device's own replica in `locker-reads.ts` (#928). The metadata writes —
 // star, tags, trash, restore — go through the replica's pending path, in
@@ -20,7 +22,6 @@ import type {
   StagedRow,
 } from "@centraid/blueprints/apps/locker/import-model";
 import type {
-  AuthPayload,
   LockerAccessEntry,
   LockerDetail,
 } from "@centraid/blueprints/apps/locker/types";
@@ -39,42 +40,35 @@ export interface ItemPayload {
   vaultDenied?: VaultDenial | null;
 }
 
-export type AuthOperation =
-  | "status"
-  | "configure"
-  | "unlock"
-  | "authorize-item"
-  | "lock"
-  | "enroll-device"
-  | "revoke-device";
-
-export interface AuthRequest {
-  operation: AuthOperation;
-  sessionToken?: string;
-  secret?: string;
-  credentialId?: string;
-  itemId?: string;
-  label?: string;
+/**
+ * Open one item's browsable detail. NOT a secret-bearing read any more: the
+ * vault hands back metadata and ciphertext, and `locker-door.ts` turns the
+ * ciphertext into a value behind the OS prompt. There is no token to spend,
+ * which is what lets the pane paint while the Locker is locked.
+ */
+export function lockerItem(itemId: string): Promise<ItemPayload> {
+  return appQuery<ItemPayload>("locker", "item", { item_id: itemId });
 }
 
-/** The control plane. Passphrases are ARGUMENTS to this call and are never a
- *  field of anything this app holds afterwards. */
-export function lockerAuth(request: AuthRequest): Promise<AuthPayload> {
-  return appQuery<AuthPayload>("locker", "auth", {
-    ...request,
-  } as Record<string, unknown>);
-}
-
-/** The ONE secret-bearing read, and it takes a one-shot item token. */
-export function lockerItem(
-  sessionToken: string,
-  itemId: string,
-  itemToken: string
-): Promise<ItemPayload> {
-  return appQuery<ItemPayload>("locker", "item", {
-    auth_session: sessionToken,
-    item_id: itemId,
-    item_token: itemToken,
+/**
+ * THE REVEAL RECEIPT (#996, W6-D2) — the journal row `gateway.reveal` wrote,
+ * posted through the ordinary device-intent path now that the unseal is local.
+ *
+ * It is the ONLY record that anyone looked, so `locker-door.ts` awaits it
+ * before it hands a value to a screen. Offline it queues like any other device
+ * write: the reveal still happened, and the record catches up.
+ */
+export function lockerRevealReceipt(input: {
+  rowId: string;
+  entity: string;
+  columns: readonly string[];
+  keyId: string;
+}): Promise<{ receiptId?: string }> {
+  return appQuery<{ receiptId?: string }>("locker", "reveal-receipt", {
+    entity: input.entity,
+    entity_id: input.rowId,
+    columns: [...input.columns],
+    key_id: input.keyId,
   });
 }
 
@@ -99,13 +93,9 @@ export interface AccessPayload {
  * items and column NAMES, and `access-model.ts` projects them into lines.
  */
 export function lockerAccess(
-  sessionToken: string,
   limit: number = ACCESS_WINDOW
 ): Promise<AccessPayload> {
-  return appQuery<AccessPayload>("locker", "access", {
-    auth_session: sessionToken,
-    limit,
-  });
+  return appQuery<AccessPayload>("locker", "access", { limit });
 }
 
 // ─── The staged-import plane ────────────────────────────────────────────────

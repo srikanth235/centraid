@@ -44,8 +44,8 @@ describe("cache-headroom", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'image/jpeg', ?, ?, ?, ?)`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, ?, ?, ?, ?)`
       )
       .run(
         contentId,

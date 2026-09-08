@@ -6,10 +6,19 @@
 
 export const GATEWAY_VERSION = "0.1.0";
 
-export const GATEWAY_PROTOCOL_VERSION = 3;
+export const GATEWAY_PROTOCOL_VERSION = 4;
 
-/** Refuse peers outside the mutual window. v3 (#726) hard floor, no COMPAT shims. */
-export const GATEWAY_MIN_PROTOCOL_VERSION = 3;
+/**
+ * Refuse peers outside the mutual window. Hard floor, no COMPAT shims.
+ *
+ * v4 (#996 wave 3): `multiVaultReplica` and `crossVaultPlacements` LEAVE
+ * `GatewayCapabilities` in the same bump that deletes the mount plane they
+ * described. A capability map is a required-key structural contract, so
+ * dropping two required keys is a wire change either end would otherwise read
+ * as malformed — and the honest answer to a peer on the other side of it is
+ * the update wall, not a shim that pretends a deleted mechanism is present.
+ */
+export const GATEWAY_MIN_PROTOCOL_VERSION = 4;
 
 /*
  * v2 (#929): the peer plane carries replica subscriptions. Floor moves with the

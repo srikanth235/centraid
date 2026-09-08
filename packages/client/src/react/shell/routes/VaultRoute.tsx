@@ -13,6 +13,7 @@ import {
   publishRouteSignals,
   publishRouteVerbs,
 } from "../routeVitals.js";
+import { useSeatWatermark } from "../useSeatWatermark.js";
 import AtlasRoute from "./AtlasRoute.js";
 import HouseholdRoute from "./HouseholdRoute.js";
 
@@ -44,6 +45,10 @@ export default function VaultRoute({
   const { navigate } = useShellActions();
   const [census, setCensus] = useState<AtlasReport | null>(null);
   const [roster, setRoster] = useState<HouseholdReport | null>(null);
+  // THE SEAT (#996). The session owns it — one file, one applier — and this
+  // route only asks how current it is. `undefined` before the browser is
+  // paired, and then no seat is opened at all.
+  const seatWatermark = useSeatWatermark();
   const [closed, setClosed] = useState<Record<string, boolean>>(() => {
     const start = sectionsStartCollapsed();
     return { holds: start, lives: start, reach: start };
@@ -104,7 +109,7 @@ export default function VaultRoute({
           embedded
           collapsed={closed.lives === true}
           onReport={setRoster}
-          records={census?.records ?? null}
+          {...(seatWatermark === undefined ? {} : { seatWatermark })}
           onToggle={() => toggle("lives")}
         />
       </div>

@@ -78,6 +78,9 @@ async function ring(
     state?: string;
     apply?: string;
     fieldUpdates?: number;
+    entered?: number;
+    updated?: number;
+    left?: number;
     removed?: number;
     retained?: number;
     detail?: string;
@@ -98,6 +101,16 @@ async function ring(
       outcome: "delivered",
       apply: body.apply ?? "bootstrap",
       fieldUpdates: body.fieldUpdates ?? 0,
+    };
+  // The predicate transport's answer (#996, R10). The fulfilment vocabulary is
+  // untouched — a delivery is a delivery — and the work-counter reading is the
+  // rows the three outputs actually wrote rather than a re-projection's path.
+  if (body.state === "applied")
+    return {
+      outcome: "delivered",
+      apply: "fields" as const,
+      fieldUpdates:
+        (body.entered ?? 0) + (body.updated ?? 0) + (body.left ?? 0),
     };
   return {
     outcome: "unreachable",

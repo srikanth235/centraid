@@ -1,30 +1,32 @@
-// Body history is the append-only `revises` content-item chain, walked for the
-// selected note only. No command fabricates history.
+// Body history is the note's own REVISION OCCURRENCES (#996, R20(a)), walked
+// from `current_revision_id` through `parent_revision_id` for the selected note
+// only. No command fabricates history.
+//
+// It was a `revises` content-item chain — a second history mechanism beside the
+// table [#916] ruled the only one, keyed by content, so two notes with
+// identical bodies shared one history and a restore could not be told from the
+// edit it undid.
 
+import { inList, readById, readPages } from "../../_shared/paged-reads.ts";
 import {
-  RELATIONS_SCHEME_URI,
-  findSchemeConcept,
-} from "../../_shared/concept-scheme-kit.ts";
-import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
+import { noteVersionChain } from "../version-chain.ts";
 
-const REVISES_NOTATION = "revises";
 const MAX_CHAIN_STEPS = 500;
 
 interface NoteRow {
+  note_id: string;
   body_content_id: string;
+  current_revision_id?: string | null;
   created_at: string;
-}
-
-interface LinkRow {
-  to_id: string;
-  valid_from: string;
 }
 
 interface ContentRow {
   content_id: string;
   content_uri?: string | null;
-  media_type?: string | null;
   created_at?: string;
 }
 
@@ -32,77 +34,76 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
   const noteId = String(input?.note_id ?? "");
   if (!noteId) return { versions: [] };
   try {
-    const notes = await ctx.vault.read({
-      entity: "knowledge.note",
-      where: [{ column: "note_id", op: "eq", value: noteId }],
-      limit: 1,
-    });
-    const note = ((notes.rows ?? []) as unknown as NoteRow[])[0];
+    const note = await readById<NoteRow>(
+      ctx,
+      {
+        name: "notes.history.note",
+        select: "note_id, body_content_id, current_revision_id, created_at",
+        from: "knowledge_note",
+        idColumn: "note_id",
+      },
+      noteId
+    );
     if (!note) return { versions: [] };
 
-    const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault)
-    );
-    const relationId = findSchemeConcept(
-      schemes.rows as Array<{ scheme_id: string; uri: string }>,
-      concepts.rows as Array<{
-        concept_id: string;
-        scheme_id: string;
-        notation: string;
-      }>,
-      RELATIONS_SCHEME_URI,
-      REVISES_NOTATION
-    )?.concept_id;
-
-    const chain = [note.body_content_id];
-    const assertedAt = new Map<string, string>();
-    if (relationId) {
-      const seen = new Set(chain);
-      const followChain = async (
-        current: string,
-        step: number
-      ): Promise<void> => {
-        if (step >= MAX_CHAIN_STEPS) return;
-        const links = await ctx.vault.read({
-          entity: "core.link",
-          where: [
-            { column: "from_type", op: "eq", value: "core.content_item" },
-            { column: "from_id", op: "eq", value: current },
-            { column: "to_type", op: "eq", value: "core.content_item" },
-            { column: "relation_concept_id", op: "eq", value: relationId },
-            { column: "valid_to", op: "is-null" },
-          ],
-          orderBy: { column: "valid_from", dir: "desc" },
-          limit: 1,
-        });
-        const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
-        if (!next || seen.has(next.to_id)) return;
-        assertedAt.set(current, next.valid_from);
-        seen.add(next.to_id);
-        chain.push(next.to_id);
-        await followChain(next.to_id, step + 1);
-      };
-      await followChain(note.body_content_id, 0);
-    }
-
-    const contents = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.content_item",
-      where: [{ column: "content_id", op: "in", value: chain }],
+    // The chain's own length is the window: `MAX_CHAIN_STEPS` caps a malformed
+    // chain, and a well-formed one terminates on a null parent long before it.
+    const revisions = await ctx.vault.page<Record<string, unknown>>({
+      query: {
+        name: "notes.history.revisions",
+        select:
+          "revision_id, entity_type, entity_id, content_id, parent_revision_id, recorded_at",
+        from: "core_entity_revision",
+        where: "entity_type = ? AND entity_id = ?",
+        bind: ["knowledge.note", noteId],
+        order: {
+          sortColumn: "recorded_at",
+          pkColumn: "revision_id",
+          descending: true,
+        },
+      },
+      limit: MAX_CHAIN_STEPS,
     });
-    const byId = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((row) => [
-        row.content_id,
-        row,
-      ])
-    );
+    // One spelling of the walk, shared with the phone (`version-chain.ts`).
+    const walked = noteVersionChain({
+      headContentId: note.body_content_id,
+      currentRevisionId: note.current_revision_id ?? null,
+      revisions: revisions.rows as never,
+      noteId,
+    });
+    const chain = [...walked.contentIds];
+    const assertedAt = walked.assertedAt;
+
+    const chainIn = inList("content_id", chain);
+    const [contentRows, representations] = await Promise.all([
+      // Bounded by the chain the walk produced, so walked to the end of it.
+      readPages<ContentRow>(ctx, {
+        name: "notes.history.contents",
+        select: "content_id, content_uri, created_at",
+        from: "core_content_item",
+        where: chainIn.sql,
+        bind: chainIn.bind,
+        order: {
+          sortColumn: "content_id",
+          pkColumn: "content_id",
+          descending: false,
+        },
+      }),
+      // Bytes carry no media type since #996 (R20(b)). A superseded version
+      // has no representation of its own — the note's moved with the head —
+      // and an edit changes the words, never the format.
+      readRepresentations({ ctx, contentIds: chain }),
+    ]);
+    const noteMediaType =
+      representations.byOwner.get(ownerKey("knowledge.note", noteId)) ?? null;
+    const byId = new Map(contentRows.map((row) => [row.content_id, row]));
     return {
       versions: chain.map((contentId, index) => {
         const content = byId.get(contentId);
         return {
           content_id: contentId,
           body: decodeNoteBody(content?.content_uri),
-          media_type: content?.media_type ?? null,
+          media_type: representations.byContent.get(contentId) ?? noteMediaType,
           current: index === 0,
           asserted_at:
             assertedAt.get(contentId) ?? content?.created_at ?? note.created_at,

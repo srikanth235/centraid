@@ -3,6 +3,14 @@
  * GRACEFUL DENIAL: catch → `null` ("facts absent"), never a consent wall over the roster.
  */
 
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+
+/** A roster's bindings are `in`-bounded by the roster; the walk states its own
+ *  ceiling rather than restating the caller's id count as a window. */
+interface BindingCtx {
+  vault: Pick<VaultApi, "page">;
+}
+
 export interface BindingRow {
   binding_id: string;
   party_id: string;
@@ -15,39 +23,48 @@ export interface PersonShareLinks {
 }
 
 export async function readLiveBindings(
-  vault: VaultApi,
+  ctx: BindingCtx,
   partyIds: string[]
 ): Promise<BindingRow[] | null> {
   if (partyIds.length === 0) return [];
   try {
-    const bindings = await vault.read({
-      entity: "share.party_vault_binding",
-      where: [
-        { column: "party_id", op: "in", value: partyIds },
-        { column: "revoked_at", op: "is-null" },
-      ],
-      limit: Math.min(partyIds.length * 2, 2000),
+    const partyIn = inList("party_id", partyIds);
+    return await readPages<BindingRow>(ctx, {
+      name: "people.shared.liveBindings",
+      select: "binding_id, party_id, vault_id, linked_at",
+      from: "share_party_vault_binding",
+      where: `${partyIn.sql} AND revoked_at IS NULL`,
+      bind: partyIn.bind,
+      order: {
+        sortColumn: "binding_id",
+        pkColumn: "binding_id",
+        descending: false,
+      },
     });
-    return (bindings.rows ?? []) as unknown as BindingRow[];
   } catch {
     return null;
   }
 }
 
 export async function readPersonShareLinks(
-  vault: VaultApi,
+  ctx: BindingCtx,
   partyId: string
 ): Promise<PersonShareLinks | null> {
   try {
-    const bindings = await vault.read({
-      entity: "share.party_vault_binding",
-      where: [
-        { column: "party_id", op: "eq", value: partyId },
-        { column: "revoked_at", op: "is-null" },
-      ],
+    const bindings = await readPages<BindingRow>(ctx, {
+      name: "people.shared.personLinks",
+      select: "binding_id, party_id, vault_id, linked_at",
+      from: "share_party_vault_binding",
+      where: "party_id = ? AND revoked_at IS NULL",
+      bind: [partyId],
+      order: {
+        sortColumn: "binding_id",
+        pkColumn: "binding_id",
+        descending: false,
+      },
     });
     return {
-      vaults: ((bindings.rows ?? []) as unknown as BindingRow[]).map((b) => ({
+      vaults: bindings.map((b) => ({
         binding_id: b.binding_id,
         vault_id: b.vault_id,
         linked_at: b.linked_at,

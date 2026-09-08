@@ -28,12 +28,12 @@ import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { handlePeerReplicaIntent } from "./peer-replica-intent-route.js";
 import {
   handlePeerReplicaBlob,
-  handlePeerReplicaBootstrap,
   handlePeerReplicaChanges,
+  handlePeerReplicaTail,
   PEER_REPLICA_BLOB_PATH,
-  PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
   PEER_REPLICA_INTENTS_PATH,
+  PEER_REPLICA_TAIL_PATH,
 } from "./peer-replica-route.js";
 import type { PeerReplicaDeps } from "./peer-replica-route.js";
 import { readJson, sendJson } from "./route-helpers.js";
@@ -168,14 +168,10 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
       },
       peerLabel: readString(body, "label") ?? peerVaultId,
       localLabel: deps.localLabel(),
-      permissions: {
-        ...(typeof body.permissions === "object" && body.permissions !== null
-          ? (body.permissions as Record<string, unknown>)
-          : {}),
-        ...(peerOwnerPartyId
-          ? { commonsPartyIds: { [peerVaultId]: peerOwnerPartyId } }
-          : {}),
-      },
+      // As on the client side (#996, OQ-7): the peer's hello contributes the
+      // one fact this link needs from it — who that side is — and nothing else
+      // it sends is written down.
+      partyIds: peerOwnerPartyId ? { [peerVaultId]: peerOwnerPartyId } : {},
     });
     if (!link) return notFound(res);
     const publicKey = deps.vaultPublicKey(link.localVaultId);
@@ -201,7 +197,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
         : { endpointId: route.endpointId }),
       relayHints: route.relayHints,
       label: link.myLabel ?? link.localVaultId,
-      permissions: link.permissions,
     });
   };
 
@@ -264,14 +259,14 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (deps.replica) {
       const search = (): URLSearchParams =>
         new URL(target, "http://gateway.local").searchParams;
-      if (pathname === PEER_REPLICA_BOOTSTRAP_PATH && method === "GET")
-        return handlePeerReplicaBootstrap(res, peer, search(), deps.replica);
       if (pathname === PEER_REPLICA_BLOB_PATH && method === "GET")
         return handlePeerReplicaBlob(res, peer, search(), deps.replica);
       if (pathname === PEER_REPLICA_CHANGES_PATH && method === "POST")
         return handlePeerReplicaChanges(req, res, peer, deps.replica);
       if (pathname === PEER_REPLICA_INTENTS_PATH && method === "POST")
         return handlePeerReplicaIntent(req, res, peer, deps.replica);
+      if (pathname === PEER_REPLICA_TAIL_PATH && method === "GET")
+        return handlePeerReplicaTail(res, peer, search(), deps.replica);
     }
     // COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy): remote-give frames
     // and the ranged byte pull answer `not_found` like any unknown path.

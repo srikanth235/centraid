@@ -45,7 +45,6 @@ import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { DEVICE_ENROL, DEVICE_OFFER, DEVICE_NOTE } from "./locker-seat-copy";
 import type { LockerScreenState } from "./locker-view-model";
 import { lockerWindowFoot } from "./locker-view-model";
 import LockerNotice from "./LockerNotice";
@@ -63,8 +62,6 @@ export interface LockerItemsViewProps {
   /** The device-credential offer, present only where this phone can hold one
    *  and does not yet. Enrolling needs an open session, which is why the offer
    *  cannot live on the lock wall that asks for one. */
-  offerDevice: boolean;
-  onEnrolDevice: () => void;
   onShowMore: () => void;
   onOpen: (row: LockerRowData) => void;
   onNew: () => void;
@@ -130,13 +127,6 @@ export default function LockerItemsView(
         pending={props.pending}
         waiting={props.waiting ?? null}
       />
-      {props.offerDevice ? (
-        <View style={styles.offer}>
-          <Text style={styles.offerTitle}>{DEVICE_OFFER}</Text>
-          <Text style={styles.offerBody}>{DEVICE_NOTE}</Text>
-          <Button label={DEVICE_ENROL} onPress={props.onEnrolDevice} />
-        </View>
-      ) : null}
       <View style={styles.acts}>
         <Button label={NEW_ITEM} onPress={props.onNew} variant="primary" />
       </View>

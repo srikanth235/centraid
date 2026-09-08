@@ -16,6 +16,12 @@ declare global {
 
   interface ImportMetaEnv {
     readonly PROD: boolean;
+    /**
+     * The seat store's build-time lever (#996, wave 2). `"1"` makes a build
+     * default to the new store; anything else leaves it off, which is what a
+     * shipped build is. The e2e lane sets it so a whole run exercises the
+     * flag ON.
+     */
   }
 
   interface ImportMeta {

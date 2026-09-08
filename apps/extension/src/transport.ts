@@ -57,7 +57,6 @@ export async function pairOverIroh(input: {
   ticketId: string;
   secret: string;
   deviceName: string;
-  grantProfile: readonly string[];
 }): Promise<{ endpointId: string; response: Record<string, unknown> }> {
   const node = await endpoint();
   const raw = await node.pair_gateway(
@@ -68,7 +67,6 @@ export async function pairOverIroh(input: {
       deviceName: input.deviceName,
       platform: "extension",
       rememberDevice: true,
-      grantProfile: input.grantProfile,
     })
   );
   return {

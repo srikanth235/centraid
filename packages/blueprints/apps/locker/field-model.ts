@@ -5,7 +5,7 @@
 
 import { DAY_MS } from "../_shared/format-kit.ts";
 import { PASSKEY_KEY_ROW } from "./item-copy.ts";
-import type { SidecarTarget } from "./permits.ts";
+import type { SidecarTarget } from "./reveal.ts";
 import type {
   LockerCustomField,
   LockerDetail,

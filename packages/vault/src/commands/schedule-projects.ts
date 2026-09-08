@@ -4,6 +4,7 @@
 // Two different subjects that only shared a file.
 
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { taskWriteConditions } from "../operations/index.js";
 
 const STRING = { type: "string", minLength: 1 } as const;
 
@@ -163,7 +164,25 @@ export const ORGANIZE_TASK: CommandDefinition = {
     required: ["task_id"],
     properties: { task_id: STRING },
   },
-  preconditions: [],
+  // FILING IS A TASK WRITE (#996, ruling R21; drift ONT-26). A section belongs
+  // to exactly one project, and nothing here compared the two columns — so a
+  // task could be filed in a section of another project, in two places at
+  // once, by this command as easily as by the row editor. The conditions are
+  // the operation's; the reader below is this command's, because `clear_*` is
+  // its own vocabulary for "unfile".
+  preconditions: taskWriteConditions((input) => ({
+    taskId: typeof input["task_id"] === "string" ? input["task_id"] : null,
+    ...(input["clear_project"] === true
+      ? { projectId: null }
+      : typeof input["project_id"] === "string"
+        ? { projectId: input["project_id"] }
+        : {}),
+    ...(input["clear_project"] === true || input["clear_section"] === true
+      ? { sectionId: null }
+      : typeof input["section_id"] === "string"
+        ? { sectionId: input["section_id"] }
+        : {}),
+  })),
   postconditions: [],
   idempotency: "idempotent",
   risk: "low",

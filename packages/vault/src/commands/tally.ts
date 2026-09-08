@@ -16,6 +16,7 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { setRepresentation } from "../schema/representation.js";
 import { replaceMemo } from "./annotations.js";
 import { bindContactReach, partyForReach } from "./contact-reach.js";
 import { writeExtractedText } from "./enrich.js";
@@ -1095,9 +1096,7 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     );
     const fx = resolveNewExpenseFx(ctx, input, amountMinor, groupId);
 
-    const minted = ctx.blobs.claimStaged(input.staged_sha, {
-      title: `${input.description} receipt`,
-    });
+    const minted = ctx.blobs.claimStaged(input.staged_sha);
     const expenseId = mintedId(ctx, "expense_id");
     insertExpenseRow(ctx, expenseId, {
       groupId,
@@ -1128,6 +1127,14 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       )
       .run(receiptId, expenseId, minted.contentId, ctx.now);
     ctx.wrote("core.attachment", receiptId);
+    // THE RECEIPT ATTACHMENT'S READING OF THE BYTES (#996, R20(b)).
+    setRepresentation(ctx.db, ctx.newId, ctx.now, {
+      contentId: minted.contentId,
+      ownerType: "core.attachment",
+      ownerId: receiptId,
+      mediaType: minted.mediaType,
+      interpretation: "receipt",
+    });
     writeExtractedText(ctx, minted.contentId, input.ocr_text);
     writeLineItems(
       ctx,

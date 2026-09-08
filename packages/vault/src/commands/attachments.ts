@@ -10,6 +10,10 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  mediaTypeForContent,
+  setRepresentation,
+} from "../schema/representation.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 import { releaseContentIfUnreferenced } from "./media.js";
 
@@ -56,7 +60,9 @@ const ATTACH: CommandDefinition = {
       data_uri: { type: "string", minLength: 6 },
       content_id: { type: "string", minLength: 1 },
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
-      title: { type: "string" },
+      // No `title`: it wrote `core_content_item.title`, which is gone (#996,
+      // R20(b)). An attachment is bytes pinned to a row — what the file is
+      // CALLED belongs to a wrapper, and an attachment is not one.
       role: { type: "string", enum: [...ROLES] },
     },
   },
@@ -134,7 +140,6 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     data_uri?: string;
     content_id?: string;
     staged_sha?: string;
-    title?: string;
     role?: string;
   };
   const pk = SUBJECT_PK[input.subject_type];
@@ -151,9 +156,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   let mediaType: string;
   let byteSize: number;
   if (input.staged_sha !== undefined) {
-    const claimed = ctx.blobs.claimStaged(input.staged_sha, {
-      title: input.title,
-    });
+    const claimed = ctx.blobs.claimStaged(input.staged_sha);
     contentId = claimed.contentId;
     mediaType = claimed.mediaType;
     byteSize = claimed.byteSize;
@@ -161,9 +164,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     // Binary spills to the CAS in mintContentFromDataUri; text/* cannot
     // redirect (FTS reads content_uri in-transaction) (#367).
     assertInlineDataUriWithinBudget(input.data_uri);
-    const minted = mintContentFromDataUri(ctx, input.data_uri, {
-      title: input.title,
-    });
+    const minted = mintContentFromDataUri(ctx, input.data_uri);
     contentId = minted.contentId;
     mediaType = minted.mediaType;
     byteSize = minted.byteSize;
@@ -172,14 +173,16 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   } else {
     const existing = ctx.db
       .prepare(
-        "SELECT media_type, byte_size FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL"
+        "SELECT byte_size FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL"
       )
-      .get(input.content_id) as
-      | { media_type: string; byte_size: number }
-      | undefined;
+      .get(input.content_id) as { byte_size: number } | undefined;
     if (!existing) throw new Error(`no live content item ${input.content_id}`);
     contentId = input.content_id;
-    mediaType = existing.media_type;
+    // Attaching bytes ALREADY in the vault: this attachment inherits whatever
+    // reading the vault already has of them (#996, R20(b)) rather than being
+    // told by a column on the byte row.
+    mediaType =
+      mediaTypeForContent(ctx.db, contentId) ?? "application/octet-stream";
     byteSize = existing.byte_size;
   }
   const role =
@@ -206,6 +209,14 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now
     );
   ctx.wrote("core.attachment", attachmentId);
+  // THE ATTACHMENT'S OWN READING OF THE BYTES (#996, R20(b)).
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: "core.attachment",
+    ownerId: attachmentId,
+    mediaType,
+    interpretation: role,
+  });
   ctx.cite({
     claim: `${mediaType} (${byteSize} bytes) attached to ${input.subject_type} ${input.subject_id}`,
     entityType: input.subject_type,

@@ -40,19 +40,21 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   })),
 }));
 
-vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    useReplicaQuery: (_appId: string, request: { entity?: string }) => ({
-      connection: "current" as const,
-      error: undefined,
-      loading: false,
-      refresh: async () => undefined,
-      rows: replicaRows.byEntity.get(request.entity ?? "") ?? [],
-    }),
-  };
-});
+// The device database seam moved with the reads (#996 wave 4b): a Notes read is
+// a page over the seat's own file now, still keyed by the entity it declares.
+vi.mock(import("../../kit/hooks/useSeatPages"), () => ({
+  useSeatPages: (
+    _appId: string,
+    _query: unknown,
+    options: { entity: string }
+  ) => ({
+    connection: "current" as const,
+    error: undefined,
+    loading: false,
+    refresh: async () => undefined,
+    rows: replicaRows.byEntity.get(options.entity) ?? [],
+  }),
+}));
 
 /** A note plus the content row `buildNotes` joins its body from. */
 function seedNotes(

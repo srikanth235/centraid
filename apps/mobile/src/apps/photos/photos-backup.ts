@@ -267,7 +267,11 @@ export async function sweepCameraRollBackup(
   if (!(await nativeUploadPolicy().canTransfer())) return;
   const release = photoTimelineEngine.acquire();
   try {
-    photoTimelineEngine.setSession(scope.session, scope.gatewayBase);
+    photoTimelineEngine.setSession(
+      scope.session,
+      scope.gatewayBase,
+      scope.seat
+    );
     const snapshot = await settledTimeline();
     if (!snapshot) return;
     const candidates = automaticBackupCandidates(consent, snapshot.assets);

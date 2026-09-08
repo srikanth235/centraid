@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
+import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import type { VaultFacts } from "./tile-overlays";
 
 /** Pre-`personal` scopes are the member's own (safe default); shares name
@@ -11,7 +11,7 @@ export function vaultPersonalOf(scope: { personal?: boolean }): boolean {
 }
 
 export function vaultFacts(
-  scopes: readonly MountedReplicaScope[] | undefined
+  scopes: readonly ReplicaVaultScope[] | undefined
 ): ReadonlyMap<string, VaultFacts> {
   return new Map(
     (scopes ?? []).map((scope) => [

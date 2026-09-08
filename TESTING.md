@@ -477,7 +477,7 @@ These suites encode product law and are cataloged by name. The matrix validator 
 1. Vault consent gateway and journalled writes — `packages/vault/src/gateway/gateway.contract.test.ts`
 2. Backup/restore round-trip and fencing — `packages/server/src/backup/backup-service.contract.test.ts`
 3. Blob custody / CAS state machine — `packages/vault/src/blob/custody-proven.contract.test.ts`
-4. Replica convergence, intent identity, and multi-writer admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/multi-writer.contract.test.ts`
+4. Replica convergence, intent identity, and offline-chain admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/offline-chain.contract.test.ts`
 5. Handler validation and worker isolation — `packages/server/src/engine/handlers/handler-runner.contract.test.ts`
 6. Control/device session boundaries — `packages/server/src/serve/web-control-sessions.contract.test.ts`
 7. Scheduler no-backfill semantics — `packages/server/src/automation/fire/scheduler-ledger.contract.test.ts`

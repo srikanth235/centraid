@@ -146,11 +146,18 @@ describe("replica-shape suite", () => {
     vault.db.vault
       .prepare(
         `INSERT INTO access_device
-         (device_id, owner_party_id, name, public_key, enrolled_at)
-       VALUES ('credential-device', ?, 'Credential device', 'public-never-replicate',
+         (device_id, owner_party_id, name, enrolled_at)
+       VALUES ('credential-device', ?, 'Credential device',
                '2026-07-15T00:00:00.000Z')`
       )
       .run(vault.boot.ownerPartyId);
+    // Key material is a TABLE away since #996 R3, not a column exclusion.
+    vault.db.vault
+      .prepare(
+        `INSERT INTO access_device_secret (device_id, public_key)
+       VALUES ('credential-device', 'public-never-replicate')`
+      )
+      .run();
     vault.db.vault
       .prepare(
         `INSERT INTO core_party
@@ -162,9 +169,15 @@ describe("replica-shape suite", () => {
     vault.db.vault
       .prepare(
         `INSERT INTO access_agent
-         (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
-       VALUES ('credential-agent', 'credential-agent-party', 'host-never-replicate',
+         (agent_id, party_id, model_ref, version, enrolled_at, status)
+       VALUES ('credential-agent', 'credential-agent-party',
                'tier:fast', '1', '2026-07-15T00:00:00.000Z', 'active')`
+      )
+      .run();
+    vault.db.vault
+      .prepare(
+        `INSERT INTO access_agent_secret (agent_id, enrollment_key)
+       VALUES ('credential-agent', 'host-never-replicate')`
       )
       .run();
 
@@ -174,16 +187,21 @@ describe("replica-shape suite", () => {
       appId: "credential-auditor",
     })[0]!;
     const wire = replicaShapesWire([shape])[0]!;
-    for (const [entityName, credential] of [
-      ["access.app", "signing_key"],
-      ["access.agent", "enrollment_key"],
-      ["access.device", "public_key"],
-    ] as const) {
-      const entity = wire.entities.find(
-        (candidate) => candidate.entity === entityName
-      );
-      expect(entity?.hasUnavailableFields, entityName).toBe(true);
-      expect(entity?.columns, entityName).not.toContain(credential);
+    // `access.app` keeps the per-COLUMN exclusion — the install register is
+    // not split. The two identity registers no longer need one: their key
+    // material is a private TABLE that never enters a shape at all (#996, R3),
+    // so the assertion is that the column is nowhere in the wire, not that the
+    // entity advertises a withheld field.
+    const appEntity = wire.entities.find(
+      (candidate) => candidate.entity === "access.app"
+    );
+    expect(appEntity?.hasUnavailableFields).toBe(true);
+    expect(appEntity?.columns).not.toContain("signing_key");
+    for (const entityName of ["access.agent", "access.device"] as const) {
+      expect(
+        wire.entities.find((candidate) => candidate.entity === entityName),
+        entityName
+      ).toBeDefined();
     }
     expect(JSON.stringify(wire)).not.toMatch(
       /signing_key|enrollment_key|public_key/u
@@ -908,6 +926,7 @@ describe("replica-shape suite", () => {
       scopes: [
         { schema: "media", verbs: "read" },
         { schema: "core", table: "content_item", verbs: "read" },
+        { schema: "core", table: "content_representation", verbs: "read" },
         { schema: "core", table: "content_derivative", verbs: "read" },
         { schema: "core", table: "collection", verbs: "read" },
         { schema: "core", table: "collection_entry", verbs: "read" },
@@ -929,6 +948,7 @@ describe("replica-shape suite", () => {
     for (const entity of [
       "media.asset",
       "core.content_item",
+      "core.content_representation",
       "core.content_derivative",
       "core.collection",
       "core.collection_entry",
@@ -943,9 +963,15 @@ describe("replica-shape suite", () => {
     expect(asset.columns).toStrictEqual(
       expect.arrayContaining(["archived_at", "tz_offset_min", "captured_at"])
     );
+    // Bytes and nothing that interprets them (#996, ruling R20(b)): the
+    // media type is the ASSET's representation and the title is the asset's.
     const content = byEntity.get("core.content_item")!;
     expect(content.columns).toStrictEqual(
-      expect.arrayContaining(["sha256", "media_type", "byte_size", "title"])
+      expect.arrayContaining(["sha256", "byte_size", "content_uri"])
+    );
+    expect(asset.columns).toStrictEqual(expect.arrayContaining(["title"]));
+    expect(byEntity.get("core.content_representation")!.columns).toStrictEqual(
+      expect.arrayContaining(["owner_type", "owner_id", "media_type"])
     );
     // Derivatives carry the variant and its inline text or CAS sha.
     const derivative = byEntity.get("core.content_derivative")!;
@@ -960,6 +986,7 @@ describe("replica-shape suite", () => {
       scopes: [
         { schema: "core", table: "document", verbs: "read" },
         { schema: "core", table: "content_item", verbs: "read" },
+        { schema: "core", table: "content_representation", verbs: "read" },
         { schema: "core", table: "tag", verbs: "read" },
         { schema: "core", table: "concept", verbs: "read" },
         { schema: "core", table: "concept_scheme", verbs: "read" },
@@ -1020,7 +1047,13 @@ describe("replica-shape suite", () => {
       ])
     );
     expect(docsByEntity.get("core.content_item")!.columns).toStrictEqual(
-      expect.arrayContaining(["content_id", "media_type", "byte_size", "title"])
+      expect.arrayContaining(["content_id", "byte_size", "content_uri"])
+    );
+    // What THIS document reads its bytes as (#996, ruling R20(b)).
+    expect(
+      docsByEntity.get("core.content_representation")!.columns
+    ).toStrictEqual(
+      expect.arrayContaining(["owner_type", "owner_id", "media_type"])
     );
     expect(docsByEntity.get("core.concept")!.columns).toStrictEqual(
       expect.arrayContaining([

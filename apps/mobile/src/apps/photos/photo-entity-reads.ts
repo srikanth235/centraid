@@ -1,27 +1,128 @@
-// Photos' whole-entity read requests, as data (#922 0a).
-//
-// Fourteen Photos screens ask for the same five entities, and each one used to
-// re-declare its request inside a `useMemo(..., [])` — a hook whose only job
-// was to give a constant a stable identity, written out once per screen. The
-// requests never depended on anything, so they are module constants here: the
-// identity `useReplicaQuery` keys its effect on is now the module's, which is
-// as stable as a value gets, and the five declarations exist once.
-//
-// Each takes the default window knowingly. Photos' library is bounded by the
-// timeline engine, not by these decorations — they are collections, places,
-// face regions and parties, all small beside the asset set — and a window that
-// ever fills says so on the status line rather than silently. E2 gives each of
-// them a declared window; until then the flag is the greppable debt marker.
+/*
+ * PHOTOS' SHARED READS, AS PAGES (#996 wave 4b, R8).
+ *
+ * Fourteen Photos screens ask for the same five sets. They were five
+ * the truncation flag entity requests with a comment admitting what that
+ * meant — "each takes the default window knowingly … the flag is the greppable
+ * debt marker". The debt is paid here: each is a statement that names its
+ * table, its columns and the order its keyset walks, and the walk states where
+ * it stops.
+ *
+ * They stay in ONE module for the same reason they always did — fourteen
+ * screens should not each re-declare the same read — and the hook goes with
+ * them so a screen names the set it wants rather than assembling a read.
+ */
 
-import type { NativeReadRequest } from "../../lib/replica/native-session";
+import type { PageQuery } from "@centraid/core/page";
+
+import type { ReplicaQueryState } from "../../kit/hooks/replica-query-state";
+import { useSeatPages } from "../../kit/hooks/useSeatPages";
+
+interface PhotoEntityRead {
+  query: PageQuery;
+  entity: string;
+  rowIdColumn: string;
+}
 
 export const PHOTO_ENTITY_READS = {
-  collections: { acceptTruncation: true, entity: "core.collection" },
-  collectionEntries: {
-    acceptTruncation: true,
-    entity: "core.collection_entry",
+  collections: {
+    query: {
+      name: "phone.photos.collections",
+      select:
+        "collection_id, owner_party_id, name, cover_content_id, " +
+        "parent_collection_id, sort_order",
+      from: "core_collection",
+      order: {
+        sortColumn: "sort_order",
+        pkColumn: "collection_id",
+        descending: false,
+      },
+    },
+    entity: "core.collection",
+    rowIdColumn: "collection_id",
   },
-  places: { acceptTruncation: true, entity: "core.place" },
-  faceRegions: { acceptTruncation: true, entity: "media.face_region" },
-  parties: { acceptTruncation: true, entity: "core.party" },
-} satisfies Record<string, NativeReadRequest>;
+  // Only the entries that place an ASSET. A notebook's placements are Notes'
+  // rows in the same table, and no Photos screen has ever drawn one.
+  collectionEntries: {
+    query: {
+      name: "phone.photos.collection-entries",
+      select:
+        "entry_id, collection_id, target_type, target_id, position, added_at",
+      from: "core_collection_entry",
+      where: "target_type = ?",
+      bind: ["media.asset"],
+      order: {
+        sortColumn: "collection_id",
+        pkColumn: "entry_id",
+        descending: false,
+      },
+    },
+    entity: "core.collection_entry",
+    rowIdColumn: "entry_id",
+  },
+  places: {
+    query: {
+      name: "phone.photos.places",
+      select:
+        "place_id, name, kind, geo_lat, geo_lng, geohash, tz, " +
+        "parent_place_id",
+      from: "core_place",
+      order: { sortColumn: "name", pkColumn: "place_id", descending: false },
+    },
+    entity: "core.place",
+    rowIdColumn: "place_id",
+  },
+  faceRegions: {
+    query: {
+      name: "phone.photos.face-regions",
+      select:
+        "region_id, asset_id, bbox_json, party_id, confidence, " +
+        "confirmed_by_party_id, review_state",
+      from: "media_face_region",
+      order: {
+        sortColumn: "asset_id",
+        pkColumn: "region_id",
+        descending: false,
+      },
+    },
+    entity: "media.face_region",
+    rowIdColumn: "region_id",
+  },
+  parties: {
+    query: {
+      name: "phone.photos.parties",
+      select: "party_id, kind, display_name, sort_name, avatar_content_id",
+      from: "core_party",
+      order: {
+        sortColumn: "sort_name",
+        pkColumn: "party_id",
+        descending: false,
+      },
+    },
+    entity: "core.party",
+    rowIdColumn: "party_id",
+  },
+  // The enrichment tier for photos, which two screens ask about. One row per
+  // domain — the table's whole point — so the walk is one page forever.
+  enrichPolicies: {
+    query: {
+      name: "phone.photos.enrich-policies",
+      select: "domain, tier, updated_at",
+      from: "enrich_policy",
+      order: { sortColumn: "domain", pkColumn: "domain", descending: false },
+    },
+    entity: "enrich.policy",
+    rowIdColumn: "domain",
+  },
+} satisfies Record<string, PhotoEntityRead>;
+
+/** One of Photos' five shared sets, walked over this phone's own copy. */
+export function usePhotoEntity(
+  name: keyof typeof PHOTO_ENTITY_READS
+): ReplicaQueryState {
+  const read: PhotoEntityRead = PHOTO_ENTITY_READS[name];
+  return useSeatPages("photos", read.query, {
+    entity: read.entity,
+    rowIdColumn: read.rowIdColumn,
+  });
+}

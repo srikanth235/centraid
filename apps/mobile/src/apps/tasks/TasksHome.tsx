@@ -178,15 +178,18 @@ export default function TasksHome({
     if (!quickAddReady(draft)) return;
     const filed = draft;
     setDraft(QUICK_ADD_EMPTY);
+    // The shelf the capture happened on is part of the write (#996, W4-D3):
+    // a task added on Today is due today, and one added anywhere else is
+    // undated and belongs to the Inbox.
     const outcome = await write(
       "add",
-      quickAddInput(filed, now),
+      quickAddInput(filed, now, shelfForPlace(place)),
       filed.scopeId
     );
     const taskId = landedTaskId(outcome);
     const filing = taskId ? quickAddFiling(filed, taskId) : null;
     if (filing) await write("organize-task", filing, filed.scopeId);
-  }, [draft, now, write]);
+  }, [draft, now, place, write]);
 
   const fileInto = useCallback(
     (projectId: string) => {

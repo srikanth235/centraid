@@ -2,15 +2,22 @@ import {
   PENDING_OVERLAY_FIELDS,
   attachPendingSidecar,
   pendingRowIntentId,
+  pendingSidecarOf,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
+import type {
+  Page,
+  PageCursor,
+  PageQuery,
+  PageRequest,
+} from "@centraid/core/page";
 
 // The ctx itself is seat-neutral and lives with the replica engine, so the
 // phone imports the SAME builder through `@centraid/client/replica/native`
 // (#922). Only the read/search closures below are the shell's.
-import { OnlineOnlyGuard } from "../../replica/errors.js";
+import { OnlineOnlyError, OnlineOnlyGuard } from "../../replica/errors.js";
 import {
   buildInlineCtxCore,
   guardedRow,
@@ -18,29 +25,27 @@ import {
   runInlineQueryCore,
 } from "../../replica/inline-query-ctx-core.js";
 import type { InlineWireResult } from "../../replica/inline-query-ctx-core.js";
-import { assertBoundedReplicaRead } from "../../replica/read-plan.js";
-import type {
-  ShellReplicaReadRequest,
-  ShellReplicaSearchRequest,
-} from "../../replica/shell-session.js";
+import type { SeatReadOverlay } from "../../replica/seat/read-overlay.js";
+import type { ShellReplicaSearchRequest } from "../../replica/shell-session.js";
 // Inline query ctx over the shell replica. Touching a field the shape does
 // not carry marks ONLINE_ONLY so the caller can fall back with the same error.
 import type {
-  ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "../../replica/types.js";
 import { postStatus } from "../../status-channel.js";
 
 export interface InlineReplicaSession {
-  read: (
-    appId: string,
-    request: ShellReplicaReadRequest
-  ) => Promise<ReplicaReadWireResult>;
   search: (
     appId: string,
     request: ShellReplicaSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
+  /** The paged read path (#996 wave 4). Absent on a session with no seat. */
+  page?: <Row extends object>(
+    query: PageQuery<Row>,
+    request: PageRequest,
+    overlay?: SeatReadOverlay
+  ) => Promise<Page<Row>>;
 }
 
 // Pending identity is shell-owned and rides the row as an enumerable symbol:
@@ -75,6 +80,25 @@ function pendingMarker(
   );
   if (identityFields.length === 0) return undefined;
   return { rowId: envelope.rowId, identityFields, intentId };
+}
+
+/**
+ * A page row's pending provenance.
+ *
+ * The seat's worker drew the outbox over these rows, so a row the member is
+ * still waiting on carries its intent key like any other (#922 G3). The
+ * identity field is the handler's own primary key rather than a guess over
+ * every `*_id` column: a page states its key, so there is nothing to infer.
+ */
+function pageRowMarker(
+  row: Record<string, unknown>,
+  pkColumn: string
+): PendingRowMarker | undefined {
+  const intentId = pendingRowIntentId(row);
+  if (intentId === undefined) return undefined;
+  const rowId = row[pkColumn];
+  if (typeof rowId !== "string") return undefined;
+  return { rowId, identityFields: [pkColumn], intentId };
 }
 
 function carriedPendingMarker(
@@ -140,7 +164,7 @@ export function buildInlineCtx(
   sidecars: PendingOverlaySidecar[] = []
 ): unknown {
   const { session, appId, signal } = options;
-  return buildInlineCtxCore<ShellReplicaReadRequest, ShellReplicaSearchRequest>(
+  return buildInlineCtxCore<ShellReplicaSearchRequest>(
     {
       // The shell's contributions, and only the shell's: each row carries its
       // pending-row provenance so a projection can be traced back to the
@@ -162,16 +186,9 @@ export function buildInlineCtx(
           return marker ? attachPendingSidecar(row, sidecar) : row;
         },
         {
-          // THE WEB SEAT'S BOUNDARY (#922 0a). A query that declares no window
-          // and does not accept the default one is refused HERE, where the
-          // caller's own file is named in the stack, rather than answered with
-          // a page silently capped at 1,000 rows.
-          beforeRead: assertBoundedReplicaRead,
-          // Honesty is not optional and not the app's to forget: a window that
-          // cut rows off says so on the one status line, from the read itself.
-          // A ranked search page that filled its window hides hits exactly as a
-          // list read hides rows, and says so on the same line (#922 0a) —
-          // which is why this is `onResult` and not two copies.
+          // Honesty is not optional and not the app's to forget: a ranked
+          // search page that filled its window hides hits, and says so on the
+          // one status line, from the read itself (#922 0a).
           onResult: (result: InlineWireResult) => {
             if (result.pending) sidecars.push(result.pending);
             if (result.truncated && result.appliedLimit !== undefined)
@@ -179,6 +196,60 @@ export function buildInlineCtx(
           },
         }
       ),
+      ...(session.page
+        ? {
+            // A PAGE'S ROWS ARE ROWS. They come off the seat's own file with
+            // every column present — there is nothing for `guardedRow` to
+            // mask, which is the point of R8 — but they still carry pending
+            // provenance, because the worker drew the outbox over them and the
+            // member's own unsettled write must be traceable to its intent.
+            page: <Row extends object>(request: {
+              query: PageQuery<Row>;
+              limit: number;
+              after?: PageCursor;
+              overlay?: SeatReadOverlay;
+            }): Promise<Page<Row>> =>
+              session.page!<Row>(
+                request.query,
+                {
+                  limit: request.limit,
+                  ...(request.after ? { after: request.after } : {}),
+                },
+                request.overlay
+              )
+                .catch((error: unknown) => {
+                  // A SEAT WITH NO COPY IS AN ONLINE-ONLY RUN, NOT AN APP ERROR
+                  // (#996 wave 4, W4-D2 / R9). Handlers catch their own vault
+                  // failures and turn them into a "cannot read this vault"
+                  // screen, so a refusal that only rejects HERE is swallowed
+                  // there and the query never falls back — the member sees a
+                  // dead app instead of the same handler answered by the
+                  // gateway's paged door. Marking the guard is what makes
+                  // `runInlineQueryCore` re-raise it past the handler's own
+                  // catch, with the code the inline runner falls back on.
+                  if (error instanceof OnlineOnlyError) throw guard.mark(error);
+                  throw error;
+                })
+                .then((page) => {
+                  for (const row of page.rows) {
+                    const marker = pageRowMarker(
+                      row as Record<string, unknown>,
+                      request.query.order.pkColumn
+                    );
+                    if (!marker) continue;
+                    pendingRows.push(marker);
+                    // The row's own sidecar IS this read's answer to "what is
+                    // happening to these writes" (#996 wave 4b). Without it the
+                    // marker names an intent the sidecar cannot describe, and
+                    // `readPendingOverlay` refuses to draw a badge with no
+                    // facts behind it — which is a queued row rendering as a
+                    // settled one.
+                    sidecars.push(pendingSidecarOf(row));
+                  }
+                  return page;
+                }),
+          }
+        : {}),
       ...(signal ? { signal } : {}),
     },
     guard

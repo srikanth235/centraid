@@ -27,9 +27,7 @@ import { usePendingChanges } from "../../kit/replica/pending-changes";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import type { LockerScreenProps as LockerRouteProps } from "../../navigation";
 import { copyLockerSecret } from "./locker-clipboard";
-import { lockerBiometricsSupported } from "./locker-device-auth";
 import {
-  enrolLockerDevice,
   searchLocker,
   setLockerGenerated,
   showMoreLockerItems,
@@ -126,8 +124,6 @@ export default function LockerHome({
       <LockerItemsView
         filter={filter}
         loaded={vault.loaded}
-        offerDevice={vault.credentialId === null && lockerBiometricsSupported()}
-        onEnrolDevice={() => void enrolLockerDevice()}
         onFilter={setFilter}
         onImport={() =>
           navigation.navigate("LockerSurface", { surface: "import" })
@@ -155,7 +151,6 @@ export default function LockerHome({
     vault.bag.generated,
     vault.bag.searchResults,
     vault.bag.searchTerm,
-    vault.credentialId,
     vault.loaded,
     vault.rows,
     vault.truncated,

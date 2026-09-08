@@ -78,36 +78,35 @@ describe("documents", () => {
   }
 
   /**
-   * Walk a document's version chain oldest-first via the `revises` links.
-   * Guards against revisiting a content id: restoring an old version gives it
-   * a NEW outgoing edge (rule R3), which can cycle the graph back through
-   * content already walked (documents.ts's target_in_chain precondition
-   * carries the same note) — a plain linked-list walk without this guard
-   * hangs forever the moment a document is restored more than once removed.
+   * A document's version chain, oldest-first, walked over its own REVISION
+   * OCCURRENCES (#996, R20(a)).
+   *
+   * The walk is over `parent_revision_id`, so a document that returns to bytes
+   * it already held reads as two occurrences of one content id rather than
+   * collapsing to one node. That is the difference the occurrence exists for:
+   * a content-id walk could only ever show a node once.
    */
   function versionChain(documentId: string): string[] {
+    const chain: string[] = [];
+    const read = db.vault.prepare(
+      `SELECT content_id, parent_revision_id FROM core_entity_revision
+        WHERE revision_id = ?`
+    );
     const head = db.vault
       .prepare(
-        "SELECT current_content_id FROM core_document WHERE document_id = ?"
+        "SELECT current_revision_id FROM core_document WHERE document_id = ?"
       )
-      .get(documentId) as { current_content_id: string };
-    const chain: string[] = [head.current_content_id];
-    const seen = new Set<string>([head.current_content_id]);
-    let cur = head.current_content_id;
-    for (;;) {
-      const next = db.vault
-        .prepare(
-          `SELECT l.to_id FROM core_link l
-           JOIN core_concept c ON c.concept_id = l.relation_concept_id
-          WHERE l.from_type = 'core.content_item' AND l.from_id = ?
-            AND l.to_type = 'core.content_item' AND l.valid_to IS NULL AND c.notation = 'revises'
-          ORDER BY l.valid_from DESC LIMIT 1`
-        )
-        .get(cur) as { to_id: string } | undefined;
-      if (!next || seen.has(next.to_id)) break;
-      chain.push(next.to_id);
-      seen.add(next.to_id);
-      cur = next.to_id;
+      .get(documentId) as { current_revision_id: string | null };
+    let at = head.current_revision_id;
+    const seen = new Set<string>();
+    while (at !== null && !seen.has(at)) {
+      seen.add(at);
+      const row = read.get(at) as
+        | { content_id: string | null; parent_revision_id: string | null }
+        | undefined;
+      if (!row?.content_id) break;
+      chain.push(row.content_id);
+      at = row.parent_revision_id;
     }
     return chain.toReversed();
   }
@@ -133,9 +132,13 @@ describe("documents", () => {
     });
     const content = db.vault
       .prepare(
-        "SELECT media_type, deleted_at FROM core_content_item WHERE content_id = ?"
+        `SELECT r.media_type, c.deleted_at
+           FROM core_content_item c
+           JOIN core_content_representation r
+             ON r.owner_type = 'core.document' AND r.owner_id = ?
+          WHERE c.content_id = ?`
       )
-      .get(contentId);
+      .get(documentId, contentId);
     expect(content).toMatchObject({
       media_type: "application/pdf",
       deleted_at: null,
@@ -221,7 +224,7 @@ describe("documents", () => {
   });
 
   test("rename_document updates the document title, not the raw content item", () => {
-    const { documentId, contentId } = addDocument({
+    const { documentId } = addDocument({
       data_uri: PDF,
       title: "Untitled.pdf",
     });
@@ -235,11 +238,14 @@ describe("documents", () => {
       .prepare("SELECT title FROM core_document WHERE document_id = ?")
       .get(documentId) as { title: string };
     expect(doc.title).toBe("Lease 2026.pdf");
-    // The underlying content item never carried the document's title.
-    const content = db.vault
-      .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
-      .get(contentId) as { title: string | null };
-    expect(content.title).toBe("Untitled.pdf");
+    // The bytes never carried the document's title — and since #996
+    // (R20(b)) they carry no title at all.
+    expect(
+      db.vault
+        .prepare("PRAGMA table_info(core_content_item)")
+        .all()
+        .map((column) => (column as { name: string }).name)
+    ).not.toContain("title");
   });
 
   test("trash then restore round-trips; content is untouched while the document lives", () => {
@@ -385,7 +391,7 @@ describe("documents", () => {
     expect(starCount(documentId)).toBe(1);
   });
 
-  test("edit_document mints a new revision, records the revises link, and the chain is walkable", () => {
+  test("edit_document mints a new revision, records the occurrence, and the chain is walkable", () => {
     const { documentId, contentId: v1 } = addDocument({
       data_uri: "data:text/plain;charset=utf-8,version%20one",
       title: "Notes.txt",
@@ -502,32 +508,41 @@ describe("documents", () => {
       )
       .get(documentId) as { current_content_id: string };
     expect(doc.current_content_id).toBe(v1);
-    // History never rewrites: the ORIGINAL v2->v1 and v3->v2 links are still
-    // live, untouched, exactly as the edits wrote them — the restore only
-    // APPENDS a new v1->v3 link (rule R3). This is the strongest proof: raw
-    // link rows, not a convenience walk.
-    const liveRevisesEdges = db.vault
+    // History never rewrites: the three earlier occurrences are untouched and
+    // the restore APPENDS a fourth (rule R3). Raw revision rows, not a
+    // convenience walk — and NO `revises` link survives anywhere, because the
+    // second history mechanism is gone (#996, R20(a) / ONT-22).
+    const occurrences = db.vault
       .prepare(
-        `SELECT l.from_id, l.to_id FROM core_link l
-         JOIN core_concept c ON c.concept_id = l.relation_concept_id
-        WHERE c.notation = 'revises' AND l.valid_to IS NULL
-        ORDER BY l.valid_from ASC`
+        `SELECT content_id, parent_revision_id FROM core_entity_revision
+          WHERE entity_type = 'core.document' AND entity_id = ?
+            AND content_id IS NOT NULL
+          ORDER BY recorded_at ASC, revision_id ASC`
       )
-      .all() as { from_id: string; to_id: string }[];
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
-    expect(liveRevisesEdges.map((row) => ({ ...row }))).toStrictEqual([
-      { from_id: v2, to_id: v1 },
-      { from_id: v3, to_id: v2 },
-      { from_id: v1, to_id: v3 },
+      .all(documentId) as {
+      content_id: string;
+      parent_revision_id: string | null;
+    }[];
+    expect(occurrences.map((row) => row.content_id)).toStrictEqual([
+      v1,
+      v2,
+      v3,
+      v1,
     ]);
-    // The restore reuses v1's own identity (content is deduped bytes) as the
-    // new HEAD, which cycles the graph back through v3 and v2 — v1 now
-    // legitimately appears at two points in true history (root, then
-    // restored-to). A content-id walk can only show one node once, so the
-    // convenience chain below collapses to v1's LATEST position; the raw
-    // edges above are the ground truth for "never rewrites".
-    expect(versionChain(documentId)).toStrictEqual([v2, v3, v1]);
+    expect(occurrences[0]?.parent_revision_id).toBeNull();
+    expect(
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_link l
+             JOIN core_concept c ON c.concept_id = l.relation_concept_id
+            WHERE c.notation = 'revises'`
+        )
+        .get() as { n: number }
+    ).toMatchObject({ n: 0 });
+    // v1 appears TWICE and reads as twice: an occurrence is a moment, not a
+    // content id, so returning to bytes the document already held is a fourth
+    // version rather than a node the walk has to collapse.
+    expect(versionChain(documentId)).toStrictEqual([v1, v2, v3, v1]);
   });
 
   test("restore_document_version refuses a content id outside the chain, or the current one", () => {

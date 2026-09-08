@@ -56,14 +56,25 @@ CREATE TABLE access_app (
 CREATE TABLE access_agent (
   agent_id       TEXT PRIMARY KEY,
   party_id       TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  -- Stable host-side enrollment identity (Centraid app id, or '_assistant').
-  -- The owner's display label remains on core_party and may change without
-  -- minting a new autonomous principal.
-  enrollment_key TEXT NOT NULL UNIQUE,
   model_ref       TEXT NOT NULL,
   version         TEXT NOT NULL,
   enrolled_at     TEXT NOT NULL,
   status          TEXT NOT NULL CHECK (status IN ('active','paused','revoked'))
+) STRICT;
+
+-- SPLIT, NOT DROPPED (#996, R3). \`access_agent\` is pointed at by replicated
+-- rows, so it replicates; its host-side enrollment credential does not, and
+-- lives here on the private-table list (\`schema/private-tables.ts\`). The
+-- direction matters: the PRIVATE sibling references the REPLICATED parent, so
+-- no replicated table declares a key into a private one and a seat's copy
+-- satisfies its own constraints.
+--
+-- Stable host-side enrollment identity (Centraid app id, or '_assistant').
+-- The owner's display label remains on core_party and may change without
+-- minting a new autonomous principal.
+CREATE TABLE access_agent_secret (
+  agent_id       TEXT PRIMARY KEY REFERENCES access_agent(agent_id) ON DELETE CASCADE,
+  enrollment_key TEXT NOT NULL UNIQUE
 ) STRICT;
 
 CREATE TABLE access_device (
@@ -73,10 +84,21 @@ CREATE TABLE access_device (
   owner_party_id TEXT NOT NULL REFERENCES core_party(party_id),
   name           TEXT NOT NULL,
   platform       TEXT,
-  public_key     TEXT NOT NULL UNIQUE,
   enrolled_at    TEXT NOT NULL,
-  last_seen_at   TEXT,
-  sync_cursor    TEXT
+  last_seen_at   TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_device_owner_party ON access_device(owner_party_id);
+
+-- SPLIT, NOT DROPPED (#996, R3). \`core_content_item.origin_device_id\` and
+-- \`media_asset.camera_device_id\` point at a device, so the IDENTITY
+-- projection above replicates to every seat and those references resolve
+-- there. The device's key material and the gateway's own sync bookkeeping do
+-- not travel: they are here, on the private-table list.
+CREATE TABLE access_device_secret (
+  device_id      TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
+  public_key     TEXT NOT NULL UNIQUE,
+  -- How far the gateway has served THIS device. Gateway bookkeeping about a
+  -- seat, never a fact the seat's own copy should carry.
+  sync_cursor    TEXT
+) STRICT;
 `;

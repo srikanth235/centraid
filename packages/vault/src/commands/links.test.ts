@@ -442,6 +442,28 @@ describe("links", () => {
     expect(out.predicate).toContain("link_live");
   });
 
+  // THE TWO ANSWERS TO A CROSS-SOURCE MATCH (#996, R20(c) / OQ-12). Both are
+  // vocabulary, because a caller-invented notation is refused: without the
+  // seeded `distinct-from` concept the owner could accept a proposal and never
+  // refuse one, and a refusal nobody can record is a proposal shown forever.
+  test("a refused match is vocabulary the owner can assert", () => {
+    const noteId = addNote("A");
+    const taskId = addTask("B");
+    const out = invoke(owner, "core.link_entities", {
+      from_type: "knowledge.note",
+      from_id: noteId,
+      to_type: "schedule.task",
+      to_id: taskId,
+      relation: "distinct-from",
+    });
+    expect(out.status).toBe("executed");
+    const { link_id } = (out as { output: { link_id: string } }).output;
+    expect(liveLink(link_id)).toMatchObject({
+      valid_to: null,
+      asserted_by: "owner",
+    });
+  });
+
   test("a link_anchor is not a linkable endpoint — locators are not entities", () => {
     const linkId = linkNoteToTask(SELECTOR);
     const anchor = anchorOf(linkId);

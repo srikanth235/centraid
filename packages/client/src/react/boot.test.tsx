@@ -7,7 +7,7 @@ import { flushMacrotasks } from "@centraid/test-kit/flush";
 // *installs* on the way past is stubbed: the replica lifecycle and the
 // enrichment worker are dynamic-import side effects with no bearing on which
 // screen appears, and the assist handoff would otherwise open a dialog.
-vi.mock(import("../replica/shell-session.js"), () => ({
+vi.mock(import("../replica/shell-session-scopes.js"), () => ({
   installReplicaStorageLifecycle: () => undefined,
 }));
 vi.mock(import("../device-enrichment-worker.js"), () => ({

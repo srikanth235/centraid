@@ -30,13 +30,11 @@ type NotificationsModule = typeof import("../../lib/notifications-core");
 type BackgroundSyncModule = typeof import("../../lib/replica/background-sync");
 type CompatibilityModule =
   typeof import("../../lib/replica/mobile-gateway-compatibility");
-type ReaderModule = typeof import("../../lib/replica/multi-vault-reader");
 type HashModule = typeof import("../../lib/replica/native-hash");
 type MultiplexModule =
   typeof import("../../lib/replica/native-multiplex-change-feed");
 type NativeSessionModule = typeof import("../../lib/replica/native-session");
-type DriverModule = typeof import("../../lib/replica/op-sqlite-driver");
-type PlacementModule = typeof import("../../lib/replica/placement-transport");
+type SeatMountModule = typeof import("./replica-seat-mount");
 type ThumbnailModule = typeof import("../../lib/replica/thumbnail-pack");
 type UploadPolicyModule = typeof import("../../lib/upload/native-policy");
 type VaultLinksModule = typeof import("../../lib/vault-links");
@@ -180,8 +178,8 @@ vi.mock(
     }) as unknown as Partial<CompatibilityModule>
 );
 
-/** One inert double stands in for both the mounted reader and the multiplex
- *  feed: this test is about the mount lifecycle, not about either of them. */
+/** An inert double for the multiplex change feed: this test is about the mount
+ *  lifecycle, not about the radio. */
 const Inert = vi.hoisted(() => {
   class InertNativeDouble {
     close(): void {}
@@ -196,14 +194,6 @@ const Inert = vi.hoisted(() => {
   }
   return InertNativeDouble;
 });
-
-vi.mock(
-  import("../../lib/replica/multi-vault-reader"),
-  () =>
-    ({
-      MultiVaultReplicaReader: Inert,
-    }) as unknown as Partial<ReaderModule>
-);
 
 vi.mock(
   import("../../lib/replica/native-hash"),
@@ -240,7 +230,10 @@ vi.mock(
             return Promise.resolve();
           },
           pullNow: () => Promise.resolve(false),
+          pullForeground: () =>
+            Promise.resolve({ landed: true, policyBlocked: false }),
           status: () => Promise.resolve({ coverage: "complete" }),
+          watermark: () => ({ commitSeq: 1, epoch: 1 }),
           subscribe: () => (): void => undefined,
           notifyReachable: (): void => undefined,
           updateGatewayBase: (): void => undefined,
@@ -250,27 +243,17 @@ vi.mock(
 );
 
 vi.mock(
-  import("../../lib/replica/op-sqlite-driver"),
+  import("./replica-seat-mount"),
   () =>
     ({
-      openMountedReplicaReaderDriver: () => {
-        world.opened.push("reader");
-        return Promise.resolve({ close: (): void => undefined });
-      },
-      openNativeReplicaDriver: (identity: { vaultId: string }) => {
+      openMountSeat: (identity: { vaultId: string }) => {
         world.opened.push(identity.vaultId);
-        return Promise.resolve({ close: (): void => undefined });
+        return Promise.resolve({
+          watermark: () => undefined,
+          close: () => Promise.resolve(),
+        });
       },
-    }) as unknown as Partial<DriverModule>
-);
-
-vi.mock(
-  import("../../lib/replica/placement-transport"),
-  () =>
-    ({
-      postCommons: () => Promise.reject(new Error("offline")),
-      postPlacement: () => Promise.reject(new Error("offline")),
-    }) as unknown as Partial<PlacementModule>
+    }) as unknown as Partial<SeatMountModule>
 );
 
 vi.mock(
@@ -318,8 +301,9 @@ vi.mock(
     }) as unknown as Partial<StoreModule>
 );
 
-// The cap itself lives here and is exercised for real: active vault first, the
-// rest in registry order, sliced to MAX_MOUNTED_NATIVE_SCOPES.
+// The switcher's whole list: active vault first, the rest in registry order,
+// UNSLICED — a seat opens one file, so what a member may switch to is bounded
+// by what the gateway granted, not by how many the phone could hold open.
 vi.mock(
   import("./replica-mount"),
   () =>
@@ -331,13 +315,12 @@ vi.mock(
       freshnessKey: (gatewayId: string, vaultId: string) =>
         `freshness:${gatewayId}:${vaultId}`,
       loadFreshness: () => Promise.resolve(new Map<string, string>()),
-      mountedScopes: (identity: { auth: { vaultId: string } }) => {
+      vaultScopes: (identity: { auth: { vaultId: string } }) => {
         world.mountPlans += 1;
         const active = identity.auth.vaultId;
         return Promise.resolve(
           [active, ...world.enrolled.filter((vaultId) => vaultId !== active)]
             .filter((vaultId) => !world.revoked.includes(vaultId))
-            .slice(0, 4)
             .map((vaultId) => ({
               vaultId,
               label: `${vaultId} vault`,
@@ -394,7 +377,7 @@ async function activate(vaultId: string): Promise<void> {
   await settle();
 }
 
-describe("activating a vault outside the mounted four (#880 W3.4)", () => {
+describe("switching vaults, one open file at a time (#996 wave 3, R12)", () => {
   beforeEach(async () => {
     registry.active = { gatewayId: "gateway-1", vaultId: "vault-1" };
     registry.listeners.clear();
@@ -431,57 +414,55 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
     container.remove();
   });
 
-  it("mounts the active vault plus three, and no more", () => {
+  it("offers every saved vault and opens exactly one file", () => {
+    // The switcher's list is not the mount: six vaults are switchable, one is
+    // open. Before #996 wave 3 these were the same set of four, and the four
+    // was a bound on ATTACHed databases rather than on what a member could see.
     expect(mountedVaultIds()).toStrictEqual([
       "vault-1",
       "vault-2",
       "vault-3",
       "vault-4",
+      "vault-5",
+      "vault-6",
     ]);
+    expect(world.opened).toStrictEqual(["vault-1"]);
     expect(world.mountPlans).toBe(1);
   });
 
-  it("re-plans the mounted set around the newly active fifth vault", async () => {
+  it("switching to any vault opens that file, not the launch-time one", async () => {
     await activate("vault-5");
 
-    // THE REGRESSION THIS PINS: before the remount, this stayed the launch-time
-    // four and vault-5 was unreadable until the process restarted.
-    expect(mountedVaultIds()).toContain("vault-5");
-    expect(mountedVaultIds()).toHaveLength(4);
+    expect(world.opened).toStrictEqual(["vault-1", "vault-5"]);
     expect(world.mountPlans).toBe(2);
     expect(seen?.ready).toBe(true);
   });
 
-  // A remount is open/close over per-vault SQLite files. Purging one would take
+  // A switch is open/close over per-vault SQLite files. Purging one would take
   // that vault's durable outbox with it — the exact thing a switch must not do.
-  it("closes the evicted sessions without purging a single outbox", async () => {
+  it("closes the previous session without purging a single outbox", async () => {
     await activate("vault-5");
 
     expect(world.closedSessions).not.toStrictEqual([]);
     expect(world.purged).toStrictEqual([]);
   });
 
-  // Sabotage target: drop the `scopes.some(...)` guard and every switch — every
-  // freshness commit, even — tears the read plane down and rebuilds it.
-  it("costs nothing when the new active vault is already mounted", async () => {
-    await activate("vault-3");
+  // Re-activating the vault that is ALREADY open must not churn the mount: the
+  // key is the (gateway, vault) pair, so a redundant registry notification is
+  // a no-op rather than a teardown and rebuild.
+  it("costs nothing when the newly active vault is the open one", async () => {
+    await activate("vault-1");
 
     expect(world.mountPlans).toBe(1);
-    expect(mountedVaultIds()).toStrictEqual([
-      "vault-1",
-      "vault-2",
-      "vault-3",
-      "vault-4",
-    ]);
+    expect(world.opened).toStrictEqual(["vault-1"]);
   });
 
-  // One attempt per vault. A scope the gateway will not hand back must leave
-  // the member on a settled screen, not in a mount loop.
+  // A vault the gateway will not hand back must leave the member on a settled
+  // screen, not in a mount loop.
   it("does not spin when the vault cannot be mounted at all", async () => {
     world.revoked = ["vault-5"];
     await activate("vault-5");
 
-    // The plan is asked exactly once more, and then the provider settles.
     expect(world.mountPlans).toBe(2);
     expect(seen?.ready).toBe(true);
   });
@@ -533,7 +514,7 @@ describe("a device that is online with a gateway in reach (#905)", () => {
 
 // A COLD START MUST NOT WAIT ON THE GATEWAY TO LOOK AT ITS OWN DISK (#922 E8).
 // The one `/info` read that raises the compatibility wall used to be awaited
-// before `mountedScopes`, so a phone whose gateway was asleep sat through the
+// before `vaultScopes`, so a phone whose gateway was asleep sat through the
 // reply deadline before a single local row could be read — on the one path
 // (a relaunch, identity already on disk) where nothing about the gateway is
 // needed to know which files to open. `wall.hold()` is the only way to see the
@@ -569,8 +550,8 @@ describe("a cold start with the gateway still answering (#922 E8)", () => {
     container.remove();
   });
 
-  it("opens every local replica file before the gateway has replied", () => {
-    expect(world.opened).toStrictEqual(["vault-1", "vault-2", "reader"]);
+  it("opens the local replica file before the gateway has replied", () => {
+    expect(world.opened).toStrictEqual(["vault-1"]);
   });
 
   // The other half of the same invariant: opening early is not publishing

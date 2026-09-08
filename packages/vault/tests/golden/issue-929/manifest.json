@@ -2,7 +2,7 @@
   "label": "issue-929",
   "frozenAt": "2026-01-01T00:00:00.000Z",
   "ontologyVersion": "1.0",
-  "userVersion": 5,
+  "userVersion": 7,
   "tables": {
     "access_device": {
       "columns": [
@@ -11,14 +11,20 @@
         "last_seen_at",
         "name",
         "owner_party_id",
-        "platform",
-        "public_key",
-        "sync_cursor"
+        "platform"
       ],
       "primaryKey": "device_id",
       "rows": 1,
       "digests": {
-        "01a07098-8e3c-7709-8036-d01ab928aaee": "2b09c628aa8fc0ef"
+        "01a07f8e-951d-749e-8167-f3994ef07fa2": "7ffdbf80c4dd18d4"
+      }
+    },
+    "access_device_secret": {
+      "columns": ["device_id", "public_key", "sync_cursor"],
+      "primaryKey": "device_id",
+      "rows": 1,
+      "digests": {
+        "01a07f8e-951d-749e-8167-f3994ef07fa2": "d46257f5fd12ce5f"
       }
     },
     "core_concept": {
@@ -28,30 +34,34 @@
         "concept_id",
         "created_at",
         "definition",
+        "normalized_key",
         "notation",
         "pref_label",
+        "pref_label_lang",
+        "row_version",
         "scheme_id",
+        "stable_id",
         "updated_at"
       ],
       "primaryKey": "concept_id",
       "rows": 16,
       "digests": {
-        "01a07098-8e35-73ae-ae7d-32b2fb32737a": "1f3c9a0bad650ab9",
-        "01a07098-8e36-7507-8f15-359c58013cf6": "46e024cf9e93a0e0",
-        "01a07098-8e36-7507-8f15-3be1086ba718": "04e546ba5a8f98dd",
-        "01a07098-8e36-7507-8f15-3cd53bda1b69": "bccfcb58ac52c2a6",
-        "01a07098-8e37-728f-b79a-728243b792ae": "2ead8fa5dc5d20e8",
-        "01a07098-8e37-728f-b79a-765e4f3efacb": "5eb66c9436fdf171",
-        "01a07098-8e37-728f-b79a-78025d50d4ef": "b95fcd868fad4e31",
-        "01a07098-8e38-705e-a375-f6788346e45c": "abe71895d1340a62",
-        "01a07098-8e38-705e-a375-f9221d0fca66": "1715f31b98cfdf02",
-        "01a07098-8e38-705e-a375-fe59522c4bed": "6a0c1b1ddb254c54",
-        "01a07098-8e39-777c-a187-fe48cab6ac5f": "2b03e63c7bbb61cc",
-        "01a07098-8e39-777c-a188-00e71bb065e6": "717f0cf22bc3bc67",
-        "01a07098-8e39-777c-a188-0453fd8628f1": "c0da51119093bc72",
-        "01a07098-8e3a-724e-900e-b116b7a27b9a": "f425c39a490b7e83",
-        "01a07098-8e3a-724e-900e-b79cad6294a3": "f3a289a0f530d683",
-        "01a07098-8e3a-724e-900e-b815d5669c08": "6ed0f302c4c68470"
+        "01a07f8e-9504-75db-8aa9-9ed67666d5c3": "55a00c26de0bf5f7",
+        "01a07f8e-9505-7209-956a-0537485dd90c": "de8fef23fd9c2bfb",
+        "01a07f8e-9507-77ff-b4c1-34a1a289d567": "b0eeebcabf662e1b",
+        "01a07f8e-9508-701b-8eec-ec781bb2d9f8": "ab8622c4e68c88f6",
+        "01a07f8e-9509-7158-811c-7bdbece4c2cc": "51c3d82b778835cb",
+        "01a07f8e-950a-758c-887f-77170872bf28": "c184eec1965ec55e",
+        "01a07f8e-950c-7660-bd2a-4210337d8c1a": "9b442995c9e3153f",
+        "01a07f8e-950d-73ca-b93b-246693409d1b": "6f5574932af840df",
+        "01a07f8e-950e-757f-8983-5417d2808211": "2011a2d44c57c0d6",
+        "01a07f8e-950f-75f8-b57e-af03e4e1db7f": "2718c46ed71725f1",
+        "01a07f8e-9510-764f-bd17-1be0c6e63f53": "4ce3817f8e476086",
+        "01a07f8e-9511-746d-b9f3-39d798643c06": "984b18e30c66ed9d",
+        "01a07f8e-9513-7438-bed3-450219f2dbdf": "159478e5471b0d30",
+        "01a07f8e-9514-736e-acb5-5143b9725cb2": "01a382afd131fef4",
+        "01a07f8e-9515-74ca-967f-1fdd314e0324": "1d2b0ba86402b682",
+        "01a07f8e-9516-74e9-9bc1-938fc8490aa7": "98224c66e41e1fcf"
       }
     },
     "core_concept_scheme": {
@@ -66,12 +76,12 @@
       "primaryKey": "scheme_id",
       "rows": 6,
       "digests": {
-        "01a07098-8e33-7661-9179-c9ccf2808d14": "64531781a388a6e4",
-        "01a07098-8e33-7661-9179-cd9e22057dc8": "143bbb6da7945ab1",
-        "01a07098-8e34-716b-9814-3130e5c633cc": "d74e54c9f897f0a2",
-        "01a07098-8e34-716b-9814-3711572b2a55": "25f27748180f15fb",
-        "01a07098-8e34-716b-9814-3959085f886f": "1b0576d1ca81d9bd",
-        "01a07098-8e35-73ae-ae7d-2e5aa1d13afa": "f272f490d931e522"
+        "01a07f8e-94fa-70aa-a9d4-e512f4be2322": "8297bcb5e18c9942",
+        "01a07f8e-94fd-76c8-821c-462bac92e932": "aab4bd6985ed00c0",
+        "01a07f8e-94ff-7526-9dfc-3ec894dca438": "b377527b972e57e2",
+        "01a07f8e-9500-7159-bd91-4bb693b81acc": "98b3f1245f637768",
+        "01a07f8e-9501-750f-99ec-40e881d6bc8b": "c853db0821cabe15",
+        "01a07f8e-9503-77de-94e3-3720d959c569": "bae31a09d29557b9"
       }
     },
     "core_content_item": {
@@ -83,88 +93,117 @@
         "creator_party_id",
         "deleted_at",
         "language",
-        "media_type",
         "origin_device_id",
         "purge_at",
+        "row_version",
         "sha256",
-        "title",
         "updated_at"
       ],
       "primaryKey": "content_id",
       "rows": 5,
       "digests": {
-        "66a1972f-596d-7738-8a3c-63d1132f3df7": "1fcdf53be8b55131",
-        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "53951d5506a0fa04",
-        "b1557230-c0e7-7255-84ce-a45ee7bf198e": "004796ee0ced5969",
-        "c128a5df-9b86-7be3-8d77-0406f25b01bd": "9d55fde2ea7425d0",
-        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "e1728d92d42ae5f2"
+        "07ba6103-9196-7f85-8271-33489e323840": "a0e4a14897965104",
+        "66a1972f-596d-7738-8a3c-63d1132f3df7": "bbb1329dc42ffea3",
+        "a210139b-b628-7592-82ec-d7aacf47468d": "503715ad8426bdc5",
+        "b1557230-c0e7-7255-84ce-a45ee7bf198e": "750e8d7b0399d6c7",
+        "cb625ee7-d35e-7668-81ea-64aa001547c1": "37f9d2edf378066d"
+      }
+    },
+    "core_content_representation": {
+      "columns": [
+        "charset",
+        "content_id",
+        "created_at",
+        "interpretation",
+        "media_type",
+        "owner_id",
+        "owner_type",
+        "representation_id",
+        "row_version",
+        "updated_at"
+      ],
+      "primaryKey": "representation_id",
+      "rows": 5,
+      "digests": {
+        "0289261d-f491-7460-8714-2b2651a726ef": "9b476e40b515d706",
+        "2f9a358a-2807-7a16-8500-9e527f712450": "27982eb101db5972",
+        "51b7f0b8-a5ed-76b1-8776-55311a9b2677": "c9619d04efaa4363",
+        "c1bac236-83fc-724a-82bd-82a02933fa5b": "27c81301a469d290",
+        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "cbd5826c3fd45b5b"
       }
     },
     "core_document": {
       "columns": [
         "created_at",
         "current_content_id",
+        "current_revision_id",
         "deleted_at",
         "document_id",
         "purge_at",
+        "row_version",
         "title",
         "updated_at"
       ],
       "primaryKey": "document_id",
       "rows": 3,
       "digests": {
-        "0289261d-f491-7460-8714-2b2651a726ef": "9734a76be0d69f3c",
-        "07ba6103-9196-7f85-8271-33489e323840": "6e5e9401443f5120",
-        "58e8ce9a-8f2b-7a70-8d2f-31a05e55b4d2": "335d7bd2ba8a0da1"
+        "329447ef-c5af-72f3-8f6a-68a553b9d9d1": "1dbbf400ac58be6b",
+        "58e8ce9a-8f2b-7a70-8d2f-31a05e55b4d2": "6d6d0a3fce563000",
+        "c128a5df-9b86-7be3-8d77-0406f25b01bd": "0d265898bc906464"
       }
     },
     "core_entity": {
       "columns": ["created_at", "entity_id", "entity_type"],
       "primaryKey": "entity_id",
-      "rows": 36,
+      "rows": 41,
       "digests": {
-        "01a07098-8e33-7661-9179-c9ccf2808d14": "68f666bcc20393c8",
-        "01a07098-8e33-7661-9179-cd9e22057dc8": "3b6644e772069d9b",
-        "01a07098-8e34-716b-9814-3130e5c633cc": "cd48d51df8531b12",
-        "01a07098-8e34-716b-9814-3711572b2a55": "1f58992152fbf5ce",
-        "01a07098-8e34-716b-9814-3959085f886f": "39d90e4c8befc566",
-        "01a07098-8e35-73ae-ae7d-2e5aa1d13afa": "e29139e3e5765456",
-        "01a07098-8e35-73ae-ae7d-32b2fb32737a": "1a07c58405de4482",
-        "01a07098-8e36-7507-8f15-359c58013cf6": "973b39ff98f2ccc5",
-        "01a07098-8e36-7507-8f15-3be1086ba718": "bf957ae769a8ec3d",
-        "01a07098-8e36-7507-8f15-3cd53bda1b69": "8e1dc823522d6fb0",
-        "01a07098-8e37-728f-b79a-728243b792ae": "3b9575a2e49ba8fd",
-        "01a07098-8e37-728f-b79a-765e4f3efacb": "09772b0fc8c9e680",
-        "01a07098-8e37-728f-b79a-78025d50d4ef": "9dc4109bd918d2f5",
-        "01a07098-8e38-705e-a375-f6788346e45c": "c5a00170226add6f",
-        "01a07098-8e38-705e-a375-f9221d0fca66": "9a42d9422a6b5039",
-        "01a07098-8e38-705e-a375-fe59522c4bed": "340b53e7f1f20ba1",
-        "01a07098-8e39-777c-a187-fe48cab6ac5f": "08b282f346564b19",
-        "01a07098-8e39-777c-a188-00e71bb065e6": "c333f951237fa4f1",
-        "01a07098-8e39-777c-a188-0453fd8628f1": "3fd61a0ea34b53eb",
-        "01a07098-8e3a-724e-900e-b116b7a27b9a": "1a28b340ad5531bb",
-        "01a07098-8e3a-724e-900e-b79cad6294a3": "88aac40983072f31",
-        "01a07098-8e3a-724e-900e-b815d5669c08": "c3e454d33cbd51ef",
-        "01a07098-8e3b-704e-83f6-6ab07eaedad7": "83a8fd1e93b76cc8",
-        "01a07098-8e3b-704e-83f6-6df7b0991bc8": "5c0a011569b9484d",
-        "01a07098-8e3c-7709-8036-cce7ab31db29": "ef386e006c398290",
-        "0289261d-f491-7460-8714-2b2651a726ef": "e42725ce32e00880",
-        "07ba6103-9196-7f85-8271-33489e323840": "c52df8b782cbe9cf",
-        "2f9a358a-2807-7a16-8500-9e527f712450": "ae5d6f26957f499b",
-        "329447ef-c5af-72f3-8f6a-68a553b9d9d1": "975584905a001e02",
+        "01a07f8e-94fa-70aa-a9d4-e512f4be2322": "76712eb4e915ef7c",
+        "01a07f8e-94fd-76c8-821c-462bac92e932": "6a6666a421d32cec",
+        "01a07f8e-94ff-7526-9dfc-3ec894dca438": "68dfbe34f84e3066",
+        "01a07f8e-9500-7159-bd91-4bb693b81acc": "91983365deb27d5a",
+        "01a07f8e-9501-750f-99ec-40e881d6bc8b": "2014487801d52938",
+        "01a07f8e-9503-77de-94e3-3720d959c569": "a61af3d81b90b0ac",
+        "01a07f8e-9504-75db-8aa9-9ed67666d5c3": "07c0321e5255715b",
+        "01a07f8e-9505-7209-956a-0537485dd90c": "216980cc523aafba",
+        "01a07f8e-9507-77ff-b4c1-34a1a289d567": "61eaf602041209fd",
+        "01a07f8e-9508-701b-8eec-ec781bb2d9f8": "92c01b30795ba30e",
+        "01a07f8e-9509-7158-811c-7bdbece4c2cc": "de13db7975e20b01",
+        "01a07f8e-950a-758c-887f-77170872bf28": "3aecaaa2b7b4e50f",
+        "01a07f8e-950c-7660-bd2a-4210337d8c1a": "b48d6032eaf25e0f",
+        "01a07f8e-950d-73ca-b93b-246693409d1b": "0ed7fec6224e5371",
+        "01a07f8e-950e-757f-8983-5417d2808211": "3457a4cc0facaa96",
+        "01a07f8e-950f-75f8-b57e-af03e4e1db7f": "c2690075137d8da3",
+        "01a07f8e-9510-764f-bd17-1be0c6e63f53": "65862f67070062eb",
+        "01a07f8e-9511-746d-b9f3-39d798643c06": "4c6a1b2901b86563",
+        "01a07f8e-9513-7438-bed3-450219f2dbdf": "e39b861e2cbc55f9",
+        "01a07f8e-9514-736e-acb5-5143b9725cb2": "28add0a506b9e6c3",
+        "01a07f8e-9515-74ca-967f-1fdd314e0324": "013d5a38d809c271",
+        "01a07f8e-9516-74e9-9bc1-938fc8490aa7": "55aa299b9432b3bd",
+        "01a07f8e-9517-749d-9e31-1d0a6c94bdee": "c32996615d38fc7b",
+        "01a07f8e-9519-76a9-93e2-78c5ca8a4864": "22080757f95a41f3",
+        "01a07f8e-951c-772c-9226-cee4e9a8a456": "a9ec733ace7c8f1f",
+        "0289261d-f491-7460-8714-2b2651a726ef": "5de0cfab46718917",
+        "07ba6103-9196-7f85-8271-33489e323840": "912a4878f07532bb",
+        "2f9a358a-2807-7a16-8500-9e527f712450": "66385d36fe59d12d",
+        "329447ef-c5af-72f3-8f6a-68a553b9d9d1": "6a3aa37e0f732454",
+        "51b7f0b8-a5ed-76b1-8776-55311a9b2677": "5d2ddfe7995882f9",
         "58e8ce9a-8f2b-7a70-8d2f-31a05e55b4d2": "6c2aeb524cff1e6a",
+        "5b818965-455e-7ef6-842f-243ef584c6a7": "380925fd068eec88",
         "66a1972f-596d-7738-8a3c-63d1132f3df7": "104e45aac3729acf",
-        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "47cd50caab7773ec",
+        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "1995e830f4c1fee4",
+        "a210139b-b628-7592-82ec-d7aacf47468d": "93bb5520507b2a1e",
         "b1557230-c0e7-7255-84ce-a45ee7bf198e": "b2f161beacaf476b",
-        "c128a5df-9b86-7be3-8d77-0406f25b01bd": "d72554470f9f4834",
-        "cb625ee7-d35e-7668-81ea-64aa001547c1": "8eea4f0745a03170",
-        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "766c6766e50187a8"
+        "c128a5df-9b86-7be3-8d77-0406f25b01bd": "ff547fcf6e48fc02",
+        "c1bac236-83fc-724a-82bd-82a02933fa5b": "cf0e2f197f93e980",
+        "c3dd9f89-daa9-755d-803e-4f8597d9e96d": "ab8f184f05ec6341",
+        "cb625ee7-d35e-7668-81ea-64aa001547c1": "8aeb323e24d7870e",
+        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "f4ae7ea22b0d23ea"
       }
     },
     "core_entity_kind": {
       "columns": ["kind"],
       "primaryKey": "kind",
-      "rows": 51,
+      "rows": 52,
       "digests": {
         "core.account": "66c1385ed428ec33",
         "core.activity": "d64edf6ef1677b06",
@@ -175,6 +214,7 @@
         "core.concept_scheme": "91a9e5a74f890d7c",
         "core.content_derivative": "6ccaa5aef262a631",
         "core.content_item": "da6e73d75a6cf0cc",
+        "core.content_representation": "d91e2fc88574e414",
         "core.document": "3e6ea155790bb53c",
         "core.entity_revision": "f9d3c67c0940bbab",
         "core.event": "a6d7da146076258a",
@@ -227,6 +267,7 @@
         "link_id",
         "provenance_id",
         "relation_concept_id",
+        "row_version",
         "to_id",
         "to_type",
         "updated_at",
@@ -236,7 +277,7 @@
       "primaryKey": "link_id",
       "rows": 1,
       "digests": {
-        "cb625ee7-d35e-7668-81ea-64aa001547c1": "08426b6cee000461"
+        "5b818965-455e-7ef6-842f-243ef584c6a7": "cce88bb7a747b63c"
       }
     },
     "core_party": {
@@ -249,13 +290,14 @@
         "kind",
         "party_id",
         "purge_at",
+        "row_version",
         "sort_name",
         "updated_at"
       ],
       "primaryKey": "party_id",
       "rows": 1,
       "digests": {
-        "01a07098-8e3b-704e-83f6-6ab07eaedad7": "9db1ce6b0e6e1c64"
+        "01a07f8e-9517-749d-9e31-1d0a6c94bdee": "a43970c2ed98b59a"
       }
     },
     "core_vault": {
@@ -263,6 +305,7 @@
         "base_currency",
         "created_at",
         "display_name",
+        "row_version",
         "self_party_id",
         "settings_json",
         "status",
@@ -272,459 +315,16 @@
       "primaryKey": "vault_id",
       "rows": 1,
       "digests": {
-        "01a07098-8e3b-704e-83f6-6df7b0991bc8": "92b155a7db703cd6"
+        "01a07f8e-9519-76a9-93e2-78c5ca8a4864": "64e48f46c6ac0c03"
       }
     },
     "enrich_policy": {
-      "columns": ["domain", "tier", "updated_at"],
+      "columns": ["domain", "row_version", "tier", "updated_at"],
       "primaryKey": "domain",
       "rows": 2,
       "digests": {
-        "docs": "925892de137d6304",
-        "photos": "b82e26bf8f637786"
-      }
-    },
-    "fts_conversation_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_conversation_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_core_collection_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_collection_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_core_content_item": {
-      "columns": ["content_id", "title"],
-      "primaryKey": null,
-      "rows": 5,
-      "digests": {}
-    },
-    "fts_core_content_item_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_content_item_content": {
-      "columns": ["c0", "c1", "id"],
-      "primaryKey": "id",
-      "rows": 5,
-      "digests": {
-        "1": "222dca257897cf1f",
-        "2": "821dd455c808fde8",
-        "3": "97997317934fa480",
-        "4": "f7370d6991565e3f",
-        "5": "dbfdbea13c098a3e"
-      }
-    },
-    "fts_core_content_item_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 7,
-      "digests": {
-        "1": "bcaeea0a10b07374",
-        "10": "d723b071b9250792",
-        "137438953473": "b3c148f4264f203e",
-        "274877906945": "a3d319b91f69f02f",
-        "412316860417": "36e59be44c96d60a",
-        "549755813889": "06978f40f4db4b86",
-        "687194767361": "8e471fc1254b4167"
-      }
-    },
-    "fts_core_content_item_docsize": {
-      "columns": ["id", "sz"],
-      "primaryKey": "id",
-      "rows": 5,
-      "digests": {
-        "1": "ae8bc72a6041a6d7",
-        "2": "acacd3565d49ce75",
-        "3": "bffc566b4b5f6d2a",
-        "4": "ccb39c045a544d59",
-        "5": "6314a0ba7a868dee"
-      }
-    },
-    "fts_core_content_item_idx": {
-      "columns": ["pgno", "segid", "term"],
-      "primaryKey": null,
-      "rows": 5,
-      "digests": {}
-    },
-    "fts_core_document": {
-      "columns": ["body", "document_id", "title"],
-      "primaryKey": null,
-      "rows": 3,
-      "digests": {}
-    },
-    "fts_core_document_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_document_content": {
-      "columns": ["c0", "c1", "c2", "id"],
-      "primaryKey": "id",
-      "rows": 3,
-      "digests": {
-        "1": "d0ede2b9b4b0b83a",
-        "2": "4afc881bc542d7db",
-        "3": "30c6e727a093fb63"
-      }
-    },
-    "fts_core_document_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 5,
-      "digests": {
-        "1": "36780b5128c9dbf5",
-        "10": "50ad03368055a4e9",
-        "137438953473": "b3c148f4264f203e",
-        "274877906945": "a3d319b91f69f02f",
-        "412316860417": "36e59be44c96d60a"
-      }
-    },
-    "fts_core_document_docsize": {
-      "columns": ["id", "sz"],
-      "primaryKey": "id",
-      "rows": 3,
-      "digests": {
-        "1": "6bd2f8140798d45d",
-        "2": "93451cf819c35403",
-        "3": "87dce826e9d08260"
-      }
-    },
-    "fts_core_document_idx": {
-      "columns": ["pgno", "segid", "term"],
-      "primaryKey": null,
-      "rows": 3,
-      "digests": {}
-    },
-    "fts_core_event_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_event_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_core_party": {
-      "columns": ["display_name", "party_id", "sort_name"],
-      "primaryKey": null,
-      "rows": 1,
-      "digests": {}
-    },
-    "fts_core_party_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_party_content": {
-      "columns": ["c0", "c1", "c2", "id"],
-      "primaryKey": "id",
-      "rows": 1,
-      "digests": {
-        "1": "d54968efc91f031f"
-      }
-    },
-    "fts_core_party_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 3,
-      "digests": {
-        "1": "b971559c74d47363",
-        "10": "ef3a0569b23f80b4",
-        "137438953473": "a16b09acfc9c887e"
-      }
-    },
-    "fts_core_party_docsize": {
-      "columns": ["id", "sz"],
-      "primaryKey": "id",
-      "rows": 1,
-      "digests": {
-        "1": "1ae6e31775d04da8"
-      }
-    },
-    "fts_core_party_idx": {
-      "columns": ["pgno", "segid", "term"],
-      "primaryKey": null,
-      "rows": 1,
-      "digests": {}
-    },
-    "fts_core_place_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_place_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_core_transaction_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_core_transaction_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_knowledge_annotation_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_knowledge_annotation_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_knowledge_note": {
-      "columns": ["body", "note_id", "title"],
-      "primaryKey": null,
-      "rows": 2,
-      "digests": {}
-    },
-    "fts_knowledge_note_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_knowledge_note_content": {
-      "columns": ["c0", "c1", "c2", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "503cbe0a8ead3b43",
-        "2": "62f9a3a73d9bd7a9"
-      }
-    },
-    "fts_knowledge_note_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 4,
-      "digests": {
-        "1": "ec4a47bb188efed6",
-        "10": "d76edd35d98a2bcd",
-        "137438953473": "1fe699dc0d7d1f34",
-        "274877906945": "43a83d57ae830f73"
-      }
-    },
-    "fts_knowledge_note_docsize": {
-      "columns": ["id", "sz"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6bd2f8140798d45d",
-        "2": "93451cf819c35403"
-      }
-    },
-    "fts_knowledge_note_idx": {
-      "columns": ["pgno", "segid", "term"],
-      "primaryKey": null,
-      "rows": 2,
-      "digests": {}
-    },
-    "fts_locker_item_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_locker_item_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_people_profile_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_people_profile_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_schedule_project_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_schedule_project_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_schedule_task_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_schedule_task_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_social_circle_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_social_circle_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_social_message_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_social_message_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_social_thread_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_social_thread_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
-      }
-    },
-    "fts_tally_expense_config": {
-      "columns": ["k", "v"],
-      "primaryKey": "k",
-      "rows": 1,
-      "digests": {
-        "version": "c633bc52cd068ddc"
-      }
-    },
-    "fts_tally_expense_data": {
-      "columns": ["block", "id"],
-      "primaryKey": "id",
-      "rows": 2,
-      "digests": {
-        "1": "6875ddfe71b8a067",
-        "10": "51abfc908b71d439"
+        "docs": "54a1c8f68943ffed",
+        "photos": "5506faa2c66e66f9"
       }
     },
     "knowledge_note": {
@@ -732,19 +332,29 @@
         "author_party_id",
         "body_content_id",
         "created_at",
+        "current_revision_id",
         "deleted_at",
         "format",
         "note_id",
         "pinned",
         "purge_at",
+        "row_version",
         "title",
         "updated_at"
       ],
       "primaryKey": "note_id",
       "rows": 2,
       "digests": {
-        "2f9a358a-2807-7a16-8500-9e527f712450": "2a33037d0f605931",
-        "329447ef-c5af-72f3-8f6a-68a553b9d9d1": "72ff8d1ae14898af"
+        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "dc5f9185adb95425",
+        "c3dd9f89-daa9-755d-803e-4f8597d9e96d": "c27f0f9cdad64d1f"
+      }
+    },
+    "locker_key": {
+      "columns": ["created_at", "key_id", "retired_at"],
+      "primaryKey": "key_id",
+      "rows": 1,
+      "digests": {
+        "eea499be-421c-413a-81bc-245c75b64c06": "b657ed0b1e139e7d"
       }
     },
     "replica_change": {
@@ -761,48 +371,52 @@
         "seq"
       ],
       "primaryKey": "seq",
-      "rows": 40,
+      "rows": 44,
       "digests": {
-        "1": "5b1015dc05488f89",
-        "2": "23eb541c76256e20",
-        "3": "5b0bbb061bc1905e",
-        "4": "4ecbcc11201caeca",
-        "5": "bd30f6cdcb3dddeb",
-        "6": "87e1d7b321135990",
-        "7": "0976fadc062cec47",
-        "8": "5ab7573eda5e1a46",
-        "9": "585ee3665ae13dbf",
-        "10": "66ce6a981d0c237d",
-        "11": "9a46953c7174e7d8",
-        "12": "5641614473c37197",
-        "13": "d4461f9a961ff915",
-        "14": "d601ccaaafa08059",
-        "15": "222ffeca2f3481d7",
-        "16": "0652da005f679a01",
-        "17": "72f91dc6dd4e177f",
-        "18": "c0b6351c727b2807",
-        "19": "7a4a3b4d96440b07",
-        "20": "4cc8524bd92521ed",
-        "21": "1d11be63df8df6f2",
-        "22": "9c5a1b7ec07cfc03",
-        "23": "a41778bdc82ff6d2",
-        "24": "86706a12f4c18c94",
-        "25": "7ff6576087e9fa09",
-        "26": "df9e8e43f34c7d7c",
-        "27": "b86e299083ac4795",
-        "28": "27134a6cea76dc5c",
-        "29": "4dd086fefd5f5374",
-        "30": "7a11aac7efabf70f",
-        "31": "04a5fb638262e0ea",
-        "32": "46bbddd47ff6e7cc",
-        "33": "91e5914a678094ec",
-        "34": "84b7bcc972f4f235",
-        "35": "789b37ce38d256a8",
-        "36": "0d39bf7efb75d1df",
-        "37": "0fecbfbf83c7fc36",
-        "38": "46850f2e5d323382",
-        "39": "8e2161b524e66b76",
-        "40": "acbd3a396da9a115"
+        "1": "e1d8012fc3ae70a7",
+        "2": "4b789d8f8e64ec6e",
+        "3": "9682323f7285f38f",
+        "4": "1a8dce1df6dd519b",
+        "5": "a43c2a0bfa505a07",
+        "6": "4dbad68b07c9aea8",
+        "7": "0bdffa65f763ae42",
+        "8": "4e9b0782f4503eb7",
+        "9": "8d17cff77666bd96",
+        "10": "a6832626488ba2d2",
+        "11": "1ea2b07210ce126b",
+        "12": "5e8642acc56cefe4",
+        "13": "f34a321bf5df9b54",
+        "14": "e9252947fb40932a",
+        "15": "e80b1568e410e6e6",
+        "16": "218d5c0249a6a792",
+        "17": "94bd4943d339f35a",
+        "18": "c1e5f95d8cef97b4",
+        "19": "72304cdcf965de64",
+        "20": "40ed678c35db8606",
+        "21": "8ed8d8f930efb1c1",
+        "22": "13f786a990c62f49",
+        "23": "88f146ee9d1178f2",
+        "24": "17cd5c46719a271f",
+        "25": "aa1762fcabc9855f",
+        "26": "dff1da1128656893",
+        "27": "56933fd4c445e3c8",
+        "28": "7ada2926a2b26746",
+        "29": "efd06a7b44fd7a73",
+        "30": "8ac422df6915d04c",
+        "31": "47167871372677d8",
+        "32": "77e1115ed5f3bcc5",
+        "33": "cbc49b46692bee6e",
+        "34": "2557b62165d64334",
+        "35": "141aa56eb870e7ac",
+        "36": "613399af993c48e4",
+        "37": "4edfcdbb96a8acb4",
+        "38": "b7c4fddf3a315ff9",
+        "39": "ed21021e63bc1b54",
+        "40": "0ea3b806bd4f41d6",
+        "41": "8773a888cfe655d1",
+        "42": "f4636c8487b51918",
+        "43": "146b06c0c3434f04",
+        "44": "493b9bb97f07e7ca"
       }
     },
     "schedule_calendar": {
@@ -819,30 +433,7 @@
       "primaryKey": "calendar_id",
       "rows": 1,
       "digests": {
-        "01a07098-8e3c-7709-8036-cce7ab31db29": "912d78aed18d75a7"
-      }
-    },
-    "share_authority": {
-      "columns": [
-        "authority_id",
-        "decision",
-        "duration",
-        "expires_at",
-        "granted_at",
-        "granted_by",
-        "principal_id",
-        "principal_kind",
-        "receipt_id",
-        "revoked_at",
-        "revoked_reason",
-        "subject_id",
-        "subject_type",
-        "verb"
-      ],
-      "primaryKey": "authority_id",
-      "rows": 1,
-      "digests": {
-        "01a07098-8e3d-7582-9cd5-e613de05855e": "1888d1e6d219a87c"
+        "01a07f8e-951c-772c-9226-cee4e9a8a456": "5dd36fa5f83db215"
       }
     }
   }

@@ -1,16 +1,13 @@
-import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { SqliteIntentStore } from "../../apps/mobile/src/lib/replica/sqlite-intent-store.js";
-import { IndexedDbIntentStore } from "../../packages/client/src/replica/intent-store.js";
 import { IntentQueue } from "../../packages/client/src/replica/intents.js";
-import { NodeSqliteDriver } from "../../packages/client/src/replica/node-sqlite-test-driver.js";
+import { NodeSeatDriver } from "../../packages/client/src/replica/seat/node-seat-driver.js";
+import { SeatIntentStore } from "../../packages/client/src/replica/seat/seat-intent-store.js";
 import type { IntentOutcome } from "../../packages/client/src/replica/types.js";
 import {
   Dispatcher,
@@ -32,13 +29,13 @@ const logger = {
 describe("R2 product offline/reconnect transport", () => {
   const cleanups: Array<() => Promise<void> | void> = [];
 
-  beforeEach(() => vi.stubGlobal("IDBKeyRange", IDBKeyRange));
-
+  // NO INDEXEDDB STUB SINCE #996 W5. Both queues in this case are SQLite now —
+  // the browser's outbox was a second database beside the replica and went with
+  // it — so the only global this ever needed is gone with the store.
   afterEach(async () => {
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
       cleanup()
     );
-    vi.unstubAllGlobals();
   });
 
   test("PWA IndexedDB and mobile SQLite queues cross real HTTP and converge once after drops", async () => {
@@ -137,14 +134,27 @@ describe("R2 product offline/reconnect transport", () => {
         })
     );
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    const pwaStore = await IndexedDbIntentStore.open(
-      `quality-r2-${crypto.randomUUID()}`,
-      new IDBFactory()
-    );
-    const mobileStore = SqliteIntentStore.create(new NodeSqliteDriver());
+    // TWO SEATS, ONE STORE CLASS (#996 W5). This used to be two outbox
+    // implementations — IndexedDB on the browser, SQLite on the phone — and
+    // the claim was that both reconnect the same way. The outbox is a table in
+    // the seat's own file on both hosts now, so what differs between these two
+    // devices is the FILE, which is what the claim was ever about.
+    const pwaStore = SeatIntentStore.create(new NodeSeatDriver(":memory:"));
+    const mobileStore = SeatIntentStore.create(new NodeSeatDriver(":memory:"));
+    // NO CURSOR BEHIND THESE TWO, AND THEY SAY SO (#996, R24). A seat store
+    // parks an executed answer on its `commit_seq` and waits for the applier to
+    // reach it — correct on a real device, and a queue with no applier would
+    // hold `awaiting-change` forever. This case is about the TRANSPORT: a
+    // reconnect that sends the same intent twice must settle it once. So the
+    // wiring is stated rather than inherited, exactly as `IntentQueueOptions`
+    // provides for.
+    const noCursor = { settlesByCommitSeq: false };
     const queues = [
-      { deviceId: "pwa-device", queue: new IntentQueue(pwaStore) },
-      { deviceId: "mobile-device", queue: new IntentQueue(mobileStore) },
+      { deviceId: "pwa-device", queue: new IntentQueue(pwaStore, noCursor) },
+      {
+        deviceId: "mobile-device",
+        queue: new IntentQueue(mobileStore, noCursor),
+      },
     ];
 
     await forEachSequentially(queues, async (target, index) => {

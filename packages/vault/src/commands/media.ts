@@ -10,7 +10,12 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { REPRESENTATION_TARGET_TYPE } from "../ingest/caption-target.js";
 import { CONTENT_REFERENCES } from "../schema/content-references.js";
+import {
+  representationIdOf,
+  setRepresentation,
+} from "../schema/representation.js";
 import {
   loadEntityRevision,
   markEntityRevisionUndone,
@@ -156,6 +161,8 @@ export interface MediaAssetRow {
   assetId: string;
   contentId: string;
   kind: string;
+  /** The owner's AUTHORED title (#996, R20(b), OQ-9) — never a machine's words. */
+  title: string | null;
   capturedAt: string | null;
   tzOffsetMin: number | null;
   captureGroupId: string | null;
@@ -174,13 +181,14 @@ export function insertMediaAssetTx(
 ): void {
   vault
     .prepare(
-      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
+      `INSERT INTO media_asset (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
     )
     .run(
       row.assetId,
       row.contentId,
       row.kind,
+      row.title,
       row.capturedAt,
       row.tzOffsetMin,
       row.captureGroupId,
@@ -430,8 +438,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   if (input.data_uri !== undefined)
     assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
-    ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
-    : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
+    ? ctx.blobs.claimStaged(input.staged_sha)
+    : mintContentFromDataUri(ctx, input.data_uri!);
   const contentId = minted.contentId;
   const deps = depsOf(ctx);
   const adopted = adoptAssetForContentTx(
@@ -465,6 +473,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     assetId,
     contentId,
     kind: input.kind ?? assetKindFor(minted.mediaType),
+    title: input.title ?? null,
     capturedAt: input.captured_at ?? meta.captured_at ?? null,
     tzOffsetMin:
       input.tz_offset_min ??
@@ -524,6 +533,14 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       );
   }
   ctx.wrote("media.asset", assetId);
+  // THIS ASSET'S READING OF THE BYTES (#996, R20(b)).
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: ASSET_TARGET_TYPE,
+    ownerId: assetId,
+    mediaType: minted.mediaType,
+    interpretation: "original",
+  });
   ctx.cite({
     claim: `${minted.mediaType} (${minted.byteSize} bytes) entered the library`,
     entityType: "media.asset",
@@ -542,7 +559,9 @@ const UPDATE_ASSET: CommandDefinition = {
     properties: {
       asset_id: { type: "string", minLength: 1 },
       captured_at: { type: "string" },
-      // The caption lives on the canonical content item as its title.
+      // The owner's own title for the photo, on `media_asset` (#996, R20(b)).
+      // A GENERATED caption never lands here: it is a derived row keyed to the
+      // representation, and `media.promote_caption` is how one becomes a title.
       title: { type: "string" },
       // The star is a `starred` flags tag on the asset (#916); the input
       // stays a boolean because that is what a member's toggle is.
@@ -571,8 +590,8 @@ const UPDATE_ASSET: CommandDefinition = {
               (SELECT CASE WHEN :captured_at IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND captured_at = :captured_at) END)
               AND (SELECT CASE WHEN :title IS NULL THEN 1
-                           ELSE EXISTS(SELECT 1 FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
-                                        WHERE a.asset_id = :asset_id AND c.title = :title) END)
+                           ELSE EXISTS(SELECT 1 FROM media_asset a
+                                        WHERE a.asset_id = :asset_id AND a.title = :title) END)
               AND (SELECT CASE WHEN :favorite IS NULL THEN 1
                            WHEN :favorite = 1 THEN ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")}
                            ELSE NOT ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")} END)
@@ -611,15 +630,102 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(input.archived === 1 ? ctx.now : null, input.asset_id);
   }
   if (input.title !== undefined) {
+    // THE AUTHORED TITLE, ON THE ASSET (#996, R20(b), OQ-9). It used to be
+    // written onto the shared byte row, where a generated caption overwrote
+    // it and two assets over one sha would have shared it.
     ctx.db
-      .prepare(
-        `UPDATE core_content_item SET title = ?
-          WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
-      )
+      .prepare("UPDATE media_asset SET title = ? WHERE asset_id = ?")
       .run(input.title, input.asset_id);
   }
   ctx.wrote("media.asset", input.asset_id);
   return { asset_id: input.asset_id };
+}
+
+/**
+ * OQ-9's ONE-TAP PROMOTE. A generated caption is a derived row keyed to the
+ * representation and stays one; this copies its words into the asset's
+ * AUTHORED title, as an owner action with the owner's name on it. The derived
+ * row is untouched — promoting is not accepting, and a re-caption later
+ * replaces the derived row without touching what the owner chose to keep.
+ */
+const PROMOTE_CAPTION: CommandDefinition = {
+  name: "media.promote_caption",
+  ownerSchema: "media",
+  inputSchema: {
+    type: "object",
+    required: ["asset_id"],
+    additionalProperties: false,
+    properties: { asset_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["asset_id", "title"],
+    properties: { asset_id: { type: "string" }, title: { type: "string" } },
+  },
+  preconditions: [
+    {
+      name: "asset_exists",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
+      name: "caption_exists",
+      sql: `SELECT count(*) AS n FROM knowledge_annotation an
+              JOIN core_content_representation r
+                ON r.representation_id = an.target_id
+             WHERE an.target_type = '${REPRESENTATION_TARGET_TYPE}'
+               AND r.owner_type = '${ASSET_TARGET_TYPE}'
+               AND r.owner_id = :asset_id`,
+      column: "n",
+      op: "gte",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "title_authored",
+      sql: `SELECT count(*) AS n FROM media_asset
+             WHERE asset_id = :asset_id AND title IS NOT NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: promoteCaption,
+};
+
+function promoteCaption(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { asset_id: string };
+  const representationId = representationIdOf(ctx.db, {
+    ownerType: ASSET_TARGET_TYPE,
+    ownerId: input.asset_id,
+  });
+  const caption = representationId
+    ? (ctx.db
+        .prepare(
+          `SELECT body_text FROM knowledge_annotation
+            WHERE target_type = ? AND target_id = ?
+            ORDER BY created_at DESC, annotation_id DESC LIMIT 1`
+        )
+        .get(REPRESENTATION_TARGET_TYPE, representationId) as
+        | { body_text: string }
+        | undefined)
+    : undefined;
+  if (!caption) throw new Error(`no caption to promote for ${input.asset_id}`);
+  ctx.db
+    .prepare("UPDATE media_asset SET title = ? WHERE asset_id = ?")
+    .run(caption.body_text, input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
+  ctx.cite({
+    claim: `caption promoted to the authored title of ${input.asset_id}`,
+    entityType: "media.asset",
+    entityId: input.asset_id,
+  });
+  return { asset_id: input.asset_id, title: caption.body_text };
 }
 
 const SET_ASSET_PLACE: CommandDefinition = {
@@ -1836,6 +1942,7 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
 export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
   gateway.registerCommand(UPDATE_ASSET);
+  gateway.registerCommand(PROMOTE_CAPTION);
   gateway.registerCommand(SET_ASSET_PLACE);
   gateway.registerCommand(NAME_PLACE);
   gateway.registerCommand(SET_FAVORITE);

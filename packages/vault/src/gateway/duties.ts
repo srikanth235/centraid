@@ -5,7 +5,6 @@ import { liveBlobShas } from "../blob/read.js";
 import { sweepBlobStaging } from "../blob/staging.js";
 import { shaOfBlobUri } from "../blob/store.js";
 import { partyForReach } from "../commands/contact-reach.js";
-import { RELATIONS_SCHEME_URI } from "../commands/links.js";
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { contentReferenceExists } from "../schema/content-references.js";
@@ -145,42 +144,32 @@ function purgeOneRow(
   }
 }
 
-function revisesConceptId(db: VaultDb): string | null {
-  const row = db.vault
+/**
+ * Every content item this document's own history names (#996, R20(a)).
+ *
+ * It was a BFS over live `revises` links, and the seen-set was load-bearing
+ * because a restore cycled the graph. The occurrence chain is a list: one walk
+ * over `parent_revision_id`, distinct content ids out. The seen-set survives
+ * for the same reason a step cap does — a chain is data, and data can be
+ * malformed.
+ */
+function documentChain(db: VaultDb, documentId: string): string[] {
+  const rows = db.vault
     .prepare(
-      `SELECT c.concept_id FROM core_concept c
-         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-        WHERE s.uri = ? AND c.notation = 'revises'`
+      `WITH RECURSIVE chain(revision_id, content_id, parent_revision_id) AS (
+         SELECT r.revision_id, r.content_id, r.parent_revision_id
+           FROM core_entity_revision r
+           JOIN core_document d ON d.current_revision_id = r.revision_id
+          WHERE d.document_id = ?
+         UNION
+         SELECT r.revision_id, r.content_id, r.parent_revision_id
+           FROM core_entity_revision r
+           JOIN chain ON chain.parent_revision_id = r.revision_id
+       )
+       SELECT DISTINCT content_id FROM chain WHERE content_id IS NOT NULL`
     )
-    .get(RELATIONS_SCHEME_URI) as { concept_id: string } | undefined;
-  return row?.concept_id ?? null;
-}
-
-/** Full BFS over live `revises`: R3 restore can cycle, so the seen-set is load-bearing. */
-function documentChain(
-  db: VaultDb,
-  headContentId: string,
-  revisesId: string
-): string[] {
-  const seen = new Set<string>([headContentId]);
-  const queue: string[] = [headContentId];
-  while (queue.length > 0) {
-    const cur = queue.shift() as string;
-    const next = db.vault
-      .prepare(
-        `SELECT to_id FROM core_link
-          WHERE from_type = 'core.content_item' AND from_id = ? AND to_type = 'core.content_item'
-            AND relation_concept_id = ? AND valid_to IS NULL`
-      )
-      .all(cur, revisesId) as { to_id: string }[];
-    for (const n of next) {
-      if (!seen.has(n.to_id)) {
-        seen.add(n.to_id);
-        queue.push(n.to_id);
-      }
-    }
-  }
-  return [...seen];
+    .all(documentId) as { content_id: string }[];
+  return rows.map((row) => row.content_id);
 }
 
 /**
@@ -207,20 +196,26 @@ function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
   return row.n > 0;
 }
 
-/** sha256 dedup: a superseded revision can coincide with a live page. */
+/**
+ * sha256 dedup: a superseded revision can coincide with a live page.
+ *
+ * Since #996 the question is asked of each live document's OWN occurrence
+ * chain rather than of a shared graph, which is also the point: two documents
+ * with identical bytes have independent histories, and one purging its history
+ * must not take the other's page with it.
+ */
 function ownedByAnotherLiveDocument(
   db: VaultDb,
   contentId: string,
-  excludeDocumentId: string,
-  revisesId: string
+  excludeDocumentId: string
 ): boolean {
   const others = db.vault
     .prepare(
-      `SELECT current_content_id FROM core_document WHERE document_id != ? AND deleted_at IS NULL`
+      `SELECT document_id FROM core_document WHERE document_id != ? AND deleted_at IS NULL`
     )
-    .all(excludeDocumentId) as { current_content_id: string }[];
+    .all(excludeDocumentId) as { document_id: string }[];
   return others.some((o) =>
-    documentChain(db, o.current_content_id, revisesId).includes(contentId)
+    documentChain(db, o.document_id).includes(contentId)
   );
 }
 
@@ -776,7 +771,6 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   }
   // Documents next (#352), same NOT NULL reason; each chain item is judged at
   // purge, not while the document lives.
-  const revisesId = revisesConceptId(db);
   const lapsedDocuments = db.vault
     .prepare(
       `SELECT document_id, current_content_id FROM core_document
@@ -789,9 +783,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   }[];
   let documentsPurged = 0;
   for (const doc of lapsedDocuments) {
-    const chain = revisesId
-      ? documentChain(db, doc.current_content_id, revisesId)
-      : [doc.current_content_id];
+    const chain = documentChain(db, doc.document_id);
+    if (!chain.includes(doc.current_content_id))
+      chain.push(doc.current_content_id);
     const done = purgeOneRow(
       db,
       skipped,
@@ -820,11 +814,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     documentsPurged += 1;
     for (const contentId of chain) {
       if (contentRentedElsewhere(db, contentId)) continue;
-      if (
-        revisesId &&
-        ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId)
-      )
-        continue;
+      if (ownedByAnotherLiveDocument(db, contentId, doc.document_id)) continue;
       purgeOneRow(db, skipped, "core.content_item", contentId, () => {
         const purge = purgeContentItem(db, owner, contentId);
         blobsReclaimed += purge.reclaimed;

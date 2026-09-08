@@ -1,4 +1,5 @@
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { Page, PageCursor, PageQuery } from "@centraid/core/page";
 /**
  * The ONE inline-query `ctx`, for every seat that holds a replica (#922).
  *
@@ -27,10 +28,14 @@ import {
   collapseMissedOccurrences,
   describeRecurrence,
   expandRecurrence,
+  occurrenceExceptionsOf,
+  overrideAt,
+  recurrenceExceptionsOf,
   shiftTemporal,
 } from "@centraid/core/time";
 
 import type { OnlineOnlyGuard } from "./online-only-guard.js";
+import type { SeatReadOverlay } from "./seat/read-overlay.js";
 import type { ReplicaRowEnvelope } from "./types.js";
 
 /**
@@ -106,12 +111,38 @@ export interface InlineRowsResult {
 }
 
 /**
- * The seat's whole contribution: how a read and a search reach rows.
+ * The seat's whole contribution beside `page`: how a SEARCH reaches rows.
+ *
+ * `read` is gone (#996, W5). A declarative read against a shaped store was the
+ * other half of this pair; a seat holds the vault's own tables, so a handler's
+ * read is `ctx.vault.page` — plain SQL a reviewer can see — and there is no
+ * second read vocabulary for one to come back in. Search stays because ranked
+ * FTS is not a page: it is a bounded top-N over the shadow tables the seat's
+ * file already carries (W5-D1).
  */
-export interface InlineCtxReads<Read, Search> {
-  read: (request: Read) => Promise<InlineRowsResult>;
+export interface InlineCtxReads<Search> {
   search: (request: Search) => Promise<InlineRowsResult>;
 }
+
+/**
+ * `ctx.vault.page` — one page of one handler's plain SQL over this seat's own
+ * copy of the vault (#996 wave 4, R8).
+ *
+ * The window is the request and the answer carries a cursor, so there is no
+ * flag to forward and nothing for a seat to announce: a handler that wants the
+ * next page asks for it. `overlay` is how a list read shows the member their
+ * own unsettled write (R23–R25); a read that is measuring the file omits it.
+ */
+export interface InlinePageRequest<Row extends object> {
+  query: PageQuery<Row>;
+  limit: number;
+  after?: PageCursor;
+  overlay?: SeatReadOverlay;
+}
+
+export type InlinePage = <Row extends object>(
+  request: InlinePageRequest<Row>
+) => Promise<Page<Row>>;
 
 /**
  * A replica session's wire surface, as both seats already expose it. The
@@ -138,16 +169,13 @@ export interface InlineWireResult {
  * does not — so neither belongs in a module both seats share. What IS shared is
  * that they are asked at the same two points, which is what this hook fixes.
  */
-export interface InlineReadHooks<Read, Search> {
-  /** Runs before the request reaches the session; throw to refuse it. */
-  beforeRead?: (request: Read) => void;
+export interface InlineReadHooks<Search> {
   beforeSearch?: (request: Search) => void;
-  /** Runs on every read and search result, before rows are projected. */
+  /** Runs on every search result, before rows are projected. */
   onResult?: (result: InlineWireResult) => void;
 }
 
-export interface InlineWireSession<Read, Search> {
-  read: (appId: string, request: Read) => Promise<InlineWireResult>;
+export interface InlineWireSession<Search> {
   search: (appId: string, request: Search) => Promise<InlineWireResult>;
 }
 
@@ -157,15 +185,15 @@ export interface InlineWireSession<Read, Search> {
  * for itself is what one ROW becomes — the shell threads pending-row
  * provenance onto it, the phone does not.
  */
-export function inlineReadsFor<Read, Search>(
-  session: InlineWireSession<Read, Search>,
+export function inlineReadsFor<Search>(
+  session: InlineWireSession<Search>,
   appId: string,
   row: (
     envelope: ReplicaRowEnvelope,
     sidecar: PendingOverlaySidecar
   ) => unknown,
-  hooks: InlineReadHooks<Read, Search> = {}
-): InlineCtxReads<Read, Search> {
+  hooks: InlineReadHooks<Search> = {}
+): InlineCtxReads<Search> {
   const project = (result: InlineWireResult): InlineRowsResult => {
     hooks.onResult?.(result);
     // One sidecar per read, shared by every row it answers for: the rows carry
@@ -178,10 +206,6 @@ export function inlineReadsFor<Read, Search>(
     };
   };
   return {
-    read: async (request) => {
-      hooks.beforeRead?.(request);
-      return project(await session.read(appId, request));
-    },
     search: async (request) => {
       hooks.beforeSearch?.(request);
       return project(await session.search(appId, request));
@@ -201,11 +225,19 @@ const INLINE_CTX_TIME = {
   collapseMissedOccurrences,
   describeRecurrence,
   expandRecurrence,
+  // The occurrence-key adapter (#996, ruling R21; drift ONT-25): a seat's
+  // handlers read a stored exception through the same one adapter the gateway
+  // worker's do, so the column is named in one place for both.
+  occurrenceExceptionsOf,
+  overrideAt,
+  recurrenceExceptionsOf,
   shiftTemporal,
 } as const;
 
-export interface InlineCtxCoreOptions<Read, Search> {
-  reads: InlineCtxReads<Read, Search>;
+export interface InlineCtxCoreOptions<Search> {
+  reads: InlineCtxReads<Search>;
+  /** Absent on a seat with no local file: `ctx.vault.page` is then online-only. */
+  page?: InlinePage;
   signal?: AbortSignal;
 }
 
@@ -227,8 +259,8 @@ const OPTIONAL_INVOKE_UNAVAILABLE = {
  * empty cards, never a blank board (#505 P4) — and every remaining verb is an
  * online-only effect.
  */
-export function buildInlineCtxCore<Read, Search>(
-  options: InlineCtxCoreOptions<Read, Search>,
+export function buildInlineCtxCore<Search>(
+  options: InlineCtxCoreOptions<Search>,
   guard: OnlineOnlyGuard
 ): unknown {
   const effect = (name: string) => (): Promise<never> =>
@@ -238,8 +270,12 @@ export function buildInlineCtxCore<Read, Search>(
     fetch: (): Promise<never> =>
       Promise.reject(guard.mark("fetch is online-only")),
     vault: {
-      read: options.reads.read,
+      // NO `read` (#996, W5). A handler that still called one would get the
+      // online-only refusal every other absent verb gives, which is the honest
+      // answer: the plane it addressed does not exist on a seat any more.
+      read: effect("read"),
       search: options.reads.search,
+      page: options.page ?? effect("page"),
       resolve: (): Promise<{ cards: unknown[] }> =>
         Promise.resolve({ cards: [] }),
       invoke: (request: { optional?: boolean }): Promise<unknown> =>
@@ -250,7 +286,6 @@ export function buildInlineCtxCore<Read, Search>(
       describe: effect("describe"),
       parked: effect("parked"),
       reveal: effect("reveal"),
-      authenticate: effect("authenticate"),
       content: effect("content"),
       changes: effect("changes"),
     },

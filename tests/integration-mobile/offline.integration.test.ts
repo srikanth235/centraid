@@ -38,11 +38,14 @@ describe("an offline phone on a real gateway", () => {
     async ({ appId, recipe }) => {
       const observed = await arrangeOffline(gateway, seat, recipe);
 
-      // A real transport failure, surfaced rather than swallowed.
+      // A real transport failure, REPORTED rather than swallowed. The seat
+      // does not throw for an outage — an older copy is not an error — so what
+      // must not be swallowed is the verdict: this pull did not land, and the
+      // refresh spinner that reads it must not claim the library is current.
       expect(
-        observed.cutPullError,
-        `${appId} pulled successfully while its transport was cut`
-      ).toBeTypeOf("string");
+        observed.cutPullLanded,
+        `${appId} reported a landed pull while its transport was cut`
+      ).toBe(false);
       // The cursor is exactly where the last landed pull left it: an outage
       // must not advance freshness.
       expect(observed.cursorWhileCut).not.toBeNull();

@@ -10,23 +10,15 @@
  * `tests/integration-mobile/tally-balance-parity.integration.test.ts`. Sharing
  * the seed is what makes "the same rows" a fact rather than a claim.
  */
-import { DatabaseSync } from "node:sqlite";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
-
-import { NodeSqliteDriver } from "./node-sqlite-driver";
+import { seedSeatTables } from "./seat-fixture.test-fixtures";
+import type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 export const VAULT_ID = "personal";
-export const SHAPE_ID = "tally-default";
 export const OWNER = "party-owner";
 export const FRIENDS = ["party-ana", "party-bo", "party-cy"] as const;
 
-export interface SeedEntity {
-  entity: string;
-  primaryKey: string;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-}
+export type { SeedEntity } from "./seat-fixture.test-fixtures";
 
 /**
  * A ledger with real arithmetic in it: three friends, a group, multi-payer and
@@ -101,12 +93,22 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.friend",
       primaryKey: "party_id",
+      seatColumns: ["friend_id", "party_id", "created_at"],
       columns: ["party_id"],
       rows: FRIENDS.map((party_id) => ({ party_id })),
     },
     {
       entity: "tally.group",
       primaryKey: "group_id",
+      seatColumns: [
+        "group_id",
+        "circle_id",
+        "icon",
+        "color",
+        "simplify_opt_in",
+        "archived_at",
+        "currency",
+      ],
       columns: [
         "group_id",
         "circle_id",
@@ -137,6 +139,7 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "social.circle",
       primaryKey: "circle_id",
+      seatColumns: ["circle_id", "owner_party_id", "name", "kind"],
       columns: ["circle_id", "name"],
       rows: [
         { circle_id: "circle-flat", name: "14 Sitwell Road" },
@@ -156,6 +159,23 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.expense",
       primaryKey: "expense_id",
+      seatColumns: [
+        "expense_id",
+        "group_id",
+        "description",
+        "amount_minor",
+        "currency",
+        "paid_by",
+        "split_method",
+        "split_params_json",
+        "spent_on",
+        "category",
+        "txn_id",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "purge_at",
+      ],
       columns: [
         "expense_id",
         "group_id",
@@ -192,6 +212,18 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.settlement",
       primaryKey: "settlement_id",
+      seatColumns: [
+        "settlement_id",
+        "group_id",
+        "from_party",
+        "to_party",
+        "amount_minor",
+        "currency",
+        "paid_on",
+        "txn_id",
+        "created_at",
+        "deleted_at",
+      ],
       columns: [
         "settlement_id",
         "from_party",
@@ -214,6 +246,17 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.obligation",
       primaryKey: "obligation_id",
+      seatColumns: [
+        "obligation_id",
+        "from_party",
+        "to_party",
+        "amount_minor",
+        "currency",
+        "reason",
+        "incurred_on",
+        "settled_at",
+        "deleted_at",
+      ],
       columns: [
         "obligation_id",
         "from_party",
@@ -238,6 +281,15 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.nudge",
       primaryKey: "nudge_id",
+      seatColumns: [
+        "nudge_id",
+        "party_id",
+        "group_id",
+        "as_of_minor",
+        "note",
+        "prepared_at",
+        "created_at",
+      ],
       columns: [
         "nudge_id",
         "party_id",
@@ -260,6 +312,26 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "tally.recurring_expense",
       primaryKey: "template_id",
+      seatColumns: [
+        "template_id",
+        "group_id",
+        "description",
+        "original_amount_minor",
+        "original_currency",
+        "settlement_currency",
+        "paid_by",
+        "category",
+        "rrule",
+        "anchor_start",
+        "tz",
+        "rate_scaled",
+        "rate_scale",
+        "rate_source",
+        "rate_date",
+        "status",
+        "last_materialized_start",
+        "updated_at",
+      ],
       columns: [
         "template_id",
         "group_id",
@@ -269,7 +341,7 @@ export function seedEntities(): SeedEntity[] {
         "settlement_currency",
         "rrule",
         "anchor_start",
-        "time_zone",
+        "tz",
         "status",
         "updated_at",
       ],
@@ -283,7 +355,7 @@ export function seedEntities(): SeedEntity[] {
           settlement_currency: "GBP",
           rrule: "FREQ=MONTHLY;BYMONTHDAY=1",
           anchor_start: "2026-01-01T09:00:00.000Z",
-          time_zone: "Europe/London",
+          tz: "Europe/London",
           status: "active",
           updated_at: "2026-01-01T09:00:00.000Z",
         },
@@ -292,11 +364,21 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "schedule.recurrence_exception",
       primaryKey: "exception_id",
+      seatColumns: [
+        "exception_id",
+        "target_type",
+        "target_id",
+        "original_start_local",
+        "recurrence_semantics",
+        "scope",
+        "action",
+        "override_json",
+      ],
       columns: [
         "exception_id",
         "target_type",
         "target_id",
-        "original_start",
+        "original_start_local",
         "action",
         "scope",
         "override_json",
@@ -306,7 +388,7 @@ export function seedEntities(): SeedEntity[] {
           exception_id: "exception-1",
           target_type: "tally.recurring_expense",
           target_id: "template-1",
-          original_start: "2026-02-01T09:00:00.000Z",
+          original_start_local: "2026-02-01T09:00:00.000Z",
           action: "skip",
           scope: "occurrence",
           override_json: null,
@@ -316,6 +398,14 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "core.attachment",
       primaryKey: "attachment_id",
+      seatColumns: [
+        "attachment_id",
+        "target_type",
+        "target_id",
+        "content_id",
+        "role",
+        "is_primary",
+      ],
       columns: [
         "attachment_id",
         "target_type",
@@ -348,50 +438,38 @@ export function seedEntities(): SeedEntity[] {
     {
       entity: "core.content_item",
       primaryKey: "content_id",
+      seatColumns: ["content_id", "content_uri", "media_type", "byte_size"],
       columns: ["content_id", "content_uri", "media_type"],
       rows: [],
     },
   ];
 }
 
-export function seedScope(file: string): void {
-  const entities = seedEntities();
-  const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), VAULT_ID);
-  store.bootstrap({
-    protocolVersion: 1,
-    vaultId: VAULT_ID,
-    schemaEpoch: "1",
-    cursor: { epoch: "epoch-1", seq: 1 },
-    shapes: [
-      {
-        shapeId: SHAPE_ID,
-        appId: "tally",
-        entities: entities.map((entity) => ({
-          entity: entity.entity,
-          primaryKey: entity.primaryKey,
-          columns: [...entity.columns],
-        })),
-      },
+/** Tables the ledger's handlers read past their own rows into. */
+const TALLY_DECORATION_TABLES = [
+  {
+    table: "core_entity_revision",
+    columns: [
+      "revision_id",
+      "entity_type",
+      "entity_id",
+      "revision_no",
+      "created_at",
+      "actor_party_id",
+      "summary",
     ],
-    rows: [],
-  });
-  store.close();
+  },
+] as const;
 
-  const database = new DatabaseSync(file);
-  const insert = database.prepare(
-    `INSERT INTO replica_row
-       (shape_id, entity, row_id, payload_json, oversized_json)
-     VALUES (?, ?, ?, ?, '[]')`
-  );
-  database.exec("BEGIN IMMEDIATE");
-  for (const entity of entities)
-    for (const row of entity.rows)
-      insert.run(
-        SHAPE_ID,
-        entity.entity,
-        String(row[entity.primaryKey]),
-        JSON.stringify(row)
-      );
-  database.exec("COMMIT");
-  database.close();
+/**
+ * The same ledger, in the tables a handler's SQL names (#996 wave 5).
+ *
+ * The old store's one blob table had no callers left once the airplane and
+ * parity oracles moved, so it is gone; what a fixture writes is the vault's
+ * own tables, which is what `ctx.vault.page` reads. The tables the dashboard only
+ * DECORATES from — revisions, the attachment's bytes — are created empty: on a
+ * real seat they exist and answer nothing.
+ */
+export function seedSeatScope(file: string): void {
+  seedSeatTables(file, seedEntities(), TALLY_DECORATION_TABLES);
 }

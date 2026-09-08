@@ -31,8 +31,27 @@ export interface ReplicaIntentOutcome {
   conflict?: ReplicaConflict;
   waitingOn?: ReplicaWaitingOn;
   answeredVersions?: readonly ReplicaAnsweredVersion[];
+  /** The canonical commit this answer stands for (#996, R24). */
+  commitSeq?: number;
+  /** What that commit wrote, with the version each row landed at. */
+  produced?: readonly ReplicaProducedRowWire[];
+  /** The intents this one may not run before (#996, R23). */
+  dependsOn?: readonly string[];
+  /** End of the idempotency window; a retry after it is answered `expired`. */
+  expiresAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One row an executed intent produced. The TABLE is physical and the key is a
+ * JSON array in declared key order — the same spelling `replica_log` uses, so
+ * a seat matches an outcome against applied rows without a second vocabulary.
+ */
+export interface ReplicaProducedRowWire {
+  table: string;
+  pk: readonly unknown[];
+  rowVersion?: number;
 }
 
 /**
@@ -40,7 +59,12 @@ export interface ReplicaIntentOutcome {
  * read off the LINK, so a member reads a person rather than a vault id.
  */
 export interface ReplicaWaitingOn {
-  seat: "owner" | "origin" | "gateway";
+  /**
+   * `intent` is the offline chain's own wait (#996, R23): the label is the
+   * PREDECESSOR'S INTENT ID, which is the only name a seat can match its own
+   * outbox against — it has no vault id for a row the create has not made yet.
+   */
+  seat: "owner" | "origin" | "gateway" | "intent";
   label?: string;
 }
 
@@ -65,10 +89,23 @@ export interface RecordReplicaIntentOutcomeInput {
   conflict?: ReplicaConflict;
   waitingOn?: ReplicaWaitingOn;
   answeredVersions?: readonly ReplicaAnsweredVersion[];
+  /**
+   * The canonical commit this answer stands for, when the commit happened
+   * SOMEWHERE ELSE (#996, R10/R24). A local execution never passes it —
+   * `gateway/execution.ts` stamps it inside the canonical transaction, which
+   * is the only place that knows it. A projected row's edit is executed by the
+   * ORIGIN, so the number that tells this seat when its pending write has
+   * landed is the origin's, carried back over the peer answer.
+   */
+  commitSeq?: number;
+  /** The intents this one may not run before (#996, R23). */
+  dependsOn?: readonly string[];
+  /** End of the idempotency window; defaults to the retention window. */
+  expiresAt?: string;
   now?: Date;
 }
 
-interface IntentRow {
+export interface IntentRow {
   intent_id: string;
   device_id: string;
   app_id: string;
@@ -80,11 +117,37 @@ interface IntentRow {
   conflict_json: string | null;
   waiting_on: string | null;
   answered_versions: string | null;
+  commit_seq: number | null;
+  produced_json: string | null;
+  depends_on: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const TERMINAL = new Set<ReplicaIntentStatus>([
+/**
+ * THE IDEMPOTENCY WINDOW (#996, R24; open question 13).
+ *
+ * How long a retained outcome answers a retry. It is stated here, in the
+ * protocol, rather than left to whatever the retention sweep happens to do:
+ * a client needs to know how long "retry is safe" lasts, and the honest
+ * answer after it lapses is `expired`, never a silent second execution.
+ *
+ * Thirty days, matching the log's retention floor. The two numbers are the
+ * same on purpose — an outcome that outlives the log rows its `commit_seq`
+ * points into can no longer tell a seat where its own effect landed.
+ */
+export const REPLICA_IDEMPOTENCY_WINDOW_DAYS = 30;
+
+function defaultExpiry(now: string): string {
+  return new Date(
+    new Date(now).getTime() +
+      REPLICA_IDEMPOTENCY_WINDOW_DAYS * 24 * 60 * 60 * 1_000
+  ).toISOString();
+}
+
+/** The statuses no retry re-enters. Shared with `intent-chain.ts`. */
+export const TERMINAL = new Set<ReplicaIntentStatus>([
   "executed",
   "denied",
   "failed",
@@ -117,17 +180,35 @@ function outcomeOf(row: IntentRow): ReplicaIntentOutcome {
           ) as ReplicaAnsweredVersion[],
         }
       : {}),
+    ...(typeof row.commit_seq === "number"
+      ? { commitSeq: row.commit_seq }
+      : {}),
+    ...(typeof row.produced_json === "string"
+      ? {
+          produced: JSON.parse(row.produced_json) as ReplicaProducedRowWire[],
+        }
+      : {}),
+    ...(typeof row.depends_on === "string"
+      ? { dependsOn: JSON.parse(row.depends_on) as string[] }
+      : {}),
+    ...(typeof row.expires_at === "string"
+      ? { expiresAt: row.expires_at }
+      : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-function rowById(vault: DatabaseSync, intentId: string): IntentRow | undefined {
+export function intentRowById(
+  vault: DatabaseSync,
+  intentId: string
+): IntentRow | undefined {
   return vault
     .prepare(
       `SELECT intent_id, device_id, app_id, action, payload_hash, status,
               invocation_id, reason, conflict_json, waiting_on,
-              answered_versions, created_at, updated_at
+              answered_versions, commit_seq, produced_json, depends_on,
+              expires_at, created_at, updated_at
          FROM replica_intent_outcome WHERE intent_id = ?`
     )
     .get(intentId) as IntentRow | undefined;
@@ -171,7 +252,7 @@ export function recordReplicaIntentOutcomeInTransaction(
   ) {
     throw new Error("replica intent identity fields must be non-empty");
   }
-  const prior = rowById(vault, input.intentId);
+  const prior = intentRowById(vault, input.intentId);
   if (prior) assertIdentity(prior, input);
   const now = (input.now ?? new Date()).toISOString();
   if (prior) {
@@ -179,7 +260,11 @@ export function recordReplicaIntentOutcomeInTransaction(
       .prepare(
         `UPDATE replica_intent_outcome
             SET status = ?, invocation_id = ?, reason = ?, conflict_json = ?,
-                waiting_on = ?, answered_versions = ?, updated_at = ?
+                waiting_on = ?, answered_versions = ?,
+                commit_seq = COALESCE(?, commit_seq),
+                depends_on = COALESCE(?, depends_on),
+                expires_at = COALESCE(?, expires_at),
+                updated_at = ?
           WHERE intent_id = ?`
       )
       .run(
@@ -189,6 +274,9 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.conflict ? JSON.stringify(input.conflict) : null,
         input.waitingOn ? JSON.stringify(input.waitingOn) : null,
         input.answeredVersions ? JSON.stringify(input.answeredVersions) : null,
+        input.commitSeq ?? null,
+        input.dependsOn ? JSON.stringify(input.dependsOn) : null,
+        input.expiresAt ?? null,
         now,
         input.intentId
       );
@@ -198,8 +286,8 @@ export function recordReplicaIntentOutcomeInTransaction(
         `INSERT INTO replica_intent_outcome (
            intent_id, device_id, app_id, action, payload_hash, status,
            invocation_id, reason, conflict_json, waiting_on, answered_versions,
-           created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           commit_seq, depends_on, expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.intentId,
@@ -213,6 +301,9 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.conflict ? JSON.stringify(input.conflict) : null,
         input.waitingOn ? JSON.stringify(input.waitingOn) : null,
         input.answeredVersions ? JSON.stringify(input.answeredVersions) : null,
+        input.commitSeq ?? null,
+        input.dependsOn ? JSON.stringify(input.dependsOn) : null,
+        input.expiresAt ?? defaultExpiry(now),
         now,
         now
       );
@@ -228,7 +319,7 @@ export function recordReplicaIntentOutcomeInTransaction(
       )
       .run(input.intentId);
   }
-  const row = rowById(vault, input.intentId);
+  const row = intentRowById(vault, input.intentId);
   if (!row)
     throw new Error(
       `replica intent ${input.intentId} disappeared while recording`
@@ -275,7 +366,7 @@ export function transitionReplicaIntentOutcomeInTransaction(
   intentId: string,
   update: TransitionReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome | undefined {
-  const prior = rowById(vault, intentId);
+  const prior = intentRowById(vault, intentId);
   if (!prior) return undefined;
   return recordReplicaIntentOutcomeInTransaction(vault, {
     intentId,
@@ -321,7 +412,7 @@ export function readReplicaIntentOutcome(
   intentId: string,
   deviceId: string
 ): ReplicaIntentOutcome | undefined {
-  const row = rowById(vault, intentId);
+  const row = intentRowById(vault, intentId);
   return row?.device_id === deviceId ? outcomeOf(row) : undefined;
 }
 

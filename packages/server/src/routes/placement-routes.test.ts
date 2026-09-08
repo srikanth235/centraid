@@ -170,18 +170,11 @@ function seedNote(vault: VaultDb, title: string): string {
   vault.vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language,
+         (content_id, content_uri, sha256, byte_size, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/plain', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)`
     )
-    .run(
-      contentId,
-      blobUriFor(blob.sha256),
-      blob.sha256,
-      blob.byteSize,
-      title,
-      now
-    );
+    .run(contentId, blobUriFor(blob.sha256), blob.sha256, blob.byteSize, now);
   return contentId;
 }
 

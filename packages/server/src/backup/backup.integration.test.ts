@@ -18,6 +18,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   currentReplicaLogState,
+  lockerKeyFileName,
+  lockerKeyFilesInCustody,
   recordEgressAuthority,
   sealAad,
   unsealValue,
@@ -106,6 +108,7 @@ describe("backup", () => {
     const grantId = recordEgressAuthority(plane.db.vault, {
       actorId: "owner",
       actorKind: "owner",
+      ownerPartyId: plane.boot.ownerPartyId,
       verb: "gmail.send",
       target: "ravi@example.com",
       grantedBy: plane.boot.ownerPartyId,
@@ -170,7 +173,6 @@ describe("backup", () => {
     bigBlobBytes: Buffer;
     lockerItemId: string;
     lockerPlaintext: string;
-    lockerPassphrase: string;
     outboxItemId: string;
     peoplePartyId: string;
     peopleRevisionId: string;
@@ -312,16 +314,6 @@ describe("backup", () => {
       password: lockerPlaintext,
     });
     const lockerItemId = lockerOut["item_id"] as string;
-    const lockerPassphrase = "a second horse guards this vault";
-    const lockerAuth = await h.plane.gateway.authenticateLocker({
-      operation: "configure",
-      secret: lockerPassphrase,
-    });
-    if (!lockerAuth.ok)
-      throw new Error(
-        `Locker auth setup failed: ${JSON.stringify(lockerAuth)}`
-      );
-
     const { itemId: outboxItemId } = seedApprovedOutboxItem(h.plane);
 
     // #630 P5: lifecycle columns and pre-trash revision survive snapshot/adoption.
@@ -383,7 +375,6 @@ describe("backup", () => {
       bigBlobBytes,
       lockerItemId,
       lockerPlaintext,
-      lockerPassphrase,
       outboxItemId,
       peoplePartyId,
       peopleRevisionId,
@@ -463,6 +454,18 @@ describe("backup", () => {
     if (!restoredSealKey) throw new Error("source seal key missing");
     const adoptedKeyStore = daemonKeyStore(path.join(freshRoot, "keys"));
     adoptedKeyStore.import(`${h.vaultId}.sealkey`, restoredSealKey);
+    // The Locker key files travel with the DEK (#996, R13): the restored file
+    // names the key its ciphertext is under, and opening it without that file
+    // is custody loss the mount refuses rather than papers over.
+    for (const entry of lockerKeyFilesInCustody({
+      store: sourceKeys,
+      vaultId: h.vaultId,
+    })) {
+      adoptedKeyStore.import(
+        lockerKeyFileName(h.vaultId, entry.keyId),
+        entry.key
+      );
+    }
     await fs.mkdir(path.join(adoptedDir, "code"), { recursive: true });
     await run(
       [
@@ -605,24 +608,28 @@ describe("backup", () => {
       );
       expect(decrypted).toBe(h.seeded.lockerPlaintext);
 
-      // #630: presence is durable; live session capabilities were memory-only.
-      await expect(
-        plane.gateway.authenticateLocker({ operation: "status" })
-      ).resolves.toMatchObject({
-        ok: true,
-        configured: true,
-        authenticated: false,
-      });
-      await expect(
-        plane.gateway.authenticateLocker({
-          operation: "unlock",
-          secret: h.seeded.lockerPassphrase,
-        })
-      ).resolves.toMatchObject({
-        ok: true,
-        configured: true,
-        authenticated: true,
-      });
+      // #996, W6-D2: what is durable across a restore is the KEY PLANE, not
+      // an unlock credential — the gateway-side verifier went with the gate
+      // (`locker_auth_credential`, rung seven), and presence is proved on the
+      // seat now. The restored vault names a live Locker key and the recovery
+      // kit carried the file that opens it, which is what makes the decrypt
+      // above possible at all.
+      expect(
+        plane.db.vault
+          .prepare(
+            `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'locker_auth_credential'`
+          )
+          .get()
+      ).toBeUndefined();
+      expect(plane.db.lockerKey().keyId).toBe(
+        (
+          plane.db.vault
+            .prepare(
+              `SELECT key_id FROM locker_key WHERE retired_at IS NULL LIMIT 1`
+            )
+            .get() as { key_id: string }
+        ).key_id
+      );
     } finally {
       adoptedRegistry.stop();
     }

@@ -142,7 +142,7 @@ export default function AgendaEventEditor({
             action: "edit-occurrence",
             input: {
               event_id: event.id,
-              original_start: event.originalStart,
+              original_start_local: event.originalStart,
               scope,
               action: "override",
               dtstart: bounds.dtstart,
@@ -185,7 +185,7 @@ export default function AgendaEventEditor({
       action: "edit-occurrence",
       input: {
         event_id: event.id,
-        original_start: event.originalStart,
+        original_start_local: event.originalStart,
         scope,
         action: "skip",
       },

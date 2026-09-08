@@ -13,6 +13,7 @@ import type { FetchAccess } from "./gate";
 import { isPinned, pinContent, unpinContent } from "./pin";
 import type { ContentRef } from "./pin";
 import type { FetchPolicy } from "./policy";
+import { contentProtections } from "./protections";
 
 export type OfflineContentOutcome =
   | { status: "stored"; uri: string; pinned: boolean }
@@ -70,8 +71,9 @@ export async function ensureOfflineContent(
       reason: OFFLINE_FETCH_FAILED_REASON,
     };
   }
-  // Never selects a pin; may evict this download when unpinned.
-  enforceOfflineContentBudget(input.budgetBytes);
+  // Never selects a pin, a capture, or bytes a queued intent still needs
+  // (#996 R25); may evict this download when it is none of those.
+  enforceOfflineContentBudget(input.budgetBytes, contentProtections());
   const settled = offlineContentUri(ref);
   return settled
     ? { status: "stored", uri: settled, pinned }

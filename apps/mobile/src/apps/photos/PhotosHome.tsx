@@ -20,7 +20,6 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -40,7 +39,7 @@ import { Store } from "../../storage";
 import CameraRollImportOffer from "./CameraRollImportOffer";
 import { detectFacesFor } from "./people-model";
 import { photoAccessTakesOverTimeline } from "./photo-access";
-import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
+import { usePhotoEntity } from "./photo-entity-reads";
 import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
 import PhotoGrainView from "./PhotoGrainView";
 import { runBackup, useAutomaticPhotoBackup } from "./photos-backup";
@@ -183,11 +182,8 @@ export default function PhotosHome({
   }, []);
   useAutomaticPhotoBackup(backupConsent);
 
-  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
-  const entries = useReplicaQuery(
-    "photos",
-    PHOTO_ENTITY_READS.collectionEntries
-  );
+  const collections = usePhotoEntity("collections");
+  const entries = usePhotoEntity("collectionEntries");
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const visibleSections = useMemo(
     () => filterSections(timeline.sections, libraryFilter),
@@ -217,10 +213,7 @@ export default function PhotosHome({
   }, []);
   // Trailing control is destination-scoped (#712). Search has no honest menu.
   // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
-  const enrichPolicies = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
-  );
+  const enrichPolicies = usePhotoEntity("enrichPolicies");
   const detectFacesAvailability = detectFacesFor(
     enrichPolicies.loading
       ? null

@@ -142,7 +142,7 @@ describe("the acts this wave can take", () => {
       action: "edit-recurring-expense-occurrence",
       input: {
         template_id: "r1",
-        original_start: "2026-09-01T09:00:00.000Z",
+        original_start_local: "2026-09-01T09:00:00.000Z",
         scope: "occurrence",
         action: "skip",
       },
@@ -154,7 +154,7 @@ describe("the acts this wave can take", () => {
       action: "materialize-recurring-expense",
       input: {
         template_id: "r1",
-        original_start: "2026-09-01T09:00:00.000Z",
+        original_start_local: "2026-09-01T09:00:00.000Z",
       },
     });
   });

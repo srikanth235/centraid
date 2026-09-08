@@ -85,6 +85,7 @@ const SCHEMAS: Record<string, JsonSchema> = {
       "currency",
       "direction",
       "accountName",
+      "accountRef",
     ],
     properties: {
       externalId: { type: "string", minLength: 1 },
@@ -94,6 +95,14 @@ const SCHEMAS: Record<string, JsonSchema> = {
       currency: { type: "string", minLength: 1 },
       direction: { type: "string", enum: ["debit", "credit"] },
       accountName: { type: "string", minLength: 1 },
+      // THE SOURCE-SCOPED ACCOUNT IDENTIFIER (#996, ruling R20(c); drift
+      // ONT-24). `accountName` is a LABEL — two institutions' "Savings" is one
+      // label — and the importer used to select an account on it, so two
+      // accounts sharing a display name were one account. This is what selects
+      // now: `owner:<name>` when the member said which account these rows are,
+      // and `file:<path>` otherwise, which is the provenance of the rows and
+      // not a claim about what they are called.
+      accountRef: { type: "string", minLength: 1 },
     },
   },
   LockerItemPayload: {

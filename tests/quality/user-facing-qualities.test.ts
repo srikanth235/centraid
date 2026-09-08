@@ -585,7 +585,7 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ n: 1 });
       const automationAgent = plane.db.vault
         .prepare(
-          "SELECT agent_id FROM access_agent WHERE enrollment_key = 'quality'"
+          "SELECT agent_id FROM access_agent_secret WHERE enrollment_key = 'quality'"
         )
         .get() as { agent_id: string };
       const proposed = plane.db.audit
@@ -922,7 +922,7 @@ describe("issue #679 user-facing quality gates", () => {
       Object.keys(profile.sealedSentinels).toSorted(compareStrings)
     ).toStrictEqual(declared.toSorted(compareStrings));
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device_secret LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const ownerParty = db.vault
       .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
@@ -1022,32 +1022,48 @@ describe("issue #679 user-facing quality gates", () => {
       },
     });
     expect(invoked.status).toBe("executed");
-    const revealed = [
-      gateway.reveal(credential, {
-        entity: "locker.item",
-        entityId: "year3-sealed-locker",
-      }),
-      gateway.reveal(credential, {
-        entity: "sync.connection_credential",
-        entityId: "year3-sealed-connection",
-      }),
-      gateway.reveal(credential, {
-        entity: "locker.item_field",
-        entityId: "year3-sealed-field",
-      }),
-      gateway.reveal(credential, {
-        entity: "locker.item_passkey",
-        entityId: "year3-sealed-locker",
-      }),
-    ];
-    // Reveal is the ONE surface a sentinel is allowed through, so every
-    // declared column has to come back out of it — a sealed cell nothing can
-    // unseal is a data-loss bug wearing a passing canary.
+    // THE SERVER NEVER UNSEALS A LOCKER ROW (#996, R13 and W6-D2). The
+    // gateway door stays for broker-owned credentials; Locker plaintext is
+    // opened on the seat that holds K. A canary that still expected locker
+    // reveal to return sentinels would be asking the gateway to do the
+    // thing the ruling forbids.
+    for (const entity of [
+      "locker.item",
+      "locker.item_field",
+      "locker.item_passkey",
+    ] as const) {
+      expect(() =>
+        gateway.reveal(credential, {
+          entity,
+          entityId:
+            entity === "locker.item_field"
+              ? "year3-sealed-field"
+              : "year3-sealed-locker",
+        })
+      ).toThrow(/does not unseal locker rows/u);
+    }
+    const revealed = gateway.reveal(credential, {
+      entity: "sync.connection_credential",
+      entityId: "year3-sealed-connection",
+    });
     const revealedText = JSON.stringify(revealed);
-    for (const sentinel of Object.values(profile.sealedSentinels))
+    const lockerSentinels = Object.entries(profile.sealedSentinels).filter(
+      ([key]) => key.startsWith("locker.")
+    );
+    const brokerSentinels = Object.entries(profile.sealedSentinels).filter(
+      ([key]) => !key.startsWith("locker.")
+    );
+    for (const [key, sentinel] of lockerSentinels) {
+      expect(
+        revealedText,
+        `locker sentinel leaked via reveal ${key}`
+      ).not.toContain(sentinel);
+    }
+    for (const [, sentinel] of brokerSentinels) {
       expect(revealedText, `reveal never returned ${sentinel}`).toContain(
         sentinel
       );
+    }
     const rawStorage = [
       db.vault.prepare("SELECT * FROM locker_item").all(),
       db.vault.prepare("SELECT * FROM sync_connection_credential").all(),
@@ -1348,7 +1364,13 @@ describe("issue #679 user-facing quality gates", () => {
       if (!/\bSELECT\b/iu.test(source)) continue;
       const bounded =
         /\bLIMIT\b/iu.test(source) ||
-        /\b(?:COUNT|SUM|AVG|MAX|MIN)\s*\(/iu.test(source);
+        /\b(?:COUNT|SUM|AVG|MAX|MIN)\s*\(/iu.test(source) ||
+        // The paged door is the bound: `readPages` walks to a stated
+        // fan-out ceiling and throws rather than truncating; `readById`
+        // is a window of one. Both land as `select:` (which this scan
+        // matches as SELECT) without a LIMIT keyword in the file.
+        /\breadPages\b/u.test(source) ||
+        /\breadById\b/u.test(source);
       if (!bounded) unbounded.push(file);
     }
     const growthEntities = new Set([

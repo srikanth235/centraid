@@ -45,8 +45,8 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
 type Door = typeof import("./locker-gateway");
 vi.mock(import("./locker-gateway"), () => {
   const door = {
-    lockerAuth: vi.fn<Door["lockerAuth"]>(),
     lockerItem: vi.fn<Door["lockerItem"]>(),
+    lockerRevealReceipt: vi.fn<Door["lockerRevealReceipt"]>(),
   };
   return door as unknown as Door;
 });

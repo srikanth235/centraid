@@ -1,3 +1,7 @@
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, expect } from "vitest";
+
 // THE FIXTURES AND THE MOUNT both `compose-states.test.tsx` files compose
 // their routes out of.
 //
@@ -5,9 +9,7 @@
 // by the label the previous screen drew and clicks it, so a route reachable
 // only from a test is a route nobody has. Nothing here sets app state from
 // outside.
-import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, expect } from "vitest";
+import { EMPTY_BAG, money, moneyBag, valuate } from "@centraid/core/money";
 
 import type { InlineFrame } from "../inline-types.ts";
 import { Root } from "./app-root.tsx";
@@ -32,7 +34,7 @@ const TEMPLATE: RecurringTemplate = {
   original_amount_minor: 145_000,
   original_currency: "GBP",
   settlement_currency: "GBP",
-  time_zone: "Europe/London",
+  tz: "Europe/London",
   status: "active",
   preview: "the 1st of every month",
   next_start: "2099-09-01T09:00:00.000Z",
@@ -60,7 +62,7 @@ export const DASHBOARD: DashboardData = {
       name: "Ana",
       color: "",
       initials: "A",
-      net_minor: -4560,
+      balances: [money(-4560, "GBP")],
     },
   ],
   groups: [
@@ -68,14 +70,14 @@ export const DASHBOARD: DashboardData = {
       group_id: "flat",
       name: "14 Sitwell Road",
       member_count: 3,
-      owner_net_minor: 6240,
+      owner_net: money(6240, "GBP"),
     },
   ],
   archived_groups: [],
   trash: [],
   recurring: [TEMPLATE, UNPHRASED],
-  owe_total_minor: 10_960,
-  owed_total_minor: 8100,
+  owe: valuate(moneyBag(money(10_960, "GBP")), "GBP"),
+  owed: valuate(moneyBag(money(8100, "GBP")), "GBP"),
   expense_count: 194,
   settlement_count: 22,
   rate_suggestions: [],
@@ -87,8 +89,8 @@ export const BARE: DashboardData = {
   friends: [],
   groups: [],
   recurring: [],
-  owe_total_minor: 0,
-  owed_total_minor: 0,
+  owe: valuate(EMPTY_BAG, "GBP"),
+  owed: valuate(EMPTY_BAG, "GBP"),
 };
 
 export const GROUP: GroupData = {
@@ -101,7 +103,7 @@ export const GROUP: GroupData = {
       name: "You",
       color: "",
       initials: "Y",
-      net_minor: 6240,
+      net: money(6240, "GBP"),
       is_me: true,
     },
     {
@@ -109,9 +111,15 @@ export const GROUP: GroupData = {
       name: "Ana",
       color: "",
       initials: "A",
-      net_minor: -4560,
+      net: money(-4560, "GBP"),
     },
-    { party_id: "tom", name: "Tom", color: "", initials: "T", net_minor: 8100 },
+    {
+      party_id: "tom",
+      name: "Tom",
+      color: "",
+      initials: "T",
+      net: money(8100, "GBP"),
+    },
   ],
   ledger: [],
   simplification: {
@@ -128,8 +136,8 @@ export const GROUP_SIMPLIFIED: GroupData = {
   simplification: {
     opted_in: true,
     transfers: [
-      { from: "ana", to: "me", amount_minor: 4560 },
-      { from: "me", to: "tom", amount_minor: 8100 },
+      { from: "ana", to: "me", amount: money(4560, "GBP") },
+      { from: "me", to: "tom", amount: money(8100, "GBP") },
     ],
     debts_before: 5,
     payments_after: 3,

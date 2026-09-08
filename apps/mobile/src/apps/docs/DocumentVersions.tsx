@@ -1,7 +1,7 @@
 // Version history (Docs handoff Part 2 §10; #821) — "every change is a
 // version and nothing is ever overwritten."
 //
-// The chain is REAL: `core.link` revises edges off this device's replica,
+// The chain is REAL: `core.entity_revision` occurrences off this device's replica,
 // walked by `docs-versions.ts` exactly as the gateway's own history query
 // walks them. What the sample shows and this seat cannot say is absent and
 // SAID to be absent:

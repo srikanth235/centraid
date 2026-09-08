@@ -1,5 +1,7 @@
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
+import type { VaultChangeMessage } from "../vault-change-sse.js";
+
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id" as const;
 
@@ -111,7 +113,12 @@ export function conflictBaseIsMissing(conflict: ReplicaConflict): boolean {
  * person: `label` comes off the LINK, never a vault id nobody has a name for.
  */
 export interface ReplicaWaitingOn {
-  seat: "owner" | "origin" | "gateway";
+  /**
+   * `intent` is the offline chain's own wait (#996, R23): the label is the
+   * PREDECESSOR'S INTENT ID, the only name a seat can match against its own
+   * outbox — there is no vault id yet for a row the create has not made.
+   */
+  seat: "owner" | "origin" | "gateway" | "intent";
   label?: string;
 }
 
@@ -126,6 +133,14 @@ export interface IntentOutcome {
    * clears before the row it wrote arrives, which is the defect this closes.
    */
   answeredVersions?: ReplicaBaseVersion[];
+  /**
+   * THE CANONICAL COMMIT POSITION AN `executed` ANSWER LANDED AT (#996, R24).
+   * Supersedes `answeredVersions` as the thing the overlay waits on: a
+   * position is one number the seat can compare against its own applied
+   * cursor, where a version set is a per-row question a seat holding the whole
+   * file no longer needs to ask row by row.
+   */
+  commitSeq?: number;
   /** Structured refusal detail; #928 fills it, the shape is fixed now. */
   denial?: ReplicaDenial;
   reason?: string;
@@ -203,7 +218,14 @@ export interface ReplicaSearchRequest {
 }
 
 export interface ReplicaDependency {
-  shapeId: string;
+  /**
+   * OPTIONAL SINCE #996 W5: a seat holds ONE vault and one file, so an entity
+   * names its own rows and there is no per-app shape left to select between.
+   * It survives on an OVERLAY invalidation, where an optimistic mutation still
+   * carries the shape its projection was written against; a CANONICAL one, born
+   * from the seat's own change notice, has no shape to name.
+   */
+  shapeId?: string;
   entity: string;
   /** The one row this dependency is confined to. ABSENT MEANS THE WHOLE
    *  ENTITY, which is what the engine emits today (#883). */
@@ -244,8 +266,20 @@ export interface ReplicaReadWireResult extends ReplicaTruncation {
 export interface ReplicaSearchWireResult extends ReplicaTruncation {
   rows: ReplicaRowEnvelope[];
   pending?: PendingOverlaySidecar;
-  cursor: ReplicaCursor;
-  dependency: ReplicaDependency;
+  /**
+   * OPTIONAL SINCE #996 W5-D1. A seat search runs against the vault's own FTS
+   * shadow tables in this seat's file; the file's position is one number about
+   * the SEAT (`SeatWatermark`), not a per-read cursor, and there is no second
+   * store to reconcile a search answer against. `receiptIdFor` already reads
+   * this as optional and answers `replica:local` without it.
+   */
+  cursor?: ReplicaCursor;
+  /**
+   * OPTIONAL for the same reason. A dependency is `(shapeId, entity)`, and a
+   * seat has no shapes — one file, one vault. Only the READ path builds live
+   * queries from it, and only the shaped store answers one.
+   */
+  dependency?: ReplicaDependency;
   coverage?: ReplicaCoverage;
 }
 
@@ -292,7 +326,13 @@ export interface ReplicaStatus {
 
 export interface OptimisticUpsert {
   op: "upsert";
-  shapeId: string;
+  /**
+   * OPTIONAL SINCE #996 W5. A shape was an app's slice of a vault and a seat
+   * holds one whole vault, so nothing resolves anything from this — an app's
+   * own name for its projection survives where one is stated, and the overlay
+   * draws by `(entity, rowId)` either way.
+   */
+  shapeId?: string;
   entity: string;
   rowId: string;
   values: ReplicaRow;
@@ -300,7 +340,7 @@ export interface OptimisticUpsert {
 
 export interface OptimisticDelete {
   op: "delete";
-  shapeId: string;
+  shapeId?: string;
   entity: string;
   rowId: string;
 }
@@ -349,6 +389,22 @@ export interface ReplicaIntent {
   waitingOn?: ReplicaWaitingOn;
   /** Carried from an `executed` answer until the replica holds them (G1). */
   answeredVersions?: ReplicaBaseVersion[];
+  /**
+   * THE CHAIN'S EDGES (#996, R23). Intent ids this one may not run before,
+   * derived by the seat from the row ids its own outbox minted — never
+   * declared by an app and never inferred from a value. Part of the payload
+   * hash on the wire, because an intent whose predecessors were rewritten in
+   * flight is a different intent.
+   */
+  dependsOn?: string[];
+  /**
+   * THE CANONICAL POSITION THE GATEWAY COMMITTED THIS AT (#996, R24). Present
+   * once the outcome is `executed`; the pending overlay is held until the
+   * seat's applied cursor reaches it, and cleared in the transaction that
+   * advances that cursor. `executed` alone is the gateway's fact, not this
+   * seat's.
+   */
+  commitSeq?: number;
   /** SHA-256 of canonical {appId, action, input, baseVersions}; daemon verifies id reuse. */
   payloadHash: string;
   appId: string;
@@ -404,4 +460,24 @@ export interface ApplyChangesResult {
   cursor: ReplicaCursor;
   invalidations: ReplicaInvalidation[];
   outcomes: IntentOutcome[];
+}
+
+/**
+ * WHAT A CHANGE FEED IS FOR SINCE #996 W5: a WAKE.
+ *
+ * The coordinator drove this adapter — it attested a shape catalog before the
+ * stream opened and wrote back a resume cursor after every applied batch,
+ * because the feed was the delivery mechanism for changes. It is not: a seat
+ * pulls its own pages from the log door, and the only thing a frame has to do
+ * is say "the gateway moved". The seat's own applied position is the one cursor
+ * anything resumes from.
+ *
+ * `setShapeIds` and `resume` survive as the STREAM's own bookkeeping — the door
+ * takes a `since` cursor, and reopening from the last frame is cheaper than
+ * reopening from zero — but nothing downstream of it holds a second position.
+ */
+export interface ReplicaChangeFeedAdapter {
+  subscribe: (listener: (message: VaultChangeMessage) => void) => () => void;
+  setShapeIds: (shapeIds: readonly string[]) => Promise<void>;
+  resume: (cursor: ReplicaCursor) => Promise<void>;
 }

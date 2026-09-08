@@ -13,6 +13,7 @@ import { existsSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import type { RuntimeLogger } from "@centraid/server/engine";
+import { destroyLockerKeys } from "@centraid/vault";
 import type { KeyStore } from "@centraid/vault";
 
 import type { GatewayDatabase } from "./gateway-db.js";
@@ -49,6 +50,9 @@ export function recoverPendingVaultErases(
       force: true,
     });
     options.keys.destroy(`${vaultId}.sealkey`);
+    // The Locker keys go with the DEK (#996, R13) — a crash-resumed erase
+    // must reach the same end state as the one that ran to completion.
+    destroyLockerKeys({ store: options.keys, vaultId });
     options.gatewayDatabase.transaction(() => {
       options.gatewayDatabase.db
         .prepare("DELETE FROM erase_intents WHERE vault_id = ?")
