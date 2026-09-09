@@ -78,11 +78,14 @@ checked on an agent's word about the host.
       — every file under `.governance/law/rules/` ships as `<id>.mjs` + `<id>.test.mjs`;
       `amendment-pairing` is the hook rule that refuses the unpaired edit
       (`.governance/law/rules/amendment-pairing.test.mjs`).
-- [x] `arrival.json` is generated deterministically from a git range, carries the law digest at
+- [ ] `arrival.json` is generated deterministically from a git range, carries the law digest at
       branch point and HEAD, is under the managed-tree digest, and has a checked-in fixture.
-      — `node .governance/law/arrival.mjs --range bb964a7e..3df6d552` is byte-identical to
-      `.governance/law/fixtures/arrival/bb964a7e..3df6d552.json` (Verification, Lane A row 5);
-      `digest.mjs --record` holds `arrival.mjs` and every `lib/` module.
+      — three of the four hold: the digests travel, `digest.mjs --record` holds `arrival.mjs` and
+      every `lib/` module, and the fixture is checked in. **Deterministic from a git range does
+      not hold**, and the fixture is the thing that proves it does not: it also pins the current
+      branch name and the working tree's whole receipts corpus, so it is red on any checkout but
+      the one that recorded it. See `## Findings from the close pass` and `QUALITY.md`; it is a
+      change to the wave-1 primitive, so the close pass reported rather than chose.
 - [x] Every rule emits one line on pass; the front page in the PR body is the formatter's output and
       nothing else. — the rule table at the top of this receipt, ten rows, rendered by
       `run.mjs --front-page`; `## PR body` below is that block plus a summary, nothing hand-drawn.
@@ -143,7 +146,7 @@ The issue's six validation items, in its order.
 
 | Item | Result |
 | --- | --- |
-| RuleTester suites for every rule, `valid` and `invalid`, at rung 0 | `bun run governance:law:test` — 176 tests, 176 pass; the `law` directive runs them inside `bash .governance/run.sh` |
+| RuleTester suites for every rule, `valid` and `invalid`, at rung 0 | `bun run governance:law:test` — 33 suites, 176 tests, **175 pass, 1 fail**. Every rule suite passes; the one failure is the arrival fixture described in `## Findings from the close pass`, not a rule |
 | Parity replay: old and new runners over the last 50 `main` commits, diff empty | `node .governance/law/parity.mjs --last 50` — 50 replayed, 0 unexplained disagreements, 1 recorded divergence with its reason in `parity-expectations.json` |
 | #1002 replay: expected findings checked in as a fixture | `.governance/law/fixtures/replay/1002.json`, asserted by `replay.test.mjs`; 11 findings across four rules |
 | Boundary demonstration: a law-only PR from a non-owner blocked by branch protection | **not done — owner action.** Needs a second GitHub account and branch protection enabled; neither is reachable from this repository (Q-1005-3) |
@@ -966,6 +969,48 @@ against the pushed HEAD before opening the PR, because its `range` line names a 
 >
 > `## Audit` carries no verdict yet; an independent reviewer writes it. `lint:product`'s three
 > failures are inherited from `origin/main` at 87cf642c and reproduced there, failure for failure.
+
+## Findings from the close pass
+
+One finding, and it is a blocker for the merge rather than a nit.
+
+**The arrival fixture is not a function of its range, so `governance:law:test` is red on `main`.**
+`.governance/law/fixtures/arrival/bb964a7e..3df6d552.json` is asserted byte for byte by
+`arrival.test.mjs`. `collectReceipts` (`.governance/law/lib/registries.mjs`) reads
+`git rev-parse --abbrev-ref HEAD` into `registries.receipts.change.branch`, and reads **every
+tracked receipt out of the working tree** into `registries.receipts.files[]`. The fixture
+therefore pins the branch that generated it and the heading list of every receipt in the repo at
+that moment:
+
+```
+$ bun run governance:law:test
+not ok 1 - the generator reproduces the checked-in fixture byte for byte
+$ node .governance/law/arrival.mjs --range bb964a7e..3df6d552 --out /tmp/a.json   # then, diffed:
+<     "branch": "lane/1005-e"            # the fixture says lane/1005-d
+>     "branch": "lane/1005-d"
+<       "Inherited red", "Corrections to the plan", "Owner items", "PR body",   # this receipt's new sections
+# 33 suites, 176 tests, 175 pass, 1 fail — every rule suite green
+```
+
+It went red here because the close pass added four sections to this receipt. It will be red on
+`main` on the branch name alone, and red again on any PR that edits any receipt anywhere.
+
+**Not regenerated on purpose.** A regeneration makes it green on `lane/1005-e` and red everywhere
+else, which hides the defect behind the appearance of a passing gate — the failure mode this whole
+issue was opened over. Two honest fixes, both changes to the wave-1 primitive and both the root's
+or owner's to choose:
+
+- **(a)** Split the record: the range-derived sections are the fixture, and the checkout-derived
+  ones (`registries.receipts.change`, the corpus in `files[]`) get shape assertions of their own.
+  Keeps the corpus in the record, where `receipt-per-issue` needs it.
+- **(b)** A `--range` run stops reading the working tree at all, and the corpus-wide half of
+  `receipt-per-issue` is answered from the range's own file set. Makes the generator's claim true
+  as written, at the cost of narrowing what that rule can see.
+
+**Recommendation: (a).** `receipt-per-issue`'s corpus-wide half is the one thing the port kept from
+the shell directive that a range cannot supply, and (b) would quietly retire it. Lane B already
+recorded that the record's `managedTree` section reads the working tree; this is the same seam,
+found once more and one layer down.
 
 ## Audit
 
