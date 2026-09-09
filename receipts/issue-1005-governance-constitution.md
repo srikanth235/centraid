@@ -1099,4 +1099,75 @@ changed` and `## Verification`.
 
 ## Audit
 
-judge: pending — root re-judges at close.
+**Round 1 — head cda0b47a, tree 9122134d58a36c728504ca5f6d5427293e0a90b2, base origin/main@87cf642c. Verdict: PASS.**
+
+- **Check 1 — `## What changed` is faithful.** Read against `git diff 87cf642c..cda0b47a` (101 files,
+  +36 956/-2 549). Every load-bearing claim holds in the tree: ten rules each with a `.test.mjs`
+  sibling; `.governance/packs/governance-kit/` and `.governance/conf/` gone; `COSTS.md`,
+  `STEERING.md` gone; `.github/CODEOWNERS` generated with all 11 pack-declared `lawPaths`;
+  `docket.json` 11 rows; every real row of `scripts/ci/gate-classes.json` carries `door` (the only
+  door-less entry is the `_comment` string). No significant behavior of the diff is omitted, and the
+  one place the port is stricter than the shell it replaced is stated with its reason.
+- **Check 2 — the evidence supports the outcome, and the load-bearing parts reproduce.** See the
+  table; every fence I re-ran matched or beat what the receipt records. Two rows are stale in the
+  receipt's favour-of-caution direction, listed under non-blocking below.
+- **Check 3 — acceptance.** Twelve of the fourteen boxes are evidenced in the tree and reproduced
+  here. The two that are not are named as owner items, not claimed: branch protection over the law
+  estate + the blocked non-owner PR demonstration (Q-1005-3), and the required `governance` check.
+  The remaining gaps are all under `## Owner items` / `## Corrections to the plan`.
+- **Check 4 — the receipt is the right one.** `receipts/issue-1005-governance-constitution.md`, one
+  file, for #1005; no other receipt is touched by the range.
+
+| Command | Result |
+| --- | --- |
+| `bun run governance:law:test` | 33 suites, **178 tests, 178 pass, 0 fail** |
+| `bash .governance/run.sh` (before this edit) | 1 `error` — this Audit section — plus 10 `warn`; 8 of 9 directives green |
+| `node .governance/law/run.mjs --range bb964a7e..3df6d552` | exit 1; doctrine-citation 2, estate-separation 1, registry-completeness 1 — the widened gate, the uncited rulings and the missing CHANGELOG row, as the issue requires |
+| `node .governance/law/parity.mjs --last 50` | exit 0; 50 replayed, **0 unexplained disagreements**, 3 recorded divergences, all one expectation |
+| determinism probe (detached worktree at cda0b47a, `arrival.mjs --range bb964a7e..3df6d552`) | `cmp` against the checked-in fixture — **identical** |
+| `node .governance/law/codeowners.mjs --check` | `✓ .github/CODEOWNERS in sync (11 law paths)`, exit 0 |
+| `node --test scripts/ci/gate-classes.test.mjs` | 8 pass, 0 fail |
+| `time GIT_INDEX_FILE=x bash .../directives/law/check.sh` | `✓ law (hook door): 6 rule(s), no findings` — **real 1.79 s**, inside the claimed 2 s |
+| `git ls-files COSTS.md STEERING.md .governance/packs/governance-kit .governance/conf` | empty |
+
+The parity expectation is honest: the recorded divergence is the shell `case` pattern `*[bot]*@*`
+treating `[bot]` as a character class, so the old directive skipped nearly every human author. The
+divergence is the old runner's hole, not the new rule's; it is written up as such.
+
+Three reds, provoked by hand, nothing landed (`git log -1` stayed cda0b47a; `git status --porcelain`
+clean after each):
+
+```
+$ git commit --allow-empty -m "bad subject"
+law/commit-message-format — pending commit — 'bad subject' is not a Conventional Commit subject
+ending in an issue reference (<type>(scope)?: <subject> (#123))                   # exit 1
+$ echo tampered >> receipts/issue-972.md && git add … && git commit -m "docs(governance): tamper probe (#1005)"
+law/doc-integrity — frozen-files: 'receipts/issue-972.md' was modified; it is immutable once on
+the default branch                                                                # exit 1
+$ printf '\n// probe\n' >> .governance/law/rules/doctrine-citation.mjs && git add … && git commit …
+law/amendment-pairing — the staged change changes .governance/law/rules/doctrine-citation.mjs but
+not doctrine-citation.test.mjs                                                    # exit 1
+```
+
+Two adversarial checks of my own. (i) *"Rules are pure; the generator is the only git reader."*
+`grep` over `.governance/law/rules/` for `child_process` / `node:fs` returns nothing — the only
+non-`lib` import in any rule is `commitlint.config.mjs`. Holds. (ii) *"CODEOWNERS covers every
+pack-declared law path."* I read `readPacks()` back out of the config and diffed its 11 globs
+against `.github/CODEOWNERS` — exact cover, and `--check` exits 1 on drift. Holds; but see the
+`readPacks()` note below, which is where that same read is not free.
+
+Not blocking; for the owner:
+
+- The six `estate-separation` warnings on the front page are this branch's own pre-rule history and
+  cannot be retro-split. Correct as reported.
+- D-9, D-10, D-11 are filed and spent inside one arrival — a self-grant, exactly as `waiver-docket`
+  says. Owner item 4 is the only thing that turns them into an owner's grant.
+- `readPacks()` (`.governance/law/eslint.config.mjs:45`) still reads `packs/*.json` off the working
+  tree, so `arrival.law.rules` / `lawPaths` are a checkout fact even in a `--range` run. Lane F
+  reported it; the determinism probe passes only because the probe tree equals HEAD.
+- Two receipt rows are stale after Lane F: `## Validation` row 1 still says "176 tests, 175 pass, 1
+  fail" (now 178/178) and the `#1002` replay checklist line still says "waiver-docket 7" (now 0,
+  and the checked-in fixture agrees with 0). Understatements, not overclaims.
+- Under a real `git commit` the staged-tree reds (b) and (c) surfaced at the commit-msg door, not at
+  pre-commit; with `GIT_INDEX_FILE` pointing at the real index the hook door refuses them directly.
+  Same outcome, later feedback — worth confirming what git sets for `pre-commit` here.
