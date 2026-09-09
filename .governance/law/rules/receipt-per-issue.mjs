@@ -7,6 +7,10 @@
 // that records an outcome and not only a fence, and a `## Audit` carrying a
 // PASS or REFUTED verdict.
 //
+// "Completed" is a fact about the change, not about the checkout: a range with
+// a base and no commit in flight is a PR as CI sees it, and a commit in flight
+// is completed when it is landing straight on the trunk (R-1005-27).
+//
 // The verdict itself is not this rule's to give. A mechanical check can see
 // that the section exists and names a verdict; whether the verdict is true is
 // an independent judgement, which is why the message says so and why the
@@ -45,7 +49,7 @@ export default defineArrivalRule({
       return commit.parents.length <= 1 && !commit.subject.startsWith('Revert "');
     });
 
-    if (change.completedChange && !change.touchesReceipt && !rangeWaived) {
+    if (change.completed && !change.touchesReceipt && !rangeWaived) {
       ctx.report(
         ["registries", "receipts", "change", "touchesReceipt"],
         "completed change touches no receipts/issue-*.md (intermediate commits need not each edit a receipt; the aggregate must. Waiver: 'governance: allow-receipt-per-issue <reason>')"
@@ -74,7 +78,7 @@ export default defineArrivalRule({
       // Shape is demanded only of a receipt this change ADDS, at the completed
       // -change boundary: an intermediate commit may carry a stub, and a
       // receipt somebody else wrote is not this change's to fix.
-      if (!change.completedChange) continue;
+      if (!change.completed) continue;
       if (!receipt.addedInRange && !receipt.addedInPending) continue;
 
       if (receipt.stub) {

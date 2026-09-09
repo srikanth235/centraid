@@ -73,9 +73,15 @@ test("the replay is not vacuous: it names the failures #1002 would have had", as
   assert.equal(doctrine.length, 2);
   assert.match(doctrine[0].message, /receipts\/issue-996-one-vault-every-seat\.md:\d+/u);
   assert.match(doctrine[0].message, /records ruling W6-D[12] and cites nothing/u);
-  // Every waiver #1002 spent, held against a register that did not exist when
-  // it merged — the seven the docket now enumerates.
-  assert.equal(by("waiver-docket").length, 7);
+  // Every waiver #1002 spent is still in the record — seven of them — but the
+  // register they would be held against did not exist at #1002's head, and the
+  // arrival now reads the docket there rather than out of whatever checkout is
+  // replaying it (R-1005-27). "Not yet established" is the honest verdict for
+  // this range; the rule's spending half is exercised by its own suite.
+  const { arrival } = await runLaw({ door: "window", range: RANGE });
+  assert.equal(arrival.registries.docket.exists, false);
+  assert.equal(arrival.waivers.length, 7, "the spends are recorded even when no register judges them");
+  assert.equal(by("waiver-docket").length, 0);
   // The four ported rules passed on it, which is the control: the two new
   // directives are catching something the old catalog genuinely could not.
   for (const id of ["commit-message-format", "doc-integrity", "receipt-per-issue"]) {

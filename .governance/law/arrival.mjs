@@ -19,7 +19,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { git, parseNameStatus } from "./lib/git.mjs";
+import { git, parseNameStatus, treeSource } from "./lib/git.mjs";
 import {
   collectDocket,
   collectDocument,
@@ -76,13 +76,21 @@ const HERE = import.meta.dirname;
  * records `registries.receipts[*].rulings` for the receipts this change
  * touched.
  *
+ * 6 (#1005 lane F) makes the record a function of exactly its inputs — the
+ * range, and the pending commit when there is one. The receipt corpus, the
+ * docket and the managed tree are read at the range's head (or out of the index
+ * inside the commit hook) instead of out of the working copy, `range` carries
+ * `onDefaultBranch` (a fact only a pending run has), and
+ * `registries.receipts.change` drops `branch`, `onDefaultBranch` and
+ * `hasStaged` for a single `completed` (R-1005-27).
+ *
  * 5 (#1005 lane D) carries the law's own declarations into the record so the
  * rules that judge amendments and citations stay pure: `law.domains` (the
  * packs' doctrine domains), `law.rules` and `law.rulesAtBase` (every declared
  * rule's severity and door, on both sides of the merge-base), and
  * `registries.receipts[*].cites`.
  */
-export const SCHEMA = 5;
+export const SCHEMA = 6;
 
 /** Branch names the ported directives treated as the trunk. */
 const DEFAULT_BRANCHES = Object.freeze(["origin/main", "origin/master", "main", "master"]);
@@ -327,6 +335,27 @@ export function declaredRulesAt(packs, rev) {
 }
 
 /**
+ * Whether a commit in flight is being made straight onto the trunk.
+ *
+ * Only ever asked for a pending run. A `--range` run answers `null`: which
+ * branch a checkout happens to be on is not a fact about the change, and a
+ * record that carried it said a different thing on every machine that
+ * generated it (R-1005-27).
+ *
+ * @param {object|null} pending The pending commit, if any.
+ * @returns {boolean|null} True on the trunk, false elsewhere, null off the hook.
+ */
+function onTrunk(pending) {
+  if (pending === null) return null;
+  try {
+    const branch = git(["symbolic-ref", "--short", "HEAD"]);
+    return branch === "main" || branch === "master";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build the whole record.
  *
  * One function per section, and every section present even when this lane does
@@ -340,9 +369,16 @@ export function declaredRulesAt(packs, rev) {
  * @returns {Promise<object>} The arrival record.
  */
 export async function buildArrival(options = {}) {
-  const range = resolveRange(options.range);
-  const rawCommits = collectCommits(range);
   const rawPending = collectPending(options.messageFile ?? null);
+  // The one fact about the checkout the record may hold, and only when a commit
+  // is being written: a commit landing straight on the trunk is a completed
+  // change, and the hook is the only door that can know it. In a `--range` run
+  // it is `null` and `completed` derives from the range alone (R-1005-27).
+  const range = { ...resolveRange(options.range), onDefaultBranch: onTrunk(rawPending) };
+  // The tree the record is about: the range's head, or the index when a commit
+  // is in flight — the commit being written is judged on what it stages.
+  const source = treeSource(rawPending === null ? range.head : null);
+  const rawCommits = collectCommits(range);
   // One classifier for the whole record: #1002's squash alone carries 1022
   // paths, and compiling the law globs once per file list is the difference
   // between a generator that fits the pre-commit rung and one that does not.
@@ -365,14 +401,14 @@ export async function buildArrival(options = {}) {
     files,
     pending,
     law,
-    managedTree: collectManagedTree(),
+    managedTree: collectManagedTree(source),
     waivers: collectWaivers(commits, pending, range),
     registries: {
       frozen: collectFrozen(range, pending !== null),
-      receipts: collectReceipts(range, pending),
+      receipts: collectReceipts(range, pending, source),
       changelog: collectDocument(range, pending, "CHANGELOG.md"),
       decisions: collectDocument(range, pending, "docs/decisions.md"),
-      docket: collectDocket(range),
+      docket: collectDocket(range, source),
     },
     // Every ledger this change moved, from the aggregate law diff and from the
     // staged set — the hook door sees only the latter, and a knob loosened in

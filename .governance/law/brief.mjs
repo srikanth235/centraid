@@ -18,6 +18,7 @@
 //   node .governance/law/brief.mjs            # the digest, for a brief
 //   node .governance/law/brief.mjs --json     # the same, machine-readable
 import { lawDigestAt } from "./arrival.mjs";
+import { treeSource } from "./lib/git.mjs";
 import { collectDocket } from "./lib/registries.mjs";
 import { loadRules, readPacks } from "./eslint.config.mjs";
 
@@ -38,7 +39,9 @@ export async function buildBrief() {
       statute: row.rule?.meta?.docs?.url ?? "",
     })),
     domains: readPacks().flatMap((pack) => pack.domains),
-    docket: collectDocket().rows,
+    // A brief is the law at HEAD, docket included: the register a worker is
+    // held to is the one that is committed, not the one in somebody's tree.
+    docket: collectDocket(null, treeSource("HEAD")).rows,
   };
 }
 

@@ -1,10 +1,11 @@
 {
-  "schema": 5,
+  "schema": 6,
   "range": {
     "base": "bb964a7e54b520d39c883e625ad32c2746da0e35",
     "head": "3df6d552d2e3e21e9751196300ae5016242a5873",
     "mergeBase": "bb964a7e54b520d39c883e625ad32c2746da0e35",
-    "hasBase": true
+    "hasBase": true,
+    "onDefaultBranch": null
   },
   "commits": [
     {
@@ -10352,83 +10353,114 @@
     "rulesAtBase": {}
   },
   "managedTree": {
-    "packs": [],
+    "packs": [
+      {
+        "id": "governance-kit/audit",
+        "directive": "agent-session-identity",
+        "recorded": "c32b32cd1f3f7b6875980ab9d30d4cd975b46c3f0746c4588f47bb62db3551b0",
+        "actual": "c32b32cd1f3f7b6875980ab9d30d4cd975b46c3f0746c4588f47bb62db3551b0"
+      },
+      {
+        "id": "governance-kit/audit",
+        "directive": "commit-issue-receipt-match",
+        "recorded": "20f0236fa38c42ff6858d5a26df79f995677056308b2222dd06010b79531103a",
+        "actual": "20f0236fa38c42ff6858d5a26df79f995677056308b2222dd06010b79531103a"
+      },
+      {
+        "id": "governance-kit/audit",
+        "directive": "doc-integrity",
+        "recorded": "946c68a3fc7f5c1b93132876844b456121063eecba1f6291b7986d96d062f1df",
+        "actual": "946c68a3fc7f5c1b93132876844b456121063eecba1f6291b7986d96d062f1df"
+      },
+      {
+        "id": "governance-kit/audit",
+        "directive": "issue-templates",
+        "recorded": "36bdfc64fc9503b11d7445a7c91a0e80b468ee1566d45ba647760caa45fdc16b",
+        "actual": "36bdfc64fc9503b11d7445a7c91a0e80b468ee1566d45ba647760caa45fdc16b"
+      },
+      {
+        "id": "governance-kit/audit",
+        "directive": "issues-tracked",
+        "recorded": "32ef002236945c4d630da1781af815afeda5f23949157bca63d90e3c03b9c1d9",
+        "actual": "32ef002236945c4d630da1781af815afeda5f23949157bca63d90e3c03b9c1d9"
+      },
+      {
+        "id": "governance-kit/audit",
+        "directive": "receipt-per-issue",
+        "recorded": "834a490115e4f3b0f35776e2e1ae52a9947ed6ff1e2330a164080db98f91cbad",
+        "actual": "834a490115e4f3b0f35776e2e1ae52a9947ed6ff1e2330a164080db98f91cbad"
+      },
+      {
+        "id": "governance-kit/audit",
+        "directive": "toolchain-config-protection",
+        "recorded": "942b43fd337277ae2c9dc815eef6afbd4f0199efad8e7342b3c1ed1937bbe1c4",
+        "actual": "942b43fd337277ae2c9dc815eef6afbd4f0199efad8e7342b3c1ed1937bbe1c4"
+      },
+      {
+        "id": "governance-kit/commits",
+        "directive": "commit-message-format",
+        "recorded": "33a3cef9bfc5c74cc56975a39a2fcd5270c8757776f7cf7aef0bde44681c838e",
+        "actual": "33a3cef9bfc5c74cc56975a39a2fcd5270c8757776f7cf7aef0bde44681c838e"
+      },
+      {
+        "id": "governance-kit/commits",
+        "directive": "no-orphan-todos",
+        "recorded": "a02ab229d3f673c1fd8b8776aa17e6c0be144591c072e5ab7b02e9da56eeedbd",
+        "actual": "a02ab229d3f673c1fd8b8776aa17e6c0be144591c072e5ab7b02e9da56eeedbd"
+      },
+      {
+        "id": "governance-kit/commits",
+        "directive": "no-unjustified-suppressions",
+        "recorded": "c241473878e6fba721829af48b39373f6fe1d8266e3c1150c95f1a65815ff163",
+        "actual": "c241473878e6fba721829af48b39373f6fe1d8266e3c1150c95f1a65815ff163"
+      },
+      {
+        "id": "governance-kit/foundation",
+        "directive": "internal-doc-links",
+        "recorded": "51b7c08249e0e78c14b60a3e567c2c63136a45aa2788a77499ff157cf0b90397",
+        "actual": "51b7c08249e0e78c14b60a3e567c2c63136a45aa2788a77499ff157cf0b90397"
+      },
+      {
+        "id": "governance-kit/foundation",
+        "directive": "managed-tree-integrity",
+        "recorded": "1a63396bf4ec68a31c2676af7a9c9f918e3e7e4ee57ad68b658a0a425a1272a7",
+        "actual": "1a63396bf4ec68a31c2676af7a9c9f918e3e7e4ee57ad68b658a0a425a1272a7"
+      },
+      {
+        "id": "governance-kit/foundation",
+        "directive": "repo-hygiene",
+        "recorded": "c0d230a60f2659811ad94a5ca3a597e917af29ea84648ee66ba78634f8ba01f8",
+        "actual": "c0d230a60f2659811ad94a5ca3a597e917af29ea84648ee66ba78634f8ba01f8"
+      },
+      {
+        "id": "governance-kit/foundation",
+        "directive": "required-docs",
+        "recorded": "a9fd804dd17b2e83ef1b2aa4b18328e7e97c6b4964f273a136507aaa3bdd8dc3",
+        "actual": "a9fd804dd17b2e83ef1b2aa4b18328e7e97c6b4964f273a136507aaa3bdd8dc3"
+      }
+    ],
     "unrecorded": [],
     "files": [
       {
         "path": ".github/workflows/governance.yml",
-        "recorded": "220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb",
-        "actual": "220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb",
-        "marker": "0.15.0"
-      },
-      {
-        "path": ".governance/law/arrival.mjs",
-        "recorded": "80ba202e79f5508a1f7c25edf89303d0b480fb055d8d42ae9879b57b4d71440f",
-        "actual": "80ba202e79f5508a1f7c25edf89303d0b480fb055d8d42ae9879b57b4d71440f",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/digest.mjs",
-        "recorded": "e7f8fda369bf8637336463a54947704ad719846d2ec6c3a24074ea8906ebbf80",
-        "actual": "e7f8fda369bf8637336463a54947704ad719846d2ec6c3a24074ea8906ebbf80",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/estates.mjs",
-        "recorded": "3b73a52a710392595368fe65c35d79878b4ff80a7ba3b3352d13dc6980ca03d6",
-        "actual": "3b73a52a710392595368fe65c35d79878b4ff80a7ba3b3352d13dc6980ca03d6",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/gates.mjs",
-        "recorded": "1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0",
-        "actual": "1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/git.mjs",
-        "recorded": "6efb64e992fad3d047ace07b4e0e746ae75713287418ae59ded8c9d7cf6fcf42",
-        "actual": "6efb64e992fad3d047ace07b4e0e746ae75713287418ae59ded8c9d7cf6fcf42",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/managed.mjs",
-        "recorded": "c89576d4531424399fefe3043a2e75803335fcb908cefd0d1980e796a078de76",
-        "actual": "c89576d4531424399fefe3043a2e75803335fcb908cefd0d1980e796a078de76",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/registries.mjs",
-        "recorded": "8869f0c1ab5a72b7b552e2345973255d059e42693af8783cccccbb38cafa4288",
-        "actual": "8869f0c1ab5a72b7b552e2345973255d059e42693af8783cccccbb38cafa4288",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/rule.mjs",
-        "recorded": "cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b",
-        "actual": "cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b",
-        "marker": ""
-      },
-      {
-        "path": ".governance/law/lib/waivers.mjs",
-        "recorded": "7b4fb12e0707e420599ee856c31a456895d97b269a6e15d27882a7f8e4964aa3",
-        "actual": "7b4fb12e0707e420599ee856c31a456895d97b269a6e15d27882a7f8e4964aa3",
-        "marker": ""
+        "recorded": "e0c96e010e2e952793f380f6c09c5daa58de411a9136f9301c4ddc67b5588497",
+        "actual": "e0c96e010e2e952793f380f6c09c5daa58de411a9136f9301c4ddc67b5588497",
+        "marker": "0.14.0"
       },
       {
         "path": ".governance/lib.sh",
-        "recorded": "19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37",
-        "actual": "19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37",
-        "marker": "0.15.0"
+        "recorded": "e230d1608e917948c5642f12dfd6bce37024e7512ca1981aad985e6aaebfa95a",
+        "actual": "e230d1608e917948c5642f12dfd6bce37024e7512ca1981aad985e6aaebfa95a",
+        "marker": "0.14.0"
       },
       {
         "path": ".governance/run.sh",
-        "recorded": "f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4",
-        "actual": "f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4",
-        "marker": "0.15.0"
+        "recorded": "05655289d539f264d0c2151b58b6da106ed3f49f1978d0215d0f79f4ba194d75",
+        "actual": "05655289d539f264d0c2151b58b6da106ed3f49f1978d0215d0f79f4ba194d75",
+        "marker": "0.14.0"
       }
     ],
-    "kitVersion": "0.15.0"
+    "kitVersion": "0.14.0"
   },
   "waivers": [
     {
@@ -13532,64 +13564,6 @@
     ],
     "receipts": {
       "files": [
-        {
-          "path": "receipts/issue-1003-governance-kit-0-15-and-file-ceiling.md",
-          "name": "issue-1003-governance-kit-0-15-and-file-ceiling.md",
-          "issue": 1003,
-          "addedInRange": false,
-          "addedInPending": false,
-          "touched": false,
-          "rulings": [],
-          "cites": [],
-          "recordsRuling": true,
-          "cost": null,
-          "fileWaiver": false,
-          "headings": [
-            "What changed",
-            "Verification",
-            "Decisions",
-            "Limitations",
-            "Audit"
-          ],
-          "stub": false,
-          "verification": {
-            "hasFence": true,
-            "hasOutcome": true,
-            "hasUrl": false
-          },
-          "audit": {
-            "hasVerdict": true
-          }
-        },
-        {
-          "path": "receipts/issue-1005-governance-constitution.md",
-          "name": "issue-1005-governance-constitution.md",
-          "issue": 1005,
-          "addedInRange": false,
-          "addedInPending": false,
-          "touched": false,
-          "rulings": [],
-          "cites": [],
-          "recordsRuling": true,
-          "cost": null,
-          "fileWaiver": false,
-          "headings": [
-            "Checklist",
-            "What changed",
-            "Verification",
-            "Decisions",
-            "Audit"
-          ],
-          "stub": false,
-          "verification": {
-            "hasFence": true,
-            "hasOutcome": true,
-            "hasUrl": false
-          },
-          "audit": {
-            "hasVerdict": false
-          }
-        },
         {
           "path": "receipts/issue-101-automations-ui-rethink.md",
           "name": "issue-101-automations-ui-rethink.md",
@@ -25585,10 +25559,7 @@
         }
       ],
       "change": {
-        "branch": "lane/1005-d",
-        "onDefaultBranch": false,
-        "hasStaged": false,
-        "completedChange": true,
+        "completed": true,
         "touchesReceipt": true
       }
     },
@@ -25619,119 +25590,8 @@
     },
     "docket": {
       "path": ".governance/law/docket.json",
-      "exists": true,
-      "rows": [
-        {
-          "id": "D-1",
-          "rule": "no-hardcoded-colors",
-          "path": "packages/blueprints/apps/photos/Chrome.module.css",
-          "reason": "The slideshow stage is a full-bleed opaque ground at hsl(0 0% 4% / 0.97), a theatre surface rather than a themed one. DESIGN.md forbids an identity hue here and the token layer carries no opaque stage role, so there is no var() to consume; the seam is already noted in token-purity-allowlist.ts (#686).",
-          "authority": "https://github.com/srikanth235/centraid/issues/686",
-          "filedBy": "owner",
-          "issue": "#686",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-2",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/ci.yml",
-          "reason": "Turbo cache on the mutation-pr lane. The directive this token names is retired upstream and no longer installed in this repository, so the token is inert; the row exists so the seven inert tokens are enumerated rather than discovered later (#637).",
-          "authority": "https://github.com/srikanth235/centraid/issues/637",
-          "filedBy": "owner",
-          "issue": "#637",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-3",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/cache-cleanup.yml",
-          "reason": "Phase 0 PR-branch cache deletion. Inert: the toolchain-config directive is retired upstream (#637).",
-          "authority": "https://github.com/srikanth235/centraid/issues/637",
-          "filedBy": "owner",
-          "issue": "#637",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-4",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/mobile-alarm-test.yml",
-          "reason": "The weekly alarm test lane. Inert: the toolchain-config directive is retired upstream (#890).",
-          "authority": "https://github.com/srikanth235/centraid/issues/890",
-          "filedBy": "owner",
-          "issue": "#890",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-5",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/mobile-ios-lock.yml",
-          "reason": "A dispatchable macOS lane; pod install runs nowhere else. Inert: the toolchain-config directive is retired upstream (#996).",
-          "authority": "https://github.com/srikanth235/centraid/issues/996",
-          "filedBy": "owner",
-          "issue": "#996",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-6",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/e2e.yml",
-          "reason": "Turbo cache on build-bearing lanes. Inert: the toolchain-config directive is retired upstream (#637).",
-          "authority": "https://github.com/srikanth235/centraid/issues/637",
-          "filedBy": "owner",
-          "issue": "#637",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-7",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/lane-gateway-package.yml",
-          "reason": "Turbo cache on the gateway packaging lane. Inert: the toolchain-config directive is retired upstream (#637).",
-          "authority": "https://github.com/srikanth235/centraid/issues/637",
-          "filedBy": "owner",
-          "issue": "#637",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-8",
-          "rule": "toolchain-config",
-          "path": ".github/workflows/candidate.yml",
-          "reason": "Rung 3 owns the Android shell. Inert: the toolchain-config directive is retired upstream (#915).",
-          "authority": "https://github.com/srikanth235/centraid/issues/915",
-          "filedBy": "owner",
-          "issue": "#915",
-          "expires": "2027-03-01"
-        },
-        {
-          "id": "D-9",
-          "rule": "doc-integrity",
-          "path": "COSTS.md",
-          "reason": "The repeal of COSTS.md deletes a file doc-integrity froze; the deletion and the removal of its overlay row are one act (G-ledgers-retired).",
-          "authority": "pending owner grant",
-          "filedBy": "agent",
-          "issue": "#1005",
-          "expires": "2026-12-31"
-        },
-        {
-          "id": "D-10",
-          "rule": "doc-integrity",
-          "path": "STEERING.md",
-          "reason": "The repeal of STEERING.md, for the same reason as D-9 (G-ledgers-retired).",
-          "authority": "pending owner grant",
-          "filedBy": "agent",
-          "issue": "#1005",
-          "expires": "2026-12-31"
-        },
-        {
-          "id": "D-11",
-          "rule": "estate-separation",
-          "path": null,
-          "reason": "#1005 spends this twice: the repeal touches the rules and the files being repealed in one act, and the law's test roster lived in the product's package.json until a glob replaced it. Both are one exception in docket terms — the rule is the same and neither is path-scoped — so they are one row rather than two identical ones.",
-          "authority": "pending owner grant",
-          "filedBy": "agent",
-          "issue": "#1005",
-          "expires": "2026-12-31"
-        }
-      ],
+      "exists": false,
+      "rows": [],
       "rowsOnBase": []
     }
   },

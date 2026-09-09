@@ -75,6 +75,44 @@ function walk(dir, prefix = "") {
 }
 
 /**
+ * Whether a relpath survives the managed-tree digest's exclusions.
+ *
+ * @param {string} rel The posix relpath.
+ * @returns {boolean} True when the digest counts it.
+ */
+function kept(rel) {
+  const parts = rel.split("/");
+  if (parts.some((part) => EXCLUDED_COMPONENTS.has(part))) return false;
+  return !parts[parts.length - 1].endsWith(".pyc");
+}
+
+/**
+ * The managed-tree digest over an in-memory tree.
+ *
+ * The generator reads its managed units out of the object database — at the
+ * range's head, or out of the index inside the commit hook — so the algorithm
+ * has to be expressible over bytes it was handed rather than over a directory
+ * it walks. `dirDigest` is the same arithmetic with the walk in front of it,
+ * which is what keeps the bash-parity test pinning both.
+ *
+ * @param {Iterable<[string, Buffer]>} entries relpath → the file's raw bytes.
+ * @returns {string} Lowercase hex, or "" for an empty tree.
+ */
+export function digestEntries(entries) {
+  const rows = [...entries]
+    .filter(([rel]) => kept(rel))
+    .sort(([a], [b]) => byteCompare(a, b));
+  if (rows.length === 0) return "";
+  const hash = createHash("sha256");
+  for (const [rel, bytes] of rows) {
+    hash.update(Buffer.from(rel, "utf8"));
+    hash.update(Buffer.from([0]));
+    hash.update(`${sha256(bytes)}\n`);
+  }
+  return hash.digest("hex");
+}
+
+/**
  * The managed-tree digest of a directory.
  *
  * @param {string} dir The directory. Missing or empty digests to "".
@@ -88,21 +126,11 @@ export function dirDigest(dir) {
     return "";
   }
   if (!stat.isDirectory()) return "";
-  const kept = walk(dir)
-    .filter((rel) => {
-      const parts = rel.split("/");
-      if (parts.some((part) => EXCLUDED_COMPONENTS.has(part))) return false;
-      return !parts[parts.length - 1].endsWith(".pyc");
-    })
-    .sort(byteCompare);
-  if (kept.length === 0) return "";
-  const hash = createHash("sha256");
-  for (const rel of kept) {
-    hash.update(Buffer.from(rel, "utf8"));
-    hash.update(Buffer.from([0]));
-    hash.update(`${sha256File(path.join(dir, rel))}\n`);
-  }
-  return hash.digest("hex");
+  return digestEntries(
+    walk(dir)
+      .filter((rel) => kept(rel))
+      .map((rel) => [rel, readFileSync(path.join(dir, rel))])
+  );
 }
 
 /**

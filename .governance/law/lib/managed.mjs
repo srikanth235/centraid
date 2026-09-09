@@ -5,11 +5,7 @@
 // YAML implementation: they are generated in one shape, and a dependency for
 // reading a handful of known keys is a dependency the commit path would pay for
 // on every run.
-import { readFileSync, readdirSync } from "node:fs";
-import path from "node:path";
-
-import { ROOT } from "./git.mjs";
-import { byteCompare, dirDigest, sha256File } from "./digest.mjs";
+import { byteCompare, digestEntries, sha256 } from "./digest.mjs";
 
 /**
  * Read the `digest:` maps out of `.governance/packs.lock`.
@@ -92,63 +88,72 @@ export function parseManagedDigests(text) {
  * this repeats the arithmetic so a rule can *reason* about it — which unit
  * moved, and whether the change set explains it.
  *
- * @returns {{packs: object[], files: object[]}} The section.
+ * Every byte comes from the tree the record is about — the range's head, or the
+ * index inside the commit hook — never from the working copy. A record whose
+ * managed digests were whatever happened to be checked out would say a
+ * different thing on every machine that read the same range (R-1005-27).
+ *
+ * @param {object} source The tree reader from `treeSource`.
+ * @returns {{packs: object[], unrecorded: object[], files: object[], kitVersion: string}} The section.
  */
-export function collectManagedTree() {
+export function collectManagedTree(source) {
+  const text = (bytes) => (bytes === null ? "" : bytes.toString("utf8"));
+  const roots = source.read([".governance/packs.lock", ".governance/install.yaml"]);
+  const packsTree = source.list([".governance/packs"]);
+  const blobs = source.read(packsTree);
   const packs = [];
   const unrecorded = [];
-  for (const pack of parsePacksLock(
-    readFileSync(path.join(ROOT, ".governance/packs.lock"), "utf8")
-  )) {
+  for (const pack of parsePacksLock(text(roots.get(".governance/packs.lock")))) {
     const [owner, name] = pack.id.split("/");
+    const base = `.governance/packs/${owner}/${name}/directives`;
     const recordedDirectives = new Set([...Object.keys(pack.digest), ...pack.directives]);
     for (const directive of Object.keys(pack.digest).sort(byteCompare)) {
+      const prefix = `${base}/${directive}/`;
       packs.push({
         id: pack.id,
         directive,
         recorded: pack.digest[directive],
-        actual: dirDigest(
-          path.join(ROOT, ".governance/packs", owner, name, "directives", directive)
+        actual: digestEntries(
+          packsTree
+            .filter((file) => file.startsWith(prefix))
+            .map((file) => [file.slice(prefix.length), blobs.get(file) ?? Buffer.alloc(0)])
         ),
       });
     }
     // A pack that records no digests is a pre-digest install and is skipped
     // whole, exactly as the shell directive skipped it.
     if (Object.keys(pack.digest).length === 0) continue;
-    const dir = path.join(ROOT, ".governance/packs", owner, name, "directives");
-    let onDisk = [];
-    try {
-      onDisk = readdirSync(dir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name);
-    } catch {
-      onDisk = [];
-    }
-    for (const directive of onDisk.sort(byteCompare)) {
+    const onTree = new Set(
+      packsTree
+        .filter((file) => file.startsWith(`${base}/`))
+        .map((file) => file.slice(base.length + 1).split("/")[0])
+    );
+    for (const directive of [...onTree].sort(byteCompare)) {
       if (!recordedDirectives.has(directive)) unrecorded.push({ id: pack.id, directive });
     }
   }
-  const manifest = readFileSync(path.join(ROOT, ".governance/install.yaml"), "utf8");
+  const manifest = text(roots.get(".governance/install.yaml"));
   const recorded = parseManagedDigests(manifest);
-  const kitVersion = /^kit_version:\s*["']?(?<version>[^"'#\s]*)/mu.exec(manifest)?.groups.version ?? "";
-  const files = Object.keys(recorded)
-    .sort(byteCompare)
-    .map((file) => {
-      let actual = "";
-      let marker = "";
-      try {
-        actual = sha256File(path.join(ROOT, file));
-        // The marker is what catches a hand-edited manifest: the files still
-        // match their recorded digests, so only the stamp disagrees.
-        marker =
-          /governance-kit:managed.*kit-version=(?<version>\S+)/u.exec(
-            readFileSync(path.join(ROOT, file), "utf8").split("\n").slice(0, 3).join("\n")
-          )?.groups.version ?? "";
-      } catch {
-        actual = "";
-      }
-      return { path: file, recorded: recorded[file], actual, marker };
-    });
+  const kitVersion =
+    /^kit_version:\s*["']?(?<version>[^"'#\s]*)/mu.exec(manifest)?.groups.version ?? "";
+  const paths = Object.keys(recorded).sort(byteCompare);
+  const managed = source.read(paths);
+  const files = paths.map((file) => {
+    const bytes = managed.get(file);
+    // The marker is what catches a hand-edited manifest: the files still match
+    // their recorded digests, so only the stamp disagrees.
+    const marker =
+      bytes === null
+        ? ""
+        : (/governance-kit:managed.*kit-version=(?<version>\S+)/u.exec(
+            bytes.toString("utf8").split("\n").slice(0, 3).join("\n")
+          )?.groups.version ?? "");
+    return {
+      path: file,
+      recorded: recorded[file],
+      actual: bytes === null ? "" : sha256(bytes),
+      marker,
+    };
+  });
   return { packs, unrecorded, files, kitVersion };
 }
-

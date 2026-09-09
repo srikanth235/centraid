@@ -6,8 +6,9 @@
 // that drifts on any of them turns every rule downstream into noise.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { cpSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 
 import {
@@ -29,6 +30,7 @@ import {
   serialize,
 } from "./arrival.mjs";
 import { dirDigest } from "./lib/digest.mjs";
+import { treeSource } from "./lib/git.mjs";
 import { RECORDED_PATHS } from "./digest.mjs";
 import { oldRunnerRevision } from "./parity.mjs";
 
@@ -61,9 +63,53 @@ test("two runs over the same range in the same tree are byte-identical", async (
   assert.equal(await generate(), await generate());
 });
 
+test("a --range record is a function of the range, not of the checkout", async (t) => {
+  // The defect this replaces: the corpus and the branch name came out of the
+  // working tree, so the fixture was green on the branch that recorded it and
+  // red everywhere else (R-1005-27). Proved from a detached worktree at HEAD,
+  // whose branch is nobody's and whose receipts are then dirtied by hand.
+  // A named path rather than a mkdtemp: the law's tests run with no product
+  // helpers on hand, and the worktree it holds has to be removable by name
+  // when a previous run died before its `after` hook.
+  const probe = path.join(tmpdir(), `arrival-probe-${process.pid}`);
+  rmSync(probe, { recursive: true, force: true });
+  execFileSync("git", ["worktree", "add", "--detach", "--quiet", probe, "HEAD"], { cwd: ROOT });
+  // The generator under test is this working copy's, not HEAD's: the property
+  // is about the code as it stands, and a probe that could only ever test the
+  // last commit would go red on the commit that fixes it.
+  cpSync(HERE, path.join(probe, ".governance", "law"), {
+    recursive: true,
+    filter: (from) => !from.includes(`${path.sep}node_modules`) && !from.includes(`${path.sep}out`),
+  });
+  t.after(() => {
+    execFileSync("git", ["worktree", "remove", "--force", probe], { cwd: ROOT });
+    rmSync(probe, { recursive: true, force: true });
+  });
+  // The law's pinned install is not copied — it is borrowed, so the probe is a
+  // second checkout of the code and not a second `npm ci`.
+  symlinkSync(path.join(HERE, "node_modules"), path.join(probe, ".governance/law/node_modules"), "dir");
+  const out = path.join(probe, "arrival.probe.json");
+  const generateThere = () => {
+    execFileSync("node", [path.join(probe, ".governance/law/arrival.mjs"), "--range", RANGE, "--out", out], {
+      cwd: probe,
+      stdio: "ignore",
+    });
+    return readFileSync(out, "utf8");
+  };
+  const fixture = readFileSync(FIXTURE, "utf8");
+  assert.equal(generateThere(), fixture, "a detached checkout on no branch records the same bytes");
+  // A dirty working copy of a receipt is not part of the range and must not
+  // reach the record.
+  const receipt = path.join(probe, "receipts", "issue-972.md");
+  writeFileSync(receipt, `${readFileSync(receipt, "utf8")}\n## A section nobody committed\n`);
+  assert.equal(generateThere(), fixture, "an edited receipt in the working copy changed the record");
+  assert.equal(JSON.parse(fixture).range.onDefaultBranch, null, "a range run knows no branch");
+  assert.ok(!fixture.includes('"branch"'), "the record names no branch");
+});
+
 test("the record has every section, including the ones no rule reads yet", () => {
   const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
-  assert.equal(arrival.schema, 5);
+  assert.equal(arrival.schema, 6);
   for (const key of ["range", "commits", "files", "law", "managedTree", "waivers", "registries", "gates", "ci"]) {
     assert.ok(key in arrival, `arrival.json has no ${key}`);
   }
@@ -106,8 +152,11 @@ test("the JS directory digest is the vendored bash digest, byte for byte", () =>
 });
 
 test("every managed unit in the current tree records what it actually is", async () => {
-  const { managedTree } = await buildArrival({ range: RANGE });
-  // No pack locks digests any more — the vendored one was ported and deleted —
+  // The managed tree is read at the range's head, so "the current tree" is a
+  // question about HEAD and the range has to say so (R-1005-27).
+  const { managedTree } = await buildArrival({ range: "HEAD~1..HEAD" });
+  // No pack locks digests any more at HEAD — the vendored one was ported and
+  // deleted —
   // so the locked-directive list is legitimately empty and the managed FILES
   // are the whole trust chain: the kit runtime plus the law's own generator.
   for (const row of managedTree.packs) {
@@ -307,19 +356,30 @@ test("the receipt registry lists every tracked receipt and what this change adde
     files.every((row) => row.path.startsWith("receipts/") && row.path.endsWith(".md")),
     "the registry must hold receipts and nothing else"
   );
-  const mine = files.find((row) => row.path === "receipts/issue-1005-governance-constitution.md");
-  assert.ok(mine, "this lane's own receipt is tracked");
-  assert.deepEqual(mine.headings.slice(0, 2), ["Checklist", "What changed"]);
-  assert.equal(mine.verification.hasFence, true);
-  assert.equal(typeof change.completedChange, "boolean");
+  // The corpus is the one at the range's head: a receipt written after
+  // #1002 merged is not part of what #1002 arrived with.
+  const theirs = files.find((row) => row.path === "receipts/issue-996-one-vault-every-seat.md");
+  assert.ok(theirs, "the range's own receipt is tracked");
+  assert.equal(theirs.verification.hasFence, true);
+  assert.ok(
+    !files.some((row) => row.path === "receipts/issue-1005-governance-constitution.md"),
+    "a receipt that did not exist at the head is not in the corpus"
+  );
+  assert.equal(change.completed, true, "a range with a base and no commit in flight is a PR");
   assert.equal(typeof change.touchesReceipt, "boolean");
+  // The record holds no fact about the checkout that generated it.
+  assert.deepEqual(Object.keys(change), ["completed", "touchesReceipt"]);
 });
 
 test("the managed tree carries the pinned kit version and each file's stamp", async () => {
+  // At #1002's head the kit was 0.15.0's predecessor, and that is the point:
+  // the section reports the tree the range ends at, not whatever is installed
+  // in this checkout (R-1005-27).
   const { managedTree } = await buildArrival({ range: RANGE });
-  assert.equal(managedTree.kitVersion, "0.15.0");
+  assert.equal(managedTree.kitVersion, "0.14.0");
   const runSh = managedTree.files.find((row) => row.path === ".governance/run.sh");
-  assert.equal(runSh.marker, "0.15.0", "run.sh carries the kit's managed stamp");
+  assert.equal(runSh.marker, "0.14.0", "run.sh carries the kit's managed stamp");
+  assert.equal((await buildArrival({ range: "HEAD~1..HEAD" })).managedTree.kitVersion, "0.15.0");
   assert.deepEqual(managedTree.unrecorded, [], "no unrecorded directive folder is installed");
 });
 
@@ -393,11 +453,11 @@ test("the adjudication documents report what this change ADDED, not that it open
   assert.deepEqual(changelog.issues, []);
   assert.equal(decisions.touched, true);
   assert.ok(decisions.issues.includes(996), "the #996 rulings landed in this range");
-  // The docket exists in the working tree now; #1002's baseline predates it,
-  // which is exactly what `rowsOnBase` is for — every row reads as one this
-  // change filed itself.
-  assert.equal(docket.exists, true);
-  assert.ok(docket.rows.length > 0);
+  // The docket did not exist on either side of #1002 — it is #1005's own
+  // institution — so the register reads as "not yet established" for this
+  // range, whatever the checkout replaying it happens to carry (R-1005-27).
+  assert.equal(docket.exists, false);
+  assert.deepEqual(docket.rows, []);
   assert.deepEqual(docket.rowsOnBase, [], "the docket did not exist at #1002's merge-base");
 });
 
@@ -412,20 +472,23 @@ test("a document row cites only the issues on added lines", () => {
     issues: [],
     lines: 0,
   });
-  assert.equal(collectDocket().path, ".governance/law/docket.json");
-  assert.deepEqual(collectDocket().rowsOnBase, [], "no docket at the baseline, no ids");
+  const atHead = collectDocket(null, treeSource("HEAD"));
+  assert.equal(atHead.path, ".governance/law/docket.json");
+  assert.equal(atHead.exists, true, "the docket is committed at HEAD");
+  assert.deepEqual(atHead.rowsOnBase, [], "no range, no baseline ids");
+  assert.equal(collectDocket(range, treeSource(range.head)).exists, false);
 });
 
 test("a receipt row carries its issue, whether a ruling is in it, and any cost", () => {
   const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
-  // The registry is the whole tracked corpus, so this lane's own receipt is in
-  // it — but nothing in #1002's range touched it, which is the field the
-  // registry rules read.
-  const mine = arrival.registries.receipts.files.find(
-    (row) => row.path === "receipts/issue-1005-governance-constitution.md"
+  // The registry is the whole tracked corpus at the range's head, so a receipt
+  // from an unrelated issue is in it — and nothing in #1002's range touched it,
+  // which is the field the registry rules read.
+  const other = arrival.registries.receipts.files.find(
+    (row) => row.path === "receipts/issue-972.md"
   );
-  assert.equal(mine.issue, 1005);
-  assert.equal(mine.touched, false);
+  assert.equal(other.issue, 972);
+  assert.equal(other.touched, false);
   const sample = arrival.registries.receipts.files.find((row) => row.issue === 996);
   assert.ok(sample, "issue #996 has a receipt");
   assert.equal(sample.recordsRuling, true, "the #996 receipt records rulings");

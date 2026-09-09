@@ -27,7 +27,7 @@ const good = {
 const withReceipts = (files, change = {}, extra = {}) =>
   JSON.stringify(
     {
-      schema: 2,
+      schema: 6,
       commits: [],
       pending: null,
       waivers: [],
@@ -35,10 +35,9 @@ const withReceipts = (files, change = {}, extra = {}) =>
         receipts: {
           files,
           change: {
-            branch: "lane/x",
-            onDefaultBranch: false,
-            hasStaged: false,
-            completedChange: true,
+            // `completed` is derived from the range and the pending commit, not
+            // from the branch the checkout is on (R-1005-27).
+            completed: true,
             touchesReceipt: true,
             ...change,
           },
@@ -59,7 +58,7 @@ ruleTester().run("receipt-per-issue", rule, {
     // Shape is demanded only of a receipt this change added.
     withReceipts([{ ...good, addedInRange: false, stub: true }]),
     // An intermediate commit may carry a stub.
-    withReceipts([{ ...good, stub: true }], { completedChange: false }),
+    withReceipts([{ ...good, stub: true }], { completed: false }),
     // A head-of-file waiver exempts one receipt entirely.
     withReceipts([{ ...good, fileWaiver: true, name: "not-a-receipt.md", stub: true }]),
     // A completed change with no receipt, waived in a commit body.

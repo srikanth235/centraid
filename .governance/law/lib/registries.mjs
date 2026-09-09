@@ -4,10 +4,7 @@
 // The generator reads; the rules judge. A rule cannot open a git object, so
 // everything a comparison needs is computed once here and lands in the arrival
 // record as plain data.
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
-import { ROOT, git, gitBytes, parseNameStatus } from "./git.mjs";
+import { git, gitBytes, parseNameStatus } from "./git.mjs";
 import { byteCompare } from "./digest.mjs";
 import { readPacks } from "../eslint.config.mjs";
 
@@ -292,13 +289,21 @@ export function collectRulings(text) {
  * ever saw the receipts a change touched could never see a collision with one
  * it did not.
  *
+ * The corpus is read out of `source` — the range's head, or the index inside
+ * the commit hook — never out of the working copy (R-1005-27). A registry that
+ * reported whatever was checked out would make the same range say a different
+ * thing on every machine, and did: the fixture pinned the branch it was
+ * generated on.
+ *
  * @param {object} range The resolved range.
  * @param {object|null} pending The pending commit, if any.
+ * @param {object} source The tree reader for the side being judged.
  * @returns {object} The registry.
  */
-export function collectReceipts(range, pending) {
+export function collectReceipts(range, pending, source) {
   const dir = "receipts";
-  const tracked = git(["ls-files", "-z", "--", `${dir}/*.md`]).split("\0").filter(Boolean);
+  const isReceipt = shellGlob(`${dir}/*.md`);
+  const tracked = source.list([dir]).filter((file) => isReceipt.test(file));
   const addedIn = (args) =>
     new Set(
       git(["diff", "--no-renames", "--diff-filter=A", "--name-only", "-z", ...args, "--", `${dir}/*.md`])
@@ -308,33 +313,26 @@ export function collectReceipts(range, pending) {
   const addedInPending = pending ? addedIn(["--cached"]) : new Set();
   const addedInRange = range.hasBase ? addedIn([`${range.base}..${range.head}`]) : new Set();
 
-  const branch = (() => {
-    try {
-      return git(["rev-parse", "--abbrev-ref", "HEAD"]);
-    } catch {
-      return "";
-    }
-  })();
-  const onDefaultBranch = branch === "main" || branch === "master";
-  const staged = parseNameStatus(git(["diff", "--cached", "-z", "--name-status", "--diff-filter=ACMR"]));
-  const hasStaged = staged.length > 0;
-  // The shell directive's two completed-change shapes, unchanged: a staged
-  // commit being made straight onto the trunk, or a branch whose index is clean
-  // and which has work against the trunk (a PR, as CI sees it).
-  const completedChange =
-    (onDefaultBranch && hasStaged) || (!onDefaultBranch && !hasStaged && range.hasBase);
+  // The two completed-change shapes, said in terms of the record's own inputs:
+  // a commit being written straight onto the trunk, or a branch with work
+  // against the trunk and no commit in flight — a PR, as CI sees it. The old
+  // reading asked git for the current branch name, which is a fact about the
+  // checkout and not about the change (R-1005-27).
+  const completed =
+    pending === null ? range.hasBase : range.onDefaultBranch === true;
 
+  const staged = pending
+    ? parseNameStatus(git(["diff", "--cached", "-z", "--name-status", "--diff-filter=ACMR"]))
+    : [];
   const touchedPaths = new Set([
-    ...(pending ? staged.map((row) => row.path) : []),
+    ...staged.map((row) => row.path),
     ...(range.hasBase ? arrivalFilesIn(range) : []),
   ]);
-  const files = tracked.sort(byteCompare).map((file) => {
-    let text = "";
-    try {
-      text = readFileSync(path.join(ROOT, file), "utf8");
-    } catch {
-      text = "";
-    }
+  const sorted = tracked.sort(byteCompare);
+  const blobs = source.read(sorted);
+  const files = sorted.map((file) => {
+    const bytes = blobs.get(file);
+    const text = bytes === null ? "" : bytes.toString("utf8");
     const headings = text
       .split("\n")
       .map((line) => /^##\s+(?<title>.+?)\s*$/u.exec(line)?.groups.title)
@@ -393,10 +391,7 @@ export function collectReceipts(range, pending) {
   return {
     files,
     change: {
-      branch,
-      onDefaultBranch,
-      hasStaged,
-      completedChange,
+      completed,
       touchesReceipt: [...touchedPaths].some((file) => /^receipts\/issue-.*\.md$/u.test(file)),
     },
   };
@@ -487,10 +482,11 @@ export function collectDocument(range, pending, file) {
  * itself, and the difference between that and a granted exception is exactly
  * which side of the merge-base the row was on.
  *
- * @param {object} [range] The resolved range, for the baseline read.
+* @param {object|null} range The resolved range, for the baseline read.
+ * @param {object} source The tree reader for the side being judged.
  * @returns {{path: string, exists: boolean, rows: object[], rowsOnBase: string[]}} The docket.
  */
-export function collectDocket(range = null) {
+export function collectDocket(range, source) {
   const file = ".governance/law/docket.json";
   const parse = (text) => {
     const parsed = JSON.parse(text);
@@ -498,11 +494,14 @@ export function collectDocket(range = null) {
   };
   let rows = [];
   let exists = false;
-  try {
-    rows = parse(readFileSync(path.join(ROOT, file), "utf8"));
-    exists = true;
-  } catch {
-    exists = false;
+  const bytes = source.read([file]).get(file);
+  if (bytes !== null) {
+    try {
+      rows = parse(bytes.toString("utf8"));
+      exists = true;
+    } catch {
+      exists = false;
+    }
   }
   let rowsOnBase = [];
   if (range?.base) {
