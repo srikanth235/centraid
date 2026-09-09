@@ -20,7 +20,7 @@ install_assets_seeded:
 collisions: []
 managed_digests:
   .github/workflows/governance.yml: 220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb
-  .governance/law/arrival.mjs: 9ea082e26a2975519084bec1026f9e03bcef633be6886dd9c62722a137acf40a
+  .governance/law/arrival.mjs: 80ba202e79f5508a1f7c25edf89303d0b480fb055d8d42ae9879b57b4d71440f
   .governance/law/lib/digest.mjs: e7f8fda369bf8637336463a54947704ad719846d2ec6c3a24074ea8906ebbf80
   .governance/law/lib/estates.mjs: 3b73a52a710392595368fe65c35d79878b4ff80a7ba3b3352d13dc6980ca03d6
   .governance/law/lib/gates.mjs: 1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0

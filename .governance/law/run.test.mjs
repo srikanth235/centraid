@@ -9,9 +9,9 @@ import path from "node:path";
 import test from "node:test";
 
 import { buildConfig, loadRules } from "./eslint.config.mjs";
-import { main, printReport, runLaw } from "./run.mjs";
+import { briefDrift, main, printReport, runLaw } from "./run.mjs";
 import { defineRule } from "./lib/rule.mjs";
-import { renderFrontPage, renderRegistries } from "./front-page.mjs";
+import { nameFiles, renderFrontPage, renderRegistries } from "./front-page.mjs";
 
 const HERE = import.meta.dirname;
 const ARRIVAL = path.join(HERE, "fixtures", "arrival", "bb964a7e..3df6d552.json");
@@ -199,4 +199,43 @@ test("the registry lines are generated from the record, including the silences",
   assert.ok(!loud.includes("docket not yet established"));
   assert.ok(!loud.includes("proposal link unverified"));
   assert.match(loud, /- token cost: receipts\/issue-1005-x\.md: 12k tokens/u);
+});
+
+test("a brief's stamp says what the agent was not told", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const root = path.resolve(import.meta.dirname, "..", "..");
+  const at = (rev) =>
+    execFileSync("git", ["rev-parse", rev], { cwd: root, encoding: "utf8" }).trim();
+  const range = { base: at("HEAD~1"), head: at("HEAD") };
+  const { lawDigestAt } = await import("./arrival.mjs");
+
+  assert.equal(briefDrift(undefined, range), null, "no stamp, no claim");
+  const current = briefDrift(lawDigestAt(range.head), range);
+  assert.deepEqual(current.changed, [], "a brief stamped at HEAD saw everything");
+  assert.equal(current.at, range.head);
+  // A stamp naming a state no commit in the range carries is reported as
+  // unknown rather than as "nothing moved" — the honest answer.
+  const stranger = briefDrift("0".repeat(64), range);
+  assert.equal(stranger.at, null);
+  assert.deepEqual(stranger.changed, []);
+});
+
+test("the front page names at most twelve paths, then counts the rest", () => {
+  assert.equal(nameFiles([]), "(unnamed)");
+  assert.equal(nameFiles(["a", "b"]), "`a`, `b`");
+  const many = Array.from({ length: 70 }, (_, index) => `f${index}`);
+  const rendered = nameFiles(many);
+  assert.match(rendered, /and 58 more$/u);
+  assert.equal(rendered.split("`f").length - 1, 12);
+  const page = renderFrontPage({
+    door: "window",
+    lawDigest: { base: "a".repeat(64), head: "b".repeat(64) },
+    lawChanged: many,
+    brief: { stamped: "c".repeat(64), head: "b".repeat(64), at: null, changed: [] },
+    range: { base: "a", head: "b" },
+    rules: [],
+    messages: [],
+  });
+  assert.match(page, /law changed under this run: `f0`.*and 58 more/u);
+  assert.match(page, /brief stamped `cccccccccccc`, HEAD is `bbbbbbbbbbbb` — changed: unknown commit/u);
 });

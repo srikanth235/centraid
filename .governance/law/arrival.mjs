@@ -209,6 +209,47 @@ function treeEntries(rev) {
 }
 
 /**
+ * The law globs, compiled once.
+ *
+ * @returns {{globs: string[], matchers: RegExp[]}} The law paths and matchers.
+ */
+export function lawMatchers() {
+  const globs = readPacks()
+    .flatMap((pack) => pack.lawPaths)
+    .sort(byteCompare);
+  return { globs, matchers: globs.map(globToRegExp) };
+}
+
+/**
+ * The law digest at one revision.
+ *
+ * Exported for `brief.mjs`, which has no range: a brief is stamped with what
+ * the law WAS when it was written, and the only question later is whether HEAD
+ * still matches.
+ *
+ * @param {string} rev The revision.
+ * @returns {string} The digest.
+ */
+export function lawDigestAt(rev) {
+  return lawDigest(treeEntries(rev), lawMatchers().matchers).digest;
+}
+
+/**
+ * The law paths that changed between two revisions.
+ *
+ * @param {string} base The earlier revision.
+ * @param {string} head The later one.
+ * @returns {string[]} Sorted paths.
+ */
+export function lawPathsChanged(base, head) {
+  const { matchers } = lawMatchers();
+  return parseNameStatus(git(["diff", "-z", "--name-status", `${base}..${head}`]))
+    .map((row) => row.path)
+    .filter((file) => matchers.some((matcher) => matcher.test(file)))
+    .sort(byteCompare);
+}
+
+/**
  * The law section: what counts as law, and whether it moved under this change.
  *
  * A change that edits the rules it is judged by is not the same kind of change
@@ -221,24 +262,11 @@ function treeEntries(rev) {
  */
 export function collectLaw(range) {
   const packs = readPacks();
-  const globs = packs.flatMap((pack) => pack.lawPaths).sort(byteCompare);
-  const matchers = globs.map(globToRegExp);
+  const { globs, matchers } = lawMatchers();
   const atBase = lawDigest(treeEntries(range.base), matchers);
   const atHead = lawDigest(treeEntries(range.head), matchers);
   const changed =
-    atBase.digest === atHead.digest
-      ? []
-      : parseNameStatus(
-          git([
-            "diff",
-            "-z",
-            "--name-status",
-            `${range.base}..${range.head}`,
-          ])
-        )
-          .map((row) => row.path)
-          .filter((file) => matchers.some((matcher) => matcher.test(file)))
-          .sort(byteCompare);
+    atBase.digest === atHead.digest ? [] : lawPathsChanged(range.base, range.head);
   return {
     paths: globs,
     digestAtBase: atBase.digest,

@@ -12,12 +12,13 @@
 //                                [--message-file F] [--arrival P]
 //                                [--json] [--front-page P]
 import { ESLint } from "eslint";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { DOCUMENT_PATTERNS, buildConfig, loadRules } from "./eslint.config.mjs";
 import { status as codeownersStatus } from "./codeowners.mjs";
-import { main as generateArrival } from "./arrival.mjs";
+import { lawDigestAt, lawPathsChanged, main as generateArrival } from "./arrival.mjs";
 import { renderFrontPage } from "./front-page.mjs";
 import { globToRegExp } from "./lib/digest.mjs";
 
@@ -31,7 +32,15 @@ const ROOT = path.resolve(HERE, "..", "..");
  * @returns {object} The options.
  */
 export function parseArgs(argv) {
-  const options = { door: "window", json: false };
+  const options = {
+    door: "window",
+    json: false,
+    // A brief carries a stamp of the law it was written against. The env var
+    // is how an orchestrator passes it without rewriting every call site.
+    ...(process.env.GOVERNANCE_BRIEF_DIGEST
+      ? { briefDigest: process.env.GOVERNANCE_BRIEF_DIGEST }
+      : {}),
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--door") options.door = argv[(i += 1)];
@@ -39,6 +48,7 @@ export function parseArgs(argv) {
     else if (arg === "--message-file") options.messageFile = argv[(i += 1)];
     else if (arg === "--arrival") options.arrival = argv[(i += 1)];
     else if (arg === "--front-page") options.frontPage = argv[(i += 1)];
+    else if (arg === "--brief-digest") options.briefDigest = argv[(i += 1)];
     else if (arg === "--json") options.json = true;
     else throw new Error(`law: unknown argument ${arg}`);
   }
@@ -69,6 +79,50 @@ export function documentsInRange(arrival) {
     .filter((file) => matchers.some((matcher) => matcher.test(file)))
     .filter((file) => existsSync(path.join(ROOT, file)))
     .sort();
+}
+
+/**
+ * What moved in the law since the brief an agent was given.
+ *
+ * The brief's digest names a state of the law, not a commit, so the commit is
+ * FOUND: the range is walked from its base until one whose law digest matches.
+ * A brief stamped with a state that is not in this range is honestly reported
+ * as unknown rather than silently treated as "nothing changed" — the whole
+ * point of the stamp is to say what the agent was not told.
+ *
+ * @param {string|undefined} stamped The digest the brief carries.
+ * @param {object} range The resolved range.
+ * @returns {{stamped: string, head: string, at: string|null, changed: string[]}|null}
+ *   The comparison, or null when no brief was stamped.
+ */
+export function briefDrift(stamped, range) {
+  if (!stamped) return null;
+  const head = lawDigestAt(range.head);
+  if (stamped === head) return { stamped, head, at: range.head, changed: [] };
+  const candidates = [range.base, ...gitRevList(range)];
+  const at = candidates.find((rev) => lawDigestAt(rev) === stamped) ?? null;
+  return {
+    stamped,
+    head,
+    at,
+    changed: at === null ? [] : lawPathsChanged(at, range.head),
+  };
+}
+
+/**
+ * The commits of a range, oldest first.
+ *
+ * @param {object} range The resolved range.
+ * @returns {string[]} The oids.
+ */
+function gitRevList(range) {
+  return execFileSync("git", ["rev-list", "--reverse", `${range.base}..${range.head}`], {
+    cwd: ROOT,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split("\n")
+    .filter(Boolean);
 }
 
 /**
@@ -129,6 +183,7 @@ export async function runLaw(options) {
     // is a fact about the working tree rather than about the change.
     codeowners: codeownersStatus(),
     lawDigest: { base: arrival.law.digestAtBase, head: arrival.law.digestAtHead },
+    brief: briefDrift(options.briefDigest, arrival.range),
     lawChanged: arrival.law.changed,
     range: arrival.range,
     rules: rows.map((row) => {

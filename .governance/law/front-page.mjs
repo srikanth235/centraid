@@ -51,6 +51,23 @@ export function renderRegistries(arrival) {
 }
 
 /**
+ * Name a list of paths without printing sixty of them.
+ *
+ * The first version printed every law path a lane touched — 60-odd backticked
+ * strings in one line — which is a line nobody reads, and an unread line is the
+ * same as no line.
+ *
+ * @param {string[]} files The paths.
+ * @param {number} [limit] How many to name.
+ * @returns {string} The rendered list.
+ */
+export function nameFiles(files, limit = 12) {
+  if (!files || files.length === 0) return "(unnamed)";
+  const shown = files.slice(0, limit).map((file) => `\`${file}\``).join(", ");
+  return files.length > limit ? `${shown} and ${files.length - limit} more` : shown;
+}
+
+/**
  * Render a run.
  *
  * @param {object} report The object `run.mjs --json` prints.
@@ -64,9 +81,18 @@ export function renderFrontPage(report, arrival = null) {
     `**Law** · ${report.door} door · range \`${short(report.range?.base)}..${short(report.range?.head)}\` · law digest \`${digest(report.lawDigest.base)}\` → \`${digest(report.lawDigest.head)}\``,
   ];
   if (report.lawDigest.base !== report.lawDigest.head) {
+    lines.push("", `law changed under this run: ${nameFiles(report.lawChanged)}`);
+  }
+  if (report.brief) {
+    // What the agent was NOT told. A brief is stamped with the law it was
+    // written against; the agent is held to HEAD, so the gap between the two
+    // is the one thing nobody could have read.
+    const { stamped, head, at, changed } = report.brief;
     lines.push(
       "",
-      `law changed under this run: ${report.lawChanged.map((file) => `\`${file}\``).join(", ") || "(unnamed)"}`
+      stamped === head
+        ? `law changed under this run: brief stamped \`${digest(stamped)}\`, HEAD is the same — nothing moved under the work`
+        : `law changed under this run: brief stamped \`${digest(stamped)}\`, HEAD is \`${digest(head)}\` — changed: ${at === null ? "unknown commit (no commit in this range carries the stamped digest)" : nameFiles(changed)}`
     );
   }
   lines.push("", "| Rule | Door | Verdict | Findings |", "| --- | --- | --- | --- |");

@@ -110,7 +110,7 @@ Every brief carries these sections, in this order.
 
 1. **State, from evidence.** What is true on disk now, each line with the command that proves it and its output. Never from memory, never from the last report. A wrong State line is the commonest reason a worker stops short, and it is always the root's error.
 2. **Reading set.** The files and docs the worker reads before editing, and the traps for the area ([traps/](traps/README.md)).
-3. **Doctrine digest.** The five to ten repo rules that bite in this area, one line each. Workers do not infer these from the codebase.
+3. **Doctrine digest.** The five to ten repo rules that bite in this area, one line each. Workers do not infer these from the codebase. The governance half is **generated, not typed**: `node .governance/law/brief.mjs` prints every rule in force with its door, severity and statute, the doctrine domains with the decisions they answer to, and the exceptions on the docket. Paste it and stamp the digest it prints. A run under `node .governance/law/run.mjs --brief-digest <digest>` (or `GOVERNANCE_BRIEF_DIGEST`) then says on the front page whether the law moved under the work and which paths moved — the worker is held to HEAD, and the stamp is what names the gap between HEAD and what the worker was told.
 4. **The slices**, in order, each with an end state a grep can check.
 5. **Exit list.** Numbered; each item a command and its expected result; always ending with the push gates. A slice that cannot be pushed is not done.
 6. **Rulings that bind**, by id, one line each.

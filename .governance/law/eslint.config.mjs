@@ -17,6 +17,8 @@ import path from "node:path";
 import json from "@eslint/json";
 import markdown from "@eslint/markdown";
 
+import { DOORS } from "./lib/rule.mjs";
+
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, "..", "..");
 
@@ -129,25 +131,36 @@ export function catalog() {
  *
  * `scripts/ci/gate-classes.json` is the repo's existing register of what each
  * gate is and which rung enforces it. A `door` there wins over nothing and
- * loses to the pack row: the pack is the law, the register is a cross-check
- * that has not grown the field yet. Its absence is expected, not an error.
+ * loses to the pack row: the pack is the law, the register is a cross-check.
+ *
+ * The two registers share ONE vocabulary (`DOORS`), which is the whole reason
+ * the field is worth having: "where is this answerable" is the same question
+ * for a lint rule and for a test suite, and two words for one question is how
+ * a gate ends up enforced in a place nobody looks. A door outside the
+ * vocabulary is refused rather than ignored — a register the reader cannot
+ * trust is worse than none.
  *
  * @returns {Record<string, string>} rule/gate id → door.
  */
 export function readGateDoors() {
+  let raw;
   try {
-    const raw = JSON.parse(
-      readFileSync(path.join(ROOT, "scripts/ci/gate-classes.json"), "utf8")
-    );
-    const doors = {};
-    for (const [key, row] of Object.entries(raw)) {
-      if (key.startsWith("_") || typeof row !== "object" || row === null) continue;
-      if (typeof row.door === "string") doors[key] = row.door;
-    }
-    return doors;
+    raw = JSON.parse(readFileSync(path.join(ROOT, "scripts/ci/gate-classes.json"), "utf8"));
   } catch {
     return {};
   }
+  const doors = {};
+  for (const [key, row] of Object.entries(raw)) {
+    if (key.startsWith("_") || typeof row !== "object" || row === null) continue;
+    if (typeof row.door !== "string") continue;
+    if (!DOORS.includes(row.door)) {
+      throw new Error(
+        `gate-classes.json: ${key} declares door '${row.door}', which is not one of ${DOORS.join(", ")}`
+      );
+    }
+    doors[key] = row.door;
+  }
+  return doors;
 }
 
 /**

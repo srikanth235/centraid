@@ -27,7 +27,8 @@ any of it.
 | `parity.mjs` | Replays the deleted shell runner against these rules over real history |
 | `replay.test.mjs` | Replays the whole catalog over #1002's merged squash; the findings are pinned in `fixtures/replay/1002.json` |
 | `commitlint.config.mjs` | The commit-subject policy, in commitlint's config shape |
-| `run.mjs` | The runner: generate, lint, report one line per rule |
+| `run.mjs` | The runner: generate, lint, report one line per rule. `--brief-digest <hex>` (or `GOVERNANCE_BRIEF_DIGEST`) reports what moved in the law since a brief was stamped |
+| `brief.mjs` | Prints the doctrine digest a worker brief carries: the law digest at HEAD, every rule with its door and statute, the doctrine domains, and the docket |
 | `front-page.mjs` | Renders a run as the PR-body front page, including the generated registry lines |
 | `fixtures/` | Checked-in arrival records the tests pin the generator against |
 | `out/` | Generated; git-ignored |
@@ -87,6 +88,12 @@ is. `GOVERNANCE_DOOR` selects which configuration the runner builds.
   while the hook may still refuse locally, where refusing costs nothing.
 - **owner** — recorded on the rule, enforced by neither door. It names a
   judgement that belongs to the repository owner.
+
+The same three words are the `door` field on every row of
+`scripts/ci/gate-classes.json`, and `readGateDoors()` refuses a value outside
+them. "Where is this answerable" is one question whether the answer is a lint
+rule or a test suite, and two vocabularies for it is how a gate ends up
+enforced somewhere nobody looks.
 
 ## Who enforces it
 

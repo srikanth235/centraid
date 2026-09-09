@@ -194,6 +194,8 @@ What is left at rung 0 is the whole catalog. Its pole is `managed-tree-integrity
 
 **Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no matter what runs here — so the only thing a local gate buys is not paying those 12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s needs 57%, which is why it is scoped rather than run whole.
 
+That arithmetic is a tiebreaker **within** a door, never a reason to move one (#1005): [`scripts/ci/gate-classes.json`](../scripts/ci/gate-classes.json) gives every gate a `door` — `hook` at rungs 0–1, `window` at rung 2, `owner` at rung 3 and above — in the same vocabulary the law's rules use, and where a gate is answerable is decided by what it can see and who can act on it. Cost decides which of two gates at the same door runs first, or whether one is scoped; it does not buy a promotion out of the door a gate belongs to.
+
 Rung 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
 
 ### Tiers, stamps, and one cache (#988)
