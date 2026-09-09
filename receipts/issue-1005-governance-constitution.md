@@ -318,7 +318,8 @@ written in one vocabulary instead of two.
 | `.governance/law/lib/registries.mjs` | `collectReceipts(range, pending, source)` lists and reads the corpus at `source`, never at the working copy; `collectDocket(range, source)` the same. `change` drops `branch`, `onDefaultBranch` and `hasStaged` for one `completed` |
 | `.governance/law/lib/managed.mjs` | `collectManagedTree(source)`: `packs.lock`, `install.yaml`, every managed file's digest and marker, and every locked directive's directory digest, all from blobs |
 | `.governance/law/lib/digest.mjs` | `digestEntries(entries)` — the managed-tree digest over an in-memory `{relpath: bytes}` tree. `dirDigest` is that function with the walk in front of it, so the bash-parity test still pins both |
-| `.governance/law/arrival.mjs` | Schema 5 → 6. `range.onDefaultBranch` (a pending run's `git symbolic-ref`, `null` otherwise); one `treeSource` built once and handed to the three collectors |
+| `.governance/law/arrival.mjs` | Schema 5 → 6. `--staged` (the hook door's tree is the index); `range.onDefaultBranch` (a `git symbolic-ref` taken only there, `null` otherwise); one `treeSource` built once and handed to the three collectors |
+| `.governance/law/run.mjs` | Passes `--staged` when the door is `hook`. The pre-commit rung carries no commit message, so the index read cannot be keyed on `--message-file`: it was, briefly, and `managed-tree-integrity` judged HEAD there — a staged hand edit to a digest row passed the hook. Caught by the exit list's own hand-made red |
 | `.governance/law/brief.mjs` | The brief's docket is read at HEAD — the register a worker is held to is the committed one |
 | `.governance/law/rules/receipt-per-issue.{mjs,test.mjs}` | Reads `change.completed`; findings unchanged for every existing case |
 | `.governance/law/arrival.test.mjs` | The determinism case: a detached `git worktree` at HEAD, on no branch, generating the fixture range — twice, the second time with a receipt dirtied in its working copy |
@@ -699,9 +700,11 @@ git worktree remove --force /tmp/probe
 time GIT_INDEX_FILE=x bash .governance/packs/srikanth235/centraid/directives/law/check.sh
                                                                      under the 2.0 s budget
 
-(hand-made red) stage a one-character edit to a digest row in .governance/install.yaml
-  ✗ managed-tree-integrity — the commit is refused at the pre-commit hook
-                                                                     the index path still works
+(hand-made red) stage a one-character edit to .governance/run.sh's digest row
+  ✗ managed-tree-integrity — .governance/run.sh: drifted from the digest recorded at
+    apply time. If you meant to change it, re-record it ...
+  ✗ law (1 violation) — the law refused this change at the hook door
+                                                                     the index path works
 
 node .governance/law/parity.mjs --last 50                             exit 0
 ```
