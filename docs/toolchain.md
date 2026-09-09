@@ -23,6 +23,8 @@ Ultracite seeds `core`, `react`, and `vitest` policy. It is not the routine comm
 
 Oxfmt is the sole style owner. Oxlint rules that only restate formatting are off. The pinned TypeScript compiler is the sole owner of compiler diagnostics; Oxlint `--type-check` is not part of any command.
 
+**There is a second linter, and it lints no product source.** ESLint is installed under [`.governance/law/`](../.governance/law/README.md) with its own private, exact-pinned `package.json`, and it is scoped to the governance documents — the generated arrival record and the markdown the constitution governs (`receipts/*.md`, `CONSTITUTION.md`, `docs/decisions.md`, `CHANGELOG.md`). **`bun run lint` never invokes it and it never sees a `.ts` file**; oxlint remains the sole owner of the product's lint policy, and oxlint's own `ignorePatterns` excludes `.governance/**` in the other direction. It exists because a governance directive written as a lint rule gets a rule catalog, severities, per-line suppression with a reason, a machine-readable report and `RuleTester` for free — machinery that would otherwise be hand-rolled in bash. It is reached through `bash .governance/run.sh` (the `law` directive) or `bun run governance:law`, and it carries its own install because the managed `governance.yml` runs no `bun install`.
+
 ## Stable command API
 
 All callers use repository-pinned binaries through these Bun scripts:
@@ -46,6 +48,8 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `check:push` | the full push tier: 17 gate names run concurrently, with the static tier gate-stamped |
 | `check:push:static` | the branch push tier: `format:check`, `lint`, `turbo:lint`, `typecheck:affected` |
 | `governance` | the stamped entry point to `.governance/run.sh`, which is itself digest-locked |
+| `governance:law` | the law's ESLint pass over the arrival record and the governance documents a change touched |
+| `governance:law:test` | the law's rule and generator tests, under `node --test` |
 
 ### Where the caches live
 
