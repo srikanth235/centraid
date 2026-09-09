@@ -24623,8 +24623,8 @@
       "change": {
         "branch": "lane/1005-c",
         "onDefaultBranch": false,
-        "hasStaged": false,
-        "completedChange": true,
+        "hasStaged": true,
+        "completedChange": false,
         "touchesReceipt": true
       }
     },

@@ -146,7 +146,14 @@ export async function buildConfig(door = "window", options = {}) {
   // porting a blocking shell directive into a warning would be weakening the
   // policy to make a run green. A row that declares no severity warns, which is
   // the honest verdict for something only a person can settle.
-  const severityFor = (row) => (row.door === "hook" ? "error" : (row.severity ?? "warn"));
+  //
+  // The ONE asymmetry: at the hook door every rule that runs is fatal. A hook
+  // rule that cannot stop the commit is a hook rule for nothing, and the hook
+  // is also the only place where the author is still holding the change and can
+  // act on it. In the window a rule whose host backing the owner has not
+  // confirmed reports at its declared severity instead, so the law never stands
+  // in for a review that has not happened. See README.md § The two doors.
+  const severityFor = (row) => (door === "hook" ? "error" : (row.severity ?? "warn"));
   const rulesFor = (surface) =>
     Object.fromEntries(
       rows

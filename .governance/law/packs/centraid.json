@@ -1,6 +1,11 @@
 {
   "id": "srikanth235/centraid",
-  "rules": {},
+  "rules": {
+    "estate-separation": {
+      "severity": "warn",
+      "door": "hook"
+    }
+  },
   "lawPaths": [
     ".governance/**",
     "CONSTITUTION.md",

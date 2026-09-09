@@ -89,14 +89,21 @@ test("a window rule takes the severity its pack row declares", async () => {
   assert.equal(errored.report.messages[0].severity, "error");
 });
 
-test("a hook rule stays fatal when the window door runs the whole law", async () => {
-  const { report } = await runLaw({ door: "window", arrival: ARRIVAL, rules: catalog("hook") });
-  assert.equal(report.messages[0].severity, "error");
-});
-
-test("a hook rule stays fatal even when the window door runs the whole law", async () => {
-  const { report } = await runLaw({ door: "window", arrival: ARRIVAL, rules: catalog("hook") });
-  assert.equal(report.messages[0].severity, "error", "the window door may widen the law, never soften it");
+test("the hook door is fatal for every rule it runs; the window door is not", async () => {
+  // The catalog's one asymmetry (#1005, R-1005-14). At the hook door the author
+  // is still holding the change and a rule that cannot refuse is a rule for
+  // nothing, so every rule that runs there is an error whatever its pack row
+  // says. At the window door the pack row is the authority, so a rule whose
+  // host backing the owner has not confirmed reports without standing in for a
+  // review that has not happened.
+  const atHook = await runLaw({ door: "hook", arrival: ARRIVAL, rules: catalog("hook", "warn") });
+  assert.equal(atHook.report.messages[0].severity, "error");
+  const atWindow = await runLaw({ door: "window", arrival: ARRIVAL, rules: catalog("hook", "warn") });
+  assert.equal(atWindow.report.messages[0].severity, "warn");
+  // A hook rule the pack declares at `error` is still an error in the window —
+  // softening one would be weakening policy without editing it.
+  const declared = await runLaw({ door: "window", arrival: ARRIVAL, rules: catalog("hook", "error") });
+  assert.equal(declared.report.messages[0].severity, "error");
 });
 
 test("the exit code is 1 for an error and 0 for a warning", async (t) => {

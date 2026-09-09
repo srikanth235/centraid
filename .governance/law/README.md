@@ -52,6 +52,7 @@ rule.
 | `doc-integrity` | hook | Frozen documents may only be added to — receipts, the Evolution Log, COSTS, STEERING, QUALITY's Resolved section | [CONSTITUTION.md](../../CONSTITUTION.md#doc-integrity) |
 | `managed-tree-integrity` | hook | Managed governance files, and the law's own generator, match their recorded digests | [CONSTITUTION.md](../../CONSTITUTION.md#managed-tree-integrity) |
 | `receipt-per-issue` | window | One well-formed receipt per issue, and a completed change carries it | [CONSTITUTION.md](../../CONSTITUTION.md#receipt-per-issue) |
+| `estate-separation` | hook | A commit edits the law or the product, never both | [CONSTITUTION.md](../../CONSTITUTION.md#estate-separation) |
 
 All four were vendored shell directives in `governance-kit/audit` until #1005.
 `parity.mjs` replays both runners over the last 50 trunk commits and fails on any
@@ -63,11 +64,19 @@ reason. Run it before changing any of them.
 A rule is answerable somewhere, and where it is answerable is part of what it
 is. `GOVERNANCE_DOOR` selects which configuration the runner builds.
 
-- **hook** — answerable from the change set alone, cheap enough for the
-  pre-commit rung, and fatal there. The commit does not happen.
-- **window** — the whole law, run over a range at review time. Hook rules stay
-  fatal; the rest report as warnings, because a warning is the honest verdict
-  for something a machine can see but only a person can settle.
+- **hook** — answerable from the **commit being written** alone (the runner
+  stamps `door` into the record, so a rule can tell the staged set from the
+  branch's history), cheap enough for the pre-commit rung, and **fatal there
+  whatever the pack row says**. A hook rule
+  that cannot stop the commit is a hook rule for nothing, and the hook is the
+  one place where the author is still holding the change.
+- **window** — the whole law, run over a range at review time, **every rule at
+  its declared pack severity**. That is the catalog's one asymmetry, and it is
+  deliberate: `estate-separation` is declared `warn` because the host backing
+  that would make it a refusal (branch protection over the `law` estate, and
+  the reviewers `.github/CODEOWNERS` names) is owner-enabled and not confirmed
+  enabled. A red gate must not stand in for a review that has not happened,
+  while the hook may still refuse locally, where refusing costs nothing.
 - **owner** — recorded on the rule, enforced by neither door. It names a
   judgement that belongs to the repository owner.
 

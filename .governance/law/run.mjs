@@ -82,6 +82,14 @@ export async function runLaw(options) {
     : await generateArrival([
         ...(options.range ? ["--range", options.range] : []),
         ...(options.messageFile ? ["--message-file", options.messageFile] : []),
+        // The door is stamped into the record because it is a fact about the
+        // change's situation, not about the rules: at the hook the only thing
+        // the author can still act on is the commit being written, while in the
+        // window every commit of the range is under review. A rule that judges
+        // history at the hook is a rule that blocks a commit for something no
+        // edit to it can fix.
+        "--stamp",
+        `door=${options.door}`,
       ]);
   // Read back rather than kept in memory: the rules lint the file on disk, so
   // the runner must report over the same bytes they saw.
