@@ -18,10 +18,14 @@ export const ROOT = path.resolve(import.meta.dirname, "..", "..", "..");
  * @returns {string} stdout, trailing newline removed.
  */
 export function git(args) {
+  // stderr is captured, not inherited: probing for a ref that does not exist is
+  // a normal step here, and a stray `fatal: Needed a single revision` printed
+  // into a governance run reads as a failure that did not happen.
   return execFileSync("git", args, {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
   }).replace(/\n$/u, "");
 }
 
@@ -32,7 +36,11 @@ export function git(args) {
  * @returns {Buffer} stdout.
  */
 export function gitBytes(args) {
-  return execFileSync("git", args, { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
+  return execFileSync("git", args, {
+    cwd: ROOT,
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 /**
