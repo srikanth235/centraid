@@ -123,6 +123,35 @@ export function extractSection(text, heading) {
 }
 
 /**
+ * The lines under `## <heading>` of a document, stopping only at the next
+ * LEVEL-2 heading, matched case-insensitively.
+ *
+ * The shell pack had two different extractors and the difference is load-
+ * bearing: `doc-integrity` stopped at a heading of any level (above), while
+ * `receipt-per-issue` read a receipt section through its `###` subheadings.
+ * A receipt whose `## Verification` is organised into sub-sections must still
+ * have its evidence seen.
+ *
+ * @param {string} text The document.
+ * @param {string} heading The heading text.
+ * @returns {string[]} The section's lines, in order.
+ */
+export function extractReceiptSection(text, heading) {
+  const out = [];
+  let inside = false;
+  for (const line of text.split("\n")) {
+    const match = /^##\s+(?<title>.*?)\s*$/u.exec(line);
+    if (match) {
+      if (inside) break;
+      if (match.groups.title.toLowerCase() === heading.toLowerCase()) inside = true;
+      continue;
+    }
+    if (inside) out.push(line);
+  }
+  return out;
+}
+
+/**
  * The frozen-document registry: for every protected path that exists at the
  * baseline, what it was and what it is now.
  *
@@ -270,8 +299,8 @@ export function collectReceipts(range, pending) {
       .split("\n")
       .map((line) => /^##\s+(?<title>.+?)\s*$/u.exec(line)?.groups.title)
       .filter(Boolean);
-    const verification = extractSection(text, "Verification").join("\n");
-    const audit = extractSection(text, "Audit").join("\n");
+    const verification = extractReceiptSection(text, "Verification").join("\n");
+    const audit = extractReceiptSection(text, "Audit").join("\n");
     return {
       path: file,
       name: file.slice(file.lastIndexOf("/") + 1),

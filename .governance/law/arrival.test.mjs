@@ -14,6 +14,7 @@ import {
   buildArrival,
   collectWaivers,
   documentIntegrityRules,
+  extractReceiptSection,
   extractSection,
   main,
   parseManagedDigests,
@@ -23,6 +24,7 @@ import {
 } from "./arrival.mjs";
 import { dirDigest } from "./lib/digest.mjs";
 import { RECORDED_PATHS } from "./digest.mjs";
+import { oldRunnerRevision } from "./parity.mjs";
 
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, "..", "..");
@@ -64,21 +66,34 @@ test("the record has every section, including the ones no rule reads yet", () =>
 });
 
 test("the JS directory digest is the vendored bash digest, byte for byte", () => {
-  const digestSh = ".governance/packs/governance-kit/audit/directives/managed-tree-integrity/lib/digest.sh";
-  for (const directive of ["commit-message-format", "doc-integrity", "managed-tree-integrity", "receipt-per-issue"]) {
-    const dir = `.governance/packs/governance-kit/audit/directives/${directive}`;
-    const fromBash = execFileSync(
-      "bash",
-      ["-c", `source ${digestSh}; mti_dir_digest ${dir}`],
-      { cwd: ROOT, encoding: "utf8" }
-    ).trim(); // awk's `print` adds the newline; the digest is the hex alone.
-    assert.equal(dirDigest(path.join(ROOT, dir)), fromBash, `${directive} digests differ`);
+  // The bash original was deleted with its pack (#1005), so it is read back out
+  // of history rather than off disk. A reimplementation that is no longer
+  // pinned to the thing it reimplemented is a second, quieter answer — and the
+  // digests it produces are still recorded in install.yaml today.
+  const rev = oldRunnerRevision();
+  const digestSh = path.join(HERE, "out", "digest.sh");
+  writeFileSync(
+    digestSh,
+    execFileSync(
+      "git",
+      ["show", `${rev}:.governance/packs/governance-kit/audit/directives/managed-tree-integrity/lib/digest.sh`],
+      { cwd: ROOT, maxBuffer: 16 * 1024 * 1024 }
+    )
+  );
+  for (const directory of [".governance/law/lib", ".governance/law/rules", ".githooks"]) {
+    const fromBash = execFileSync("bash", ["-c", `source ${digestSh}; mti_dir_digest ${directory}`], {
+      cwd: ROOT,
+      encoding: "utf8",
+    }).trim();
+    assert.equal(dirDigest(path.join(ROOT, directory)), fromBash, `${directory} digests differ`);
   }
 });
 
 test("every managed unit in the current tree records what it actually is", () => {
   const { managedTree } = buildArrival({ range: RANGE });
-  assert.ok(managedTree.packs.length > 0, "no locked pack directives found");
+  // No pack locks digests any more — the vendored one was ported and deleted —
+  // so the locked-directive list is legitimately empty and the managed FILES
+  // are the whole trust chain: the kit runtime plus the law's own generator.
   for (const row of managedTree.packs) {
     assert.equal(row.actual, row.recorded, `${row.id}/${row.directive} has drifted`);
   }
@@ -113,14 +128,23 @@ test("name-status parsing keeps a rename's destination and never mis-splits", ()
 
 test("the lockfile and install-manifest readers read only their own blocks", () => {
   const packs = parsePacksLock(readFileSync(path.join(ROOT, ".governance/packs.lock"), "utf8"));
-  assert.ok(packs.some((pack) => pack.id === "srikanth235/centraid"));
-  const audit = packs.find((pack) => pack.id === "governance-kit/audit");
-  assert.deepEqual(Object.keys(audit.digest).sort(), [
-    "commit-message-format",
-    "doc-integrity",
-    "managed-tree-integrity",
-    "receipt-per-issue",
-  ]);
+  const local = packs.find((pack) => pack.id === "srikanth235/centraid");
+  assert.ok(local, "the repo-local pack is not in the lockfile");
+  assert.ok(local.directives.includes("lint-check"), "the directives list is not being read");
+  // The local pack records no digests, so it is skipped by the integrity rule
+  // exactly as the shell directive skipped it.
+  assert.deepEqual(local.digest, {});
+  // The same reader over the vendored pack that used to be here, from history.
+  const historical = parsePacksLock(
+    execFileSync("git", ["show", `${oldRunnerRevision()}:.governance/packs.lock`], {
+      cwd: ROOT,
+      encoding: "utf8",
+    })
+  );
+  assert.deepEqual(
+    Object.keys(historical.find((pack) => pack.id === "governance-kit/audit").digest).sort(),
+    ["commit-message-format", "doc-integrity", "managed-tree-integrity", "receipt-per-issue"]
+  );
   const managed = parseManagedDigests(readFileSync(path.join(ROOT, ".governance/install.yaml"), "utf8"));
   // The kit's three rows, plus the law generator's own — recorded so a silent
   // edit to the thing that writes the record is refused at the commit hook.
@@ -174,10 +198,17 @@ test("the doc-integrity rule set carries the ported overlay and always the recei
   }
 });
 
-test("section extraction reads any heading level and stops at the next heading", () => {
-  const document = ["# Title", "intro", "## Resolved", "- one", "", "- two", "### Later", "- three"].join("\n");
+test("the two section extractors differ exactly as the shell pack's two did", () => {
+  const document = ["# Title", "intro", "## Resolved", "- one", "", "- two", "### Later", "- three", "## Next", "- four"].join("\n");
+  // doc-integrity's: any heading ends the section.
   assert.deepEqual(extractSection(document, "Resolved"), ["- one", "", "- two"]);
   assert.deepEqual(extractSection(document, "Nothing"), []);
+  // receipt-per-issue's: only a level-2 heading does, so a receipt organised
+  // into `###` sub-sections still has all of its evidence read.
+  // The `###` heading line itself is body text to this extractor, exactly as it
+  // was to lib.sh's awk, whose boundary pattern is `^##[[:space:]]+`.
+  assert.deepEqual(extractReceiptSection(document, "Resolved"), ["- one", "", "- two", "### Later", "- three"]);
+  assert.deepEqual(extractReceiptSection(document, "resolved"), ["- one", "", "- two", "### Later", "- three"]);
 });
 
 test("the frozen registry covers every rule target that exists at the baseline", () => {

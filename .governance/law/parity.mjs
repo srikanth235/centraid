@@ -131,7 +131,12 @@ export function oldRunnerRevision() {
       return false;
     }
   };
-  return exists(last) ? last : `${last}^`;
+  // Resolved to a real oid: `<sha>^` printed through a `slice(0, 8)` would read
+  // as the deletion commit itself, which is the one revision that does NOT
+  // have the old runner.
+  return exists(last)
+    ? last
+    : execFileSync("git", ["rev-parse", `${last}^`], { cwd: ROOT, encoding: "utf8" }).trim();
 }
 
 /**
@@ -215,7 +220,6 @@ export function verdictsIn(tree, door = "window") {
  * @returns {{rows: object[], disagreements: object[]}} The table and the diffs.
  */
 export function replay(count) {
-  const rev = oldRunnerRevision();
   const commits = execFileSync(
     "git",
     ["rev-list", "--max-count", String(count), "origin/main"],
@@ -224,6 +228,18 @@ export function replay(count) {
     .split("\n")
     .filter(Boolean)
     .toReversed();
+  return replayAt(commits);
+}
+
+/**
+ * Replay both runners at each of the given revisions, in one scratch worktree.
+ *
+ * @param {string[]} commits The revisions, in the order to visit them.
+ * @returns {{rows: object[], disagreements: object[], explained: object[], oldRunnerRevision: string}}
+ *   The table and the diffs.
+ */
+export function replayAt(commits) {
+  const rev = oldRunnerRevision();
   const scratch = mkdtempSync(path.join(tmpdir(), "law-parity-"));
   const tree = path.join(scratch, "tree");
   execFileSync("git", ["worktree", "add", "--detach", "-q", tree, commits[0]], { cwd: ROOT });
@@ -283,17 +299,22 @@ export function renderTable(rows) {
  */
 export function main(argv) {
   if (argv.includes("--range-only")) {
-    // The range path, on the branch this is running from: here both runners see
-    // a real merge-base against the trunk, which is the half history cannot
-    // exercise.
-    const { old, next } = verdictsIn(ROOT);
-    const rows = [{ sha: "working tree", old, next }];
+    // The range path: a scratch worktree at HEAD, where the merge-base against
+    // the trunk is real. History cannot exercise this half — at a historical
+    // commit the merge-base IS that commit — and the working tree cannot run
+    // the old checks any more, because they are deleted.
+    const { rows, disagreements, explained } = replayAt(["HEAD"]);
     process.stdout.write(`${renderTable(rows)}\n`);
-    const bad = PORTED.filter(
-      (id) => old[id] !== next[id] && !explainedBy(id, old[id], next[id])
+    process.stdout.write(
+      `\nrange path at HEAD: ${disagreements.length} unexplained disagreement(s), ` +
+        `${explained.length} recorded divergence(s)\n`
     );
-    for (const id of bad) process.stdout.write(`✗ ${id}: old=${old[id]} new=${next[id]}\n`);
-    return bad.length === 0 ? 0 : 1;
+    for (const row of disagreements) {
+      process.stdout.write(
+        `✗ ${row.sha} ${row.directive}: old=${row.old[row.directive]} new=${row.next[row.directive]}\n`
+      );
+    }
+    return disagreements.length === 0 ? 0 : 1;
   }
   const index = argv.indexOf("--last");
   const count = index === -1 ? 50 : Number(argv[index + 1]);

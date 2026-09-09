@@ -18,11 +18,28 @@ any of it.
 | `lib/rule.mjs` | `defineRule` (the metadata every rule carries) and `ruleTester` |
 | `lib/digest.mjs` | The managed-tree digest algorithm, in JS, byte-identical to the pack's `lib/digest.sh` |
 | `eslint.config.mjs` | **Derived** from the packs. Never hand-written |
-| `arrival.mjs` | The generator: turns a commit range into `out/arrival.json` |
+| `arrival.mjs` | The generator: turns a commit range into `out/arrival.json`. Split across `lib/git.mjs`, `lib/registries.mjs` and `lib/managed.mjs`; all of it is under the managed-tree digest |
+| `digest.mjs` | `--record` re-records the generator's own digests in `install.yaml` |
+| `parity.mjs` | Replays the deleted shell runner against these rules over real history |
+| `commitlint.config.mjs` | The commit-subject policy, in commitlint's config shape |
 | `run.mjs` | The runner: generate, lint, report one line per rule |
 | `front-page.mjs` | Renders a run as the PR-body front page |
 | `fixtures/` | Checked-in arrival records the tests pin the generator against |
 | `out/` | Generated; git-ignored |
+
+## The rules
+
+| Rule | Door | What it enforces | Statute |
+| --- | --- | --- | --- |
+| `commit-message-format` | hook | Conventional Commit subjects that name their issue, ≤ 100 chars | [CONSTITUTION.md](../../CONSTITUTION.md#commit-message-format) |
+| `doc-integrity` | hook | Frozen documents may only be added to — receipts, the Evolution Log, COSTS, STEERING, QUALITY's Resolved section | [CONSTITUTION.md](../../CONSTITUTION.md#doc-integrity) |
+| `managed-tree-integrity` | hook | Managed governance files, and the law's own generator, match their recorded digests | [CONSTITUTION.md](../../CONSTITUTION.md#managed-tree-integrity) |
+| `receipt-per-issue` | window | One well-formed receipt per issue, and a completed change carries it | [CONSTITUTION.md](../../CONSTITUTION.md#receipt-per-issue) |
+
+All four were vendored shell directives in `governance-kit/audit` until #1005.
+`parity.mjs` replays both runners over the last 50 trunk commits and fails on any
+disagreement that is not written down in `parity-expectations.json` with a
+reason. Run it before changing any of them.
 
 ## The two doors
 

@@ -1,23 +1,5 @@
 version: '2'
 packs:
-- id: governance-kit/audit
-  version: 0.11.0
-  source: gh
-  ref: gh:duaility/governance-kit/packs/audit@audit/v0.11.0
-  sha: 05fe4202738188f4da65ca809183dbe9eceda7a6
-  subpath: packs/audit
-  min_governance_kit: 0.13.0
-  installed_at: '2026-09-08T17:18:51Z'
-  directives:
-  - commit-message-format
-  - doc-integrity
-  - managed-tree-integrity
-  - receipt-per-issue
-  digest:
-    commit-message-format: aaefac8208331cd2486785ec09dbf14307bab654fe5efa86e493496a6b6e4bbe
-    doc-integrity: 0d8b6066fc95b12cf9719aae00f1288844863f33c3ec3301eee6001dab7e734a
-    managed-tree-integrity: 5d793a3011bde1cddf2fe850f9cc03a08b610e4e0319393fed1657c660a911bd
-    receipt-per-issue: b24ee648f2cf170efd064c0ca8f1986b2cae48c44c0aeb8224831d41a07d4522
 - id: srikanth235/centraid
   version: '0.1'
   source: local

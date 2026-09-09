@@ -8224,32 +8224,7 @@
     ]
   },
   "managedTree": {
-    "packs": [
-      {
-        "id": "governance-kit/audit",
-        "directive": "commit-message-format",
-        "recorded": "aaefac8208331cd2486785ec09dbf14307bab654fe5efa86e493496a6b6e4bbe",
-        "actual": "aaefac8208331cd2486785ec09dbf14307bab654fe5efa86e493496a6b6e4bbe"
-      },
-      {
-        "id": "governance-kit/audit",
-        "directive": "doc-integrity",
-        "recorded": "0d8b6066fc95b12cf9719aae00f1288844863f33c3ec3301eee6001dab7e734a",
-        "actual": "0d8b6066fc95b12cf9719aae00f1288844863f33c3ec3301eee6001dab7e734a"
-      },
-      {
-        "id": "governance-kit/audit",
-        "directive": "managed-tree-integrity",
-        "recorded": "5d793a3011bde1cddf2fe850f9cc03a08b610e4e0319393fed1657c660a911bd",
-        "actual": "5d793a3011bde1cddf2fe850f9cc03a08b610e4e0319393fed1657c660a911bd"
-      },
-      {
-        "id": "governance-kit/audit",
-        "directive": "receipt-per-issue",
-        "recorded": "b24ee648f2cf170efd064c0ca8f1986b2cae48c44c0aeb8224831d41a07d4522",
-        "actual": "b24ee648f2cf170efd064c0ca8f1986b2cae48c44c0aeb8224831d41a07d4522"
-      }
-    ],
+    "packs": [],
     "unrecorded": [],
     "files": [
       {
@@ -8260,8 +8235,8 @@
       },
       {
         "path": ".governance/law/arrival.mjs",
-        "recorded": "28d29dd640e3ee9c9ef35af28ed3e8a059046967891a99e937c185f4e27232e4",
-        "actual": "28d29dd640e3ee9c9ef35af28ed3e8a059046967891a99e937c185f4e27232e4",
+        "recorded": "94b21f8415dafe9d0ee501db8b606e70c93da410dca53f98652b290287c70713",
+        "actual": "94b21f8415dafe9d0ee501db8b606e70c93da410dca53f98652b290287c70713",
         "marker": ""
       },
       {
@@ -8272,8 +8247,8 @@
       },
       {
         "path": ".governance/law/lib/git.mjs",
-        "recorded": "288e30347088da0e1cc55d5d9e65ef2eafc4a6183bb55dbbe6d02bd8516ffb6b",
-        "actual": "288e30347088da0e1cc55d5d9e65ef2eafc4a6183bb55dbbe6d02bd8516ffb6b",
+        "recorded": "6efb64e992fad3d047ace07b4e0e746ae75713287418ae59ded8c9d7cf6fcf42",
+        "actual": "6efb64e992fad3d047ace07b4e0e746ae75713287418ae59ded8c9d7cf6fcf42",
         "marker": ""
       },
       {
@@ -8284,8 +8259,8 @@
       },
       {
         "path": ".governance/law/lib/registries.mjs",
-        "recorded": "2c21de0d6eccc65111987b3e4a4bbc00ea4c188d48946fdb78f0a57cb0f0a16b",
-        "actual": "2c21de0d6eccc65111987b3e4a4bbc00ea4c188d48946fdb78f0a57cb0f0a16b",
+        "recorded": "7e385bbe82badafc0cebd9b41476a33af124dd9d6b759b0c69b2b3f211c57744",
+        "actual": "7e385bbe82badafc0cebd9b41476a33af124dd9d6b759b0c69b2b3f211c57744",
         "marker": ""
       },
       {
@@ -13227,7 +13202,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -13250,7 +13225,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -13296,7 +13271,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -13369,7 +13344,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -13449,7 +13424,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -13759,7 +13734,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -13807,7 +13782,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -13860,7 +13835,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -13886,7 +13861,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -13912,7 +13887,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -14645,7 +14620,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -14877,8 +14852,8 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
-            "hasOutcome": false,
+            "hasFence": true,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -14982,7 +14957,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -15305,7 +15280,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -15541,7 +15516,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -15616,7 +15591,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -15821,7 +15796,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -15848,7 +15823,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -15900,7 +15875,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -16004,7 +15979,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -16183,8 +16158,8 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
-            "hasUrl": false
+            "hasOutcome": true,
+            "hasUrl": true
           },
           "audit": {
             "hasVerdict": true
@@ -16514,7 +16489,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -16540,7 +16515,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -16566,7 +16541,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -16868,8 +16843,8 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
-            "hasUrl": false
+            "hasOutcome": true,
+            "hasUrl": true
           },
           "audit": {
             "hasVerdict": true
@@ -16894,12 +16869,12 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
+            "hasFence": true,
             "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -16947,11 +16922,11 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -16998,12 +16973,12 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
-            "hasOutcome": false,
+            "hasFence": true,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -17051,7 +17026,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -17073,7 +17048,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -17149,7 +17124,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -17175,7 +17150,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -17196,8 +17171,8 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
-            "hasOutcome": false,
+            "hasFence": true,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -17326,7 +17301,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -17553,7 +17528,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -17788,7 +17763,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -17836,7 +17811,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -17887,7 +17862,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -18251,7 +18226,7 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
+            "hasFence": true,
             "hasOutcome": true,
             "hasUrl": false
           },
@@ -18468,7 +18443,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -18500,7 +18475,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -18624,7 +18599,7 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
+            "hasFence": true,
             "hasOutcome": true,
             "hasUrl": false
           },
@@ -18677,11 +18652,11 @@
           "stub": false,
           "verification": {
             "hasFence": false,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -18725,12 +18700,12 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
-            "hasOutcome": false,
+            "hasFence": true,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -18826,7 +18801,7 @@
           ],
           "stub": false,
           "verification": {
-            "hasFence": false,
+            "hasFence": true,
             "hasOutcome": true,
             "hasUrl": false
           },
@@ -18957,7 +18932,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -18982,7 +18957,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19065,7 +19040,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19090,7 +19065,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19115,7 +19090,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19165,7 +19140,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19191,7 +19166,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19469,7 +19444,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19496,7 +19471,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19527,7 +19502,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -19723,8 +19698,8 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
-            "hasUrl": false
+            "hasOutcome": true,
+            "hasUrl": true
           },
           "audit": {
             "hasVerdict": true
@@ -19748,7 +19723,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19773,7 +19748,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19873,7 +19848,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19921,7 +19896,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -19977,7 +19952,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -20024,7 +19999,7 @@
           "verification": {
             "hasFence": true,
             "hasOutcome": false,
-            "hasUrl": false
+            "hasUrl": true
           },
           "audit": {
             "hasVerdict": true
@@ -20079,7 +20054,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -20109,7 +20084,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -20187,7 +20162,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -20289,7 +20264,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -20340,7 +20315,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -20420,7 +20395,7 @@
             "hasUrl": false
           },
           "audit": {
-            "hasVerdict": false
+            "hasVerdict": true
           }
         },
         {
@@ -20592,8 +20567,8 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": true,
-            "hasUrl": true
+            "hasOutcome": false,
+            "hasUrl": false
           },
           "audit": {
             "hasVerdict": true
@@ -20640,7 +20615,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": true,
+            "hasOutcome": false,
             "hasUrl": false
           },
           "audit": {
@@ -20688,7 +20663,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": true,
+            "hasOutcome": false,
             "hasUrl": false
           },
           "audit": {
@@ -20764,7 +20739,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -20820,7 +20795,7 @@
           "stub": false,
           "verification": {
             "hasFence": true,
-            "hasOutcome": false,
+            "hasOutcome": true,
             "hasUrl": false
           },
           "audit": {
@@ -21067,8 +21042,8 @@
       "change": {
         "branch": "lane/1005-b",
         "onDefaultBranch": false,
-        "hasStaged": true,
-        "completedChange": false,
+        "hasStaged": false,
+        "completedChange": true,
         "touchesReceipt": true
       }
     }

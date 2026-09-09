@@ -32,6 +32,7 @@ export {
   collectReceipts,
   collectWaivers,
   documentIntegrityRules,
+  extractReceiptSection,
   extractSection,
 } from "./lib/registries.mjs";
 export { collectManagedTree, parseManagedDigests, parsePacksLock } from "./lib/managed.mjs";

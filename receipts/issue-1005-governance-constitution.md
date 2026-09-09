@@ -3,6 +3,9 @@
 Lane A: `.governance/law/` — the law directory, the arrival record, the runner and the doors.
 Branch `lane/1005-a`, four commits, one per seam.
 
+Lane B: the vendored `governance-kit/audit` pack ported to rules and deleted.
+Branch `lane/1005-b`, four commits, one per seam.
+
 ## Checklist
 
 The umbrella's acceptance boxes. Only the ones this lane owns are checked.
@@ -15,7 +18,7 @@ The umbrella's acceptance boxes. Only the ones this lane owns are checked.
       whole law at review time, hook rules still fatal, the rest warned)
 - [x] One line per enabled rule on every run, green or red
 - [x] The managed tree's digest arithmetic available to rules, byte-identical to the vendored bash
-- [ ] The vendored `governance-kit/audit` pack ported to rules and deleted (Lane B)
+- [x] The vendored `governance-kit/audit` pack ported to rules and deleted (Lane B)
 - [ ] Estates, registries, appeals (Lane B/C)
 - [ ] CODEOWNERS and branch protection — what the host enforces (Lane C)
 - [ ] CONSTITUTION.md reworked to match (Lane D)
@@ -23,6 +26,54 @@ The umbrella's acceptance boxes. Only the ones this lane owns are checked.
       `.governance/law/README.md` now)
 
 ## What changed
+
+### Lane B — the port and the deletion
+
+| File | Change |
+| --- | --- |
+| `.governance/law/rules/commit-message-format.mjs` + `.test.mjs` | New. Conventional Commit subjects with an issue reference, over `arrival.commits` and `arrival.pending` |
+| `.governance/law/rules/doc-integrity.mjs` + `.test.mjs` | New. `frozen-files` / `append-only` / `frozen-section`, over `arrival.registries.frozen` |
+| `.governance/law/rules/managed-tree-integrity.mjs` + `.test.mjs` | New. Recorded-versus-actual digests, unrecorded directive folders, and the stamped-kit-version check, over `arrival.managedTree` |
+| `.governance/law/rules/receipt-per-issue.mjs` + `.test.mjs` | New. Filename shape, uniqueness, completed-change association and receipt shape, over `arrival.registries.receipts` |
+| `.governance/law/commitlint.config.mjs` | New. The commit-subject policy in commitlint's config shape |
+| `.governance/law/lib/git.mjs` | New. The one place the generator talks to git |
+| `.governance/law/lib/registries.mjs` | New. `collectWaivers`, `documentIntegrityRules`, `extractSection`, `collectFrozen`, `collectReceipts` |
+| `.governance/law/lib/managed.mjs` | New. `parsePacksLock`, `parseManagedDigests`, `collectManagedTree` |
+| `.governance/law/lib/rule.mjs` | `defineArrivalRule` and `locate` (JSON-pointer reporting) |
+| `.governance/law/arrival.mjs` | Schema 2: `range.hasBase`, `commits[].authorEmail`, `waivers`, `registries.frozen`, `registries.receipts`. Split into the three `lib/` modules above when it crossed the 625-line ceiling |
+| `.governance/law/arrival.test.mjs` | Cases for waivers, the rule set, section extraction, both registries, the pending-message path, and the bash/JS digest parity — now read out of history |
+| `.governance/law/digest.mjs` + `.test.mjs` | New. `--record` rewrites exactly the law generator's rows in `install.yaml` |
+| `.governance/law/parity.mjs` | New. Replays both runners over the last 50 trunk commits |
+| `.governance/law/parity-expectations.json` | New. The one recorded divergence, with its reason |
+| `.governance/law/eslint.config.mjs` | Pack `options` become rule options; the window door no longer demotes a declared `error` to a warning |
+| `.governance/law/packs/governance-kit-audit.json` | The four rule rows, their doors, and the ported `doc-integrity` overlay |
+| `.governance/law/fixtures/arrival/bb964a7e..3df6d552.json` | Regenerated for schema 2 and for the deleted pack |
+| `.governance/law/README.md` | The rule table, the new files, and the parity requirement |
+| `.governance/packs/governance-kit/` | **Deleted** — all four directive folders, their manifests, `constitution.md` files and `lib/digest.sh` |
+| `.governance/conf/governance-kit/` | **Deleted** — the four overlays; `doc-integrity`'s three rows moved into the pack declaration |
+| `.governance/packs.lock` | The `governance-kit/audit` entry removed |
+| `.governance/install.yaml` | `managed_digests` gains the law generator's six files |
+| `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf` | Emptied, with the reason |
+| `CONSTITUTION.md` | Four `Enforced by` lines now name the rule and its cases; one appended Evolution Log line; the Compliance paragraph's deferral sentence corrected |
+| `docs/dev-environment.md` | Nine directives, no deferral, the `law` directive's measured 0.96 s, and why the deferral mechanism had already stopped operating |
+| `docs/decisions.md` | `G-rung0-deferral` gains a dated supersession sentence; the row itself is untouched |
+| `scripts/test.sh` | The comment describing `receipt-per-issue` as vendored and deferred |
+| `package.json` | `governance:law:test` names the seven law test files |
+
+**The port is stricter in exactly one place, and it is on record.** The shell
+`commit-message-format` skipped bot authors with `*[bot]*@*`. In a shell `case`,
+`[bot]` is a character class, so that pattern matches any address containing
+`b`, `o` or `t` before the `@` — `srikanth235@gmail.com` included. Its whole
+range mode was therefore judging almost no commit. The rule matches the literal
+token, and three of the last 50 trunk subjects it flags were passing silently.
+Reproducing the defect would have been carrying a hole forward.
+
+**A second thing the replay surfaced.** Under governance-kit 0.15.0 nothing in
+`.githooks/` reads `pre-commit-deferred.conf` — the dispatchers select on the
+`hook:` field alone — so the rung-0 deferral that CONSTITUTION.md,
+`docs/dev-environment.md` and `docs/decisions.md` all described had already
+stopped operating. `receipt-per-issue` was running at pre-commit. All three
+documents are corrected.
 
 Nothing existing was modified except four files: `.gitignore`, `package.json`, `docs/toolchain.md`
 and `docs/dev-environment.md`. No managed or digest-locked file was touched.
@@ -65,6 +116,94 @@ Design decisions worth naming, because they are load-bearing for the later lanes
   declare `enforces`, `observes`, or both. The branch-protection/CODEOWNERS half is Lane C's.
 
 ## Verification
+
+### Lane B
+
+| # | Command | Outcome |
+| --- | --- | --- |
+| 1 | `bun run governance:law:test` | 82 tests, 82 pass, 0 fail |
+| 2 | `bash .governance/run.sh` | 9 directives; 8 pass, `law` red on this receipt's Audit verdict alone |
+| 3 | `time GIT_INDEX_FILE=x bash .../directives/law/check.sh` | `✓ law`, real 0.96 s — inside the 5 s rung-0 budget with all four rules |
+| 4 | `node .governance/law/parity.mjs --last 50` | 50 commits replayed, **0 unexplained disagreements**, 1 recorded divergence over 3 commits; exit 0 |
+| 5 | three demonstrated reds by hand | quoted below |
+| 6 | `bun run format:check`, `bun run lint`, `bun run lint:test-reachability`, `bun run test:governance-shell`, `node --test scripts/ci/gate-classes.test.mjs` | all green |
+| 7 | four real commits through the hooks | no `SKIP_GOVERNANCE`, no `--no-verify` |
+| 8 | `git status --porcelain` | empty |
+
+The three reds, quoted from the refused commits:
+
+```
+$ git commit -m "bad subject"
+✗ commit-message-format — 1 finding
+    law/commit-message-format — pending commit — 'bad subject' is not a Conventional Commit
+    subject ending in an issue reference (<type>(scope)?: <subject> (#123))
+✗ Commit blocked by governance.                                       # exit 1 — refused
+
+$ echo tampered >> receipts/issue-988-governance-tooling.md && git commit -m "docs(governance): tamper (#1005)"
+    law/doc-integrity — frozen-files: 'receipts/issue-988-governance-tooling.md' was modified;
+    it is immutable once on the default branch (add a new file instead, or waive with
+    'governance: allow-doc-integrity receipts/issue-988-governance-tooling.md <reason>')
+✗ Commit blocked by governance.                                       # exit 1 — refused
+
+$ printf '\n// tampered\n' >> .governance/law/arrival.mjs && git commit -m "chore(governance): tamper with the generator (#1005)"
+✗ managed-tree-integrity — 1 finding
+    law/managed-tree-integrity — .governance/law/arrival.mjs: drifted from the digest recorded
+    at apply time. If you meant to change it, re-record it (`node .governance/law/digest.mjs
+    --record` for the law's own generator) — otherwise restore it
+✗ Commit blocked by governance.                                       # exit 1 — refused
+```
+
+Both edits were reverted with `git checkout HEAD --` and `node .governance/law/digest.mjs`
+reports all six generator files recorded — exit 0, green.
+
+The parity table's shape (50 rows, abridged; `old/new` per directive):
+
+```
+| commit   | commit-message-format | doc-integrity | managed-tree-integrity | receipt-per-issue |
+| 3e555c8d | pass/pass             | pass/pass     | FAIL/FAIL              | pass/pass         |
+| f5ca34fb | pass/pass             | pass/pass     | FAIL/FAIL              | pass/pass         |
+| bb964a7e | pass/FAIL             | pass/pass     | FAIL/FAIL              | FAIL/FAIL         |
+| 3df6d552 | pass/FAIL             | pass/pass     | FAIL/FAIL              | FAIL/FAIL         |
+| 87cf642c | pass/FAIL             | pass/pass     | pass/pass              | FAIL/FAIL         |
+
+old runner taken from f298ee7c; 50 commit(s) replayed; 0 unexplained disagreement(s),
+3 recorded divergence(s)                                              # exit 0 — pass
+```
+
+`managed-tree-integrity` reads FAIL/FAIL on historical commits because the replay
+overlays the 0.15.0 pack onto trees whose `packs.lock` records an earlier audit
+version — both runners see the same mismatch and agree, which is the property
+under test.
+
+**A markdown hazard worth recording.** `oxfmt` reflows long markdown table rows, and a row
+containing the literal `## Audit` can be wrapped so that a line begins with `## ` — a synthetic
+level-2 heading that every section extractor then believes. It happened to this receipt while it
+was being written and scrambled its section order. Prose in a governed document should not put a
+`##` token where a wrap can reach column zero.
+
+**Both halves are proven, separately, because history can only show one.** At a
+historical commit the merge-base with the trunk IS that commit, so `--last 50`
+exercises the repo-state and HEAD-only paths. The range path is proven by
+`node .governance/law/parity.mjs --range-only`, which replays both runners in a
+scratch worktree at HEAD, where the merge-base against `origin/main` is real:
+
+```
+| commit | commit-message-format | doc-integrity | managed-tree-integrity | receipt-per-issue |
+| HEAD   | pass/pass             | pass/pass     | pass/pass              | FAIL/FAIL         |
+
+range path at HEAD: 0 unexplained disagreement(s), 0 recorded divergence(s)   # exit 0 - pass
+```
+
+Both runners agree on all four, `receipt-per-issue` included: both are red on
+this receipt's Audit verdict, which is the finding that stays until an
+independent reviewer writes it.
+
+The arbitrary range `bb964a7e..3df6d552` could not be driven through the old
+runner at all: it takes its base from the default branch and exposes no range
+flag, and giving it a synthetic base would mean rewriting refs. The generator
+side of that range is pinned by the checked-in fixture instead.
+
+### Lane A
 
 Run in `/home/user/centraid-law` at `ce660e62` (the lane's third commit; the fourth is this receipt and the two docs), on this container (4 threads).
 
@@ -163,6 +302,44 @@ Limitation, named rather than worked around: the arrival record's `managedTree` 
 against the **working tree**, so the checked-in fixture also pins the current digests of the four
 locked directives and the three managed files. Lane B changes those by design; the fixture is
 regenerated with them, and the diff is the evidence that they moved.
+
+### Lane B decisions
+- **R-1005-5** — the commit policy lives in `.governance/law/commitlint.config.mjs` in
+  commitlint's shape and `@commitlint/cli` is not installed. The reason is mechanical:
+  commitlint's API is asynchronous and an ESLint rule is synchronous. What the shape buys is a
+  vocabulary contributors and editors already read, and the option of running the real tool later.
+- **R-1005-6** — `managed-tree-integrity` is a rule over `arrival.managedTree`, and the law's own
+  generator is now inside `install.yaml`'s `managed_digests`, re-recorded by
+  `node .governance/law/digest.mjs --record`. The helper is a convenience, not the boundary: every
+  file here is agent-writable, and what makes the record trustworthy is that `install.yaml` is
+  owner-reviewed and that a change to it is visible in the diff.
+- **R-1005-7** — the four directive folders, the `governance-kit/audit` lock entry and
+  `.governance/conf/governance-kit/` are deleted, after the parity replay was recorded and not
+  before. `doc-integrity`'s three overlay rows moved into the pack declaration's
+  `options.doc-integrity.rules`.
+- **Door assignment** — `commit-message-format`, `doc-integrity` and `managed-tree-integrity` at
+  the hook door; `receipt-per-issue` at the window door, with its corpus-wide half made answerable
+  at either door by the generator's receipt registry.
+
+Two deliberate deviations from a literal reading of the rulings, both because the
+literal reading would have weakened the policy:
+
+1. **The window door no longer demotes severity.** R-1005-3 said non-hook rules run at `warn` at
+   the window door. Applied literally, porting `receipt-per-issue` — a directive that BLOCKED —
+   would have turned it into a warning, which is weakening policy without editing it. The door now
+   decides which rules run and the pack row decides how loud each is; a rule that declares no
+   severity still warns.
+2. **The receipt extractor and the document extractor are two functions, not one.** The shell
+   pack had two: `doc-integrity`'s awk ended a section at a heading of any level, while lib.sh's
+   `extract_md_section` ended it only at the next `##`. Collapsing them looked like tidying and
+   silently stopped reading any receipt whose `## Verification` has `###` sub-sections — this one
+   included. `arrival.test.mjs` now pins both behaviours against each other.
+3. **`digest.mjs` records more than the two named files.** R-1005-6 named `arrival.mjs` and
+   `lib/digest.mjs`. When `arrival.mjs` crossed the 625-line ceiling it was split across
+   `lib/git.mjs`, `lib/registries.mjs` and `lib/managed.mjs`, so the recorded set is every module
+   under `lib/` — otherwise splitting a file would be a way to move half the generator out from
+   under its own digest.
+
 
 ## Audit
 
