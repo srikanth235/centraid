@@ -10381,14 +10381,6 @@
         }
       },
       {
-        "path": "COSTS.md",
-        "mode": "frozen-files",
-        "heading": null,
-        "baseSha": "07541013e5ea1515d80eca039d5d1c16d164cb1d",
-        "headSha": "07541013e5ea1515d80eca039d5d1c16d164cb1d",
-        "deleted": false
-      },
-      {
         "path": "QUALITY.md",
         "mode": "frozen-section",
         "heading": "Resolved",
@@ -10398,14 +10390,6 @@
         "section": {
           "missingLines": []
         }
-      },
-      {
-        "path": "STEERING.md",
-        "mode": "frozen-files",
-        "heading": null,
-        "baseSha": "31daf3aa14ff9b1c7bc012094eab75cc249f9805",
-        "headSha": "31daf3aa14ff9b1c7bc012094eab75cc249f9805",
-        "deleted": false
       },
       {
         "path": "receipts/issue-101-automations-ui-rethink.md",

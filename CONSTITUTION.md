@@ -16,8 +16,8 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 ## Principles
 
 - Changes to this constitution must land with a corresponding change to the enforcing tests.
-- Every commit is treated as agent-authored — the audit chain (issue → receipt → commit → token + steering ledger) is mandatory, not opt-in.
-- The repo is its own system of record. Decisions, costs, steering events, and quality observations belong in tracked files, not in chat history.
+- Every commit is treated as agent-authored — the audit chain (issue → receipt → commit → decisions row) is mandatory, not opt-in.
+- The repo is its own system of record. Decisions and quality observations belong in tracked files, not in chat history.
 - Docs are load-bearing. Stale docs are bugs; broken internal links are bugs; missing baseline docs (constitution, agents, readme, license, security, architecture) are bugs.
 - Documentation describes current state. History is cited by reference; current decisions, deliberate non-goals, and supersession markers remain documentable state, while intent belongs in proposal issues.
 - Escape hatches exist (`SKIP_GOVERNANCE=1`, `git commit --no-verify`) — but every skipped commit is still checked in CI.
@@ -157,6 +157,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 - 2026-09-02 — @srikanth235 — Modify `coverage-scope-reachability`: read the enforced floor globs from `tests/floors.json#coverage` instead of `tests/coverage-floors.json`. #915 Wave 4 merged twenty tighten-only ledgers under `tests/` into four files behind one validator (`bun run lint:ledgers`), each section keeping its own direction and its own `approvedDeviation` so merging the files did not merge the waivers. Scope is unchanged — the same object-valued keys name the same globs — and the self-test fixtures move with the read (#915).
 - 2026-09-09 — @srikanth235 — Port `commit-message-format`, `doc-integrity`, `managed-tree-integrity` and `receipt-per-issue` from the vendored `governance-kit/audit` shell pack to ESLint rules under `.governance/law/`, and delete the pack. Behaviour is pinned by a replay of both runners over the last 50 trunk commits; the one recorded divergence is that the shell bot-author filter `*[bot]*@*` was a character class that skipped nearly every human address, so the rule judges subjects the directive silently passed (#1005).
+- 2026-09-09 — @srikanth235 — Add `estate-separation` and `registry-completeness`, and repeal `COSTS.md` and `STEERING.md`. Every tracked path now belongs to one of three estates (`law`, `registry`, `territory`); a commit may not edit the law and the product together, and what a change decided must be recorded where decisions live. The two append-only ledgers are deleted with their `doc-integrity` overlay rows, their `oxfmt`/`format-check` exclusions and their `install.yaml` seeds: both stopped at #238/#240 while the work reached #1003 and no gate noticed, which is the failure the two new directives exist to prevent. Token cost is a front-page number read back from the receipt when the author recorded one. `.github/CODEOWNERS` is generated from the law estate; branch protection over it remains owner-enabled and unconfirmed (#1005).
 
 ## Escape hatches
 

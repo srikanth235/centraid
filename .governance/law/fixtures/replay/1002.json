@@ -1,0 +1,61 @@
+{
+  "range": "bb964a7e..3df6d552",
+  "rules": [
+    {
+      "id": "commit-message-format",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "doc-integrity",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "estate-separation",
+      "door": "hook",
+      "severity": "warn",
+      "verdict": "fail",
+      "count": 1
+    },
+    {
+      "id": "managed-tree-integrity",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "receipt-per-issue",
+      "door": "window",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "registry-completeness",
+      "door": "window",
+      "severity": "error",
+      "verdict": "fail",
+      "count": 1
+    }
+  ],
+  "messages": [
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/estate-separation",
+      "severity": "warn",
+      "message": "3df6d552 edits the law and the territory in one commit — law: 'tests/claims.json', 'tests/inventory.json'; territory: '.github/workflows/mobile-ios-lock.yml', 'ARCHITECTURE.md', 'SECURITY.md' and 1015 more. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/registry-completeness",
+      "severity": "error",
+      "message": "CHANGELOG.md carries no line citing #996. A change that reached the trunk and left no entry is a change nobody downstream can find; add a bullet under '## [Unreleased]' linking the issue."
+    }
+  ]
+}

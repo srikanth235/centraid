@@ -175,7 +175,18 @@ The failure report changed too, and that matters as much as the clock: every gat
 
 The deferral mechanism this section used to describe is retired, and one thing about it is worth recording because it was invisible: under governance-kit 0.15.0 **nothing in `.githooks/` reads that conf file at all** — the hook dispatchers select directives by their `hook:` field alone. The deferral had already stopped operating before #1005 removed it; `receipt-per-issue` was running at pre-commit and the documentation said otherwise. A gate whose mechanism has quietly evaporated still reads as enforced, which is exactly the failure #782 named.
 
-The ninth is `law` ([#1005](https://github.com/srikanth235/centraid/issues/1005)), which is not a shell check at all: it generates the change set into `.governance/law/out/arrival.json` and lints it, and the governance documents the change touched, with the ESLint rule catalog declared under [`.governance/law/`](../.governance/law/README.md). At rung 0 it opens the **hook door** — only the rules answerable from the change set alone, all fatal — and measures **0.96 s** on this container with the four ported rules; everywhere else (`bash .governance/run.sh`, CI, `bun run governance:law`) the **window door** runs the whole catalog with the non-hook rules as warnings. It prints one line per enabled rule either way.
+The ninth is `law` ([#1005](https://github.com/srikanth235/centraid/issues/1005)), which is not a shell check at all: it generates the change set into `.governance/law/out/arrival.json` and lints it, and the governance documents the change touched, with the ESLint rule catalog declared under [`.governance/law/`](../.governance/law/README.md). At rung 0 it opens the **hook door** — the rules answerable from the commit being written, all fatal there whatever their pack row says — and everywhere else (`bash .governance/run.sh`, CI, `bun run governance:law`) the **window door** runs the whole catalog at each rule's declared severity. It prints one line per enabled rule either way. The two doors also see different change sets: at the hook only the staged set is judged, because a finding about a commit already made would block a commit no edit to it could fix.
+
+Two of the catalog's rules are about the change rather than about a file. `estate-separation` refuses a commit that edits the **law** estate and the **territory** estate together (`warn` in the window, fatal at the hook — waive with `governance: allow-estate-separation <reason>` in the commit body); `registry-completeness` asks for the changelog line, the `docs/decisions.md` ruling, the gate authorisation or the docket row that the change's own events call for, at `error`, because `governance` is a required check. [CONSTITUTION.md](../CONSTITUTION.md#estate-separation) carries both directives in full and [docs/decisions.md](decisions.md#governance-as-a-constitution-1005) the rulings behind them.
+
+`.github/CODEOWNERS` is generated, not hand-kept:
+
+```bash
+node .governance/law/codeowners.mjs --check   # exit 1 on drift
+node .governance/law/codeowners.mjs --write   # regenerate from the packs' lawPaths
+```
+
+What the **host** would enforce — GitHub branch protection requiring review from code owners on the default branch, and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.
 
 What is left at rung 0 is the whole catalog. Its pole is `managed-tree-integrity`, now a rule rather than a vendored directive, and still repo-wide: a hand-edited managed file is exactly the "is this diff well-formed?" question rung 0 exists to answer, and the law's own generator is under that digest too. (`internal-doc-links`, the other pole this section used to name, was retired with the `foundation` pack in audit 0.11.0.)
 

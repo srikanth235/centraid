@@ -24,6 +24,7 @@ any of it.
 | `digest.mjs` | `--record` re-records the generator's own digests in `install.yaml` |
 | `codeowners.mjs` | Generates `.github/CODEOWNERS` from the law estate; `--check` exits 1 on drift |
 | `parity.mjs` | Replays the deleted shell runner against these rules over real history |
+| `replay.test.mjs` | Replays the whole catalog over #1002's merged squash; the findings are pinned in `fixtures/replay/1002.json` |
 | `commitlint.config.mjs` | The commit-subject policy, in commitlint's config shape |
 | `run.mjs` | The runner: generate, lint, report one line per rule |
 | `front-page.mjs` | Renders a run as the PR-body front page, including the generated registry lines |

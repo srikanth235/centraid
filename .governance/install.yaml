@@ -13,8 +13,6 @@ agents_md_snippet: true
 agents_md_created: false
 install_assets_seeded:
   - QUALITY.md
-  - COSTS.md
-  - STEERING.md
   - .github/ISSUE_TEMPLATE/bug.yml
   - .github/ISSUE_TEMPLATE/proposal.yml
   - .github/ISSUE_TEMPLATE/config.yml

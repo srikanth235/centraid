@@ -195,8 +195,6 @@ test("the doc-integrity rule set carries the ported overlay and always the recei
   for (const expected of [
     "frozen-files receipts/*.md",
     "frozen-section CONSTITUTION.md Evolution Log",
-    "frozen-files COSTS.md",
-    "frozen-files STEERING.md",
     "frozen-section QUALITY.md Resolved",
   ]) {
     assert.ok(rendered.includes(expected), `the rule set has lost '${expected}'`);
@@ -220,7 +218,6 @@ test("the frozen registry covers every rule target that exists at the baseline",
   const { registries } = await buildArrival({ range: RANGE });
   const paths = new Set(registries.frozen.map((row) => row.path));
   assert.ok(paths.has("CONSTITUTION.md"), "CONSTITUTION.md is a frozen-section target");
-  assert.ok(paths.has("COSTS.md"));
   assert.ok(paths.has("QUALITY.md"));
   assert.ok(
     registries.frozen.some((row) => row.path.startsWith("receipts/") && row.mode === "frozen-files"),
