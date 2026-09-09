@@ -123,10 +123,17 @@ export async function loadRules() {
  * warnings so a PR sees them without a red gate standing in for owner review.
  *
  * @param {"hook"|"window"} [door] Which door to build.
+ * @param {object} [options] Injection points.
+ * @param {object[]} [options.declared] The resolved rules; defaults to
+ *   `loadRules()`. Injectable so the runner resolves the catalog once, and so
+ *   a test can put a throwaway rule through the real config path.
+ * @param {string} [options.arrivalPath] The record to lint, repo-relative, so
+ *   a checked-in fixture goes through the same config the real record does.
  * @returns {Promise<object[]>} A flat ESLint config array.
  */
-export async function buildConfig(door = "window") {
-  const rows = (await loadRules()).filter((row) =>
+export async function buildConfig(door = "window", options = {}) {
+  const { declared, arrivalPath = ARRIVAL_PATH } = options;
+  const rows = (declared ?? (await loadRules())).filter((row) =>
     door === "hook" ? row.door === "hook" : true
   );
   const severityFor = (row) =>
@@ -143,7 +150,7 @@ export async function buildConfig(door = "window") {
   };
   return [
     {
-      files: [ARRIVAL_PATH],
+      files: [arrivalPath],
       language: "json/json",
       plugins: { json, law: plugin },
       // A disable comment nobody needs is a standing permission slip for the
