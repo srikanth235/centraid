@@ -1,0 +1,18 @@
+{
+  "id": "srikanth235/centraid",
+  "rules": {},
+  "lawPaths": [
+    ".governance/**",
+    "CONSTITUTION.md",
+    "scripts/ci/gate-classes.json",
+    "tests/floors.json",
+    "tests/budgets.json",
+    "tests/inventory.json",
+    "tests/quarantine.json",
+    "tests/claims.json",
+    "oxlint.config.ts",
+    "oxfmt.config.ts",
+    ".github/CODEOWNERS"
+  ],
+  "domains": []
+}
