@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { DOCUMENT_PATTERNS, buildConfig, loadRules } from "./eslint.config.mjs";
+import { status as codeownersStatus } from "./codeowners.mjs";
 import { main as generateArrival } from "./arrival.mjs";
 import { renderFrontPage } from "./front-page.mjs";
 import { globToRegExp } from "./lib/digest.mjs";
@@ -123,6 +124,10 @@ export async function runLaw(options) {
   );
   const report = {
     door: options.door,
+    // What the host would have to enforce, and whether the file it reads to do
+    // it still matches the law estate. The runner answers this, not a rule: it
+    // is a fact about the working tree rather than about the change.
+    codeowners: codeownersStatus(),
     lawDigest: { base: arrival.law.digestAtBase, head: arrival.law.digestAtHead },
     lawChanged: arrival.law.changed,
     range: arrival.range,

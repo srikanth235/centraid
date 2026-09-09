@@ -86,6 +86,12 @@ export function renderFrontPage(report, arrival = null) {
       );
     }
   }
+  if (report.codeowners) {
+    lines.push(
+      "",
+      `law estate: ${report.codeowners.paths} paths, CODEOWNERS ${report.codeowners.inSync ? "in sync" : "**drifted** — run `node .governance/law/codeowners.mjs --write`"}`
+    );
+  }
   lines.push(...renderRegistries(arrival));
   return `${lines.join("\n")}\n`;
 }

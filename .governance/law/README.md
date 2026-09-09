@@ -22,6 +22,7 @@ any of it.
 | `eslint.config.mjs` | **Derived** from the packs. Never hand-written |
 | `arrival.mjs` | The generator: turns a commit range into `out/arrival.json`. Split across `lib/git.mjs`, `lib/registries.mjs` and `lib/managed.mjs`; all of it is under the managed-tree digest |
 | `digest.mjs` | `--record` re-records the generator's own digests in `install.yaml` |
+| `codeowners.mjs` | Generates `.github/CODEOWNERS` from the law estate; `--check` exits 1 on drift |
 | `parity.mjs` | Replays the deleted shell runner against these rules over real history |
 | `commitlint.config.mjs` | The commit-subject policy, in commitlint's config shape |
 | `run.mjs` | The runner: generate, lint, report one line per rule |
@@ -80,6 +81,32 @@ is. `GOVERNANCE_DOOR` selects which configuration the runner builds.
   while the hook may still refuse locally, where refusing costs nothing.
 - **owner** — recorded on the rule, enforced by neither door. It names a
   judgement that belongs to the repository owner.
+
+## Who enforces it
+
+`.github/CODEOWNERS` is **generated** from the same `lawPaths` the rules are
+compiled from:
+
+```
+node .governance/law/codeowners.mjs --write   # regenerate
+node .governance/law/codeowners.mjs --check   # exit 1 on drift
+```
+
+`codeowners.test.mjs` pins the generation and asserts the checked-in file
+matches, so a law path added to a pack cannot end up owned by nobody. Every run
+of the law prints the state on the front page (`law estate: N paths, CODEOWNERS
+in sync`).
+
+What the **host** enforces, and this repository cannot:
+
+| Setting | Where | State |
+| --- | --- | --- |
+| Require review from Code Owners on the default branch | GitHub branch protection | owner-enabled, **not confirmed enabled** |
+| `governance` as a required check | GitHub branch protection ([decisions.md](../../docs/decisions.md#the-pr-gate-loop-892)) | owner-documented as the intended required set (`check` + `governance`) |
+
+What the **rules** do: observe and report. Generating CODEOWNERS does not turn
+branch protection on and cannot check that it is on; it only guarantees that
+when the owner does turn it on, the law estate is what it covers.
 
 ## What rules enforce and what they only observe
 

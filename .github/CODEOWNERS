@@ -1,0 +1,23 @@
+# GENERATED — do not edit by hand.
+#
+# Written by `node .governance/law/codeowners.mjs --write` from the union of
+# `lawPaths` in `.governance/law/packs/*.json`: the law estate, the set of
+# paths whose edit changes what the NEXT change is allowed to do. Adding a
+# law path to a pack and regenerating is the only way to add a line here.
+#
+# The host is what enforces this. A CODEOWNERS entry means something only
+# while branch protection requires review from code owners on the default
+# branch — owner-enabled, configured outside this repository. The rules under
+# `.governance/law/` observe; they never enforce.
+
+.github/CODEOWNERS @srikanth235
+.governance/** @srikanth235
+CONSTITUTION.md @srikanth235
+oxfmt.config.ts @srikanth235
+oxlint.config.ts @srikanth235
+scripts/ci/gate-classes.json @srikanth235
+tests/budgets.json @srikanth235
+tests/claims.json @srikanth235
+tests/floors.json @srikanth235
+tests/inventory.json @srikanth235
+tests/quarantine.json @srikanth235
