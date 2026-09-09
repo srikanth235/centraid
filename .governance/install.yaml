@@ -22,5 +22,11 @@ install_assets_seeded:
 collisions: []
 managed_digests:
   .github/workflows/governance.yml: 220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb
+  .governance/law/arrival.mjs: 28d29dd640e3ee9c9ef35af28ed3e8a059046967891a99e937c185f4e27232e4
+  .governance/law/lib/digest.mjs: e7f8fda369bf8637336463a54947704ad719846d2ec6c3a24074ea8906ebbf80
+  .governance/law/lib/git.mjs: 288e30347088da0e1cc55d5d9e65ef2eafc4a6183bb55dbbe6d02bd8516ffb6b
+  .governance/law/lib/managed.mjs: c89576d4531424399fefe3043a2e75803335fcb908cefd0d1980e796a078de76
+  .governance/law/lib/registries.mjs: 2c21de0d6eccc65111987b3e4a4bbc00ea4c188d48946fdb78f0a57cb0f0a16b
+  .governance/law/lib/rule.mjs: 9679ebd4819ffc997addb8aa926e0d0df607326f7f38914e6d46907054b08102
   .governance/lib.sh: 19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37
   .governance/run.sh: f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4

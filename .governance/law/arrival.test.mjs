@@ -6,7 +6,7 @@
 // that drifts on any of them turns every rule downstream into noise.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
@@ -22,6 +22,7 @@ import {
   serialize,
 } from "./arrival.mjs";
 import { dirDigest } from "./lib/digest.mjs";
+import { RECORDED_PATHS } from "./digest.mjs";
 
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, "..", "..");
@@ -121,11 +122,14 @@ test("the lockfile and install-manifest readers read only their own blocks", () 
     "receipt-per-issue",
   ]);
   const managed = parseManagedDigests(readFileSync(path.join(ROOT, ".governance/install.yaml"), "utf8"));
-  assert.deepEqual(Object.keys(managed).sort(), [
-    ".github/workflows/governance.yml",
-    ".governance/lib.sh",
-    ".governance/run.sh",
-  ]);
+  // The kit's three rows, plus the law generator's own — recorded so a silent
+  // edit to the thing that writes the record is refused at the commit hook.
+  for (const file of [".github/workflows/governance.yml", ".governance/lib.sh", ".governance/run.sh"]) {
+    assert.ok(file in managed, `${file} left managed_digests`);
+  }
+  for (const file of RECORDED_PATHS) {
+    assert.ok(file in managed, `${file} is not recorded in install.yaml`);
+  }
 });
 
 test("serialize is pretty JSON with exactly one trailing newline", () => {
@@ -190,4 +194,39 @@ test("the frozen registry covers every rule target that exists at the baseline",
     assert.ok(["frozen-files", "append-only", "frozen-section"].includes(row.mode));
     assert.equal(typeof row.baseSha, "string");
   }
+});
+
+test("the receipt registry lists every tracked receipt and what this change added", () => {
+  const { registries } = buildArrival({ range: RANGE });
+  const { files, change } = registries.receipts;
+  assert.ok(files.length > 100, "the corpus is much larger than this");
+  assert.ok(
+    files.every((row) => row.path.startsWith("receipts/") && row.path.endsWith(".md")),
+    "the registry must hold receipts and nothing else"
+  );
+  const mine = files.find((row) => row.path === "receipts/issue-1005-governance-constitution.md");
+  assert.ok(mine, "this lane's own receipt is tracked");
+  assert.deepEqual(mine.headings.slice(0, 2), ["Checklist", "What changed"]);
+  assert.equal(mine.verification.hasFence, true);
+  assert.equal(typeof change.completedChange, "boolean");
+  assert.equal(typeof change.touchesReceipt, "boolean");
+});
+
+test("the managed tree carries the pinned kit version and each file's stamp", () => {
+  const { managedTree } = buildArrival({ range: RANGE });
+  assert.equal(managedTree.kitVersion, "0.15.0");
+  const runSh = managedTree.files.find((row) => row.path === ".governance/run.sh");
+  assert.equal(runSh.marker, "0.15.0", "run.sh carries the kit's managed stamp");
+  assert.deepEqual(managedTree.unrecorded, [], "no unrecorded directive folder is installed");
+});
+
+test("a pending commit message is read, comment lines dropped, staged set attached", () => {
+  // This path only runs inside the commit-msg hook, which is exactly why it
+  // needs a test: a broken import here surfaces as a crashed commit and
+  // nothing else.
+  const messageFile = path.join(HERE, "out", "arrival.test.msg");
+  writeFileSync(messageFile, "feat(governance): a subject (#1005)\n\n# a git comment\nbody line\n");
+  const arrival = buildArrival({ range: RANGE, messageFile });
+  assert.equal(arrival.pending.message, "feat(governance): a subject (#1005)\n\nbody line");
+  assert.ok(Array.isArray(arrival.pending.files));
 });

@@ -59,7 +59,7 @@
     "golden-vault:freeze": "node scripts/golden-vault/build.mjs",
     "governance": "node scripts/ci/governance-run.mjs",
     "governance:law": "node .governance/law/run.mjs",
-    "governance:law:test": "node --test .governance/law/arrival.test.mjs .governance/law/run.test.mjs .governance/law/rules/commit-message-format.test.mjs .governance/law/rules/doc-integrity.test.mjs",
+    "governance:law:test": "node --test .governance/law/arrival.test.mjs .governance/law/run.test.mjs .governance/law/digest.test.mjs .governance/law/rules/commit-message-format.test.mjs .governance/law/rules/doc-integrity.test.mjs .governance/law/rules/managed-tree-integrity.test.mjs .governance/law/rules/receipt-per-issue.test.mjs",
     "hygiene:lane": "node scripts/hygiene-lane.mjs",
     "knip": "knip",
     "lint": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .",

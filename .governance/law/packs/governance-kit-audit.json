@@ -8,6 +8,14 @@
     "doc-integrity": {
       "severity": "error",
       "door": "hook"
+    },
+    "managed-tree-integrity": {
+      "severity": "error",
+      "door": "hook"
+    },
+    "receipt-per-issue": {
+      "severity": "error",
+      "door": "window"
     }
   },
   "lawPaths": [],

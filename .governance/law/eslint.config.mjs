@@ -108,7 +108,7 @@ export async function loadRules() {
     const rule = modules[index].default;
     return {
       id,
-      severity: row?.severity ?? "error",
+      severity: row?.severity ?? "warn",
       door: row?.door ?? doors[id] ?? rule?.meta?.door ?? "window",
       surface: rule?.meta?.surface ?? "arrival",
       options,
@@ -141,8 +141,12 @@ export async function buildConfig(door = "window", options = {}) {
   const rows = (declared ?? (await loadRules())).filter((row) =>
     door === "hook" ? row.door === "hook" : true
   );
-  const severityFor = (row) =>
-    door === "hook" || row.door === "hook" ? "error" : "warn";
+  // The door decides WHICH rules run; the pack row decides how loud each one
+  // is. A rule the pack declares at `error` stays an error at the window door —
+  // porting a blocking shell directive into a warning would be weakening the
+  // policy to make a run green. A row that declares no severity warns, which is
+  // the honest verdict for something only a person can settle.
+  const severityFor = (row) => (row.door === "hook" ? "error" : (row.severity ?? "warn"));
   const rulesFor = (surface) =>
     Object.fromEntries(
       rows
