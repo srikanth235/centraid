@@ -324,6 +324,7 @@ written in one vocabulary instead of two.
 | `.governance/law/rules/receipt-per-issue.{mjs,test.mjs}` | Reads `change.completed`; findings unchanged for every existing case |
 | `.governance/law/arrival.test.mjs` | The determinism case: a detached `git worktree` at HEAD, on no branch, generating the fixture range — twice, the second time with a receipt dirtied in its working copy |
 | `.governance/law/replay.test.mjs` | The `waiver-docket` count and why it moved |
+| `.governance/law/parity.mjs` | Stages the injected files and runs the new runner with `--staged`. The harness writes the old shell pack and the current law INTO a scratch checkout, so a new runner that read the commit would judge a tree neither runner is in: `managed-tree-integrity` went old=FAIL/new=pass on 49 of 50 commits until both runners were pointed at the same tree |
 | `.governance/law/fixtures/` | Both regenerated |
 | `.governance/install.yaml` | Re-recorded (`digest.mjs --record`) for the five generator modules that moved |
 | `.governance/law/README.md` | `## The arrival record`: what is read at `head`, what moves to the index at the hook |
@@ -706,7 +707,9 @@ time GIT_INDEX_FILE=x bash .governance/packs/srikanth235/centraid/directives/law
   ✗ law (1 violation) — the law refused this change at the hook door
                                                                      the index path works
 
-node .governance/law/parity.mjs --last 50                             exit 0
+node .governance/law/parity.mjs --last 50
+# 50 commit(s) replayed; 0 unexplained disagreement(s), 3 recorded divergence(s)
+                                                                     exit 0 — pass
 ```
 
 The one number that moved: the #1002 replay's `waiver-docket` findings, seven → zero.

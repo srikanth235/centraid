@@ -197,7 +197,13 @@ export function verdictsIn(tree, door = "window") {
     const script = path.join(tree, PACK, "directives", directive, "check.sh");
     old[directive] = existsSync(script) ? verdict("bash", [script], tree).status : -1;
   }
-  const result = verdict("node", [".governance/law/run.mjs", "--door", door, "--json"], tree);
+  // Both runners must judge the same tree. The old one reads the worktree, and
+  // this harness has just written the old pack and the new law INTO it, so the
+  // injected files are staged and the new runner is pointed at the index
+  // (R-1005-27) — otherwise it would read the commit, where neither runner
+  // exists, and report a clean managed tree the shell directive never saw.
+  execFileSync("git", ["add", "-A"], { cwd: tree, stdio: "ignore" });
+  const result = verdict("node", [".governance/law/run.mjs", "--door", door, "--staged", "--json"], tree);
   let report = { rules: [] };
   try {
     report = JSON.parse(result.output.slice(result.output.indexOf("{"), result.output.lastIndexOf("}") + 1));

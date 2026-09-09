@@ -9,7 +9,7 @@
 //
 // Usage:
 //   node .governance/law/run.mjs [--door hook|window] [--range A..B]
-//                                [--message-file F] [--arrival P]
+//                                [--message-file F] [--arrival P] [--staged]
 //                                [--json] [--front-page P]
 import { ESLint } from "eslint";
 import { execFileSync } from "node:child_process";
@@ -49,6 +49,7 @@ export function parseArgs(argv) {
     else if (arg === "--arrival") options.arrival = argv[(i += 1)];
     else if (arg === "--front-page") options.frontPage = argv[(i += 1)];
     else if (arg === "--brief-digest") options.briefDigest = argv[(i += 1)];
+    else if (arg === "--staged") options.staged = true;
     else if (arg === "--json") options.json = true;
     else throw new Error(`law: unknown argument ${arg}`);
   }
@@ -139,8 +140,12 @@ export async function runLaw(options) {
         ...(options.messageFile ? ["--message-file", options.messageFile] : []),
         // At the hook door the record is generated from the INDEX: the
         // pre-commit rung carries no commit message, so the staged tree is the
-        // only thing that says what this commit will be (R-1005-27).
-        ...(options.door === "hook" ? ["--staged"] : []),
+        // only thing that says what this commit will be (R-1005-27). `--staged`
+        // asks for the same read at any door, which is what the parity harness
+        // needs: it INJECTS the old runner into a scratch checkout, and a new
+        // runner reading the commit instead of the tree in front of it would be
+        // judging a different change than the shell runner it is compared to.
+        ...(options.door === "hook" || options.staged ? ["--staged"] : []),
         // The door is stamped into the record because it is a fact about the
         // change's situation, not about the rules: at the hook the only thing
         // the author can still act on is the commit being written, while in the
