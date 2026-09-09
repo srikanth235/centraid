@@ -9,6 +9,9 @@ Branch `lane/1005-b`, four commits, one per seam.
 Lane C: the estates, the registry rules, generated CODEOWNERS, and the repeal of the two
 unenforced ledgers. Branch `lane/1005-c`, six commits, one per seam.
 
+Lane D: the docket, the citation and pairing rules, the constitution rework, and the generated
+brief. Branch `lane/1005-d`, six commits, one per seam.
+
 ## Checklist
 
 The umbrella's acceptance boxes. Only the ones this lane owns are checked.
@@ -27,9 +30,11 @@ The umbrella's acceptance boxes. Only the ones this lane owns are checked.
       Appeals are the docket, whose path Lane C reserves and Lane D creates
 - [x] CODEOWNERS and branch protection — what the host enforces (Lane C). The file is generated
       from the law estate; branch protection stays owner-enabled and is **not** claimed as enabled
-- [ ] CONSTITUTION.md reworked to match (Lane D)
-- [ ] The rule/test pairing check itself as a rule (later lane; the convention is documented in
-      `.governance/law/README.md` now)
+- [x] CONSTITUTION.md reworked to match (Lane D). Every principle resolves to a rule id, a
+      `docs/decisions.md` anchor or an owner question recorded there; every enforced directive has
+      a section stating its door, what the host enforces and what the rule only observes
+- [x] The rule/test pairing check itself as a rule (Lane D: `amendment-pairing`)
+- [x] Appeals: the docket, and every waiver in the tree filed as a row (Lane D: `waiver-docket`)
 
 ## What changed
 
@@ -154,6 +159,38 @@ Design decisions worth naming, because they are load-bearing for the later lanes
 | `package.json` | `governance:law:test` becomes a glob, so a new rule never needs a manifest edit |
 | `scripts/lint-test-reachability.mjs` `.test.mjs` | A test-file glob in a script now reaches its files; one new case pins that `*` does not cross `/` |
 
+
+### Lane D — the docket, citation, pairing, coverage, and the generated brief
+
+| File | What changed |
+| --- | --- |
+| `.governance/law/lib/estates.mjs` | `docs/**` moved from `territory` to `registry` (R-1005-19) |
+| `.governance/law/lib/waivers.mjs` | **New.** Every place a waiver can be written, read into one list with one shape: commit bodies (reason = a paragraph, not a line), comment-form tokens on added lines, `eslint-disable` directives in governance documents. Split out of `registries.mjs`, which would otherwise pass the 625-line ceiling |
+| `.governance/law/lib/registries.mjs` | `collectRulings` and `collectCites` for touched receipts; `collectDocket(range)` gains `rowsOnBase` |
+| `.governance/law/arrival.mjs` | Schema 3 → 5. `law.domains`, `law.rules`, `law.rulesAtBase`, `registries.docket.rowsOnBase`, `registries.receipts[*].{rulings,cites}`, `waivers[*].docket`; `lawDigestAt` and `lawPathsChanged` exported for the brief |
+| `.governance/law/docket.json` | **New.** The register of standing exceptions: eleven rows for what the tree already spends |
+| `.governance/law/rules/waiver-docket.{mjs,test.mjs}` | **New.** The register's own shape, the spending against it, and `eslint-disable` directives that name no row |
+| `.governance/law/rules/amendment-pairing.{mjs,test.mjs}` | **New.** Rule with its cases, new rule with its pack row, severity/door with its statute |
+| `.governance/law/rules/doctrine-citation.{mjs,test.mjs}` | **New.** Doctrine domains, and rulings recorded with nothing cited |
+| `.governance/law/rules/constitution-coverage.{mjs,test.mjs}` | **New.** Every principle resolves; every directive has a section and vice versa |
+| `.governance/law/rules/registry-completeness.{mjs,test.mjs}` | Loses its fourth (docket) question to `waiver-docket` |
+| `.governance/law/lib/rule.mjs` | `SURFACES` gains `all`; `defineRule` gains `clock` and `catalog`, the two declared injections |
+| `.governance/law/eslint.config.mjs` | A third config block for the docket; `rulesIn(...surfaces)`; the clock and the catalog injected as options; `readGateDoors()` refuses a door outside `DOORS` |
+| `.governance/law/brief.mjs` (+ test) | **New.** The generated doctrine digest: law digest at HEAD, rules with door/severity/statute, domains, docket |
+| `.governance/law/run.mjs` (+ test) | `--brief-digest` / `GOVERNANCE_BRIEF_DIGEST`, and `briefDrift` |
+| `.governance/law/front-page.mjs` | The brief line; `nameFiles` caps the "law changed" list at twelve paths |
+| `.governance/law/packs/centraid.json` | Four new rule rows; five doctrine domains |
+| `.governance/law/fixtures/` | Arrival regenerated at schema 5; the #1002 replay now reproduces four failing rules |
+| `CONSTITUTION.md` | Principles all cited; four missing directive sections written; every section states Door / Host enforces / Rule observes; amendment process and escape hatches rewritten; one Evolution Log line |
+| `scripts/ci/gate-classes.json` (+ test) | A `door` on every row, in the rules' vocabulary, asserted against the rung; `governance` and `governance:law:test` classified |
+| `docs/decisions.md` | R-1005-19..26, and Q-1005-1..3 — the three principles that could be made no statute |
+| `docs/multi-agent.md` · `docs/dev-environment.md` | The brief is generated and stamped; the door is the placement and cost is the tiebreaker within it |
+| `CHANGELOG.md` | The docket, the three new rules and the generated brief, on the existing #1005 line |
+
+This lane's changes sit in the **pr-gate** doctrine domain (`scripts/ci/gate-classes.json`,
+`scripts/ci/**`) and answer to [The PR gate loop (#892)](../docs/decisions.md#the-pr-gate-loop-892):
+the door field is the same "where is this answerable" question that ruling's rung ladder answers,
+written in one vocabulary instead of two.
 
 ## Verification
 
@@ -409,6 +446,105 @@ git ls-files COSTS.md STEERING.md   # empty
 ```
 
 
+### Lane D
+
+Every command below was run in the lane worktree at `4a03e3ab`, except the receipt and decisions
+edits of the last commit.
+
+```
+bun run governance:law:test
+# tests 176 / # pass 176 / # fail 0                                   exit 0 — pass
+
+bash .governance/run.sh
+✓ coverage-scope-reachability  ✓ format-check  ✓ gateway-engine-mode-agnostic
+✓ handler-contract  ✓ lint-check  ✓ no-hardcoded-colors  ✓ no-hardcoded-model-ids
+✓ pre-push-gate
+✗ law (1 violation) — the ONE tolerated red, quoted in full:
+    receipts/issue-1005-governance-constitution.md — '## Audit' records no PASS/REFUTED
+    verdict; an independent reviewer must report a verdict + evidence for each check this
+    rule names.
+  The window door's other findings are warnings and are the intended output, below.
+
+time GIT_INDEX_FILE=x bash .governance/packs/srikanth235/centraid/directives/law/check.sh
+real 0m1.592s                                                        under the 2.0 s budget
+
+node .governance/law/run.mjs --range bb964a7e..3df6d552               the #1002 replay, by hand
+  law/estate-separation — 3df6d552 edits the law and the territory in one commit — law:
+    'tests/claims.json', 'tests/inventory.json'; territory: ... and 1004 more.
+  law/registry-completeness — CHANGELOG.md carries no line citing #996.
+  law/doctrine-citation — receipts/issue-996-one-vault-every-seat.md:4059 records ruling
+    W6-D1 and cites nothing.
+  law/doctrine-citation — receipts/issue-996-one-vault-every-seat.md:4497 records ruling
+    W6-D2 and cites nothing.
+  (plus seven law/waiver-docket findings: every waiver #1002 spent, against a register that
+   did not exist when it merged)
+
+node .governance/law/brief.mjs                                        prints; 10 rules, 5 domains, 11 docket rows
+node .governance/law/run.mjs --brief-digest 0000…0000 --front-page /tmp/fp.md
+  law changed under this run: brief stamped `000000000000`, HEAD is `f2141b5417bb` —
+  changed: unknown commit (no commit in this range carries the stamped digest)
+
+node --test scripts/ci/gate-classes.test.mjs
+# pass 8 / # fail 0                                                   exit 0 — pass
+
+bun run lint:ledgers                 ok — 20 sections across 5 ledgers hold
+bun run format:check                 all matched files use the correct format
+bun run lint                         exit 0 — pass
+bun run lint:test-reachability       exit 0 — pass
+bun run test:governance-shell        exit 0 — pass
+bun run lint:workflow-pins           exit 0 — pass
+bun run check:push:static            ✓ 4/4 gates passed in 23.6s
+git status --porcelain               clean
+```
+
+`bun run lint:product` fails on `lint:quality-knobs`, `lint:mobile-testids` and
+`lint:e2e-wiring`. All three reproduce unchanged at the lane's base `da7656fb`, verified by
+running the same gate in the root checkout at that commit — inherited, not caused here.
+
+#### Demonstrated reds, by hand
+
+Each was produced against the real hooks and then reverted; `git log` and `git status` confirm
+neither the probe commit nor the probe edit survives.
+
+```
+1. A rule edited without its cases, staged and committed:
+   ✗ amendment-pairing — the staged change changes .governance/law/rules/estate-separation.mjs
+     but not estate-separation.test.mjs. A rule changed without its cases is a claim, not a
+     reviewable change — CONSTITUTION.md's amendment process is one commit, three edits.
+   → the commit did not happen (HEAD unchanged at 4a03e3ab)
+
+2. An uncited principle appended to CONSTITUTION.md, then `bash .governance/run.sh law`:
+   ✗ constitution-coverage — CONSTITUTION.md:32 this principle cites nothing. End it with
+     '— rule: <id>', '— decision: <docs/decisions.md anchor>' or '— owner question: <anchor>'…
+
+3. `<!-- eslint-disable law/receipt-per-issue -->` appended to this receipt, staged and committed:
+   ✗ waiver-docket — receipts/issue-1005-governance-constitution.md:558 this 'eslint-disable'
+     names no docket row. Write it as '-- docket:D-<n> <why>' and file the row in
+     .governance/law/docket.json; a suppression with no register entry is an exception nobody
+     is tracking.
+   → the commit did not happen
+```
+
+#### What this pull request's own window door says, and why it is right
+
+```
+✗ doctrine-citation — 4 findings
+✗ estate-separation — 6 findings
+✗ waiver-docket    — 4 findings
+```
+
+- **`waiver-docket` ×4 — self-granted.** The umbrella's own waivers (two `doc-integrity` for the
+  COSTS/STEERING repeal, two `estate-separation`) name rows `D-9`, `D-10` and `D-11`, which this
+  same change filed at `authority: pending owner grant`. That is precisely what the rule is for and
+  precisely what it should say: a row filed and spent in one arrival is a permission slip its author
+  wrote itself, and only the owner's grant converts it. Nothing here should be "fixed" to go green.
+- **`estate-separation` ×6 — lanes A–C.** Six commits from the earlier lanes edited the law and one
+  territory file (`package.json`, `.gitignore`, `scripts/test.sh`) together. They are on the trunk
+  side of no merge-base and cannot be split now; the finding is `warn` and is the honest record.
+- **`doctrine-citation` ×3 — rulings R-1005-5..7** in this receipt's Lane A section cite nothing in
+  their paragraphs. Lane D does not rewrite earlier lanes' receipt text, so the finding stands as
+  written rather than being edited away. The fourth was the `pr-gate` domain, and is answered above.
+
 ## Decisions
 
 Root rulings this lane implemented, recorded verbatim with the reason each was given.
@@ -550,6 +686,50 @@ rule outside `CONSTITUTION.md`. A recommendation: fold `docs/**` into `registry`
 — it is the same kind of thing (a record of what is, written by the change that
 made it so), and it never changes what the next change is permitted to do.
 
+
+### Lane D decisions
+
+Root rulings this lane implemented, and the reason each was given. All eight are recorded in
+[docs/decisions.md § Governance as a constitution (#1005)](../docs/decisions.md#governance-as-a-constitution-1005)
+as **R-1005-19** through **R-1005-26**, with the three owner questions as **Q-1005-1..3**.
+
+- **R-1005-19 Estates.** `docs/**` is `registry`, not `territory`. Reason: a doc records what is and
+  never changes what the next change may do, which is the one thing that makes a path law
+  ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **R-1005-20 The docket.** `.governance/law/docket.json`, and `waiver-docket` over it. Reason: an
+  exception nobody can enumerate is not an exception but a hole, and the only mechanical difference
+  between a granted exception and a self-written one is which side of the merge-base its row was on
+  ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **R-1005-21 `constitution-coverage`.** Reason: no unwritten law — an agent is held only to what was
+  published before it acted ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **R-1005-22 `doctrine-citation`.** Reason: the expensive failures are changes made in a settled
+  area by somebody who did not know it was settled ([#1002](https://github.com/srikanth235/centraid/issues/1002)).
+- **R-1005-23 `amendment-pairing`.** Reason: the cardinal rule was enforced by attention, which is to
+  say by nobody ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **R-1005-24 The generated brief.** Reason: a digest typed by hand is wrong the first time somebody
+  amends the law ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **R-1005-25 Doors on gates.** Reason: one question, one vocabulary; cost is a tiebreaker within a
+  door and never a reason to move one ([#576](https://github.com/srikanth235/centraid/issues/576),
+  [The PR gate loop](../docs/decisions.md#the-pr-gate-loop-892)).
+- **R-1005-26 The extended replay.** Reason: a catalog that has only seen its own fixtures is a
+  catalog of opinions ([#1002](https://github.com/srikanth235/centraid/issues/1002)).
+
+Three judgements this lane made inside those rulings, recorded because they differ from the brief:
+
+- **Eleven docket rows, not twelve.** The umbrella spent four waivers, but its two
+  `estate-separation` waivers are one exception in docket terms — same rule, neither path-scoped —
+  so they are one row (`D-11`) rather than two identical ones a matcher would have to choose between
+  ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **`waiver-docket` is one rule across three surfaces, at the hook door.** The brief asked for a
+  window/`warn` half and a hook/`error` half; a pack row carries one door per rule id. The rule is
+  declared `hook`/`warn`, so the register's shape and the docket-less suppression are fatal at the
+  commit hook, and the spending half returns early when `stamp.door === "hook"` — the same asymmetry
+  `estate-separation` already carries, for the same reason
+  ([R-1005-14](../docs/decisions.md#governance-as-a-constitution-1005)).
+- **`governance:law:test` is classified rung 1, not rung 2.** It already runs in CI inside
+  `scripts:test`, which `check:push` names at rung 1 and `ci.yml` re-runs, so no `ci.yml` change was
+  invented for it; the register records where it is enforced rather than where it might be
+  ([R-1005-25](../docs/decisions.md#governance-as-a-constitution-1005)).
 
 ## Audit
 
