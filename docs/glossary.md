@@ -232,6 +232,22 @@ The vocabulary for what a member shares with whom, how those bytes reach an audi
 
 Two retired vocabularies, historical only. **lend** — #726's live edges, borrowed stores, leases, budgets, and write-back machinery were deleted in #731; do not use “lend” or “borrowed scope” for a shared container, since a member holds their own full resident copy. **give** — the one-time receiver-owned snapshot is retired by [#825](https://github.com/srikanth235/centraid/issues/825), code and all. Its verbs answer `not_found` (the peer `edge/give`, `edge/closure/:id`, `edge/deny` and `blob/chunk` frames; the gateway `edges/pending` and `edges/:id/answer` verbs), a cross-owner pair on `POST /centraid/_gateway/edges` is refused with `cross_owner_give_retired`, and the transport that carried it — the give client, the remote reconciler, the audience-side blob pull, the `await-answer`/`deliver-refusal`/`pull-blob` outbox kinds, and the per-link "receive gives" preference — is deleted. A gateway upgraded across the retirement has its leftover queued obligations drained once at open, each ending its edge terminally rather than retrying a withdrawn verb. The word survives only in receipts and changelogs and nothing replaces it. Say **grant**.
 
+## The law (governance, [#1005](https://github.com/srikanth235/centraid/issues/1005))
+
+The vocabulary of `.governance/` since the kit became a constitution. Detail in [`.governance/law/README.md`](../.governance/law/README.md); the rulings are in [decisions.md](decisions.md#governance-as-a-constitution-1005).
+
+| Term | Meaning |
+| --- | --- |
+| **the law** | The rule catalog under [`.governance/law/`](../.governance/law/README.md) plus [CONSTITUTION.md](../CONSTITUTION.md). A directive is an ESLint rule; the constitution is its config. Never "the audit", which was the retired shell pack |
+| **arrival** | One agent run, materialized as `arrival.json`: the commits, the changed files tagged by estate, the registry rows keyed by issue, the waivers spent, the gates touched, and the law digest at branch point and at HEAD. Generated once per run from git, and the only place the law talks to git — rules read the document, never the repo |
+| **door** | Which rung a rule answers at. **hook** = answerable from the commit being written, fatal at pre-commit whatever its row says; **window** = the whole law at review time, at each rule's declared severity; **owner** = only a person can answer it. A check's rung is set by its door, never by its cost |
+| **estate** | Which jurisdiction a path belongs to. **law** = the packs' declared `lawPaths` (CONSTITUTION.md, `.governance/**`, gate ledgers, the linter configs, CODEOWNERS); **territory** = product code, scripts, workflows; **registry** = evidence (`receipts/**`, `docs/**`, `CHANGELOG.md`, `QUALITY.md`, the docket). One commit edits law or territory, never both; registry may ride with either |
+| **registry** | An append-only record the law checks for consistency rather than for presence — event-driven, so a routine arrival adds only its receipt and changelog row and nobody writes a blank N/A |
+| **docket** | `.governance/law/docket.json`, the register of standing exceptions. A row carries id, rule, path, reason, authority, filer, issue and expiry; a suppression names it as `-- docket:D-n`. Anyone files, only the owner grants — by merging the row before it is spent |
+| **front page** | The machine-written head of a PR body and of an umbrella receipt: the range, whether the law moved under the run, one line per enabled rule green or red, the registry lines, and the token cost read back from the receipt. Rendered by `node .governance/law/run.mjs --front-page <path>`; hand edits inside its markers are undone by the next run |
+| **law digest** | The hash of the law as published, printed by `node .governance/law/brief.mjs` and stamped into a worker's brief. `run.mjs --brief-digest <hex>` reports whether the law moved under the work; the worker is held to HEAD, and the stamp names the gap |
+| **amendment** | A change to the law: rule, cases, pack row and constitution section in one commit. `amendment-pairing` refuses any subset |
+
 ## Forbidden / discouraged synonyms (broader)
 
 | Avoid | Prefer |

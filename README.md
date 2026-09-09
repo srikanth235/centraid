@@ -221,6 +221,8 @@ bun run typecheck      # turbo typecheck + tests/ tsc (check:pr; push tier uses 
 bun run lint:types     # type-aware lint (check:pr and CI, not the push tier)
 bun run toolchain:doctor # non-mutating Ultracite/config drift check
 bun run ci             # alias of check:pr
+bun run governance     # every governance directive (the hooks run it for you)
+bun run governance:law # the law's rule catalog over this change, at the window door
 ```
 
 See [docs/toolchain.md](docs/toolchain.md) for the stable command API, rule rubric, runtime profiles, safe-fix policy, and dedicated-upgrade contract.

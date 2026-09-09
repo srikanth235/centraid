@@ -165,7 +165,7 @@ The container can restart at any time and kill every worker. Uncommitted work on
 Runs once per umbrella, after the last lane lands, and only when the owner opens it. One worker:
 
 1. Doc pass: every touched doc to current state; no text describing the deleted thing; decisions moved from the receipt to the decisions log.
-2. Receipt close: final rows, inherited-red table, corrections to the plan.
+2. Receipt close: the issue's acceptance boxes reconciled one by one, the inherited-red table, corrections to the plan, and the owner hand-offs. The receipt's front page is **generated** — `node .governance/law/run.mjs --front-page <path>`, pasted between its markers — never typed; the next run overwrites anything hand-edited inside it.
 3. Dead-code sweep for what the last slice orphaned.
 4. PR readiness: body against the issue checklist; draft off; issue body reconciled to what shipped.
 5. Owner hand-offs as explicit questions.

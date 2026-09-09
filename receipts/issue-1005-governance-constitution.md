@@ -593,16 +593,17 @@ regenerated with them, and the diff is the evidence that they moved.
 - **R-1005-5** — the commit policy lives in `.governance/law/commitlint.config.mjs` in
   commitlint's shape and `@commitlint/cli` is not installed. The reason is mechanical:
   commitlint's API is asynchronous and an ESLint rule is synchronous. What the shape buys is a
-  vocabulary contributors and editors already read, and the option of running the real tool later.
+  vocabulary contributors and editors already read, and the option of running the real tool later. Ruled by the root under [#1005](https://github.com/srikanth235/centraid/issues/1005).
 - **R-1005-6** — `managed-tree-integrity` is a rule over `arrival.managedTree`, and the law's own
   generator is now inside `install.yaml`'s `managed_digests`, re-recorded by
   `node .governance/law/digest.mjs --record`. The helper is a convenience, not the boundary: every
   file here is agent-writable, and what makes the record trustworthy is that `install.yaml` is
-  owner-reviewed and that a change to it is visible in the diff.
+  owner-reviewed and that a change to it is visible in the diff. Ruled by the root under [#1005](https://github.com/srikanth235/centraid/issues/1005).
 - **R-1005-7** — the four directive folders, the `governance-kit/audit` lock entry and
   `.governance/conf/governance-kit/` are deleted, after the parity replay was recorded and not
   before. `doc-integrity`'s three overlay rows moved into the pack declaration's
-  `options.doc-integrity.rules`.
+  `options.doc-integrity.rules`. Ruled by the root under
+  [#1005](https://github.com/srikanth235/centraid/issues/1005).
 - **Door assignment** — `commit-message-format`, `doc-integrity` and `managed-tree-integrity` at
   the hook door; `receipt-per-issue` at the window door, with its corpus-wide half made answerable
   at either door by the generator's receipt registry.
