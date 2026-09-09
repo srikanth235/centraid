@@ -5,9 +5,11 @@ packs:
   source: local
   directives:
   - handler-contract
+  - law
   - no-hardcoded-model-ids
   - gateway-engine-mode-agnostic
   - format-check
   - coverage-scope-reachability
   - lint-check
+  - no-hardcoded-colors
   - pre-push-gate

@@ -41,18 +41,16 @@ carries its class and the reason for it in `scripts/ci/gate-classes.json`, and
 `scripts/ci/gate-classes.test.mjs` fails if a gate is classified hygiene and
 then enforced nowhere.
 
-**Rung 1 also absorbed rung 0's repo-wide directives (#915 Wave 4).**
-`receipt-per-issue` is vendored, digest-locked, and repo-wide by construction,
-and its `hook:` field cannot be moved in-tree without failing
-`managed-tree-integrity`. `.githooks/pre-commit` therefore skips the ids in
-`.governance/conf/srikanth235/centraid/pre-commit-deferred.conf` and
-`.githooks/pre-push` runs exactly those before `check:push`. `.governance/run.sh`
-never changed, so CI's copy always runs every directive either way.
-
-The deferral's original arithmetic no longer holds: `repo-hygiene` was retired
-in governance-kit audit 0.11.0 and `receipt-per-issue` was rewritten to a much
-cheaper check, so the whole 12-directive suite now runs in about 4s. Whether
-anything still needs deferring is an open question, not a settled rule.
+**Nothing is deferred to rung 1 any more (#1005).** Rung 1 once absorbed the
+repo-wide directives that could not fit rung 0's budget (#915 Wave 4), through a
+`pre-commit-deferred.conf` the hooks were supposed to read. Two things ended it.
+`receipt-per-issue` and its three siblings are no longer vendored directives at
+all — #1005 ported them to rules under `.governance/law/`, where the hook door
+answers the repo-wide half from one generated record in under a second. And the
+mechanism had already stopped operating: under governance-kit 0.15.0 nothing in
+`.githooks/` reads that file, the dispatchers select on `hook:` alone, so the
+conf has been deleted rather than left to read as enforced. `.governance/run.sh`
+never changed, so CI's copy always ran every directive either way.
 
 **Fix:** run `bun run check:push` and repair what it reports. Run
 `bun run check:pr` when you want CI's full answer without waiting for CI.
