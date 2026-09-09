@@ -42,6 +42,7 @@ export {
   collectDocument,
   collectFrozen,
   collectReceipts,
+  collectCites,
   collectRulings,
   documentIntegrityRules,
   extractReceiptSection,
@@ -74,8 +75,14 @@ const HERE = import.meta.dirname;
  * `registries.docket.rowsOnBase`, the ids the docket held at the baseline; and
  * records `registries.receipts[*].rulings` for the receipts this change
  * touched.
+ *
+ * 5 (#1005 lane D) carries the law's own declarations into the record so the
+ * rules that judge amendments and citations stay pure: `law.domains` (the
+ * packs' doctrine domains), `law.rules` and `law.rulesAtBase` (every declared
+ * rule's severity and door, on both sides of the merge-base), and
+ * `registries.receipts[*].cites`.
  */
-export const SCHEMA = 4;
+export const SCHEMA = 5;
 
 /** Branch names the ported directives treated as the trunk. */
 const DEFAULT_BRANCHES = Object.freeze(["origin/main", "origin/master", "main", "master"]);
@@ -213,9 +220,8 @@ function treeEntries(rev) {
  *   The law section.
  */
 export function collectLaw(range) {
-  const globs = readPacks()
-    .flatMap((pack) => pack.lawPaths)
-    .sort(byteCompare);
+  const packs = readPacks();
+  const globs = packs.flatMap((pack) => pack.lawPaths).sort(byteCompare);
   const matchers = globs.map(globToRegExp);
   const atBase = lawDigest(treeEntries(range.base), matchers);
   const atHead = lawDigest(treeEntries(range.head), matchers);
@@ -238,7 +244,58 @@ export function collectLaw(range) {
     digestAtBase: atBase.digest,
     digestAtHead: atHead.digest,
     changed,
+    // What the packs DECLARE, carried into the record so the rules that judge
+    // an amendment or a citation read one document rather than re-opening the
+    // pack files a second time with a second parser.
+    domains: packs
+      .flatMap((pack) => pack.domains)
+      .sort((a, b) => byteCompare(a.id ?? "", b.id ?? "")),
+    rules: declaredRules(packs),
+    rulesAtBase: declaredRulesAt(packs, range.base),
   };
+}
+
+/**
+ * Every rule a pack declares, as `id → {severity, door}`.
+ *
+ * Rules declared `off` are included: a repeal is exactly the change
+ * `amendment-pairing` must be able to see.
+ *
+ * @param {object[]} packs The parsed packs.
+ * @returns {Record<string, {severity: string|null, door: string|null}>} The map.
+ */
+export function declaredRules(packs) {
+  const rows = {};
+  for (const pack of packs) {
+    for (const [id, row] of Object.entries(pack.rules ?? {})) {
+      rows[id] = { severity: row?.severity ?? null, door: row?.door ?? null };
+    }
+  }
+  return Object.fromEntries(Object.entries(rows).sort(([a], [b]) => byteCompare(a, b)));
+}
+
+/**
+ * The same map, as it stood at a revision.
+ *
+ * A pack file that did not exist there contributes nothing, which reads as
+ * "every rule it declares is new" — the honest answer for a pack this change
+ * introduced.
+ *
+ * @param {object[]} packs The parsed packs, for their file paths.
+ * @param {string} rev The revision.
+ * @returns {Record<string, {severity: string|null, door: string|null}>} The map.
+ */
+export function declaredRulesAt(packs, rev) {
+  const at = [];
+  for (const pack of packs) {
+    const relative = path.relative(path.resolve(HERE, "..", ".."), pack.file);
+    try {
+      at.push(JSON.parse(git(["show", `${rev}:${relative}`])));
+    } catch {
+      // Absent at that revision.
+    }
+  }
+  return declaredRules(at);
 }
 
 /**

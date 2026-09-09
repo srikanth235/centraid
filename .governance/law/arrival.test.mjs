@@ -63,12 +63,22 @@ test("two runs over the same range in the same tree are byte-identical", async (
 
 test("the record has every section, including the ones no rule reads yet", () => {
   const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
-  assert.equal(arrival.schema, 4);
+  assert.equal(arrival.schema, 5);
   for (const key of ["range", "commits", "files", "law", "managedTree", "waivers", "registries", "gates", "ci"]) {
     assert.ok(key in arrival, `arrival.json has no ${key}`);
   }
   assert.equal(arrival.pending, null, "no --message-file means no pending commit");
   assert.deepEqual(Object.keys(arrival.ci).sort(), ["issueExists", "issueIsProposal", "prAuthorIsOwner"]);
+  // The law's own declarations travel in the record, so the rules that judge
+  // an amendment or a citation read one document rather than re-opening the
+  // pack files with a second parser.
+  for (const key of ["domains", "rules", "rulesAtBase"]) {
+    assert.ok(key in arrival.law, `arrival.law has no ${key}`);
+  }
+  assert.ok(
+    arrival.law.domains.some((domain) => domain.id === "the-law"),
+    "the law is its own doctrine domain"
+  );
 });
 
 test("the JS directory digest is the vendored bash digest, byte for byte", () => {

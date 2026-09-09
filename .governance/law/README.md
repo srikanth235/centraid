@@ -13,7 +13,7 @@ any of it.
 | Path | What it is |
 | --- | --- |
 | `docket.json` | The register of standing exceptions: one row per waiver anyone may spend |
-| `packs/<pack>.json` | The law as *declared*: which rules a pack enables, at which severity, behind which door, and which paths are law |
+| `packs/<pack>.json` | The law as *declared*: which rules a pack enables, at which severity, behind which door, which paths are law, and which paths are doctrine domains |
 | `rules/<id>.mjs` | One rule, defined through `lib/rule.mjs` |
 | `rules/<id>.test.mjs` | That rule's cases, through ESLint's own `RuleTester` |
 | `lib/rule.mjs` | `defineRule` (the metadata every rule carries) and `ruleTester` |
@@ -57,6 +57,8 @@ rule.
 | `receipt-per-issue` | window | One well-formed receipt per issue, and a completed change carries it | [CONSTITUTION.md](../../CONSTITUTION.md#receipt-per-issue) |
 | `estate-separation` | hook | A commit edits the law or the product, never both | [CONSTITUTION.md](../../CONSTITUTION.md#estate-separation) |
 | `registry-completeness` | window | What a change decided is recorded where decisions live | [CONSTITUTION.md](../../CONSTITUTION.md#registry-completeness) |
+| `amendment-pairing` | hook | The law moves with its test, its row and its statute | [CONSTITUTION.md](../../CONSTITUTION.md#amendment-pairing) |
+| `doctrine-citation` | window | A change to a settled domain names the decision it answers to | [CONSTITUTION.md](../../CONSTITUTION.md#doctrine-citation) |
 | `waiver-docket` | hook / window | Every exception spent names a row in the register of exceptions | [CONSTITUTION.md](../../CONSTITUTION.md#waiver-docket) |
 
 All four were vendored shell directives in `governance-kit/audit` until #1005.

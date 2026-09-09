@@ -2,7 +2,7 @@
 
 This document is the source of truth for the principles, guidelines, and directives that govern development in this repository. Every directive here is enforced by an executable test under `.governance/`. A directive with no enforcing test is not a directive — it is a wish.
 
-> **The cardinal rule:** Amendments to this constitution must land in the same commit as the change to its enforcing test. No exceptions.
+> **The cardinal rule:** amendments to this constitution land in the same commit as the change to their enforcing test. It is no longer a callout anybody has to remember — it is [`amendment-pairing`](#amendment-pairing), and it refuses the commit.
 
 ## Compliance
 
@@ -82,6 +82,26 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Host enforces**: nothing mechanical. The docket is a law-glob path (`.governance/**`), so the boundary is the owner's review through `.github/CODEOWNERS` plus branch protection — owner-enabled, outside this repository, and **not confirmed enabled**. That is why the pack declares it `warn`.
 - **Rule observes**: that a row exists, matches, predates the change and is not marked pending. Whether the exception should have been granted at all is the owner's, which is precisely what `authority: pending owner grant` records.
 - **Exceptions**: none. A rule whose whole subject is exceptions cannot have one — the docket row IS the exception, and a row that cannot be written honestly is a waiver that should not be spent.
+
+### amendment-pairing
+
+- **Directive**: the law moves with the evidence that it works. Three pairings. (1) A commit that changes `.governance/law/rules/<id>.mjs` changes `.governance/law/rules/<id>.test.mjs` too — in that commit or in the set being staged alongside it. (2) A commit that ADDS a rule file adds a row for it in some `.governance/law/packs/*.json`; `severity: "off"` is the way to repeal a rule on the record rather than by deleting it. (3) A rule whose declared severity or door moved between the merge-base and HEAD requires a change to this file in the same arrival. Merge commits are skipped — a merge has no diff of its own. At the hook door only the staged set is judged; in the window every commit of the range is.
+- **Rationale**: this document opened for four months with a callout — "amendments to this constitution must land in the same commit as the change to its enforcing test, no exceptions" — and nothing checked it. A cardinal rule enforced by attention is enforced by nobody, which is the failure this whole umbrella exists to answer. The three pairings are the same idea at three depths: a rule changed without its cases is a claim rather than a reviewable change; a rule nothing enables is dead code that reads as law; and a severity or a door moved on its own is a repeal nobody announced, because severity and door **are** the policy — the door decides which rules run and the row decides how loud each one is ([R-1005-11](docs/decisions.md#governance-as-a-constitution-1005)).
+- **Enforced by**: `.governance/law/rules/amendment-pairing.mjs` (cases: `.governance/law/rules/amendment-pairing.test.mjs`), over `arrival.commits[].files`, `arrival.pending.files` and `arrival.law.rules` against `arrival.law.rulesAtBase`, which the generator reads from the pack files on both sides of the merge-base.
+- **Door**: hook. All three pairings are answerable from the change set alone, and the hook is the one place where the author is still holding the change.
+- **Host enforces**: the `governance` workflow, which runs the window door on every pull request. The hook refusal is local and bypassable like every hook; CI re-asks.
+- **Rule observes**: nothing beyond the pairing. Whether the cases are GOOD cases is the reviewer's; that they were written at all is mechanical.
+- **Exceptions**: none, and deliberately so. Every escape this rule could offer is a way to land a rule change with no evidence, which is the thing it exists to prevent. A change that genuinely cannot pair belongs in two commits.
+
+### doctrine-citation
+
+- **Directive**: a pack declares its **doctrine domains** — `{ id, paths, decision }` rows in `.governance/law/packs/*.json`, where `decision` is a `docs/decisions.md` anchor. An arrival touching a domain's paths cites that anchor, or the issue the anchor ends with, in a receipt it touched or in a commit body; otherwise it is one finding per domain. Separately, a ruling recorded in a touched receipt — a bold id such as `**R19**`, `**W6-D1**` or `**R-1005-19**` — whose paragraph cites no issue and no `docs/decisions.md` anchor is a finding. The five domains declared today are the vault schema, the design tokens, the PR gate, the mobile replica, and the law itself.
+- **Rationale**: the expensive failures in this repository are not changes that broke something; they are changes made in a settled area by somebody who did not know it was settled. Naming the decision costs a phrase and tells the next reader which argument this change is already inside of. The ruling half is the sharper one: [#1002](https://github.com/srikanth235/centraid/issues/1002) merged a receipt carrying `**W6-D1**` and `**W6-D2**` with nothing behind either — rules invented in a document nobody would ever look at for rules, which is how doctrine drifts without any decision being reversed.
+- **Enforced by**: `.governance/law/rules/doctrine-citation.mjs` (cases: `.governance/law/rules/doctrine-citation.test.mjs`), over `arrival.law.domains`, `arrival.files`, `arrival.commits[].body` and `arrival.registries.receipts[*].{rulings,cites}`. The generator extracts each ruling id, its line and what its paragraph cites; a table row is its own paragraph, so two rulings in one table cannot lend each other a citation neither wrote.
+- **Door**: window. Whether a citation is the RIGHT one is a reading, and a reading happens at review time.
+- **Host enforces**: the owner's review. There is no mechanical backing for "this change is inside that doctrine", which is why the pack declares it `warn` — a red gate must not stand in for a reading nobody has done.
+- **Rule observes**: that a citation exists. Never that it is apt, and never that the doctrine was followed.
+- **Exceptions**: per-commit waiver `governance: allow-doctrine-citation <reason>` in the commit body, with a docket row (see [waiver-docket](#waiver-docket)). A change genuinely outside every declared domain files nothing, because no domain was touched.
 
 ### gateway-engine-mode-agnostic
 

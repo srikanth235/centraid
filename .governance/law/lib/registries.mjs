@@ -205,6 +205,23 @@ export function collectFrozen(range, pending) {
 }
 
 /**
+ * Every citation in a document: issue numbers and `docs/decisions.md` anchors.
+ *
+ * @param {string} text The document.
+ * @returns {string[]} Sorted, de-duplicated citations.
+ */
+export function collectCites(text) {
+  const cites = new Set();
+  for (const match of text.matchAll(/#(?<number>[0-9]{2,7})\b/gu)) {
+    cites.add(`#${match.groups.number}`);
+  }
+  for (const match of text.matchAll(/decisions\.md(?<anchor>#[a-z0-9-]+)/gu)) {
+    cites.add(`docs/decisions.md${match.groups.anchor}`);
+  }
+  return [...cites].sort(byteCompare);
+}
+
+/**
  * A ruling id as a receipt writes one: `**R13**`, `**W4-D1**`, `**R-1005-19**`.
  */
 const RULING_ID = /\*\*(?<id>R-?[0-9]+(?:-[0-9]+)?|W[0-9]+-D[0-9]+)\*\*/gu;
@@ -344,6 +361,10 @@ export function collectReceipts(range, pending) {
       // a rule never judges a receipt nobody opened, so parsing every one of
       // them would grow the record by megabytes to answer nothing.
       rulings: touchedPaths.has(file) ? collectRulings(text) : [],
+      // Everything this receipt cites, anywhere in it: the issues it names and
+      // the `docs/decisions.md` anchors it links. `doctrine-citation` asks
+      // whether a change that touched a doctrine domain said WHY here.
+      cites: touchedPaths.has(file) ? collectCites(text) : [],
       recordsRuling:
         decisions.trim() !== "" ||
         /\*\*(?:R-?[0-9]+-[0-9]+|R[0-9]+|W[0-9]+-D[0-9]+)\*\*/u.test(text) ||

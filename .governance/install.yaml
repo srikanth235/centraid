@@ -20,13 +20,13 @@ install_assets_seeded:
 collisions: []
 managed_digests:
   .github/workflows/governance.yml: 220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb
-  .governance/law/arrival.mjs: ce059c193487f05506944b7296deef3cbcdea3bbea05f1618e368a9a8f8033f8
+  .governance/law/arrival.mjs: 9ea082e26a2975519084bec1026f9e03bcef633be6886dd9c62722a137acf40a
   .governance/law/lib/digest.mjs: e7f8fda369bf8637336463a54947704ad719846d2ec6c3a24074ea8906ebbf80
   .governance/law/lib/estates.mjs: 3b73a52a710392595368fe65c35d79878b4ff80a7ba3b3352d13dc6980ca03d6
   .governance/law/lib/gates.mjs: 1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0
   .governance/law/lib/git.mjs: 6efb64e992fad3d047ace07b4e0e746ae75713287418ae59ded8c9d7cf6fcf42
   .governance/law/lib/managed.mjs: c89576d4531424399fefe3043a2e75803335fcb908cefd0d1980e796a078de76
-  .governance/law/lib/registries.mjs: 9bc3a640b85142a68efdc5e1b99dec39b3912386fb03e81b2470756bba363756
+  .governance/law/lib/registries.mjs: 8869f0c1ab5a72b7b552e2345973255d059e42693af8783cccccbb38cafa4288
   .governance/law/lib/rule.mjs: 23809bab1f9b82bb09851091f04263353acae1c6c2554061301c86c5d94e9e1a
   .governance/law/lib/waivers.mjs: 7b4fb12e0707e420599ee856c31a456895d97b269a6e15d27882a7f8e4964aa3
   .governance/lib.sh: 19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37

@@ -56,7 +56,7 @@ test("replaying #1002's squash reproduces the recorded findings exactly", async 
   assert.deepEqual(comparable(report), JSON.parse(readFileSync(EXPECTED, "utf8")));
 });
 
-test("the replay is not vacuous: it names the two failures #1002 would have had", async () => {
+test("the replay is not vacuous: it names the failures #1002 would have had", async () => {
   const expected = JSON.parse(readFileSync(EXPECTED, "utf8"));
   const by = (id) => expected.messages.filter((message) => message.ruleId === `law/${id}`);
   const estate = by("estate-separation");
@@ -67,6 +67,15 @@ test("the replay is not vacuous: it names the two failures #1002 would have had"
   const registry = by("registry-completeness");
   assert.equal(registry.length, 1);
   assert.match(registry[0].message, /CHANGELOG\.md carries no line citing #996/u);
+  // The uncited ruling: #1002's receipt wrote two rules down and cited nothing
+  // for either, which is how doctrine drifts with no decision being reversed.
+  const doctrine = by("doctrine-citation");
+  assert.equal(doctrine.length, 2);
+  assert.match(doctrine[0].message, /receipts\/issue-996-one-vault-every-seat\.md:\d+/u);
+  assert.match(doctrine[0].message, /records ruling W6-D[12] and cites nothing/u);
+  // Every waiver #1002 spent, held against a register that did not exist when
+  // it merged — the seven the docket now enumerates.
+  assert.equal(by("waiver-docket").length, 7);
   // The four ported rules passed on it, which is the control: the two new
   // directives are catching something the old catalog genuinely could not.
   for (const id of ["commit-message-format", "doc-integrity", "receipt-per-issue"]) {
