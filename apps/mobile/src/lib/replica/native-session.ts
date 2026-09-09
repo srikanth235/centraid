@@ -301,6 +301,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
   updateGatewayBase(baseUrl: string): void {
     if (this.#closed || this.#gatewayAuth.baseUrl === baseUrl) return;
     this.#gatewayAuth.baseUrl = baseUrl;
+    // THE SEAT MOVES WITH THE SESSION. It was opened before the tunnel existed
+    // (its file carries the outbox, which cannot wait for the network), so the
+    // base it holds is a placeholder or a previous launch's port. Rebasing the
+    // feed alone left the snapshot and log doors pointed at a dead address and
+    // the copy permanently empty.
+    this.#seat.updateGatewayBase(baseUrl);
     const foreground = this.#appState
       ? this.#appState.currentState !== "background"
       : true;

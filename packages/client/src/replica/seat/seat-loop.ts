@@ -59,11 +59,34 @@ export interface SeatLoopOptions {
 
 export class SeatLoop {
   #state: SeatState | undefined;
+  /*
+   * THE BASE IS NOT A CONSTANT ON EVERY HOST (#996 follow-up).
+   *
+   * A browser seat's gateway origin is the page's own, fixed for the life of
+   * the tab. A phone's is not: the seat is opened from disk BEFORE the network
+   * — the outbox has to be durable for a write made offline — and the real
+   * base only exists once the loopback tunnel over iroh comes up, on a port
+   * chosen per launch. Held as a readonly option, the seat asked a dead
+   * address for the snapshot and every log page, forever: bootstrap never
+   * landed, the file stayed empty, and Home rendered a correct empty replica
+   * over a vault full of rows.
+   *
+   * So the base is state, not configuration, and `updateGatewayBase` is the
+   * seat's half of the rebase the change feed and the session already got.
+   */
+  #baseUrl: string;
 
   constructor(
     private readonly channel: SeatChannel,
     private readonly options: SeatLoopOptions
-  ) {}
+  ) {
+    this.#baseUrl = options.baseUrl;
+  }
+
+  /** Point the snapshot and log doors at a new gateway base (see `#baseUrl`). */
+  updateGatewayBase(baseUrl: string): void {
+    this.#baseUrl = baseUrl;
+  }
 
   /** Open the file this seat already holds, if it holds one. */
   async open(): Promise<void> {
@@ -176,7 +199,7 @@ export class SeatLoop {
   }
 
   private url(path: string, search?: Record<string, string>): string {
-    const url = new URL(path, this.options.baseUrl);
+    const url = new URL(path, this.#baseUrl);
     for (const [key, value] of Object.entries(search ?? {}))
       url.searchParams.set(key, value);
     return url.toString();

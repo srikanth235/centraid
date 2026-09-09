@@ -68,6 +68,16 @@ jobs:
           java-version: "17"
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      # GENERATE THE ANDROID PROJECT (#996). `apps/mobile/android` is a prebuild
+      # output and is gitignored, so `working-directory: apps/mobile/android`
+      # below names a directory that does not exist until this step runs. The
+      # enrolled `eas-build` job needs no equivalent: EAS prebuilds on its own
+      # workers from the same inputs.
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: bun run native:prebuild
       - name: assembleDebug (scaffold — no release signing)
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon

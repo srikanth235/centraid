@@ -1,7 +1,8 @@
-/* The §8 consent gate (issue #712 C1) — lifted out of Photos'
-   EnrichmentConsent.module.css, byte-for-byte, so the one visual change is
-   zero: both call sites (Photos' face detection, Docs' capture-time OCR)
-   read this file now instead of each carrying their own copy.
+/* The §8 consent gate (issue #712 C1) — the web renderer's sheet, shared by
+   every consent moment rather than copied per app. Photos' face detection no
+   longer asks one: recognition is on by default and ambient (ruled
+   2026-09-09), so the surviving grammar is Docs' capture-time OCR and
+   whatever asks next.
 
    Two panels of paper and ink, then the note. Nothing here is a fill except
    the one filled answer (`kit-btn primary`), because a consent question is

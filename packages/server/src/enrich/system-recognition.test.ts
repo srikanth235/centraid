@@ -4,10 +4,10 @@
  * This list is small and load-bearing in three different places, and one of them
  * is easy to get backwards: membership here is what makes the scheduler reconcile
  * honour a recipe's `enabled` bit instead of the experimental-automations gate
- * (`serve/build-gateway.ts`). An off-by-default recipe therefore BELONGS here —
- * leaving it out would make it an ordinary automation that only arms when the
- * experimental gate is on, which is a different product promise than "opt-in".
- * The assertions below pin that reading against the shipped manifests.
+ * (`serve/build-gateway.ts`). Since the 2026-09-09 ruling every listed recipe
+ * ships ON, so that filter is the OPT-OUT: turning one off is what drops its
+ * scheduler registration and its data cursor. The assertions below pin that
+ * reading against the shipped manifests.
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -27,7 +27,10 @@ const BLUEPRINTS_ROOT = path.dirname(
   require.resolve("@centraid/blueprints/package.json")
 );
 
-function manifestOf(id: string): { enabled?: boolean } {
+function manifestOf(id: string): {
+  enabled?: boolean;
+  triggers?: unknown[];
+} {
   return JSON.parse(
     readFileSync(
       path.join(
@@ -40,7 +43,7 @@ function manifestOf(id: string): { enabled?: boolean } {
       ),
       "utf8"
     )
-  ) as { enabled?: boolean };
+  ) as { enabled?: boolean; triggers?: unknown[] };
 }
 
 describe("system recognition lane", () => {
@@ -71,10 +74,23 @@ describe("system recognition lane", () => {
     }
   });
 
-  it("place-names ships disabled, which is what makes it opt-in", () => {
-    // The reconcile in build-gateway.ts filters these rows on `row.enabled`, so
-    // this one bit is the whole opt-in mechanism: no scheduler registration and
-    // no data cursor until a member turns it on.
-    expect(manifestOf("place-names").enabled).toBe(false);
+  it.each([...SYSTEM_RECOGNITION_TEMPLATE_IDS])(
+    "%s ships enabled, so a fresh vault recognizes on ingest",
+    (id) => {
+      // Ruled 2026-09-09: every bundled recognition recipe is on by default,
+      // `faces` included. The reconcile in build-gateway.ts filters these rows
+      // on `row.enabled`, so that bit is now the whole OPT-OUT mechanism — a
+      // recipe a member switches off holds no scheduler registration and
+      // bootstraps no data cursor.
+      expect(manifestOf(id).enabled).toBe(true);
+    }
+  );
+
+  it("faces fires on media ingest, not only on its request queue", () => {
+    // The queue is still the PRIORITY lane inside the handler; the trigger is
+    // what makes the ambient library reachable at all.
+    expect(manifestOf("faces").triggers).toStrictEqual([
+      { kind: "data", entities: ["media.asset"], every: "*/5 * * * *" },
+    ]);
   });
 });

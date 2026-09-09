@@ -4,7 +4,7 @@
 // in it, which are selected, which writes the member's role permits, and what
 // each refusal says. None of that is geometry. Splitting the sheet out is the
 // `*.styles.ts` convention this directory already keeps (PhotoLightbox,
-// PhotosLibrary, PhotoEditor, FaceReview, EnrichmentConsent), and it leaves the
+// PhotosLibrary, PhotoEditor, FaceReview, PeopleEmptyState), and it leaves the
 // screen reading as data + routes.
 //
 // COLOUR-TAKING, unlike PhotosLibrary's colourless sheet: several rules here

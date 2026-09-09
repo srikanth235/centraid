@@ -7,8 +7,12 @@
 // (`photos-collections.ts`). `kind === "video"` already has its own door
 // (Collections' shelf, `PhotoStateView`'s `videos` mode).
 //
-// DETECT FACES (#724) opens the consent gate, NEVER the `request-enrichment`
-// write; omitted entirely when the caller passes no handler.
+// PRIORITISE FACES (#724, re-ruled 2026-09-09) opens the People shelf, where
+// the one priority ask lives — never the `request-enrichment` write itself.
+// Recognition is ambient; the row moves a library SOONER, not WHETHER. Omitted
+// entirely when the caller passes no handler.
+
+import { PRIORITISE_ACTION } from "@centraid/blueprints/apps/photos/enrichment-consent";
 
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
 import type { DetectFacesAvailability } from "./people-model";
@@ -59,8 +63,8 @@ export function libraryMenuGroups({
                 key: "detect-faces",
                 // One text slot per row, so a refusal rides after an em dash.
                 label: detectFaces.availability.available
-                  ? "Detect faces"
-                  : `Detect faces — ${detectFaces.availability.reason ?? "not available yet"}`,
+                  ? PRIORITISE_ACTION
+                  : `${PRIORITISE_ACTION} — ${detectFaces.availability.reason ?? "not available yet"}`,
                 icon: "users",
                 disabled: !detectFaces.availability.available,
                 onSelect: detectFaces.onDetectFaces,

@@ -3634,6 +3634,7 @@ export async function buildGateway(
           automationTurns: experimental.automations,
           automations: experimental.automations,
           connectors: experimental.connectors,
+          seatReplica: true,
         },
       })
     ),

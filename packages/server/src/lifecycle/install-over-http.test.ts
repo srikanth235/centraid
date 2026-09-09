@@ -190,8 +190,10 @@ describe("install-over-http scenarios", () => {
       "embed-text/embed-text",
       "faces/faces",
     ]) {
+      // On by default since 2026-09-09: a fresh vault recognizes on ingest,
+      // and the toggle below is the member's opt-OUT.
       expect(rows.find((row) => row.ref === ref)).toMatchObject({
-        enabled: false,
+        enabled: true,
         systemLane: "recognition",
       });
     }
@@ -250,12 +252,15 @@ describe("install-over-http scenarios", () => {
       }
     );
 
+    // The owner control that matters now is turning a recipe OFF: mount-time
+    // materialization re-publishes the bundled snapshot on every boot, and it
+    // must carry that answer forward rather than re-enabling from the manifest.
     const enabled = await fetch(
       `${handle.url}/centraid/_automations/set-enabled?ref=photo-ocr%2Fphoto-ocr`,
       {
         method: "POST",
         headers: jsonAuth(),
-        body: JSON.stringify({ enabled: true, publish: true }),
+        body: JSON.stringify({ enabled: false, publish: true }),
       }
     );
     expect(enabled.status).toBe(200);
@@ -308,7 +313,7 @@ describe("install-over-http scenarios", () => {
     expect(
       restartedRows.rows.find((row) => row.ref === "photo-ocr/photo-ocr")
     ).toMatchObject({
-      enabled: true,
+      enabled: false,
       manifest: {
         requires: { model: "openai/gpt-4o-mini" },
         enrich: { delegateStep: { selected: "delegate" } },

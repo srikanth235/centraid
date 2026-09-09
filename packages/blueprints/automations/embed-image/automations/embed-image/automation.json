@@ -2,7 +2,7 @@
   "name": "Image embeddings",
   "version": "0.1.0",
   "description": "Embeds new photograph previews in bounded cursor batches.",
-  "enabled": false,
+  "enabled": true,
   "prompt": "Build my seat-local similarity index from preview derivatives in bounded batches.",
   "triggers": [
     {

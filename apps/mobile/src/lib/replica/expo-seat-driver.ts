@@ -6,6 +6,7 @@ import type {
   SeatSqliteDriver,
 } from "@centraid/client/replica/native";
 
+import { pathToFileUri } from "../../../modules/centraid-storage";
 import { keyPragma } from "./expo-sqlite-driver";
 import { asReplicaStorageError } from "./replica-storage-error";
 
@@ -45,7 +46,24 @@ export class ExpoSeatDriver implements SeatSqliteDriver {
       const db = openDatabaseSync(
         options.name,
         options.useNewConnection === true ? { useNewConnection: true } : {},
-        options.location
+        // A URI, NOT A PATH, and the seat's copy depends on it (#996 follow-up).
+        //
+        // expo-sqlite joins this directory with the name and hands the string
+        // to the native module, which resolves it with `URL(string:)` on iOS.
+        // A plain path is not a URL: it parses SCHEMELESS, so `toFilePath()`
+        // returns `absoluteString` — the percent-ENCODED string — and the seat
+        // opened `Library/Application%20Support/CentraidReplica/…`, a second
+        // empty file one directory over from the one the bootstrap installs
+        // through expo-file-system. Every handler's SQL then answered
+        // `no such table`, on a phone holding a complete copy.
+        //
+        // `file://` makes it a file URL on both hosts: iOS decodes it back to
+        // the real path, and Android's `Uri.path` does the same. The space is
+        // encoded here rather than left raw so the string is a valid URL by
+        // construction instead of by the platform's leniency.
+        options.location === undefined
+          ? undefined
+          : encodeURI(pathToFileUri(options.location))
       );
       // The key is the first statement on the handle, before any PRAGMA the
       // seat's own open block runs — those are writes.

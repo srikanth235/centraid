@@ -1,5 +1,5 @@
 // Geometry and type for Face review. COLOURLESS on purpose, same as
-// EnrichmentConsent.styles.ts — every colour comes from `useTheme()` at the
+// PeopleEmptyState.styles.ts — every colour comes from `useTheme()` at the
 // call site, so one sheet serves light and dark.
 import { StyleSheet } from "react-native";
 

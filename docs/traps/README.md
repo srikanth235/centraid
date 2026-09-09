@@ -9,7 +9,7 @@ Read the matching trap before working near its area; each one was paid for once.
 | [wal-checkpoint.md](wal-checkpoint.md) | Unsafe SQLite/WAL copies |
 | [electron-screenshot.md](electron-screenshot.md) | Electron `capturePage` / Playwright screenshots |
 | [manifest-regeneration.md](manifest-regeneration.md) | `manifest.json` / vendor rebuilds |
-| [mobile-native-state.md](mobile-native-state.md) | Mobile recipe completeness vs fingerprint ratchet (L1–L4) |
+| [mobile-native-state.md](mobile-native-state.md) | Mobile native INPUT purity vs the fingerprint ratchet (L1–L4) |
 | [coverage-run-filters.md](coverage-run-filters.md) | Filtering a vitest coverage run without over-measuring |
 | [device-only-runtime-gaps.md](device-only-runtime-gaps.md) | APIs Hermes and Android's libcore lack that Node and the desktop JVM have |
 | [emulator-snapshot-settings.md](emulator-snapshot-settings.md) | `settings put global` on a lane that restores a cached AVD RAM snapshot |

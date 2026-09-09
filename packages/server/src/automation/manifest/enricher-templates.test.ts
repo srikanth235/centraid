@@ -42,6 +42,21 @@ const ENRICHERS = [
 ] as const;
 /** The reminder's whole logic IS its condition trigger. */
 const CONDITION_ENRICHERS = new Set(["renewal-reminders"]);
+/**
+ * The bundled RECOGNITION recipes, on by default since the 2026-09-09 ruling:
+ * they run local models over the member's own bytes, cost nothing per fire, and
+ * are turned OFF from the recipe's toggle (or the vault's `enrich_policy` tier).
+ * Everything else in `ENRICHERS` still ships disabled — `doc-text-extractor`
+ * most pointedly, because it is a billed model turn on the gateway lane rather
+ * than a bundled recognizer, so enabling it is the member's own ask.
+ */
+const ON_BY_DEFAULT = new Set([
+  "photo-ocr",
+  "transcript",
+  "embed-image",
+  "embed-text",
+  "faces",
+]);
 
 /** A valid one-page born-digital PDF for the generated handler's pdf.js path. */
 function searchablePdf(text: string): Buffer {
@@ -260,12 +275,14 @@ function stubCtx(options: {
 
 describe("enricher template hygiene", () => {
   it.each(ENRICHERS.map((id) => [id] as const))(
-    "%s: manifest parses, data trigger + vault block cohere, ships disabled",
+    "%s: manifest parses, data trigger + vault block cohere, ships at its ruled default",
     (id) => {
       const manifest = parseManifest(
         readFileSync(path.join(automationDir(id), "automation.json"), "utf8")
       );
-      expect(manifest.enabled).toBe(false); // enabling IS the owner's opt-in
+      // Recognition is on and turned OFF by the member; a billed or
+      // owner-authored enricher is off and turned ON by them.
+      expect(manifest.enabled).toBe(ON_BY_DEFAULT.has(id));
       expect(manifest.vault).toBeDefined();
       const wantKind = CONDITION_ENRICHERS.has(id) ? "condition" : "data";
       expect(manifest.triggers.some((t) => t.kind === wantKind)).toBe(true);

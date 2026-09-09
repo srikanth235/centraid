@@ -345,14 +345,17 @@ jobs:
       #
       #   fp<hash>  @expo/fingerprint over the native inputs ONLY — config
       #             plugins, autolinked native modules (read from node_modules,
-      #             so the install MUST run first), the bare apps/mobile/ios
-      #             project, the resolved Expo config, and the RN version. It
-      #             deliberately ignores apps/mobile/src/** (Metro-served JS) and
-      #             THIS workflow file, so editing either no longer forces a
-      #             rebuild — the exact over-hashing the old hand-rolled
-      #             `git ls-files | shasum` key suffered (it mixed in the whole
-      #             e2e.yml and all of ios/, including gitignored build products,
-      #             so any workflow edit or leftover build dir busted the cache).
+      #             so the install MUST run first), the resolved Expo config, and
+      #             the RN version. Since #996 it also ignores apps/mobile/ios
+      #             itself: that project is a prebuild OUTPUT of those same
+      #             inputs, and hashing it would key the cache on whether the
+      #             step below had already run. It deliberately ignores
+      #             apps/mobile/src/** (Metro-served JS) and THIS workflow file,
+      #             so editing either no longer forces a rebuild — the exact
+      #             over-hashing the old hand-rolled `git ls-files | shasum` key
+      #             suffered (it mixed in the whole e2e.yml and all of ios/,
+      #             including build products, so any workflow edit or leftover
+      #             build dir busted the cache).
       #             The hashing lives in apps/mobile/scripts/native-fingerprint.mjs.
       #   xc<hash>  the host toolchain (Xcode build + iphonesimulator SDK).
       #             @expo/fingerprint hashes the PROJECT, not the MACHINE — so a
@@ -396,6 +399,24 @@ jobs:
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
+      # GENERATE THE iOS PROJECT (#996). `apps/mobile/ios` is a prebuild output
+      # and is gitignored, so the checkout carries no Xcode project, no Podfile
+      # and no Pods. `expo run:ios` inside ios-simulator-install.sh would
+      # generate one implicitly, but two things need it earlier and explicitly:
+      # the INJECT path reads `ios/Pods/hermes-engine/.../hermesc` without ever
+      # invoking `expo run:ios`, and `native:prebuild` also builds
+      # `vec.xcframework`, which has to exist BEFORE `pod install` or the
+      # withSQLiteVecExtension podspec vendors a path that is not there.
+      #
+      # LANG is set for CocoaPods: the ruby CLI aborts on a non-UTF-8 default
+      # external encoding when a pod path or a spec carries a non-ASCII byte,
+      # and the macOS runner's default locale is not UTF-8.
+      - name: Generate the iOS project and build vec.xcframework
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          LANG: en_US.UTF-8
+        run: bun run native:prebuild
       - name: Build and start the tokenless mobile test gateway
         # Scoped to the gateway's dependency subgraph instead of a full
         # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
@@ -465,17 +486,24 @@ jobs:
         with:
           path: ~/.cache/centraid-mobile-e2e
           key: ios-shell-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
-      # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
-      # `pod install` entirely — and `pod install` is the ONLY thing that runs
-      # the centraid-tunnel podspec's prepare_command, which downloads the
-      # git-ignored Iroh.xcframework and IrohLib.swift. Those are a vendored
-      # framework and a compiled source of that pod, so skipping the fetch breaks
-      # the native build outright. It would not even fail on the first run: the
-      # cache is empty then. It would fail on the second native change, which is
-      # exactly the path a pods cache exists to serve. It is also why the
-      # `hermesc` the injection path below needs is banked beside the `.app`
-      # rather than restored with the Pods that built it.
+      # Deliberately NOT caching CocoaPods, and under CNG there is not even a
+      # tree to cache it into until the prebuild step above has run. The reason
+      # survives the migration: a Pods cache hit would leave
+      # ios/Pods/Manifest.lock matching the Podfile.lock prebuild just wrote, so
+      # Expo CLI skips `pod install` entirely — and `pod install` is the ONLY
+      # thing that runs the centraid-tunnel podspec's prepare_command, which
+      # downloads the git-ignored Iroh.xcframework and IrohLib.swift. Those are a
+      # vendored framework and a compiled source of that pod, so skipping the
+      # fetch breaks the native build outright. It would not even fail on the
+      # first run: the cache is empty then. It would fail on the second native
+      # change, which is exactly the path a pods cache exists to serve. It is
+      # also why the `hermesc` the injection path below needs is banked beside
+      # the `.app` rather than restored with the Pods that built it.
+      #
+      # Podfile.lock is a per-run artifact now (#996): prebuild + `pod install`
+      # regenerate it from this checkout's node_modules on every lane, so there
+      # is no committed lock for it to drift from and nothing to verify it
+      # against.
       #
       # ONE STEP REPLACES THREE (#915 Wave 2). "Build and install", "Save" and
       # "Install the cached app" were three mutually exclusive branches spelled
@@ -620,9 +648,11 @@ jobs:
       # Fingerprint the Android native build inputs — same mechanism as the iOS
       # job (apps/mobile/scripts/native-fingerprint.mjs). Keyed so a JS-only
       # commit reuses the cached .apk while any native-input change rebuilds it.
-      # The Android build toolchain (Gradle/AGP/NDK/compileSdk) lives in the
-      # tracked android/ gradle files, which the fingerprint already hashes; the
-      # host JDK is folded in separately (jdk<hash>), mirroring iOS's xc<hash>.
+      # The Android build toolchain (Gradle/AGP/NDK/compileSdk) is decided by
+      # app.config.ts and the withCentraidAndroidBuild plugin since #996, and the
+      # fingerprint hashes both; the generated android/ tree it writes is
+      # ignored, being an output of exactly those inputs. The host JDK is folded
+      # in separately (jdk<hash>), mirroring iOS's xc<hash>.
       # #892 Phase 0 — `apk_key` adds the embedded Hermes bundle's inputs to the
       # native ones and keys the APK; `hash` stays native-only and keys the gradle
       # BUILD DIRECTORY. @expo/fingerprint ignores `src/**` by design, which was
@@ -643,6 +673,19 @@ jobs:
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
           echo "Android fingerprints: fp=$fp js=$js jdk=$jdk"
+      # GENERATE THE ANDROID PROJECT (#996). `apps/mobile/android` is a prebuild
+      # output and is gitignored, so the checkout has no gradle project for
+      # `android-emulator-install.sh` to invoke `./gradlew` in, and every cache
+      # below restores directories that live inside it. Prebuild runs BEFORE
+      # both restores so the banked `.gradle` and `build` directories land on
+      # top of the project they were produced against. It runs AFTER the
+      # fingerprint because the fingerprint ignores the generated trees, so
+      # prebuilding first would change nothing except the claim.
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: bun run native:prebuild
       - name: Install Maestro CLI
         # #890 W0 — pinned to the SAME version iOS pins. This lane installed
         # whatever `releases/latest` served, so the two platforms could be
@@ -715,10 +758,10 @@ jobs:
             node_modules/@*/*/android/build
             node_modules/@*/*/android/.cxx
             !node_modules/@centraid/**
-          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ needs.resolve-candidate.outputs.sha }}
+          key: android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ needs.resolve-candidate.outputs.sha }}
           restore-keys: |
-            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-v2-${{ runner.os }}-
+            android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v3-${{ runner.os }}-
       # AVD snapshot caching — the reactivecircus best practice. The first run
       # boots a clean emulator once and banks a booted-state snapshot; every
       # later run resumes from it in seconds instead of a ~40s cold boot. It also
@@ -851,7 +894,7 @@ jobs:
             node_modules/@*/*/android/build
             node_modules/@*/*/android/.cxx
             !node_modules/@centraid/**
-          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ needs.resolve-candidate.outputs.sha }}
+          key: android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ needs.resolve-candidate.outputs.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

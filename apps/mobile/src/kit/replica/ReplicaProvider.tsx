@@ -504,6 +504,14 @@ export function ReplicaProvider({
           mountKey,
           value: {
             session,
+            // THE SEAT TRAVELS IN THIS OBJECT, not in a `publish` before it.
+            // `publish` patches an EXISTING entry for this mount key, so every
+            // call made before this first `setBuilt` is a no-op — the seat
+            // published at open was dropped, `replica.seat?.page` stayed
+            // undefined, and `useSeatRead` reads that as no session at all:
+            // every app screen drew "not connected" and every Home tile read 0
+            // over a fully bootstrapped copy.
+            seat: openedSeat,
             gatewayBase: identity.auth.baseUrl,
             vaultId: activeRef.current?.vaultId ?? identity.auth.vaultId,
             scopes: liveScopes.map((scope) => ({

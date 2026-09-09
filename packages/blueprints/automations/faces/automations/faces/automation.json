@@ -1,19 +1,19 @@
 {
   "name": "Face recognition",
   "version": "0.1.0",
-  "description": "Processes only the explicit faces consent queue in bounded batches; never scans the ambient library.",
-  "enabled": false,
-  "prompt": "When I explicitly request face detection, process only those consent-tagged photographs in bounded batches.",
+  "description": "Detects faces in new photographs in bounded batches, explicit requests first. On by default; turn it off here or set enrichment to off.",
+  "enabled": true,
+  "prompt": "Detect faces in bounded batches: drain photographs I explicitly asked about first, then work through the rest of the library behind a cursor.",
   "triggers": [
     {
       "kind": "data",
-      "entities": ["enrich.request"],
+      "entities": ["media.asset"],
       "every": "*/5 * * * *"
     }
   ],
   "requires": {},
   "vault": {
-    "why": "Reads open face-consent requests and photograph previews, then writes validated face regions and drains only satisfied requests.",
+    "why": "Reads open face requests and photograph previews, then writes validated face regions and drains satisfied requests.",
     "scopes": [
       {
         "schema": "core",

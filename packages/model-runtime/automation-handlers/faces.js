@@ -77,6 +77,35 @@ async function seedConsentCursor(ctx, model) {
   return latest.rows?.[0]?.model === model ? latest.rows[0].target_id : "";
 }
 
+/**
+ * The ambient pass's cursor seed, the same shape `embed-image` uses: a library
+ * whose NEWEST photograph already carries a stamp at this model was derived
+ * under an earlier run of this recipe, so the walk starts past it instead of
+ * re-reading the whole library. Anything else seeds at the beginning.
+ */
+async function seedAmbientCursor(ctx, model) {
+  const latest = await ctx.vault.read({
+    entity: "media.asset",
+    where: [
+      { column: "kind", op: "in", value: ["photo", "scan"] },
+      { column: "deleted_at", op: "is-null" },
+    ],
+    orderBy: { column: "asset_id", dir: "desc" },
+    limit: 1,
+  });
+  const asset = latest.rows?.[0];
+  if (!asset) return "";
+  const stamps = await ctx.vault.read({
+    entity: "enrich.derivation",
+    where: [
+      { column: "target_id", op: "eq", value: asset.asset_id },
+      { column: "variant", op: "eq", value: "faces" },
+    ],
+    limit: 1,
+  });
+  return stamps.rows?.[0]?.model === model ? asset.asset_id : "";
+}
+
 export default async function handler({ ctx }) {
   const model = modelAvailable();
   if (!model)
@@ -86,6 +115,10 @@ export default async function handler({ ctx }) {
     await ctx.state.set(
       "consentCursor",
       priorModel === undefined ? await seedConsentCursor(ctx, model) : ""
+    );
+    await ctx.state.set(
+      "cursor",
+      priorModel === undefined ? await seedAmbientCursor(ctx, model) : ""
     );
     await ctx.state.set("model", model);
   }
@@ -174,12 +207,46 @@ export default async function handler({ ctx }) {
         continue;
       }
       const result = await deriveAsset(ctx, asset, model);
+      processed.add(asset.asset_id);
       derived += result.derived;
       skipped += result.skipped;
+      // One batch budget across all three passes: whatever the priority lanes
+      // spend is not available to the ambient walk below.
+      remaining -= 1;
     }
     const last = stamps.rows?.at(-1)?.target_id;
     if (last) await ctx.state.set("consentCursor", last);
     if ((stamps.rows?.length ?? 0) === capacity) rearm = true;
+  }
+
+  // The ambient ingest pass, LAST: the priority lanes above (an owner's
+  // explicit ask, a search miss, an on-view request, and content already
+  // carrying a faces stamp) drain first and spend from the same batch budget,
+  // so a busy queue simply leaves the library walk nothing to do this fire.
+  if (remaining > 0) {
+    const cursor = (await ctx.state.get("cursor")) ?? "";
+    const capacity = remaining;
+    const read = await ctx.vault.read({
+      entity: "media.asset",
+      where: [
+        { column: "asset_id", op: "gt", value: cursor },
+        { column: "kind", op: "in", value: ["photo", "scan"] },
+        { column: "deleted_at", op: "is-null" },
+      ],
+      orderBy: { column: "asset_id", dir: "asc" },
+      limit: capacity,
+    });
+    for (const asset of read.rows ?? []) {
+      if (processed.has(asset.asset_id)) continue;
+      const result = await deriveAsset(ctx, asset, model);
+      processed.add(asset.asset_id);
+      derived += result.derived;
+      skipped += result.skipped;
+      remaining -= 1;
+    }
+    const last = read.rows?.at(-1)?.asset_id;
+    if (last) await ctx.state.set("cursor", last);
+    if ((read.rows?.length ?? 0) === capacity) rearm = true;
   }
 
   if (drained.length)
@@ -193,7 +260,7 @@ export default async function handler({ ctx }) {
       input: {},
     });
   return {
-    summary: `faces derived ${derived}; skipped ${skipped}; consent queue batch ${requests.rows?.length ?? 0}/${BATCH}`,
+    summary: `faces derived ${derived}; skipped ${skipped}; request queue batch ${requests.rows?.length ?? 0}/${BATCH}`,
     output: { derived, skipped, drained: drained.length, model, rearm },
   };
 }

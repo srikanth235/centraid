@@ -2,7 +2,7 @@
   "name": "Text embeddings",
   "version": "0.1.0",
   "description": "Embeds new text derivatives in bounded cursor batches.",
-  "enabled": false,
+  "enabled": true,
   "prompt": "Build my seat-local text similarity index from extracted text in bounded batches.",
   "triggers": [
     {

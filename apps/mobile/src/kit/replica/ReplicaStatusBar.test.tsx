@@ -6,7 +6,7 @@
 // forbids.
 //
 // react-native is mocked to plain DOM elements (the same approach
-// `EnrichmentConsent.test.tsx` uses) so this can run under jsdom.
+// `PeopleEmptyState.test.tsx` uses) so this can run under jsdom.
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";

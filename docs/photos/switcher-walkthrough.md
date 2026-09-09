@@ -23,7 +23,7 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
 
 5. **Search by caption, person, place, album.**
    - Grouped hits with counts and a door into the owning surface; caption matches ride device-local FTS, so this works offline.
-   - **Status: SHIPPED** for captions, places, albums, and the consent-gated people pipeline.
+   - **Status: SHIPPED** for captions, places, albums, and the people pipeline.
 
 6. **Search by what is _in_ the picture (semantic and text-in-photo).**
    - Type "beach sunset"; scored matches appear as a "Photos that look like…" hit group and join the grid. Type a word that appears as text inside a photograph (a sign, a receipt) and it can match too.
@@ -48,7 +48,7 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
 
 11. **Review faces, name people.**
     - "Is this the same person?" confirmation, never a wall of unlabelled clusters. Confirm a proposal onto a party, name an unnamed cluster, or forget a person entirely.
-    - **Status: SHIPPED** — consent-gated detection → embedding → party-anchored matching → stranger clustering on the bundled YuNet/SFace pair; `media.forget_person` provides the delete cascade required by [SECURITY.md](../../SECURITY.md). **Partial: People shelf wiring** ([`PhotosPeopleView.tsx`](../../apps/mobile/src/apps/photos/PhotosPeopleView.tsx)); the roster, review queue, and forget-person command work while shelf-wiring polish remains open.
+    - **Status: SHIPPED** — on-ingest detection → embedding → party-anchored matching → stranger clustering on the bundled YuNet/SFace pair; `media.forget_person` provides the delete cascade required by [SECURITY.md](../../SECURITY.md). **Partial: People shelf wiring** ([`PhotosPeopleView.tsx`](../../apps/mobile/src/apps/photos/PhotosPeopleView.tsx)); the roster, review queue, and forget-person command work while shelf-wiring polish remains open.
 
 12. **Edit a photograph.**
     - Crop, rotate, straighten — non-destructive, round-tripping with desktop.

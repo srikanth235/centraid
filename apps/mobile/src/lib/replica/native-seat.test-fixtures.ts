@@ -88,6 +88,10 @@ function nodeNativeSeat(options: NodeSeatOptions): NodeNativeSeat & {
   return {
     driver: () => drivers.at(-1)!,
     outbox: (): IntentRecordStore => loop.outbox(),
+    // The fixture's seat has no door behind it, but it is still the port the
+    // product rebases, so it carries the same call rather than a narrower one.
+    updateGatewayBase: (baseUrl: string): void =>
+      loop.updateGatewayBase(baseUrl),
     search: (request: SeatSearchRequest): Promise<ReplicaSearchWireResult> =>
       seatSearchEnvelopes(loop, request),
     baseVersions: (

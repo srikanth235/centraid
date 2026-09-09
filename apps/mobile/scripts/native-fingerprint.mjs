@@ -16,9 +16,11 @@ import { pathToFileURL } from "node:url";
  * editing the workflow file — or anything under `ios/` that a prior build had
  * dirtied — invalidated the cache and forced a full rebuild on an otherwise
  * JS-only night. @expo/fingerprint hashes exactly the native inputs (config
- * plugins, autolinked native modules, the bare `ios/` + `android/` projects,
- * the resolved Expo config, the RN version) and ignores `src/**` and the CI
- * YAML, so the warm path is reached far more often. See the e2e.yml comment on
+ * plugins, autolinked native modules, the resolved Expo config, the RN
+ * version) and ignores `src/**` and the CI YAML, so the warm path is reached
+ * far more often. Since #996 it also ignores the generated `ios/` + `android/`
+ * projects: those are prebuild OUTPUTS of the same inputs, and hashing them
+ * would key the cache on whether a prebuild had already run. See the e2e.yml comment on
  * the fingerprint step for how the host toolchain (Xcode/SDK) is folded in
  * separately — fingerprint hashes the *project*, not the *machine*.
  *
@@ -34,15 +36,18 @@ const projectRoot = path.resolve(import.meta.dirname, "..");
 
 export const NATIVE_FINGERPRINT_IGNORE_PATHS = [
   "native-fingerprints.json",
-  // Xcode creates this nested workspace on first open/build. The committed
-  // app uses Centraid.xcworkspace; this ignored IDE metadata is absent on a
-  // clean Linux checkout and must not make the iOS ratchet host-stateful.
-  "ios/Centraid.xcodeproj/project.xcworkspace/**/*",
-  // Kotlin 2.1 writes local daemon error reports here during a native
-  // compile. They describe the machine/build attempt, not binary inputs,
-  // and Expo's defaults do not yet exclude this directory. Without this,
-  // merely running the compile gate changes the next cache key.
-  "android/.kotlin/**/*",
+  // THE PREBUILD OUTPUTS ARE NOT INPUTS (#996). `ios/` and `android/` are
+  // generated and gitignored, so they exist on a developer's disk and do not
+  // exist on a fresh CI checkout. Hashing either would make every fingerprint
+  // host-stateful: the same commit would produce two values depending on
+  // whether a prebuild had run, and the committed ratchet could never settle.
+  // Ignoring them leaves @expo/fingerprint's `bareNativeDir` source present but
+  // empty (`hash: null`), which is exactly the value it takes when the
+  // directory is absent — the two states become indistinguishable, which is the
+  // point. `verify-native-state.mjs` L3 asserts that emptiness, so deleting
+  // these two entries fails a gate rather than quietly localising every hash.
+  "ios/**",
+  "android/**",
   // CocoaPods reconstructs these git-ignored Iroh bindings from the tag
   // and checksum pinned in CentraidTunnel.podspec. Hashing the downloaded
   // products as well as that recipe makes the result depend on whether
@@ -78,7 +83,13 @@ export function nativeFingerprintOptions(platform) {
   };
 }
 
-export async function fingerprintForPlatform(platform) {
+/**
+ * The hash AND the source list it was computed from. The identity ratchet
+ * (`verify-native-state.mjs`) checks the sources as well as the digest: a
+ * fingerprint that quietly stopped reading a config plugin would keep matching
+ * the committed hash forever, which is a silent gate rather than a red one.
+ */
+export async function fingerprintReportForPlatform(platform) {
   const fingerprint = await createFingerprintAsync(
     projectRoot,
     nativeFingerprintOptions(platform)
@@ -89,7 +100,11 @@ export async function fingerprintForPlatform(platform) {
       `empty ${platform} fingerprint — refusing to emit a constant key`
     );
   }
-  return fingerprint.hash;
+  return { hash: fingerprint.hash, sources: fingerprint.sources };
+}
+
+export async function fingerprintForPlatform(platform) {
+  return (await fingerprintReportForPlatform(platform)).hash;
 }
 
 if (

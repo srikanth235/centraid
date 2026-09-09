@@ -3,10 +3,14 @@
 <plist version="1.0">
   <dict>
     <key>EXUpdatesCheckOnLaunch</key>
-    <string>ALWAYS</string>
+    <string>NEVER</string>
+    <key>EXUpdatesEnableBsdiffPatchSupport</key>
+    <true/>
     <key>EXUpdatesEnabled</key>
     <false/>
     <key>EXUpdatesLaunchWaitMs</key>
     <integer>0</integer>
+    <key>EXUpdatesRuntimeVersion</key>
+    <string>0.1.0</string>
   </dict>
 </plist>

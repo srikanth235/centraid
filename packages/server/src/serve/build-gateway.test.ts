@@ -967,10 +967,11 @@ describe("build-gateway scenarios", () => {
       expect(byName.get("connections")).toMatchObject({ status: "ok" });
       // Reconcile ran during start() and reported the scheduler healthy.
       expect(byName.get("automations")?.status).toBe("ok");
-      // Bundled enricher templates install disabled by default on the boot vault.
+      // Every bundled recognition recipe installs ENABLED on a fresh vault
+      // (ruled 2026-09-09), so the boot vault reports the full lane armed.
       expect(byName.get("enrichment")).toMatchObject({
         status: "ok",
-        detail: "0 of 5 enrichers enabled",
+        detail: "5 of 5 enrichers enabled",
       });
       expect(byName.get("blob-sweep")?.status).toBe("ok");
       // Host-pushed failure carries its structured event.

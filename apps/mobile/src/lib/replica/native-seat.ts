@@ -76,6 +76,8 @@ export interface NativeSeatOptions {
  */
 export interface NativeSeatPort {
   outbox: () => IntentRecordStore;
+  /** Rebase the snapshot and log doors after the tunnel moves (see below). */
+  updateGatewayBase: (baseUrl: string) => void;
   search: (request: SeatSearchRequest) => Promise<ReplicaSearchWireResult>;
   baseVersions: (
     mutations: readonly OptimisticMutation[]
@@ -131,6 +133,20 @@ export class NativeSeat implements NativeSeatPort {
 
   sync(): Promise<SeatWatermark | undefined> {
     return this.loop.sync();
+  }
+
+  /**
+   * THE SEAT IS REBASED TOO, NOT ONLY THE FEED AND THE SESSION.
+   *
+   * This phone's gateway base is an ephemeral loopback port that the tunnel
+   * picks per launch, and the seat is opened from disk BEFORE it exists (the
+   * outbox has to be durable for a write made offline). Left at the base it
+   * opened with, the seat asks a dead address for the snapshot and for every
+   * log page — bootstrap never lands and the copy stays empty behind a Home
+   * that is rendering it correctly.
+   */
+  updateGatewayBase(baseUrl: string): void {
+    this.loop.updateGatewayBase(baseUrl);
   }
 
   /** The outbox in this phone's seat file — the queue's durable store (R24). */

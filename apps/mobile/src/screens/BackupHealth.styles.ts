@@ -3,8 +3,8 @@ import { StyleSheet } from "react-native";
 import { borders, spacing, t, radii } from "../kit/theme";
 
 export const styles = StyleSheet.create({
-  // The consent moment's geometry mirrors EnrichmentConsent.styles.ts on
-  // purpose: one consent grammar, whichever surface is asking (#711).
+  // The consent moment's geometry mirrors the shared ConsentGate on purpose:
+  // one consent grammar, whichever surface is asking (#711).
   action: {
     alignItems: "center",
     borderRadius: radii.lg,

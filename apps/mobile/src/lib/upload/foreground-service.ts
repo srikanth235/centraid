@@ -1,14 +1,6 @@
-import { NativeModules, Platform } from "react-native";
+import { Platform } from "react-native";
 
-interface NativeUploadForegroundModule {
-  start: (total: number) => void;
-  update: (completed: number, total: number) => void;
-  stop: () => void;
-}
-
-const native = NativeModules.CentraidUploadForeground as
-  | NativeUploadForegroundModule
-  | undefined;
+import { nativeUploadForeground as native } from "../../../modules/centraid-upload";
 
 // Refcounted so concurrent producers cannot tear the service down under one
 // another (F8): each `start` increments, and only the `stop` that returns the

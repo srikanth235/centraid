@@ -1,20 +1,15 @@
 // @vitest-environment jsdom
-// THE ENRICHMENT CONSENT MOMENT (v4 handoff §8) — a privacy regression net.
-//   1. NO ENRICHMENT WRITE WITHOUT AN EXPLICIT ANSWER: mounting, opening,
-//      reading the policy, declining, closing all write nothing. No
-//      device-side faces producer exists here; that answer cannot reach
-//      `window.centraid.write`.
-//   2. THE EGRESS DISCLOSURE STAYS ON SCREEN: the cloud panel is the only
-//      place Photos says photographs would leave the device; it renders even
-//      though no cloud helper can be chosen.
-// Copy asserted via the shared consent module (the native client renders the
-// same one). Views via renderToStaticMarkup; gate driven directly.
+// PHOTOS' ENRICHMENT COPY + THE PEOPLE EMPTY STATE — a privacy regression net.
+// Recognition is ambient (ruled 2026-09-09), so three rules survive:
+//   1. THE EMPTY STATE IS HONEST — it names the recipe and its switch, and
+//      never presents itself as a consent moment.
+//   2. NO WRITE WITHOUT AN EXPLICIT PRESS — the priority action writes exactly
+//      ONE manual `enrich.request`, tagged `faces` by the action handler.
+//   3. THE EGRESS DISCLOSURE SURVIVES ITS RENDERER — pinned here, where
+//      softening it fails, rather than deleted with the panel that showed it.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { createElement } from "react";
-import type { ComponentType } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const app = (rel: string): string =>
@@ -24,45 +19,41 @@ interface AnswerAvailability {
   available: boolean;
   reason?: string;
 }
-interface ConsentProps {
-  count: number | null;
-  onDevice: AnswerAvailability;
-  cloud: AnswerAvailability;
-  busy?: boolean;
-  answered?: "device" | "declined" | null;
-  onRunOnDevice: () => void;
-  onDecline: () => void;
-  onChooseCloud?: () => void;
+interface PeopleEmptyStateProps {
+  count: number;
+  statusLine: string;
+  line: string;
+  action: string;
+  prioritise: AnswerAvailability;
+  busy: boolean;
+  prioritised: boolean;
+  onPrioritise: () => void;
 }
-interface EnrichmentGate {
+interface PeopleEmptyState {
   ensurePolicyLoaded: () => void;
-  props: (count: number) => ConsentProps | null;
+  props: (count: number) => PeopleEmptyStateProps;
 }
 interface ConsentCopy {
-  ON_DEVICE_PANEL: {
-    eyebrow: string;
-    body: string;
-    facts: readonly { label: string; value: string; net?: boolean }[];
-    action: string;
-    action2?: string;
-  };
   CLOUD_PANEL: {
     eyebrow: string;
     title: string;
     body: string;
     facts: readonly { label: string; value: string; net?: boolean }[];
     action: string;
+    net?: boolean;
   };
   CLOUD_EGRESS_DISCLOSURE: string;
-  ENRICHMENT_NOTE: string;
+  CLOUD_ANSWER: AnswerAvailability;
   ENRICHMENT_STATUS_LINE: string;
+  ENRICHMENT_PRIORITISED_NOTE: string;
+  ENRICHMENT_QUEUED_NOTE: string;
   ENRICHMENT_UNAVAILABLE: Record<string, string>;
-  onDeviceTitle: (count: number) => string;
-  deviceAnswerFor: (
+  PEOPLE_EMPTY_LINE: string;
+  PRIORITISE_ACTION: string;
+  prioritiseAnswerFor: (
     tier: string | null | undefined,
     denied?: boolean
   ) => AnswerAvailability;
-  CLOUD_ANSWER: AnswerAvailability;
 }
 
 (
@@ -70,135 +61,137 @@ interface ConsentCopy {
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const copy = (await import(app("enrichment-consent.ts"))) as ConsentCopy;
-const { EnrichmentConsent } = (await import(
-  app("components/EnrichmentConsent.tsx")
-)) as { EnrichmentConsent: ComponentType<ConsentProps> };
-const { createEnrichmentGate } = (await import(app("enrichment-gate.ts"))) as {
-  createEnrichmentGate: (opts: { onData: () => void }) => EnrichmentGate;
+const { createPeopleEmptyState } = (await import(
+  app("enrichment-gate.ts")
+)) as {
+  createPeopleEmptyState: (opts: { onData: () => void }) => PeopleEmptyState;
 };
 
-/** Every fact the two panels must state — the handoff's nine, verbatim. */
-const NINE_FACTS: readonly [string, string][] = [
-  ["where it would run", "on this device"],
-  ["what leaves the device", "nothing"],
-  ["how long", "about 40 minutes, resumable"],
-  ["what it writes", "a faces column in your library"],
-  ["undo", "delete the faces column; photographs are untouched"],
-  ["where it would run", "a cloud helper you have named"],
-  ["what leaves the device", "a downscaled copy of every photograph"],
-  ["how long", "about 6 minutes"],
-  ["receipt", "one per batch, in the grants ledger"],
-];
-
-function markup(props: Partial<ConsentProps> = {}): string {
-  return renderToStaticMarkup(
-    createElement(EnrichmentConsent, {
-      count: 6214,
-      onDevice: { available: true },
-      cloud: copy.CLOUD_ANSWER,
-      onRunOnDevice: () => undefined,
-      onDecline: () => undefined,
-      ...props,
-    })
-  );
-}
-
-describe("the enrichment consent surface", () => {
-  it("asks the question over the live count, before anything runs", () => {
-    expect(markup()).toContain("Run face detection over 6,214 photographs?");
-    // A library of one is still a sentence, not `1 photographs`.
-    expect(copy.onDeviceTitle(1)).toBe("Run face detection over 1 photograph?");
-  });
-
-  it("states all nine facts, in both panels", () => {
-    const html = markup();
-    for (const [label, value] of NINE_FACTS) {
-      expect(html).toContain(label);
-      expect(html).toContain(value);
-    }
-  });
-
-  it("carries the egress disclosure in the cloud panel, flagged", () => {
-    const html = markup();
-    // THE line. Its absence is the defect this file exists to catch.
-    expect(html).toContain(copy.CLOUD_EGRESS_DISCLOSURE);
-    expect(html).toContain("a downscaled copy of every photograph");
-    // Flagged as egress: `data-net` is what the stylesheet turns into the
-    // 2px `--net` rule, so this pins the mark, not a class name.
-    expect(html).toMatch(
-      /data-net="true"[^]*?a downscaled copy of every photograph/u
-    );
-    expect(html).toContain("Faster, and the photographs leave this device.");
-  });
-
-  it("renders the cloud panel even though no cloud helper can be chosen", () => {
-    // Present and unavailable, with the reason stated — never omitted;
-    // omitting it removes the disclosure above with it.
-    const html = markup();
-    expect(html).toContain(copy.CLOUD_PANEL.action);
-    expect(html).toContain(copy.ENRICHMENT_UNAVAILABLE.cloudUnavailable);
-    expect(html).toMatch(/Choose the cloud helper[^]*?<\/button>/u);
-    expect(html).toMatch(/disabled=""[^]*?Choose the cloud helper/u);
-  });
-
-  it("says it is not a settings toggle", () => {
-    expect(markup()).toContain(
-      "This is not a settings toggle. It is asked once, answered once, and receipted — and the answer is visible in Privacy afterwards."
-    );
-    expect(copy.ENRICHMENT_NOTE).toContain("asked once, answered once");
-  });
-
-  it("offers both answers, one filled and one plain", () => {
-    const html = markup();
-    expect(html).toContain("Run on this device");
-    expect(html).toContain("Not now");
-    // The ONE filled element is the run answer (§18); the cloud answer is
-    // outlined destructive, never a fill.
-    expect(html).toMatch(/class="kit-btn primary"[^]*?Run on this device/u);
-    expect(html).toMatch(
-      /class="kit-btn destructive"[^]*?Choose the cloud helper/u
+describe("the People shelf's empty-state copy", () => {
+  it("claims only what an empty roster shows", () => {
+    // No client reads a "has recognition ever run" fact.
+    expect(copy.ENRICHMENT_STATUS_LINE).toBe(
+      "No faces have been grouped here yet"
     );
   });
 
-  it("withholds the device answer when the library points at the gateway tier", () => {
-    // "what leaves the device: nothing" is FALSE there, so no answer; name it.
-    expect(copy.deviceAnswerFor("gateway").available).toBe(false);
-    expect(copy.deviceAnswerFor("gateway").reason).toBe(
-      copy.ENRICHMENT_UNAVAILABLE.modelTier
-    );
-    expect(copy.deviceAnswerFor("off").available).toBe(false);
-    expect(copy.deviceAnswerFor("device")).toStrictEqual({
-      available: false,
-      reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
-    });
-    expect(copy.deviceAnswerFor(null).available).toBe(false);
-    expect(copy.deviceAnswerFor("device", true).available).toBe(false);
+  it("names the recipe that groups faces, and the switch that stops it", () => {
+    expect(copy.PEOPLE_EMPTY_LINE).toContain("Faces recipe");
+    expect(copy.PEOPLE_EMPTY_LINE).toContain("Automations → Recognition");
+    // Ambient, not answered: the sentence says WHEN, never WHETHER.
+    expect(copy.PEOPLE_EMPTY_LINE).toContain("as photographs arrive");
   });
 
-  it("[C5] also accepts the pre-rename 'local'/'model' spellings, the same way", () => {
-    // A raw `enrich.policy` row can bypass vault's normalizing read — see
-    // this file's C5 COMPAT comment.
-    expect(copy.deviceAnswerFor("local")).toStrictEqual({
-      available: false,
-      reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
-    });
-    expect(copy.deviceAnswerFor("model").available).toBe(false);
-    expect(copy.deviceAnswerFor("model").reason).toBe(
-      copy.ENRICHMENT_UNAVAILABLE.modelTier
+  it("carries no consent doctrine anywhere in the module", () => {
+    // The retired handoff's promises: any of them back here is a surface
+    // claiming to hold recognition back, which it does not.
+    const all = Object.values(copy)
+      .flatMap((value) =>
+        typeof value === "string"
+          ? [value]
+          : typeof value === "object" && value !== null
+            ? Object.values(value as Record<string, unknown>).map(String)
+            : []
+      )
+      .join(" ");
+    for (const banned of [
+      "asked once",
+      "answered once",
+      "Run face detection",
+      "Not now",
+      "settings toggle",
+      "Nothing was requested",
+    ])
+      expect(all).not.toContain(banned);
+  });
+
+  it("promises the priority ask makes a run SOONER, never WHETHER", () => {
+    expect(copy.ENRICHMENT_PRIORITISED_NOTE).toContain("sooner");
+    expect(copy.ENRICHMENT_PRIORITISED_NOTE).not.toMatch(/whether/iu);
+    // The hold says only that DELIVERY waits; the ambient pass runs anyway.
+    expect(copy.ENRICHMENT_QUEUED_NOTE).toContain("reconnects");
+    expect(copy.ENRICHMENT_QUEUED_NOTE).not.toContain("nothing runs");
+  });
+
+  it("labels the action as an action, not a question", () => {
+    expect(copy.PRIORITISE_ACTION).toBe("Prioritise faces");
+  });
+});
+
+describe("the provider-egress disclosure", () => {
+  it("states the exact egress sentence, flagged as egress", () => {
+    // THE line — it survives the panel that used to render it.
+    expect(copy.CLOUD_EGRESS_DISCLOSURE).toBe(
+      "a downscaled copy of every photograph"
+    );
+    const fact = copy.CLOUD_PANEL.facts.find(
+      (item) => item.value === copy.CLOUD_EGRESS_DISCLOSURE
+    );
+    expect(fact?.label).toBe("what leaves the device");
+    expect(fact?.net).toBe(true);
+    // The panel itself is bordered `--net`: the panel IS the disclosure.
+    expect(copy.CLOUD_PANEL.net).toBe(true);
+    expect(copy.CLOUD_PANEL.body).toContain(
+      "Faster, and the photographs leave this device."
+    );
+    expect(copy.CLOUD_PANEL.body).toContain(
+      "separate consent with its own receipt"
+    );
+  });
+
+  it("states, rather than hides, that no helper can be chosen from an app", () => {
+    expect(copy.CLOUD_ANSWER.available).toBe(false);
+    expect(copy.CLOUD_ANSWER.reason).toBe(
+      copy.ENRICHMENT_UNAVAILABLE.cloudUnavailable
     );
   });
 });
 
-describe("the enrichment gate (issue #712 C2, re-homed into People's empty state)", () => {
-  // `enrichment-gate.ts` drives `PeopleShelf`'s `gate` prop — a plain closure
-  // over `window.centraid`, driven directly. LOAD-BEARING: no enrichment write
-  // without an explicit answer.
+describe("whether the priority ask is offerable", () => {
+  it("is takeable on the gateway tier — the Faces recipe's declared lane", () => {
+    expect(copy.prioritiseAnswerFor("gateway")).toStrictEqual({
+      available: true,
+    });
+  });
+
+  it("withholds it on the device tier, and says the lane is why", () => {
+    expect(copy.prioritiseAnswerFor("device")).toStrictEqual({
+      available: false,
+      reason: copy.ENRICHMENT_UNAVAILABLE.deviceTier,
+    });
+    expect(copy.ENRICHMENT_UNAVAILABLE.deviceTier).toContain(
+      "runs on the gateway"
+    );
+  });
+
+  it("keeps `off` meaning what it means: no run to prioritise", () => {
+    expect(copy.prioritiseAnswerFor("off")).toStrictEqual({
+      available: false,
+      reason: copy.ENRICHMENT_UNAVAILABLE.offTier,
+    });
+    expect(copy.ENRICHMENT_UNAVAILABLE.offTier).toContain("is off");
+    // The tier may never be framed as what withholds a RUN elsewhere.
+    expect(copy.ENRICHMENT_UNAVAILABLE.deviceTier).not.toContain("is off");
+  });
+
+  it("says nothing it cannot know while the policy is unread or denied", () => {
+    expect(copy.prioritiseAnswerFor(null)).toStrictEqual({ available: false });
+    expect(copy.prioritiseAnswerFor("gateway", true)).toStrictEqual({
+      available: false,
+      reason: copy.ENRICHMENT_UNAVAILABLE.denied,
+    });
+  });
+});
+
+describe("the People empty state (issue #712 C2, re-homed onto the shelf)", () => {
+  // `enrichment-gate.ts` drives `PeopleShelf`'s `emptyState` prop, driven
+  // directly. LOAD-BEARING: no write without an explicit press.
   const write = vi.fn<(intent: unknown) => Promise<{ status: string }>>(
     async () => ({ status: "executed" })
   );
   const read = vi.fn<(query: unknown) => Promise<{ tier: string }>>(
     async () => ({
-      tier: "device",
+      tier: "gateway",
     })
   );
   const onData = vi.fn<() => void>();
@@ -210,56 +203,75 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     (window as unknown as { centraid: unknown }).centraid = { read, write };
   });
 
+  async function loaded(): Promise<PeopleEmptyState> {
+    const shelf = createPeopleEmptyState({ onData });
+    shelf.ensurePolicyLoaded();
+    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
+    return shelf;
+  }
+
   it("writes nothing on creation, and nothing on reading the policy", async () => {
-    const gate = createEnrichmentGate({ onData });
+    const shelf = createPeopleEmptyState({ onData });
     expect(write).not.toHaveBeenCalled();
-    gate.ensurePolicyLoaded();
+    shelf.ensurePolicyLoaded();
     expect(write).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    expect(gate.props(6214)?.onDevice).toStrictEqual({
-      available: false,
-      reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
-    });
-  });
-
-  it("writes nothing when the member declines", async () => {
-    const gate = createEnrichmentGate({ onData });
-    gate.ensurePolicyLoaded();
-    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    gate.props(6214)?.onDecline();
-    expect(write).not.toHaveBeenCalled();
-    // Declining answers the question — the caller falls back to its own copy
-    // rather than leaving a half-answered gate up.
-    expect(gate.props(6214)).toBeNull();
-  });
-
-  it("does not issue a request when no device-side faces producer exists", async () => {
-    const gate = createEnrichmentGate({ onData });
-    gate.ensurePolicyLoaded();
-    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    expect(write).not.toHaveBeenCalled();
-    gate.props(6214)?.onRunOnDevice();
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("repeated unavailable on-device answers remain write-free", async () => {
-    const gate = createEnrichmentGate({ onData });
-    gate.ensurePolicyLoaded();
-    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    gate.props(6214)?.onRunOnDevice();
-    gate.props(6214)?.onRunOnDevice();
+  it("renders the honest empty state, always — it is never withheld", async () => {
+    const shelf = await loaded();
+    const props = shelf.props(6214);
+    expect(props.statusLine).toBe(copy.ENRICHMENT_STATUS_LINE);
+    expect(props.line).toBe(copy.PEOPLE_EMPTY_LINE);
+    expect(props.action).toBe(copy.PRIORITISE_ACTION);
+    expect(props.count).toBe(6214);
+    // No latch, no "answered": there is no question to close.
+    expect(props.prioritised).toBe(false);
+  });
+
+  it("writes exactly one manual request, from the press alone", async () => {
+    const shelf = await loaded();
+    expect(shelf.props(6214).prioritise).toStrictEqual({ available: true });
+    shelf.props(6214).onPrioritise();
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    const intent = write.mock.calls[0]?.[0] as {
+      action: string;
+      input: Record<string, unknown>;
+    };
+    // `reason: "manual"` + `capability: "faces"` are pinned by the handler.
+    expect(intent.action).toBe("request-enrichment");
+    expect(intent.input["entity_type"]).toBe("media.asset");
+    await vi.waitFor(() => expect(shelf.props(6214).prioritised).toBe(true));
+  });
+
+  it("never issues a second request once one has landed", async () => {
+    const shelf = await loaded();
+    shelf.props(6214).onPrioritise();
+    await vi.waitFor(() => expect(shelf.props(6214).prioritised).toBe(true));
+    shelf.props(6214).onPrioritise();
+    shelf.props(6214).onPrioritise();
+    expect(write).toHaveBeenCalledOnce();
+  });
+
+  it("refuses to write when the tier could not honour the request", async () => {
+    read.mockResolvedValueOnce({ tier: "device" });
+    const shelf = await loaded();
+    const props = shelf.props(6214);
+    expect(props.prioritise.available).toBe(false);
+    expect(props.prioritise.reason).toBe(
+      copy.ENRICHMENT_UNAVAILABLE.deviceTier
+    );
+    props.onPrioritise();
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("refuses the answer outright when the library's tier cannot honour it", async () => {
-    read.mockResolvedValueOnce({ tier: "gateway" });
-    const gate = createEnrichmentGate({ onData });
-    gate.ensurePolicyLoaded();
-    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    const props = gate.props(6214);
-    expect(props?.onDevice.available).toBe(false);
-    expect(props?.onDevice.reason).toBe(copy.ENRICHMENT_UNAVAILABLE.modelTier);
-    props?.onRunOnDevice();
+  it("refuses to write when the policy cannot be read at all", async () => {
+    read.mockRejectedValueOnce(new Error("denied"));
+    const shelf = await loaded();
+    const props = shelf.props(6214);
+    expect(props.prioritise.reason).toBe(copy.ENRICHMENT_UNAVAILABLE.denied);
+    props.onPrioritise();
     expect(write).not.toHaveBeenCalled();
   });
 });

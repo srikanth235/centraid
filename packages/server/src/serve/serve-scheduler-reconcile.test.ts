@@ -15,6 +15,10 @@ import type * as automation from "@centraid/server/automation";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import {
+  SYSTEM_RECOGNITION_REFS,
+  isSystemRecognitionRef,
+} from "../enrich/system-recognition.ts";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "./serve.ts";
 import type { GatewayServeHandle } from "./serve.ts";
@@ -58,8 +62,13 @@ function bootstrapRejectingScheduler(): automation.LocalScheduler {
     async list() {
       return [];
     },
+    // Only the PUBLISHED automation's bootstrap fails. The boot reconcile now
+    // carries the bundled recognition recipes (on by default since
+    // 2026-09-09), and rejecting those would fail `serve()` itself rather than
+    // the publish this test is about.
     async reconcile(desired) {
-      if (desired.length > 0) throw new Error("cursor bootstrap failed");
+      if (desired.some((row) => row.ownerApp === "brief"))
+        throw new Error("cursor bootstrap failed");
       return { added: [], updated: [], removed: [] };
     },
     nudge() {},
@@ -191,7 +200,14 @@ describe("serve-scheduler-reconcile scenarios", () => {
     // The publish's onAppLive reconciled the scheduler with the new row.
     await waitFor(() => reconcileCalls.length > baseline);
     const last = reconcileCalls.at(-1)!;
-    expect(last.rows.map((r) => r.ref)).toStrictEqual(["brief/brief"]);
+    // The recognition lane is armed on every boot — every bundled recipe ships
+    // enabled — so the row this publish added is what distinguishes the call.
+    expect(
+      last.rows.map((r) => r.ref).filter((ref) => !isSystemRecognitionRef(ref))
+    ).toStrictEqual(["brief/brief"]);
+    expect(last.rows.map((r) => r.ref)).toStrictEqual(
+      expect.arrayContaining([...SYSTEM_RECOGNITION_REFS])
+    );
     // The gateway started its scheduler exactly once, on boot.
     expect(started).toBe(1);
   });

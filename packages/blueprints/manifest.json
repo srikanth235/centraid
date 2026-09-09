@@ -698,7 +698,6 @@
         "components/Editor.tsx",
         "components/EmptyTrash.module.css",
         "components/EmptyTrash.tsx",
-        "components/EnrichmentConsent.tsx",
         "components/FaceReview.module.css",
         "components/FaceReview.tsx",
         "components/Import.module.css",

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ReactNative = typeof import("react-native");
 type ForegroundServiceModule = typeof import("./foreground-service");
+type UploadModule = typeof import("../../../modules/centraid-upload");
 
 const native = {
   start: vi.fn<(total: number) => void>(),
@@ -20,7 +21,14 @@ vi.mock(import("react-native"), () => ({
   Platform: {
     OS: "android",
   } as unknown as ReactNative["Platform"],
-  NativeModules: { CentraidUploadForeground: native },
+}));
+
+// The autolinked Android module. `requireOptionalNativeModule` needs a real
+// native runtime, so the local module is stubbed at its own boundary — the
+// same seam every other `modules/centraid-*` import is mocked at.
+vi.mock(import("../../../modules/centraid-upload"), () => ({
+  nativeUploadForeground:
+    native as unknown as UploadModule["nativeUploadForeground"],
 }));
 
 let UploadForegroundService: ForegroundServiceModule["UploadForegroundService"];

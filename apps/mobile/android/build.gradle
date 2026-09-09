@@ -19,34 +19,14 @@ allprojects {
     maven { url 'https://www.jitpack.io' }
   }
 
-  // ONE OpenSSL IN THIS APP (#996 wave 3).
-  //
-  // Two native modules link OpenSSL from the same Maven artifact at different
-  // versions: react-native-quick-crypto asks for 3.6.2-1 (streaming SHA-256
-  // for camera assets, and the WebCrypto AES-GCM/PBKDF2 Hermes has no
-  // provider for), and expo-sqlite asks for 3.3.2-1 the moment
-  // `expo.sqlite.useSQLCipher` is on — SQLCipher IS an OpenSSL consumer
-  // (`-DSQLCIPHER_CRYPTO_OPENSSL`). Unforced, both land in the build and
-  // `:app:mergeReleaseNativeLibs` fails on two `libcrypto.so` per ABI.
-  //
-  // THE FIX IS ONE LIBRARY, NOT A `pickFirst`. Excluding a duplicate would
-  // keep two OpenSSL builds in the tree and bind SQLCipher to whichever the
-  // merger happened to pick; a SQLCipher linked against an OpenSSL it was not
-  // compiled against is a silent data-corruption path, not a packaging
-  // warning. Forcing resolves it before anything is packaged, so there is one
-  // library and every consumer compiled against the headers of the one they
-  // get.
-  //
-  // NEWEST WINS, and the direction matters: OpenSSL 3.x is ABI-stable within
-  // the major line, so code compiled against 3.3 headers runs on 3.6, and the
-  // reverse is not guaranteed. `seat-native-build-config.test.ts` holds the
-  // forced version equal to the newest any consumer asks for, and fails if a
-  // third consumer arrives wanting something else.
+  // ONE OpenSSL IN THIS APP (#996 wave 3) — written by
+  // apps/mobile/plugins/withCentraidAndroidBuild.cjs, which carries the reasoning.
   configurations.all {
     resolutionStrategy {
       force 'io.github.ronickg:openssl:3.6.2-1'
     }
   }
+
 }
 
 apply plugin: "expo-root-project"
