@@ -1,6 +1,26 @@
 {
   "id": "governance-kit/audit",
-  "rules": {},
+  "rules": {
+    "commit-message-format": {
+      "severity": "error",
+      "door": "hook"
+    },
+    "doc-integrity": {
+      "severity": "error",
+      "door": "hook"
+    }
+  },
   "lawPaths": [],
-  "domains": []
+  "domains": [],
+  "options": {
+    "doc-integrity": {
+      "rules": [
+        "frozen-files receipts/*.md",
+        "frozen-section CONSTITUTION.md Evolution Log",
+        "frozen-files COSTS.md",
+        "frozen-files STEERING.md",
+        "frozen-section QUALITY.md Resolved"
+      ]
+    }
+  }
 }

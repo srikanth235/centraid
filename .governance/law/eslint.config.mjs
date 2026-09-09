@@ -48,6 +48,10 @@ export function readPacks() {
       return {
         id: pack.id,
         rules: pack.rules ?? {},
+        // Per-rule options: the shell pack's overlay rows (`.governance/conf/`)
+        // live here now, because a rule's configuration belongs beside the row
+        // that enables it rather than in a second file with its own syntax.
+        options: pack.options ?? {},
         lawPaths: pack.lawPaths ?? [],
         domains: pack.domains ?? [],
         file,
@@ -92,7 +96,7 @@ export async function loadRules() {
   const declared = readPacks().flatMap((pack) =>
     Object.entries(pack.rules)
       .filter(([, row]) => (row?.severity ?? "error") !== "off")
-      .map(([id, row]) => ({ id, row }))
+      .map(([id, row]) => ({ id, row, options: pack.options?.[id] ?? null }))
   );
   // Imported in parallel: rule modules are pure and independent of each other,
   // and a sequential await here would pay the resolver cost once per rule on
@@ -100,13 +104,14 @@ export async function loadRules() {
   const modules = await Promise.all(
     declared.map(({ id }) => import(path.join(HERE, "rules", `${id}.mjs`)))
   );
-  const rows = declared.map(({ id, row }, index) => {
+  const rows = declared.map(({ id, row, options }, index) => {
     const rule = modules[index].default;
     return {
       id,
       severity: row?.severity ?? "error",
       door: row?.door ?? doors[id] ?? rule?.meta?.door ?? "window",
       surface: rule?.meta?.surface ?? "arrival",
+      options,
       rule,
     };
   });
@@ -142,7 +147,10 @@ export async function buildConfig(door = "window", options = {}) {
     Object.fromEntries(
       rows
         .filter((row) => row.surface === surface)
-        .map((row) => [`law/${row.id}`, severityFor(row)])
+        .map((row) => [
+          `law/${row.id}`,
+          row.options ? [severityFor(row), row.options] : severityFor(row),
+        ])
     );
   const plugin = {
     meta: { name: "law", version: "0.0.0" },

@@ -49,8 +49,13 @@ test("an empty law is green, silent, and still says which door ran", async () =>
   assert.equal(report.door, "hook");
 });
 
-test("the real catalog is empty in this wave and both doors build a config", async () => {
-  assert.deepEqual(await loadRules(), []);
+test("the declared catalog resolves and both doors build a config", async () => {
+  const declared = await loadRules();
+  assert.ok(declared.length > 0, "the packs declare no rules");
+  for (const row of declared) {
+    assert.equal(typeof row.rule?.meta?.docs?.url, "string", `${row.id} has no statute link`);
+    assert.ok(["hook", "window", "owner"].includes(row.door));
+  }
   const configs = await Promise.all(["hook", "window"].map((door) => buildConfig(door)));
   for (const config of configs) {
     assert.equal(config.length, 2);

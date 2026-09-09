@@ -100,3 +100,62 @@ export function ruleTester(surface = "arrival") {
       })
     : new RuleTester({ plugins: { json }, language: "json/json" });
 }
+
+/**
+ * Walk a JSON AST to the node a pointer names, so a finding lands on the line
+ * that caused it rather than on the file.
+ *
+ * @param {object} document The `@eslint/json` Document node.
+ * @param {(string|number)[]} pointer Member names and array indices, in order.
+ * @returns {object|null} The value node, or null when the path does not exist.
+ */
+export function locate(document, pointer) {
+  let node = document.body;
+  for (const step of pointer) {
+    if (node?.type === "Object") {
+      const member = node.members.find((entry) => entry.name.value === step);
+      if (!member) return null;
+      node = member.value;
+      continue;
+    }
+    if (node?.type === "Array") {
+      node = node.elements[step];
+      if (!node) return null;
+      continue;
+    }
+    return null;
+  }
+  return node ?? null;
+}
+
+/**
+ * Define a rule over the arrival record.
+ *
+ * The rule receives the parsed record and reports by JSON pointer. It never
+ * sees git, a clock or a network — the generator already did all of that — so
+ * it is a pure function of one document and its options, which is exactly what
+ * `RuleTester` can drive.
+ *
+ * @param {object} spec As `defineRule`, but with `check` instead of `create`.
+ * @param {(arrival: object, ctx: object) => void} spec.check The judgement.
+ * @returns {object} An ESLint rule object.
+ */
+export function defineArrivalRule(spec) {
+  const { check, ...rest } = spec;
+  return defineRule({
+    ...rest,
+    surface: "arrival",
+    create(context) {
+      return {
+        Document(node) {
+          const arrival = JSON.parse(context.sourceCode.getText());
+          check(arrival, {
+            options: context.options[0] ?? {},
+            report: (pointer, message) =>
+              context.report({ node: locate(node, pointer) ?? node, message }),
+          });
+        },
+      };
+    },
+  });
+}

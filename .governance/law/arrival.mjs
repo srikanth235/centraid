@@ -26,8 +26,17 @@ import { readPacks } from "./eslint.config.mjs";
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, "..", "..");
 
-/** The schema version of the record this generator writes. */
-export const SCHEMA = 1;
+/**
+ * The schema version of the record this generator writes.
+ *
+ * 2 (#1005 lane B) added `range.hasBase`, `waivers`, `registries.frozen` and
+ * `registries.receipts` when the vendored `governance-kit/audit` pack was
+ * ported to rules.
+ */
+export const SCHEMA = 2;
+
+/** Branch names the ported directives treated as the trunk. */
+const DEFAULT_BRANCHES = Object.freeze(["origin/main", "origin/master", "main", "master"]);
 
 /**
  * Run git in the repository root and return trimmed stdout.
@@ -82,19 +91,40 @@ export function parseNameStatus(raw) {
 export function resolveRange(explicit) {
   if (explicit) {
     const [base, head = "HEAD"] = explicit.split("..");
-    return {
-      base: git(["rev-parse", base]),
-      head: git(["rev-parse", head]),
-      mergeBase: null,
-    };
+    const resolved = { base: git(["rev-parse", base]), head: git(["rev-parse", head]) };
+    return { ...resolved, mergeBase: resolved.base, hasBase: resolved.base !== resolved.head };
   }
   const head = git(["rev-parse", "HEAD"]);
-  try {
-    const mergeBase = git(["merge-base", "HEAD", "origin/main"]);
-    return { base: mergeBase, head, mergeBase };
-  } catch {
-    return { base: git(["rev-parse", "HEAD~1"]), head, mergeBase: null };
+  // The ported directives all walked this same candidate list and all treated
+  // "the merge-base is HEAD" as "there is no new work" — the case that makes
+  // them skip. `hasBase` carries that distinction into the record so a rule
+  // reproduces the skip without asking git anything.
+  for (const candidate of DEFAULT_BRANCHES) {
+    try {
+      git(["rev-parse", "--verify", candidate]);
+    } catch {
+      continue;
+    }
+    let mergeBase;
+    try {
+      mergeBase = git(["merge-base", "HEAD", candidate]);
+    } catch {
+      continue;
+    }
+    if (mergeBase && mergeBase !== head) {
+      return { base: mergeBase, head, mergeBase, hasBase: true };
+    }
   }
+  // No new work against a trunk. The range is the tip commit alone — which is
+  // exactly what `commit-message-format`'s fallback validated — and `hasBase`
+  // is false, which is what makes `doc-integrity` skip.
+  let base = head;
+  try {
+    base = git(["rev-parse", "HEAD~1"]);
+  } catch {
+    base = head;
+  }
+  return { base, head, mergeBase: null, hasBase: false };
 }
 
 /**
@@ -109,14 +139,15 @@ export function collectCommits(range) {
     .split("\n")
     .filter(Boolean);
   return shas.map((sha) => {
-    const [parents, subject, ...bodyLines] = git([
+    const [parents, authorEmail, subject, ...bodyLines] = git([
       "show",
       "-s",
-      "--format=%P%n%s%n%b",
+      "--format=%P%n%ae%n%s%n%b",
       sha,
     ]).split("\n");
     return {
       sha,
+      authorEmail,
       subject,
       body: bodyLines.join("\n").replace(/\n+$/u, ""),
       parents: parents.split(" ").filter(Boolean),
@@ -205,6 +236,200 @@ export function collectLaw(range) {
     digestAtHead: atHead.digest,
     changed,
   };
+}
+
+/**
+ * In-message waivers, from every commit body in the range and from the pending
+ * message.
+ *
+ * The token is `governance: allow-<directive> ...`, optionally inside an HTML
+ * comment. `doc-integrity` needs a path and a reason; the others need a reason.
+ * A bare token with no reason does not waive - that was true of the shell
+ * directives and stays true here.
+ *
+ * @param {object[]} commits The commits in the range.
+ * @param {object|null} pending The pending commit, if any.
+ * @returns {{directive: string, path: string|null, reason: string, source: string}[]}
+ *   Sorted by (source, directive, path).
+ */
+export function collectWaivers(commits, pending) {
+  const token = /^\s*(?:<!--)?\s*governance:\s*allow-(?<directive>[a-z0-9-]+)\s+(?<rest>.+?)\s*(?:-->)?\s*$/u;
+  const waivers = [];
+  const scan = (text, source) => {
+    for (const line of (text ?? "").split("\n")) {
+      const match = token.exec(line);
+      if (!match) continue;
+      const { directive, rest } = match.groups;
+      const fields = rest.split(/\s+/u).filter(Boolean);
+      // `doc-integrity` is the one path-scoped waiver: `<path> <reason>`. It
+      // needs both fields, so a one-field line is not a waiver at all.
+      if (directive === "doc-integrity") {
+        if (fields.length < 2) continue;
+        waivers.push({ directive, path: fields[0], reason: fields.slice(1).join(" "), source });
+      } else {
+        waivers.push({ directive, path: null, reason: fields.join(" "), source });
+      }
+    }
+  };
+  for (const commit of commits) scan(`${commit.subject}\n${commit.body}`, `commit:${commit.sha}`);
+  if (pending) scan(pending.message, "pending");
+  return waivers.sort((a, b) =>
+    byteCompare(
+      `${a.source} ${a.directive} ${a.path ?? ""}`,
+      `${b.source} ${b.directive} ${b.path ?? ""}`
+    )
+  );
+}
+
+/**
+ * The document-integrity rules a pack declares, as `[mode, target, argument]`.
+ *
+ * `frozen-files receipts/*.md` is a cross-pack invariant in the shell directive
+ * - always restored after the overlay is read - so it is restored here too,
+ * whatever a pack says.
+ *
+ * @returns {{mode: string, target: string, argument: string|null}[]} The rules.
+ */
+export function documentIntegrityRules() {
+  const declared = readPacks().flatMap(
+    (pack) => pack.options?.["doc-integrity"]?.rules ?? []
+  );
+  const rules = [...declared];
+  if (!rules.includes("frozen-files receipts/*.md")) rules.push("frozen-files receipts/*.md");
+  return rules
+    .map((line) => {
+      const [mode, target, ...rest] = line.split(/\s+/u).filter(Boolean);
+      return { mode, target, argument: rest.length > 0 ? rest.join(" ") : null };
+    })
+    .sort((a, b) =>
+      byteCompare(
+        `${a.mode} ${a.target} ${a.argument ?? ""}`,
+        `${b.mode} ${b.target} ${b.argument ?? ""}`
+      )
+    );
+}
+
+/**
+ * `<mode> <path>` glob matching, with `*` crossing `/`.
+ *
+ * That is bash's `[[ "$f" == $glob ]]` semantics, which the shell directive
+ * used deliberately over git's pathspec wildcards, so `receipts/*.md` covers a
+ * nested receipt too.
+ *
+ * @param {string} glob The pattern.
+ * @returns {RegExp} The matcher.
+ */
+function shellGlob(glob) {
+  const body = glob.replace(/[.+^${}()|[\]\\?]/gu, "\\$&").replaceAll("*", ".*");
+  return new RegExp(`^${body}$`, "u");
+}
+
+/**
+ * The lines under `## <heading>` (any heading level) of a document.
+ *
+ * @param {string} text The document.
+ * @param {string} heading The heading text.
+ * @returns {string[]} The section's lines, in order.
+ */
+export function extractSection(text, heading) {
+  const out = [];
+  let inside = false;
+  for (const line of text.split("\n")) {
+    const match = /^#{1,6}\s+(?<title>.*?)\s*$/u.exec(line);
+    if (match) {
+      if (match.groups.title === heading) {
+        inside = true;
+        continue;
+      }
+      if (inside) inside = false;
+      continue;
+    }
+    if (inside) out.push(line);
+  }
+  return out;
+}
+
+/**
+ * The frozen-document registry: for every protected path that exists at the
+ * baseline, what it was and what it is now.
+ *
+ * The generator does the reading; the rule does the judging. A rule cannot open
+ * a git object, so everything the comparison needs - both blob oids, whether
+ * the append-only prefix survived, which frozen-section lines went missing - is
+ * computed once, here.
+ *
+ * @param {object} range The resolved range.
+ * @param {boolean} pending Whether the staged tree is the "current" side.
+ * @returns {object[]} One row per protected path, sorted by path then mode.
+ */
+export function collectFrozen(range, pending) {
+  // No new work against the trunk means nothing to compare: the shell
+  // directive returned green here and so does the record.
+  if (!range.hasBase) return [];
+  const current = pending ? "" : range.head;
+  const shaAt = (rev, file) => {
+    try {
+      return git(["rev-parse", "--verify", `${rev}:${file}`]);
+    } catch {
+      return null;
+    }
+  };
+  const blobAt = (rev, file) =>
+    execFileSync("git", ["cat-file", "blob", `${rev}:${file}`], {
+      cwd: ROOT,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  const baseFiles = git(["ls-tree", "-r", "--name-only", "-z", range.base])
+    .split("\0")
+    .filter(Boolean);
+
+  const rows = [];
+  for (const rule of documentIntegrityRules()) {
+    const targets =
+      rule.mode === "frozen-files"
+        ? baseFiles.filter((file) => shellGlob(rule.target).test(file))
+        : [rule.target];
+    for (const file of targets) {
+      const baseSha = shaAt(range.base, file);
+      if (baseSha === null) continue; // absent at the baseline -> not yet frozen
+      const headSha = shaAt(current, file);
+      const row = {
+        path: file,
+        mode: rule.mode,
+        heading: rule.argument,
+        baseSha,
+        headSha,
+        deleted: headSha === null,
+      };
+      if (rule.mode === "append-only") {
+        let prefixIntact = false;
+        if (headSha !== null) {
+          const before = blobAt(range.base, file);
+          const after = blobAt(current, file);
+          prefixIntact =
+            after.length >= before.length && before.equals(after.subarray(0, before.length));
+        }
+        row.appendOnly = { prefixIntact };
+      }
+      if (rule.mode === "frozen-section") {
+        let missingLines = [];
+        if (headSha !== null) {
+          const present = new Set(
+            extractSection(blobAt(current, file).toString("utf8"), rule.argument)
+          );
+          missingLines = extractSection(
+            blobAt(range.base, file).toString("utf8"),
+            rule.argument
+          )
+            .filter((line) => line.replace(/\s/gu, "") !== "")
+            .filter((line) => !present.has(line));
+        }
+        row.section = { missingLines };
+      }
+      rows.push(row);
+    }
+  }
+  return rows.sort((a, b) => byteCompare(`${a.path} ${a.mode}`, `${b.path} ${b.mode}`));
 }
 
 /**
@@ -323,20 +548,20 @@ export function collectManagedTree() {
  */
 export function buildArrival(options = {}) {
   const range = resolveRange(options.range);
+  const commits = collectCommits(range);
+  const pending = collectPending(options.messageFile ?? null);
   return {
     schema: SCHEMA,
     range,
-    commits: collectCommits(range),
+    commits,
     files: parseNameStatus(
       git(["diff", "-z", "--name-status", `${range.base}..${range.head}`])
     ),
-    pending: collectPending(options.messageFile ?? null),
+    pending,
     law: collectLaw(range),
     managedTree: collectManagedTree(),
-    // Filled by later waves; present from the first record so a rule can read
-    // them without an existence check.
-    waivers: [],
-    registries: {},
+    waivers: collectWaivers(commits, pending),
+    registries: { frozen: collectFrozen(range, pending !== null) },
     gates: [],
     ci: { issueExists: null, issueIsProposal: null, prAuthorIsOwner: null },
     ...(options.stamp && Object.keys(options.stamp).length > 0
