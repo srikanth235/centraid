@@ -1,7 +1,8 @@
 // Every `invalid` case is one of the four events this rule is for: a change
 // that lands with no changelog line, a receipt that rules with no decisions
 // row, a gate that widened with neither a ruling nor a fresh waiver note, and a
-// waiver spent with no docket row.
+// and a widened gate nothing authorised. What a waiver needs from the docket
+// is `waiver-docket`'s question, not this rule's.
 import rule, { issuesOf } from "./registry-completeness.mjs";
 import { ruleTester } from "../lib/rule.mjs";
 import assert from "node:assert/strict";
@@ -70,7 +71,7 @@ ruleTester().run("registry-completeness", rule, {
       receipts: [{ ...receipt, recordsRuling: false }],
       gates: [{ path: "tests/floors.json", commits: ["a"], direction: "widened", deviation: "changed" }],
     }),
-    // A waiver with the docket absent: reported on the front page, not here.
+    // A waiver is not this rule's question at all any more.
     record({
       waivers: [{ directive: "estate-separation", path: null, reason: "why", source: "commit:a" }],
     }),
@@ -103,18 +104,6 @@ ruleTester().run("registry-completeness", rule, {
         gates: [{ path: "tests/budgets.json", commits: ["a"], direction: "mixed", deviation: "unchanged" }],
       }),
       errors: [{ message: /loosened at least one number/u }],
-    },
-    {
-      // The docket exists and carries a row for some other directive.
-      code: record({
-        waivers: [{ directive: "estate-separation", path: null, reason: "why", source: "commit:a" }],
-        docket: {
-          path: ".governance/law/docket.json",
-          exists: true,
-          rows: [{ directive: "doc-integrity" }],
-        },
-      }),
-      errors: [{ message: /carries no row for it/u }],
     },
   ],
 });

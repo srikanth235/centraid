@@ -383,9 +383,12 @@ test("the adjudication documents report what this change ADDED, not that it open
   assert.deepEqual(changelog.issues, []);
   assert.equal(decisions.touched, true);
   assert.ok(decisions.issues.includes(996), "the #996 rulings landed in this range");
-  assert.equal(docket.exists, false, "the docket path is reserved, not yet created");
-  assert.deepEqual(docket.rows, []);
-  assert.deepEqual(docket.rowsOnBase, []);
+  // The docket exists in the working tree now; #1002's baseline predates it,
+  // which is exactly what `rowsOnBase` is for — every row reads as one this
+  // change filed itself.
+  assert.equal(docket.exists, true);
+  assert.ok(docket.rows.length > 0);
+  assert.deepEqual(docket.rowsOnBase, [], "the docket did not exist at #1002's merge-base");
 });
 
 test("a document row cites only the issues on added lines", () => {

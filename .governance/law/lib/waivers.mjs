@@ -7,7 +7,8 @@
 // collector, into one list with one shape, which `waiver-docket` then holds
 // against the register of standing exceptions.
 import { git } from "./git.mjs";
-import { byteCompare } from "./digest.mjs";
+import { byteCompare, globToRegExp } from "./digest.mjs";
+import { DOCUMENT_PATTERNS } from "../eslint.config.mjs";
 
 /**
  * A `governance: allow-<directive>` token, wherever one is written.
@@ -39,7 +40,17 @@ const TRAILER = /^[A-Z][A-Za-z-]*(?:-[A-Za-z]+)*:\s/u;
  * document rules, so nothing here re-implements one: the rule list and the
  * `--` description are read exactly as ESLint reads them.
  */
-const DISABLE = /eslint-disable(?:-next-line|-line)?(?<rest>[^\n]*)$/u;
+const DISABLE =
+  /^\s*(?:\/\/|\/\*|\*|#|<!--)\s*eslint-disable(?:-next-line|-line)?(?<rest>[^\n]*)$/u;
+
+/**
+ * The documents whose suppressions are waivers.
+ *
+ * A source file's `eslint-disable` answers to oxlint or to the product's own
+ * config and is not an exception to THIS law; only the governance documents
+ * the law lints are read here.
+ */
+const DOCUMENTS = DOCUMENT_PATTERNS.map(globToRegExp);
 
 /**
  * Strip a comment's closing delimiter from a reason.
@@ -133,6 +144,10 @@ function waiversIn(text, source, options = {}) {
  * @returns {object[]} One row per rule the directive names.
  */
 function disablesIn(line, file) {
+  // A line quoting the directive — every constitution section does — is prose,
+  // not a suppression.
+  if (line.includes("`")) return [];
+  if (!DOCUMENTS.some((matcher) => matcher.test(file))) return [];
   const match = DISABLE.exec(line);
   if (!match) return [];
   const rest = match.groups.rest.replace(/\s*(?:\*\/|-->)\s*$/u, "");

@@ -11,7 +11,11 @@
 //     ruling
 //   a gate widened       → a ruling authorises it, or the ledger's own
 //                          `approvedDeviation` note moved
-//   a waiver was used    → the docket carries a row for that directive
+//
+// A waiver's docket row was a fifth question here until #1005 lane D, and is
+// now `waiver-docket`'s alone. Two rules answering one question is how the
+// quieter one goes stale, and the docket rule asks the sharper version of it —
+// not "is there a row" but "was the row granted before this change spent it".
 //
 // That the change carries a receipt AT ALL is `receipt-per-issue`'s question
 // and is not re-asked here; this rule reads the receipt the other rule already
@@ -53,7 +57,7 @@ export default defineArrivalRule({
   door: "window",
   description: "What a change decided is recorded where decisions live.",
   enforces:
-    "a change that lands, rules, widens a gate or spends a waiver without the matching registry entry — the required `governance` check carries it",
+    "a change that lands, rules or widens a gate without the matching registry entry — the required `governance` check carries it",
   observes:
     "whether the entry says anything true; a line citing the issue is findable, which is all a rule can see",
   schema: [{ type: "object", additionalProperties: true }],
@@ -92,20 +96,6 @@ export default defineArrivalRule({
       ctx.report(
         ["gates", index],
         `${gate.path} ${gate.direction === "mixed" ? "loosened at least one number" : "widened"} with no authorisation: docs/decisions.md cites none of ${issues.map((issue) => `#${issue}`).join(", ")}, and the ledger's own approvedDeviation note did not change (presence never waives — #781). Record the ruling or extend the section's note.`
-      );
-    }
-
-    // The docket is the register of standing exceptions. Until it exists there
-    // is no row to be missing, so the absence is reported once on the front
-    // page as generated text rather than as a finding against this change.
-    const docket = registries.docket;
-    if (!docket?.exists) return;
-    const rows = new Set(docket.rows.map((row) => row.directive));
-    for (const [index, waiver] of (arrival.waivers ?? []).entries()) {
-      if (waiver.reason === "" || rows.has(waiver.directive)) continue;
-      ctx.report(
-        ["waivers", index],
-        `a '${waiver.directive}' waiver was used (${waiver.source}) but ${docket.path} carries no row for it. A waiver with no docket row is an exception nobody is tracking.`
       );
     }
   },

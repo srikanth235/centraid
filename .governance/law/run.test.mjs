@@ -59,9 +59,11 @@ test("the declared catalog resolves and both doors build a config", async () => 
   }
   const configs = await Promise.all(["hook", "window"].map((door) => buildConfig(door)));
   for (const config of configs) {
-    assert.equal(config.length, 2);
+    // The arrival record, the docket, and the governance documents.
+    assert.equal(config.length, 3);
     assert.equal(config[0].language, "json/json");
-    assert.equal(config[1].language, "markdown/commonmark");
+    assert.equal(config[1].language, "json/json");
+    assert.equal(config[2].language, "markdown/commonmark");
     for (const block of config) {
       assert.equal(block.linterOptions.reportUnusedDisableDirectives, "error");
     }

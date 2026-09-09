@@ -42,6 +42,13 @@
       "severity": "error",
       "verdict": "fail",
       "count": 1
+    },
+    {
+      "id": "waiver-docket",
+      "door": "hook",
+      "severity": "warn",
+      "verdict": "fail",
+      "count": 7
     }
   ],
   "messages": [
@@ -56,6 +63,48 @@
       "ruleId": "law/registry-completeness",
       "severity": "error",
       "message": "CHANGELOG.md carries no line citing #996. A change that reached the trunk and left no entry is a change nobody downstream can find; add a bullet under '## [Unreleased]' linking the issue."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'repo-hygiene' on packages/client/src/replica/offline-chain.contract.test.ts (file:packages/client/src/replica/offline-chain.contract.test.ts) was waived, but .governance/law/docket.json carries no row for it. File a row — id, rule, path, reason, authority, who filed it, its issue and an expiry — or drop the waiver."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'repo-hygiene' on packages/vault/src/replica/log.ts (file:packages/vault/src/replica/log.ts) was waived, but .governance/law/docket.json carries no row for it. File a row — id, rule, path, reason, authority, who filed it, its issue and an expiry — or drop the waiver."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'toolchain-config' (commit:3df6d552d2e3e21e9751196300ae5016242a5873) was waived, but .governance/law/docket.json carries no row for it. File a row — id, rule, path, reason, authority, who filed it, its issue and an expiry — or drop the waiver."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'toolchain-config' (commit:3df6d552d2e3e21e9751196300ae5016242a5873) was waived, but .governance/law/docket.json carries no row for it. File a row — id, rule, path, reason, authority, who filed it, its issue and an expiry — or drop the waiver."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'toolchain-config' (commit:3df6d552d2e3e21e9751196300ae5016242a5873) was waived, but .governance/law/docket.json carries no row for it. File a row — id, rule, path, reason, authority, who filed it, its issue and an expiry — or drop the waiver."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'toolchain-config' (commit:3df6d552d2e3e21e9751196300ae5016242a5873) was waived, but .governance/law/docket.json carries no row for it. File a row — id, rule, path, reason, authority, who filed it, its issue and an expiry — or drop the waiver."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/waiver-docket",
+      "severity": "warn",
+      "message": "'toolchain-config' on .github/workflows/mobile-ios-lock.yml (file:.github/workflows/mobile-ios-lock.yml) names docket row D-5, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it."
     }
   ]
 }

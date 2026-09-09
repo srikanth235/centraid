@@ -20,8 +20,11 @@ import markdown from "@eslint/markdown";
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, "..", "..");
 
-/** Where the runner writes the arrival record; the only JSON the law lints. */
+/** Where the runner writes the arrival record; the record the law lints. */
 export const ARRIVAL_PATH = ".governance/law/out/arrival.json";
+
+/** The register of standing exceptions, linted over its own shape. */
+export const DOCKET_PATH = ".governance/law/docket.json";
 
 /** The governance documents, relative to the repository root. */
 export const DOCUMENT_PATTERNS = Object.freeze([
@@ -141,6 +144,10 @@ export async function buildConfig(door = "window", options = {}) {
   const rows = (declared ?? (await loadRules())).filter((row) =>
     door === "hook" ? row.door === "hook" : true
   );
+  // The one impure input any rule gets, and it arrives as an option rather
+  // than as a clock the rule reads: a rule stays a pure function of one
+  // document, and a test pins the date instead of racing it.
+  const today = process.env.GOVERNANCE_TODAY ?? new Date().toISOString().slice(0, 10);
   // The door decides WHICH rules run; the pack row decides how loud each one
   // is. A rule the pack declares at `error` stays an error at the window door —
   // porting a blocking shell directive into a warning would be weakening the
@@ -154,14 +161,16 @@ export async function buildConfig(door = "window", options = {}) {
   // confirmed reports at its declared severity instead, so the law never stands
   // in for a review that has not happened. See README.md § The two doors.
   const severityFor = (row) => (door === "hook" ? "error" : (row.severity ?? "warn"));
-  const rulesFor = (surface) =>
+  const optionsFor = (row) =>
+    row.rule?.meta?.law?.clock ? { ...row.options, today } : row.options;
+  const rulesIn = (...surfaces) =>
     Object.fromEntries(
       rows
-        .filter((row) => row.surface === surface)
-        .map((row) => [
-          `law/${row.id}`,
-          row.options ? [severityFor(row), row.options] : severityFor(row),
-        ])
+        .filter((row) => surfaces.includes(row.surface))
+        .map((row) => {
+          const resolved = optionsFor(row);
+          return [`law/${row.id}`, resolved ? [severityFor(row), resolved] : severityFor(row)];
+        })
     );
   const plugin = {
     meta: { name: "law", version: "0.0.0" },
@@ -175,14 +184,24 @@ export async function buildConfig(door = "window", options = {}) {
       // A disable comment nobody needs is a standing permission slip for the
       // next diff that moves in, so an unused one is itself a finding.
       linterOptions: { reportUnusedDisableDirectives: "error" },
-      rules: rulesFor("arrival"),
+      rules: rulesIn("arrival", "all"),
+    },
+    {
+      // The docket is JSON and is linted over its own shape, always — a
+      // register of exceptions with a malformed row is a register nobody can
+      // read, whether or not this change touched it.
+      files: [DOCKET_PATH],
+      language: "json/json",
+      plugins: { json, law: plugin },
+      linterOptions: { reportUnusedDisableDirectives: "error" },
+      rules: rulesIn("all"),
     },
     {
       files: [...DOCUMENT_PATTERNS],
       language: "markdown/commonmark",
       plugins: { markdown, law: plugin },
       linterOptions: { reportUnusedDisableDirectives: "error" },
-      rules: rulesFor("documents"),
+      rules: rulesIn("documents", "all"),
     },
   ];
 }

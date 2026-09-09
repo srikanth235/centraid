@@ -12,6 +12,7 @@ any of it.
 
 | Path | What it is |
 | --- | --- |
+| `docket.json` | The register of standing exceptions: one row per waiver anyone may spend |
 | `packs/<pack>.json` | The law as *declared*: which rules a pack enables, at which severity, behind which door, and which paths are law |
 | `rules/<id>.mjs` | One rule, defined through `lib/rule.mjs` |
 | `rules/<id>.test.mjs` | That rule's cases, through ESLint's own `RuleTester` |
@@ -56,6 +57,7 @@ rule.
 | `receipt-per-issue` | window | One well-formed receipt per issue, and a completed change carries it | [CONSTITUTION.md](../../CONSTITUTION.md#receipt-per-issue) |
 | `estate-separation` | hook | A commit edits the law or the product, never both | [CONSTITUTION.md](../../CONSTITUTION.md#estate-separation) |
 | `registry-completeness` | window | What a change decided is recorded where decisions live | [CONSTITUTION.md](../../CONSTITUTION.md#registry-completeness) |
+| `waiver-docket` | hook / window | Every exception spent names a row in the register of exceptions | [CONSTITUTION.md](../../CONSTITUTION.md#waiver-docket) |
 
 All four were vendored shell directives in `governance-kit/audit` until #1005.
 `parity.mjs` replays both runners over the last 50 trunk commits and fails on any

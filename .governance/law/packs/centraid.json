@@ -8,6 +8,10 @@
     "registry-completeness": {
       "severity": "error",
       "door": "window"
+    },
+    "waiver-docket": {
+      "severity": "warn",
+      "door": "hook"
     }
   },
   "lawPaths": [

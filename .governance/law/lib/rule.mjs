@@ -19,8 +19,15 @@ import { describe, it } from "node:test";
 /** Doors a rule can be enforced at. See README.md § The two doors. */
 export const DOORS = Object.freeze(["hook", "window", "owner"]);
 
-/** Surfaces a rule can be written over. */
-export const SURFACES = Object.freeze(["arrival", "documents"]);
+/**
+ * Surfaces a rule can be written over.
+ *
+ * `all` is the rule that has to see more than one: `waiver-docket` judges the
+ * arrival record, the docket itself and the `eslint-disable` directives in the
+ * governance documents, and splitting it into three rule ids would give one
+ * institution three names and three severities to keep in step.
+ */
+export const SURFACES = Object.freeze(["arrival", "documents", "all"]);
 
 /**
  * Define a law rule.
@@ -34,7 +41,11 @@ export const SURFACES = Object.freeze(["arrival", "documents"]);
  * @param {string} spec.description One line, imperative, for `meta.docs`.
  * @param {string} [spec.enforces] What the rule makes impossible.
  * @param {string} [spec.observes] What it only reports, the host enforcing it.
- * @param {"arrival"|"documents"} [spec.surface] Which document it reads.
+ * @param {"arrival"|"documents"|"all"} [spec.surface] Which document it reads.
+ * @param {boolean} [spec.clock] Whether the config injects today's date into
+ *   the rule's options. A rule may not READ a clock — it stays a pure function
+ *   of one document and its options — but an expiry is a real thing to check,
+ *   so the impure input is declared here and supplied by the config.
  * @param {object[]} [spec.schema] ESLint options schema.
  * @param {(context: object) => object} spec.create The visitor factory.
  * @returns {object} An ESLint rule object.
@@ -48,6 +59,7 @@ export function defineRule(spec) {
     enforces,
     observes,
     surface = "arrival",
+    clock = false,
     schema = [],
     create,
   } = spec;
@@ -73,7 +85,7 @@ export function defineRule(spec) {
       // them to build the per-door config and the front page.
       door,
       surface,
-      law: { id, statute, enforces: enforces ?? null, observes: observes ?? null },
+      law: { id, statute, clock, enforces: enforces ?? null, observes: observes ?? null },
       schema,
     },
     create,
