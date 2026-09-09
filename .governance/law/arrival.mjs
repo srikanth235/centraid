@@ -35,7 +35,7 @@ import { readPacks } from "./eslint.config.mjs";
 
 // Re-exported so the generator stays one import for its callers and its tests,
 // even though its sections live in one file each.
-export { collectGates, isLedger, judgeSection } from "./lib/gates.mjs";
+export { collectGates, isLedger, judgeDeviation, judgeSection } from "./lib/gates.mjs";
 export { ESTATES, estateClassifier, estatesOf, tagEstates } from "./lib/estates.mjs";
 export {
   collectDocket,

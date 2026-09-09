@@ -11,7 +11,7 @@ import test from "node:test";
 import { buildConfig, loadRules } from "./eslint.config.mjs";
 import { main, printReport, runLaw } from "./run.mjs";
 import { defineRule } from "./lib/rule.mjs";
-import { renderFrontPage } from "./front-page.mjs";
+import { renderFrontPage, renderRegistries } from "./front-page.mjs";
 
 const HERE = import.meta.dirname;
 const ARRIVAL = path.join(HERE, "fixtures", "arrival", "bb964a7e..3df6d552.json");
@@ -158,4 +158,43 @@ test("the front page names the range, both law digests, and every rule", () => {
   assert.match(page, /\| `a-rule` \| hook \| ✓ pass \| 0 \|/u);
   assert.match(page, /token cost: not recorded/u);
   assert.ok(page.endsWith("\n"));
+});
+
+test("the registry lines are generated from the record, including the silences", () => {
+  // A blank where a line belongs reads as "nothing to say"; "no rulings
+  // recorded" is a claim the law is making, and nobody could have typed it in.
+  const quiet = renderRegistries(null);
+  for (const expected of [
+    "- no rulings recorded",
+    "- no changelog entry",
+    "- no gates moved",
+    "- no waivers used",
+    "- docket not yet established",
+    "- proposal link unverified (offline)",
+    "- token cost: not recorded",
+  ]) {
+    assert.ok(quiet.includes(expected), `the front page dropped '${expected}'`);
+  }
+  const loud = renderRegistries({
+    registries: {
+      changelog: { issues: [1005] },
+      decisions: { issues: [1005] },
+      docket: { path: ".governance/law/docket.json", exists: true, rows: [] },
+      receipts: { files: [{ path: "receipts/issue-1005-x.md", touched: true, cost: "12k tokens" }] },
+    },
+    gates: [{ path: "tests/floors.json", direction: "widened" }],
+    waivers: [
+      { directive: "estate-separation", path: null, reason: "a reason", source: "commit:abc" },
+      { directive: "doc-integrity", path: null, reason: "", source: "commit:abc" },
+    ],
+    ci: { issueIsProposal: true },
+  }).join("\n");
+  assert.match(loud, /- rulings recorded: #1005 in `docs\/decisions\.md`/u);
+  assert.match(loud, /- changelog entries: #1005/u);
+  assert.match(loud, /- gates moved: `tests\/floors\.json` \(widened\)/u);
+  assert.match(loud, /- waiver used: `estate-separation` — a reason \(commit:abc\)/u);
+  assert.ok(!loud.includes("doc-integrity"), "a waiver with no reason is not a waiver");
+  assert.ok(!loud.includes("docket not yet established"));
+  assert.ok(!loud.includes("proposal link unverified"));
+  assert.match(loud, /- token cost: receipts\/issue-1005-x\.md: 12k tokens/u);
 });

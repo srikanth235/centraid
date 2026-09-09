@@ -144,6 +144,46 @@ export function combine(verdicts) {
 }
 
 /**
+ * Every `approvedDeviation` note in a value, keyed by its path inside it.
+ *
+ * The ledger validator's waiver is a note that must have CHANGED against the
+ * base (#781: presence never waives). The law does not re-adjudicate the
+ * waiver — it only reports whether one moved, so a widening with neither a
+ * ruling nor a fresh note is visible.
+ *
+ * @param {unknown} value Any JSON value.
+ * @param {string} [prefix] The path so far.
+ * @returns {Map<string, string>} Path → note, serialized.
+ */
+export function deviations(value, prefix = "") {
+  const out = new Map();
+  if (value === null || typeof value !== "object") return out;
+  for (const [key, child] of Object.entries(value)) {
+    const at = prefix === "" ? key : `${prefix}.${key}`;
+    if (key === "approvedDeviation") out.set(at, JSON.stringify(child));
+    else for (const [path, note] of deviations(child, at)) out.set(path, note);
+  }
+  return out;
+}
+
+/**
+ * Whether any `approvedDeviation` note in a file moved.
+ *
+ * @param {object|null} before The file at the baseline.
+ * @param {object|null} after The file now.
+ * @returns {"changed"|"unchanged"|"unknown"} The verdict.
+ */
+export function judgeDeviation(before, after) {
+  if (before === null || after === null) return "unknown";
+  const baseline = deviations(before);
+  const current = deviations(after);
+  for (const [path, note] of current) {
+    if (baseline.get(path) !== note) return "changed";
+  }
+  return baseline.size === current.size ? "unchanged" : "changed";
+}
+
+/**
  * Read a JSON blob at a revision, or `null`.
  *
  * @param {string} rev The revision; `""` means the index.
@@ -190,6 +230,7 @@ export async function collectGates(range, paths, commits, staged) {
         .filter((commit) => commit.files.some((row) => row.path === file))
         .map((commit) => commit.sha),
       direction,
+      deviation: before === null || after === null ? "unknown" : judgeDeviation(before, after),
     };
   });
 }

@@ -179,11 +179,11 @@ export function printReport(report) {
  */
 export async function main(argv, overrides = {}) {
   const options = { ...parseArgs(argv), ...overrides };
-  const { report } = await runLaw(options);
+  const { report, arrival } = await runLaw(options);
   if (options.frontPage) {
     const out = path.resolve(ROOT, options.frontPage);
     mkdirSync(path.dirname(out), { recursive: true });
-    writeFileSync(out, renderFrontPage(report));
+    writeFileSync(out, renderFrontPage(report, arrival));
   }
   if (options.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else printReport(report);

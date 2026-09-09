@@ -25,7 +25,7 @@ any of it.
 | `parity.mjs` | Replays the deleted shell runner against these rules over real history |
 | `commitlint.config.mjs` | The commit-subject policy, in commitlint's config shape |
 | `run.mjs` | The runner: generate, lint, report one line per rule |
-| `front-page.mjs` | Renders a run as the PR-body front page |
+| `front-page.mjs` | Renders a run as the PR-body front page, including the generated registry lines |
 | `fixtures/` | Checked-in arrival records the tests pin the generator against |
 | `out/` | Generated; git-ignored |
 
@@ -53,6 +53,7 @@ rule.
 | `managed-tree-integrity` | hook | Managed governance files, and the law's own generator, match their recorded digests | [CONSTITUTION.md](../../CONSTITUTION.md#managed-tree-integrity) |
 | `receipt-per-issue` | window | One well-formed receipt per issue, and a completed change carries it | [CONSTITUTION.md](../../CONSTITUTION.md#receipt-per-issue) |
 | `estate-separation` | hook | A commit edits the law or the product, never both | [CONSTITUTION.md](../../CONSTITUTION.md#estate-separation) |
+| `registry-completeness` | window | What a change decided is recorded where decisions live | [CONSTITUTION.md](../../CONSTITUTION.md#registry-completeness) |
 
 All four were vendored shell directives in `governance-kit/audit` until #1005.
 `parity.mjs` replays both runners over the last 50 trunk commits and fails on any

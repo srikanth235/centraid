@@ -10280,8 +10280,8 @@
       },
       {
         "path": ".governance/law/arrival.mjs",
-        "recorded": "daf80f18665d374a7924a8c5a03e592d924e8fcb8d1e5184559de7676eb285ee",
-        "actual": "daf80f18665d374a7924a8c5a03e592d924e8fcb8d1e5184559de7676eb285ee",
+        "recorded": "855ade1de5b29747257d11bfbebfc59d20a237ea581013fc273f8472fea2093c",
+        "actual": "855ade1de5b29747257d11bfbebfc59d20a237ea581013fc273f8472fea2093c",
         "marker": ""
       },
       {
@@ -10298,8 +10298,8 @@
       },
       {
         "path": ".governance/law/lib/gates.mjs",
-        "recorded": "981075f4ad5ad479ed2c8bd45602ca432c8e113a00149bcf18364e992037bf96",
-        "actual": "981075f4ad5ad479ed2c8bd45602ca432c8e113a00149bcf18364e992037bf96",
+        "recorded": "1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0",
+        "actual": "1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0",
         "marker": ""
       },
       {
@@ -24623,8 +24623,8 @@
       "change": {
         "branch": "lane/1005-c",
         "onDefaultBranch": false,
-        "hasStaged": true,
-        "completedChange": false,
+        "hasStaged": false,
+        "completedChange": true,
         "touchesReceipt": true
       }
     },
@@ -24665,7 +24665,8 @@
       "commits": [
         "3df6d552d2e3e21e9751196300ae5016242a5873"
       ],
-      "direction": "mixed"
+      "direction": "mixed",
+      "deviation": "unchanged"
     }
   ],
   "ci": {

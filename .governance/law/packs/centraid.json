@@ -4,6 +4,10 @@
     "estate-separation": {
       "severity": "warn",
       "door": "hook"
+    },
+    "registry-completeness": {
+      "severity": "error",
+      "door": "window"
     }
   },
   "lawPaths": [
