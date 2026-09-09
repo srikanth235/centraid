@@ -17,6 +17,8 @@ any of it.
 | `rules/<id>.test.mjs` | That rule's cases, through ESLint's own `RuleTester` |
 | `lib/rule.mjs` | `defineRule` (the metadata every rule carries) and `ruleTester` |
 | `lib/digest.mjs` | The managed-tree digest algorithm, in JS, byte-identical to the pack's `lib/digest.sh` |
+| `lib/estates.mjs` | The three estates — which body of the repository a path belongs to |
+| `lib/gates.mjs` | The gate register: which tighten-only ledgers a change moved, and which way |
 | `eslint.config.mjs` | **Derived** from the packs. Never hand-written |
 | `arrival.mjs` | The generator: turns a commit range into `out/arrival.json`. Split across `lib/git.mjs`, `lib/registries.mjs` and `lib/managed.mjs`; all of it is under the managed-tree digest |
 | `digest.mjs` | `--record` re-records the generator's own digests in `install.yaml` |
@@ -26,6 +28,21 @@ any of it.
 | `front-page.mjs` | Renders a run as the PR-body front page |
 | `fixtures/` | Checked-in arrival records the tests pin the generator against |
 | `out/` | Generated; git-ignored |
+
+## The three estates
+
+Every tracked path belongs to exactly one estate, and `arrival.json` tags every
+file row — per commit and in the aggregate — with it.
+
+| Estate | What it is | Where it is declared |
+| --- | --- | --- |
+| `law` | The rules themselves. Editing it changes what the *next* change is allowed to do | the union of every pack's `lawPaths` |
+| `registry` | The adjudication and evidence layer: receipts, `CHANGELOG.md`, `docs/decisions.md`, `QUALITY.md`, the docket. Editing it records what happened; it never changes what is permitted | `REGISTRY_PATHS` in `lib/estates.mjs` |
+| `territory` | Everything else — the product the law is for | everything not matched above |
+
+`registry` is tested first, because `.governance/law/docket.json` also matches
+the law glob `.governance/**` and a register of exceptions is evidence, not a
+rule.
 
 ## The rules
 

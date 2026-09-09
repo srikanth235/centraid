@@ -79,7 +79,7 @@ export function documentsInRange(arrival) {
 export async function runLaw(options) {
   const arrivalPath = options.arrival
     ? path.resolve(ROOT, options.arrival)
-    : generateArrival([
+    : await generateArrival([
         ...(options.range ? ["--range", options.range] : []),
         ...(options.messageFile ? ["--message-file", options.messageFile] : []),
       ]);

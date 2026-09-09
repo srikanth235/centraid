@@ -20,14 +20,26 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { git, parseNameStatus } from "./lib/git.mjs";
-import { collectFrozen, collectReceipts, collectWaivers } from "./lib/registries.mjs";
+import {
+  collectDocket,
+  collectDocument,
+  collectFrozen,
+  collectReceipts,
+  collectWaivers,
+} from "./lib/registries.mjs";
+import { collectGates } from "./lib/gates.mjs";
+import { estateClassifier, tagEstates } from "./lib/estates.mjs";
 import { collectManagedTree } from "./lib/managed.mjs";
 import { byteCompare, globToRegExp, lawDigest } from "./lib/digest.mjs";
 import { readPacks } from "./eslint.config.mjs";
 
 // Re-exported so the generator stays one import for its callers and its tests,
 // even though its sections live in one file each.
+export { collectGates, isLedger, judgeSection } from "./lib/gates.mjs";
+export { ESTATES, estateClassifier, estatesOf, tagEstates } from "./lib/estates.mjs";
 export {
+  collectDocket,
+  collectDocument,
   collectFrozen,
   collectReceipts,
   collectWaivers,
@@ -46,8 +58,12 @@ const HERE = import.meta.dirname;
  * 2 (#1005 lane B) added `range.hasBase`, `waivers`, `registries.frozen` and
  * `registries.receipts` when the vendored `governance-kit/audit` pack was
  * ported to rules.
+ *
+ * 3 (#1005 lane C) tagged every file row with its `estate`, filled `gates` with
+ * the tighten-only ledgers this change moved and which way, and added
+ * `registries.changelog`, `registries.decisions` and `registries.docket`.
  */
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 
 /** Branch names the ported directives treated as the trunk. */
 const DEFAULT_BRANCHES = Object.freeze(["origin/main", "origin/master", "main", "master"]);
@@ -224,28 +240,52 @@ export function collectLaw(range) {
  * @param {string} [options.range] `base..head`.
  * @param {string} [options.messageFile] A commit message being written.
  * @param {Record<string, string>} [options.stamp] Extra `key=value` facts.
- * @returns {object} The arrival record.
+ * @returns {Promise<object>} The arrival record.
  */
-export function buildArrival(options = {}) {
+export async function buildArrival(options = {}) {
   const range = resolveRange(options.range);
-  const commits = collectCommits(range);
-  const pending = collectPending(options.messageFile ?? null);
+  const rawCommits = collectCommits(range);
+  const rawPending = collectPending(options.messageFile ?? null);
+  // One classifier for the whole record: #1002's squash alone carries 1022
+  // paths, and compiling the law globs once per file list is the difference
+  // between a generator that fits the pre-commit rung and one that does not.
+  const classify = estateClassifier();
+  const commits = rawCommits.map((commit) => ({
+    ...commit,
+    files: tagEstates(commit.files, classify),
+  }));
+  const pending =
+    rawPending === null ? null : { ...rawPending, files: tagEstates(rawPending.files, classify) };
+  const files = tagEstates(
+    parseNameStatus(git(["diff", "-z", "--name-status", `${range.base}..${range.head}`])),
+    classify
+  );
+  const law = collectLaw(range);
   return {
     schema: SCHEMA,
     range,
     commits,
-    files: parseNameStatus(
-      git(["diff", "-z", "--name-status", `${range.base}..${range.head}`])
-    ),
+    files,
     pending,
-    law: collectLaw(range),
+    law,
     managedTree: collectManagedTree(),
     waivers: collectWaivers(commits, pending),
     registries: {
       frozen: collectFrozen(range, pending !== null),
       receipts: collectReceipts(range, pending),
+      changelog: collectDocument(range, pending, "CHANGELOG.md"),
+      decisions: collectDocument(range, pending, "docs/decisions.md"),
+      docket: collectDocket(),
     },
-    gates: [],
+    // Every ledger this change moved, from the aggregate law diff and from the
+    // staged set — the hook door sees only the latter, and a knob loosened in
+    // the commit being written is exactly what it is there to notice.
+    gates: await collectGates(
+      range,
+      [...new Set([...law.changed, ...(pending?.files ?? []).map((row) => row.path)])],
+      commits,
+      pending !== null
+    ),
     ci: { issueExists: null, issueIsProposal: null, prAuthorIsOwner: null },
     ...(options.stamp && Object.keys(options.stamp).length > 0
       ? { stamp: options.stamp }
@@ -288,16 +328,16 @@ export function parseArgs(argv) {
  * Generate the record and write it.
  *
  * @param {string[]} argv Arguments after the script name.
- * @returns {string} The path written.
+ * @returns {Promise<string>} The path written.
  */
-export function main(argv) {
+export async function main(argv) {
   const options = parseArgs(argv);
-  const arrival = buildArrival(options);
+  const arrival = await buildArrival(options);
   mkdirSync(path.dirname(options.out), { recursive: true });
   writeFileSync(options.out, serialize(arrival));
   return options.out;
 }
 
 if (process.argv[1] === import.meta.filename) {
-  process.stdout.write(`${main(process.argv.slice(2))}\n`);
+  process.stdout.write(`${await main(process.argv.slice(2))}\n`);
 }

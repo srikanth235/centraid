@@ -12,7 +12,12 @@ import test from "node:test";
 
 import {
   buildArrival,
+  collectDocket,
+  collectDocument,
   collectWaivers,
+  estateClassifier,
+  isLedger,
+  judgeSection,
   documentIntegrityRules,
   extractReceiptSection,
   extractSection,
@@ -41,23 +46,23 @@ const FIXTURE = path.join(HERE, "fixtures", "arrival", `${RANGE}.json`);
  *
  * @returns {string} The file's contents.
  */
-function generate() {
+async function generate() {
   const out = path.join(HERE, "out", "arrival.test.json");
-  main(["--range", RANGE, "--out", out]);
+  await main(["--range", RANGE, "--out", out]);
   return readFileSync(out, "utf8");
 }
 
-test("the generator reproduces the checked-in fixture byte for byte", () => {
-  assert.equal(generate(), readFileSync(FIXTURE, "utf8"));
+test("the generator reproduces the checked-in fixture byte for byte", async () => {
+  assert.equal(await generate(), readFileSync(FIXTURE, "utf8"));
 });
 
-test("two runs over the same range in the same tree are byte-identical", () => {
-  assert.equal(generate(), generate());
+test("two runs over the same range in the same tree are byte-identical", async () => {
+  assert.equal(await generate(), await generate());
 });
 
 test("the record has every section, including the ones no rule reads yet", () => {
   const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
-  assert.equal(arrival.schema, 2);
+  assert.equal(arrival.schema, 3);
   for (const key of ["range", "commits", "files", "law", "managedTree", "waivers", "registries", "gates", "ci"]) {
     assert.ok(key in arrival, `arrival.json has no ${key}`);
   }
@@ -89,8 +94,8 @@ test("the JS directory digest is the vendored bash digest, byte for byte", () =>
   }
 });
 
-test("every managed unit in the current tree records what it actually is", () => {
-  const { managedTree } = buildArrival({ range: RANGE });
+test("every managed unit in the current tree records what it actually is", async () => {
+  const { managedTree } = await buildArrival({ range: RANGE });
   // No pack locks digests any more — the vendored one was ported and deleted —
   // so the locked-directive list is legitimately empty and the managed FILES
   // are the whole trust chain: the kit runtime plus the law's own generator.
@@ -211,8 +216,8 @@ test("the two section extractors differ exactly as the shell pack's two did", ()
   assert.deepEqual(extractReceiptSection(document, "resolved"), ["- one", "", "- two", "### Later", "- three"]);
 });
 
-test("the frozen registry covers every rule target that exists at the baseline", () => {
-  const { registries } = buildArrival({ range: RANGE });
+test("the frozen registry covers every rule target that exists at the baseline", async () => {
+  const { registries } = await buildArrival({ range: RANGE });
   const paths = new Set(registries.frozen.map((row) => row.path));
   assert.ok(paths.has("CONSTITUTION.md"), "CONSTITUTION.md is a frozen-section target");
   assert.ok(paths.has("COSTS.md"));
@@ -227,8 +232,8 @@ test("the frozen registry covers every rule target that exists at the baseline",
   }
 });
 
-test("the receipt registry lists every tracked receipt and what this change added", () => {
-  const { registries } = buildArrival({ range: RANGE });
+test("the receipt registry lists every tracked receipt and what this change added", async () => {
+  const { registries } = await buildArrival({ range: RANGE });
   const { files, change } = registries.receipts;
   assert.ok(files.length > 100, "the corpus is much larger than this");
   assert.ok(
@@ -243,21 +248,118 @@ test("the receipt registry lists every tracked receipt and what this change adde
   assert.equal(typeof change.touchesReceipt, "boolean");
 });
 
-test("the managed tree carries the pinned kit version and each file's stamp", () => {
-  const { managedTree } = buildArrival({ range: RANGE });
+test("the managed tree carries the pinned kit version and each file's stamp", async () => {
+  const { managedTree } = await buildArrival({ range: RANGE });
   assert.equal(managedTree.kitVersion, "0.15.0");
   const runSh = managedTree.files.find((row) => row.path === ".governance/run.sh");
   assert.equal(runSh.marker, "0.15.0", "run.sh carries the kit's managed stamp");
   assert.deepEqual(managedTree.unrecorded, [], "no unrecorded directive folder is installed");
 });
 
-test("a pending commit message is read, comment lines dropped, staged set attached", () => {
+test("a pending commit message is read, comment lines dropped, staged set attached", async () => {
   // This path only runs inside the commit-msg hook, which is exactly why it
   // needs a test: a broken import here surfaces as a crashed commit and
   // nothing else.
   const messageFile = path.join(HERE, "out", "arrival.test.msg");
   writeFileSync(messageFile, "feat(governance): a subject (#1005)\n\n# a git comment\nbody line\n");
-  const arrival = buildArrival({ range: RANGE, messageFile });
+  const arrival = await buildArrival({ range: RANGE, messageFile });
   assert.equal(arrival.pending.message, "feat(governance): a subject (#1005)\n\nbody line");
   assert.ok(Array.isArray(arrival.pending.files));
+});
+
+test("every file row carries an estate, at the commit level and the aggregate", () => {
+  const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
+  const rows = [...arrival.files, ...arrival.commits.flatMap((commit) => commit.files)];
+  assert.ok(rows.length > 1000, "#1002's squash is a thousand-file change");
+  for (const row of rows) {
+    assert.ok(["law", "registry", "territory"].includes(row.estate), `${row.path}: ${row.estate}`);
+  }
+  const estateOf = (file) => arrival.files.find((row) => row.path === file)?.estate;
+  assert.equal(estateOf("tests/inventory.json"), "law");
+  assert.equal(estateOf("QUALITY.md"), "registry");
+  assert.equal(estateOf("ARCHITECTURE.md"), "territory");
+});
+
+test("the docket is registry, not law, even though it lives inside .governance", () => {
+  // It matches the law glob `.governance/**` too, and the order is the ruling:
+  // a register of exceptions is evidence, never a rule.
+  const classify = estateClassifier();
+  assert.equal(classify(".governance/law/docket.json"), "registry");
+  assert.equal(classify(".governance/law/rules/doc-integrity.mjs"), "law");
+  assert.equal(classify("receipts/nested/issue-1.md"), "registry");
+  assert.equal(classify("packages/server/src/index.ts"), "territory");
+});
+
+test("a ledger's direction is judged against the validator's own table", () => {
+  assert.ok(isLedger("tests/floors.json"));
+  assert.ok(isLedger(".governance/packs/srikanth235/centraid/directives/x/allowlist.txt"));
+  assert.equal(isLedger("tests/claims.json"), false, "claims is law but is not a numeric ledger");
+  // `up` is a floor: a number that falls is a widening. `down` is a ceiling.
+  assert.equal(judgeSection({ a: 90 }, { a: 80 }, "up"), "widened");
+  assert.equal(judgeSection({ a: 90 }, { a: 95 }, "up"), "narrowed");
+  assert.equal(judgeSection({ a: 90, b: 10 }, { a: 95, b: 5 }, "up"), "mixed");
+  assert.equal(judgeSection({ a: 90 }, { a: 90 }, "up"), "unchanged");
+  assert.equal(judgeSection({ a: 5 }, { a: 9 }, "down"), "widened");
+  // A knob that disappeared stopped being enforced, which is the loosest move.
+  assert.equal(judgeSection({ a: 90 }, {}, "up"), "widened");
+  // No declared direction means no verdict, never a silent "narrowed".
+  assert.equal(judgeSection({ a: 1 }, { a: 2 }, "register"), "unknown");
+});
+
+test("#1002's squash moved a ledger and the record names which and how", () => {
+  const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
+  const inventory = arrival.gates.find((gate) => gate.path === "tests/inventory.json");
+  assert.ok(inventory, "tests/inventory.json changed in the range and is a ledger");
+  assert.deepEqual(inventory.commits, [arrival.range.head]);
+  assert.ok(["widened", "narrowed", "mixed", "unchanged"].includes(inventory.direction));
+  assert.ok(
+    !arrival.gates.some((gate) => gate.path === "tests/claims.json"),
+    "claims.json is law but carries no ratcheted numbers"
+  );
+});
+
+test("the adjudication documents report what this change ADDED, not that it opened them", () => {
+  const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
+  const { changelog, decisions, docket } = arrival.registries;
+  // #1002's squash never touched the changelog — the gap the registry rule is for.
+  assert.equal(changelog.touched, false);
+  assert.deepEqual(changelog.issues, []);
+  assert.equal(decisions.touched, true);
+  assert.ok(decisions.issues.includes(996), "the #996 rulings landed in this range");
+  assert.equal(docket.exists, false, "the docket path is reserved, not yet created");
+  assert.deepEqual(docket.rows, []);
+});
+
+test("a document row cites only the issues on added lines", () => {
+  const range = { base: "bb964a7e", head: "3df6d552", hasBase: true };
+  const row = collectDocument(range, null, "docs/decisions.md");
+  assert.equal(row.path, "docs/decisions.md");
+  assert.equal(row.lines > 0, true);
+  assert.deepEqual(collectDocument(range, null, "CHANGELOG.md"), {
+    path: "CHANGELOG.md",
+    touched: false,
+    issues: [],
+    lines: 0,
+  });
+  assert.equal(collectDocket().path, ".governance/law/docket.json");
+});
+
+test("a receipt row carries its issue, whether a ruling is in it, and any cost", () => {
+  const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
+  // The registry is the whole tracked corpus, so this lane's own receipt is in
+  // it — but nothing in #1002's range touched it, which is the field the
+  // registry rules read.
+  const mine = arrival.registries.receipts.files.find(
+    (row) => row.path === "receipts/issue-1005-governance-constitution.md"
+  );
+  assert.equal(mine.issue, 1005);
+  assert.equal(mine.touched, false);
+  const sample = arrival.registries.receipts.files.find((row) => row.issue === 996);
+  assert.ok(sample, "issue #996 has a receipt");
+  assert.equal(sample.recordsRuling, true, "the #996 receipt records rulings");
+  assert.ok(sample.cost === null || typeof sample.cost === "string");
+  for (const row of arrival.registries.receipts.files) {
+    assert.equal(typeof row.touched, "boolean");
+    assert.ok(row.issue === null || Number.isInteger(row.issue));
+  }
 });

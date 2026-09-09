@@ -288,6 +288,10 @@ export function collectReceipts(range, pending) {
   const completedChange =
     (onDefaultBranch && hasStaged) || (!onDefaultBranch && !hasStaged && range.hasBase);
 
+  const touchedPaths = new Set([
+    ...(pending ? staged.map((row) => row.path) : []),
+    ...(range.hasBase ? arrivalFilesIn(range) : []),
+  ]);
   const files = tracked.sort(byteCompare).map((file) => {
     let text = "";
     try {
@@ -301,11 +305,29 @@ export function collectReceipts(range, pending) {
       .filter(Boolean);
     const verification = extractReceiptSection(text, "Verification").join("\n");
     const audit = extractReceiptSection(text, "Audit").join("\n");
+    const decisions = extractReceiptSection(text, "Decisions").join("\n");
+    const cost =
+      [...extractReceiptSection(text, "Accounting"), ...extractReceiptSection(text, "Cost")]
+        .map((line) => line.trim())
+        .find((line) => line !== "") ?? null;
+    const issueNumber = /issue-(?<number>[0-9]+)/u.exec(file)?.groups.number;
     return {
       path: file,
       name: file.slice(file.lastIndexOf("/") + 1),
+      issue: issueNumber === undefined ? null : Number(issueNumber),
       addedInRange: addedInRange.has(file),
       addedInPending: addedInPending.has(file),
+      touched: touchedPaths.has(file),
+      // A ruling recorded in a receipt is a decision the adjudication layer
+      // must also carry: either a `## Decisions` section with content, or a
+      // bold ruling id anywhere in the document (`**R-1005-13**`, `**W2-D1**`).
+      recordsRuling:
+        decisions.trim() !== "" ||
+        /\*\*(?:R-?[0-9]+-[0-9]+|R[0-9]+|W[0-9]+-D[0-9]+)\*\*/u.test(text) ||
+        /\bR-[0-9]+-[0-9]+\b/u.test(text),
+      // The token cost of the arrival, when the receipt states one. The number
+      // is the author's; the law only reports whether it was recorded.
+      cost,
       // A head-of-file waiver exempts one receipt from the whole rule.
       fileWaiver: /governance:\s*allow-receipt-per-issue\s+\S/u.test(
         text.split("\n").slice(0, 10).join("\n").replaceAll("<!--", "").replaceAll("-->", "")
@@ -331,10 +353,7 @@ export function collectReceipts(range, pending) {
       onDefaultBranch,
       hasStaged,
       completedChange,
-      touchesReceipt: [
-        ...(pending ? staged.map((row) => row.path) : []),
-        ...(range.hasBase ? arrivalFilesIn(range) : []),
-      ].some((file) => /^receipts\/issue-.*\.md$/u.test(file)),
+      touchesReceipt: [...touchedPaths].some((file) => /^receipts\/issue-.*\.md$/u.test(file)),
     },
   };
 }
@@ -351,3 +370,86 @@ function arrivalFilesIn(range) {
   ).map((row) => row.path);
 }
 
+
+/**
+ * The lines a change set ADDED to one file, across the range and the index.
+ *
+ * `-U0` because context lines are not this change's writing, and a rule that
+ * accepted them would let a change satisfy the registry by touching a file
+ * near somebody else's bullet.
+ *
+ * @param {object} range The resolved range.
+ * @param {boolean} staged Whether an index diff should be included.
+ * @param {string} file The repo-relative path.
+ * @returns {string[]} The added lines, without their `+`.
+ */
+function addedLines(range, staged, file) {
+  const collect = (args) => {
+    let raw = "";
+    try {
+      raw = git(["diff", "-U0", "--no-color", ...args, "--", file]);
+    } catch {
+      return [];
+    }
+    return raw
+      .split("\n")
+      .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+      .map((line) => line.slice(1));
+  };
+  return [
+    ...(range.hasBase ? collect([`${range.base}..${range.head}`]) : []),
+    ...(staged ? collect(["--cached"]) : []),
+  ];
+}
+
+/**
+ * One adjudication document, and which issues this change cited in it.
+ *
+ * The registry rules ask "was the ruling written down where rulings live?", so
+ * what matters is not that the file was opened but that a line naming the issue
+ * was added to it.
+ *
+ * @param {object} range The resolved range.
+ * @param {object|null} pending The pending commit, if any.
+ * @param {string} file The repo-relative path.
+ * @returns {{path: string, touched: boolean, issues: number[], lines: number}} The row.
+ */
+export function collectDocument(range, pending, file) {
+  const added = addedLines(range, pending !== null, file);
+  const issues = new Set();
+  for (const line of added) {
+    for (const match of line.matchAll(/#(?<number>[0-9]{1,7})\b/gu)) {
+      issues.add(Number(match.groups.number));
+    }
+  }
+  return {
+    path: file,
+    touched: added.length > 0,
+    issues: [...issues].sort((a, b) => a - b),
+    lines: added.length,
+  };
+}
+
+/**
+ * The docket: the register of standing exceptions to the law.
+ *
+ * #1005 reserves the path and the docket lane creates the file. Until it
+ * exists the register is `exists: false`, which is what lets a rule say
+ * "not yet established" instead of "no row found" — the difference between a
+ * missing institution and a missing entry.
+ *
+ * @returns {{path: string, exists: boolean, rows: object[]}} The docket.
+ */
+export function collectDocket() {
+  const file = ".governance/law/docket.json";
+  let rows = [];
+  let exists = false;
+  try {
+    const parsed = JSON.parse(readFileSync(path.join(ROOT, file), "utf8"));
+    exists = true;
+    rows = Array.isArray(parsed) ? parsed : (parsed.rows ?? parsed.entries ?? []);
+  } catch {
+    exists = false;
+  }
+  return { path: file, exists, rows };
+}
