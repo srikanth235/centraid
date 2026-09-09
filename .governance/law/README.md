@@ -39,7 +39,7 @@ file row — per commit and in the aggregate — with it.
 | Estate | What it is | Where it is declared |
 | --- | --- | --- |
 | `law` | The rules themselves. Editing it changes what the *next* change is allowed to do | the union of every pack's `lawPaths` |
-| `registry` | The adjudication and evidence layer: receipts, `CHANGELOG.md`, `docs/decisions.md`, `QUALITY.md`, the docket. Editing it records what happened; it never changes what is permitted | `REGISTRY_PATHS` in `lib/estates.mjs` |
+| `registry` | The adjudication and evidence layer: receipts, `CHANGELOG.md`, all of `docs/**`, `QUALITY.md`, the docket. Editing it records what happened; it never changes what is permitted | `REGISTRY_PATHS` in `lib/estates.mjs` |
 | `territory` | Everything else — the product the law is for | everything not matched above |
 
 `registry` is tested first, because `.governance/law/docket.json` also matches

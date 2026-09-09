@@ -25,8 +25,8 @@ import {
   collectDocument,
   collectFrozen,
   collectReceipts,
-  collectWaivers,
 } from "./lib/registries.mjs";
+import { collectWaivers } from "./lib/waivers.mjs";
 import { collectGates } from "./lib/gates.mjs";
 import { estateClassifier, tagEstates } from "./lib/estates.mjs";
 import { collectManagedTree } from "./lib/managed.mjs";
@@ -42,11 +42,16 @@ export {
   collectDocument,
   collectFrozen,
   collectReceipts,
-  collectWaivers,
+  collectRulings,
   documentIntegrityRules,
   extractReceiptSection,
   extractSection,
 } from "./lib/registries.mjs";
+export {
+  addedLinesByFile,
+  collectWaivers,
+  collectWaiversFromLines,
+} from "./lib/waivers.mjs";
 export { collectManagedTree, parseManagedDigests, parsePacksLock } from "./lib/managed.mjs";
 export { parseNameStatus } from "./lib/git.mjs";
 
@@ -62,8 +67,15 @@ const HERE = import.meta.dirname;
  * 3 (#1005 lane C) tagged every file row with its `estate`, filled `gates` with
  * the tighten-only ledgers this change moved and which way, and added
  * `registries.changelog`, `registries.decisions` and `registries.docket`.
+ *
+ * 4 (#1005 lane D) reads every place a waiver can be written — a commit body, a
+ * comment on a line the change added, an `eslint-disable` directive in a
+ * governance document — into one `waivers` list carrying its `docket` id; adds
+ * `registries.docket.rowsOnBase`, the ids the docket held at the baseline; and
+ * records `registries.receipts[*].rulings` for the receipts this change
+ * touched.
  */
-export const SCHEMA = 3;
+export const SCHEMA = 4;
 
 /** Branch names the ported directives treated as the trunk. */
 const DEFAULT_BRANCHES = Object.freeze(["origin/main", "origin/master", "main", "master"]);
@@ -269,13 +281,13 @@ export async function buildArrival(options = {}) {
     pending,
     law,
     managedTree: collectManagedTree(),
-    waivers: collectWaivers(commits, pending),
+    waivers: collectWaivers(commits, pending, range),
     registries: {
       frozen: collectFrozen(range, pending !== null),
       receipts: collectReceipts(range, pending),
       changelog: collectDocument(range, pending, "CHANGELOG.md"),
       decisions: collectDocument(range, pending, "docs/decisions.md"),
-      docket: collectDocket(),
+      docket: collectDocket(range),
     },
     // Every ledger this change moved, from the aggregate law diff and from the
     // staged set — the hook door sees only the latter, and a knob loosened in

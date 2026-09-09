@@ -12,49 +12,6 @@ import { byteCompare } from "./digest.mjs";
 import { readPacks } from "../eslint.config.mjs";
 
 /**
- * In-message waivers, from every commit body in the range and from the pending
- * message.
- *
- * The token is `governance: allow-<directive> ...`, optionally inside an HTML
- * comment. `doc-integrity` needs a path and a reason; the others need a reason.
- * A bare token with no reason does not waive - that was true of the shell
- * directives and stays true here.
- *
- * @param {object[]} commits The commits in the range.
- * @param {object|null} pending The pending commit, if any.
- * @returns {{directive: string, path: string|null, reason: string, source: string}[]}
- *   Sorted by (source, directive, path).
- */
-export function collectWaivers(commits, pending) {
-  const token = /^\s*(?:<!--)?\s*governance:\s*allow-(?<directive>[a-z0-9-]+)\s+(?<rest>.+?)\s*(?:-->)?\s*$/u;
-  const waivers = [];
-  const scan = (text, source) => {
-    for (const line of (text ?? "").split("\n")) {
-      const match = token.exec(line);
-      if (!match) continue;
-      const { directive, rest } = match.groups;
-      const fields = rest.split(/\s+/u).filter(Boolean);
-      // `doc-integrity` is the one path-scoped waiver: `<path> <reason>`. It
-      // needs both fields, so a one-field line is not a waiver at all.
-      if (directive === "doc-integrity") {
-        if (fields.length < 2) continue;
-        waivers.push({ directive, path: fields[0], reason: fields.slice(1).join(" "), source });
-      } else {
-        waivers.push({ directive, path: null, reason: fields.join(" "), source });
-      }
-    }
-  };
-  for (const commit of commits) scan(`${commit.subject}\n${commit.body}`, `commit:${commit.sha}`);
-  if (pending) scan(pending.message, "pending");
-  return waivers.sort((a, b) =>
-    byteCompare(
-      `${a.source} ${a.directive} ${a.path ?? ""}`,
-      `${b.source} ${b.directive} ${b.path ?? ""}`
-    )
-  );
-}
-
-/**
  * The document-integrity rules a pack declares, as `[mode, target, argument]`.
  *
  * `frozen-files receipts/*.md` is a cross-pack invariant in the shell directive
@@ -248,6 +205,68 @@ export function collectFrozen(range, pending) {
 }
 
 /**
+ * A ruling id as a receipt writes one: `**R13**`, `**W4-D1**`, `**R-1005-19**`.
+ */
+const RULING_ID = /\*\*(?<id>R-?[0-9]+(?:-[0-9]+)?|W[0-9]+-D[0-9]+)\*\*/gu;
+
+/**
+ * Every ruling a receipt records, with what its paragraph cites.
+ *
+ * A ruling with no citation is a rule nobody agreed to: the reader cannot find
+ * the issue it was argued on or the decisions row it is in force under. The
+ * generator only READS — which ids are written, on which line, and which
+ * issues or `docs/decisions.md` anchors sit in the same paragraph. Whether
+ * that is enough is `doctrine-citation`'s judgement.
+ *
+ * @param {string} text The receipt.
+ * @returns {{id: string, line: number, cites: string[]}[]} The rulings.
+ */
+export function collectRulings(text) {
+  const lines = text.split("\n");
+  // A paragraph is the contiguous run of non-blank lines a ruling sits in; in
+  // a markdown table one row is one line, which is exactly the granularity a
+  // decisions table wants.
+  const paragraphs = [];
+  let start = 0;
+  for (let index = 0; index <= lines.length; index += 1) {
+    const blank = index === lines.length || lines[index].trim() === "";
+    if (!blank) continue;
+    if (index > start) paragraphs.push({ start, lines: lines.slice(start, index) });
+    start = index + 1;
+  }
+  const rulings = [];
+  for (const paragraph of paragraphs) {
+    for (const [offset, line] of paragraph.lines.entries()) {
+      // A table row is its own paragraph for citation purposes: two rulings in
+      // one table must not lend each other a citation neither wrote.
+      const scope = line.trimStart().startsWith("|") ? [line] : paragraph.lines;
+      const cites = new Set();
+      for (const scoped of scope) {
+        for (const match of scoped.matchAll(/#(?<number>[0-9]{2,7})\b/gu)) {
+          cites.add(`#${match.groups.number}`);
+        }
+        for (const match of scoped.matchAll(
+          /decisions\.md(?<anchor>#[a-z0-9-]+)/gu
+        )) {
+          cites.add(`docs/decisions.md${match.groups.anchor}`);
+        }
+        for (const match of scoped.matchAll(/\((?<anchor>#[a-z][a-z0-9-]{4,})\)/gu)) {
+          cites.add(`docs/decisions.md${match.groups.anchor}`);
+        }
+      }
+      for (const match of line.matchAll(RULING_ID)) {
+        rulings.push({
+          id: match.groups.id,
+          line: paragraph.start + offset + 1,
+          cites: [...cites].sort(byteCompare),
+        });
+      }
+    }
+  }
+  return rulings;
+}
+
+/**
  * The receipt registry: every tracked receipt, which ones this change added,
  * and the shape facts a rule needs to judge them.
  *
@@ -321,6 +340,10 @@ export function collectReceipts(range, pending) {
       // A ruling recorded in a receipt is a decision the adjudication layer
       // must also carry: either a `## Decisions` section with content, or a
       // bold ruling id anywhere in the document (`**R-1005-13**`, `**W2-D1**`).
+      // Only for the receipts this change touched: the corpus is 380 files and
+      // a rule never judges a receipt nobody opened, so parsing every one of
+      // them would grow the record by megabytes to answer nothing.
+      rulings: touchedPaths.has(file) ? collectRulings(text) : [],
       recordsRuling:
         decisions.trim() !== "" ||
         /\*\*(?:R-?[0-9]+-[0-9]+|R[0-9]+|W[0-9]+-D[0-9]+)\*\*/u.test(text) ||
@@ -438,18 +461,38 @@ export function collectDocument(range, pending, file) {
  * "not yet established" instead of "no row found" — the difference between a
  * missing institution and a missing entry.
  *
- * @returns {{path: string, exists: boolean, rows: object[]}} The docket.
+ * `rowsOnBase` is the ids the docket already carried at the baseline. A row
+ * filed and spent in the same arrival is a permission slip an agent wrote
+ * itself, and the difference between that and a granted exception is exactly
+ * which side of the merge-base the row was on.
+ *
+ * @param {object} [range] The resolved range, for the baseline read.
+ * @returns {{path: string, exists: boolean, rows: object[], rowsOnBase: string[]}} The docket.
  */
-export function collectDocket() {
+export function collectDocket(range = null) {
   const file = ".governance/law/docket.json";
+  const parse = (text) => {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : (parsed.rows ?? parsed.entries ?? []);
+  };
   let rows = [];
   let exists = false;
   try {
-    const parsed = JSON.parse(readFileSync(path.join(ROOT, file), "utf8"));
+    rows = parse(readFileSync(path.join(ROOT, file), "utf8"));
     exists = true;
-    rows = Array.isArray(parsed) ? parsed : (parsed.rows ?? parsed.entries ?? []);
   } catch {
     exists = false;
   }
-  return { path: file, exists, rows };
+  let rowsOnBase = [];
+  if (range?.base) {
+    try {
+      rowsOnBase = parse(git(["show", `${range.base}:${file}`]))
+        .map((row) => row?.id)
+        .filter((id) => typeof id === "string")
+        .sort(byteCompare);
+    } catch {
+      rowsOnBase = [];
+    }
+  }
+  return { path: file, exists, rows, rowsOnBase };
 }

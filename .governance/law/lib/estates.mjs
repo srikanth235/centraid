@@ -8,8 +8,8 @@
 //   law        the rules themselves — the union of every pack's `lawPaths`.
 //              Editing it changes what the next change is allowed to do.
 //   registry   the adjudication and evidence layer — receipts, the changelog,
-//              the decisions file, the quality register, the docket. Editing it
-//              records what happened; it never changes what is permitted.
+//              the whole of `docs/`, the quality register, the docket. Editing
+//              it records what happened; it never changes what is permitted.
 //   territory  everything else — the product. The thing the law is for.
 //
 // The classification is deliberately total and deliberately ordered: `registry`
@@ -26,11 +26,18 @@ import { readPacks } from "../eslint.config.mjs";
  *
  * `.governance/law/docket.json` is reserved by #1005 and created by the docket
  * lane; naming it before it exists is what keeps it from being born as law.
+ *
+ * `docs/**` is the whole documentation tree, not `docs/decisions.md` alone
+ * (R-1005-19, 2026-09-09). Docs record what IS; none of them changes what the
+ * next change may do, which is the one thing that makes a path law. Filing
+ * them as territory made every doc-and-rule commit an estate-separation
+ * finding and taught the honest fix — one commit, law and its own
+ * documentation — to look like the violation.
  */
 export const REGISTRY_PATHS = Object.freeze([
   "receipts/**",
   "CHANGELOG.md",
-  "docs/decisions.md",
+  "docs/**",
   "QUALITY.md",
   ".governance/law/docket.json",
 ]);

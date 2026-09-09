@@ -15,6 +15,7 @@ import {
   collectDocket,
   collectDocument,
   collectWaivers,
+  collectWaiversFromLines,
   estateClassifier,
   isLedger,
   judgeSection,
@@ -62,7 +63,7 @@ test("two runs over the same range in the same tree are byte-identical", async (
 
 test("the record has every section, including the ones no rule reads yet", () => {
   const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
-  assert.equal(arrival.schema, 3);
+  assert.equal(arrival.schema, 4);
   for (const key of ["range", "commits", "files", "law", "managedTree", "waivers", "registries", "gates", "ci"]) {
     assert.ok(key in arrival, `arrival.json has no ${key}`);
   }
@@ -182,11 +183,70 @@ test("a waiver needs a reason, and doc-integrity's needs a path as well", () => 
     },
   ];
   const waivers = collectWaivers(commits, { message: "governance: allow-doc-integrity QUALITY.md why", files: [] });
-  assert.deepEqual(waivers, [
-    { directive: "receipt-per-issue", path: null, reason: "release commit", source: "commit:abc" },
-    { directive: "doc-integrity", path: "COSTS.md", reason: "coordinated rewrite", source: "commit:abc" },
-    { directive: "doc-integrity", path: "QUALITY.md", reason: "why", source: "pending" },
-  ].sort((a, b) => (`${a.source} ${a.directive} ${a.path ?? ""}` < `${b.source} ${b.directive} ${b.path ?? ""}` ? -1 : 1)));
+  assert.deepEqual(
+    waivers.map((waiver) => `${waiver.source} ${waiver.directive} ${waiver.path ?? "-"} ${waiver.reason}`),
+    [
+      "commit:abc commit-message-format - ",
+      "commit:abc doc-integrity COSTS.md coordinated rewrite",
+      "commit:abc receipt-per-issue - release commit",
+      "pending doc-integrity QUALITY.md why",
+    ]
+  );
+  // A bare token still does not waive — the rules filter on `reason !== ""` —
+  // but it is RECORDED, because "somebody wrote a waiver that does not work"
+  // is a thing the front page should be able to say.
+  assert.equal(waivers.find((waiver) => waiver.directive === "commit-message-format").reason, "");
+});
+
+test("a waiver reason is a paragraph, not a line", () => {
+  // The first parser stopped at the newline and the front page printed half a
+  // sentence, which reads as a complete thought and is not one.
+  const [waiver] = collectWaivers(
+    [
+      {
+        sha: "abc",
+        subject: "feat: x (#1)",
+        body: [
+          "governance: allow-estate-separation the law's test roster lived in the",
+          "product's package.json, and replacing it with a glob is one act.",
+          "",
+          "Co-Authored-By: somebody <n@example.com>",
+        ].join("\n"),
+        parents: [],
+        files: [],
+      },
+    ],
+    null
+  );
+  assert.equal(
+    waiver.reason,
+    "the law's test roster lived in the product's package.json, and replacing it with a glob is one act."
+  );
+});
+
+test("a waiver written in a file, and an eslint-disable, are waivers too", () => {
+  const line = (text) => text;
+  const rows = collectWaiversFromLines([
+    ["packages/blueprints/apps/photos/Chrome.module.css", [line("  /* governance: allow-no-hardcoded-colors overlay */")]],
+    ["CONSTITUTION.md", [line("per-commit waiver `governance: allow-estate-separation <reason>` in the body")]],
+    ["receipts/issue-1.md", [line("<!-- eslint-disable law/receipt-per-issue -- docket:D-9 the audit lands at close -->")]],
+  ]);
+  assert.deepEqual(rows, [
+    {
+      directive: "receipt-per-issue",
+      path: "receipts/issue-1.md",
+      reason: "docket:D-9 the audit lands at close",
+      source: "disable:receipts/issue-1.md",
+      docket: "D-9",
+    },
+    {
+      directive: "no-hardcoded-colors",
+      path: "packages/blueprints/apps/photos/Chrome.module.css",
+      reason: "overlay",
+      source: "file:packages/blueprints/apps/photos/Chrome.module.css",
+      docket: null,
+    },
+  ]);
 });
 
 test("the doc-integrity rule set carries the ported overlay and always the receipts row", () => {
@@ -325,6 +385,7 @@ test("the adjudication documents report what this change ADDED, not that it open
   assert.ok(decisions.issues.includes(996), "the #996 rulings landed in this range");
   assert.equal(docket.exists, false, "the docket path is reserved, not yet created");
   assert.deepEqual(docket.rows, []);
+  assert.deepEqual(docket.rowsOnBase, []);
 });
 
 test("a document row cites only the issues on added lines", () => {
@@ -339,6 +400,7 @@ test("a document row cites only the issues on added lines", () => {
     lines: 0,
   });
   assert.equal(collectDocket().path, ".governance/law/docket.json");
+  assert.deepEqual(collectDocket().rowsOnBase, [], "no docket at the baseline, no ids");
 });
 
 test("a receipt row carries its issue, whether a ruling is in it, and any cost", () => {

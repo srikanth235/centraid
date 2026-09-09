@@ -49,7 +49,7 @@
       "path": ".governance/law/out/arrival.json",
       "ruleId": "law/estate-separation",
       "severity": "warn",
-      "message": "3df6d552 edits the law and the territory in one commit — law: 'tests/claims.json', 'tests/inventory.json'; territory: '.github/workflows/mobile-ios-lock.yml', 'ARCHITECTURE.md', 'SECURITY.md' and 1015 more. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body."
+      "message": "3df6d552 edits the law and the territory in one commit — law: 'tests/claims.json', 'tests/inventory.json'; territory: '.github/workflows/mobile-ios-lock.yml', 'ARCHITECTURE.md', 'SECURITY.md' and 1004 more. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body."
     },
     {
       "path": ".governance/law/out/arrival.json",
