@@ -2,7 +2,7 @@
 
 <!-- governance:front-page start -->
 
-**Law** · window door · range `87cf642c..d0c76db0` · law digest `629a7ce80994` → `e9ba379e08d2`
+**Law** · window door · range `87cf642c..01241cb6` · law digest `629a7ce80994` → `e9ba379e08d2`
 
 law changed under this run: `.github/CODEOWNERS`, `.governance/conf/governance-kit/audit/commit-message-format.conf`, `.governance/conf/governance-kit/audit/doc-integrity.conf`, `.governance/conf/governance-kit/audit/managed-tree-integrity.conf`, `.governance/conf/governance-kit/audit/receipt-per-issue.conf`, `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf`, `.governance/install.yaml`, `.governance/law/README.md`, `.governance/law/arrival.mjs`, `.governance/law/arrival.test.mjs`, `.governance/law/brief.mjs`, `.governance/law/brief.test.mjs` and 70 more
 
@@ -27,11 +27,11 @@ law changed under this run: `.github/CODEOWNERS`, `.governance/conf/governance-k
 - `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — c57f98b6 edits the law and the territory in one commit — law: '.governance/law/arrival.mjs', '.governance/law/arrival.test.mjs', '.governance/law/commitlint.config.mjs' and 9 more; territory: 'package.json'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
 - `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — 615be91b edits the law and the territory in one commit — law: '.governance/install.yaml', '.governance/law/arrival.mjs', '.governance/law/arrival.test.mjs' and 13 more; territory: 'package.json'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
 - `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — 381682ff edits the law and the territory in one commit — law: '.governance/conf/governance-kit/audit/commit-message-format.conf', '.governance/conf/governance-kit/audit/doc-integrity.conf', '.governance/conf/governance-kit/audit/managed-tree-integrity.conf' and 25 more; territory: 'scripts/test.sh'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
-- `.governance/law/out/arrival.json:2187` **law/waiver-docket** (warn) — 'doc-integrity' on COSTS.md (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-9, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
-- `.governance/law/out/arrival.json:2194` **law/waiver-docket** (warn) — 'doc-integrity' on STEERING.md (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-10, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
-- `.governance/law/out/arrival.json:2201` **law/waiver-docket** (warn) — 'estate-separation' (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-11, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
-- `.governance/law/out/arrival.json:2208` **law/waiver-docket** (warn) — 'estate-separation' (commit:fedd15cc99fc4fe19b3702b5a8a3775478136b99) names docket row D-11, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
-- `.governance/law/out/arrival.json:5312` **law/receipt-per-issue** (error) — receipts/issue-1005-governance-constitution.md — '## Audit' records no PASS/REFUTED verdict; an independent reviewer must report a verdict + evidence for each check this rule names.
+- `.governance/law/out/arrival.json:2203` **law/waiver-docket** (warn) — 'doc-integrity' on COSTS.md (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-9, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:2210` **law/waiver-docket** (warn) — 'doc-integrity' on STEERING.md (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-10, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:2217` **law/waiver-docket** (warn) — 'estate-separation' (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-11, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:2224` **law/waiver-docket** (warn) — 'estate-separation' (commit:fedd15cc99fc4fe19b3702b5a8a3775478136b99) names docket row D-11, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:5328` **law/receipt-per-issue** (error) — receipts/issue-1005-governance-constitution.md — '## Audit' records no PASS/REFUTED verdict; an independent reviewer must report a verdict + evidence for each check this rule names.
 
 law estate: 11 paths, CODEOWNERS in sync
 
@@ -933,6 +933,39 @@ options and a recommendation; none is recorded as done.
    **Recommendation: (a) for the docs link half — it is mechanical and it lost its enforcing
    directive when the vendored `governance-kit/docs` pack went; (b) for the other three**, which
    #659 and #767 both recorded as shape-level and not `grep`-decidable.
+
+## PR body
+
+Pasted verbatim into the pull request when the owner asks for it. The front page at the top of this
+receipt is the PR's first block; regenerate it with `node .governance/law/run.mjs --front-page`
+against the pushed HEAD before opening the PR, because its `range` line names a commit.
+
+> **#1005 — governance-kit as a constitution.** The kit stops being a set of shell scripts that ask
+> "is this one commit well-formed?" and becomes the window a whole agent run is brought through. A
+> directive is now an ESLint rule with a door, a statute and a `RuleTester` file; the constitution is
+> its config, where `error` blocks, `warn` is a front-page finding and `off` is a repeal you can see
+> in a diff.
+>
+> Ten rules under `.governance/law/`, over a generated `arrival.json` that is the only place the law
+> talks to git. The four vendored audit directives are ported with parity proven over the last fifty
+> trunk commits and the old pack deleted; six are new — `estate-separation`, `registry-completeness`,
+> `waiver-docket`, `doctrine-citation`, `amendment-pairing`, `constitution-coverage`. `COSTS.md` and
+> `STEERING.md` are retired: both stopped seven hundred issues ago and nothing noticed, and the one
+> number that mattered is now written by the formatter.
+>
+> The front page at the top of the receipt is machine-written — the range, whether the law moved
+> under the run, one line per rule, the registry lines. #1002's range replays through the window and
+> surfaces the widened gate, the uncited rulings and the missing registry rows as findings, pinned as
+> a fixture. Rung 0 measures 3.6 s with the whole catalog at its hook door.
+>
+> **Read the receipt's `## Owner items` before merging.** Five things need the owner: branch
+> protection over the eleven law paths with the blocked-PR demonstration, the required `governance`
+> check, the three docket rows this change filed and spent (D-9..D-11, granted by merging under owner
+> review), and two doctrines that resolve to no statute. Three rules are declared `warn` precisely
+> because their host backing is unconfirmed — the repository does not assert its own configuration.
+>
+> `## Audit` carries no verdict yet; an independent reviewer writes it. `lint:product`'s three
+> failures are inherited from `origin/main` at 87cf642c and reproduced there, failure for failure.
 
 ## Audit
 
