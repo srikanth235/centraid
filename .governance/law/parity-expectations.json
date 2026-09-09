@@ -1,0 +1,11 @@
+{
+  "_comment": "Disagreements between the deleted shell runner and the rules that replaced it, each one a decision on record rather than a hole. A disagreement not listed here fails `node .governance/law/parity.mjs`. See receipts/issue-1005-governance-constitution.md.",
+  "divergences": [
+    {
+      "directive": "commit-message-format",
+      "old": "pass",
+      "new": "fail",
+      "reason": "The shell directive skipped bot authors with the shell pattern `*[bot]*@*`. In a shell `case`, `[bot]` is a CHARACTER CLASS, so it matches any address containing b, o or t before the `@` — which is nearly every human address, srikanth235@gmail.com included. Its Mode B loop therefore judged almost no commit at all. The rule matches the literal `[bot]@`, `dependabot` and `renovate` instead, so it judges subjects the directive silently skipped. The port is stricter here on purpose; reproducing the defect would have been carrying a hole forward."
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import {
   RUNNERS,
   assertEveryConfigModelled,
   filesNamedByScripts,
+  globsNamedByScripts,
   findOrphans,
   flattenProjects,
   globToRegExp,
@@ -232,4 +233,31 @@ test("the gate is green on this tree", () => {
   );
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
   assert.match(run.stdout, /every one reached by a runner/u);
+});
+
+test("a script that names its tests by glob reaches them", () => {
+  // `.governance/law` hands `node --test` a shell glob rather than a list, so
+  // adding a rule does not mean editing the root manifest (#1005). The shell
+  // expands it before node sees it, so what is reachable is what it matches.
+  const globs = globsNamedByScripts({
+    "governance:law:test":
+      "node --test .governance/law/*.test.mjs .governance/law/rules/*.test.mjs",
+    "scripts:test": "node --test scripts/one.test.mjs",
+  });
+  assert.equal(globs.length, 2);
+  assert.equal(
+    findOrphans({
+      files: [
+        ".governance/law/run.test.mjs",
+        ".governance/law/rules/doc-integrity.test.mjs",
+        ".governance/law/lib/nested/deep.test.mjs",
+      ],
+      projects: [],
+      named: new Set(),
+      namedGlobs: globs,
+      playwright: [],
+    }).length,
+    1,
+    "a single-star glob does not cross a directory boundary"
+  );
 });

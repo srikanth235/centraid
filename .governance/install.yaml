@@ -13,8 +13,6 @@ agents_md_snippet: true
 agents_md_created: false
 install_assets_seeded:
   - QUALITY.md
-  - COSTS.md
-  - STEERING.md
   - .github/ISSUE_TEMPLATE/bug.yml
   - .github/ISSUE_TEMPLATE/proposal.yml
   - .github/ISSUE_TEMPLATE/config.yml
@@ -22,5 +20,14 @@ install_assets_seeded:
 collisions: []
 managed_digests:
   .github/workflows/governance.yml: 220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb
+  .governance/law/arrival.mjs: e376376549bda3bf0672cafcb4a6a607bdcf5f01299d4a63ae507a480c6253ad
+  .governance/law/lib/digest.mjs: a1c5858e43b05e59bab1e00bf8cea72dfb8df585cc352c3b72541e53336c031b
+  .governance/law/lib/estates.mjs: 3b73a52a710392595368fe65c35d79878b4ff80a7ba3b3352d13dc6980ca03d6
+  .governance/law/lib/gates.mjs: 1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0
+  .governance/law/lib/git.mjs: e644f94d75b0cce7a55b1f7870177450bf7ed55f4bf1798d47aabb7e7e2f8be2
+  .governance/law/lib/managed.mjs: 83ca10ceeb7ac669bc7443ea34182fc3e45b8aa2b0582b8722efe5470f9e1a05
+  .governance/law/lib/registries.mjs: 9267dcda4077eec7cc0ebbd9983e99176ebac84eb9f57b3e513b04c1603582b9
+  .governance/law/lib/rule.mjs: cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b
+  .governance/law/lib/waivers.mjs: 7b4fb12e0707e420599ee856c31a456895d97b269a6e15d27882a7f8e4964aa3
   .governance/lib.sh: 19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37
   .governance/run.sh: f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4

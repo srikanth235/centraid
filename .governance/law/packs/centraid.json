@@ -1,0 +1,82 @@
+{
+  "id": "srikanth235/centraid",
+  "rules": {
+    "amendment-pairing": {
+      "severity": "error",
+      "door": "hook"
+    },
+    "constitution-coverage": {
+      "severity": "error",
+      "door": "window"
+    },
+    "doctrine-citation": {
+      "severity": "warn",
+      "door": "window"
+    },
+    "estate-separation": {
+      "severity": "warn",
+      "door": "hook"
+    },
+    "registry-completeness": {
+      "severity": "error",
+      "door": "window"
+    },
+    "waiver-docket": {
+      "severity": "warn",
+      "door": "hook"
+    }
+  },
+  "lawPaths": [
+    ".governance/**",
+    "CONSTITUTION.md",
+    "scripts/ci/gate-classes.json",
+    "tests/floors.json",
+    "tests/budgets.json",
+    "tests/inventory.json",
+    "tests/quarantine.json",
+    "tests/claims.json",
+    "oxlint.config.ts",
+    "oxfmt.config.ts",
+    ".github/CODEOWNERS"
+  ],
+  "domains": [
+    {
+      "id": "vault-schema",
+      "paths": [
+        "packages/vault/src/schema/**"
+      ],
+      "decision": "#ontology-v0-close-916"
+    },
+    {
+      "id": "design-tokens",
+      "paths": [
+        "packages/design/src/**"
+      ],
+      "decision": "#typography-and-design-contracts"
+    },
+    {
+      "id": "pr-gate",
+      "paths": [
+        ".github/workflows/ci.yml",
+        "scripts/ci/**"
+      ],
+      "decision": "#the-pr-gate-loop-892"
+    },
+    {
+      "id": "replica",
+      "paths": [
+        "apps/mobile/src/lib/replica/**",
+        "packages/client/src/replica/**"
+      ],
+      "decision": "#one-vault-every-seat-996"
+    },
+    {
+      "id": "the-law",
+      "paths": [
+        ".governance/law/**",
+        "CONSTITUTION.md"
+      ],
+      "decision": "#governance-as-a-constitution-1005"
+    }
+  ]
+}

@@ -47,6 +47,21 @@ There is no guaranteed commit bit. Response cadence: see [README.md](README.md).
 
 Receipts are **append-only**: a multi-PR issue keeps one receipt and each PR adds one section at the end, because `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. The root `.gitattributes` marks `receipts/*.md merge=union`, so two branches appending to the same receipt rebase cleanly with the upstream section first instead of conflicting. The driver cannot tell an append from an edit, so the rule it does not replace still stands: never change text above your own section — `doc-integrity` enforces that. Details and limits: [docs/dev-environment.md](docs/dev-environment.md#receipts-are-append-only-and-sibling-appends-merge-by-union).
 
+## Amending the law
+
+The repo's directives are ESLint rules under [`.governance/law/`](.governance/law/README.md), and changing one is an **amendment**, not an edit. Four things move together, in a single commit, or `amendment-pairing` refuses it:
+
+1. the rule — `.governance/law/rules/<id>.mjs`, carrying `meta.door` (`hook`, `window` or `owner`) and its statute link;
+2. its cases — `.governance/law/rules/<id>.test.mjs`. The `invalid` case is the demonstrated red; a directive with no enforcing test is a wish;
+3. its row — the pack declaration under `.governance/law/packs/`, which sets the severity (`error` blocks, `warn` is a front-page finding, `off` repeals);
+4. its statute — a `### <id>` section in [CONSTITUTION.md](CONSTITUTION.md) stating the door, what the **host** enforces and what the rule only observes. `constitution-coverage` fails on a rule with no section and on a principle that resolves to neither a rule id nor a `docs/decisions.md` anchor.
+
+A change to the law estate is also separated from product code by `estate-separation`: one commit edits the law or the territory, never both. Registry files (`receipts/**`, `docs/**`, `CHANGELOG.md`, `QUALITY.md`, the docket) may ride with either.
+
+An exception to a rule is not a code comment. `eslint-disable-next-line <rule> -- docket:<id>` points at a row in `.governance/law/docket.json` carrying reason, authority, issue and expiry. **Anyone may file a row; only the owner grants one**, by merging it under owner review before it is spent — a row filed and used in the same change is refused by `waiver-docket` as a permission slip its author wrote itself.
+
+Run it: `bun run governance:law` for the window door, `bun run governance:law:test` for the cases, `bash .governance/run.sh` for everything. Do not weaken a rule to go green; the amendment is the supported path, and the law estate requires owner review to merge ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+
 ## Security
 
 Report vulnerabilities privately per [SECURITY.md](SECURITY.md) — not as public issues.

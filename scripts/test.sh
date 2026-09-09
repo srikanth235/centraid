@@ -14,9 +14,9 @@
 # test:governance-shell`, `check:pr`, a bare shell) runs the full lane, so the
 # gate can only ever narrow the *fast* loop — never the enforcing one.
 #
-# `receipt-per-issue` is vendored, digest-locked, and repo-wide by construction,
-# so it stays deferred to pre-push. Its cost fell sharply in governance-kit
-# audit 0.11.0. See docs/dev-environment.md#the-local-gate-loop.
+# `receipt-per-issue` is no longer a vendored directive: #1005 ported it, with
+# the other three, to a rule under `.governance/law/`, and nothing is deferred
+# to pre-push any more. See docs/dev-environment.md#the-local-gate-loop.
 #
 # The hook signal is GIT_INDEX_FILE, which git sets for pre-commit (verified on
 # git 2.50.1) and not for a plain `bun run`. It is deliberately paired with a

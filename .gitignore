@@ -36,6 +36,12 @@ apps/web/public/centraid-worker-iroh.wasm
 __pycache__
 *.pyc
 
+# The law's own ESLint install and its generated arrival record (#1005). Named
+# in full rather than left to the bare `out` entry above, so deleting that
+# entry cannot silently start committing generated governance state.
+.governance/law/node_modules/
+.governance/law/out/
+
 # Per-app scratch trees the boot harness builds (app.js + symlinked kit assets);
 # they must live inside the package because vite refuses to load a dynamically
 # imported module from outside the project root. See src/app-boot-harness.ts.

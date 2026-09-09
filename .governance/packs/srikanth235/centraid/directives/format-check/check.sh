@@ -45,7 +45,7 @@ while IFS= read -r file; do
     # excluded there; passing only excluded paths makes oxfmt exit 2 ("expected
     # at least one target") rather than report a formatting result.
     case "$file" in
-    .governance/* | .github/workflows/governance.yml | receipts/* | CONSTITUTION.md | COSTS.md | STEERING.md | QUALITY.md)
+    .governance/* | .github/workflows/governance.yml | receipts/* | CONSTITUTION.md | QUALITY.md)
         continue
         ;;
     esac

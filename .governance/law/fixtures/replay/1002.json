@@ -1,0 +1,101 @@
+{
+  "range": "bb964a7e..3df6d552",
+  "rules": [
+    {
+      "id": "amendment-pairing",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "commit-message-format",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "constitution-coverage",
+      "door": "window",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "doc-integrity",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "doctrine-citation",
+      "door": "window",
+      "severity": "warn",
+      "verdict": "fail",
+      "count": 2
+    },
+    {
+      "id": "estate-separation",
+      "door": "hook",
+      "severity": "warn",
+      "verdict": "fail",
+      "count": 1
+    },
+    {
+      "id": "managed-tree-integrity",
+      "door": "hook",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "receipt-per-issue",
+      "door": "window",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
+      "id": "registry-completeness",
+      "door": "window",
+      "severity": "error",
+      "verdict": "fail",
+      "count": 1
+    },
+    {
+      "id": "waiver-docket",
+      "door": "hook",
+      "severity": "warn",
+      "verdict": "pass",
+      "count": 0
+    }
+  ],
+  "messages": [
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/doctrine-citation",
+      "severity": "warn",
+      "message": "receipts/issue-996-one-vault-every-seat.md:4059 records ruling W6-D1 and cites nothing. A ruling with no issue and no docs/decisions.md anchor is a rule nobody agreed to: the next reader cannot find where it was argued or whether it is still in force."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/doctrine-citation",
+      "severity": "warn",
+      "message": "receipts/issue-996-one-vault-every-seat.md:4497 records ruling W6-D2 and cites nothing. A ruling with no issue and no docs/decisions.md anchor is a rule nobody agreed to: the next reader cannot find where it was argued or whether it is still in force."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/estate-separation",
+      "severity": "warn",
+      "message": "3df6d552 edits the law and the territory in one commit — law: 'tests/claims.json', 'tests/inventory.json'; territory: '.github/workflows/mobile-ios-lock.yml', 'ARCHITECTURE.md', 'SECURITY.md' and 1004 more. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body."
+    },
+    {
+      "path": ".governance/law/out/arrival.json",
+      "ruleId": "law/registry-completeness",
+      "severity": "error",
+      "message": "CHANGELOG.md carries no line citing #996. A change that reached the trunk and left no entry is a change nobody downstream can find; add a bullet under '## [Unreleased]' linking the issue."
+    }
+  ]
+}

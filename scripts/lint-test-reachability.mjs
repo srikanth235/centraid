@@ -297,6 +297,26 @@ export function filesNamedByScripts(scripts) {
 }
 
 /**
+ * Every test-file GLOB named by a root `package.json` script.
+ *
+ * A script that hands `node --test` a shell glob names its files just as much
+ * as one that lists them, and the list form has a cost: it puts a package's
+ * test roster in the root manifest, so adding a test to that package means
+ * editing the manifest too. `.governance/law` runs its suite this way (#1005).
+ * The shell expands the glob before `node` ever sees it, so what is reachable
+ * is exactly what the pattern matches in the tree.
+ *
+ * @param {object} scripts The `scripts` block.
+ * @returns {RegExp[]} One matcher per glob, anchored, over repo-relative paths.
+ */
+export function globsNamedByScripts(scripts) {
+  const named = JSON.stringify(scripts ?? {}).match(
+    /[\w./@-]*\*[\w./@*-]*\.(?:test|spec)\.[cm]?[jt]sx?/gu
+  );
+  return [...new Set(named)].map((glob) => globToRegExp(glob));
+}
+
+/**
  * The directories a Playwright config owns.
  *
  * Read textually rather than imported: importing a Playwright config pulls in
@@ -339,14 +359,22 @@ export function playwrightDirs(configs, read) {
  * @param {string[]} input.files Every tracked path, repo-relative.
  * @param {{root: string, include: string[], exclude: string[]}[]} input.projects Leaf vitest projects.
  * @param {Set<string>} input.named Files a package.json script hands a runner.
+ * @param {RegExp[]} [input.namedGlobs] Matchers for globs a script hands a runner.
  * @param {{dir: string}[]} input.playwright Playwright test directories.
  * @returns {string[]} Repo-relative paths, sorted.
  */
-export function findOrphans({ files, projects, named, playwright }) {
+export function findOrphans({
+  files,
+  projects,
+  named,
+  namedGlobs = [],
+  playwright,
+}) {
   const orphans = [];
   for (const file of files) {
     if (!TEST_FILE.test(path.basename(file))) continue;
     if (named.has(file)) continue;
+    if (namedGlobs.some((matcher) => matcher.test(file))) continue;
     if (
       playwright.some(
         ({ dir }) =>
@@ -428,6 +456,7 @@ export async function run() {
     files: tracked,
     projects,
     named: filesNamedByScripts(pkg.scripts),
+    namedGlobs: globsNamedByScripts(pkg.scripts),
     playwright,
   });
   return {

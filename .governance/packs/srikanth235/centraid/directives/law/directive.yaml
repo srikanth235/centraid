@@ -1,0 +1,23 @@
+# law — the governance documents must pass the law's ESLint rules.
+category: Governance
+recommended: true
+summary: |
+  The change set is generated into an arrival record (`.governance/law/out/
+  arrival.json`) and linted, together with the governance documents the change
+  touched, by the rule catalog declared in `.governance/law/packs/*.json`.
+
+  Two doors. In a commit hook the `hook` door runs: only the rules answerable
+  from the change set alone, all fatal, so the commit does not happen. Anywhere
+  else — `bash .governance/run.sh`, CI, a bare `bun run governance:law` — the
+  `window` door runs the whole catalog, with the hook rules still fatal and the
+  rest reported as warnings.
+
+  Every enabled rule prints a line, green or red. A gate that is silent when it
+  is happy is a gate nobody can tell is running.
+
+  The rules observe; they do not enforce. Enforcement is the host's — branch
+  protection and the reviewers `.github/CODEOWNERS` names — because nothing an
+  agent can edit is the authority for what an agent may do, and every file
+  under `.governance/law/` is agent-writable.
+surface: change-set
+hook: pre-commit

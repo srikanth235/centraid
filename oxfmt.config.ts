@@ -56,8 +56,6 @@ export default defineConfig({
     // Governance freezes historical receipts/ledgers byte-for-byte and freezes
     // historical sections in the constitution and quality ledger.
     "receipts/**",
-    "COSTS.md",
-    "STEERING.md",
     "CONSTITUTION.md",
     "QUALITY.md",
     // Generator-owned outputs with regeneration checks elsewhere in the repo.

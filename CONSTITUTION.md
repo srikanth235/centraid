@@ -2,29 +2,33 @@
 
 This document is the source of truth for the principles, guidelines, and directives that govern development in this repository. Every directive here is enforced by an executable test under `.governance/`. A directive with no enforcing test is not a directive — it is a wish.
 
-> **The cardinal rule:** Amendments to this constitution must land in the same commit as the change to its enforcing test. No exceptions.
+> **The cardinal rule:** amendments to this constitution land in the same commit as the change to their enforcing test. It is no longer a callout anybody has to remember — it is [`amendment-pairing`](#amendment-pairing), and it refuses the commit.
 
 ## Compliance
 
 Anyone working in this repo — humans, agents, scripted automation — must satisfy every principle, guideline, and directive in this document.
 
-- **Mechanical directives** (the **Directives** section below) are enforced by `.governance/` via the git hooks and CI. A violating commit is blocked locally and re-blocked in CI if the hook is bypassed. Locally the directives are split across two rungs: the pre-commit hook runs the sub-5-second directives, and the one that is repo-wide by construction — `receipt-per-issue` — runs at pre-push instead, listed in `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf` (#915). The split is local only: `.governance/run.sh`, which CI invokes, runs every directive on every PR regardless of hook.
+- **Mechanical directives** (the **Directives** section below) are enforced by `.governance/` via the git hooks and CI. A violating commit is blocked locally and re-blocked in CI if the hook is bypassed. Locally every directive runs at the pre-commit rung: the four vendored ones are rules under `.governance/law/` (#1005), which the `law` directive runs behind its hook door at commit time, so `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf` is empty and nothing is deferred to pre-push. The split is local only: `.governance/run.sh`, which CI invokes, runs every directive on every PR regardless of hook.
 - **Principles and guidelines** (the **Principles** section above the Directives) cannot be checked mechanically. They depend on judgment and reviewer discipline. A change that defies a principle without explanation is grounds to block the PR.
 
 If a specific change cannot satisfy a directive, document the deviation in the PR description and use the directive's stated waiver mechanism if one exists. Drive-by violations without explanation will block the merge.
 
 ## Principles
 
-- Changes to this constitution must land with a corresponding change to the enforcing tests.
-- Every commit is treated as agent-authored — the audit chain (issue → receipt → commit → token + steering ledger) is mandatory, not opt-in.
-- The repo is its own system of record. Decisions, costs, steering events, and quality observations belong in tracked files, not in chat history.
-- Docs are load-bearing. Stale docs are bugs; broken internal links are bugs; missing baseline docs (constitution, agents, readme, license, security, architecture) are bugs.
-- Documentation describes current state. History is cited by reference; current decisions, deliberate non-goals, and supersession markers remain documentable state, while intent belongs in proposal issues.
-- Escape hatches exist (`SKIP_GOVERNANCE=1`, `git commit --no-verify`) — but every skipped commit is still checked in CI.
-- Every user-facing interaction has a perceived-latency budget. A hot path that ships without a measured budget is an incomplete feature, not a fast one nobody got around to measuring.
-- Nothing whose cost scales with vault size runs synchronously on the request path or the event loop. Growth is the default assumption; "it is small today" is an observation, not a design.
-- Every user-facing quality gate lands with a seeded demonstrated-red run, recorded in the receipt and dated in the [`tests/claims.json`](tests/claims.json) qualities layer. Green-only evidence is incomplete evidence.
-- Every gate knob is tighten-only or waiver-gated. A budget, allowlist, classification, or expected-component list that can be silently widened in the same change is not a gate.
+Every principle here resolves to something published: a rule id, a `docs/decisions.md` anchor, or an open question recorded there for the owner. That is `constitution-coverage`'s subject, and it is not a formality — an agent is held only to what was written down before it acted, so a principle that resolves to nothing is a mood, and being held to a mood is the failure this document exists to prevent. A principle that cannot be made a statute becomes a question, never a silence.
+
+- Changes to this constitution land with the change to their enforcing test. — rule: amendment-pairing
+- Every commit is treated as agent-authored: one issue, one receipt, one commit subject naming it. — rule: receipt-per-issue
+- The repo is its own system of record. What a change decided is written where decisions live, not in chat history. — rule: registry-completeness
+- A change inside settled doctrine names the decision it answers to. — rule: doctrine-citation
+- Docs are load-bearing. Stale docs are bugs; broken internal links are bugs; missing baseline docs (constitution, agents, readme, license, security, architecture) are bugs. — owner question: #q-1005-1
+- Documentation describes current state. History is cited by reference; current decisions, deliberate non-goals, and supersession markers remain documentable state, while intent belongs in proposal issues. — owner question: #q-1005-1
+- Escape hatches exist, and every one of them is a row somebody can read. — rule: waiver-docket
+- Every user-facing interaction has a perceived-latency budget. A hot path that ships without a measured budget is an incomplete feature, not a fast one nobody got around to measuring. — owner question: #q-1005-2
+- Nothing whose cost scales with vault size runs synchronously on the request path or the event loop. Growth is the default assumption; "it is small today" is an observation, not a design. — owner question: #q-1005-2
+- Every user-facing quality gate lands with a seeded demonstrated-red run, recorded in the receipt and dated in the [`tests/claims.json`](tests/claims.json) qualities layer. Green-only evidence is incomplete evidence. — decision: #the-quality-ladder-915
+- Every gate knob is tighten-only or waiver-gated. A budget, allowlist, classification, or expected-component list that can be silently widened in the same change is not a gate. — rule: registry-completeness
+- A change to the law is not a change to the product, and is reviewed on its own. — rule: estate-separation
 
 ## Directives
 
@@ -39,6 +43,9 @@ If a specific change cannot satisfy a directive, document the deviation in the P
     - `ctx-primitives` — handlers may not import provider SDKs directly (`@anthropic-ai/sdk`, `openai`, `groq-sdk`, `@google/generative-ai`, `cohere-ai`, `@mistralai/mistralai`, `replicate`, `together-ai`). Provider-backed judgment flows through `ctx.delegate`; self-contained recognition handlers use `ctx.vault.content` and `ctx.vault.invoke`. There is no generic `ctx.infer` or `ctx.enrich`.
 - **Rationale**: all four guard one boundary — a handler owns its app's `data.sqlite` and reaches everything else through `ctx.*` — and they share one failure signature: the mutation succeeds, the bus stays quiet, the inline React routes and replica subscribers watching that table never re-fetch, and the UI goes stale with no error anywhere. The change-stream feed at `/centraid/<id>/_changes` is the common dependency: the handler-runner skips SQLite session tracking for `handlerKind === 'query'` as a read-path optimization (`packages/server/src/engine/handlers/handler-runner.ts`), per-table invalidation is driven by each action's declared `writes:`, and `runtime.sqlite` is gateway-owned state the stream would never invalidate. `ctx-primitives` guards the same boundary from the other side: reaching past `ctx.*` defeats per-profile model routing, bypasses run-ledger cost accounting, and couples a handler to one provider — breaking the "same code, three hosts" portability the architecture depends on. Extending `ctx.*` is the supported way to grow capabilities. They are one directive because none is a load-bearing axis alone and the catalog should be honest about how much work each entry does — the same reasoning governance-kit applies when it consolidates its own catalog.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/handler-contract/check.sh`
+- **Door**: hook (pre-commit), and again in CI through `.governance/run.sh`.
+- **Host enforces**: the `governance` workflow, a required check on the default branch ([decisions.md](docs/decisions.md#the-pr-gate-loop-892)).
+- **Rule observes**: nothing about whether the handler is CORRECT — only that its writes stay declared and its imports stay inside `ctx.*`.
 - **Exceptions**: per-line waiver `// governance: allow-handler-contract <reason>` for the rare opt-in case (e.g. lazy view materialization on first access, or an action that must call a provider directly during a controlled experiment). The retired per-directive tokens (`allow-query-handlers-read-only`, `allow-data-runtime-sqlite-separation`, `allow-handler-uses-ctx-primitives`) are still honoured, so an existing waiver keeps working. `declared-writes` takes no waiver: JSON has no comment syntax, and the right opt-out for a no-DB-write action is the explicit empty array.
 
 ### no-hardcoded-model-ids
@@ -46,6 +53,9 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Directive**: production source under `packages/` and `apps/` must not reference concrete provider model ids (`claude-opus-4-7`, `claude-sonnet-4-6`, `gpt-5`, `o1-mini`, `gemini-2.0-flash`, etc.) inside string literals. Model selection flows through capability tiers resolved at runtime. The single allowlisted file is `packages/server/src/engine/model-pricing.ts` (the price table is by definition a model-id-to-price map). Test files (`**/*.test.{ts,tsx}`, `**/*.spec.{ts,tsx}`) are excluded since they exercise the pricing and storage layers and need real ids.
 - **Rationale**: provider-agnostic inference. The model lineup churns - Anthropic, OpenAI, Google, and Meta ship new flagship models every few months and retire old ones on a similar cadence. Code that references `claude-sonnet-4-5` directly is a maintenance liability the moment the next minor version ships. Capability tiers (`tier:fast`, `tier:smart`) abstract that churn behind a runtime resolver and let model selection move with operator preferences and per-profile routing without code edits.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-model-ids/check.sh`
+- **Door**: hook (pre-commit), and again in CI.
+- **Host enforces**: the `governance` workflow.
+- **Rule observes**: nothing; a concrete model id in a string literal is decidable.
 - **Exceptions**: per-line waiver `// governance: allow-no-hardcoded-model-ids <reason>` for the rare opt-in case (e.g. a controlled experiment that pins a specific model intentionally).
 
 ### no-hardcoded-colors
@@ -53,13 +63,119 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Directive**: stylesheets under `packages/blueprints/apps/**/*.module.css` must not introduce hex (`#fff`, `#0b0d12`, `#rrggbbaa`) or functional (`rgb()`, `rgba()`, `hsl()`, `hsla()`) color literals. Color reaches app CSS as `var(--token)` from `@centraid/design`. The check evaluates only lines added relative to the merge base with the default branch (or staged additions when no such ref exists), so historical debt does not block every commit while a new literal fails immediately.
 - **Rationale**: `packages/design` is contract-tested on the supply side, but supply without enforced consumption is theatre — a literal in app CSS silently forks the palette, survives every token change, and shows up later as the one panel that didn't switch to dark mode. The exhaustive gate is `packages/blueprints/src/token-purity.test.ts`, which also covers `font-family` stacks and custom properties declared in reserved namespaces (`--c-*`, `--t-*`, `--r-*`, `--sp-*`, `--bg-*`, `--text-*`, and every name in `BLUEPRINT_TOKEN_CONTRACT`) and pins the remaining debt per file in `token-purity-allowlist.ts` so the ledger can only shrink. This directive is the fast commit-time tripwire in front of it.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh`
+- **Door**: hook (pre-commit), added lines only, and again in CI.
+- **Host enforces**: the `governance` workflow. The exhaustive gate is `packages/blueprints/src/token-purity.test.ts` at rung 1.
+- **Rule observes**: whether the literal SHOULD be a token — the docket row is where that judgement is recorded (see [waiver-docket](#waiver-docket), row `D-1`).
 - **Exceptions**: per-line waiver `/* governance: allow-no-hardcoded-colors <reason> */` for the rare literal that genuinely cannot be a token (e.g. a value fixed by an external spec).
+
+### estate-separation
+
+- **Directive**: every tracked path belongs to exactly one **estate** — `law` (the union of every pack's `lawPaths` in `.governance/law/packs/*.json`: `.governance/**`, this file, the tighten-only ledgers under `tests/`, `oxlint.config.ts`, `oxfmt.config.ts`, `scripts/ci/gate-classes.json`, `.github/CODEOWNERS`), `registry` (`receipts/**`, `CHANGELOG.md`, `docs/**`, `QUALITY.md`, `.governance/law/docket.json`) or `territory` (everything else). A single commit may not edit the `law` estate and the `territory` estate together, and neither may a change set spread the same mix across two of its commits. `law` + `registry` is the expected shape: a rule lands with the receipt and the ruling that authorised it. Merge commits are skipped — a merge has no diff of its own. A commit that moves the law whose issue CI reports is not a proposal is a second finding; offline, `ci.issueIsProposal` is null and that half is silent rather than guessing.
+- **Rationale**: "is this feature right?" and "should this rule exist?" are different questions with different evidence, different reviewers, and different consequences for being wrong. A diff that answers both at once gets the second waved through on the strength of the first — which is exactly how a gate gets widened in the same change that needed it widened. Separating the estates does not make the law unchangeable; it makes changing the law a change somebody looked at on its own.
+- **Enforced by**: `.governance/law/rules/estate-separation.mjs` (cases: `.governance/law/rules/estate-separation.test.mjs`), over `arrival.files`, `arrival.commits[].files` and `arrival.pending.files`, each tagged with its estate by the generator. The two doors see different change sets, which is scope and not softening: at the hook only the staged set is judged, because a finding about a commit already made would block a commit no edit to it could fix; in the window every commit of the range is judged, and so is the aggregate.
+- **Host enforces**: nothing. Every file under `.governance/law/` is agent-writable, so the refusal at the commit hook is a local convenience, not a boundary. The boundary is GitHub branch protection plus the reviewers `.github/CODEOWNERS` names over the `law` estate — owner-enabled, outside this repository, and **not confirmed enabled**.
+- **Observes**: at the window door, at the pack's declared `warn`, so a finding is visible on the pull request without the law standing in for an owner review that has not happened. At the hook door it is fatal, which is the catalog's one door asymmetry.
+- **Door**: hook for the staged set, window for the aggregate. The catalog's one door asymmetry.
+- **Exceptions**: per-commit waiver `governance: allow-estate-separation <reason>` in the commit body. Reason required — a bare token does not waive. A waiver in the pending message waives the staged set. Audit trail: `git log --grep='allow-estate-separation'`.
+
+### registry-completeness
+
+- **Directive**: the registry estate must carry what this change did. Three events, three questions, and nothing is asked of a change that did not cause the event. (1) A change bound to an issue adds a `CHANGELOG.md` line citing it. (2) A receipt this change touched that records a ruling — a `## Decisions` section with content, or a bold ruling id — requires a line in `docs/decisions.md` citing that receipt's issue. (3) A gate ledger that widened (or moved both ways) requires either a `docs/decisions.md` line citing this change's issue or a changed `approvedDeviation` note in the ledger itself; the finding names which one satisfied it. (4) — a waiver's docket row — was this directive's fourth question until #1005 lane D and is now [`waiver-docket`](#waiver-docket)'s alone, which asks the sharper version of it: not whether a row exists but whether it was granted before this change spent it. The issue is the touched receipt's — the one binding a squash cannot lose — falling back to the commit subjects' `(#N)`. That the change carries a receipt at all is `receipt-per-issue`'s question and is not re-asked here.
+- **Rationale**: "The repo is its own system of record" is a principle with no enforcing test: the ledgers it named stopped being written while the work went on, and nothing noticed. What makes a record trustworthy is not that somebody promised to keep it but that the change which caused an entry cannot land without it. Event-driven is the whole design — a rule that demanded a changelog line from every commit would be a rule people learn to satisfy with an empty bullet, and a register of empty bullets is worse than none.
+- **Enforced by**: `.governance/law/rules/registry-completeness.mjs` (cases: `.governance/law/rules/registry-completeness.test.mjs`), over `arrival.registries.{receipts,changelog,decisions,docket}`, `arrival.gates` and `arrival.waivers`. The generator reads the issues cited on lines this change ADDED (`git diff -U0`), never that the file was opened.
+- **Host enforces**: the `governance` workflow is a required check on the default branch (see [docs/decisions.md](docs/decisions.md#the-pr-gate-loop-892)), so a finding here blocks the merge. That backing is why this directive is declared `error` where `estate-separation` is `warn`.
+- **Observes**: whether the entry says anything true. A line citing the issue is findable, which is all a rule can see; whether the ruling is the right one is the reviewer's.
+- **Door**: window. Its completed-change half is a question about the aggregate.
+- **Exceptions**: none, because the rule only ever asks for the record of something the change itself did. A change with no event files nothing.
+
+### waiver-docket
+
+- **Directive**: every exception the law grants is a row in `.governance/law/docket.json`, and every exception a change spends names one. A row carries `id`, `rule`, `path` (a glob, or `null` for "wherever the rule applies"), `reason`, `authority` (the pull request or merge that granted it, or the literal `pending owner grant`), `filedBy` (`agent` or `owner`), `issue` and `expires` (`YYYY-MM-DD`). Ids are unique; a row past its expiry is a finding. A waiver an arrival spends — a `governance: allow-*` token in a commit body or on a line the change added, or an `eslint-disable` directive in one of the governance documents — must name a row whose `rule` and `path` match, which was already on the trunk at the merge-base, and whose authority is not `pending owner grant`. A row filed and spent in the same arrival is **self-granted** and is reported as such.
+- **Rationale**: a law with no escape is a law people route around with `--no-verify`, so every rule here can be waived. What is not deliberate is a waiver nobody ever revisits: this repository carried eight of them — a colour literal and seven workflow first lines naming a directive that no longer exists — and nothing enumerated them. The self-granting clause is the load-bearing half. An agent can write any row it likes; what it cannot do is put that row on the trunk before the change that needs it, which is the only mechanical difference between a granted exception and a permission slip somebody wrote themselves.
+- **Enforced by**: `.governance/law/rules/waiver-docket.mjs` (cases: `.governance/law/rules/waiver-docket.test.mjs`), over `.governance/law/docket.json`, over `arrival.waivers` against `arrival.registries.docket.rowsOnBase`, and over the `eslint-disable` directives in the documents the law lints. Nothing here re-implements a suppression mechanism: ESLint's own directive **is** the waiver primitive for the document rules, the derived config already reports an unused one as an error (`linterOptions.reportUnusedDisableDirectives`), and the rule only requires that the directive's `--` description names its row. The date is injected into the rule's options by the config; a rule never reads a clock.
+- **Door**: hook for the register and the suppressions, window for the spending. The register's shape and a suppression that names no row are answerable from the change alone and are fatal at the commit hook; the spending half is silent at the hook, because a finding about a row that landed three commits ago would block a commit no edit to it could fix.
+- **Host enforces**: nothing mechanical. The docket is a law-glob path (`.governance/**`), so the boundary is the owner's review through `.github/CODEOWNERS` plus branch protection — owner-enabled, outside this repository, and **not confirmed enabled**. That is why the pack declares it `warn`.
+- **Rule observes**: that a row exists, matches, predates the change and is not marked pending. Whether the exception should have been granted at all is the owner's, which is precisely what `authority: pending owner grant` records.
+- **Exceptions**: none. A rule whose whole subject is exceptions cannot have one — the docket row IS the exception, and a row that cannot be written honestly is a waiver that should not be spent.
+
+### amendment-pairing
+
+- **Directive**: the law moves with the evidence that it works. Three pairings. (1) A commit that changes `.governance/law/rules/<id>.mjs` changes `.governance/law/rules/<id>.test.mjs` too — in that commit or in the set being staged alongside it. (2) A commit that ADDS a rule file adds a row for it in some `.governance/law/packs/*.json`; `severity: "off"` is the way to repeal a rule on the record rather than by deleting it. (3) A rule whose declared severity or door moved between the merge-base and HEAD requires a change to this file in the same arrival. Merge commits are skipped — a merge has no diff of its own. At the hook door only the staged set is judged; in the window every commit of the range is.
+- **Rationale**: this document opened for four months with a callout — "amendments to this constitution must land in the same commit as the change to its enforcing test, no exceptions" — and nothing checked it. A cardinal rule enforced by attention is enforced by nobody, which is the failure this whole umbrella exists to answer. The three pairings are the same idea at three depths: a rule changed without its cases is a claim rather than a reviewable change; a rule nothing enables is dead code that reads as law; and a severity or a door moved on its own is a repeal nobody announced, because severity and door **are** the policy — the door decides which rules run and the row decides how loud each one is ([R-1005-11](docs/decisions.md#governance-as-a-constitution-1005)).
+- **Enforced by**: `.governance/law/rules/amendment-pairing.mjs` (cases: `.governance/law/rules/amendment-pairing.test.mjs`), over `arrival.commits[].files`, `arrival.pending.files` and `arrival.law.rules` against `arrival.law.rulesAtBase`, which the generator reads from the pack files on both sides of the merge-base.
+- **Door**: hook. All three pairings are answerable from the change set alone, and the hook is the one place where the author is still holding the change.
+- **Host enforces**: the `governance` workflow, which runs the window door on every pull request. The hook refusal is local and bypassable like every hook; CI re-asks.
+- **Rule observes**: nothing beyond the pairing. Whether the cases are GOOD cases is the reviewer's; that they were written at all is mechanical.
+- **Exceptions**: none, and deliberately so. Every escape this rule could offer is a way to land a rule change with no evidence, which is the thing it exists to prevent. A change that genuinely cannot pair belongs in two commits.
+
+### doctrine-citation
+
+- **Directive**: a pack declares its **doctrine domains** — `{ id, paths, decision }` rows in `.governance/law/packs/*.json`, where `decision` is a `docs/decisions.md` anchor. An arrival touching a domain's paths cites that anchor, or the issue the anchor ends with, in a receipt it touched or in a commit body; otherwise it is one finding per domain. Separately, a ruling recorded in a touched receipt — a bold id such as `**R19**`, `**W6-D1**` or `**R-1005-19**` — whose paragraph cites no issue and no `docs/decisions.md` anchor is a finding. The five domains declared today are the vault schema, the design tokens, the PR gate, the mobile replica, and the law itself.
+- **Rationale**: the expensive failures in this repository are not changes that broke something; they are changes made in a settled area by somebody who did not know it was settled. Naming the decision costs a phrase and tells the next reader which argument this change is already inside of. The ruling half is the sharper one: [#1002](https://github.com/srikanth235/centraid/issues/1002) merged a receipt carrying `**W6-D1**` and `**W6-D2**` with nothing behind either — rules invented in a document nobody would ever look at for rules, which is how doctrine drifts without any decision being reversed.
+- **Enforced by**: `.governance/law/rules/doctrine-citation.mjs` (cases: `.governance/law/rules/doctrine-citation.test.mjs`), over `arrival.law.domains`, `arrival.files`, `arrival.commits[].body` and `arrival.registries.receipts[*].{rulings,cites}`. The generator extracts each ruling id, its line and what its paragraph cites; a table row is its own paragraph, so two rulings in one table cannot lend each other a citation neither wrote.
+- **Door**: window. Whether a citation is the RIGHT one is a reading, and a reading happens at review time.
+- **Host enforces**: the owner's review. There is no mechanical backing for "this change is inside that doctrine", which is why the pack declares it `warn` — a red gate must not stand in for a reading nobody has done.
+- **Rule observes**: that a citation exists. Never that it is apt, and never that the doctrine was followed.
+- **Exceptions**: per-commit waiver `governance: allow-doctrine-citation <reason>` in the commit body, with a docket row (see [waiver-docket](#waiver-docket)). A change genuinely outside every declared domain files nothing, because no domain was touched.
+
+### constitution-coverage
+
+- **Directive**: every bullet under `## Principles` ends with `— rule: <id>`, `— decision: <docs/decisions.md anchor>` or `— owner question: <anchor>`. A cited rule id must be a rule some pack enables or a directive folder under `.governance/packs/<owner>/<pack>/directives/`; a cited anchor must exist in `docs/decisions.md`. Every `### <id>` under `## Directives` must name something in that catalog, and everything in that catalog must have a `### <id>` section.
+- **Rationale**: **no unwritten law.** An agent is held only to what was published before it acted, so a principle nobody can resolve is unenforceable in the only sense that matters — the person or agent it is applied to could not have known it. The reverse direction matters as much: this document said for months that "a directive with no enforcing test is not a directive, it is a wish", and four enforced directives (`format-check`, `lint-check`, `pre-push-gate`, `law`) had no section here at all. What cannot be made a statute becomes an owner question recorded in `docs/decisions.md` and cited — the one thing it may never be is dropped.
+- **Enforced by**: `.governance/law/rules/constitution-coverage.mjs` (cases: `.governance/law/rules/constitution-coverage.test.mjs`), over this document. The catalog and the anchor list are resolved once by the derived config from the packs, the directive folders and `docs/decisions.md`, and reach the rule as options; the rule reads one document and its options and nothing else.
+- **Door**: window. It is a question about this whole document, not about a change set.
+- **Host enforces**: the `governance` workflow, a required check on the default branch ([decisions.md](docs/decisions.md#the-pr-gate-loop-892)) — which is why it is declared `error`.
+- **Rule observes**: nothing. Whether a citation is APT is `doctrine-citation`'s and the reviewer's; whether it resolves is mechanical.
+- **Exceptions**: none. An exception here would be an unwritten principle, which is the thing.
+
+### format-check
+
+- **Directive**: every staged file that oxfmt owns (`ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, `mts`, `cts`, `json`, `jsonc`, `yml`, `yaml`, `css`) is already formatted. Scope is staged files only.
+- **Rationale**: CI runs `bun run format:check` across the whole tree and nothing local did, so a commit could pass every hook and still fail CI on a stripped trailing newline. A repo-wide check at commit time would block on debt the author never touched, which trains people to reach for `--no-verify`; formatting involves no judgement, so the fix is always `bun run format`.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/format-check/check.sh`
+- **Door**: hook (pre-commit), and again in CI through `.governance/run.sh`.
+- **Host enforces**: the `governance` workflow, plus `format:check` inside `check:push`.
+- **Rule observes**: nothing — formatting is decidable.
+- **Exceptions**: none. Run the formatter.
+
+### lint-check
+
+- **Directive**: every staged file oxlint owns (`ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, `mts`, `cts`) already passes the repository's explicit `oxlint.config.ts` with warnings denied. Scope is staged files only. This is what puts the law's own JavaScript under the product's linter — the 625-line file ceiling included.
+- **Rationale**: the same reasoning as `format-check`, one rung earlier than the repo-wide gate: `check:pr` and CI run the same pinned config, but a lint error introduced at commit time otherwise survives until one of those runs. Errors or off, never warning debt.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/lint-check/check.sh`
+- **Door**: hook (pre-commit), and again in CI.
+- **Host enforces**: the `governance` workflow, plus `lint` inside `check:push`.
+- **Rule observes**: nothing.
+- **Exceptions**: an `oxlint-disable` comment is oxlint's own mechanism and is subject to its own policy; the file-size ceiling's exemptions are rows in `tests/inventory.json#fileSize`, never inline suppressions ([G-file-ceiling](docs/decisions.md#gate-and-ledger-diet)).
+
+### pre-push-gate
+
+- **Directive**: every push that creates or updates a ref runs a gate tier chosen by the ref it targets: `main` runs `bun run check:push`, any other branch runs `bun run check:push:static`. Deletes and no-op pushes are exempt; `CENTRAID_PUSH_TIER=full` widens a branch push back to the full tier.
+- **Rationale**: AGENTS.md said "run the gate before every push" for several releases. It is a good rule enforced by attention, which is to say not enforced — [#568](https://github.com/srikanth235/centraid/issues/568) shipped a red CI precisely because a gate lived in prose rather than in a hook. The gates were already written and already fast; this is only the wiring that makes running them the default instead of the diligent thing.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/pre-push-gate/check.sh`
+- **Door**: hook (pre-push). CI re-asks the same questions at rung 2.
+- **Host enforces**: `ci.yml` and `governance.yml`, which listen on a bare `pull_request:` and run the full tier on every commit of every branch.
+- **Rule observes**: nothing beyond whether the gate ran.
+- **Exceptions**: `SKIP_CHECK_PR=1 git push` opts out of this directive alone for a WIP branch, a docs typo or a throwaway spike; the deferred directives still run and CI still enforces.
+
+### law
+
+- **Directive**: the change set is generated into an arrival record (`.governance/law/out/arrival.json`) and linted, together with the governance documents the change touched and the docket, by the rule catalog declared in `.governance/law/packs/*.json`. Two doors: in a commit hook the `hook` door runs — only the rules answerable from the change set alone, all fatal, so the commit does not happen; anywhere else the `window` door runs the whole catalog, with the hook rules still fatal and the rest at their declared severity. Every enabled rule prints a line, green or red.
+- **Rationale**: a gate that is silent when it is happy is a gate nobody can tell is running, and the whole value of a rule catalog is that a reader can see the catalog. Splitting the doors is what lets a rule refuse locally, where refusing costs nothing, without a red gate standing in for an owner review that has not happened.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/law/check.sh`, which runs `node .governance/law/run.mjs`.
+- **Door**: hook (pre-commit and `commit-msg`), window everywhere else.
+- **Host enforces**: the `governance` workflow. The rules themselves observe and do not enforce — every file under `.governance/law/` is agent-writable, and nothing an agent can edit is the authority for what an agent may do.
+- **Rule observes**: everything the individual rule sections state.
+- **Exceptions**: `SKIP_GOVERNANCE=1` and `git commit --no-verify`, which telegraph intent and are re-asked in CI.
 
 ### gateway-engine-mode-agnostic
 
 - **Directive**: code under `packages/server/` may not branch on which gateway mode it is running under. Specifically, gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `gateway_mode`, `gateway_kind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) are forbidden in tracked source files. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway.
 - **Rationale**: the architecture's "same code, three hosts" property is what makes "local-first with optional remote" cheap rather than expensive. Once `app-engine` starts checking which host it lives inside, dev and prod paths diverge and "works on my machine" becomes a class of bug again. Centraid's docs frame this explicitly: "the split exists only at the chat backend and the reachable-from surface; the rest of the gateway is byte-identical." Encoding that promise as a check stops it from rotting silently the next time someone is tempted to add a one-liner branch.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/gateway-engine-mode-agnostic/check.sh`
+- **Door**: hook (pre-commit), and again in CI.
+- **Host enforces**: the `governance` workflow.
+- **Rule observes**: nothing; the discriminating identifiers are a fixed list.
 - **Exceptions**: per-line waiver `// governance: allow-gateway-engine-mode-agnostic <reason>` for the rare case where app-engine genuinely needs to inspect its host (none today; the architecture promise is that no such case should exist).
 
 ### coverage-scope-reachability
@@ -67,6 +183,9 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Directive**: Every first-party TypeScript source tree under `packages/*/src` or `apps/*/src`, and every executable tree co-located outside `src/` inside a package or app (`packages/blueprints/apps`, `packages/model-runtime/automation-handlers`, …), must be covered by an enforced coverage floor, own a flow in the derived flow view (`node scripts/test-report/derive-flows.mjs --json`), or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs. The enforced floors are the object-valued keys of `tests/floors.json#coverage`.
 - **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. The check covers ordinary `packages/*/src` and `apps/*/src` trees plus the co-located runtime trees, which are discovered from the tracked file list rather than named. The rule runs both ways: a tree that moves *into* `src/` stops being a scope of its own, because the conventional include already instruments it and the package's `src/**` floor already measures it — so a named assertion left behind for it would pin a path holding no code. The same enumeration and instrumentation rule applies to every covered source-tree class (see #532, #630, #725, #753, #781, and #799 for the boundary decisions). The floors themselves are read from a SECTION rather than a file of their own: #915 Wave 4 merged the repo's twenty tighten-only ledgers into four (`tests/floors.json`, `tests/budgets.json`, `tests/inventory.json`, `tests/quarantine.json`) under one validator, so the coverage floors are `tests/floors.json#coverage` — the same globs, the same object-valued-key rule, one level deeper. Flow ownership is read from the derived view rather than from a single registry file: #915 split it between `tests/claims.json` (the hand-typed half) and `tests/agent-e2e-mobile/roster.json` (the committed journeys), and `scripts/test-report/derive-flows.mjs` is the one deterministic, offline place both are joined — an empty view is itself a violation, so the check cannot go quietly silent.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
+- **Door**: hook (pre-commit), and again in CI.
+- **Host enforces**: the `governance` workflow, plus the coverage floors themselves at rung 2.
+- **Rule observes**: whether the coverage a scope has is GOOD coverage — only that some owner exists for it.
 - **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.
 
 ## governance-kit/audit
@@ -75,7 +194,10 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 - **Directive**: Commit messages match `<type>(scope)?!?: subject (#123)` — a Conventional Commits prefix **plus** a trailing GitHub issue reference. Default types ship in the manifest's tunable `TYPES` list. A bare overlay line adds a type and `!<type>` removes a default.
 - **Rationale**: The typed prefix keeps changelogs scannable; the trailing `(#123)` anchors every commit to a durable work item. Together they make `git log` a readable audit trail instead of a stream of "fix stuff". The two halves are enforced as one rule because a Conventional Commits message without the issue anchor is still a hole in the audit trail this kit cares about.
-- **Enforced by**: `.governance/packs/governance-kit/audit/directives/commit-message-format/check.sh` (also wired into the `.githooks/commit-msg` dispatcher).
+- **Enforced by**: `.governance/law/rules/commit-message-format.mjs` (cases: `.governance/law/rules/commit-message-format.test.mjs`), over the arrival record's commits and pending message. The policy itself is `.governance/law/commitlint.config.mjs`. It runs at the hook door through `.governance/packs/srikanth235/centraid/directives/law/` (pre-commit, and again at `hooks/commit-msg.sh` once the message exists) and at the window door in CI.
+- **Door**: hook (pre-commit, and again at `commit-msg` once the message exists), and window in CI.
+- **Host enforces**: the `governance` workflow.
+- **Rule observes**: nothing about whether the subject is TRUE.
 - **Exceptions**: Merge and revert commits are skipped automatically. Per-commit waiver — a line `governance: allow-commit-message-format <reason>` in the commit body exempts that commit from the subject-format check (reason required; a bare token does not waive). The waiver lives in the body since the subject itself is what the check inspects; the audit trail is `git log --grep='allow-commit-message-format'`.
 
 ### doc-integrity
@@ -86,29 +208,43 @@ If a specific change cannot satisfy a directive, document the deviation in the P
     - `frozen-section <file> <heading>` — every line present under that heading at the baseline must still appear, verbatim. The rest of the file is free.
   Content authored within the current branch stays editable until it merges. When no default branch resolves, the baseline falls back to HEAD.
 - **Rationale**: Receipts and the constitution's evolution log are the durable record of *what happened*. They are only trustworthy if their history cannot be quietly rewritten. In-flight receipts stay editable until they merge.
-- **Enforced by**: `.governance/packs/governance-kit/audit/directives/doc-integrity/check.sh` (Mode B — CI walks merge-base → HEAD) and `.githooks/commit-msg` (Mode A). Protected documents come from the manifest registry plus its tunable overlay.
+- **Enforced by**: `.governance/law/rules/doc-integrity.mjs` (cases: `.governance/law/rules/doc-integrity.test.mjs`), over `arrival.registries.frozen`, which the generator computes from the merge-base baseline against HEAD or against the staged tree when a commit is pending. The protected set is declared in `.governance/law/packs/governance-kit-audit.json` under `options.doc-integrity.rules`; `frozen-files receipts/*.md` is restored whatever a pack declares.
+- **Door**: hook.
+- **Host enforces**: the `governance` workflow.
+- **Rule observes**: nothing about whether the appended content is honest.
 - **Exceptions**: Path-scoped per-change-set waiver — `governance: allow-doc-integrity <path> <reason>` in a commit body exempts `<path>` (reason required). Receipts remain covered even if the overlay tries to drop that rule. The Evolution Log freeze may be dropped with `!frozen-section CONSTITUTION.md Evolution Log`.
 
 ### managed-tree-integrity
 
 - **Directive**: The governance-managed tree changes only through the install/update verbs, never by hand. Every pack entry in `.governance/packs.lock` that records a `digest:` map must have each vendored directive folder (`.governance/packs/<owner>/<pack>/directives/<id>/`) match its recorded `sha256`, with no unrecorded directive folder present; every file in `.governance/install.yaml`'s `managed_digests:` map (`.governance/run.sh`, `.governance/lib.sh`, the CI workflow, and the generated `.github/workflows/governance-schedule.yml` when enrolled, plus, on pre-retirement installs, the legacy sweep pair `.governance/sweep.sh` and `.github/workflows/governance-sweep.yml`) must match its recorded `sha256`. Marked legacy `governance-schedule-<lane>.yml` files remain covered during migration; unmarked hand-authored workflows are not reconciled by generation. The verbs record these digests at materialization time; a hand-edit to any managed file changes its digest and fails the check. The local-only hook dispatchers (`.githooks/*`, `.husky/*`, `.governance/hooks/*`) are deliberately **out of scope** (issue #267) — CI enforcement (`bash .governance/run.sh`) never touches `core.hooksPath`, they are intentionally bypassable (`SKIP_GOVERNANCE=1` / `--no-verify`), and they are regenerated from `(kit, install set, strategy)`; digesting them bought near-zero protection and broke the Wrap hook-collision flow.
 - **Rationale**: A trust tool whose own enforcement code can be silently hand-edited is self-refuting — a one-line change to a vendored `check.sh` can quietly neuter a rule, and nothing would notice. The predecessor `consumed-tree-integrity` only guarded `.governance/packs/**`, and only in this repo: it verifies via `git show <sha>:<path>`, which needs the pinned pack commit as a *local* git object — true when a repo consumes its own tags, false for any consumer pinning someone else's pack. Recording a content digest at apply time and recomputing it on disk makes integrity verifiable **offline in every repo**, with no upstream objects, and extends the guard to the kit-runtime files (`run.sh`, `lib.sh`) that `kit-version-sync` only ever checked by version *marker* — the gap that let a hand-edit to `.governance/lib.sh` go uncaught. The digest set tracks only **trust-chain** artifacts (what CI executes), not local convenience plumbing.
-- **Enforced by**: `.governance/packs/governance-kit/audit/directives/managed-tree-integrity/check.sh` → `lib/digest.sh` (pure bash/awk — no python on the commit path; repo-state; pre-commit + CI). Digests are written by the apply engines via `kit/assets/packs/lib/digestlib.py`.
+- **Enforced by**: `.governance/law/rules/managed-tree-integrity.mjs` (cases: `.governance/law/rules/managed-tree-integrity.test.mjs`), over `arrival.managedTree`. The digest arithmetic is `.governance/law/lib/digest.mjs`, byte-identical to the kit's algorithm. The law's own generator is itself recorded in `install.yaml`, re-recorded with `node .governance/law/digest.mjs --record`.
+- **Door**: hook.
+- **Host enforces**: the `governance` workflow. The digest makes a hand-edit VISIBLE; `.github/CODEOWNERS` over `.governance/**` is what makes it reviewed.
+- **Rule observes**: nothing — a digest either matches or it does not.
 - **Exceptions**: A pack with no recorded `digest:` (or a manifest with no `managed_digests:`) is skipped — installs predating the digest feature gain coverage on their next `pack update` / `kit update`. To exempt a unit you are deliberately mid-migration on, list it (a `<owner>/<pack>/<id>` id or a runtime relpath) in `.governance/conf/<owner>/<pack>/managed-tree-integrity.conf`; the durable fix is to re-run the owning verb so the recorded digest matches the tree again.
 
 ### receipt-per-issue
 
 - **Directive**: Every tracked `receipts/*.md` file binds to exactly one GitHub issue. The filename matches `issue-<N>.md` or `issue-<N>-<slug>.md` (slug optional). No two receipts share an issue number. A **completed change** (PR aggregate `base..HEAD`, or a commit made directly on the default branch) must add or update a `receipts/issue-*.md`; that non-stub receipt must include `## What changed` (the outcome and significant behavior, with the work-item reference) and `## Verification` (commands/checks with their outcomes, or a durable evidence pointer). A fenced command with no outcome is not evidence; this check records that evidence was written, not that it ran. `## Decisions` / limitations is optional. Independent review (`## Audit`) remains required on those completed-change receipts. Intermediate feature-branch commits do not each require a receipt edit. Historical stubs whose only `## ` heading is `## Session` or `## Accounting` are valid on intermediate commits and cannot satisfy a completed change.
 - **Rationale**: Receipts are the durable post-implementation audit trace for work against a GitHub issue. Completeness and association belong at the completed change, not at every intermediate commit. File-first (issue #293) survives squash: the receipt path sits in the aggregate diff identically before and after a squash-merge. `commit-message-format` independently requires the subject `(#N)`. Mechanical validation cannot prove a command ran or that an audit verdict is true; the scheduled lane re-adjudicates the `judge:` block.
-- **Enforced by**: `.governance/packs/governance-kit/audit/directives/receipt-per-issue/check.sh` (uniqueness and shape at pre-commit / CI; association at `hooks/commit-msg.sh` for direct-to-default and in CI for the PR aggregate).
+- **Enforced by**: `.governance/law/rules/receipt-per-issue.mjs` (cases: `.governance/law/rules/receipt-per-issue.test.mjs`), over `arrival.registries.receipts` — every tracked receipt, which ones this change added, and each one's shape. It runs at the window door, because its completed-change half is a question about the aggregate.
+- **Door**: window. Its completed-change half is a question about the aggregate.
+- **Host enforces**: the `governance` workflow.
+- **Rule observes**: whether the evidence in `## Verification` was really produced, or whether an `## Audit` verdict is true. The scheduled lane re-adjudicates the `judge:` block.
 - **Exceptions**: Per-receipt waiver — `governance: allow-receipt-per-issue <reason>` in the first 10 lines of the receipt. Per-commit waiver for a completed change with no receipt (releases) — the same token in the commit body. Reason required. Pre-existing receipts outside the current change set are grandfathered for the completed-change shape rules. Audit trail: `grep -r 'allow-receipt-per-issue' receipts/`; `git log --grep='allow-receipt-per-issue'`.
 
 ## Amendment process
 
-1. Open a PR that modifies this file **and** the directive folder under `.governance/packs/<owner>/<repo>/directives/` in the same commit.
-2. The PR description states *what* changed and *why* — link the incident, RFC, or discussion that motivated it.
-3. Add an entry to the **Evolution Log** below.
-4. At least one reviewer with governance authority approves.
+An amendment is one commit, and `amendment-pairing` refuses it if it is not.
+
+1. Write the rule (`.governance/law/rules/<id>.mjs`) and its cases (`<id>.test.mjs`) together. A rule changed without its cases is a claim, not a reviewable change.
+2. Add the row that enables it to the owning pack (`.governance/law/packs/*.json`): `"<id>": { "severity": …, "door": … }`. `severity: "off"` repeals a rule on the record rather than by deleting it.
+3. Write the `### <id>` section here — Directive, Rationale, Enforced by, Door, Host enforces, Rule observes, Exceptions. `constitution-coverage` fails without it, and moving a rule's severity or door without touching this file is refused.
+4. Append one line to the **Evolution Log** below: date, author, what changed and its issue.
+5. The pull request describes what changed and why, linking the proposal issue. `.github/CODEOWNERS` is generated from the law estate, so the owner is a required reviewer wherever branch protection is enabled.
+
+A directive written in bash amends the same way, with its `directive.yaml` and `check.sh` in place of steps 1–2.
 
 ## Evolution Log
 
@@ -138,13 +274,29 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-09-02 — @srikanth235 — Modify `coverage-scope-reachability`: read flow ownership from `node scripts/test-report/derive-flows.mjs --json` instead of `tests/claims.json#flows[].owner`. #915 retired the matrix; the hand-typed half is `tests/claims.json` and the mobile journeys live in `tests/agent-e2e-mobile/roster.json`, so no single file carries the owner list any more. Scope is unchanged — the same owner paths satisfy the same trees — and an empty derived view now fails the directive so the read cannot degrade into a silent pass (#915).
 
 - 2026-09-02 — @srikanth235 — Modify `coverage-scope-reachability`: read the enforced floor globs from `tests/floors.json#coverage` instead of `tests/coverage-floors.json`. #915 Wave 4 merged twenty tighten-only ledgers under `tests/` into four files behind one validator (`bun run lint:ledgers`), each section keeping its own direction and its own `approvedDeviation` so merging the files did not merge the waivers. Scope is unchanged — the same object-valued keys name the same globs — and the self-test fixtures move with the read (#915).
+- 2026-09-09 — @srikanth235 — Port `commit-message-format`, `doc-integrity`, `managed-tree-integrity` and `receipt-per-issue` from the vendored `governance-kit/audit` shell pack to ESLint rules under `.governance/law/`, and delete the pack. Behaviour is pinned by a replay of both runners over the last 50 trunk commits; the one recorded divergence is that the shell bot-author filter `*[bot]*@*` was a character class that skipped nearly every human address, so the rule judges subjects the directive silently passed (#1005).
+- 2026-09-09 — @srikanth235 — Add `estate-separation` and `registry-completeness`, and repeal `COSTS.md` and `STEERING.md`. Every tracked path now belongs to one of three estates (`law`, `registry`, `territory`); a commit may not edit the law and the product together, and what a change decided must be recorded where decisions live. The two append-only ledgers are deleted with their `doc-integrity` overlay rows, their `oxfmt`/`format-check` exclusions and their `install.yaml` seeds: both stopped at #238/#240 while the work reached #1003 and no gate noticed, which is the failure the two new directives exist to prevent. Token cost is a front-page number read back from the receipt when the author recorded one. `.github/CODEOWNERS` is generated from the law estate; branch protection over it remains owner-enabled and unconfirmed (#1005).
+
+- 2026-09-09 — @srikanth235 — Rework this document against `constitution-coverage`, and add `waiver-docket`, `amendment-pairing`, `doctrine-citation` and `constitution-coverage`. Every principle now resolves to a rule id, a `docs/decisions.md` anchor or an owner question recorded there — three principles that could be made neither became questions Q-1005-1..3 rather than silences. Every enforced directive has a section, including `format-check`, `lint-check`, `pre-push-gate` and `law`, which had none; every section states its door, what the host enforces and what the rule only observes. The cardinal-rule callout is retired into `amendment-pairing`, which refuses the commit instead of asking to be remembered, and the escape hatches are a register with expiry dates rather than a paragraph (#1005).
 
 ## Escape hatches
 
 Governance is enforced at two layers:
 
-1. **Pre-commit hook** — runs every directive whose cost fits the rung-0 budget. Skip with `SKIP_GOVERNANCE=1 git commit ...` or `git commit --no-verify` when a hotfix cannot wait.
-2. **Pre-push hook** — runs the directives deferred from rung 0 (`receipt-per-issue` — repo-wide by construction, so it cannot be scoped to a staged set), then `bun run check:push`. Skip the gate alone with `SKIP_CHECK_PR=1 git push`, or every hook with `SKIP_GOVERNANCE=1 git push` / `git push --no-verify`.
+1. **Pre-commit hook** — runs every directive whose cost fits the rung-0 budget, including the law's `hook` door. Skip with `SKIP_GOVERNANCE=1 git commit ...` or `git commit --no-verify` when a hotfix cannot wait.
+2. **Pre-push hook** — runs `bun run check:push` (on `main`) or `bun run check:push:static` (any other branch). Skip the gate alone with `SKIP_CHECK_PR=1 git push`, or every hook with `SKIP_GOVERNANCE=1 git push` / `git push --no-verify`.
 3. **CI workflow** — `.github/workflows/governance.yml` runs `.governance/run.sh`, which runs **every** directive regardless of its hook, on every PR and push to the default branch. CI cannot be skipped from a developer machine.
 
 The hooks are for speed; CI is for enforcement. Which hook a directive runs on is a local scheduling decision and never a scope decision — if a commit or a push lands with a hook skipped, CI still runs the whole set.
+
+### The docket
+
+Skipping a run is not the same as being excused from a rule, and only the second one is an exception. Every exception this repository grants is a row in [`.governance/law/docket.json`](.governance/law/docket.json): an id, the rule it excuses, the path it covers, a reason written for somebody who was not there, the authority that granted it, who filed it, its issue, and the date it expires. A waiver spent without a matching row is a finding, and so is a row filed by the same change that spends it — see [waiver-docket](#waiver-docket).
+
+Three ways to spend one, all of them enumerated in the same register:
+
+- `governance: allow-<directive> <reason>` in a commit body, for a per-change exception.
+- The same token in a comment, on the line it excuses, for a per-line exception.
+- `<!-- eslint-disable <rule> -- docket:D-<n> <why> -->` in a governance document. ESLint's own directive is the waiver primitive for the document rules; the derived config reports an unused one as an error, so a suppression cannot outlive what it suppressed.
+
+A bare token with no reason has never waived anything, and still does not.

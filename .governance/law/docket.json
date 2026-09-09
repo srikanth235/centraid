@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "rows": [
+    {
+      "id": "D-1",
+      "rule": "no-hardcoded-colors",
+      "path": "packages/blueprints/apps/photos/Chrome.module.css",
+      "reason": "The slideshow stage is a full-bleed opaque ground at hsl(0 0% 4% / 0.97), a theatre surface rather than a themed one. DESIGN.md forbids an identity hue here and the token layer carries no opaque stage role, so there is no var() to consume; the seam is already noted in token-purity-allowlist.ts (#686).",
+      "authority": "https://github.com/srikanth235/centraid/issues/686",
+      "filedBy": "owner",
+      "issue": "#686",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-2",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/ci.yml",
+      "reason": "Turbo cache on the mutation-pr lane. The directive this token names is retired upstream and no longer installed in this repository, so the token is inert; the row exists so the seven inert tokens are enumerated rather than discovered later (#637).",
+      "authority": "https://github.com/srikanth235/centraid/issues/637",
+      "filedBy": "owner",
+      "issue": "#637",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-3",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/cache-cleanup.yml",
+      "reason": "Phase 0 PR-branch cache deletion. Inert: the toolchain-config directive is retired upstream (#637).",
+      "authority": "https://github.com/srikanth235/centraid/issues/637",
+      "filedBy": "owner",
+      "issue": "#637",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-4",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/mobile-alarm-test.yml",
+      "reason": "The weekly alarm test lane. Inert: the toolchain-config directive is retired upstream (#890).",
+      "authority": "https://github.com/srikanth235/centraid/issues/890",
+      "filedBy": "owner",
+      "issue": "#890",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-5",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/mobile-ios-lock.yml",
+      "reason": "A dispatchable macOS lane; pod install runs nowhere else. Inert: the toolchain-config directive is retired upstream (#996).",
+      "authority": "https://github.com/srikanth235/centraid/issues/996",
+      "filedBy": "owner",
+      "issue": "#996",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-6",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/e2e.yml",
+      "reason": "Turbo cache on build-bearing lanes. Inert: the toolchain-config directive is retired upstream (#637).",
+      "authority": "https://github.com/srikanth235/centraid/issues/637",
+      "filedBy": "owner",
+      "issue": "#637",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-7",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/lane-gateway-package.yml",
+      "reason": "Turbo cache on the gateway packaging lane. Inert: the toolchain-config directive is retired upstream (#637).",
+      "authority": "https://github.com/srikanth235/centraid/issues/637",
+      "filedBy": "owner",
+      "issue": "#637",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-8",
+      "rule": "toolchain-config",
+      "path": ".github/workflows/candidate.yml",
+      "reason": "Rung 3 owns the Android shell. Inert: the toolchain-config directive is retired upstream (#915).",
+      "authority": "https://github.com/srikanth235/centraid/issues/915",
+      "filedBy": "owner",
+      "issue": "#915",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "D-9",
+      "rule": "doc-integrity",
+      "path": "COSTS.md",
+      "reason": "The repeal of COSTS.md deletes a file doc-integrity froze; the deletion and the removal of its overlay row are one act (G-ledgers-retired).",
+      "authority": "pending owner grant",
+      "filedBy": "agent",
+      "issue": "#1005",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "D-10",
+      "rule": "doc-integrity",
+      "path": "STEERING.md",
+      "reason": "The repeal of STEERING.md, for the same reason as D-9 (G-ledgers-retired).",
+      "authority": "pending owner grant",
+      "filedBy": "agent",
+      "issue": "#1005",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "D-11",
+      "rule": "estate-separation",
+      "path": null,
+      "reason": "#1005 spends this twice: the repeal touches the rules and the files being repealed in one act, and the law's test roster lived in the product's package.json until a glob replaced it. Both are one exception in docket terms — the rule is the same and neither is path-scoped — so they are one row rather than two identical ones.",
+      "authority": "pending owner grant",
+      "filedBy": "agent",
+      "issue": "#1005",
+      "expires": "2026-12-31"
+    }
+  ]
+}

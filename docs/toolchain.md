@@ -23,6 +23,8 @@ Ultracite seeds `core`, `react`, and `vitest` policy. It is not the routine comm
 
 Oxfmt is the sole style owner. Oxlint rules that only restate formatting are off. The pinned TypeScript compiler is the sole owner of compiler diagnostics; Oxlint `--type-check` is not part of any command.
 
+**There is a second linter, and it lints no product source.** ESLint is installed under [`.governance/law/`](../.governance/law/README.md) with its own private, exact-pinned `package.json`, and it is scoped to the governance documents — the generated arrival record and the markdown the constitution governs (`receipts/*.md`, `CONSTITUTION.md`, `docs/decisions.md`, `CHANGELOG.md`). **`bun run lint` never invokes it and it never sees a `.ts` file**; oxlint remains the sole owner of the product's lint policy, and oxlint's own `ignorePatterns` excludes `.governance/**` in the other direction. It exists because a governance directive written as a lint rule gets a rule catalog, severities, per-line suppression with a reason, a machine-readable report and `RuleTester` for free — machinery that would otherwise be hand-rolled in bash. It is reached through `bash .governance/run.sh` (the `law` directive) or `bun run governance:law`, and it carries its own install because the managed `governance.yml` runs no `bun install`.
+
 ## Stable command API
 
 All callers use repository-pinned binaries through these Bun scripts:
@@ -46,6 +48,8 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `check:push` | the full push tier: 17 gate names run concurrently, with the static tier gate-stamped |
 | `check:push:static` | the branch push tier: `format:check`, `lint`, `turbo:lint`, `typecheck:affected` |
 | `governance` | the stamped entry point to `.governance/run.sh`, which is itself digest-locked |
+| `governance:law` | the law's ESLint pass over the arrival record and the governance documents a change touched |
+| `governance:law:test` | the law's rule and generator tests, under `node --test` |
 
 ### Where the caches live
 
@@ -111,7 +115,7 @@ Knip's dead-export detection stops at workspace entry files: a capability re-exp
 
 Documented exceptions live in the config's `allowlist`, one non-empty `reason` string per entry (the same documented-exception style as `knip.json`); a stale entry — one whose capability gained a production caller or disappeared — is itself a failure, so the list only shrinks. The allowlist is currently **empty** and should stay that way: a failing capability is fixed by wiring the production caller or deleting the export, not by adding an entry.
 
-Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:pr`. The one intentional mutation is governance token accounting: immediately before a commit, its hook appends the frozen cost coordinate to this issue's receipt so the commit and ledger row remain one auditable unit.
+Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:pr`. No hook mutates a tracked file: token cost per arrival is no longer appended to anything, it is read back out of the touched receipt's `## Accounting` section and printed on the generated front page, or printed as `token cost: not recorded` when the author recorded none ([#1005](https://github.com/srikanth235/centraid/issues/1005), [decisions.md](decisions.md#governance-as-a-constitution-1005)).
 
 `lint:fix` never enables suggestions or dangerous fixes. The strings `--fix-suggestions` and `--fix-dangerously` do not belong in scripts, hooks, or CI. Oxfmt writes are the only routine style mutation.
 

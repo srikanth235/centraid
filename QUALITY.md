@@ -363,6 +363,19 @@
 
 ## Resolved
 
+- #1005 — **The arrival fixture pinned the whole working tree, so it was red on
+  every checkout but the one that recorded it.** `collectReceipts` read every
+  tracked receipt out of the working copy and `git rev-parse --abbrev-ref HEAD`
+  into `registries.receipts.change.branch`, and `collectManagedTree` and
+  `collectDocket` read the checkout too. Answered by neither option the finding
+  offered: the record is now a function of exactly the range and the pending
+  commit (R-1005-27), and the corpus, the docket and the managed tree are read
+  **at the range's head** — so nothing is narrowed and `receipt-per-issue` still
+  answers uniqueness across the whole corpus. At the commit hook those reads
+  move to the index, so the commit being written is judged on what it stages.
+  `arrival.test.mjs` proves it from a detached worktree that is on no branch and
+  whose receipts are then dirtied by hand.
+
 - #996 — **`evaluateReplicaRead` had no production caller on any host.** It was
   filed open while `packages/client/src/replica/query.ts` still exported it and
   the store compiled the read grammar to SQL elsewhere, leaving a second

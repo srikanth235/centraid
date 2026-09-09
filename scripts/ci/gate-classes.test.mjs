@@ -89,6 +89,42 @@ test("every classified gate is a real root script with a class, a rung and a rea
   }
 });
 
+// #1005 gave the law's rules a `door` — where a finding is answerable and who
+// can act on it — and the same question is the one this register answers with
+// `rung`. Two vocabularies for one question is how a gate ends up enforced
+// somewhere nobody looks, so the field is shared and the two are held in step
+// here. `.governance/law/eslint.config.mjs` reads the same field and refuses a
+// value outside the vocabulary.
+const DOORS = ["hook", "window", "owner"];
+
+/**
+ * The door a rung belongs to.
+ *
+ * @param {number} rung The ladder rung.
+ * @returns {string} The door.
+ */
+const doorForRung = (rung) =>
+  rung <= 1 ? "hook" : rung === 2 ? "window" : "owner";
+
+test("every gate declares a door, in the rules' vocabulary, matching its rung", () => {
+  for (const [gate, row] of classified) {
+    assert.ok(
+      DOORS.includes(row.door),
+      `${gate} declares door ${JSON.stringify(row.door)}; the vocabulary is ${DOORS.join(", ")}`
+    );
+    assert.equal(
+      row.door,
+      doorForRung(row.rung),
+      `${gate} is rung ${row.rung} but door ${row.door} — a gate is answerable where its rung runs it`
+    );
+  }
+  assert.match(
+    classes._comment,
+    /door/u,
+    "the register's own comment must explain the door field"
+  );
+});
+
 test("hygiene gates left check:push and arrived in the weekly lane", () => {
   const hygiene = classified
     .filter(([, row]) => row.class === "hygiene")
