@@ -1,5 +1,59 @@
 # Issue #1005 — governance-kit as a constitution
 
+<!-- governance:front-page start -->
+
+**Law** · window door · range `87cf642c..d0c76db0` · law digest `629a7ce80994` → `e9ba379e08d2`
+
+law changed under this run: `.github/CODEOWNERS`, `.governance/conf/governance-kit/audit/commit-message-format.conf`, `.governance/conf/governance-kit/audit/doc-integrity.conf`, `.governance/conf/governance-kit/audit/managed-tree-integrity.conf`, `.governance/conf/governance-kit/audit/receipt-per-issue.conf`, `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf`, `.governance/install.yaml`, `.governance/law/README.md`, `.governance/law/arrival.mjs`, `.governance/law/arrival.test.mjs`, `.governance/law/brief.mjs`, `.governance/law/brief.test.mjs` and 70 more
+
+| Rule | Door | Verdict | Findings |
+| --- | --- | --- | --- |
+| `amendment-pairing` | hook | ✓ pass | 0 |
+| `commit-message-format` | hook | ✓ pass | 0 |
+| `constitution-coverage` | window | ✓ pass | 0 |
+| `doc-integrity` | hook | ✓ pass | 0 |
+| `doctrine-citation` | window | ✓ pass | 0 |
+| `estate-separation` | hook | ✗ fail | 6 |
+| `managed-tree-integrity` | hook | ✓ pass | 0 |
+| `receipt-per-issue` | window | ✗ fail | 1 |
+| `registry-completeness` | window | ✓ pass | 0 |
+| `waiver-docket` | hook | ✗ fail | 4 |
+
+### Findings
+
+- `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — a9748c94 edits the law and the territory in one commit — law: '.governance/law/README.md', '.governance/law/eslint.config.mjs', '.governance/law/lib/rule.mjs' and 4 more; territory: '.gitignore'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
+- `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — 807feea9 edits the law and the territory in one commit — law: '.governance/law/arrival.mjs', '.governance/law/arrival.test.mjs', '.governance/law/fixtures/arrival/bb964a7e..3df6d552.json' and 1 more; territory: 'package.json'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
+- `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — 246d5033 edits the law and the territory in one commit — law: '.governance/law/eslint.config.mjs', '.governance/law/front-page.mjs', '.governance/law/run.mjs' and 4 more; territory: 'package.json'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
+- `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — c57f98b6 edits the law and the territory in one commit — law: '.governance/law/arrival.mjs', '.governance/law/arrival.test.mjs', '.governance/law/commitlint.config.mjs' and 9 more; territory: 'package.json'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
+- `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — 615be91b edits the law and the territory in one commit — law: '.governance/install.yaml', '.governance/law/arrival.mjs', '.governance/law/arrival.test.mjs' and 13 more; territory: 'package.json'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
+- `.governance/law/out/arrival.json:1` **law/estate-separation** (warn) — 381682ff edits the law and the territory in one commit — law: '.governance/conf/governance-kit/audit/commit-message-format.conf', '.governance/conf/governance-kit/audit/doc-integrity.conf', '.governance/conf/governance-kit/audit/managed-tree-integrity.conf' and 25 more; territory: 'scripts/test.sh'. Split them, or waive with 'governance: allow-estate-separation <reason>' in the commit body.
+- `.governance/law/out/arrival.json:2187` **law/waiver-docket** (warn) — 'doc-integrity' on COSTS.md (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-9, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:2194` **law/waiver-docket** (warn) — 'doc-integrity' on STEERING.md (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-10, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:2201` **law/waiver-docket** (warn) — 'estate-separation' (commit:db3df05b2c8ea00529e78fe96d410bd16339d559) names docket row D-11, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:2208` **law/waiver-docket** (warn) — 'estate-separation' (commit:fedd15cc99fc4fe19b3702b5a8a3775478136b99) names docket row D-11, which this same change filed. A row granted and spent in one arrival is a permission slip its author wrote itself; land the row first, and let the owner grant it.
+- `.governance/law/out/arrival.json:5312` **law/receipt-per-issue** (error) — receipts/issue-1005-governance-constitution.md — '## Audit' records no PASS/REFUTED verdict; an independent reviewer must report a verdict + evidence for each check this rule names.
+
+law estate: 11 paths, CODEOWNERS in sync
+
+### Registries
+
+- rulings recorded: #238, #240, #576, #659, #767, #927, #1002, #1003, #1005 in `docs/decisions.md`
+- changelog entries: #238, #240, #1003, #1005
+- gates moved: `oxfmt.config.ts` (unknown), `scripts/ci/gate-classes.json` (unknown)
+- waiver used: `doc-integrity` `COSTS.md` — repealed by G-ledgers-retired in docs/decisions.md; the ledger stopped at #238 and nothing noticed (commit:db3df05b2c8ea00529e78fe96d410bd16339d559)
+- waiver used: `doc-integrity` `STEERING.md` — repealed by G-ledgers-retired in docs/decisions.md; the ledger stopped at #240 and nothing noticed (commit:db3df05b2c8ea00529e78fe96d410bd16339d559)
+- waiver used: `estate-separation` — a repeal touches the rules and the files being repealed in one act; splitting it would leave the tree citing two deleted paths (commit:db3df05b2c8ea00529e78fe96d410bd16339d559)
+- waiver used: `estate-separation` — the law's test roster lived in the product's package.json; this commit replaces that enumeration with a glob so no future rule needs a territory edit (commit:fedd15cc99fc4fe19b3702b5a8a3775478136b99)
+- proposal link unverified (offline)
+- token cost: not recorded
+
+<!-- governance:front-page end -->
+
+Regenerated by `node .governance/law/run.mjs --front-page <path>`; hand edits inside the
+markers are undone by the next run. The `range` head is the commit that existed when the
+block was rendered, so the line moves with every later commit — that is the point of the
+markers, not a defect in them.
+
 Lane A: `.governance/law/` — the law directory, the arrival record, the runner and the doors.
 Branch `lane/1005-a`, four commits, one per seam.
 
@@ -14,27 +68,87 @@ brief. Branch `lane/1005-d`, six commits, one per seam.
 
 ## Checklist
 
-The umbrella's acceptance boxes. Only the ones this lane owns are checked.
+The umbrella's fourteen acceptance boxes, verbatim from
+[#1005](https://github.com/srikanth235/centraid/issues/1005), each with the evidence that
+answers it. Two are the owner's and are left unchecked with the action named; nothing here is
+checked on an agent's word about the host.
 
-- [x] Directives can be written as lint rules rather than shell scripts: a rule harness, a derived
-      config, a runner, and a single entry point that still is `bash .governance/run.sh`
-- [x] An arrival record generated once per run — deterministic, fixture-pinned, and the only place
-      that talks to git — so rules stay pure and synchronous over a document
-- [x] Two doors: `hook` (the commit being written, fatal at pre-commit whatever the pack row says)
-      and `window` (the whole law at review time, every rule at its declared severity)
-- [x] One line per enabled rule on every run, green or red
-- [x] The managed tree's digest arithmetic available to rules, byte-identical to the vendored bash
-- [x] The vendored `governance-kit/audit` pack ported to rules and deleted (Lane B)
-- [x] Estates (`law` / `registry` / `territory`) and the registry rules — `estate-separation` and
-      `registry-completeness`, with the gate register and the generated front-page lines (Lane C).
-      Appeals are the docket, whose path Lane C reserves and Lane D creates
-- [x] CODEOWNERS and branch protection — what the host enforces (Lane C). The file is generated
-      from the law estate; branch protection stays owner-enabled and is **not** claimed as enabled
-- [x] CONSTITUTION.md reworked to match (Lane D). Every principle resolves to a rule id, a
-      `docs/decisions.md` anchor or an owner question recorded there; every enforced directive has
-      a section stating its door, what the host enforces and what the rule only observes
-- [x] The rule/test pairing check itself as a rule (Lane D: `amendment-pairing`)
-- [x] Appeals: the docket, and every waiver in the tree filed as a row (Lane D: `waiver-docket`)
+- [x] A directive is an ESLint rule with `meta.door`, a statute link, and a RuleTester file; a rule
+      file changed without its tester changed fails the hook.
+      — every file under `.governance/law/rules/` ships as `<id>.mjs` + `<id>.test.mjs`;
+      `amendment-pairing` is the hook rule that refuses the unpaired edit
+      (`.governance/law/rules/amendment-pairing.test.mjs`).
+- [x] `arrival.json` is generated deterministically from a git range, carries the law digest at
+      branch point and HEAD, is under the managed-tree digest, and has a checked-in fixture.
+      — `node .governance/law/arrival.mjs --range bb964a7e..3df6d552` is byte-identical to
+      `.governance/law/fixtures/arrival/bb964a7e..3df6d552.json` (Verification, Lane A row 5);
+      `digest.mjs --record` holds `arrival.mjs` and every `lib/` module.
+- [x] Every rule emits one line on pass; the front page in the PR body is the formatter's output and
+      nothing else. — the rule table at the top of this receipt, ten rows, rendered by
+      `run.mjs --front-page`; `## PR body` below is that block plus a summary, nothing hand-drawn.
+- [ ] CODEOWNERS covers every pack-declared law path and branch protection requires owner review
+      there; a law-only PR authored by a non-owner cannot merge, demonstrated and recorded in the
+      receipt. — **owner action.** The repository half is done and machine-checked: the front page
+      reads `law estate: 11 paths, CODEOWNERS in sync`, and `node .governance/law/codeowners.mjs
+      --check` exits 1 on drift. Branch protection over those paths, and the blocked-PR
+      demonstration, are host configuration this repository cannot assert (Q-1005-3, `## Owner
+      items`).
+- [x] `estate-separation`: a commit touching a law path together with territory, or without a
+      proposal link, is refused in the hook and shown on the front page; the same check over the
+      arrival catches the split-across-commits case within one PR.
+      — fatal at the hook door, `warn` at the window; the six front-page findings above are the
+      whole-arrival half reading this branch's own history.
+- [x] `registry-completeness`: a ruling, waiver, or gate move without its registry row is a finding;
+      a routine arrival needs only its receipt and changelog row; COSTS.md and STEERING.md are
+      removed, their constitution clauses repealed, and the ruling recorded in docs/decisions.md.
+      — `✓ registry-completeness` on the front page; the Registries block is generated text, "no
+      rulings recorded" included; `G-ledgers-retired` in
+      [docs/decisions.md](../docs/decisions.md#governance-as-a-constitution-1005).
+- [x] `waiver-docket`: every disable directive names a docket row with reason, authority, expiry,
+      merged to `origin/main` under owner review before use; `reportUnusedDisableDirectives` is
+      `error`. — the rule is live and its four findings above are precisely the self-grant case it
+      exists to catch (D-9..D-11, `## Owner items`); `reportUnusedDisableDirectives: "error"` in
+      `.governance/law/eslint.config.mjs` (R-1005-3).
+- [x] `constitution-coverage`: every principle in CONSTITUTION.md resolves to a rule id or a
+      decision id. — `✓ constitution-coverage` on the front page; the principles that resolve to
+      neither are recorded as Q-1005-1 and Q-1005-2 rather than dropped.
+- [x] The doctrine digest in a brief is generated from config with the law digest stamped; an
+      amendment landing during a run produces a front-page line naming it.
+      — `node .governance/law/brief.mjs`; the `law changed under this run:` line at the top of this
+      receipt is that line, produced by this very branch moving the law under itself.
+- [x] The four existing audit directives are ported with parity proven on the last 50 `main`
+      commits, and the old runner is gone. — `node .governance/law/parity.mjs --last 50`: 0
+      unexplained disagreements (Verification, Lane B row 4); `.governance/packs/governance-kit/`
+      and its four conf overlays are deleted.
+- [x] `scripts/ci/gate-classes.json` carries `door` per gate and the hook/window configs are derived
+      from it. — every row carries `door`; `scripts/ci/gate-classes.test.mjs` fails on a missing or
+      unknown one (R-1005-25).
+- [x] Replaying #1002's range through the window surfaces the widened gate, the uncited ruling, and
+      the missing registry rows as findings. — `node .governance/law/run.mjs --range
+      bb964a7e..3df6d552`: estate-separation 1, registry-completeness 1, doctrine-citation 2,
+      waiver-docket 7; pinned in `.governance/law/fixtures/replay/1002.json` and asserted by
+      `replay.test.mjs` (R-1005-18, R-1005-26).
+- [x] Each rule's doc states what the host enforces and what the rule only observes.
+      — every `### <id>` section of [CONSTITUTION.md](../CONSTITUTION.md) carries the pair, and
+      `constitution-coverage` fails a rule with no section.
+- [x] Rung 0 stays under 5s; docs listed under Scope describe current state; one receipt for this
+      issue whose front page is machine-written. — `time bash .githooks/pre-commit` with one staged
+      registry file: **3.6 s** total on this container (`## Inherited red` records the machine);
+      the doc pass is the first commit of this lane; this file is the one receipt and its head is
+      the formatter's output.
+
+### Validation
+
+The issue's six validation items, in its order.
+
+| Item | Result |
+| --- | --- |
+| RuleTester suites for every rule, `valid` and `invalid`, at rung 0 | `bun run governance:law:test` — 176 tests, 176 pass; the `law` directive runs them inside `bash .governance/run.sh` |
+| Parity replay: old and new runners over the last 50 `main` commits, diff empty | `node .governance/law/parity.mjs --last 50` — 50 replayed, 0 unexplained disagreements, 1 recorded divergence with its reason in `parity-expectations.json` |
+| #1002 replay: expected findings checked in as a fixture | `.governance/law/fixtures/replay/1002.json`, asserted by `replay.test.mjs`; 11 findings across four rules |
+| Boundary demonstration: a law-only PR from a non-owner blocked by branch protection | **not done — owner action.** Needs a second GitHub account and branch protection enabled; neither is reachable from this repository (Q-1005-3) |
+| `bash .governance/run.sh` green in hook and CI; rung-0 wall clock measured and recorded | hook: measured, `3.6 s`, and every directive green through the real hooks on every commit of this lane. Window: 8 of 9 green, `law` red on this receipt's `## Audit` verdict alone — the finding that stays until an independent reviewer writes it. CI: **pending the required check**, which is owner-enabled (`## Owner items`) |
+| `bun run lint:ledgers`, `lint:product`, `gate-classes.test.mjs` green with the new field | `lint:ledgers` green; `gate-classes.test.mjs` 7/7 green; `lint:product` carries three failures that are inherited, not caused — see `## Inherited red` |
 
 ## What changed
 
@@ -731,6 +845,94 @@ Three judgements this lane made inside those rulings, recorded because they diff
   `scripts:test`, which `check:push` names at rung 1 and `ci.yml` re-runs, so no `ci.yml` change was
   invented for it; the register records where it is enforced rather than where it might be
   ([R-1005-25](../docs/decisions.md#governance-as-a-constitution-1005)).
+
+## Inherited red
+
+Measured against `origin/main` at `87cf642c` in a sibling worktree
+(`git worktree add /home/user/centraid-main 87cf642c` + `bun install --frozen-lockfile`, removed
+after), then on this branch at `da7656fb`. Same three gates, same three messages, failure for
+failure. None of them touches `.governance/`, `scripts/ci/gate-classes.json` or any file this issue
+edits.
+
+| Gate | Failure at `origin/main` 87cf642c | On this branch |
+| --- | --- | --- |
+| `lint:quality-knobs` | `tests/quality/classification-ratchet.json`: stale fingerprint for `packages/server/src/automation/manifest/manifest.ts` and for `packages/server/src/serve/health-registry.ts` | identical, both lines |
+| `lint:mobile-testids` | `apps/mobile/src/kit/test-ids.ts:165 [unapplied-id]` — declares `locker-gate-field`, nothing in `apps/mobile/src` applies it | identical |
+| `lint:e2e-wiring` | `[matrix-owner]` — the claims ledger names `tests/agent-e2e-mobile/flows/volume-proof.mjs` as evidence for `removedMinimumTestsFlows.mobile-volume-proof.owner`, no lane schedules it | identical |
+
+`39/42 product gates passed` on both sides. The remaining `lint:product` gates, and every other
+gate this lane ran, are green.
+
+## Corrections to the plan
+
+What the waves did differently from the issue's execution plan, and the ruling that decided each.
+
+- **Wave 5 (doors) folded into wave 4 rather than running as its own wave.** The `door` field is
+  read by the config builder from the first commit of wave 1; by the time the last rule landed
+  there was nothing left for a separate wave to do but add the field to
+  `scripts/ci/gate-classes.json`, which is one commit ([R-1005-25](../docs/decisions.md#governance-as-a-constitution-1005)).
+- **`docs/**` is registry, not territory.** The plan's estate sketch put law against territory and
+  left docs unstated. A doc records what is; it never changes what the next change may do, so
+  filing it as territory would have made every doc pass an estate violation
+  ([R-1005-19](../docs/decisions.md#governance-as-a-constitution-1005)).
+- **`waiver-docket` is one door, not two.** The plan implies the whole rule runs at the window. Its
+  register-shape half is answerable from the commit being written and its spending half is not, so
+  the rule is declared `hook`/`warn` and returns early on the spending half at the hook door — the
+  same asymmetry `estate-separation` carries ([R-1005-14](../docs/decisions.md#governance-as-a-constitution-1005)).
+- **`.github/workflows/ci.yml` was not touched.** `governance:law:test` already runs in CI inside
+  `scripts:test`, which `check:push` names at rung 1 and `ci.yml` re-runs. The gate register records
+  where a check is enforced, not where it might be
+  ([R-1005-25](../docs/decisions.md#governance-as-a-constitution-1005)).
+- **commitlint is a config shape, not a CLI.** The issue says "`commit-message-format` via commitlint
+  config ownership". commitlint's API is asynchronous and an ESLint rule is synchronous, so the
+  policy lives in `.governance/law/commitlint.config.mjs` in commitlint's shape and
+  `@commitlint/cli` is not installed — the vocabulary without the dependency
+  ([R-1005-5](https://github.com/srikanth235/centraid/issues/1005)).
+- **Eleven docket rows, not twelve.** The sweep found twelve escape-hatch uses; two of them are the
+  same rule, unscoped by path, spent twice by the same repeal, so they are one row rather than two
+  identical ones ([R-1005-20](../docs/decisions.md#governance-as-a-constitution-1005)).
+- **The window door does not demote severity.** R-1005-3 read literally would have turned
+  `receipt-per-issue` — a directive that blocked — into a warning at the window. That is weakening
+  policy without editing it, so the door decides which rules run and the pack row decides how loud
+  (Lane B decisions, deviation 1).
+
+## Owner items
+
+Five things this issue cannot finish on an agent's authority. Each is an explicit question with the
+options and a recommendation; none is recorded as done.
+
+1. **Q-1005-3 — is branch protection on?** `estate-separation`, `doctrine-citation` and
+   `waiver-docket` are declared `warn` because their host backing is owner-enabled and unconfirmed.
+   *Options:* (a) enable required review from code owners on `main` over the eleven law paths and
+   move the three rows to `error` in one commit; (b) leave them `warn` and accept that the law
+   estate is advisory. **Recommendation: (a).** The rules are the whole trust boundary of this
+   issue; without the host behind them an agent can land a law change and use it in the next PR,
+   which is the failure the issue was opened to close.
+2. **Q-1005-3, second half — the boundary demonstration.** The acceptance box asks for a law-only PR
+   from a non-owner account, blocked, recorded here. *Options:* (a) the owner opens one from a
+   second account after enabling protection and pastes the block into this receipt; (b) the box
+   stays unchecked and the claim is never made. **Recommendation: (a), after item 1** — it is the
+   only evidence that distinguishes "configured" from "believed configured".
+3. **Enable the required check `governance`.** `governance.yml` is kit-managed and rolls up into no
+   aggregate, so nothing requires it today; `registry-completeness` and `receipt-per-issue` are
+   `error` on the assumption that it does. *Options:* (a) add `governance` to the required set
+   beside `check`; (b) demote both rules to `warn`. **Recommendation: (a)** — (b) would mean a
+   receipt-less merge passes, which is the state before #988.
+4. **Grant D-9, D-10 and D-11 by merging this PR under owner review.** All three were filed and
+   spent inside this arrival, which `waiver-docket` correctly reports as a self-grant. They cannot
+   be pre-landed: D-9 and D-10 waive `doc-integrity` over the deletion of `COSTS.md` and
+   `STEERING.md`, and D-11 waives `estate-separation` for the repeal that touches the rules and the
+   files being repealed in one act. *Options:* (a) merge under owner review, which is what makes the
+   authority the owner's; (b) split the repeal across two PRs so the rows land first.
+   **Recommendation: (a)** — (b) leaves the trunk citing two deleted paths between the PRs.
+5. **Q-1005-1 and Q-1005-2 — two doctrines with no statute.** The docs doctrine (link integrity, no
+   narrated history) and the performance doctrine (latency budgets, nothing size-scaling on the
+   request path). *Options for each:* (a) a rule — a link checker plus a narration tripwire for the
+   first, `tests/journeys.json` as the statute for the second; (b) a `docs/decisions.md` row that
+   makes it a cited doctrine without a rule; (c) leave it reviewer-judged and cited here.
+   **Recommendation: (a) for the docs link half — it is mechanical and it lost its enforcing
+   directive when the vendored `governance-kit/docs` pack went; (b) for the other three**, which
+   #659 and #767 both recorded as shape-level and not `grep`-decidable.
 
 ## Audit
 
