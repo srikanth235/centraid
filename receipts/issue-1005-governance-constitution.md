@@ -78,14 +78,15 @@ checked on an agent's word about the host.
       — every file under `.governance/law/rules/` ships as `<id>.mjs` + `<id>.test.mjs`;
       `amendment-pairing` is the hook rule that refuses the unpaired edit
       (`.governance/law/rules/amendment-pairing.test.mjs`).
-- [ ] `arrival.json` is generated deterministically from a git range, carries the law digest at
+- [x] `arrival.json` is generated deterministically from a git range, carries the law digest at
       branch point and HEAD, is under the managed-tree digest, and has a checked-in fixture.
-      — three of the four hold: the digests travel, `digest.mjs --record` holds `arrival.mjs` and
-      every `lib/` module, and the fixture is checked in. **Deterministic from a git range does
-      not hold**, and the fixture is the thing that proves it does not: it also pins the current
-      branch name and the working tree's whole receipts corpus, so it is red on any checkout but
-      the one that recorded it. See `## Findings from the close pass` and `QUALITY.md`; it is a
-      change to the wave-1 primitive, so the close pass reported rather than chose.
+      — all four hold as of Lane F (R-1005-27). The record is a function of the range and, when a
+      commit is in flight, the index; the corpus, the docket and the managed tree are read at the
+      range's head. Evidence, from a detached worktree at HEAD that is on no branch and whose
+      working copy of `receipts/issue-972.md` was then dirtied by hand:
+      `node .governance/law/arrival.mjs --range bb964a7e..3df6d552 --out /tmp/a.json && cmp
+      /tmp/a.json .governance/law/fixtures/arrival/bb964a7e..3df6d552.json` → identical, before
+      and after the edit. `arrival.test.mjs` runs exactly that as a case.
 - [x] Every rule emits one line on pass; the front page in the PR body is the formatter's output and
       nothing else. — the rule table at the top of this receipt, ten rows, rendered by
       `run.mjs --front-page`; `## PR body` below is that block plus a summary, nothing hand-drawn.
@@ -308,6 +309,23 @@ This lane's changes sit in the **pr-gate** doctrine domain (`scripts/ci/gate-cla
 `scripts/ci/**`) and answer to [The PR gate loop (#892)](../docs/decisions.md#the-pr-gate-loop-892):
 the door field is the same "where is this answerable" question that ruling's rung ladder answers,
 written in one vocabulary instead of two.
+
+### Lane F — the record is a function of its range
+
+| File | What changed |
+| --- | --- |
+| `.governance/law/lib/git.mjs` | **New reads.** `readBlobs` — one `git cat-file --batch` for the whole receipts corpus rather than 380 `git show`s — and `treeSource(rev)`, the one view every collector reads through: a revision for a `--range` run, `null` (the index) inside the commit hook |
+| `.governance/law/lib/registries.mjs` | `collectReceipts(range, pending, source)` lists and reads the corpus at `source`, never at the working copy; `collectDocket(range, source)` the same. `change` drops `branch`, `onDefaultBranch` and `hasStaged` for one `completed` |
+| `.governance/law/lib/managed.mjs` | `collectManagedTree(source)`: `packs.lock`, `install.yaml`, every managed file's digest and marker, and every locked directive's directory digest, all from blobs |
+| `.governance/law/lib/digest.mjs` | `digestEntries(entries)` — the managed-tree digest over an in-memory `{relpath: bytes}` tree. `dirDigest` is that function with the walk in front of it, so the bash-parity test still pins both |
+| `.governance/law/arrival.mjs` | Schema 5 → 6. `range.onDefaultBranch` (a pending run's `git symbolic-ref`, `null` otherwise); one `treeSource` built once and handed to the three collectors |
+| `.governance/law/brief.mjs` | The brief's docket is read at HEAD — the register a worker is held to is the committed one |
+| `.governance/law/rules/receipt-per-issue.{mjs,test.mjs}` | Reads `change.completed`; findings unchanged for every existing case |
+| `.governance/law/arrival.test.mjs` | The determinism case: a detached `git worktree` at HEAD, on no branch, generating the fixture range — twice, the second time with a receipt dirtied in its working copy |
+| `.governance/law/replay.test.mjs` | The `waiver-docket` count and why it moved |
+| `.governance/law/fixtures/` | Both regenerated |
+| `.governance/install.yaml` | Re-recorded (`digest.mjs --record`) for the five generator modules that moved |
+| `.governance/law/README.md` | `## The arrival record`: what is read at `head`, what moves to the index at the hook |
 
 ## Verification
 
@@ -662,6 +680,40 @@ neither the probe commit nor the probe edit survives.
   their paragraphs. Lane D does not rewrite earlier lanes' receipt text, so the finding stands as
   written rather than being edited away. The fourth was the `pr-gate` domain, and is answered above.
 
+### Lane F
+
+Run in the lane worktree at `e40d0817`, except the doc commit that follows.
+
+```
+bun run governance:law:test
+# tests 177 / # pass 177 / # fail 0                                   exit 0 — pass
+
+git worktree add --detach /tmp/probe HEAD                            a checkout on no branch
+cd /tmp/probe && node .governance/law/arrival.mjs \
+  --range bb964a7e..3df6d552 --out /tmp/a.json
+cmp /tmp/a.json .governance/law/fixtures/arrival/bb964a7e..3df6d552.json
+                                                                     exit 0 — identical
+echo x >> /tmp/probe/receipts/issue-972.md && (regenerate) && (cmp)   exit 0 — still identical
+git worktree remove --force /tmp/probe
+
+time GIT_INDEX_FILE=x bash .governance/packs/srikanth235/centraid/directives/law/check.sh
+                                                                     under the 2.0 s budget
+
+(hand-made red) stage a one-character edit to a digest row in .governance/install.yaml
+  ✗ managed-tree-integrity — the commit is refused at the pre-commit hook
+                                                                     the index path still works
+
+node .governance/law/parity.mjs --last 50                             exit 0
+```
+
+The one number that moved: the #1002 replay's `waiver-docket` findings, seven → zero.
+`.governance/law/docket.json` did not exist at `3df6d552` — the register is #1005's own
+institution — and the arrival now reads the docket at the range's head rather than out of whatever
+checkout is replaying it, so `exists: false` and the rule abstains. That is the correct reading
+under R-1005-27, and it is not a loss of evidence: all seven spends are still in `arrival.waivers`,
+which `replay.test.mjs` now asserts alongside the abstention. The acceptance findings —
+`estate-separation` 1, `registry-completeness` 1, `doctrine-citation` 2 — are unchanged.
+
 ## Decisions
 
 Root rulings this lane implemented, recorded verbatim with the reason each was given.
@@ -849,6 +901,19 @@ Three judgements this lane made inside those rulings, recorded because they diff
   invented for it; the register records where it is enforced rather than where it might be
   ([R-1005-25](../docs/decisions.md#governance-as-a-constitution-1005)).
 
+### Lane F decisions
+
+- **R-1005-27 The arrival record is a function of exactly two inputs: the range `(base, head)`, and
+  `pending` when a commit is being written.** A `--range` run reads nothing from the working tree or
+  the current branch. The receipt corpus, `registries.docket` and `managedTree` are read at `head`
+  (`git ls-tree` plus one batched `git cat-file`); at the hook door all of it moves to the index, so
+  the commit being written is judged on what it stages. `registries.receipts.change.branch` is
+  removed and `change.completed` derives from `range.hasBase`, or from `range.onDefaultBranch` — a
+  `git symbolic-ref` taken only for a pending run — when a commit is in flight. Reason: a fixture
+  that pins the checkout is green on one branch and red everywhere else, which is a passing gate
+  that enforces nothing ([#1005](https://github.com/srikanth235/centraid/issues/1005),
+  [decisions.md](../docs/decisions.md#governance-as-a-constitution-1005)).
+
 ## Inherited red
 
 Measured against `origin/main` at `87cf642c` in a sibling worktree
@@ -1011,6 +1076,20 @@ or owner's to choose:
 the shell directive that a range cannot supply, and (b) would quietly retire it. Lane B already
 recorded that the record's `managedTree` section reads the working tree; this is the same seam,
 found once more and one layer down.
+
+**Resolved 2026-09-09 by Lane F, and by neither option as written (R-1005-27).** The root ruled
+that the record is a function of exactly two inputs — the range, and the pending commit when one
+is being written — which takes (b)'s claim ("a `--range` run reads nothing from the checkout")
+without paying (b)'s price. The corpus is not narrowed to the range's own file set; it is read
+**at the range's head** (`git ls-tree` plus one batched `git cat-file`), so `receipt-per-issue`
+still sees every receipt and still answers uniqueness across the whole corpus. The same move
+covers `registries.docket` and `managedTree`, which Lane B had recorded as the same seam. Inside
+the commit hook every one of those reads moves to the **index**, so the commit being written is
+judged on what it stages — the door where `managed-tree-integrity` has to refuse a staged hand
+edit, and it still does. `registries.receipts.change.branch` is gone; `change.completed` derives
+from `range.hasBase`, or from `range.onDefaultBranch` when a commit is in flight, which is the one
+fact about the checkout the hook is entitled to. Schema 6. See `### Lane F` under `## What
+changed` and `## Verification`.
 
 ## Audit
 

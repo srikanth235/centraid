@@ -2,29 +2,6 @@
 
 ## Open
 
-- **The arrival fixture pins the whole working tree, so it is red on every
-  checkout but the one that recorded it.**
-  `.governance/law/fixtures/arrival/bb964a7e..3df6d552.json` is asserted byte
-  for byte by `.governance/law/arrival.test.mjs`, and the record it pins is not
-  a function of the git range the fixture is named after.
-  `collectReceipts` in `.governance/law/lib/registries.mjs` reads
-  `git rev-parse --abbrev-ref HEAD` into `registries.receipts.change.branch`
-  and reads **every tracked receipt out of the working tree** into
-  `registries.receipts.files[]`, headings and all. The fixture therefore
-  records the branch it was generated on (`lane/1005-d`) and the section list
-  of every receipt as it stood at that moment. Two consequences: the test is
-  red on `main` the instant this merges, because the branch name differs; and
-  it goes red again on any PR that edits any receipt anywhere in the repo,
-  which is most of them. Found by the #1005 close pass, when adding four
-  sections to the #1005 receipt turned the fixture red — the fourth
-  regeneration of a fixture that is supposed to be pinned. Regenerating it is
-  not the fix, it just moves which checkout is green. The fix is a decision
-  about what the record is: either the range-derived sections are the fixture
-  and the checkout-derived ones are asserted for shape separately, or the
-  generator stops reading the working tree for a `--range` run. Both are
-  changes to the primitive laid down in wave 1, so the close pass reported it
-  rather than choosing ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
-
 - **The command palette's photo target reads a `title` column the vault
   deleted, so a photo can never be a palette hit.**
   `packages/client/src/react/shell/routes/paletteEntitySearch.ts` and
@@ -385,6 +362,19 @@
   which makes every `.tsx` number in that file wrong in the same direction.
 
 ## Resolved
+
+- #1005 — **The arrival fixture pinned the whole working tree, so it was red on
+  every checkout but the one that recorded it.** `collectReceipts` read every
+  tracked receipt out of the working copy and `git rev-parse --abbrev-ref HEAD`
+  into `registries.receipts.change.branch`, and `collectManagedTree` and
+  `collectDocket` read the checkout too. Answered by neither option the finding
+  offered: the record is now a function of exactly the range and the pending
+  commit (R-1005-27), and the corpus, the docket and the managed tree are read
+  **at the range's head** — so nothing is narrowed and `receipt-per-issue` still
+  answers uniqueness across the whole corpus. At the commit hook those reads
+  move to the index, so the commit being written is judged on what it stages.
+  `arrival.test.mjs` proves it from a detached worktree that is on no branch and
+  whose receipts are then dirtied by hand.
 
 - #996 — **`evaluateReplicaRead` had no production caller on any host.** It was
   filed open while `packages/client/src/replica/query.ts` still exported it and

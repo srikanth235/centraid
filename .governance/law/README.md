@@ -95,6 +95,31 @@ them. "Where is this answerable" is one question whether the answer is a lint
 rule or a test suite, and two vocabularies for it is how a gate ends up
 enforced somewhere nobody looks.
 
+## The arrival record
+
+`arrival.json` is a function of exactly two inputs: the range `(base, head)`,
+and the pending commit when one is being written. Nothing else — not the branch
+the checkout is on, not the state of the working copy — reaches it
+([R-1005-27](../../docs/decisions.md#governance-as-a-constitution-1005)). That
+is what lets `fixtures/arrival/` pin the generator: the same range records the
+same bytes on any checkout, on any branch, with any local edits in flight.
+
+| Section | Read from |
+| --- | --- |
+| `range`, `commits`, `files`, `law`, `gates` | the commit range, out of the object database |
+| `registries.frozen` | blobs at `base` against blobs at `head` (or the index, at the hook) |
+| `registries.receipts.files[]` — the whole tracked corpus | `git ls-tree` at `head`, and one batched `git cat-file` for the text |
+| `registries.docket`, `managedTree` | the same tree at `head` |
+| `registries.receipts.change.completed` | `range.hasBase`, or `range.onDefaultBranch` when a commit is in flight |
+| `pending` | the message file and the index — the one legitimate index read |
+
+Inside the commit hook the whole right-hand column moves from `head` to the
+**index**, so the commit being written is judged on what it stages: staging a
+hand edit to `install.yaml` is refused there, which is the property the door
+exists for. `range.onDefaultBranch` is computed only for a pending run — the
+hook is the one place where "this is landing on the trunk" is a fact about the
+change — and is `null` in a `--range` run.
+
 ## Who enforces it
 
 `.github/CODEOWNERS` is **generated** from the same `lawPaths` the rules are
