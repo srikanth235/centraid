@@ -5,6 +5,10 @@
       "severity": "error",
       "door": "hook"
     },
+    "constitution-coverage": {
+      "severity": "error",
+      "door": "window"
+    },
     "doctrine-citation": {
       "severity": "warn",
       "door": "window"

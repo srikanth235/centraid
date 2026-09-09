@@ -62,6 +62,68 @@ export function readPacks() {
     });
 }
 
+/** Where the shell directives live, for the catalog the constitution covers. */
+const DIRECTIVES = "packs/srikanth235/centraid/directives";
+
+/**
+ * A GitHub heading anchor, as `docs/decisions.md` links to its own sections.
+ *
+ * @param {string} heading The heading text.
+ * @returns {string} The anchor, without its leading `#`.
+ */
+export function slug(heading) {
+  return heading
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9 -]/gu, "")
+    .trim()
+    .replaceAll(/\s+/gu, "-");
+}
+
+/**
+ * What `constitution-coverage` needs to judge a citation: the whole catalog of
+ * enforceable things, and every anchor `docs/decisions.md` offers.
+ *
+ * Resolved here rather than in the rule for the same reason the clock is: a
+ * rule is a pure function of one document and its options, and this config is
+ * already the one place that reads the packs.
+ *
+ * @returns {{rules: string[], anchors: string[]}} The catalog.
+ */
+export function catalog() {
+  const rules = new Set();
+  for (const pack of readPacks()) {
+    for (const [id, row] of Object.entries(pack.rules)) {
+      if ((row?.severity ?? "error") !== "off") rules.add(id);
+    }
+  }
+  // A directive written in bash is still a directive, and the constitution
+  // covers the catalog rather than the implementation language.
+  try {
+    for (const entry of readdirSync(path.join(ROOT, ".governance", DIRECTIVES), {
+      withFileTypes: true,
+    })) {
+      if (entry.isDirectory()) rules.add(entry.name);
+    }
+  } catch {
+    // No shell pack installed: the rule catalog is the whole catalog.
+  }
+  const anchors = new Set();
+  try {
+    const text = readFileSync(path.join(ROOT, "docs/decisions.md"), "utf8");
+    for (const match of text.matchAll(/^#{2,6}\s+(?<heading>.+?)\s*$/gmu)) {
+      anchors.add(`#${slug(match.groups.heading)}`);
+    }
+    // A row id is a citable thing too: `**R-1005-19**` is how a ruling in a
+    // decisions table is named, and it is what a principle would cite.
+    for (const match of text.matchAll(/\*\*(?<id>[A-Za-z][A-Za-z0-9-]{2,})\*\*/gu)) {
+      anchors.add(`#${match.groups.id.toLowerCase()}`);
+    }
+  } catch {
+    // No decisions file: every decision citation will fail, which is honest.
+  }
+  return { rules: [...rules].sort(), anchors: [...anchors].sort() };
+}
+
 /**
  * The doors the gate register knows about.
  *
@@ -161,8 +223,17 @@ export async function buildConfig(door = "window", options = {}) {
   // confirmed reports at its declared severity instead, so the law never stands
   // in for a review that has not happened. See README.md § The two doors.
   const severityFor = (row) => (door === "hook" ? "error" : (row.severity ?? "warn"));
-  const optionsFor = (row) =>
-    row.rule?.meta?.law?.clock ? { ...row.options, today } : row.options;
+  const injected = {};
+  const optionsFor = (row) => {
+    const law = row.rule?.meta?.law;
+    if (!law?.clock && !law?.catalog) return row.options;
+    if (law.catalog && injected.catalog === undefined) injected.catalog = catalog();
+    return {
+      ...row.options,
+      ...(law.clock ? { today } : {}),
+      ...(law.catalog ? injected.catalog : {}),
+    };
+  };
   const rulesIn = (...surfaces) =>
     Object.fromEntries(
       rows

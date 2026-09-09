@@ -42,6 +42,10 @@ export const SURFACES = Object.freeze(["arrival", "documents", "all"]);
  * @param {string} [spec.enforces] What the rule makes impossible.
  * @param {string} [spec.observes] What it only reports, the host enforcing it.
  * @param {"arrival"|"documents"|"all"} [spec.surface] Which document it reads.
+ * @param {boolean} [spec.catalog] Whether the config injects the rule catalog
+ *   and the decisions anchors into the rule's options. Same reasoning as
+ *   `clock`: the rule stays pure, and what it needs from the filesystem is
+ *   resolved once, by the config that is derived from the packs anyway.
  * @param {boolean} [spec.clock] Whether the config injects today's date into
  *   the rule's options. A rule may not READ a clock — it stays a pure function
  *   of one document and its options — but an expiry is a real thing to check,
@@ -60,6 +64,7 @@ export function defineRule(spec) {
     observes,
     surface = "arrival",
     clock = false,
+    catalog = false,
     schema = [],
     create,
   } = spec;
@@ -85,7 +90,7 @@ export function defineRule(spec) {
       // them to build the per-door config and the front page.
       door,
       surface,
-      law: { id, statute, clock, enforces: enforces ?? null, observes: observes ?? null },
+      law: { id, statute, clock, catalog, enforces: enforces ?? null, observes: observes ?? null },
       schema,
     },
     create,

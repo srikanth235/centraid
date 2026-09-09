@@ -10316,6 +10316,10 @@
         "severity": "error",
         "door": "hook"
       },
+      "constitution-coverage": {
+        "severity": "error",
+        "door": "window"
+      },
       "doc-integrity": {
         "severity": "error",
         "door": "hook"
@@ -10401,8 +10405,8 @@
       },
       {
         "path": ".governance/law/lib/rule.mjs",
-        "recorded": "23809bab1f9b82bb09851091f04263353acae1c6c2554061301c86c5d94e9e1a",
-        "actual": "23809bab1f9b82bb09851091f04263353acae1c6c2554061301c86c5d94e9e1a",
+        "recorded": "cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b",
+        "actual": "cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b",
         "marker": ""
       },
       {

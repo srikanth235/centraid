@@ -27,7 +27,7 @@ managed_digests:
   .governance/law/lib/git.mjs: 6efb64e992fad3d047ace07b4e0e746ae75713287418ae59ded8c9d7cf6fcf42
   .governance/law/lib/managed.mjs: c89576d4531424399fefe3043a2e75803335fcb908cefd0d1980e796a078de76
   .governance/law/lib/registries.mjs: 8869f0c1ab5a72b7b552e2345973255d059e42693af8783cccccbb38cafa4288
-  .governance/law/lib/rule.mjs: 23809bab1f9b82bb09851091f04263353acae1c6c2554061301c86c5d94e9e1a
+  .governance/law/lib/rule.mjs: cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b
   .governance/law/lib/waivers.mjs: 7b4fb12e0707e420599ee856c31a456895d97b269a6e15d27882a7f8e4964aa3
   .governance/lib.sh: 19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37
   .governance/run.sh: f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4

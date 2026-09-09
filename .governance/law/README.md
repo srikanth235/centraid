@@ -57,6 +57,7 @@ rule.
 | `receipt-per-issue` | window | One well-formed receipt per issue, and a completed change carries it | [CONSTITUTION.md](../../CONSTITUTION.md#receipt-per-issue) |
 | `estate-separation` | hook | A commit edits the law or the product, never both | [CONSTITUTION.md](../../CONSTITUTION.md#estate-separation) |
 | `registry-completeness` | window | What a change decided is recorded where decisions live | [CONSTITUTION.md](../../CONSTITUTION.md#registry-completeness) |
+| `constitution-coverage` | window | Every principle resolves to a statute, and every directive has one | [CONSTITUTION.md](../../CONSTITUTION.md#constitution-coverage) |
 | `amendment-pairing` | hook | The law moves with its test, its row and its statute | [CONSTITUTION.md](../../CONSTITUTION.md#amendment-pairing) |
 | `doctrine-citation` | window | A change to a settled domain names the decision it answers to | [CONSTITUTION.md](../../CONSTITUTION.md#doctrine-citation) |
 | `waiver-docket` | hook / window | Every exception spent names a row in the register of exceptions | [CONSTITUTION.md](../../CONSTITUTION.md#waiver-docket) |

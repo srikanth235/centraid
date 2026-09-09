@@ -16,6 +16,13 @@
       "count": 0
     },
     {
+      "id": "constitution-coverage",
+      "door": "window",
+      "severity": "error",
+      "verdict": "pass",
+      "count": 0
+    },
+    {
       "id": "doc-integrity",
       "door": "hook",
       "severity": "error",
