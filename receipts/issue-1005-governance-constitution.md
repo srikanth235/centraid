@@ -6,6 +6,9 @@ Branch `lane/1005-a`, four commits, one per seam.
 Lane B: the vendored `governance-kit/audit` pack ported to rules and deleted.
 Branch `lane/1005-b`, four commits, one per seam.
 
+Lane C: the estates, the registry rules, generated CODEOWNERS, and the repeal of the two
+unenforced ledgers. Branch `lane/1005-c`, six commits, one per seam.
+
 ## Checklist
 
 The umbrella's acceptance boxes. Only the ones this lane owns are checked.
@@ -14,13 +17,16 @@ The umbrella's acceptance boxes. Only the ones this lane owns are checked.
       config, a runner, and a single entry point that still is `bash .governance/run.sh`
 - [x] An arrival record generated once per run — deterministic, fixture-pinned, and the only place
       that talks to git — so rules stay pure and synchronous over a document
-- [x] Two doors: `hook` (answerable from the change set, fatal at pre-commit) and `window` (the
-      whole law at review time, hook rules still fatal, the rest warned)
+- [x] Two doors: `hook` (the commit being written, fatal at pre-commit whatever the pack row says)
+      and `window` (the whole law at review time, every rule at its declared severity)
 - [x] One line per enabled rule on every run, green or red
 - [x] The managed tree's digest arithmetic available to rules, byte-identical to the vendored bash
 - [x] The vendored `governance-kit/audit` pack ported to rules and deleted (Lane B)
-- [ ] Estates, registries, appeals (Lane B/C)
-- [ ] CODEOWNERS and branch protection — what the host enforces (Lane C)
+- [x] Estates (`law` / `registry` / `territory`) and the registry rules — `estate-separation` and
+      `registry-completeness`, with the gate register and the generated front-page lines (Lane C).
+      Appeals are the docket, whose path Lane C reserves and Lane D creates
+- [x] CODEOWNERS and branch protection — what the host enforces (Lane C). The file is generated
+      from the law estate; branch protection stays owner-enabled and is **not** claimed as enabled
 - [ ] CONSTITUTION.md reworked to match (Lane D)
 - [ ] The rule/test pairing check itself as a rule (later lane; the convention is documented in
       `.governance/law/README.md` now)
@@ -114,6 +120,40 @@ Design decisions worth naming, because they are load-bearing for the later lanes
 - **Rules observe; the host enforces.** Every file under `.governance/law/` is agent-writable, so
   nothing there can be the authority for what an agent may do. `defineRule` requires each rule to
   declare `enforces`, `observes`, or both. The branch-protection/CODEOWNERS half is Lane C's.
+
+### Lane C — estates, the registries, CODEOWNERS, and the repeal
+
+| File | What changed |
+| --- | --- |
+| `.governance/law/lib/estates.mjs` | **New.** The three estates and the classifier; `REGISTRY_PATHS` is fixed here, not pack-declared |
+| `.governance/law/lib/gates.mjs` | **New.** The gate register: which tighten-only ledgers moved and which way, over the ledger validator's own `SECTIONS` table |
+| `.governance/law/lib/registries.mjs` | `collectDocument` (changelog, decisions — issues on ADDED lines only), `collectDocket`; receipt rows grow `issue`, `touched`, `recordsRuling`, `cost` |
+| `.governance/law/arrival.mjs` | Schema 2 → 3; every file row tagged with its estate (commit, aggregate, staged); `gates` filled; `registries.{changelog,decisions,docket}`; `buildArrival` is now async |
+| `.governance/law/arrival.test.mjs` | Async call sites; seven new cases for estates, gate direction, the documents and the receipt fields; the COSTS/STEERING expectations dropped with the repeal |
+| `.governance/law/fixtures/arrival/bb964a7e..3df6d552.json` | Regenerated for schema 3 and again for the repeal |
+| `.governance/law/rules/estate-separation.mjs` `.test.mjs` | **New.** The rule and its 14 cases |
+| `.governance/law/rules/registry-completeness.mjs` `.test.mjs` | **New.** The rule and its 15 cases |
+| `.governance/law/eslint.config.mjs` | The window door reads the pack row; the hook door is fatal for every rule it runs |
+| `.governance/law/run.mjs` | Stamps the door into the record; carries `codeowners` in the report; hands the arrival to the front page |
+| `.governance/law/run.test.mjs` | The two duplicated door tests become one that pins the asymmetry both ways; the front-page registry lines |
+| `.governance/law/front-page.mjs` | `renderRegistries` — every line generated, including the silences; the law-estate/CODEOWNERS line |
+| `.governance/law/codeowners.mjs` `.test.mjs` | **New.** `.github/CODEOWNERS` generated from the packs' `lawPaths`; `--check` exits 1 on drift |
+| `.github/CODEOWNERS` | **New**, generated. 11 law paths, owner `@srikanth235` |
+| `.governance/law/replay.test.mjs`, `fixtures/replay/1002.json` | **New.** The catalog replayed over #1002's merged squash, findings pinned |
+| `.governance/law/packs/centraid.json` | Rows for `estate-separation` (hook, `warn`) and `registry-completeness` (window, `error`) |
+| `.governance/law/packs/governance-kit-audit.json` | The two `frozen-files` rows for the repealed ledgers removed |
+| `.governance/law/README.md` | The estates table, the two new rules, the door asymmetry, and a "Who enforces it" section stating what the host does and that it is unconfirmed |
+| `.governance/install.yaml` | `managed_digests` re-recorded for the two new `lib/` modules; the two `install_assets_seeded` rows removed |
+| `.governance/packs/srikanth235/centraid/directives/format-check/check.sh` | The two repealed paths leave the exclusion case list |
+| `CONSTITUTION.md` | `### estate-separation` and `### registry-completeness`; two Principles lines reworded; one Evolution Log line appended (the 2026-06-12 line is untouched) |
+| `docs/decisions.md` | **New section** `## Governance as a constitution (#1005)` — `G-ledgers-retired` and `R-1005-11`..`R-1005-18`, each with its reason, plus two deliberate non-goals |
+| `CHANGELOG.md` | One `### Changed` bullet citing #1005 |
+| `docs/dev-environment.md` | The `law` directive's two doors restated (scope, not severity), the two new directives, the CODEOWNERS commands, and what the host would enforce |
+| `oxfmt.config.ts` | The two repealed ignore rows removed |
+| `COSTS.md`, `STEERING.md` | **Deleted** (R-1005-17) |
+| `package.json` | `governance:law:test` becomes a glob, so a new rule never needs a manifest edit |
+| `scripts/lint-test-reachability.mjs` `.test.mjs` | A test-file glob in a script now reaches its files; one new case pins that `*` does not cross `/` |
+
 
 ## Verification
 
@@ -259,6 +299,116 @@ Not verified on this container and named rather than implied: `shellcheck` over 
 files (not installed); the behaviour of the `law` directive under the CI image's Node, which is a
 different release from the local `v22.22.2`.
 
+### Lane C
+
+Every command below was run in the lane worktree at `6edde758`.
+
+```
+bun run governance:law:test
+# tests 124 / # pass 124 / # fail 0                                  # exit 0 — pass
+```
+
+```
+bash .governance/run.sh
+# ✗ governance: 1 directive(s) failed, 8 passed                      # exit 1
+```
+
+The **one** red is the receipt's own audit verdict, which only an independent
+reviewer can write:
+
+```
+law/receipt-per-issue — receipts/issue-1005-governance-constitution.md —
+'## Audit' records no PASS/REFUTED verdict
+```
+
+`estate-separation` reports six warnings in the same run, all against Lane A
+and Lane B commits that predate the rule (each mixed `.governance/**` with
+`package.json`, `.gitignore`, `docs/dev-environment.md` or `scripts/test.sh`).
+They are warnings by the pack row and do not fail the run; they are the rule
+telling the truth about this branch's own history.
+
+```
+time GIT_INDEX_FILE=x bash .governance/packs/srikanth235/centraid/directives/law/check.sh
+# ✓ law (hook door): 4 rule(s), no findings
+# real 0m1.270s                                                      # exit 0 — under the 2.0 s budget
+```
+
+```
+node .governance/law/codeowners.mjs --check
+# ✓ .github/CODEOWNERS in sync (11 law paths)                        # exit 0 — pass
+```
+
+Replaying #1002's merged squash (R-1005-18) — the two new directives catch what
+the four ported ones passed:
+
+```
+node .governance/law/run.mjs --range bb964a7e..3df6d552
+# ✗ estate-separation — 1 finding
+#     3df6d552 edits the law and the territory in one commit — law:
+#     'tests/claims.json', 'tests/inventory.json'; territory:
+#     '.github/workflows/mobile-ios-lock.yml', 'ARCHITECTURE.md',
+#     'SECURITY.md' and 1015 more.
+# ✗ registry-completeness — 1 finding
+#     CHANGELOG.md carries no line citing #996.
+# ✓ commit-message-format  ✓ doc-integrity  ✓ receipt-per-issue
+```
+
+Both findings are pinned in `.governance/law/fixtures/replay/1002.json` and
+regenerated by `replay.test.mjs`.
+
+**Demonstrated reds, by hand.** Staging `tests/floors.json` (law) with
+`packages/server/src/index.ts` (territory) and running `git commit`:
+
+```
+law/estate-separation — the staged change edits the law and the territory in
+one commit — law: 'tests/floors.json'; territory:
+'packages/server/src/index.ts'.
+✗ law (hook door): 4 rule(s), 1 error(s), 0 warning(s)
+✗ Commit blocked by governance.
+```
+
+`git log --oneline -1` still showed `06efb79c`; both files were reverted. The
+refusal comes from the **commit-msg** rung of the hook door, not pre-commit:
+`check.sh` runs without `--message-file`, so the staged set is not in the record
+there, and `hooks/commit-msg.sh` re-runs the hook door with it attached. Both
+rungs are inside one `git commit`, so the commit does not happen either way.
+
+Second red: a throwaway commit adding `receipts/issue-9999-demonstrated-red.md`
+with a `## Decisions` section and no matching line in `docs/decisions.md`:
+
+```
+law/registry-completeness — receipts/issue-9999-demonstrated-red.md records a
+ruling but docs/decisions.md carries no line citing #9999.
+law/registry-completeness — CHANGELOG.md carries no line citing #9999.
+```
+
+The commit was dropped with `git reset --hard HEAD~1`; `git status --porcelain`
+is clean.
+
+```
+bun run lint:ledgers
+# check-ledgers: ok — 20 sections across 5 ledgers hold against origin/main   # exit 0
+bun run format:check                     # All matched files use the correct format — exit 0
+bun run lint                             # exit 0 — pass
+bun run lint:test-reachability           # 1748 test files, every one reached — exit 0
+bun run test:governance-shell            # self-test ok (synthetic violation observed) — exit 0
+node --test scripts/ci/gate-classes.test.mjs
+# tests 7 / # pass 7 / # fail 0          # exit 0 — pass
+bun run check:push:static
+# ✓ 4/4 gates passed in 25.1s            # exit 0 — pass
+```
+
+`bun run lint:product` is **38/42**. Three of the four failures
+(`lint:quality-knobs`, `lint:mobile-testids`, `lint:e2e-wiring`) reproduce at
+the lane's base commit `381682ff` and are not this lane's; the fourth,
+`lint:test-reachability`, was this lane's and is fixed in `6edde758`.
+
+```
+git status --porcelain      # empty (bar the untracked lane note)
+git ls-files COSTS.md STEERING.md   # empty
+```
+
+
 ## Decisions
 
 Root rulings this lane implemented, recorded verbatim with the reason each was given.
@@ -339,6 +489,66 @@ literal reading would have weakened the policy:
    `lib/git.mjs`, `lib/registries.mjs` and `lib/managed.mjs`, so the recorded set is every module
    under `lib/` — otherwise splitting a file would be a way to move half the generator out from
    under its own digest.
+
+### Lane C decisions
+
+- **G-ledgers-retired** — `COSTS.md` and `STEERING.md` are deleted. Both stopped
+  at #238/#240 while the work reached #1003 and nothing noticed for seven hundred
+  issues. The reason is not that the numbers were wrong; it is that a register
+  nobody is required to write records the beginning of a habit and nothing after
+  it. The one number that mattered is now generated: the front page reads token
+  cost out of the touched receipt's Accounting section, or prints "not recorded".
+- **R-1005-13** — three estates, `registry` tested first, because
+  `.governance/law/docket.json` also matches the law glob `.governance/**` and a
+  register of exceptions is evidence rather than a rule.
+- **R-1005-14** — `estate-separation` at the hook door, pack severity `warn`. The
+  window door now reads the pack row rather than promoting every hook rule to
+  `error`; the hook door is fatal for everything it runs. The four ported rules
+  are declared `error`, so nothing they do changed.
+- **R-1005-15** — `registry-completeness` at `error`, because its host backing is
+  real and already documented (`governance` is a required check). Event-driven
+  throughout: nothing is asked of a change that did not cause the event.
+- **R-1005-16** — `.github/CODEOWNERS` generated from the packs' `lawPaths`.
+  It does not turn branch protection on and cannot check that it is on; every doc
+  says so.
+- **R-1005-18** — the catalog replayed over #1002's merged squash, findings
+  pinned. A catalog that has only ever seen its own fixtures is a catalog of
+  opinions.
+
+Four deviations from a literal reading of the rulings, each because the literal
+reading would have been wrong or unworkable:
+
+1. **A fifth gate direction, `unchanged`.** R-1005-13 fixed the enum at
+   `widened | narrowed | mixed | unknown`. A ledger whose prose rows moved but
+   whose numbers did not is neither narrowed (nothing tightened) nor unknown (the
+   direction was perfectly judgeable), and collapsing the two would make the
+   front page report an unmoved ledger as unjudgeable. `unknown` still means
+   exactly what it did: no direction table applies.
+2. **`registry-completeness` also fires on `mixed`.** The ruling named `widened`.
+   A `mixed` file contains a widening; exempting it would be a way to loosen a
+   number under cover of tightening a neighbour.
+3. **The two doors see different change sets.** R-1005-14 is about severity, and
+   severity alone was not enough: at the hook door the record's `commits` are the
+   branch's history, so the rule refused every commit on a branch that already
+   contained a mixed one — a refusal no edit to the commit being written could
+   clear. The runner now stamps the door into the record and the rule judges only
+   the staged set at the hook. This is scope, not softening: the same commits are
+   still judged, in the window, where they are what is under review.
+4. **The aggregate finding is suppressed when a commit already mixed.** The
+   ruling asked for the aggregate "so the PR-level window catches what
+   commit-level cannot". Reporting it as well as the commit-level finding is the
+   same fact twice with a worse message.
+
+One friction worth the owner's attention, reported rather than papered over: the
+estate map puts `docs/**` (bar `docs/decisions.md`) in `territory`, so **the law
+and its own documentation cannot land in one commit**. Lane C hit this twice.
+`package.json` was solved for good by making `governance:law:test` a glob; the
+`docs/dev-environment.md` half was carried into the repeal commit, which needed a
+waiver anyway. The options are to make `docs/**` a fourth estate, to fold it into
+`registry`, or to leave it and accept a waiver on every commit that documents a
+rule outside `CONSTITUTION.md`. A recommendation: fold `docs/**` into `registry`
+— it is the same kind of thing (a record of what is, written by the change that
+made it so), and it never changes what the next change is permitted to do.
 
 
 ## Audit
