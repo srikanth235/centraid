@@ -1,0 +1,36 @@
+{
+  "lane": "scale",
+  "owner": "tests/agent-e2e-mobile/flows/cold-start.mjs",
+  "name": "8 per-launch cold starts to a ready Home",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "median cold start",
+      "value": 14980.029160000006,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 cold start",
+      "value": 15564.257780000014,
+      "unit": "ms"
+    },
+    {
+      "name": "slowest cold start",
+      "value": 15564.257780000014,
+      "unit": "ms"
+    },
+    {
+      "name": "launches",
+      "value": 8,
+      "unit": "count"
+    }
+  ],
+  "platform": "android",
+  "capturedAt": "2026-09-08T10:39:40.671Z",
+  "history": [
+    {
+      "at": "2026-09-08T10:39:40.671Z",
+      "value": 14980.029160000006
+    }
+  ]
+}
