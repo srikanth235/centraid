@@ -15,7 +15,7 @@
 //
 // Usage:
 //   node .governance/law/arrival.mjs [--range A..B] [--message-file F]
-//                                    [--out P] [--stamp key=value]...
+//                                    [--staged] [--out P] [--stamp key=value]...
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -337,16 +337,16 @@ export function declaredRulesAt(packs, rev) {
 /**
  * Whether a commit in flight is being made straight onto the trunk.
  *
- * Only ever asked for a pending run. A `--range` run answers `null`: which
+ * Only ever asked at the hook door. A `--range` run answers `null`: which
  * branch a checkout happens to be on is not a fact about the change, and a
  * record that carried it said a different thing on every machine that
  * generated it (R-1005-27).
  *
- * @param {object|null} pending The pending commit, if any.
+ * @param {boolean} staged Whether the index is the tree being judged.
  * @returns {boolean|null} True on the trunk, false elsewhere, null off the hook.
  */
-function onTrunk(pending) {
-  if (pending === null) return null;
+function onTrunk(staged) {
+  if (!staged) return null;
   try {
     const branch = git(["symbolic-ref", "--short", "HEAD"]);
     return branch === "main" || branch === "master";
@@ -365,19 +365,22 @@ function onTrunk(pending) {
  * @param {object} [options] Generation options.
  * @param {string} [options.range] `base..head`.
  * @param {string} [options.messageFile] A commit message being written.
+ * @param {boolean} [options.staged] Read the index rather than the range's head.
  * @param {Record<string, string>} [options.stamp] Extra `key=value` facts.
  * @returns {Promise<object>} The arrival record.
  */
 export async function buildArrival(options = {}) {
   const rawPending = collectPending(options.messageFile ?? null);
-  // The one fact about the checkout the record may hold, and only when a commit
-  // is being written: a commit landing straight on the trunk is a completed
-  // change, and the hook is the only door that can know it. In a `--range` run
-  // it is `null` and `completed` derives from the range alone (R-1005-27).
-  const range = { ...resolveRange(options.range), onDefaultBranch: onTrunk(rawPending) };
-  // The tree the record is about: the range's head, or the index when a commit
-  // is in flight — the commit being written is judged on what it stages.
-  const source = treeSource(rawPending === null ? range.head : null);
+  // `--staged` is the hook door: the tree being judged is the index, because
+  // the commit being written is the only thing its author can still act on.
+  // The commit-msg hook also passes a message file; the pre-commit hook does
+  // not, so the index read cannot be keyed on the message (R-1005-27).
+  const staged = options.staged === true || rawPending !== null;
+  // The one fact about the checkout the record may hold, and only at that door:
+  // a commit landing straight on the trunk is a completed change. In a
+  // `--range` run it is `null` and `completed` derives from the range alone.
+  const range = { ...resolveRange(options.range), onDefaultBranch: onTrunk(staged) };
+  const source = treeSource(staged ? null : range.head);
   const rawCommits = collectCommits(range);
   // One classifier for the whole record: #1002's squash alone carries 1022
   // paths, and compiling the law globs once per file list is the difference
@@ -440,7 +443,7 @@ export function serialize(arrival) {
  * Parse argv.
  *
  * @param {string[]} argv Arguments after the script name.
- * @returns {{range?: string, messageFile?: string, out: string, stamp: object}} Options.
+ * @returns {{range?: string, messageFile?: string, staged?: boolean, out: string, stamp: object}} Options.
  */
 export function parseArgs(argv) {
   const options = { out: path.join(HERE, "out", "arrival.json"), stamp: {} };
@@ -448,6 +451,7 @@ export function parseArgs(argv) {
     const arg = argv[i];
     if (arg === "--range") options.range = argv[(i += 1)];
     else if (arg === "--message-file") options.messageFile = argv[(i += 1)];
+    else if (arg === "--staged") options.staged = true;
     else if (arg === "--out") options.out = argv[(i += 1)];
     else if (arg === "--stamp") {
       const [key, ...rest] = argv[(i += 1)].split("=");

@@ -137,6 +137,10 @@ export async function runLaw(options) {
     : await generateArrival([
         ...(options.range ? ["--range", options.range] : []),
         ...(options.messageFile ? ["--message-file", options.messageFile] : []),
+        // At the hook door the record is generated from the INDEX: the
+        // pre-commit rung carries no commit message, so the staged tree is the
+        // only thing that says what this commit will be (R-1005-27).
+        ...(options.door === "hook" ? ["--staged"] : []),
         // The door is stamped into the record because it is a fact about the
         // change's situation, not about the rules: at the hook the only thing
         // the author can still act on is the commit being written, while in the

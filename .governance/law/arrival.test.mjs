@@ -107,6 +107,24 @@ test("a --range record is a function of the range, not of the checkout", async (
   assert.ok(!fixture.includes('"branch"'), "the record names no branch");
 });
 
+test("--staged reads the index, so the hook judges the commit being written", async () => {
+  // The pre-commit rung carries no commit message, so the index read cannot be
+  // keyed on `--message-file`: without `--staged` the hook would judge HEAD and
+  // a staged hand edit to a managed file would sail through (R-1005-27).
+  const staged = await buildArrival({ range: RANGE, staged: true });
+  assert.equal(typeof staged.range.onDefaultBranch, "boolean", "the hook may know the trunk");
+  const corpus = staged.registries.receipts.files.map((row) => row.path);
+  const tracked = execFileSync("git", ["ls-files", "--", "receipts"], { cwd: ROOT, encoding: "utf8" })
+    .split("\n")
+    .filter((file) => file.endsWith(".md"));
+  assert.deepEqual(corpus, tracked, "the staged corpus is the index's, not the range head's");
+  assert.equal(staged.managedTree.kitVersion, "0.15.0", "and so is the managed tree");
+  // The default stays the range: the same call without the flag is the fixture.
+  const ranged = await buildArrival({ range: RANGE });
+  assert.equal(ranged.range.onDefaultBranch, null);
+  assert.notDeepEqual(ranged.registries.receipts.files.map((row) => row.path), corpus);
+});
+
 test("the record has every section, including the ones no rule reads yet", () => {
   const arrival = JSON.parse(readFileSync(FIXTURE, "utf8"));
   assert.equal(arrival.schema, 6);

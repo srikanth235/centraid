@@ -113,8 +113,8 @@ same bytes on any checkout, on any branch, with any local edits in flight.
 | `registries.receipts.change.completed` | `range.hasBase`, or `range.onDefaultBranch` when a commit is in flight |
 | `pending` | the message file and the index — the one legitimate index read |
 
-Inside the commit hook the whole right-hand column moves from `head` to the
-**index**, so the commit being written is judged on what it stages: staging a
+Inside the commit hook — `arrival.mjs --staged`, which `run.mjs` passes at the
+hook door — the whole right-hand column moves from `head` to the **index**, so the commit being written is judged on what it stages: staging a
 hand edit to `install.yaml` is refused there, which is the property the door
 exists for. `range.onDefaultBranch` is computed only for a pending run — the
 hook is the one place where "this is landing on the trunk" is a fact about the
