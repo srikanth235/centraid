@@ -192,7 +192,7 @@
     "turbo": "2.10.7",
     "typescript": "catalog:",
     "ultracite": "7.9.4",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "overrides": {
     "shell-quote": "1.8.4",
