@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url";
 
 import {
   ConversationStore,
-  makeLedgerDbProvider,
   ProviderEgressConsentStore,
 } from "@centraid/server/engine";
 import type { RunTurnFn } from "@centraid/server/engine";
@@ -32,6 +31,7 @@ import {
 } from "@centraid/vault";
 import type { Credential, Gateway, VaultDb } from "@centraid/vault";
 
+import { makeReplicatedLedgerDbProvider } from "../../replicated-ledger-db.js";
 import { startLiveDispatch } from "../automation/run-automation-live-dispatch.js";
 import { runFake, vaultToolContext } from "../backends/acp/test-fixtures.js";
 import type { HarnessKind } from "../types.js";
@@ -233,12 +233,14 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   openVaultDb({ dir: workdir }).close({ skipOptimize: true });
   const ledgerDbFile = path.join(workdir, "vault.db");
   const automationRef = "demo/nightly";
-  const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
+  const store = new ConversationStore(
+    makeReplicatedLedgerDbProvider(ledgerDbFile)
+  );
   store.ensureAutomationConversation(automationRef, "demo", "Nightly", "codex");
   store.close();
   // Ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
-    makeLedgerDbProvider(ledgerDbFile),
+    makeReplicatedLedgerDbProvider(ledgerDbFile),
     (member) => member === "codex"
   );
   const before = consent.has(automationRef, kind, "automations");
