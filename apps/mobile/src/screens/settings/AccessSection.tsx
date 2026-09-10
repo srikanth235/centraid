@@ -22,6 +22,7 @@ import type {
 } from "@centraid/client/access-lens";
 
 import { Text } from "../../kit/components/NativeText";
+import { formatDateShort } from "../../kit/format";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { nativeGrantWire } from "../../kit/share/grant-seat";
@@ -162,14 +163,9 @@ function AccessGroupCard({
 /** NEVER USED IS A FACT, NOT A BLANK (#928) — see the desktop seat's twin. */
 function lastUsed(answer: AccessAnswer): string {
   if (answer.lastUsedAt === null) return "never used";
-  const at = new Date(answer.lastUsedAt);
-  return Number.isNaN(at.getTime())
-    ? "never used"
-    : `last used ${at.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })}`;
+  // One formatter module (#1015, S8): this was its own option bag.
+  const when = formatDateShort(answer.lastUsedAt);
+  return when ? `last used ${when}` : "never used";
 }
 
 const makeStyles = (colors: ThemeColors) =>

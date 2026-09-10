@@ -3,6 +3,7 @@
 // has no recovery plane, so no recovery section is built.
 
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
+import { formatDateShort } from "../../kit/format";
 import { memberFacingError } from "../../kit/member-error";
 import type { DeviceRow, DeviceTicket } from "../../lib/devices";
 import type { VaultRow } from "../../lib/gateway";
@@ -38,12 +39,9 @@ export interface DeviceGroup {
 /** A date, never an age: the wire carries no clock here. */
 export function pairedOn(iso: string | undefined): string {
   if (!iso) return "";
-  const at = Date.parse(iso);
-  if (Number.isNaN(at)) return "";
-  return new Date(at).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "long",
-  });
+  // One formatter module (#1015, S8): this said "10 September" where the
+  // page beside it said "10 Sep 2026".
+  return formatDateShort(iso);
 }
 
 export function expiresAt(iso: string): string {

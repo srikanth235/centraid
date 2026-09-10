@@ -276,10 +276,13 @@ export default function SettingsScreen({
                   disabled={pairing}
                 />
               ) : null}
+              {/* DESIGN.md invariant 3: destructive is OUTLINED `--net`.
+                  It was `secondary` — visually identical to "Pair another"
+                  directly above it (shell/findings 15). */}
               <Button
                 label="Unpair"
                 icon="X"
-                variant="secondary"
+                variant="destructive"
                 onPress={onUnpair}
               />
             </View>

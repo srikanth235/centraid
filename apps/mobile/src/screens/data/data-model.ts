@@ -248,9 +248,18 @@ export function pickBrowseTable(
   return [...pool].sort((a, b) => b.rows - a.rows)[0];
 }
 
+/**
+ * ONE COUNT OF THE KINDS (#1015, shell/findings 16). The header said 61 and
+ * this line said 38, twenty-five points apart on the same screen, because the
+ * header counted the rows `censusKinds` builds (one per populated TABLE) and
+ * this read `totals.populatedKinds` (one per logical kind). Two reads of one
+ * census is two claims about the vault; the list the member can count is the
+ * one that wins, so the sentence derives from the same rows the page renders.
+ */
 export function censusDetail(census: AtlasCensus): string {
+  const kinds = censusKinds(census).length;
   const clauses = [
-    `${count(census.totals.populatedKinds)} ${census.totals.populatedKinds === 1 ? "kind" : "kinds"}`,
+    `${count(kinds)} ${kinds === 1 ? "kind" : "kinds"}`,
     recordCount(census.totals.rows),
   ];
   if (census.totals.bytes !== null)
