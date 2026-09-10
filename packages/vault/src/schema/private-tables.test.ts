@@ -13,10 +13,12 @@ import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import {
+  isReplicatedTable,
   PRIVATE_TABLES,
   PRIVATE_TABLE_NAMES,
   replicatedReferencesToPrivate,
   replicatedTablesOf,
+  unclassifiedTables,
 } from "./private-tables.js";
 
 describe("the private-table list", () => {
@@ -78,5 +80,54 @@ describe("the private-table list", () => {
     } finally {
       db.vault.close();
     }
+  });
+});
+
+// THE GOLDEN LIST (#1014, G13). `replicatedTablesOf` used to subtract the
+// private list from every table the file carries, so a new table replicated
+// to every seat unless someone remembered to classify it. These two tests are
+// the falsifier for the other direction: a table added to the schema and
+// named on no list fails the build, and a name on the allow-list that no
+// table carries is the quiet failure the private list has had since #996.
+describe("the replicated allow-list", () => {
+  test("every table a fresh vault carries is classified", () => {
+    const db = openVaultDb();
+    try {
+      expect(unclassifiedTables(db.vault)).toStrictEqual([]);
+    } finally {
+      db.vault.close();
+    }
+  });
+
+  test("no table is on both lists, and the union is the whole file", () => {
+    const db = openVaultDb();
+    try {
+      const replicated = replicatedTablesOf(db.vault);
+      expect(
+        replicated.filter((name) => PRIVATE_TABLE_NAMES.has(name))
+      ).toStrictEqual([]);
+      for (const entry of PRIVATE_TABLES) {
+        expect(isReplicatedTable(entry.table), entry.table).toBe(false);
+      }
+    } finally {
+      db.vault.close();
+    }
+  });
+
+  test("an unclassified table is caught", () => {
+    const db = openVaultDb();
+    try {
+      db.vault.exec(`CREATE TABLE zz_unclassified (id TEXT PRIMARY KEY)`);
+      expect(unclassifiedTables(db.vault)).toStrictEqual(["zz_unclassified"]);
+      expect(replicatedTablesOf(db.vault)).not.toContain("zz_unclassified");
+    } finally {
+      db.vault.close();
+    }
+  });
+
+  test("an app's ext band replicates by prefix", () => {
+    expect(isReplicatedTable("ext_gym_workout")).toBe(true);
+    expect(isReplicatedTable("extdraft_gym_workout")).toBe(true);
+    expect(isReplicatedTable("zz_unclassified")).toBe(false);
   });
 });

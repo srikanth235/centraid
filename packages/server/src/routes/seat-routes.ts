@@ -52,6 +52,7 @@ import type {
 import {
   buildSeatSnapshot,
   readReplicaLog,
+  recordSeatCursor,
   replicaLogState,
   ReplicaLogRebootstrapRequiredError,
   seatLogRowWire,
@@ -327,6 +328,17 @@ export function makeSeatRouteHandler(
           error: "seat_log_epoch_mismatch",
           message: `log row ${foreign.seq} carries epoch ${foreign.epoch}, this vault is ${state.epoch}`,
         });
+      }
+      // THE HOLD THE PRUNE STANDS ON (#1014, V1/T9). `since` is the position
+      // the device HAS — the rows above it are what it still needs — so this
+      // is what `lowestSeatCursor` must not prune past. Recording the served
+      // watermark instead would pin only what is already in flight and let
+      // retention delete the rest.
+      //
+      // BEST-EFFORT, LIKE A DOORBELL: the page is already served and correct;
+      // a failure to write bookkeeping about it may never fail the answer.
+      if (sinceEpoch === state.epoch) {
+        recordSeatCursor(plane.db.vault, resolution.access.deviceId, seq);
       }
       options.logger?.info(
         `seat log page for ${vaultId}: since ${seq}, ${page.rows.length} rows, ` +

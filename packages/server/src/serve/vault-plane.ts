@@ -83,6 +83,7 @@ import {
   registerAtlasCommands,
   pruneReplicaChanges,
   pruneReplicaIntentOutcomes,
+  pruneReplicaLog,
   lowestSeatCursor,
   runJournalArchival,
   blobCustodyProven,
@@ -2178,6 +2179,22 @@ export class VaultPlane {
           `vault plane: replica prune expired=${replicaPrune.expired} ` +
             `compacted=${replicaPrune.compacted} overflow=${replicaPrune.overflow} ` +
             `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`
+        );
+      }
+      // THE SEAT LOG'S OWN PRUNE, WIRED (#1014, G7/T1/V1). `replica_log`
+      // carries a full JSON row image per (table, pk) per commit in the file
+      // the gateway SERVES, and until now nothing in production ever pruned
+      // it: the 30-day/200,000-row window, the `retention` verdict and the
+      // seat's re-bootstrap path were all unreachable. It is held above the
+      // lowest LIVE seat cursor (`access_device_secret.sync_cursor`, written
+      // by the seat-log door), so wiring it cannot prune past a device that
+      // is still tailing.
+      const seatLogPrune = pruneReplicaLog(this.db.vault);
+      if (seatLogPrune.pruned > 0) {
+        this.logger.info(
+          `vault plane: seat log prune pruned=${seatLogPrune.pruned} ` +
+            `retained=${seatLogPrune.retained} floor=${seatLogPrune.floor.seq} ` +
+            `heldBySeat=${String(seatLogPrune.heldBySeat ?? "none")}`
         );
       }
       // DETACHED, so remote latency never blocks the sweep (#296). Backoff

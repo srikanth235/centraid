@@ -28,9 +28,9 @@ import {
   admissionDuringRebootstrap,
   AdmissionWaiters,
   drainIntents,
-  GatewayClientError,
   IntentQueue,
   InvalidationBus,
+  isAuthorizationError,
   postReplicaIntent,
   replicaIntentInvalidations,
   ReplicaProtocolError,
@@ -537,6 +537,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.#bus.emit(replicaIntentInvalidations([intent]));
         void this.publishProtectedContent();
       },
+      appliedCommitSeq: () => this.#seat.watermark()?.appliedCommitSeq,
       isAuthorizationError,
       onAuthorizationRevoked: () => {
         this.queueEveryoneWaiting("saved locally; the session is reconnecting");
@@ -615,8 +616,4 @@ export async function createNativeReplicaSession(
   const session = new NativeReplicaSession({ ...options, queue, idFactory });
   await session.start();
   return session;
-}
-
-function isAuthorizationError(error: unknown): boolean {
-  return error instanceof GatewayClientError && error.code === "auth_required";
 }

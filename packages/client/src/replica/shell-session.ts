@@ -30,7 +30,6 @@
 
 import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
 
-import { GatewayClientError } from "../gateway-client-core.js";
 import type { GatewayAuth } from "../gateway-client-core.js";
 import { clearVaultChangeCursor } from "../vault-change-feed.js";
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
@@ -60,7 +59,11 @@ import type { SeatWatermark } from "./seat/watermark.js";
 import { AdmissionWaiters } from "./shell-admission.js";
 import { drainIntents } from "./shell-intent-drain.js";
 import { InvalidationBus } from "./shell-invalidation-bus.js";
-import { admissionResult, QUEUED_OFFLINE } from "./shell-outcomes.js";
+import {
+  admissionResult,
+  isAuthorizationError,
+  QUEUED_OFFLINE,
+} from "./shell-outcomes.js";
 import { purgeShellScope } from "./shell-session-purge.js";
 import type {
   ReplicaShellSessionOptions,
@@ -574,6 +577,8 @@ export class ReplicaShellSession {
       rejectAll: (error) => this.#admission.rejectAll(error),
       queueEveryoneWaiting: (reason) => this.queueEveryoneWaiting(reason),
       settled: (intent) => this.emit(replicaIntentInvalidations([intent])),
+      // The cursor an executed answer is measured against (#1014, R1).
+      appliedCommitSeq: () => this.#seat.watermark()?.appliedCommitSeq,
       isAuthorizationError,
       onAuthorizationRevoked: () => this.#onAuthorizationRevoked?.(this),
       scheduleRetry: () => this.scheduleRetry(),
@@ -614,8 +619,4 @@ export class ReplicaShellSession {
     if (this.#closed)
       throw new ReplicaProtocolError("Replica session is closed");
   }
-}
-
-export function isAuthorizationError(error: unknown): boolean {
-  return error instanceof GatewayClientError && error.code === "auth_required";
 }

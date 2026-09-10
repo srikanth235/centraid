@@ -8,6 +8,9 @@
  * vault is what this vault asked for, over the link that authorizes it.
  */
 
+import { createHash } from "node:crypto";
+import { closeSync, openSync, rmSync, writeSync } from "node:fs";
+
 import { shareShapeGrantId, subscriberQuery } from "@centraid/core/protocol";
 import { readSubscription } from "@centraid/vault";
 import type { ShareTailFrame, VaultDb } from "@centraid/vault";
@@ -36,14 +39,124 @@ function unreachable(detail: string): PeerReplicaPullOutcome {
 }
 
 /**
- * Bytes the seat does not already hold, one bounded chunk per request. Content
- * addressing is the integrity check: a chunk stream that did not hash to the
- * sha the manifest named is not written, so a peer cannot swap bytes under a
- * content address the audience already trusts.
+ * A CHUNK AT A TIME, AND NEVER MORE THAN THE MANIFEST DECLARED (#1014, V11).
+ *
+ * The manifest entry's `size` is what the origin judged the grant's ceiling
+ * against, so it is the audience's cap too: a `total` larger than it, or a
+ * stream that runs past it, is the origin contradicting the closure it served
+ * and the pull stops before the next byte is asked for. Without this the seat
+ * concatenated whatever arrived, and one shared video was an OOM on both ends.
+ *
+ * Bytes go to a staging file as they arrive rather than into an array of
+ * buffers, and the content address is computed over the stream, so a blob only
+ * ever costs one chunk of memory. A store with no staging seam (the memory
+ * tier) keeps the buffered path — bounded by the same cap.
  */
+function stagedWrite(
+  blobs: VaultDb["blobs"],
+  sha256: string
+): { path: string; write: (bytes: Buffer) => void; close: () => void } | null {
+  const temp = blobs.stagingPathSync(sha256);
+  if (temp === null) return null;
+  const fd = openSync(temp, "w", 0o600);
+  let open = true;
+  return {
+    path: temp,
+    write: (bytes) => {
+      writeSync(fd, bytes);
+    },
+    close: () => {
+      if (!open) return;
+      open = false;
+      closeSync(fd);
+    },
+  };
+}
+
+async function pullBlob(
+  input: PullShareShapeInput,
+  blob: { sha256: string; size: number },
+  endpointTicket: ReturnType<PeerDial["endpointTicketFor"]>
+): Promise<string | undefined> {
+  // BEFORE THE FIRST BYTE: the manifest's own declaration is the cap.
+  if (!Number.isSafeInteger(blob.size) || blob.size < 0)
+    return `the manifest declared no usable size for ${blob.sha256}`;
+  const staged = stagedWrite(input.seat.blobs, blob.sha256);
+  const buffered: Buffer[] = [];
+  const digest = createHash("sha256");
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+  try {
+    while (offset < total) {
+      const query = subscriberQuery({
+        originVaultId: input.originVaultId,
+        audienceVaultId: input.audienceVaultId,
+        shapeId: input.shapeId,
+      });
+      // A REFUSAL IS A STATE, NEVER AN EXCEPTION on this plane (#1014, T16).
+      // The tail door already answered `unreachable` for a cut dial; the blob
+      // door let the throw out of `pullShareTail` entirely, so a peer whose
+      // connection died mid-object reached the sweep as a rejected promise
+      // rather than a pending row.
+      let response: { status: number; json: unknown };
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- (#929) each chunk's offset is the previous chunk's end, so the pull is sequential by construction
+        response = await input.dial.request({
+          endpointTicket,
+          method: "GET",
+          target: `${PEER_REPLICA_BLOB_PATH}?${query}&sha256=${encodeURIComponent(blob.sha256)}&offset=${offset}`,
+        });
+      } catch (error) {
+        return `the origin could not be reached for ${blob.sha256}: ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+      }
+      const body = response.json as {
+        state?: string;
+        total?: number;
+        base64?: string;
+      };
+      if (response.status !== 200 || body.state !== "chunk")
+        return `the origin would not serve ${blob.sha256}`;
+      total = body.total ?? 0;
+      if (total > blob.size)
+        return `the origin offered ${total} bytes for ${blob.sha256}, past the ${blob.size} its manifest declared`;
+      const bytes = Buffer.from(body.base64 ?? "", "base64");
+      if (bytes.byteLength === 0) return `empty chunk for ${blob.sha256}`;
+      // WHILE STREAMING: the same cap again, because `total` is the origin's
+      // claim and the bytes are what it actually sent.
+      if (offset + bytes.byteLength > blob.size)
+        return `the origin sent past the ${blob.size} bytes it declared for ${blob.sha256}`;
+      digest.update(bytes);
+      if (staged) staged.write(bytes);
+      else buffered.push(bytes);
+      offset += bytes.byteLength;
+    }
+    // Content addressing is the integrity check: bytes that did not hash to
+    // the sha the manifest named are never adopted, so a peer cannot swap
+    // them under a content address this vault already trusts.
+    if (digest.digest("hex") !== blob.sha256)
+      return `bytes for ${blob.sha256} did not hash to their content address`;
+    if (staged) {
+      staged.close();
+      input.seat.blobs.adoptStagedSync(blob.sha256, staged.path, offset);
+      return undefined;
+    }
+    input.seat.blobs.ingestSync(Buffer.concat(buffered));
+    return undefined;
+  } finally {
+    if (staged) {
+      staged.close();
+      // Adoption renamed it away; anything left is a pull that failed.
+      rmSync(staged.path, { force: true });
+    }
+  }
+}
+
+/** Bytes the seat does not already hold, one bounded chunk per request. */
 async function pullBlobs(
   input: PullShareShapeInput,
-  manifest: readonly { sha256: string }[]
+  manifest: readonly { sha256: string; size: number }[]
 ): Promise<string | undefined> {
   const store = input.seat.blobs.local;
   const endpointTicket = input.dial.endpointTicketFor(
@@ -52,39 +165,9 @@ async function pullBlobs(
   );
   for (const blob of manifest) {
     if (store.hasSync(blob.sha256)) continue;
-    const chunks: Buffer[] = [];
-    let offset = 0;
-    let total = Number.POSITIVE_INFINITY;
-    while (offset < total) {
-      const query = subscriberQuery({
-        originVaultId: input.originVaultId,
-        audienceVaultId: input.audienceVaultId,
-        shapeId: input.shapeId,
-      });
-      // oxlint-disable-next-line no-await-in-loop -- (#929) each chunk's offset is the previous chunk's end, so the pull is sequential by construction
-      const response = await input.dial.request({
-        endpointTicket,
-        method: "GET",
-        target: `${PEER_REPLICA_BLOB_PATH}?${query}&sha256=${encodeURIComponent(blob.sha256)}&offset=${offset}`,
-      });
-      const body = response.json as {
-        state?: string;
-        total?: number;
-        base64?: string;
-      };
-      if (response.status !== 200 || body.state !== "chunk")
-        return `the origin would not serve ${blob.sha256}`;
-      const bytes = Buffer.from(body.base64 ?? "", "base64");
-      if (bytes.byteLength === 0) return `empty chunk for ${blob.sha256}`;
-      chunks.push(bytes);
-      total = body.total ?? 0;
-      offset += bytes.byteLength;
-    }
-    // `ingestSync` re-hashes and refuses a mismatch, so a swapped byte cannot
-    // land under a content address this vault already trusts.
-    const ingested = input.seat.blobs.ingestSync(Buffer.concat(chunks));
-    if (ingested.sha256 !== blob.sha256)
-      return `bytes for ${blob.sha256} did not hash to their content address`;
+    // oxlint-disable-next-line no-await-in-loop -- (#929) one blob at a time is the point: the seat holds one chunk, never a library
+    const failure = await pullBlob(input, blob, endpointTicket);
+    if (failure) return failure;
   }
   return undefined;
 }

@@ -274,7 +274,74 @@ describe("replica-intent-route suite", () => {
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
-  test("a foreign intent id looks in-flight and never dispatches or mutates its owner row", async () => {
+  /*
+   * X20 (#1014): A VAULT THAT COULD NOT WRITE IS A 500, NEVER AN ACK. Every
+   * throw out of `recordReplicaIntentOutcome` used to become `202 in-flight`,
+   * which is the door telling the seat "accepted, ask again later" about a
+   * write that never happened — the phone re-sends and the member's change is
+   * gone with an acknowledgement over it. A 5xx is what makes the drain hold
+   * the head and retry (`isPermanentIntentRejection` is 4xx only).
+   */
+  test("a vault that cannot record the admission answers 500, not an ack", async () => {
+    const vault = await plane();
+    const input = { title: "unwritable" };
+    const payloadHash = intentHash({
+      appId: "planner",
+      action: "add_task",
+      input,
+    });
+    const prepare = vault.db.vault.prepare.bind(vault.db.vault);
+    vi.spyOn(vault.db.vault, "prepare").mockImplementation(((
+      sql: string
+    ): unknown => {
+      if (sql.includes("INSERT INTO replica_intent_outcome"))
+        throw new Error("disk I/O error");
+      return prepare(sql);
+    }) as typeof vault.db.vault.prepare);
+    const dispatch = vi.fn<ReplicaIntentDispatcher>();
+    const result = response();
+
+    await handleReplicaIntent(
+      request({
+        intentId: "unwritable-intent",
+        appId: "planner",
+        action: "add_task",
+        input,
+        payloadHash,
+      }),
+      result.res,
+      {
+        plane: vault,
+        access: {
+          canWrite: true,
+          rememberDevice: true,
+          deviceId: "device-1",
+          appId: "planner",
+        },
+        dispatch,
+      }
+    );
+
+    expect(result.res.statusCode).toBe(500);
+    expect(result.body()).toMatchObject({
+      error: "replica_intent_outcome_failed",
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  /*
+   * X20 (#1014) RE-RULES THE CONCEALED ANSWER. This id belongs to another
+   * device, so `202 in-flight` used to be the reply: an ordinary
+   * acknowledgement, no existence oracle. It is also an acknowledgement of a
+   * write that CAN NEVER RUN — the prober re-sends forever and the member's
+   * change is silently gone — and the two invariants that answer was protecting
+   * (never dispatch, never touch the owner's row) hold just as well under a
+   * refusal. An intent id is the caller's own 128-bit value, so `409` tells a
+   * caller who already holds the id that it is not theirs to use, and tells
+   * nobody anything they could have guessed.
+   */
+  test("a foreign intent id is refused and never dispatches or mutates its owner row", async () => {
     const vault = await plane();
     const input = { title: "collision probe" };
     const payloadHash = crypto
@@ -315,10 +382,10 @@ describe("replica-intent-route suite", () => {
       }
     );
 
-    expect(result.res.statusCode).toBe(202);
+    expect(result.res.statusCode).toBe(409);
     expect(result.body()).toMatchObject({
-      accepted: true,
-      outcome: { intentId: "foreign-intent", status: "in-flight" },
+      error: "intent_id_reused",
+      intentId: "foreign-intent",
     });
     expect(dispatch).not.toHaveBeenCalled();
     expect(
@@ -1033,6 +1100,90 @@ describe("replica-intent-route suite", () => {
           actualVersion: expect.any(Number),
         },
       },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  test("still checks opaque row versions after the change log is pruned", async () => {
+    // FAILS CLOSED (#1014, G9). The candidate ids used to come from
+    // `replica_change`, and an empty candidate set SKIPPED the check — so
+    // after any retention prune or epoch bump every opaque-shape base version
+    // passed unconditionally, on the one path whose job is to refuse a write
+    // made against a row someone else has moved. The candidates come from the
+    // entity's own table now, which a prune cannot empty.
+    const vault = await plane();
+    vault.recordAppInstall("planner", {
+      scopes: [
+        {
+          schema: "schedule",
+          table: "task",
+          verbs: "read+act",
+          fieldMask: ["title"],
+        },
+      ],
+    });
+    vault.db.vault
+      .prepare(
+        `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, status, priority)
+         VALUES ('pruned-conflict', ?, 'Before', 'needs-action', 0)`
+      )
+      .run(vault.boot.ownerPartyId);
+    const access = {
+      canWrite: true,
+      rememberDevice: true,
+      deviceId: "device-pruned-conflict",
+      appId: "planner",
+    };
+    const shape = buildReplicaShapes(vault.db.vault, access).find((item) =>
+      item.entityMap.has("schedule.task")
+    )!;
+    const row = readReplicaRow(
+      vault.db.vault,
+      "schedule.task",
+      "pruned-conflict"
+    )!;
+    const before = shapeReplicaRow(shape, "schedule.task", row)!;
+    const version = row.rowVersion!;
+    vault.db.vault
+      .prepare(
+        `UPDATE schedule_task SET title = 'After' WHERE task_id = 'pruned-conflict'`
+      )
+      .run();
+    // Exactly the state retention leaves behind.
+    vault.db.vault.exec(`DELETE FROM replica_change`);
+
+    const input = { title: "offline edit" };
+    const baseVersions = [
+      {
+        shapeId: shape.shapeId,
+        entity: "schedule.task",
+        rowId: before.rowId,
+        version,
+      },
+    ];
+    const dispatch = vi.fn<ReplicaIntentDispatcher>();
+    const reply = response();
+    await handleReplicaIntent(
+      request({
+        intentId: "pruned-conflict-1",
+        appId: "planner",
+        action: "edit_task",
+        input,
+        baseVersions,
+        payloadHash: intentHash({
+          appId: "planner",
+          action: "edit_task",
+          input,
+          baseVersions,
+        }),
+      }),
+      reply.res,
+      { plane: vault, access, dispatch }
+    );
+
+    expect(reply.body()).toMatchObject({
+      outcome: { status: "conflict" },
     });
     expect(dispatch).not.toHaveBeenCalled();
   });

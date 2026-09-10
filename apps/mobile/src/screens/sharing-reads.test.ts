@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  linkCounterpartyLabel,
   readShareSection,
   shareAbsentLine,
   shareReadReach,
@@ -73,5 +74,43 @@ describe("naming which of the two happened", () => {
     expect(shareAbsentLine(noun, "refused")).toContain("refused");
     // And neither may be mistakable for the true-empty sentence.
     expect(shareAbsentLine(noun, "refused")).not.toContain("yet");
+  });
+
+  describe("the link row names the counterparty (#1014 S4)", () => {
+    const link = {
+      vaultA: "vlt_personal",
+      vaultB: "vlt_family",
+      labelA: "Personal",
+      labelB: "Family",
+      remoteVaultId: null,
+    };
+
+    it("names the OTHER side, from whichever side is looking", () => {
+      expect(linkCounterpartyLabel(link, "vlt_family")).toBe("Personal");
+      expect(linkCounterpartyLabel(link, "vlt_personal")).toBe("Family");
+    });
+
+    it("does not lean on remoteVaultId, which a local pair leaves null", () => {
+      // The reproduced case: two vaults on ONE gateway, so there is no remote
+      // and the old row fell back to `vaultB` — this vault's own name.
+      expect(linkCounterpartyLabel(link, "vlt_family")).not.toBe("Family");
+    });
+
+    it("falls back to the vault id when a side has no label", () => {
+      expect(
+        linkCounterpartyLabel({ ...link, labelA: null }, "vlt_family")
+      ).toBe("vlt_personal");
+    });
+
+    it("names the far side for a link neither of whose sides is ours", () => {
+      // A roster spanning several mounted vaults: the gateway's `remoteVaultId`
+      // is the only thing that says which side is away from this gateway.
+      expect(
+        linkCounterpartyLabel(
+          { ...link, remoteVaultId: "vlt_personal" },
+          "vlt_other"
+        )
+      ).toBe("Personal");
+    });
   });
 });

@@ -113,12 +113,7 @@ export class NativeWriteRail {
         "The pending row is no longer available to edit"
       );
     }
-    const intentId = this.#intentIds.forWrite(
-      appId,
-      input.action,
-      input.input,
-      input.intentId
-    );
+    const intentId = this.#intentIds.forWrite(input.intentId);
     const projected = projectPendingWrite(pendingProjectionFor(appId), {
       appId,
       action: input.action,
