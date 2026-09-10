@@ -979,6 +979,15 @@ Ruled 2026-09-10 by [#1015](https://github.com/srikanth235/centraid/issues/1015)
 - **No desktop or PWA seat.** The same grammar reaches those seats in a separate wave. Fixing one seat at a time is what makes the mobile gallery a usable gate.
 - **No new features.** Only the product paths the audit found missing — Locker's unlock key, Tally's add-expense entry, Tasks' due and reminder fields — are restored, because a room with no way into it is not a consistency problem.
 
+### Later rulings (#1015)
+
+Appended as the umbrella's lanes reached them; each row is dated and does not rewrite the six above.
+
+| Date | Ruling | Why |
+| --- | --- | --- |
+| 2026-09-10 | **A notebook is a place reached only by tapping Notebooks.** The Notes band offers no notebook tab, and `notes-band.test.ts`'s pin that "a filter is not a place" is superseded for notebooks only — a filter over the note list still is not one. | The band's five seats are the app's rooms; a notebook is one of an unbounded set, so putting one on the band makes the band a function of the member's data. Reaching it through Notebooks keeps the band fixed and still gives a notebook a real back target (D4). |
+| 2026-09-10 | **Emptying the Docs trash is one vault command, `core.empty_document_trash`, that collapses every trashed document's grace window onto its own `deleted_at`.** The gateway's lifecycle sweep stays the only thing that destroys a document. | D1 asked for the control, and the vault had no door: `core.trash_document` refuses an already-trashed document and nothing could bring a purge date forward. Making the command a DATE rather than a second destruction path keeps the sweep's rent checks, authority revocations and provenance receipts as the single audited way a document leaves the vault. |
+
 ## Related docs
 
 | Doc | Current contract |

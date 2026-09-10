@@ -126,4 +126,98 @@ describe("documents: purge", () => {
     assert(again.status === "failed");
     expect(again.predicate).toContain("document_exists");
   });
+  test("empty_document_trash is a no-op on an empty trash, and a live document is untouched", () => {
+    const { documentId } = addDocument({
+      data_uri: "data:text/plain;charset=utf-8,live",
+      title: "Live.txt",
+    });
+    const outcome = invoke("core.empty_document_trash", {});
+    expect(outcome.status).toBe("executed");
+    expect(
+      (outcome as { output: { documents_released: number } }).output
+        .documents_released
+    ).toBe(0);
+    const row = db.vault
+      .prepare(
+        "SELECT deleted_at, purge_at FROM core_document WHERE document_id = ?"
+      )
+      .get(documentId) as {
+      deleted_at: string | null;
+      purge_at: string | null;
+    };
+    expect(row.deleted_at).toBeNull();
+    expect(row.purge_at).toBeNull();
+  });
+
+  test("empty_document_trash collapses the window on every trashed document and the sweep destroys them", () => {
+    const first = addDocument({
+      data_uri: "data:text/plain;charset=utf-8,one",
+      title: "One.txt",
+    });
+    const second = addDocument({
+      data_uri: "data:text/plain;charset=utf-8,two",
+      title: "Two.txt",
+    });
+    const kept = addDocument({
+      data_uri: "data:text/plain;charset=utf-8,kept",
+      title: "Kept.txt",
+    });
+    invoke("core.trash_document", { document_id: first.documentId });
+    invoke("core.trash_document", { document_id: second.documentId });
+    // Trashing alone leaves a 30-day window: nothing lapses yet.
+    expect(gw.sweep(owner).documentsPurged).toBe(0);
+
+    const outcome = invoke("core.empty_document_trash", {});
+    expect(outcome.status).toBe("executed");
+    expect(
+      (outcome as { output: { documents_released: number } }).output
+        .documents_released
+    ).toBe(2);
+    for (const id of [first.documentId, second.documentId]) {
+      const row = db.vault
+        .prepare(
+          "SELECT deleted_at, purge_at FROM core_document WHERE document_id = ?"
+        )
+        .get(id) as { deleted_at: string; purge_at: string };
+      expect(row.purge_at).toBe(row.deleted_at);
+    }
+
+    // Only the sweep destroys — with its rent checks and its receipts intact.
+    expect(gw.sweep(owner).documentsPurged).toBe(2);
+    for (const id of [first.documentId, second.documentId])
+      expect(
+        db.vault
+          .prepare("SELECT 1 FROM core_document WHERE document_id = ?")
+          .get(id)
+      ).toBeUndefined();
+    expect(
+      db.vault
+        .prepare("SELECT 1 FROM core_document WHERE document_id = ?")
+        .get(kept.documentId)
+    ).toBeTruthy();
+    expect(
+      db.vault
+        .prepare("SELECT 1 FROM core_content_item WHERE content_id = ?")
+        .get(kept.contentId)
+    ).toBeTruthy();
+  });
+
+  test("empty_document_trash leaves a restored document alone and can be run twice", () => {
+    const { documentId } = addDocument({
+      data_uri: "data:text/plain;charset=utf-8,back",
+      title: "Back.txt",
+    });
+    invoke("core.trash_document", { document_id: documentId });
+    expect(
+      invoke("core.restore_document", { document_id: documentId }).status
+    ).toBe("executed");
+    expect(invoke("core.empty_document_trash", {}).status).toBe("executed");
+    expect(invoke("core.empty_document_trash", {}).status).toBe("executed");
+    expect(gw.sweep(owner).documentsPurged).toBe(0);
+    expect(
+      db.vault
+        .prepare("SELECT 1 FROM core_document WHERE document_id = ?")
+        .get(documentId)
+    ).toBeTruthy();
+  });
 });

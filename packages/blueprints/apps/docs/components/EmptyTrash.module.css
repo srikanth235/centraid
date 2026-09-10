@@ -1,0 +1,67 @@
+/* Emptying the trash (Docs spec §4.3, §14; #1015 D1). Tokens only; logical
+   properties only; nothing below 11px.
+
+   The destructive control is OUTLINED `--net`, never filled — the same
+   grammar Photos' own EmptyTrash uses, so the one irreversible act in Docs is
+   not a new species of control. `--danger` is the fallback for a surface that
+   has not emitted `--net` yet.
+
+   The card idiom is the one every non-drive panel uses (Blocks.module.css):
+   hairline, container radius, elevated paper. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-inline-size: 62ch;
+  margin: var(--sp-4) 0 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+}
+
+.note {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+/* The confirm replaces the control in place — a member reading it is reading
+   about the very thing they just pressed, not about a dialog that arrived. */
+/* A `fieldset`, not a `div[role=group]` — the semantic tag the a11y rule asks
+   for, so its own default border and inline margins are cleared here. */
+.confirm {
+  margin: 0;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--net, var(--danger));
+  border-radius: var(--r-lg);
+}
+
+.question {
+  margin: 0;
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+
+.detail {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.destructive:not(:disabled) {
+  color: var(--net, var(--danger));
+  border-color: var(--net, var(--danger));
+}
