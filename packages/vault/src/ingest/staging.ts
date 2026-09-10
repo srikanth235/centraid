@@ -229,22 +229,27 @@ export function stageBatchTx(
     `SELECT target_type AS entity_type, target_id AS entity_id, content_hash FROM sync_external_entity
       WHERE connection_id = ? AND external_id = ?`
   );
-  // THE REVIEW QUEUE HOLDS ONE ENTRY PER EXTERNAL ID (#1014, B7). The
-  // external-id map is written at PUBLISH, so on a review-gated connection two
-  // pulls before the member answers staged the same id as `create` twice —
+  // THE REVIEW QUEUE HOLDS ONE CREATABLE ENTRY PER EXTERNAL ID (#1014, B7).
+  // The external-id map is written at PUBLISH, so on a review-gated connection
+  // two pulls before the member answers staged the same id as `create` twice —
   // approving both created two rows, and the map's
   // `ON CONFLICT … DO UPDATE SET target_id` then orphaned the first. A draft
-  // still awaiting review is as good as a map entry for this purpose, so it is
-  // consulted here and REFRESHED in place rather than duplicated.
-  const draftLookup = vault.prepare(
-    `SELECT r.row_id, r.disposition FROM sync_import_row r
+  // still awaiting review is as good as a map entry for this purpose.
+  //
+  // THE NEWEST DRAFT WINS, and every older one is retired to a `skip` saying
+  // so. The other direction — keeping the old row and skipping the new one —
+  // holds the same invariant but leaves a caller that has just staged a batch
+  // holding a batch id that publishes nothing, and pull-then-publish is
+  // exactly the shape callers have.
+  const openCreateDrafts = vault.prepare(
+    `SELECT r.row_id FROM sync_import_row r
        JOIN sync_import_batch b ON b.batch_id = r.batch_id
       WHERE b.connection_id = ? AND b.status = 'draft'
         AND r.external_id = ? AND r.published_entity_id IS NULL
-      ORDER BY b.created_at DESC, r.seq DESC LIMIT 1`
+        AND r.disposition = 'create'`
   );
-  const refreshDraft = vault.prepare(
-    `UPDATE sync_import_row SET payload_json = ?, note = ? WHERE row_id = ?`
+  const retireDraft = vault.prepare(
+    `UPDATE sync_import_row SET disposition = 'skip', note = ? WHERE row_id = ?`
   );
   const failedAttempts = publishFailureAttempts(vault, connectionId);
   let seq = 0;
@@ -300,18 +305,15 @@ export function stageBatchTx(
       disposition = "skip";
       note = `publishing failed ${attempts} times; not retried until the upstream row changes`;
     } else if (disposition === "create") {
-      const draft = draftLookup.get(connectionId, candidate.externalId) as
-        | { row_id: string; disposition: string }
-        | undefined;
-      if (draft) {
-        refreshDraft.run(
-          JSON.stringify(candidate.payload),
-          "refreshed from a later pull; still awaiting review",
+      const superseded = openCreateDrafts.all(
+        connectionId,
+        candidate.externalId
+      ) as { row_id: string }[];
+      for (const draft of superseded)
+        retireDraft.run(
+          "superseded by a later pull of the same upstream row",
           draft.row_id
         );
-        disposition = "skip";
-        note = "already staged for review; that draft was refreshed instead";
-      }
     }
     counts[disposition] += 1;
     const rowId = uuidv7();

@@ -433,7 +433,7 @@ describe("staging the same external id twice before review", () => {
     };
   });
 
-  test("refreshes the draft awaiting review instead of staging a second create", () => {
+  test("retires the older draft so only the newest pull can create the row", () => {
     const first = gw2.stageImportFile(owner2, {
       filename: "calendar.ics",
       data: ICS("Dentist"),
@@ -444,10 +444,12 @@ describe("staging the same external id twice before review", () => {
       filename: "calendar.ics",
       data: ICS("Dentist, moved"),
     });
-    expect(second.staged).toMatchObject({ create: 0, skip: 1 });
+    // The NEWEST draft owns the create — a caller that has just staged holds a
+    // batch id that actually publishes.
+    expect(second.staged).toMatchObject({ create: 1 });
 
-    // The member's queue still holds exactly one creatable entry for the id,
-    // and it carries the FRESHER payload.
+    // The member's queue holds exactly one creatable entry for the id, and it
+    // carries the fresher payload.
     const creates = db2.vault
       .prepare(
         `SELECT payload_json FROM sync_import_row
@@ -457,12 +459,16 @@ describe("staging the same external id twice before review", () => {
     expect(creates).toHaveLength(1);
     expect(creates[0]?.payload_json).toContain("Dentist, moved");
 
-    // Approving the one draft creates one row, not two.
+    // Approving BOTH batches creates one row, not two.
     gw2.publishImport(owner2, first.batchId);
     gw2.publishImport(owner2, second.batchId);
     const count = db2.vault
       .prepare("SELECT count(*) AS n FROM core_event WHERE ical_uid = ?")
       .get("evt-dup@example.com") as { n: number };
     expect(count.n).toBe(1);
+    const summary = db2.vault
+      .prepare("SELECT summary FROM core_event WHERE ical_uid = ?")
+      .get("evt-dup@example.com") as { summary: string };
+    expect(summary.summary).toBe("Dentist, moved");
   });
 });
