@@ -16,6 +16,13 @@ import {
 } from "./crypto.js";
 import type { Keyring } from "./crypto.js";
 
+// `seal-key` IS READ-ONLY LEGACY (#1014, X21). A SNAPSHOT NEVER CARRIES A KEY
+// (#996 R13): `assembleSourceEntries` produces no entry of this kind — the
+// word "seal" does not occur in `backup-sources.ts` — and key custody rides
+// the recovery kit alone. The member stays in the union and in `ENTRY_KINDS`
+// so a manifest written before that change still validates and still
+// restores; nothing writes it. Removing it would turn an old backup into an
+// unreadable one, which is the opposite of what a backup format is for.
 export type ManifestEntryKind = "db" | "blob" | "git-bundle" | "seal-key";
 
 export interface ManifestEntry {
@@ -238,6 +245,7 @@ const ENTRY_KINDS = new Set<ManifestEntryKind>([
   "db",
   "blob",
   "git-bundle",
+  // Read-only legacy — see `ManifestEntryKind`.
   "seal-key",
 ]);
 
