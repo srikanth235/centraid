@@ -12,11 +12,18 @@
  *    the staging is the node filesystem one the desktop seat uses;
  * 2. `digest`/`idFactory` are injected, exactly as the device injects
  *    expo-crypto, so no Expo native module is resolved here;
- * 3. the change feed never emits. The SSE feed is a device concern; every
- *    suite here advances the session with `pullNow()`, which is the same seat
- *    catch-up a feed frame wakes. What this tier therefore CANNOT claim is
- *    that a live SSE frame wakes the pull — that stays with the device
- *    journeys.
+ * 3. the change feed is silent BY DEFAULT — every suite here advances the
+ *    session with `pullNow()`, which is the same seat catch-up a feed frame
+ *    wakes. `liveFeed: true` swaps in the shipped
+ *    `NativeMultiplexChangeFeed` over real `fetch` against this gateway's real
+ *    SSE route, which is how #1014's T11 closed the gap that used to sit here:
+ *    the live defect (R15/R22) was in the feed, and this tier's own gate could
+ *    not see it.
+ *
+ * A fourth stand-in exists only to make the feed module importable off-device:
+ * `expo/fetch` is aliased to `lib/expo-fetch.ts` (see the vitest config), which
+ * hands back Node's own streaming `fetch`. Every suite injects its own
+ * `streamFetch` regardless.
  *
  * The transport itself is real `fetch` over loopback, and `cut()` moves it to a
  * port nothing listens on so a failure is the platform's, not a flag's.
@@ -25,6 +32,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
+import { NativeMultiplexChangeFeed } from "../../../apps/mobile/src/lib/replica/native-multiplex-change-feed.js";
 import { createNativeReplicaSession } from "../../../apps/mobile/src/lib/replica/native-session.js";
 import type {
   NativeChangeFeed,
@@ -57,6 +65,14 @@ function silentFeed(): NativeChangeFeed & { active: boolean } {
 
 export interface MobileSeat {
   readonly session: NativeReplicaSession;
+  /**
+   * Cancel the open SSE body, exactly as the platform did in the live trace
+   * that produced R15 (`-999`, and the request was never re-issued). A no-op
+   * on a seat with no live feed.
+   */
+  dropFeed: () => void;
+  /** SSE requests this seat's feed has issued since it opened. */
+  feedRequests: () => number;
   /** This phone's copy of the vault — the read door every suite here uses. */
   readonly seat: IntegrationSeat;
   /** The phone loses the network: every request now refuses to connect. */
@@ -69,6 +85,18 @@ export interface MobileSeat {
 }
 
 export interface OpenSeatOptions {
+  /**
+   * Give this seat the SHIPPED multiplex feed over this gateway's real SSE
+   * route, instead of the silent stand-in (#1014, T11).
+   */
+  liveFeed?: boolean;
+  /**
+   * The foreground catch-up clock. Parked beyond any suite's lifetime by
+   * default for the same reason `retryDelayMs` is: a background pull would
+   * make "did this arrangement land" depend on a timer rather than on the
+   * arrangement. A suite asserting the clock exists has to shorten it.
+   */
+  pullIntervalMs?: number;
   /** Distinct per seat so two seats on one gateway keep separate replicas. */
   label?: string;
   /** Which vault on this gateway. Defaults to the gateway's own default. */
@@ -144,6 +172,39 @@ export async function openSeat(
       );
     },
   });
+  // THE SHIPPED RADIO, OVER REAL `fetch` (#1014, T11). Not a stand-in: this is
+  // `NativeMultiplexChangeFeed` talking to the gateway's own SSE route, so a
+  // suite can finally assert that a gateway write reaches a seat with no
+  // `pullNow()` at all — and that a cancelled stream is re-issued.
+  const bodies: ReadableStream<Uint8Array>[] = [];
+  let feedRequests = 0;
+  const multiplex = options.liveFeed
+    ? new NativeMultiplexChangeFeed({
+        gatewayAuth: {
+          baseUrl: gateway.url,
+          token: gateway.token,
+          gatewayId: "mobile-integration",
+          vaultId,
+        },
+        minReconnectMs: 10,
+        maxReconnectMs: 50,
+        streamFetch: (async (input: unknown, init: unknown) => {
+          feedRequests += 1;
+          const response = await fetch(
+            live ? String(input) : String(input).replace(gateway.url, dead),
+            init as RequestInit
+          );
+          if (response.body) bodies.push(response.body);
+          return response;
+        }) as never,
+        resumeFrom: () => {
+          const watermark = seat.watermark();
+          return watermark
+            ? { epoch: watermark.epoch, applied: watermark.applied }
+            : undefined;
+        },
+      })
+    : undefined;
   const session = await createNativeReplicaSession({
     gatewayAuth: {
       baseUrl: gateway.url,
@@ -152,7 +213,7 @@ export async function openSeat(
       vaultId,
     },
     fetcher,
-    changeFeed: silentFeed(),
+    changeFeed: multiplex ? multiplex.scope(vaultId) : silentFeed(),
     seat,
     digest: nodeDigest,
     idFactory: () => `${label}-intent-${++counter}`,
@@ -161,6 +222,7 @@ export async function openSeat(
     // flushes explicitly, so a background retry would make "did it settle"
     // depend on a timer rather than on the arrangement.
     retryDelayMs: options.retryDelayMs ?? 10 * 60_000,
+    pullIntervalMs: options.pullIntervalMs ?? 10 * 60_000,
   });
   // THE FIRST COPY, AWAITED — which the phone never does. `start()` fires the
   // first catch-up and deliberately does NOT await it (a member who tapped an
@@ -173,6 +235,11 @@ export async function openSeat(
   return {
     session,
     seat,
+    dropFeed: () => {
+      for (const body of bodies.splice(0))
+        void body.cancel().catch(() => undefined);
+    },
+    feedRequests: () => feedRequests,
     cut: () => {
       live = false;
     },
@@ -180,7 +247,10 @@ export async function openSeat(
       live = true;
     },
     attempts,
-    close: () => session.close(),
+    close: async () => {
+      multiplex?.close();
+      await session.close();
+    },
   };
 }
 
