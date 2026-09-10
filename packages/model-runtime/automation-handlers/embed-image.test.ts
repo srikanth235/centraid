@@ -27,6 +27,16 @@ function stamp(targetId: string, model: string): Record<string, unknown> {
   return { target_id: targetId, variant: "embedding", model };
 }
 
+/** The vault's durable "this codec cannot preview that original" marker. */
+function previewUnsupportedStamp(contentId: string): Record<string, unknown> {
+  return {
+    target_id: contentId,
+    variant: "preview",
+    capability: "previews",
+    model: "preview-codec@1",
+  };
+}
+
 describe("embed-image handler", () => {
   beforeEach(() => {
     setEmbedImageRuntimeForTests({
@@ -66,6 +76,7 @@ describe("embed-image handler", () => {
       expect(result.output).toStrictEqual({
         derived: 0,
         skipped: 0,
+        notReady: 0,
         model: MODEL,
         rearm: false,
       });
@@ -210,9 +221,71 @@ describe("embed-image handler", () => {
       const result = await handler({ ctx: harness.ctx, log: harness.log });
 
       expect(result.summary).toBe(
-        "embedded 16 images; skipped 0; bounded batch 16/16"
+        "embedded 16 images; skipped 0; not ready 0; bounded batch 16/16"
       );
       expect(result.output).toMatchObject({ derived: 16, rearm: true });
+    });
+  });
+
+  // #1011: the preview is contributed at ingest and backstopped by the sweep,
+  // so an asset the rung has not reached yet is "not ready", never a failed
+  // turn — and the single cursor parks behind it because nothing else would.
+  describe("an asset whose preview has not landed", () => {
+    it("counts it not-ready, keeps going, and parks the cursor behind it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [],
+        },
+        content: {
+          "c-a1:preview": bytesContent(),
+          "c-a3:preview": bytesContent(),
+        },
+        state: { model: MODEL, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 0,
+        notReady: 1,
+      });
+      expect(result.summary).toContain("not ready 1");
+      expect(harness.state.get("cursor")).toBe("a1");
+      expect(
+        harness.invokes.filter(
+          (entry) => entry.command === "enrich.upsert_embedding"
+        )
+      ).toHaveLength(2);
+    });
+  });
+
+  // The other half of #1011: a preview that is not merely late but IMPOSSIBLE.
+  // Parking behind one of those froze the single cursor forever, so the rest of
+  // the library was never embedded at all.
+  describe("an original the codec declined", () => {
+    it("skips it, advances the cursor past it, and keeps embedding", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [previewUnsupportedStamp("c-a2")],
+        },
+        content: {
+          "c-a1:preview": bytesContent(),
+          "c-a3:preview": bytesContent(),
+        },
+        state: { model: MODEL, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 1,
+        notReady: 0,
+      });
+      expect(harness.state.get("cursor")).toBe("a3");
     });
   });
 });

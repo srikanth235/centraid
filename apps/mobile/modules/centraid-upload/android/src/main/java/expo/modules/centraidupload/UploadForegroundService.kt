@@ -1,4 +1,4 @@
-package dev.centraid.mobile.upload
+package expo.modules.centraidupload
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,8 +7,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
-import com.facebook.react.bridge.Arguments
 import com.facebook.react.HeadlessJsTaskService
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 
 class UploadForegroundService : HeadlessJsTaskService() {
@@ -26,9 +26,15 @@ class UploadForegroundService : HeadlessJsTaskService() {
     const val EXTRA_COMPLETED = "completed"
     const val EXTRA_TOTAL = "total"
 
+    // The launcher icon, read off the host application rather than through a
+    // generated `R` class: this service lives in an autolinked library module,
+    // so `dev.centraid.mobile.R` is not on its compile classpath. `applicationInfo.icon`
+    // is the same resource the manifest's `android:icon` points at.
+    private fun smallIcon(context: Context): Int = context.applicationInfo.icon
+
     fun notification(context: Context, completed: Int, total: Int) =
       NotificationCompat.Builder(context, CHANNEL)
-        .setSmallIcon(dev.centraid.mobile.R.mipmap.ic_launcher)
+        .setSmallIcon(smallIcon(context))
         .setContentTitle("Centraid backup")
         .setContentText("Backing up ${completed.coerceAtMost(total)} of $total")
         .setOnlyAlertOnce(true)

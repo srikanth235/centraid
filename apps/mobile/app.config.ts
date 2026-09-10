@@ -52,15 +52,46 @@ export default function createExpoConfig({
     scheme: "centraid",
     userInterfaceStyle: "automatic",
     icon: "../../assets/icon.png",
-    splash: {
-      image: "../../assets/splash.png",
-      backgroundColor: "#3EC8B4",
-      resizeMode: "contain",
-    },
+    // No top-level `splash`: SDK 57 dropped the key from `ExpoConfig` and the
+    // `expo-splash-screen` plugin block below is the whole of it.
     ios: {
       supportsTablet: true,
       bundleIdentifier: "dev.centraid.mobile",
       buildNumber: String(BUILD),
+      // The app target's floor. `plugins/withCentraidIos.cjs` re-points the pods
+      // and the share extension at this same value.
+      deploymentTarget: "17.5",
+      // Apple's required-reason API declaration, as config rather than a
+      // committed `PrivacyInfo.xcprivacy` — `ios/` is generated (#996 CNG wave).
+      // Every reason below is a category Expo's own modules reach: file
+      // timestamps (replica + upload staging), UserDefaults (SecureStore,
+      // share app group), free disk space (the pre-download space check), and
+      // system boot time (queue backoff clocks).
+      privacyManifests: {
+        NSPrivacyAccessedAPITypes: [
+          {
+            NSPrivacyAccessedAPIType:
+              "NSPrivacyAccessedAPICategoryFileTimestamp",
+            NSPrivacyAccessedAPITypeReasons: ["C617.1", "0A2A.1", "3B52.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType:
+              "NSPrivacyAccessedAPICategoryUserDefaults",
+            NSPrivacyAccessedAPITypeReasons: ["CA92.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryDiskSpace",
+            NSPrivacyAccessedAPITypeReasons: ["E174.1", "85F4.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType:
+              "NSPrivacyAccessedAPICategorySystemBootTime",
+            NSPrivacyAccessedAPITypeReasons: ["35F9.1"],
+          },
+        ],
+        NSPrivacyCollectedDataTypes: [],
+        NSPrivacyTracking: false,
+      },
       infoPlist: {
         UIBackgroundModes: ["processing", "remote-notification"],
         ITSAppUsesNonExemptEncryption: false,
@@ -82,9 +113,9 @@ export default function createExpoConfig({
       // Centraid opts out of Android Auto Backup entirely: resume cursors,
       // the cached scope manifest and Keystore-wrapped SecureStore blobs
       // restored onto a phone with an empty replica claim rows that device
-      // never had (android/.../replica_backup_rules.xml). The manifest already
-      // says so; declaring it here is what stops a future `expo prebuild` from
-      // regenerating the manifest without it.
+      // never had. This key writes `android:allowBackup="false"`; the matching
+      // exclusion rules for both backup paths are written by
+      // `plugins/withCentraidAndroidPrivacy.cjs`.
       allowBackup: false,
       adaptiveIcon: {
         foregroundImage: "../../assets/adaptive-icon.png",
@@ -106,6 +137,15 @@ export default function createExpoConfig({
         },
     assetBundlePatterns: ["**/*"],
     plugins: [
+      // Centraid's own plugins come FIRST on purpose. `@expo/config-plugins`
+      // composes mods so that the LAST-registered one runs FIRST
+      // (`withMod` calls its own action, then `nextMod`), so a plugin that has
+      // to see — and overwrite — what every upstream plugin produced must be
+      // registered at the head of this list.
+      "./plugins/withCentraidAndroidPrivacy.cjs",
+      "./plugins/withCentraidAndroidBuild.cjs",
+      "./plugins/withCentraidAndroidSplash.cjs",
+      "./plugins/withCentraidIos.cjs",
       "expo-notifications",
       "expo-background-task",
       "expo-secure-store",
@@ -142,6 +182,11 @@ export default function createExpoConfig({
           },
           androidIntentFilters: ["text/*", "image/*", "video/*", "*/*"],
           androidMultiIntentFilters: ["image/*", "video/*", "*/*"],
+          // Kept off the plugin's `${appId}.share-extension` default: the App
+          // Store record and its provisioning profile were created against
+          // `dev.centraid.mobile.share`, and an extension bundle id is not
+          // something a build can rename.
+          iosShareExtensionBundleIdentifier: "dev.centraid.mobile.share",
         },
       ],
       [
@@ -188,7 +233,16 @@ export default function createExpoConfig({
         },
       ],
       "react-native-quick-crypto",
-      "./plugins/withCentraidUploadService.cjs",
+      // The splash: a flat brand field, no logo. Android draws the launcher
+      // icon at 96dp over it because the platform splash API requires an icon;
+      // iOS shows the colour alone.
+      [
+        "expo-splash-screen",
+        {
+          ios: { backgroundColor: "#3EC8B4" },
+          android: { backgroundColor: "#14181F" },
+        },
+      ],
     ],
     extra: {
       recurrencePolicy: "bounded-local-expansion",

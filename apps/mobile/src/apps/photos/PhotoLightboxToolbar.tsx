@@ -1,6 +1,7 @@
 // Same five as desktop (CHANGELOG §D), chip·capsule·chip. Labels gone (44
 // not 70); `accessibilityLabel` from `action.label`. REASON stays visible
-// as `READ_ONLY_VAULT_REASON` (§6, §18). Trash `--net` ink, never fill.
+// as whatever sentence `viewerWriteRefusal` returns (§6, §18): read-only
+// vault, or not-in-a-vault-yet for a device row. Trash `--net` ink, never fill.
 
 import * as Haptics from "expo-haptics";
 import React from "react";
@@ -13,9 +14,9 @@ import { styles } from "./PhotoLightbox.styles";
 import { ViewerChromePlate, ViewerChromeTarget } from "./PhotoLightboxChrome";
 import type { PhotoAsset } from "./timeline-model";
 import {
-  READ_ONLY_VAULT_REASON,
   VIEWER_BOTTOM_GROUPS,
   viewerAction,
+  viewerWriteRefusal,
 } from "./viewer-model";
 import type { ViewerActionId } from "./viewer-model";
 
@@ -39,9 +40,14 @@ export function PhotoLightboxToolbar({
   onWrite,
 }: PhotoLightboxToolbarProps): React.JSX.Element {
   const { colors } = useTheme();
-  const writable = Boolean(
-    asset.assetId && asset.sourceVaultId && asset.canWrite === true
-  );
+  // The refusal ladder, shared with the `···` menu and `PhotoLightbox`'s
+  // `writeReason` (`viewerWriteRefusal`): a device row the seat has not pulled
+  // yet is NOT a read-only vault, and must not be told it is.
+  const refusal = viewerWriteRefusal({
+    writable: asset.canWrite === true,
+    hasVaultAsset: Boolean(asset.assetId && asset.sourceVaultId),
+  });
+  const writable = refusal === undefined;
   // Crop/rotate are raster on a still; do not pretend a video has a non-destructive editor.
   const editable = asset.kind === "photo" || asset.kind === "scan";
   const enabled: Record<ViewerActionId, boolean> = {
@@ -60,9 +66,9 @@ export function PhotoLightboxToolbar({
       ? editable
         ? undefined
         : "Crop and rotate work on photographs, not on this kind of media"
-      : READ_ONLY_VAULT_REASON,
-    favorite: writable ? undefined : READ_ONLY_VAULT_REASON,
-    trash: writable ? undefined : READ_ONLY_VAULT_REASON,
+      : refusal,
+    favorite: refusal,
+    trash: refusal,
   };
   const run: Record<ViewerActionId, () => void> = {
     copy: () => onSaveToMyVault?.(),
@@ -132,9 +138,19 @@ export function PhotoLightboxToolbar({
       </View>
       {/* Visible refusal under the row — a NAME can move to AT, a REASON cannot. */}
       {writable ? null : (
-        <Text style={[styles.viewerReadOnlyReason, { color: colors.net }]}>
-          {READ_ONLY_VAULT_REASON}
-        </Text>
+        <View
+          style={[
+            styles.viewerReadOnlyPlate,
+            {
+              backgroundColor: colors.stageSunken,
+              borderColor: colors.stageLine,
+            },
+          ]}
+        >
+          <Text style={[styles.viewerReadOnlyReason, { color: colors.net }]}>
+            {refusal}
+          </Text>
+        </View>
       )}
     </>
   );

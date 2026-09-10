@@ -13,7 +13,6 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
-import dev.centraid.mobile.upload.UploadForegroundPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -22,8 +21,8 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // This service package is application-owned and cannot be autolinked.
-          add(UploadForegroundPackage())
+          // Packages that cannot be autolinked yet can be added manually here, for example:
+          // add(MyReactNativePackage())
         }
     )
   }

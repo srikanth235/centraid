@@ -2,7 +2,7 @@
   "name": "Photo OCR",
   "version": "0.1.0",
   "description": "Extracts searchable reading-order text from new photographs in bounded batches.",
-  "enabled": false,
+  "enabled": true,
   "prompt": "When photographs arrive, extract visible text from preview derivatives in bounded batches. Preserve absent confidence and never send originals.",
   "triggers": [
     {

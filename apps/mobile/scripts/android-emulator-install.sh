@@ -114,8 +114,10 @@ else
   # android/app/build.gradle — J1/#501), aborting the job with "No development
   # build ... is installed" even though the apk built and installed fine (#535).
   # Maestro launches the real package itself, so expo's launch step is both
-  # broken for this build and unnecessary. android/ is a committed native
-  # project, so `assemble*` needs no prebuild.
+  # broken for this build and unnecessary. Since #996 `android/` is a prebuild
+  # OUTPUT, so it has to exist before this runs: every lane that sources this
+  # script runs `bun run --cwd apps/mobile native:prebuild` in a step of its
+  # own, deliberately before it restores any gradle or build directory.
   #
   # The release variant is DEBUG-SIGNED here on purpose: android/app/build.gradle
   # falls back to the debug signing config when CENTRAID_UPLOAD_STORE_FILE is

@@ -103,6 +103,16 @@ jobs:
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
+      # GENERATE THE ANDROID PROJECT (#996). `apps/mobile/android` is a prebuild
+      # output and is gitignored, so the checkout has no gradle project for
+      # `android-emulator-canary.sh` to build in, and the caches below restore
+      # directories that live inside it — hence before both restores, and after
+      # the fingerprint, which ignores the generated trees either way.
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: bun run native:prebuild
       - name: Install Maestro CLI
         # Same pin as ci.yml and e2e.yml; validate-nightly-wiring.mjs fails when
         # the three disagree.
@@ -158,10 +168,10 @@ jobs:
             node_modules/@*/*/android/build
             node_modules/@*/*/android/.cxx
             !node_modules/@centraid/**
-          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          key: android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
           restore-keys: |
-            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-v2-${{ runner.os }}-
+            android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v3-${{ runner.os }}-
       - name: AVD cache
         id: avd_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -262,7 +272,7 @@ jobs:
             node_modules/@*/*/android/build
             node_modules/@*/*/android/.cxx
             !node_modules/@centraid/**
-          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          key: android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -377,6 +387,20 @@ jobs:
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
+      # GENERATE THE iOS PROJECT (#996). `apps/mobile/ios` is a prebuild output
+      # and is gitignored. `expo run:ios` would generate it implicitly on the
+      # BUILD path, but the INJECT path reads
+      # `ios/Pods/hermes-engine/.../hermesc` without ever running it, and
+      # `native:prebuild` also builds `vec.xcframework`, which must exist before
+      # `pod install` or the withSQLiteVecExtension podspec vendors a path that
+      # is not there. LANG for CocoaPods: the ruby CLI aborts on a non-UTF-8
+      # default external encoding, and the runner's default locale is not UTF-8.
+      - name: Generate the iOS project and build vec.xcframework
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          LANG: en_US.UTF-8
+        run: bun run native:prebuild
       - name: Build and start the tokenless mobile test gateway
         run: |
           bun run turbo run build --filter=@centraid/server

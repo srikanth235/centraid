@@ -4,10 +4,77 @@ import * as VideoThumbnails from "expo-video-thumbnails";
 import jpeg from "jpeg-js";
 import { rgbaToThumbHash } from "thumbhash";
 
+import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
+
 import { authHeader } from "../gateway";
 import { bytesToBase64 } from "./bytes";
 
 export type DeviceDerivativeVariant = "thumb" | "preview" | "poster";
+
+/**
+ * THE PHONE IS THE ONLY DECODER FOR HEIC (#1011). The gateway's preview codec
+ * is sharp, and the `@img/sharp-libvips-darwin-arm64` this repo pins ships
+ * libheif WITHOUT an HEVC decoder (patent licensing) — so the HEVC-coded HEIC
+ * an iPhone actually writes DECLINES on the gateway and earns the durable
+ * `preview-codec@1` "unsupported" stamp, after which every recognition recipe
+ * skips it. iOS decodes it natively, so the phone contributes the JPEG display
+ * rungs itself and the marker never stands.
+ *
+ * Keyed by EXTENSION because the import door is filename-routed: the phone
+ * names the file before the gateway has sniffed a byte.
+ */
+const GATEWAY_UNDECODABLE_EXTENSIONS = new Set(["heic", "heif", "hif"]);
+
+export function gatewayCanDecode(filename: string): boolean {
+  const dot = filename.lastIndexOf(".");
+  const extension = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
+  return !GATEWAY_UNDECODABLE_EXTENSIONS.has(extension);
+}
+
+export interface SourceSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * The ladder's rungs FIT WITHIN `maxEdge` on the LONG side and NEVER UPSCALE —
+ * the gateway contract in `packages/vault/src/blob/preview.ts`. ImageManipulator
+ * preserves the aspect ratio from whichever single dimension it is given, so
+ * naming the long one is the whole of the fit; `null` means the original is
+ * already inside the box and is copied through untouched.
+ */
+export function longEdgeResize(
+  source: SourceSize | undefined,
+  maxEdge: number
+): { width: number } | { height: number } | null {
+  // Without dimensions the width is the only edge we can name; a portrait
+  // original then lands slightly taller than the gateway's rung, which the
+  // ladder tolerates (a rung is an accelerator, never a correctness input).
+  if (!source) return { width: maxEdge };
+  if (source.width <= 0 || source.height <= 0) return { width: maxEdge };
+  if (Math.max(source.width, source.height) <= maxEdge) return null;
+  return source.width >= source.height
+    ? { width: maxEdge }
+    : { height: maxEdge };
+}
+
+/** `poster` is not a ladder rung — no gateway backstop produces it — so its
+ *  edge is ours to choose, unlike `thumb`/`preview` above. */
+const POSTER_EDGE = 1_024;
+
+/**
+ * THUMBHASH CAPS AT 100×100 AND THROWS ABOVE IT (#1011). `rgbaToThumbHash`
+ * raises `<w>x<h> doesn't fit in 100x100`, so hashing the decoded `thumb`
+ * (long edge `BLOB_TINY_EDGE` = 256) threw for EVERY still — taking the whole
+ * derivative set, and on the import path the phone's only HEIC display rungs,
+ * down with it. The inline rungs get their OWN ≤100px render.
+ *
+ * The number mirrors the gateway's `THUMBHASH_EDGE`
+ * (`packages/server/src/preview/codec.ts` and its two sibling codecs): both
+ * sides downscale the long edge to 100 before hashing, so a phone thumbhash
+ * and a gateway thumbhash of the same photograph agree.
+ */
+const THUMBHASH_EDGE = 100;
 
 export interface DeviceDerivative {
   variant: DeviceDerivativeVariant;
@@ -49,12 +116,14 @@ function persistDurably(cacheUri: string, name: string): string {
 
 async function jpegRung(
   uri: string,
-  width: number,
-  compress: number
+  maxEdge: number,
+  compress: number,
+  source?: SourceSize
 ): Promise<string> {
+  const resize = longEdgeResize(source, maxEdge);
   const result = await ImageManipulator.manipulateAsync(
     uri,
-    [{ resize: { width } }],
+    resize ? [{ resize }] : [],
     {
       compress,
       format: ImageManipulator.SaveFormat.JPEG,
@@ -89,7 +158,8 @@ export function dhash(width: number, height: number, data: Uint8Array): string {
 /** HEIC/video-safe device derivatives: native decode first, tiny JPEG decode second. */
 export async function generateDeviceDerivatives(
   localUri: string,
-  mediaType: string
+  mediaType: string,
+  sourceSize?: SourceSize
 ): Promise<DeviceDerivativeSet> {
   const source = mediaType.startsWith("video/")
     ? (
@@ -99,12 +169,18 @@ export async function generateDeviceDerivatives(
         })
       ).uri
     : localUri;
-  const thumb = await jpegRung(source, 256, 0.82);
-  const preview = await jpegRung(source, 2_048, 0.86);
+  // The edges are the LADDER'S, imported rather than mirrored: a rung the
+  // gateway would size differently is a rung two devices disagree about.
+  const thumb = await jpegRung(source, BLOB_TINY_EDGE, 0.82, sourceSize);
+  const preview = await jpegRung(source, BLOB_MEDIUM_EDGE, 0.86, sourceSize);
   const poster = mediaType.startsWith("video/")
-    ? await jpegRung(source, 1_024, 0.86)
+    ? await jpegRung(source, POSTER_EDGE, 0.86, sourceSize)
     : undefined;
-  const decoded = jpeg.decode(await new File(thumb).bytes(), {
+  // A THIRD, UNPERSISTED render, not the `thumb`: see `THUMBHASH_EDGE`. The
+  // 8×8 difference hash reads the same raster, which costs nothing and keeps
+  // one decode for both inline rungs.
+  const hashSource = await jpegRung(source, THUMBHASH_EDGE, 0.9, sourceSize);
+  const decoded = jpeg.decode(await new File(hashSource).bytes(), {
     useTArray: true,
   });
   const thumbhash = bytesToBase64(
@@ -167,6 +243,59 @@ export async function contributeDeviceDerivatives(
       if (!response.ok)
         throw new Error(
           `Derivative ${derivative.variant} failed (${response.status})`
+        );
+    })
+  );
+}
+
+/**
+ * The INLINE rungs, through the same variant door (#419, #1011). The upload
+ * QUEUE path hands these to `photos.upload` as command input; the IMPORT path
+ * has no such field on `media.asset`, so it contributes them here — which the
+ * ledger accepts identically, and which matters beyond the placeholder: with
+ * `phash`/`thumbhash` still missing, `backfillPreviews` re-selects the item,
+ * asks the codec that already declined it, and stamps it unsupported even
+ * though the display rungs are sitting on the row.
+ */
+export async function contributeDeviceHashes(
+  gatewayBase: string,
+  parentSha: string,
+  hashes: { phash: string; thumbhash: string }
+): Promise<void> {
+  const inline: readonly {
+    variant: string;
+    mediaType: string;
+    value: string;
+  }[] = [
+    {
+      variant: "phash",
+      mediaType: "text/x-perceptual-hash",
+      value: hashes.phash,
+    },
+    {
+      variant: "thumbhash",
+      mediaType: "application/x-thumbhash",
+      value: hashes.thumbhash,
+    },
+  ];
+  await Promise.all(
+    inline.map(async (entry) => {
+      const params = new URLSearchParams({
+        variant: entry.variant,
+        variant_of: parentSha,
+        media_type: entry.mediaType,
+      });
+      const response = await fetch(
+        `${gatewayBase}/centraid/_vault/blobs?${params}`,
+        {
+          method: "POST",
+          headers: { "content-type": entry.mediaType, ...authHeader() },
+          body: entry.value,
+        }
+      );
+      if (!response.ok)
+        throw new Error(
+          `Derivative ${entry.variant} failed (${response.status})`
         );
     })
   );

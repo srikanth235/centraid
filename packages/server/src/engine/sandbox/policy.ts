@@ -12,7 +12,8 @@ export type SandboxLane =
   | "app-seed"
   | "automation-handler"
   | "media-transcode"
-  | "model-runtime";
+  | "model-runtime"
+  | "system";
 
 export interface FilesystemGrant {
   readonly mode: "read-confined";
@@ -22,8 +23,11 @@ export interface FilesystemGrant {
 export interface SandboxPolicy {
   readonly lane: SandboxLane;
   readonly allowedBuiltins: readonly string[];
-  readonly filesystem: "denied" | FilesystemGrant;
-  readonly network: "denied";
+  /** `"unrestricted"` is the SYSTEM lane alone: first-party code that already
+   *  runs with the gateway's own filesystem reach. Every other lane is
+   *  `"denied"` or a read-confined grant. */
+  readonly filesystem: "denied" | "unrestricted" | FilesystemGrant;
+  readonly network: "denied" | "allowed";
   readonly subprocess: "denied" | "allowed";
   readonly nativeAddons: boolean;
   readonly environment: "denied" | "inherited";
@@ -118,6 +122,35 @@ export function modelRuntimePolicy(
   };
 }
 
+/**
+ * PROVENANCE TIER, NOT A CAPABILITY REQUEST. This lane is reachable only for an
+ * automation id in `SYSTEM_AUTOMATION_IDS` (`enrich/system-recognition.ts`) —
+ * shipped with the release, first-party code authored in this repo, present in
+ * every vault. A manifest cannot ask for it: `automation/manifest/manifest.ts`
+ * accepts only `model-runtime` and `media-transcode` under `sandbox.lane`, and
+ * the routing decision is made by the PARENT from the id, never from anything
+ * the bundle or its manifest declares.
+ *
+ * It grants nothing the gateway process does not already have: bundled
+ * blueprint code is first-party shell code, and running it in-thread under the
+ * same authority as `packages/server` is the honest description of what it is.
+ * The security property that survives is the one that matters — nothing the
+ * owner did not ship in the release ever reaches this lane. Bundled-but-optional
+ * automations and (future) code-store automations stay exactly as confined as
+ * they are today.
+ */
+export function systemAutomationPolicy(): SandboxPolicy {
+  return {
+    lane: "system",
+    allowedBuiltins: ALL_BUILTINS,
+    filesystem: "unrestricted",
+    network: "allowed",
+    subprocess: "allowed",
+    nativeAddons: true,
+    environment: "inherited",
+  };
+}
+
 /** A SEPARATE lane, never a `subprocess` grant on `modelRuntimePolicy`, which
  *  would widen every bundle there. HONEST LIMIT: the child is unconstrained. */
 export function mediaTranscodePolicy(
@@ -159,6 +192,18 @@ export function builtinId(specifier: string): string | null {
   return KNOWN_BUILTINS.has(bare) ? bare : null;
 }
 
+/** Every builtin this Node carries — the system lane's allowlist is not a
+ *  narrower list than the gateway's own. */
+const ALL_BUILTINS: readonly string[] = Object.freeze(
+  [
+    ...new Set(
+      builtinModules.map((name) =>
+        name.startsWith("node:") ? name.slice(5) : name
+      )
+    ),
+  ].sort()
+);
+
 const KNOWN_BUILTINS: ReadonlySet<string> = new Set(
   builtinModules.map((name) =>
     name.startsWith("node:") ? name.slice(5) : name
@@ -175,6 +220,9 @@ export function builtinDecision(
   id: string
 ): BuiltinDecision {
   if (id === FS_BUILTIN || id === FS_PROMISES_BUILTIN) {
+    // The system lane reads the real `node:fs`: the confined mirror is partial
+    // by construction, and first-party code is not what it exists to bound.
+    if (policy.filesystem === "unrestricted") return { kind: "allow" };
     if (policy.filesystem === "denied") {
       return {
         kind: "deny",

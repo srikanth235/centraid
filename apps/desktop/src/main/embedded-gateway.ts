@@ -33,6 +33,10 @@ export async function startDesktopEmbeddedGateway(
     keyStore: options.keyStore,
     token: options.token,
     hostDeviceEndpointId: options.ownerEndpointId,
+    // A production host: the desktop owns this box and says out loud that it
+    // may pull the pinned recognition weights (#1011). The gateway default is
+    // `verify-only`, so an embedded build that forgot this never downloads.
+    modelAssets: { provision: "fetch" },
     // No founding options (#603): the gateway founds its own Personal
     // vault synchronously when it sees a fresh data dir, and the
     // founding-ticket plane is gone entirely.

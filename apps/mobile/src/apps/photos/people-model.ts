@@ -3,9 +3,11 @@
 // Counts are photographs, not regions.
 
 import { groupPeopleFaces } from "@centraid/blueprints/apps/_shared/people-counts";
+import { PEOPLE_EMPTY_LINE } from "@centraid/blueprints/apps/photos/enrichment-consent";
 
-// "DETECT FACES" gates on the gateway rung — the sweep runs there;
-// `deviceAnswerFor` answers a different tier. Nothing here invents data.
+// "PRIORITISE FACES" gates on the gateway rung — the ambient sweep runs there
+// (ruled 2026-09-09), and the ask only moves this library sooner in its queue.
+// Nothing here invents data.
 
 export interface FaceRegionRow {
   region_id: string;
@@ -83,8 +85,9 @@ export interface PeopleFacts {
   policiesLoading?: boolean;
 }
 
-export const PEOPLE_EMPTY =
-  "Face detection runs when you ask for it — the people it finds wait here for you to name.";
+/** The shelf's empty line is the shared module's, so web and native cannot
+ *  drift: recognition is ambient, the people it finds wait here to be named. */
+export const PEOPLE_EMPTY = PEOPLE_EMPTY_LINE;
 
 export const PEOPLE_PENDING_EMPTY =
   "Face detection is still running on the gateway.";
@@ -96,17 +99,12 @@ const DETECT_REASONS = {
   unknown: "This library has not said yet how far enrichment may run.",
 } as const;
 
-/**
- * The `gateway` rung is where the faces sweep runs.
- *
- * COMPAT(enrich-tier-rename #712): `model` is the pre-rename name for
- * `gateway`, and such a row must not read as "not allowed".
- */
+/** The `gateway` rung is where the faces sweep runs. */
 export function detectFacesFor(
   tier: string | null | undefined
 ): DetectFacesAvailability {
-  if (tier === "gateway" || tier === "model") return { available: true };
-  if (tier === "device" || tier === "local")
+  if (tier === "gateway") return { available: true };
+  if (tier === "device")
     return { available: false, reason: DETECT_REASONS.device };
   if (tier === "off") return { available: false, reason: DETECT_REASONS.off };
   // null = "not read yet", not a refusal.

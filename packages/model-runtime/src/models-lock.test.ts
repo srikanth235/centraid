@@ -11,6 +11,8 @@ const lock = JSON.parse(
   files: Array<{
     model: string;
     path: string;
+    capabilities: string[];
+    bytes: number;
     sha256: string;
     license: string;
     url: string;
@@ -25,6 +27,8 @@ describe("[law:enrichment-model-lock]", () => {
     expect(new Set(lock.files.map((file) => file.path)).size).toBe(21);
     for (const file of lock.files) {
       expect(file.sha256).toMatch(/^[a-f0-9]{64}$/u);
+      expect(file.bytes).toBeGreaterThan(0);
+      expect(file.capabilities.length).toBeGreaterThan(0);
       expect(["Apache-2.0", "MIT"]).toContain(file.license);
       expect(file.url).toMatch(/^https:\/\//u);
       expect(file.path).not.toContain("..");

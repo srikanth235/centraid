@@ -2,18 +2,24 @@
  * Source-level contract for the face-detection recognition handler (#781).
  *
  * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
- * bundled copy's spine: a per-item consent request derives and drains, and a
+ * bundled copy's spine: a per-item request derives and drains, and a
  * target-less request walks the vault behind its own cursor. This file owns
- * the model-availability gate, the consent-queue edge cases (missing target,
- * already-stamped target, capacity exhaustion), the consent-cursor sweep that
- * re-derives on a model bump, and the detector call/write shapes.
+ * the model-availability gate, the request-queue edge cases (missing target,
+ * already-stamped target, capacity exhaustion), the stamp sweep that
+ * re-derives on a model bump, the ambient ingest walk that faces has run since
+ * it became on-by-default (2026-09-09), and the detector call/write shapes.
+ *
+ * The three passes share ONE batch budget in a fixed order — request queue,
+ * prior stamps, ambient library — so the tests below pin both that a request
+ * is served before the backlog and that the ambient walk actually happens when
+ * the priority lanes leave capacity.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import handler, { setFacesRuntimeForTests } from "./faces.js";
 import { bytesContent, createHarness } from "./handler-harness.js";
 
-const MODEL = "yunet-sface@1";
+const MODEL = "yunet-arcface@1";
 const FACES = [{ box: [1, 2, 3, 4], embedding: [0.5] }];
 
 function asset(id: string): Record<string, unknown> {
@@ -38,6 +44,16 @@ function request(id: string, targetId: string | null): Record<string, unknown> {
 
 function stamp(targetId: string, model: string): Record<string, unknown> {
   return { target_id: targetId, variant: "faces", model };
+}
+
+/** The vault's durable "this codec cannot preview that original" marker. */
+function previewUnsupportedStamp(contentId: string): Record<string, unknown> {
+  return {
+    target_id: contentId,
+    variant: "preview",
+    capability: "previews",
+    model: "preview-codec@1",
+  };
 }
 
 function previews(
@@ -131,7 +147,7 @@ describe("faces handler", () => {
     });
   });
 
-  describe("consent queue", () => {
+  describe("request queue", () => {
     it("drains a request whose target asset is gone without deriving anything", async () => {
       const harness = createHarness({
         entities: {
@@ -210,7 +226,99 @@ describe("faces handler", () => {
     });
   });
 
-  describe("consent-cursor sweep", () => {
+  describe("ambient ingest pass", () => {
+    it("derives newly ingested photographs with nothing in the queue", async () => {
+      const harness = createHarness({
+        entities: {
+          "enrich.request": [],
+          "media.asset": [asset("a1"), asset("a2")],
+          "enrich.derivation": [],
+        },
+        content: previews(["a1", "a2"]),
+        state: { model: MODEL, consentCursor: "zzz" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({ derived: 2, drained: 0 });
+      expect(harness.invokes.map((entry) => entry.command)).toStrictEqual([
+        "enrich.upsert_faces",
+        "enrich.upsert_faces",
+        "enrich.rebuild_face_clusters",
+      ]);
+      expect(harness.state.get("cursor")).toBe("a2");
+    });
+
+    it("walks only photographs and scans, behind its own cursor", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [
+            { ...asset("a1"), kind: "video" },
+            asset("a2"),
+            { ...asset("a3"), deleted_at: "2026-01-01T00:00:00.000Z" },
+          ],
+          "enrich.derivation": [],
+        },
+        content: previews(["a2"]),
+        state: { model: MODEL, consentCursor: "zzz", cursor: "a1" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({ derived: 1 });
+      expect(
+        harness.contentRequests.map((entry) => entry.contentId)
+      ).toStrictEqual(["c-a2"]);
+      expect(harness.state.get("cursor")).toBe("a2");
+    });
+
+    it("skips a photograph already stamped at this model without reading bytes", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [stamp("a1", MODEL)],
+        },
+        state: { model: MODEL, consentCursor: "zzz" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({ derived: 0, skipped: 1 });
+      expect(harness.contentRequests).toStrictEqual([]);
+      expect(harness.invokes).toStrictEqual([]);
+    });
+
+    it("lets the request queue spend the whole batch first, leaving the library walk for the next fire", async () => {
+      const ids = Array.from(
+        { length: 16 },
+        (_, index) => `a${String(index).padStart(2, "0")}`
+      );
+      const harness = createHarness({
+        entities: {
+          "enrich.request": ids.map((id) => request(`r-${id}`, id)),
+          "media.asset": [...ids.map((id) => asset(id)), asset("z1")],
+          "enrich.derivation": [],
+        },
+        content: previews([...ids, "z1"]),
+        state: { model: MODEL, consentCursor: "zzz" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        derived: 16,
+        drained: 16,
+        rearm: true,
+      });
+      // The ambient photograph is untouched: same budget, lower priority.
+      expect(
+        harness.contentRequests.map((entry) => entry.contentId)
+      ).not.toContain("c-z1");
+      expect(harness.state.get("cursor")).toBeUndefined();
+    });
+  });
+
+  describe("prior-stamp sweep", () => {
     it("seeds past the newest stamp at the current model on the first fire", async () => {
       const harness = createHarness({
         entities: {
@@ -223,6 +331,9 @@ describe("faces handler", () => {
 
       expect(result.output).toMatchObject({ derived: 0, skipped: 0 });
       expect(harness.state.get("consentCursor")).toBe("a1");
+      // The ambient walk seeds the same way: a library whose newest photograph
+      // already carries this model's stamp is not re-read from the beginning.
+      expect(harness.state.get("cursor")).toBe("a1");
       expect(harness.contentRequests).toStrictEqual([]);
     });
 
@@ -240,6 +351,9 @@ describe("faces handler", () => {
 
       expect(result.output).toMatchObject({ derived: 1, model: MODEL });
       expect(harness.state.get("consentCursor")).toBe("a1");
+      // A model bump re-arms BOTH cursors; the ambient walk then sees an asset
+      // the stamp sweep already derived in this fire and does not repeat it.
+      expect(harness.state.get("cursor")).toBe("a1");
     });
 
     it("does not derive an asset twice when its request and its stamp both land in one fire", async () => {
@@ -261,6 +375,109 @@ describe("faces handler", () => {
           (entry) => entry.command === "enrich.upsert_faces"
         )
       ).toHaveLength(1);
+    });
+  });
+
+  // #1011: an asset whose display rung has not landed yet is NOT ready, and
+  // "not ready" is neither a failure nor a stamp — the ambient walk parks its
+  // watermark behind it so the next tick comes back for it.
+  describe("an asset whose preview has not landed", () => {
+    it("skips it without stamping and parks the ambient cursor behind it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [],
+        },
+        // a2 has no preview: a1 lands, a2 parks, a3 still runs this fire.
+        content: previews(["a1", "a3"]),
+        state: { model: MODEL, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 0,
+        notReady: 1,
+      });
+      expect(result.summary).toContain("not ready 1");
+      // Parked on the last asset BEFORE the unready one, so a2 is re-read.
+      expect(harness.state.get("cursor")).toBe("a1");
+      expect(
+        harness.invokes.filter(
+          (entry) => entry.command === "enrich.upsert_faces"
+        )
+      ).toHaveLength(2);
+    });
+
+    it("leaves a targeted request undrained so the queue carries the retry", async () => {
+      const harness = createHarness({
+        entities: {
+          "enrich.request": [request("r1", "a1")],
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [],
+        },
+        content: {},
+        state: { model: MODEL, cursor: "", consentCursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({ notReady: 1, drained: 0 });
+      expect(
+        harness.invokes.filter(
+          (entry) => entry.command === "enrich.mark_requests_drained"
+        )
+      ).toStrictEqual([]);
+    });
+
+    // #1011's other half. A preview that is not late but IMPOSSIBLE — a HEIC no
+    // codec generation in service can decode — used to park the ambient cursor
+    // in front of it on every tick, so the library behind it was never walked.
+    it("skips an original the codec declined and walks past it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [previewUnsupportedStamp("c-a2")],
+        },
+        content: previews(["a1", "a3"]),
+        state: { model: MODEL, consentCursor: "zzz", cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 1,
+        notReady: 0,
+      });
+      expect(harness.state.get("cursor")).toBe("a3");
+      // No faces stamp for the declined asset: this recipe never saw it.
+      expect(
+        harness.invokes
+          .filter((entry) => entry.command === "enrich.upsert_faces")
+          .map((entry) => (entry.input as { asset_id: string }).asset_id)
+      ).toStrictEqual(["a1", "a3"]);
+    });
+
+    it("drains a targeted request for a declined original instead of retrying it", async () => {
+      const harness = createHarness({
+        entities: {
+          "enrich.request": [request("r1", "a1")],
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [previewUnsupportedStamp("c-a1")],
+        },
+        content: {},
+        state: { model: MODEL, cursor: "", consentCursor: "zzz" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        skipped: 1,
+        notReady: 0,
+        drained: 1,
+      });
     });
   });
 });

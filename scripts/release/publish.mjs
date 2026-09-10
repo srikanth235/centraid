@@ -6,7 +6,8 @@
  *     [--surfaces desktop,gateway-image,gateway-npm] [--dry-run] [--beta] [--push]
  *
  * - Requires --issue N (governance commit suffix; refuse #0)
- * - Bumps monorepo + mobile native numbers via sync-versions.mjs (all stamps)
+ * - Bumps the monorepo version via sync-versions.mjs (every workspace package;
+ *   the mobile native numbers derive from it at prebuild, app.config.ts)
  * - Records ship surface set (does not invent surface-local versions)
  * - Moves CHANGELOG Unreleased into the versioned section
  * - Creates annotated tag vX.Y.Z (or vX.Y.Z-beta.N with --beta)
@@ -169,11 +170,7 @@ if (dryRun) {
 
 const commitMsg = `chore(release): ${version} (#${issue})`;
 execSync(
-  "git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md " +
-    "apps/mobile/android/app/build.gradle " +
-    "apps/mobile/ios/Centraid.xcodeproj/project.pbxproj " +
-    "apps/mobile/ios/Centraid/Info.plist " +
-    "apps/mobile/ios/ShareExtension/ShareExtension-Info.plist 2>/dev/null || true",
+  "git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md",
   { cwd: root, stdio: "inherit", shell: true }
 );
 execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {

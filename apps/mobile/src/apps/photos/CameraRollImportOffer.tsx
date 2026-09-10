@@ -1,8 +1,8 @@
 // The first-run camera-roll import's OFFER (#724) — the honest,
 // reviewable alternative to the silent automatic sweep (`photos-backup.ts`).
 // A member sees a plain count and two verbs: `Import` runs
-// `runCameraRollImport` (`camera-roll-import.ts`) over the vault's existing
-// staged-import route (`camera-roll-import-run.ts`), `Not now` dismisses the
+// `runImportBatchWithNudge` (`camera-roll-import-run.ts`) over the vault's
+// existing staged-import route, nudging this seat once when the batch lands, `Not now` dismisses the
 // offer for this device without touching a single photograph. Progress is
 // PERSISTED (`Store`) after every candidate settles, so a kill mid-import
 // resumes on next launch exactly where it left off — see
@@ -18,17 +18,18 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { nudgeSeatCatchUp } from "../../kit/replica/seat-nudge";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import { Store } from "../../storage";
 import {
   EMPTY_IMPORT_PROGRESS,
   importSummary,
   remainingCandidates,
-  runCameraRollImport,
   selectImportCandidates,
 } from "./camera-roll-import";
 import type { ImportProgress } from "./camera-roll-import";
-import { attemptImportCandidate } from "./camera-roll-import-run";
+import { runImportBatchWithNudge } from "./camera-roll-import-run";
 import type { PhotoAsset } from "./timeline-model";
 
 const DISMISSED_KEY = "photos.cameraRollImport.dismissed";
@@ -44,6 +45,7 @@ export default function CameraRollImportOffer({
   gatewayBase,
 }: CameraRollImportOfferProps): React.JSX.Element | null {
   const { colors } = useTheme();
+  const replica = useReplica();
   const [dismissed, setDismissed] = useState<boolean | undefined>(undefined);
   const [progress, setProgress] = useState<ImportProgress>();
   const [running, setRunning] = useState(false);
@@ -71,13 +73,21 @@ export default function CameraRollImportOffer({
     if (!gatewayBase || running) return;
     setRunning(true);
     try {
-      const result = await runCameraRollImport(candidates, progress, {
-        attempt: (candidate) => attemptImportCandidate(gatewayBase, candidate),
-        onProgress: (next) => {
-          Store.set(PROGRESS_KEY, next);
-          setProgress(next);
-        },
-      });
+      // The publish commits rows on the GATEWAY, which this phone's own seat
+      // knows nothing about; the batch nudges it once at the end so the owner
+      // sees their own import within seconds (#1011 M2).
+      const result = await runImportBatchWithNudge(
+        gatewayBase,
+        candidates,
+        progress,
+        {
+          nudgeSeat: () => nudgeSeatCatchUp(replica),
+          onProgress: (next) => {
+            Store.set(PROGRESS_KEY, next);
+            setProgress(next);
+          },
+        }
+      );
       setProgress(result);
     } finally {
       setRunning(false);

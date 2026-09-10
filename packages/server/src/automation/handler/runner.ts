@@ -100,8 +100,10 @@ export interface RunHandlerOptions {
   automationName?: string;
   automationDir: string;
   handlerFile: string;
-  /** Absent is the strict `automation-handler` floor, never "no sandbox". */
-  sandboxLane?: "model-runtime" | "media-transcode";
+  /** Absent is the strict `automation-handler` floor, never "no sandbox".
+   *  `"system"` is set by the fire path from the automation's provenance, never
+   *  from its manifest. */
+  sandboxLane?: "model-runtime" | "media-transcode" | "system";
   sandboxReadRoots?: readonly string[];
   sandboxRuntimeDir?: string;
   runId: string;

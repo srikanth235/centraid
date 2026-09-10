@@ -30,6 +30,7 @@ export function buildZoomGesture({
   frame,
   panEnabled,
   onSettle,
+  onSingleTap,
 }: {
   scale: SharedValue<number>;
   startScale: SharedValue<number>;
@@ -38,6 +39,8 @@ export function buildZoomGesture({
   /** Only while zoomed: live at fit, it kills the pager swipe. */
   panEnabled: boolean;
   onSettle?: (scale: number) => void;
+  /** One bare tap on the photograph — the chrome toggle (#1011). */
+  onSingleTap?: () => void;
 }): ReturnType<typeof Gesture.Simultaneous> {
   const start = { x: 0, y: 0 };
   const pinch = Gesture.Pinch()
@@ -91,7 +94,19 @@ export function buildZoomGesture({
         panExtent(frame.height, scale.value)
       );
     });
-  return Gesture.Simultaneous(pinch, doubleTap, pan);
+  // EXCLUSIVE, never simultaneous: a single tap that fired on the first half
+  // of a double tap would flash the chrome away on every zoom. The single tap
+  // only wins once the double tap has failed to arrive.
+  const singleTap = Gesture.Tap()
+    .numberOfTaps(1)
+    .onEnd((_event, success) => {
+      if (success && onSingleTap) runOnJS(onSingleTap)();
+    });
+  return Gesture.Simultaneous(
+    pinch,
+    onSingleTap ? Gesture.Exclusive(doubleTap, singleTap) : doubleTap,
+    pan
+  );
 }
 
 export function applyZoom(

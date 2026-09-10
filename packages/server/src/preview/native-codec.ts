@@ -8,8 +8,25 @@ const MAX_INPUT_PIXELS = 40_000_000;
 const MAX_INPUT_EDGE = 12_000;
 const THUMBHASH_EDGE = 100;
 
+/**
+ * What libvips decodes for us. HEIC/HEIF is here because iPhones capture it by
+ * DEFAULT: without it most of a real phone library would carry no preview rung
+ * at all, and every recognition recipe would read "not ready" forever (#1011).
+ * The PORTABLE codec cannot decode HEIC — jpeg-js and pngjs are its whole
+ * decoder set — so a HEIC preview requires this native codec to have loaded.
+ * A source libheif refuses (the simulator's stock camera-roll HEIC trips its
+ * iref-reference security limit) is a DECLINE, not a crash: every entry point
+ * below catches and returns `null`, exactly as a corrupt JPEG does.
+ */
+const SUPPORTED_MEDIA_TYPES: ReadonlySet<string> = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+  "image/heif",
+]);
+
 function supported(mediaType: string): boolean {
-  return mediaType === "image/jpeg" || mediaType === "image/png";
+  return SUPPORTED_MEDIA_TYPES.has(mediaType.toLowerCase());
 }
 
 function input(source: Buffer) {

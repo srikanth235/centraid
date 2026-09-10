@@ -20,11 +20,31 @@ export interface SeatSyncTarget {
   sync: () => Promise<SeatWatermark | undefined>;
 }
 
+export interface SeatSyncLoopOptions {
+  /**
+   * WHAT SWALLOWED THE CATCH-UP, SAID OUT LOUD (#1011).
+   *
+   * `sync()` still never rejects — a seat that could not reach the gateway is
+   * a seat with a slightly older copy — but "did not land" and "why" are two
+   * different answers, and only the first of them was ever reported. A phone
+   * whose every pull failed on the same refused socket therefore drew an empty
+   * library with nothing anywhere naming the refusal: not on the device, and
+   * not on the gateway, whose seat doors were never reached to log a thing.
+   *
+   * So the failure is HANDED OVER rather than dropped. The loop still decides
+   * nothing with it; the host does.
+   */
+  readonly onError?: (error: unknown) => void;
+}
+
 export class SeatSyncLoop {
   #running: Promise<SeatWatermark | undefined> | undefined;
   #again = false;
 
-  constructor(private readonly seat: SeatSyncTarget) {}
+  constructor(
+    private readonly seat: SeatSyncTarget,
+    private readonly options: SeatSyncLoopOptions = {}
+  ) {}
 
   /**
    * Catch up, or join the catch-up already running.
@@ -40,7 +60,10 @@ export class SeatSyncLoop {
     }
     this.#running = this.seat
       .sync()
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        this.options.onError?.(error);
+        return undefined;
+      })
       .finally(() => {
         this.#running = undefined;
         if (!this.#again) return;

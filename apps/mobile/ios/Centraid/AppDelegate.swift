@@ -1,14 +1,9 @@
-// `public` is required, not stylistic: Swift 6.3 (Xcode 26) enforces explicit
-// access levels on imports whose types surface in public API. This file uses
-// Expo at two levels — `public class AppDelegate: ExpoAppDelegate` exposes it,
-// while `class ReactNativeDelegate: ExpoReactNativeFactoryDelegate` keeps it
-// internal — so a bare `import Expo` is ambiguous and fails to compile.
-public import Expo
+internal import Expo
 import React
 import ReactAppDependencyProvider
 
-@UIApplicationMain
-public class AppDelegate: ExpoAppDelegate {
+@main
+class AppDelegate: ExpoAppDelegate {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
@@ -24,10 +19,6 @@ public class AppDelegate: ExpoAppDelegate {
 
     reactNativeDelegate = delegate
     reactNativeFactory = factory
-    // SDK 54 called `bindReactNativeFactory(factory)` here. That global is gone
-    // in SDK 57 — ExpoReactNativeFactory registers itself through
-    // ExpoAppDelegateSubscriberRepository, and the assignment above is what
-    // keeps it alive.
 
 #if os(iOS) || os(tvOS)
     window = UIWindow(frame: UIScreen.main.bounds)

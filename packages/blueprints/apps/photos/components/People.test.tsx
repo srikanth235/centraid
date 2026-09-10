@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// THE PEOPLE SHELF'S CONSENT GATE (#712): while the roster is empty and the
-// question open, `gate` replaces the grid/note; app-root.tsx decides WHEN.
-// Pure-view test via renderToStaticMarkup.
+// THE PEOPLE SHELF'S EMPTY STATE (#712, ruled 2026-09-09): while the roster
+// is empty, `emptyState` replaces the grid/note; app-root.tsx decides WHEN.
+// Signage, not a consent moment. Pure-view test via renderToStaticMarkup.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -24,14 +24,15 @@ interface AnswerAvailability {
   available: boolean;
   reason?: string;
 }
-interface EnrichmentConsentProps {
-  count: number | null;
-  onDevice: AnswerAvailability;
-  cloud: AnswerAvailability;
-  busy?: boolean;
-  answered?: "device" | "declined" | null;
-  onRunOnDevice: () => void;
-  onDecline: () => void;
+interface PeopleEmptyStateProps {
+  count: number;
+  statusLine: string;
+  line: string;
+  action: string;
+  prioritise: AnswerAvailability;
+  busy: boolean;
+  prioritised: boolean;
+  onPrioritise: () => void;
 }
 interface PeopleShelfProps {
   people: readonly Person[];
@@ -41,18 +42,18 @@ interface PeopleShelfProps {
   onOpen: (partyId: string) => void;
   onReview?: () => void;
   onNameProposal?: (regionId: string) => void;
-  gate?: EnrichmentConsentProps;
+  emptyState?: PeopleEmptyStateProps;
 }
 
 const { PeopleShelf } = (await import(app("components/People.tsx"))) as {
   PeopleShelf: ComponentType<PeopleShelfProps>;
 };
-const { CLOUD_ANSWER, ON_DEVICE_PANEL } = (await import(
-  app("enrichment-consent.ts")
-)) as {
-  CLOUD_ANSWER: AnswerAvailability;
-  ON_DEVICE_PANEL: { action: string };
-};
+const { ENRICHMENT_STATUS_LINE, PEOPLE_EMPTY_LINE, PRIORITISE_ACTION } =
+  (await import(app("enrichment-consent.ts"))) as {
+    ENRICHMENT_STATUS_LINE: string;
+    PEOPLE_EMPTY_LINE: string;
+    PRIORITISE_ACTION: string;
+  };
 
 const BASE_PROPS: PeopleShelfProps = {
   people: [],
@@ -68,38 +69,73 @@ function markup(props: Partial<PeopleShelfProps> = {}): string {
   );
 }
 
-const GATE_PROPS: EnrichmentConsentProps = {
+const EMPTY_PROPS: PeopleEmptyStateProps = {
   count: 6214,
-  onDevice: { available: true },
-  cloud: CLOUD_ANSWER,
-  onRunOnDevice: () => undefined,
-  onDecline: () => undefined,
+  statusLine: ENRICHMENT_STATUS_LINE,
+  line: PEOPLE_EMPTY_LINE,
+  action: PRIORITISE_ACTION,
+  prioritise: { available: true },
+  busy: false,
+  prioritised: false,
+  onPrioritise: () => undefined,
 };
 
-describe("the People shelf's consent gate", () => {
-  it("renders the gate in place of the grid/note when `gate` is present", () => {
-    const html = markup({ gate: GATE_PROPS });
-    expect(html).toContain(ON_DEVICE_PANEL.action);
-    // Not the plain pending-note copy — the gate is the whole empty state.
+describe("the People shelf's empty state", () => {
+  it("replaces the grid/note, and names the recipe and its switch", () => {
+    const html = markup({ emptyState: EMPTY_PROPS });
+    expect(html).toContain(ENRICHMENT_STATUS_LINE);
+    expect(html).toContain(PEOPLE_EMPTY_LINE);
+    expect(html).toContain("Faces recipe");
+    expect(html).toContain("Automations → Recognition");
+    // Not the plain pending-note copy — this IS the whole empty state.
     expect(html).not.toContain("not matched to anyone");
   });
 
-  it("renders the ordinary grid/note when `gate` is absent, unchanged", () => {
+  it("never asks for consent: no panel, no facts table, no decline", () => {
+    // A surface offering to "run" or "decline" faces claims a power this
+    // shelf does not have.
+    const html = markup({ emptyState: EMPTY_PROPS });
+    expect(html).not.toContain("Run face detection");
+    expect(html).not.toContain("Not now");
+    expect(html).not.toContain("what leaves the device");
+    expect(html).not.toContain("asked once");
+  });
+
+  it("offers the priority action as a plain, enabled control", () => {
+    const html = markup({ emptyState: EMPTY_PROPS });
+    expect(html).toMatch(
+      /class="kit-btn secondary"[^]*?Prioritise faces<\/button>/u
+    );
+    expect(html).not.toContain('disabled=""');
+  });
+
+  it("states WHY the action is inert, beside it, and disables it", () => {
+    const html = markup({
+      emptyState: {
+        ...EMPTY_PROPS,
+        prioritise: { available: false, reason: "Not available: because." },
+      },
+    });
+    expect(html).toContain("Not available: because.");
+    expect(html).toMatch(/disabled=""[^]*?Prioritise faces/u);
+  });
+
+  it("renders the ordinary grid/note when `emptyState` is absent, unchanged", () => {
     const html = markup({ unmatchedCount: 3 });
     expect(html).toContain(
       "3 faces are not matched to anyone — face review proposes them one at a time."
     );
-    expect(html).not.toContain(ON_DEVICE_PANEL.action);
+    expect(html).not.toContain(PRIORITISE_ACTION);
   });
 
-  it("prefers a non-empty roster's cards over the gate even if `gate` were passed", () => {
-    // Belt and braces: the component never shows grid AND gate together —
-    // withholding `gate` is the CALLER's job.
+  it("prefers the empty state even if a roster were passed with it", () => {
+    // The component never shows grid AND empty state; withholding
+    // `emptyState` is the CALLER's job.
     const html = markup({
       people: [{ party_id: "p1", name: "Ana", count: 2, asset_ids: [] }],
-      gate: GATE_PROPS,
+      emptyState: EMPTY_PROPS,
     });
-    expect(html).toContain(ON_DEVICE_PANEL.action);
+    expect(html).toContain(PRIORITISE_ACTION);
     expect(html).not.toContain("Ana");
   });
 });

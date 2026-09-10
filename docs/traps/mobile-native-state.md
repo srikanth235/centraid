@@ -1,29 +1,29 @@
-# Trap: mobile native recipe vs fingerprint ratchet
+# Trap: mobile native inputs vs the fingerprint ratchet
+
+`apps/mobile/ios` and `apps/mobile/android` are **outputs** of `expo prebuild` and are gitignored ([#996](https://github.com/srikanth235/centraid/issues/996)). The gate that used to read them — a committed `Podfile.lock`, a committed `project.pbxproj` — reads the **inputs** instead: `app.config.ts`, `plugins/*.cjs`, `plugins/native/**`, the local Expo modules under `modules/`, and the dependency set.
 
 ## What goes wrong
 
-Main can be green on `ci:native-state` while the **native recipe is incomplete** — local modules exist under `apps/mobile/modules/` but never appear in `ios/Podfile.lock`. Fingerprints still match that incomplete world (files are hashed; CocoaPods is never run on Linux CI). The next PR that regenerates the lock or touches hashed non-native noise is the first hard failure, and it looks like a main regression.
+Two failures, both silent, both of which the layers below fail closed on.
 
-Historical shape:
+**A native file gets committed.** Someone hand-edits the generated project to fix something, `git add`s it, and it works — once. The next prebuild overwrites it, the fix disappears with no error anywhere, and the committed file now has no writer keeping it current. Anything that has to survive a regeneration is written by a config plugin; there is no second answer.
 
-| Change | Modules on disk | `Podfile.lock` | Fingerprints |
-| --- | --- | --- | --- |
-| #631 (storage) | +storage | regenerated | ratcheted |
-| #638 (network-status, ocr) | +two modules | **unchanged** | ratcheted to incomplete world |
-| Follow-on #644 | same | expanded lock | identity moves → red |
+**The ratchet goes quiet instead of red.** A fingerprint that stops reading a config plugin or a local module keeps matching the committed hash forever while the thing it exists to watch moves freely. That is the historical [#638](https://github.com/srikanth235/centraid/issues/638) hole — a module shipped, its lock entry did not, and fingerprints were ratcheted onto the incomplete world — one layer up from the file it used to live in.
 
 ## The invariant
 
-> Fingerprints may only ratchet when the native **recipe** is complete and coherent. Incomplete worlds cannot be blessed by updating only `native-fingerprints.json`.
+> The config, the plugins and the local modules are the **only** native inputs, and a fresh prebuild is reproducible from them alone. An incomplete or host-dependent recipe cannot be blessed by updating `native-fingerprints.json`.
 
 `bun run --cwd apps/mobile ci:native-state` enforces four layers:
 
 | Layer | What |
 | --- | --- |
-| **L1** | Every local `modules/*/ios/*.podspec` is in `Podfile.lock` DEPENDENCIES + EXTERNAL SOURCES. Android: each module's `expo-module.config.json` declares the platforms its directories imply (no Android lockfile — `ci:android-native` compiles modules). |
-| **L2** | Pod versions (Expo / React-Core / Hermes) match `node_modules` |
-| **L3** | `REACT_NATIVE_PATH` is relative and resolves to this repo's RN |
-| **L4** | Committed `native-fingerprints.json` matches `@expo/fingerprint` |
+| **L1** | Generated-tree purity — nothing under `ios/` or `android/` is tracked, and git ignores both |
+| **L2** | Input coverage — every `plugins/*.cjs` and every local module's platform directory is in the fingerprint's source list, the `expoConfig` / `expoAutolinkingConfig:<platform>` sources are present, and each module's `expo-module.config.json` declares the platforms its directories imply |
+| **L3** | Host independence — no prebuild output contributes to the hash, so a prebuilt worktree and a fresh checkout compute the same value |
+| **L4** | Identity ratchet — committed `native-fingerprints.json` matches `@expo/fingerprint` |
+
+L3 is asserted on the **source list**, not on the ignore-path array: `nativeFingerprintOptions` ignores `ios/**` and `android/**`, which leaves `@expo/fingerprint`'s `bareNativeDir` source present but empty (`hash: null`) — indistinguishable from the directory being absent. Deleting those ignore entries reds L3 rather than quietly making every hash local to whoever ran it.
 
 ## Correct remediation
 
@@ -31,38 +31,45 @@ Historical shape:
 # See which layer is red
 bun run --cwd apps/mobile ci:native-state --status
 
-# Incomplete lock / missing pods — repair on macOS only
-cd apps/mobile/ios && pod install
-# Linux CI and many sandboxes can *verify* the lock but never *repair* it.
-
-# After L1–L3 are green and you have reviewed the native diff:
+# After L1–L3 are green and you have reviewed the INPUT diff:
 bun run --cwd apps/mobile ci:native-state --write
-# Commit Podfile.lock + native-fingerprints.json together (same PR as the module).
 ```
 
 `--write` **refuses** when L1–L3 fail. Do not hand-edit hashes to silence CI.
 
-Script-key reorders in `apps/mobile/package.json` no longer move identity (`sourceSkips: PackageJsonScriptsAll`). A script that truly changed prebuild output would not bust the cache either — nothing in current mobile scripts does that.
+To see what the inputs produce, regenerate rather than inspect a committed tree:
+
+```sh
+bun run --cwd apps/mobile native:prebuild   # expo prebuild --no-install + the sqlite-vec build
+bunx expo config --type introspect          # the merged manifest, without generating anything
+```
+
+Script-key reorders in `apps/mobile/package.json` do not move identity (`sourceSkips: PackageJsonScriptsAll`). A script that truly changed prebuild output would not bust the cache either — nothing in current mobile scripts does that.
+
+## What is no longer checked, and why
+
+`Podfile.lock` is regenerated by `pod install` on every macOS lane, after that lane's prebuild, from that lane's `node_modules`. It is never committed, so there is no lock for a checker to compare against a tree — which retires the whole L1/L2 pod family: module↔lock completeness, the node-module pod drift [#996](https://github.com/srikanth235/centraid/issues/996) added after the op-sqlite removal, the Expo/React-Core/Hermes version coherence, and the `REACT_NATIVE_PATH` hygiene check over `project.pbxproj`. Each guarded a **committed artifact against its inputs**; regeneration makes the two the same thing by construction. The macOS lane that existed to repair and commit the lock (`mobile-ios-lock.yml`) went with them.
 
 ## How agents get it wrong
 
-1. **Shipping a new module + fingerprint without regenerating `Podfile.lock`** — the #638 hole; L1 now fails closed.
-2. **Running `--write` to "make CI green" without a complete recipe** — refused; fix lock/modules first.
-3. **Expecting Linux `mobile-smoke` to repair the lock** — it only verifies; `pod install` needs a Mac.
+1. **Committing a generated file to make a build work** — L1 fails closed; the fix belongs in a config plugin.
+2. **Running `--write` to "make CI green"** — refused while L1–L3 are red.
+3. **Adding a `.gitignore` exception for one native file** — same as (1), and L1 checks the ignore rule as well as the index.
 4. **Blaming oxfmt script sorting for identity churn** — deafened in the fingerprint options; do not carve the formatter.
-5. **Duplicating lock regeneration across parallel PRs** — coordinate; one PR owns complete lock + `--write`.
+5. **Expecting a lane to build without prebuilding** — `expo run:*` generates the project implicitly, `./gradlew` and the `hermesc` injection path do not. Every CI lane that touches either runs `native:prebuild` in a step of its own, before it restores any cache that lives inside the generated tree.
 
 ## Checklist
 
-- [ ] New/changed local modules listed in `Podfile.lock` (DEPENDENCIES + EXTERNAL SOURCES)
-- [ ] `expo-module.config.json` platforms match on-disk `ios/` / `android/` dirs
-- [ ] `bun run --cwd apps/mobile ci:native-state` green (or `--status` explains L1 vs L4)
-- [ ] If L4 only: deliberate `--write` with module↔lock delta in the issue receipt
+- [ ] Native change expressed in `app.config.ts`, a plugin, or a local module — never in `ios/` or `android/`
+- [ ] New/changed local modules declare their platforms in `expo-module.config.json`
+- [ ] `bun run --cwd apps/mobile ci:native-state` green (or `--status` explains which layer)
+- [ ] If L4 only: deliberate `--write` with the input delta named in the issue receipt
 - [ ] No second CLI name — flags on `ci:native-state` only
 
 ## Related
 
-- Issue #646 (completeness loop), #587 E23 (fingerprint ratchet), #631 vs #638
-- `apps/mobile/scripts/verify-native-state.mjs`
+- Issue [#996](https://github.com/srikanth235/centraid/issues/996) (CNG migration), [#646](https://github.com/srikanth235/centraid/issues/646) (completeness loop), #587 E23 (fingerprint ratchet)
+- [dev-environment.md](../dev-environment.md#mobile-the-native-projects-are-generated)
+- `apps/mobile/scripts/verify-native-state.mjs`, `verify-native-state-lib.mjs`
 - `apps/mobile/scripts/native-fingerprint.mjs`
 - `apps/mobile/native-fingerprints.json`

@@ -38,7 +38,8 @@ async function loadSandboxBoot(): Promise<
 type SandboxLaneRequest =
   | "automation-handler"
   | "media-transcode"
-  | "model-runtime";
+  | "model-runtime"
+  | "system";
 
 interface WorkerRequest {
   handlerFile: string;
@@ -491,12 +492,16 @@ function execute(request: WorkerRequest): void {
         // Unconditional (#846): an absent lane is the floor, not "none".
         const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
         const roots = request.sandboxReadRoots ?? [];
+        // `system` is the PROVENANCE lane the parent chose from the automation
+        // id (`enrich/system-recognition.ts`); a manifest cannot reach it.
         const policy =
-          request.sandboxLane === "model-runtime"
-            ? sandboxApi.modelRuntimePolicy(roots)
-            : request.sandboxLane === "media-transcode"
-              ? sandboxApi.mediaTranscodePolicy(roots)
-              : sandboxApi.automationHandlerPolicy();
+          request.sandboxLane === "system"
+            ? sandboxApi.systemAutomationPolicy()
+            : request.sandboxLane === "model-runtime"
+              ? sandboxApi.modelRuntimePolicy(roots)
+              : request.sandboxLane === "media-transcode"
+                ? sandboxApi.mediaTranscodePolicy(roots)
+                : sandboxApi.automationHandlerPolicy();
         const sandbox = sandboxApi.installWorkerSandbox(policy, {
           redactLaunchArgs: true,
         });

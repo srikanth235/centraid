@@ -1,5 +1,5 @@
 {
-  "_comment": "Expected @expo/fingerprint hashes. Native/dependency changes must update these values after a human reviews the generated-project diff (#587 E23/F31).",
-  "ios": "4cdab9719d86b91f5ffbc2267efd1523d38e9326",
-  "android": "6a0bd966408ca5bf182d6aaa230eb77fe123e101"
+  "_comment": "Expected @expo/fingerprint hashes over the CNG inputs (app.config.ts, plugins/, modules/, the dependency set). Changing them must be a reviewed act — see docs/traps/mobile-native-state.md.",
+  "ios": "426f2060939f82ee2e044d56b76142e1364b301f",
+  "android": "11238f61f1aa4ba52e105cbc3665636df1f6f465"
 }

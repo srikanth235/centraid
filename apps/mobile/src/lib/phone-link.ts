@@ -274,14 +274,20 @@ export async function ensureTunnelStarted(): Promise<
   startInFlight = (async () => {
     await hydratePhoneLink();
     if (!isPaired() || !isTunnelAvailableImpl()) {
-      console.error(
+      // A TRACE, NOT AN ERROR. LogBox promotes every `console.error` to the
+      // red overlay: these three lines report a healthy (or simply unpaired)
+      // tunnel, and as errors they parked a permanent bar over the tab bar in
+      // every dev build and raised a full-screen redbox that swallowed the
+      // taps of the Maestro journeys in `tests/agent-e2e-mobile`. A real
+      // failure still throws `PhoneLinkError` below.
+      console.log(
         `[centraid] replica: no tunnel — paired=${isPaired()} native=${isTunnelAvailableImpl()}`
       );
       return undefined;
     }
     const status = await getTunnelStatusImpl();
     if (status.state === "running" && status.port) {
-      console.error(`[centraid] replica: tunnel reused on port ${status.port}`);
+      console.log(`[centraid] replica: tunnel reused on port ${status.port}`);
       return { baseUrl: `http://127.0.0.1:${status.port}` };
     }
     try {
@@ -289,7 +295,7 @@ export async function ensureTunnelStarted(): Promise<
         secretKeyB64: getSecure(LINK_SECRET_KEY, ""),
         ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ""),
       });
-      console.error(
+      console.log(
         `[centraid] replica: tunnel started on port ${port} from ${status.state}`
       );
       return { baseUrl: `http://127.0.0.1:${port}` };

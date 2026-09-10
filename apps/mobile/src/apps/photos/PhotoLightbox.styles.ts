@@ -22,15 +22,50 @@ export const styles = StyleSheet.create({
   },
   viewerReadOnlyReason: {
     ...t("mono"),
-    paddingBottom: spacing[2],
+  },
+  /** The refusal now floats ON the photograph, so it needs its own opaque
+   *  ground: `--net` ink over an arbitrary photograph is not a contrast. */
+  viewerReadOnlyPlate: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginHorizontal: VIEWER_CHROME_INSET,
+    marginTop: spacing[1],
     paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
   },
   facts: { ...t("mono"), flex: 1, marginTop: spacing[1] },
   /** Fixed key column: a flexible key lets the value fight the label for width. */
   factLabel: { ...t("small"), flexGrow: 0, flexShrink: 0, width: 96 },
   factsRow: { flexDirection: "row", gap: spacing[3], paddingVertical: 3 },
   fill: { flex: 1 },
+  /** The photograph IS the screen: the pager runs edge to edge under every
+   *  piece of chrome, so a square frame is centred in the whole viewport
+   *  instead of sitting in whatever a column of bars left over (#1011). */
+  stageLayer: {
+    bottom: 0,
+    insetInlineEnd: 0,
+    insetInlineStart: 0,
+    position: "absolute",
+    top: 0,
+  },
+  /** The foot of the stage: status plate, filmstrip, action row. `box-none`
+   *  at the call site, so every touch that misses a control is the
+   *  photograph's. */
+  chromeBottom: {
+    bottom: 0,
+    insetInlineEnd: 0,
+    insetInlineStart: 0,
+    position: "absolute",
+    zIndex: 2,
+  },
   filmstrip: {
+    // `flexGrow: 0` is LOAD-BEARING, not tidiness. A `ScrollView`'s own base
+    // style carries `flexGrow: 1`, and a user `height` does not cancel it: in
+    // the old column layout the strip absorbed half the free space and left a
+    // 372pt band of black under an eight-thumbnail row, squeezing the
+    // photograph into a 313pt letterbox (#1011).
+    flexGrow: 0,
+    flexShrink: 0,
     height: FILMSTRIP.height,
   },
   /** RN throws on child-layout props in a ScrollView `style`; pad the content. */
@@ -105,11 +140,17 @@ export const styles = StyleSheet.create({
   },
   sheetBody: { paddingBottom: spacing[5] },
   sheetTitle: { ...t("title"), marginBottom: spacing[1] },
+  /** No rule and no full-width ground: this line floats on the photograph
+   *  inside its own plate, so a hairline here would draw a band. */
   statusLine: {
     alignItems: "center",
-    borderTopWidth: 1,
+    alignSelf: "center",
+    borderRadius: radii.pill,
+    borderWidth: 1,
     flexDirection: "row",
     gap: spacing[2],
+    marginBottom: spacing[1],
+    marginHorizontal: VIEWER_CHROME_INSET,
     minHeight: 30,
     paddingHorizontal: spacing[3],
     paddingVertical: 6,

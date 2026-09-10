@@ -1,24 +1,17 @@
-// People roster, off the band (#712): unnamed cards still render; a person
-// card opens that person's photographs, never Face review. Empty roster is
-// the consent gate until answered this session.
+// People roster (#712): a card opens that person's photographs, never Face
+// review. Empty roster: signage, not consent.
 
 import React, { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 
 import {
-  CLOUD_ANSWER,
-  CLOUD_PANEL,
-  deviceAnswerFor,
-  ENRICHMENT_DECLINED_NOTE,
-  ENRICHMENT_NOTE,
+  ENRICHMENT_PRIORITISED_NOTE,
   ENRICHMENT_QUEUED_NOTE,
-  ENRICHMENT_REQUESTED_NOTE,
-  ON_DEVICE_PANEL,
+  prioritiseAnswerFor,
 } from "@centraid/blueprints/apps/photos/enrichment-consent";
 import type { PageQuery } from "@centraid/core/page";
 import { identityColor, tileFinish } from "@centraid/design";
 
-import { ConsentGate } from "../../kit/components/ConsentGate";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
@@ -31,6 +24,7 @@ import { spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
+import PeopleEmptyState from "./PeopleEmptyState";
 import { usePhotoEntity } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
 
@@ -63,18 +57,17 @@ export default function PhotosPeopleView({
   const policies = usePhotoEntity("enrichPolicies");
 
   const [enrichBusy, setEnrichBusy] = useState(false);
-  const [enrichAnswered, setEnrichAnswered] = useState<
-    "device" | "declined" | null
-  >(null);
+  const [prioritised, setPrioritised] = useState(false);
   const enrichPolicy = policies.rows.find((row) => row.domain === "photos");
   const enrichTier = policies.loading
     ? null
     : ((enrichPolicy?.tier as string | undefined) ?? "off");
-  const deviceAnswer = deviceAnswerFor(enrichTier);
-  const runOnDevice = async (): Promise<void> => {
-    // Do not rely on a disabled prop for this write.
-    if (!session || enrichBusy || enrichAnswered) return;
-    if (!deviceAnswer.available) return;
+  const prioritiseAnswer = prioritiseAnswerFor(enrichTier);
+  // THE ONE WRITE — front of the queue, never whether. Gated here, never by
+  // a disabled prop alone.
+  const prioritise = async (): Promise<void> => {
+    if (!session || enrichBusy || prioritised) return;
+    if (!prioritiseAnswer.available) return;
     setEnrichBusy(true);
     try {
       const result = await session.write("photos", {
@@ -84,18 +77,14 @@ export default function PhotosPeopleView({
       if (
         surfaceWriteOutcome(result, { queuedMessage: ENRICHMENT_QUEUED_NOTE })
       ) {
-        setEnrichAnswered("device");
-        postStatus(ENRICHMENT_REQUESTED_NOTE);
+        setPrioritised(true);
+        postStatus(ENRICHMENT_PRIORITISED_NOTE);
       }
     } catch (error) {
-      surfaceWriteFailure(error, "Face detection was not asked for");
+      surfaceWriteFailure(error, "Faces were not prioritised");
     } finally {
       setEnrichBusy(false);
     }
-  };
-  const declineEnrichment = (): void => {
-    setEnrichAnswered("declined");
-    postStatus(ENRICHMENT_DECLINED_NOTE);
   };
 
   const shelf = useMemo(
@@ -124,10 +113,6 @@ export default function PhotosPeopleView({
     [clusters.rows, faces.rows, parties.rows, policies.loading, policies.rows]
   );
 
-  // Gate only while unanswered; an answered empty roster uses the plain copy.
-  const showGate =
-    shelf.people.length === 0 && shelf.unnamed.length === 0 && !enrichAnswered;
-
   return (
     <PhotosScreen current="more">
       <View style={styles.header}>
@@ -141,26 +126,12 @@ export default function PhotosPeopleView({
         contentContainerStyle={styles.grid}
         columnWrapperStyle={styles.row}
         ListEmptyComponent={
-          showGate ? (
-            <View style={styles.gate}>
-              <ConsentGate
-                domain="photos"
-                onDevicePanel={ON_DEVICE_PANEL}
-                onDevice={deviceAnswer}
-                netPanel={CLOUD_PANEL}
-                net={CLOUD_ANSWER}
-                note={ENRICHMENT_NOTE}
-                busy={enrichBusy}
-                answered={enrichAnswered}
-                onRunOnDevice={() => void runOnDevice()}
-                onDecline={declineEnrichment}
-              />
-            </View>
-          ) : (
-            <Text style={styles.empty}>
-              No people yet — faces are proposed on a photograph you open.
-            </Text>
-          )
+          <PeopleEmptyState
+            prioritise={prioritiseAnswer}
+            busy={enrichBusy}
+            prioritised={prioritised}
+            onPrioritise={() => void prioritise()}
+          />
         }
         ListFooterComponent={
           <View>
@@ -224,14 +195,6 @@ const makeStyles = (colors: ThemeColors) =>
     avatar: { aspectRatio: 1, borderRadius: radii.pill, width: "72%" },
     card: { alignItems: "center", gap: spacing[1], width: "33.33%" },
     count: { ...t("mono"), color: colors.textFaint },
-    empty: {
-      ...t("small"),
-      color: colors.textFaint,
-      paddingHorizontal: spacing[4],
-      paddingVertical: spacing[5],
-      textAlign: "center",
-    },
-    gate: { paddingHorizontal: spacing[3], paddingTop: spacing[3] },
     grid: { paddingBottom: spacing[6], paddingTop: spacing[3] },
     header: {
       alignItems: "center",

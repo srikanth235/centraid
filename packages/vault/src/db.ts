@@ -101,6 +101,8 @@ export interface VaultDb {
   remote: () => RemoteTier | null;
   blobTransfers: BlobTransferCoordinator;
   previewCodec?: PreviewCodec;
+  /** Fire-and-forget ingress display rungs; absent when no codec is injected. */
+  contributePreview?: (input: IngressPreviewInput) => void;
   /**
    * Bound the WAL by SIZE, independently of who else is checkpointing.
    * `wal_autocheckpoint = 0` above hands TRUNCATE to the shipper (#408) and
@@ -406,6 +408,17 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         }
       : {}),
   });
+  // The ONE shared ingress preview contributor (#405, #1011): the async doors
+  // reach it through the transfer coordinator, the synchronous `stageBlobBytes`
+  // seam through `VaultDb.contributePreview`. Injected rather than imported so
+  // `blob/staging.ts` needs no edge back to `blob/preview.ts`, which stages
+  // its rungs THROUGH `stageBlobBytes`.
+  const contributePreview = options.previewCodec
+    ? (input: IngressPreviewInput): void =>
+        void contributeIngressPreviews(api, options.previewCodec!, input).catch(
+          () => {}
+        )
+    : undefined;
   const blobTransfers = new BlobTransferCoordinator({
     vault,
     dir: dir ?? ":memory:",
@@ -415,12 +428,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remoteConfigured: () => readBlobStoreSettings(vault).kind === "s3",
     policy: () => readBackupPolicy(vault),
     contentKeys: blobContentKeys,
-    ...(options.previewCodec && {
-      contributePreview: (input: IngressPreviewInput) =>
-        void contributeIngressPreviews(api, options.previewCodec!, input).catch(
-          () => {}
-        ),
-    }),
+    ...(contributePreview ? { contributePreview } : {}),
     ...(options.shouldDeferBackgroundWork
       ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
       : {}),
@@ -441,6 +449,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remote: remoteTier,
     blobTransfers,
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
+    ...(contributePreview ? { contributePreview } : {}),
     checkpointIfLargerThan(thresholdBytes) {
       if (dir === undefined)
         return { walBytes: 0, checkpointed: false, busy: false };

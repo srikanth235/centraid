@@ -73,6 +73,7 @@ import {
 } from "./pending-content-refs";
 import { isReplicaStorageFullError } from "./replica-storage-error";
 import { noteResyncVerdict } from "./resync-notice";
+import { SeatSyncErrorSink } from "./seat-sync-error";
 import { stampVaultSourceRows } from "./vault-source";
 import type { VaultSource } from "./vault-source";
 import { waitingOnLabel } from "./waiting-on";
@@ -120,6 +121,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
    */
   #rebootstrapping = false;
   #storageFullError: unknown | undefined;
+  /** The last catch-up failure, for Diagnostics and the status line (#1011). */
+  readonly #syncErrors = new SeatSyncErrorSink();
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -138,7 +141,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#feed = options.changeFeed;
     this.#seat = options.seat;
     this.#queue = options.queue;
-    this.#syncLoop = new SeatSyncLoop(options.seat);
+    // KEPT, NOT DROPPED (#1011): the loop's one failure is the only thing that
+    // explains an empty copy over a full vault, and it used to die inside
+    // `SeatSyncLoop`.
+    this.#syncLoop = new SeatSyncLoop(options.seat, {
+      onError: (error) => this.#syncErrors.note(error),
+    });
     this.#appState = options.appState;
     this.#isConnected = options.isConnected ?? (() => true);
     this.#isNetworkWorkAllowed =
@@ -301,6 +309,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
   updateGatewayBase(baseUrl: string): void {
     if (this.#closed || this.#gatewayAuth.baseUrl === baseUrl) return;
     this.#gatewayAuth.baseUrl = baseUrl;
+    // THE SEAT MOVES WITH THE SESSION. It was opened before the tunnel existed
+    // (its file carries the outbox, which cannot wait for the network), so the
+    // base it holds is a placeholder or a previous launch's port. Rebasing the
+    // feed alone left the snapshot and log doors pointed at a dead address and
+    // the copy permanently empty.
+    this.#seat.updateGatewayBase(baseUrl);
     const foreground = this.#appState
       ? this.#appState.currentState !== "background"
       : true;
@@ -353,9 +367,17 @@ export class NativeReplicaSession implements MobileReplicaSession {
    * answer that is `true` whatever happened tells a member their library is
    * current when the network is gone.
    */
+  /** Why the last catch-up did not land; `undefined` if it did (#1011). */
+  get lastSyncError(): unknown | undefined {
+    return this.#syncErrors.last;
+  }
+
   async pullNow(): Promise<boolean> {
-    if (this.#closed || !this.#isConnected() || this.storageFull) return false;
+    if (this.#closed || this.storageFull) return false;
     if (!(await this.#isRowSyncAllowed())) return false;
+    // The oracle is consulted by `catchUp` and ONLY there (#1011): checking it
+    // here too let the foreground pass refuse without scheduling the retry
+    // that is the only way back from a stale `false`.
     return this.catchUp();
   }
 
@@ -375,9 +397,20 @@ export class NativeReplicaSession implements MobileReplicaSession {
     // Bootstrapping anyway would take a cursor the member never asked for and
     // make "this phone has no copy" untrue for the wrong reason; the wake that
     // corrects the probe calls back through here.
-    if (this.#closed || this.storageFull || !this.#isConnected()) return false;
+    if (this.#closed || this.storageFull) return false;
+    // AND IT MUST ASK AGAIN (#1011). This guard used to return scheduling
+    // nothing, while the oracle it consults was set from the PREVIOUS pull's
+    // verdict — so one refused catch-up latched `isConnected()` false and the
+    // phone never asked for a log page again, drawing an empty library over a
+    // vault holding hundreds of rows. A retry is the only exit that does not
+    // depend on the member noticing.
+    if (!this.#isConnected()) {
+      this.scheduleRetry();
+      return false;
+    }
     try {
       const landed = (await this.#syncLoop.sync()) !== undefined;
+      if (landed) this.#syncErrors.clear();
       // A REFUSED CATCH-UP MUST BE ASKED AGAIN (#905). Every trigger that could
       // bootstrap this session fires once per EVENT — a reachability wake, a
       // foreground transition, a rebootstrap demand — and none of them is a

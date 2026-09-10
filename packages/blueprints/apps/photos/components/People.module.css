@@ -145,3 +145,27 @@
 .noteButton:hover {
   background: var(--bg-press);
 }
+
+/* The empty roster (ruled 2026-09-09): a status line, one sentence, and one
+   plain action. Not a consent panel — nothing here decides whether the Faces
+   recipe runs, so it carries no facts table and no `--net` rule. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--sp-2);
+  max-inline-size: 520px;
+}
+
+.emptyStatus {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-faint);
+}
+
+/* Why the action is inert, read beside it rather than discovered afterwards. */
+.emptyReason {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-faint);
+}

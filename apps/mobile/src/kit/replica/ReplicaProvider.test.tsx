@@ -78,6 +78,8 @@ const world = vi.hoisted(() => ({
   mountPlans: 0,
   purged: [] as string[],
   closedSessions: [] as string[],
+  /** `false` for a phone whose seat file will not open at all (#1011). */
+  seatOpens: true,
 }));
 
 vi.mock(
@@ -248,6 +250,7 @@ vi.mock(
     ({
       openMountSeat: (identity: { vaultId: string }) => {
         world.opened.push(identity.vaultId);
+        if (!world.seatOpens) return Promise.resolve(undefined);
         return Promise.resolve({
           watermark: () => undefined,
           close: () => Promise.resolve(),
@@ -566,5 +569,56 @@ describe("a cold start with the gateway still answering (#922 E8)", () => {
 
     expect(seen?.ready).toBe(true);
     expect(mountedVaultIds()).toStrictEqual(["vault-1", "vault-2"]);
+  });
+});
+
+// A SEAT THAT WILL NOT OPEN IS NOT A PROVIDER THAT NEVER ANSWERS (#1011).
+//
+// `openMountSeat` returns `undefined` for a host with no durable directory AND
+// for a file that refused to open, and that branch announced itself with
+// `publish`, which patches an entry for the mount key that does not exist yet.
+// The announcement was a no-op, so the provider sat at its loading value
+// forever: live, on a build whose seat driver had just started refusing, that
+// read as a paired phone drawing "pair a vault when ready", skeletons on every
+// tile, and not one request to the gateway, with nothing on any log.
+describe("a phone whose seat file will not open (#1011)", () => {
+  beforeEach(async () => {
+    net.deviceOnline = true;
+    net.base = "http://127.0.0.1:9999";
+    registry.active = { gatewayId: "gateway-1", vaultId: "vault-1" };
+    registry.listeners.clear();
+    world.enrolled = ["vault-1"];
+    world.revoked = [];
+    world.mountPlans = 0;
+    world.purged = [];
+    world.closedSessions = [];
+    world.opened = [];
+    world.seatOpens = false;
+    wall.open();
+    seen = undefined;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(
+        React.createElement(ReplicaProvider, null, React.createElement(Probe))
+      );
+    });
+    await settle();
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    world.seatOpens = true;
+  });
+
+  it("settles ready rather than sitting on the loading value forever", () => {
+    expect(seen?.ready).toBe(true);
+    expect(seen?.error).toBeDefined();
+  });
+
+  it("offers a refresh, so the member is not stranded for the app's life", () => {
+    expect(seen?.refresh).toBeTypeOf("function");
   });
 });

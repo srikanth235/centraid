@@ -17,20 +17,25 @@ import {
   decodeImage,
   decodeImageResized,
   normalizeImageNet,
+  normalizeSymmetric,
   resizeDecodedImage,
 } from "../preprocess.js";
-import type {
-  ItemResult,
-  ModelId,
-  OcrItem,
-  OcrRegion,
-  OcrResult,
-} from "../types.js";
+import type { ItemResult, OcrItem, OcrRegion, OcrResult } from "../types.js";
 
-// PP-OCRv4 detection + recognition (PaddleOCR, Apache-2.0 — see
-// LICENSES.md), ONNX exports from SWHL/RapidOCR (also Apache-2.0). The
-// character dictionary is PaddleOCR's own `ppocr_keys_v1.txt`.
-export const OCR_MODEL_ID: ModelId = "pp-ocrv4@1";
+// PP-OCRv5 detection + recognition (PaddleOCR, Apache-2.0 — see
+// LICENSES.md), pinned ONNX exports of the mobile det/rec pair. v5 replaced
+// v4 in #1011: one recognition head now covers simplified and traditional
+// Chinese, English and Japanese, where v4's `ch` head handled Latin text as
+// a side effect of its Chinese training set.
+//
+// The pipeline shape is unchanged from v4 — DBNet probability map for
+// detection, 3x48xW CTC head for recognition, blank at class 0 with a
+// trailing space class — so only the dictionary (v5 ships its own, larger
+// `ppocrv5_dict.txt`) and the weights move.
+//
+// The id itself lives in `../model-ids.ts` so the host can read it without
+// loading this module's ONNX/sharp resolution seams (#1011).
+export { OCR_MODEL_ID } from "../model-ids.js";
 
 const OCR_DIR = path.join(MODELS_DIR, "ocr");
 const DET_MODEL_PATH = path.join(OCR_DIR, "det.onnx");
@@ -140,7 +145,7 @@ async function recognizeCrop(cropBytes: {
     Math.max(REC_HEIGHT, Math.round(cropBytes.width * scale))
   );
   const resized = await resizeDecodedImage(cropBytes, targetWidth, REC_HEIGHT);
-  const chw = normalizeImageNet(resized);
+  const chw = normalizeSymmetric(resized);
 
   const ort = await loadOnnxRuntime();
   const session = await getOrCreateSession(REC_MODEL_PATH);

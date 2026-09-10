@@ -57,6 +57,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   private readonly now: () => Date;
   private readonly onError?: VaultCursorEngineOptions["onError"];
   private readonly onTick?: VaultCursorEngineOptions["onTick"];
+  private readonly shouldPauseBackground?: VaultCursorEngineOptions["shouldPauseBackground"];
   private readonly onDormancyChange?: VaultCursorEngineOptions["onDormancyChange"];
   private readonly nudgeDelayMs: number;
   private readonly catchUpCap: number;
@@ -81,6 +82,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     this.now = options.now ?? (() => new Date());
     this.onError = options.onError;
     this.onTick = options.onTick;
+    this.shouldPauseBackground = options.shouldPauseBackground;
     this.defaultCronTimeZone = options.defaultCronTimeZone;
     this.onDormancyChange = options.onDormancyChange;
     this.nudgeDelayMs = options.nudgeDelayMs ?? 25;
@@ -260,6 +262,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   }
 
   private processSafely(registration: CursorRegistration, at: Date): void {
+    // PAUSED, NOT DISABLED (#528). Stopping the work here rather than at the
+    // fire is the difference between a pause that costs nothing and one that
+    // reads a cursor, consumes its element and throws the result away.
+    if (this.shouldPauseBackground?.(registration.ref)) return;
     void this.serialize(registration, at).catch((error) =>
       this.onError?.(error, registration.ref)
     );

@@ -237,6 +237,10 @@ async function commandServe(args: string[]): Promise<void> {
       ? {}
       : { experimental: config.experimental }),
     token: loopbackSecret,
+    // A production host, and the one that owns the network side effect: the
+    // daemon says out loud that it may pull the pinned recognition weights
+    // (#1011). The gateway default is `verify-only`.
+    modelAssets: { provision: "fetch" },
     logTag: "centraid-gateway",
     deviceAccess: devicePlane.deviceAccess,
     isHostCustody: devicePlane.isHostCustody,

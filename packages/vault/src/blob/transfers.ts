@@ -137,6 +137,9 @@ export class BlobTransferCoordinator {
       contentKeys: options.contentKeys,
       state: this.state,
       preflight: (sha256) => this.preflight(sha256),
+      ...(options.contributePreview
+        ? { contributePreview: options.contributePreview }
+        : {}),
       emit: () => this.emit(),
     });
     this.outbox = new BlobOutboxRunner({

@@ -17,6 +17,7 @@ import {
 } from "./derivatives.js";
 import type { DerivativeVariant, ValidatedDerivative } from "./derivatives.js";
 import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
+import { clearPreviewUnsupportedFor } from "./preview-status.js";
 import { upsertContentEmbedding } from "./semantic-contributions.js";
 import { sha256OfBytes } from "./store.js";
 
@@ -194,6 +195,16 @@ export function stageBlobBytes(
             contribution?.textContent ?? null,
             nowIso()
           );
+        // A DISPLAY RUNG RETIRES THE DECLINE, whoever produced it (#1011). The
+        // phone decodes the HEVC-coded HEIC sharp's libheif cannot and
+        // contributes JPEG rungs through this same door; without this the
+        // `preview-codec@1` "unsupported" stamp an earlier pass wrote would
+        // outlive the rung that disproves it, and every recognition recipe
+        // would keep skipping a perfectly readable asset until the codec
+        // version was bumped.
+        if (options.variant === "thumb" || options.variant === "preview") {
+          clearPreviewUnsupportedFor(db.vault, parent.content_id);
+        }
         if (options.variant === "phash" && contribution?.textContent) {
           const assets = db.vault
             .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
@@ -234,6 +245,39 @@ export function stageBlobBytes(
   // transaction, minting nothing itself. Inline contributions have NO CAS
   // object: a receipt would replicate nonexistent bytes, failing forever.
   if (binary) db.blobTransfers.recordLocalReceipt(sha256, byteSize);
+
+  // The SYNCHRONOUS ingress door's display rungs (#1011). The five async doors
+  // reach `contributeIngressPreviews` through the transfer coordinator; this
+  // seam — the JSON `POST /_vault/blobs` route, `gateway.stageBlob`, and the
+  // file-drop / camera-roll import stager — had none, so a camera-roll import
+  // landed `media_asset` rows with no thumb and every recognition recipe read
+  // "not ready" until the hours-apart sweep.
+  //
+  // FIRE-AND-FORGET, exactly as the doors do it: `stageBlobBytes` is
+  // synchronous by contract (import calls it mid-parse, inside the batch's
+  // own parse loop) and the codec is async, so awaiting is not available
+  // without making every caller async. Late arrival is safe: when the
+  // contribution settles AFTER `media.add_asset` has claimed the parent sha,
+  // the `variantOf` branch above sees `core_content_item.sha256` already
+  // present and writes `core_content_derivative` directly rather than leaving
+  // an orphan `blob_staging` row — the same claimed path `promoteStagedBlob`
+  // takes for rungs that arrived first. A failure is never fatal to custody:
+  // the item simply stays backfillable by the sweep.
+  //
+  // The contributor is INJECTED (`db.contributePreview`, wired in `db.ts`),
+  // not imported: it stages its own rungs back through this same function, so
+  // importing it here would be a module cycle. Only originals qualify —
+  // `variant` set is a rung, and a rung fathering rungs would not terminate;
+  // the `image/*` and `INGRESS_PREVIEW_MAX_BYTES` bounds are the contributor's
+  // own, identical for every door.
+  if (options.variant === undefined && binary && byteSize > 0) {
+    db.contributePreview?.({
+      sha256,
+      bytes: options.bytes,
+      mediaType,
+      ...(options.stagedBy ? { stagedBy: options.stagedBy } : {}),
+    });
+  }
 
   return {
     sha256,

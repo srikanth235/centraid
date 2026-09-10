@@ -5,7 +5,7 @@ import { MODELS_DIR } from "../config.js";
 import {
   computeSimilarityTransform,
   decodeYuNetLevel,
-  SFACE_TEMPLATE_112,
+  ARCFACE_TEMPLATE_112,
   warpAffine,
 } from "../face-geometry.js";
 import type { DecodedFace } from "../face-geometry.js";
@@ -23,16 +23,21 @@ import type {
   FacesItem,
   FacesResult,
   ItemResult,
-  ModelId,
 } from "../types.js";
 
-// YuNet detection + SFace recognition (OpenCV Zoo, MIT + Apache-2.0
-// respectively — see LICENSES.md), both natively ONNX.
-export const FACES_MODEL_ID: ModelId = "yunet-sface@1";
+// YuNet detection (OpenCV Zoo, MIT) + ArcFace ResNet100 recognition (ONNX
+// Model Zoo, Apache-2.0 — see LICENSES.md), both natively ONNX. ArcFace
+// superseded SFace in #1011: 512-d additive-angular-margin embeddings in
+// place of 128-d, which is what makes party matching and stranger
+// clustering separable at a threshold the vault can state.
+//
+// The id itself lives in `../model-ids.ts` so the host can read it without
+// loading this module's ONNX/sharp resolution seams (#1011).
+export { FACES_MODEL_ID } from "../model-ids.js";
 
 const FACES_DIR = path.join(MODELS_DIR, "faces");
 const YUNET_MODEL_PATH = path.join(FACES_DIR, "yunet.onnx");
-const SFACE_MODEL_PATH = path.join(FACES_DIR, "sface.onnx");
+const ARCFACE_MODEL_PATH = path.join(FACES_DIR, "arcface.onnx");
 
 // The pinned OpenCV Zoo 2023mar export declares a fixed 640×640 input.
 // Keep this beside the session feed: changing it without changing weights is
@@ -41,11 +46,14 @@ const YUNET_INPUT_SIZE = 640;
 const YUNET_STRIDES = [8, 16, 32] as const;
 const YUNET_SCORE_THRESHOLD = 0.6;
 const YUNET_NMS_IOU = 0.3;
-const SFACE_INPUT_SIZE = 112;
+// ArcFace's published export declares a fixed 1x3x112x112 input and emits a
+// 512-d `fc1` embedding. Both are pinned by the weekly real-weight lane.
+const ARCFACE_INPUT_SIZE = 112;
+export const FACE_EMBEDDING_DIM = 512;
 
 export function facesWeightsPresent(modelsDir: string = MODELS_DIR): boolean {
   const facesDir = path.join(modelsDir, "faces");
-  return ["yunet.onnx", "sface.onnx"].every((filename) =>
+  return ["yunet.onnx", "arcface.onnx"].every((filename) =>
     existsSync(path.join(facesDir, filename))
   );
 }
@@ -112,20 +120,25 @@ async function detectFaces(
 
 async function embedFace(alignedPixels: Float32Array): Promise<number[]> {
   const ort = await loadOnnxRuntime();
-  const session = await getOrCreateSession(SFACE_MODEL_PATH);
+  const session = await getOrCreateSession(ARCFACE_MODEL_PATH);
   const inputName = session.inputNames[0] ?? "data";
   const fetches = await session.run({
     [inputName]: new ort.Tensor("float32", alignedPixels, [
       1,
       3,
-      SFACE_INPUT_SIZE,
-      SFACE_INPUT_SIZE,
+      ARCFACE_INPUT_SIZE,
+      ARCFACE_INPUT_SIZE,
     ]),
   });
   const outputName = session.outputNames[0];
   const data = outputName ? fetches[outputName]?.data : undefined;
   if (!data || !(data instanceof Float32Array)) {
-    throw new Error("faces: SFace did not return a float32 embedding");
+    throw new Error("faces: ArcFace did not return a float32 embedding");
+  }
+  if (data.length !== FACE_EMBEDDING_DIM) {
+    throw new Error(
+      `faces: ArcFace returned ${data.length} dimensions, expected ${FACE_EMBEDDING_DIM}`
+    );
   }
   return Array.from(data);
 }
@@ -151,7 +164,7 @@ export async function faces(item: FacesItem): Promise<ItemResult<FacesResult>> {
         : { width: native.width, height: native.height };
 
     // Promise.all rather than a for-await loop: each detection's alignment
-    // + SFace embedding is independent of every other, so there is no
+    // + ArcFace embedding is independent of every other, so there is no
     // reason to serialize them.
     const perDetection = await Promise.all(
       detections
@@ -166,13 +179,13 @@ export async function faces(item: FacesItem): Promise<ItemResult<FacesResult>> {
           }));
           const transform = computeSimilarityTransform(
             landmarksInNative,
-            SFACE_TEMPLATE_112
+            ARCFACE_TEMPLATE_112
           );
           const aligned = warpAffine(
             native,
             transform,
-            SFACE_INPUT_SIZE,
-            SFACE_INPUT_SIZE
+            ARCFACE_INPUT_SIZE,
+            ARCFACE_INPUT_SIZE
           );
           const alignedPixels = toOpenCvRgbPlanar(aligned);
           const embedding = await embedFace(alignedPixels);

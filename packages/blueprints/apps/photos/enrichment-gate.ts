@@ -1,13 +1,15 @@
-import type { EnrichmentConsentProps } from "./components/EnrichmentConsent.tsx";
+// The People shelf's EMPTY STATE and its one action (#712, ruled 2026-09-09).
+// Recognition is ambient: this decides only whether the PRIORITY ask is
+// offerable, and issues one manual `enrich.request` per press. LOAD-BEARING:
+// mount, policy read and re-render write nothing.
 import {
-  CLOUD_ANSWER,
-  deviceAnswerFor,
-  ENRICHMENT_DECLINED_NOTE,
-  ENRICHMENT_REQUESTED_NOTE,
+  ENRICHMENT_PRIORITISED_NOTE,
+  ENRICHMENT_STATUS_LINE,
+  PEOPLE_EMPTY_LINE,
+  PRIORITISE_ACTION,
+  prioritiseAnswerFor,
 } from "./enrichment-consent.ts";
-// Face-detection consent gate (#712): lives in the People shelf's empty
-// state, not behind a toolbar dialog; closure factory as in people.ts.
-// LOAD-BEARING: no enrichment write without an explicit latched answer.
+import type { AnswerAvailability } from "./enrichment-consent.ts";
 import { act, narrate, notice } from "./outcomes.ts";
 
 interface EnrichmentStatus {
@@ -15,20 +17,31 @@ interface EnrichmentStatus {
   vaultDenied?: { message?: string } | null;
 }
 
-export interface EnrichmentGate {
-  ensurePolicyLoaded: () => void;
-  props: (count: number) => EnrichmentConsentProps | null;
+export interface PeopleEmptyStateProps {
+  count: number;
+  statusLine: string;
+  line: string;
+  action: string;
+  prioritise: AnswerAvailability;
+  busy: boolean;
+  prioritised: boolean;
+  onPrioritise: () => void;
 }
 
-export function createEnrichmentGate({
+export interface PeopleEmptyState {
+  ensurePolicyLoaded: () => void;
+  props: (count: number) => PeopleEmptyStateProps;
+}
+
+export function createPeopleEmptyState({
   onData,
 }: {
   onData: () => void;
-}): EnrichmentGate {
-  let status: EnrichmentStatus | null = null; // null = not yet read
+}): PeopleEmptyState {
+  let status: EnrichmentStatus | null = null;
   let statusLoading = false;
   let busy = false;
-  let answered: "device" | "declined" | null = null;
+  let prioritised = false;
 
   function ensurePolicyLoaded(): void {
     if (status != null || statusLoading) return;
@@ -47,10 +60,13 @@ export function createEnrichmentGate({
       });
   }
 
-  // THE ONE WRITE — reachable from onRunOnDevice alone.
-  async function runOnDevice(): Promise<void> {
-    if (busy || answered) return;
-    if (!deviceAnswerFor(status?.tier, !!status?.vaultDenied).available) return;
+  function answer(): AnswerAvailability {
+    return prioritiseAnswerFor(status?.tier, !!status?.vaultDenied);
+  }
+
+  async function prioritise(): Promise<void> {
+    if (busy || prioritised) return;
+    if (!answer().available) return;
     busy = true;
     onData();
     const outcome = await act("request-enrichment", {
@@ -58,31 +74,23 @@ export function createEnrichmentGate({
     });
     busy = false;
     if (narrate(outcome)) {
-      answered = "device";
-      notice(ENRICHMENT_REQUESTED_NOTE);
+      prioritised = true;
+      notice(ENRICHMENT_PRIORITISED_NOTE);
     }
-    onData();
-  }
-
-  function decline(): void {
-    answered = "declined";
-    notice(ENRICHMENT_DECLINED_NOTE);
     onData();
   }
 
   return {
     ensurePolicyLoaded,
-    props: (count) => {
-      if (answered) return null;
-      return {
-        count,
-        onDevice: deviceAnswerFor(status?.tier, !!status?.vaultDenied),
-        cloud: CLOUD_ANSWER,
-        busy,
-        answered,
-        onRunOnDevice: () => void runOnDevice(),
-        onDecline: decline,
-      };
-    },
+    props: (count) => ({
+      count,
+      statusLine: ENRICHMENT_STATUS_LINE,
+      line: PEOPLE_EMPTY_LINE,
+      action: PRIORITISE_ACTION,
+      prioritise: answer(),
+      busy,
+      prioritised,
+      onPrioritise: () => void prioritise(),
+    }),
   };
 }

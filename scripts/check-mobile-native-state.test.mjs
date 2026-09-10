@@ -16,7 +16,12 @@ test("the apps/mobile directory itself triggers the native-state run", () => {
 });
 
 test("a deeply nested mobile file triggers the native-state run", () => {
-  assert.equal(mobileAffected(["apps/mobile/ios/Podfile.lock"]), true);
+  // A CNG input (#996), not a generated file: `apps/mobile/ios/**` is a path no
+  // change set can name any more, so a case built on one would assert nothing.
+  assert.equal(
+    mobileAffected(["apps/mobile/plugins/withCentraidIos.cjs"]),
+    true
+  );
 });
 
 test("one mobile path among non-mobile paths still triggers the run", () => {

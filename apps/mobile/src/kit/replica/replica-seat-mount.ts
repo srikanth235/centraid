@@ -60,7 +60,18 @@ export async function openMountSeat(
       storageLocation: options.storageLocation,
       digest: nativeReplicaDigest,
     });
-  } catch {
+  } catch (error) {
+    // SAID ONCE, THEN SWALLOWED (#1011). The refusal itself is not an error a
+    // screen can act on — the read path answers online-only — but a seat that
+    // declines to open is the difference between a library and an empty one,
+    // and this `catch` used to be the end of the only sentence describing it.
+    console.error(
+      `[centraid] replica: seat did not open — ${
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error)
+      }`
+    );
     // A phone whose file will not open has no seat, which the read path
     // answers online-only rather than as an error a screen can act on.
     return undefined;

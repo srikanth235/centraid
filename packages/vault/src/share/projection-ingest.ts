@@ -70,10 +70,13 @@ function linkProjectedPlace(
  * receiving vault under the RECIPIENT's egress answers — which is what "a copy
  * is the recipient's" means in machinery rather than in prose.
  *
- * CAPTIONS AND FACES ARE STILL NOT ENQUEUED: they are consent-gated, and a
- * projection must never manufacture an owner's consent. `required_capability`
- * stays NULL, since a device-lease row would hand gateway work to a paired
- * device.
+ * NO CAPTION OR FACES REQUEST IS WRITTEN HERE: a projection must never
+ * manufacture an owner's ask. That is unchanged by the 2026-09-09 ruling that
+ * made the bundled recognition recipes on-by-default — faces reaches a
+ * projected photo the way it reaches every other photo in the audience's
+ * library, through that vault's own recipe and its ambient walk, under the
+ * audience's own default and their own opt-out. `required_capability` stays
+ * NULL, since a device-lease row would hand gateway work to a paired device.
  */
 function requestProjectedEnrichment(
   audience: DatabaseSync,

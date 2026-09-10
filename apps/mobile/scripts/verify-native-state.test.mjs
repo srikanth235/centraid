@@ -4,8 +4,6 @@ import path from "node:path";
 import { SourceSkips } from "@expo/fingerprint";
 import { describe, expect, test } from "vitest";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
-
 import {
   EXPO_MODULES_JSI_MIN_XCODE,
   expoModulesJsiMinXcode,
@@ -23,159 +21,177 @@ import {
 import {
   attachRemediation,
   classifyNativeStateError,
-  dependencyPodNames,
-  externalSourcePodNames,
   formatStatusReport,
   formatWriteSummary,
-  moduleLockDelta,
+  generatedNativeDirsIgnored,
+  moduleNativeDirsFor,
   parseNativeStateArgs,
-  podVersions,
+  trackedGeneratedNativeFiles,
+  validateFingerprintInputCoverage,
   validateFingerprints,
-  lockedNodeModulePackages,
-  validateIosModuleLockCompleteness,
-  validateLockedNodeModulePods,
+  validateGeneratedTreesNotHashed,
+  validateGeneratedTreesUntracked,
   validateModulePlatformShape,
-  validatePodLock,
-  validateReactNativePaths,
+  GENERATED_NATIVE_DIRS,
 } from "./verify-native-state.mjs";
 
+const IGNORED_BOTH = {
+  "apps/mobile/ios": true,
+  "apps/mobile/android": true,
+};
+
 describe("native state guards", () => {
-  test("rejects a stale Expo and React Native Podfile.lock", () => {
-    const lock =
-      "  - Expo (54.0.34):\n  - React-Core (0.81.5):\n  - React-Core-prebuilt (0.81.5):\n  - ReactNativeDependencies (0.81.5):\n    :tag: hermes-v0.16.0\n";
-    expect(podVersions(lock)).toEqual({
-      expo: "54.0.34",
-      reactNative: "0.81.5",
-      reactNativePrebuilt: "0.81.5",
-      reactNativeDependencies: "0.81.5",
-      hermesTag: "hermes-v0.16.0",
-    });
-    expect(
-      validatePodLock({
-        lock,
-        expoVersion: "57.0.8",
-        reactNativeVersion: "0.86.2",
-        hermesTags: ["hermes-v0.17.0", "hermes-v250829098.0.16"],
-      })
-    ).toEqual([
-      "Podfile.lock Expo 54.0.34 does not match node_modules Expo 57.0.8",
-      "Podfile.lock React-Core 0.81.5 does not match node_modules react-native 0.86.2",
-      "Podfile.lock React-Core-prebuilt 0.81.5 does not match node_modules react-native 0.86.2",
-      "Podfile.lock ReactNativeDependencies 0.81.5 does not match node_modules react-native 0.86.2",
-      "Podfile.lock Hermes tag hermes-v0.16.0 does not match node_modules react-native Hermes tag(s) hermes-v0.17.0, hermes-v250829098.0.16",
-    ]);
-  });
-
-  test("rejects a worktree-depth REACT_NATIVE_PATH", () => {
-    const podsRoot = "/repo/apps/mobile/ios/Pods";
-    const expected = "/repo/node_modules/react-native";
-    const podsRootVariable = ["$", "{PODS_ROOT}"].join("");
-    expect(
-      validateReactNativePaths(
-        `REACT_NATIVE_PATH = "${podsRootVariable}/../../../../../../../node_modules/react-native";`,
-        { podsRoot, expected }
-      )
-    ).toEqual([
-      `REACT_NATIVE_PATH resolves to ${path.resolve("/repo/apps/mobile/ios/Pods/../../../../../../../node_modules/react-native")}; expected ${expected} from this repository layout`,
-    ]);
-  });
-
-  test("rejects committed iOS and Android fingerprint drift with --write remediation", () => {
-    const errors = validateFingerprints(
-      { ios: "committed-ios", android: "committed-android" },
-      { ios: "current-ios", android: "current-android" }
-    );
-    expect(errors).toEqual([
-      "ios native fingerprint mismatch: committed committed-ios, current current-ios; review the native diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
-      "android native fingerprint mismatch: committed committed-android, current current-android; review the native diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
-    ]);
-    const withNext = attachRemediation(errors);
-    expect(withNext.at(-1)).toContain("ci:native-state --write");
-    expect(withNext.at(-1)).toContain("L4 identity only");
-  });
-
-  test("L1 fails when a local podspec is missing from Podfile.lock DEPENDENCIES", () => {
-    const lock = `DEPENDENCIES:
-  - CentraidStorage (from \`../modules/centraid-storage/ios\`)
-  - CentraidTunnel (from \`../modules/centraid-tunnel/ios\`)
-
-EXTERNAL SOURCES:
-  CentraidStorage:
-    :path: "../modules/centraid-storage/ios"
-  CentraidTunnel:
-    :path: "../modules/centraid-tunnel/ios"
-`;
-    expect(dependencyPodNames(lock)).toEqual([
-      "CentraidStorage",
-      "CentraidTunnel",
-    ]);
-    expect(externalSourcePodNames(lock)).toEqual([
-      "CentraidStorage",
-      "CentraidTunnel",
-    ]);
-    const errors = validateIosModuleLockCompleteness({
-      localPodNames: [
-        "CentraidNetworkStatus",
-        "CentraidOcr",
-        "CentraidStorage",
-        "CentraidTunnel",
+  // #996 made ios/ and android/ prebuild OUTPUTS. The one way the whole CNG
+  // premise fails silently is a tracked file down there: prebuild overwrites it,
+  // so the edit appears to work, ships once, and disappears.
+  test("L1 fails when a prebuild output is tracked", () => {
+    const errors = validateGeneratedTreesUntracked({
+      trackedNativeFiles: [
+        "apps/mobile/ios/Podfile.lock",
+        "apps/mobile/android/app/build.gradle",
       ],
-      lock,
+      ignoredDirs: IGNORED_BOTH,
     });
-    expect(errors.some((e) => e.includes("CentraidNetworkStatus"))).toBe(true);
-    expect(errors.some((e) => e.includes("CentraidOcr"))).toBe(true);
-    expect(errors.every((e) => e.startsWith("L1 recipe incomplete"))).toBe(
-      true
-    );
-    expect(errors.some((e) => e.includes("pod install"))).toBe(true);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("2 tracked file(s)");
+    expect(errors[0]).toContain("apps/mobile/ios/Podfile.lock");
+    expect(classifyNativeStateError(errors[0])).toBe("L1");
     const remediated = attachRemediation(errors);
-    expect(remediated.at(-1)).toMatch(/fix the native recipe first/u);
+    expect(remediated.at(-1)).toMatch(/fix the native inputs first/u);
     expect(remediated.at(-1)).not.toMatch(/--write`$/u);
   });
 
-  // #996 wave 3 swapped op-sqlite for expo-sqlite and could not regenerate the
-  // lock (that needs macOS). The version checks above saw nothing: neither half
-  // of the drift is a version, so the gate was green on a lock that cannot link.
-  test("L1 fails on a lock whose node_modules pods no longer match the tree", () => {
-    const lock = `EXTERNAL SOURCES:
-  CentraidTunnel:
-    :path: "../modules/centraid-tunnel/ios"
-  ExpoCamera:
-    :path: "../../../node_modules/expo-camera/ios"
-  op-sqlite:
-    :path: "../../../node_modules/@op-engineering/op-sqlite"
-
-SPEC CHECKSUMS:
-`;
-    expect(lockedNodeModulePackages(lock)).toEqual([
-      "@op-engineering/op-sqlite",
-      "expo-camera",
-    ]);
-    const errors = validateLockedNodeModulePods({
-      lock,
-      resolvedPackages: ["expo-camera", "expo-sqlite"],
-      iosAutolinkedPackages: ["expo-camera", "expo-sqlite"],
-    });
-    expect(errors).toEqual([
-      "L1 recipe stale: Podfile.lock sources a pod from node_modules/@op-engineering/op-sqlite, which bun.lock no longer resolves (cd apps/mobile/ios && pod install  # macOS only; Linux CI can verify but not repair the lock; fix the native recipe first (complete Podfile.lock / module configs), then re-run verify; do not run --write until L1–L3 pass)",
-      "L1 recipe stale: dependency expo-sqlite autolinks an iOS pod that Podfile.lock does not carry (cd apps/mobile/ios && pod install  # macOS only; Linux CI can verify but not repair the lock; fix the native recipe first (complete Podfile.lock / module configs), then re-run verify; do not run --write until L1–L3 pass)",
-    ]);
-    // The lock `pod install` will write: op-sqlite gone, ExpoSQLite present.
+  test("L1 fails when a generated tree stops being ignored", () => {
     expect(
-      validateLockedNodeModulePods({
-        lock: `EXTERNAL SOURCES:
-  ExpoCamera:
-    :path: "../../../node_modules/expo-camera/ios"
-  ExpoSQLite:
-    :path: "../../../node_modules/expo-sqlite/ios"
-`,
-        resolvedPackages: ["expo-camera", "expo-sqlite"],
-        iosAutolinkedPackages: ["expo-camera", "expo-sqlite"],
+      validateGeneratedTreesUntracked({
+        trackedNativeFiles: [],
+        ignoredDirs: { "apps/mobile/ios": true, "apps/mobile/android": false },
+      })
+    ).toEqual([
+      "L1 generated tree: apps/mobile/android is not ignored by git — the next `git add .` would commit a prebuild output (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)",
+    ]);
+  });
+
+  test("L1 passes on a clean CNG tree", () => {
+    expect(
+      validateGeneratedTreesUntracked({
+        trackedNativeFiles: [],
+        ignoredDirs: IGNORED_BOTH,
       })
     ).toEqual([]);
   });
 
-  test("L1 Android shape fails when a platform directory is undeclared", () => {
+  // The live answer, on whatever tree the suite runs against: a developer's
+  // worktree (prebuilt) and CI (never prebuilt) must both say the same thing.
+  test("this repository's generated trees are untracked and ignored", () => {
+    expect(trackedGeneratedNativeFiles()).toEqual([]);
+    expect(generatedNativeDirsIgnored()).toEqual(IGNORED_BOTH);
+    expect(GENERATED_NATIVE_DIRS).toEqual([
+      "apps/mobile/ios",
+      "apps/mobile/android",
+    ]);
+  });
+
+  // A ratchet that stops reading an input does not go red, it goes QUIET: the
+  // committed hash keeps matching while the plugin it should be watching moves
+  // freely. That is the #638 hole one layer up from the file it lived in.
+  test("L2 fails when a config plugin is absent from the source list", () => {
+    const errors = validateFingerprintInputCoverage({
+      platform: "ios",
+      sources: [
+        { type: "file", filePath: "plugins/withCentraidIos.cjs" },
+        { type: "contents", id: "expoConfig" },
+        { type: "contents", id: "expoAutolinkingConfig:ios" },
+      ],
+      pluginFiles: [
+        "plugins/withCentraidAndroidBuild.cjs",
+        "plugins/withCentraidIos.cjs",
+      ],
+      moduleNativeDirs: [],
+    });
+    expect(errors).toEqual([
+      "L2 input coverage: config plugin plugins/withCentraidAndroidBuild.cjs is not in the ios fingerprint source list — the ratchet cannot notice a change to it (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)",
+    ]);
+    expect(classifyNativeStateError(errors[0])).toBe("L2");
+  });
+
+  test("L2 fails when autolinking has stopped seeing a local module", () => {
+    const errors = validateFingerprintInputCoverage({
+      platform: "android",
+      sources: [
+        { type: "contents", id: "expoConfig" },
+        { type: "contents", id: "expoAutolinkingConfig:android" },
+      ],
+      pluginFiles: [],
+      moduleNativeDirs: ["modules/centraid-upload/android"],
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("modules/centraid-upload/android");
+    expect(errors[0]).toContain("autolinking is not seeing it");
+  });
+
+  // app.config.ts never appears as a file source — Expo folds it into these two
+  // synthetic ones. Losing them is the ratchet going blind to the whole config.
+  test("L2 fails when the resolved config sources are missing", () => {
+    const errors = validateFingerprintInputCoverage({
+      platform: "ios",
+      sources: [{ type: "file", filePath: "plugins/withCentraidIos.cjs" }],
+      pluginFiles: ["plugins/withCentraidIos.cjs"],
+      moduleNativeDirs: [],
+    });
+    expect(errors.map((e) => e.split(" carries")[0])).toEqual([
+      "L2 input coverage: the ios fingerprint",
+      "L2 input coverage: the ios fingerprint",
+    ]);
+    expect(errors.some((e) => e.includes("`expoConfig`"))).toBe(true);
+    expect(errors.some((e) => e.includes("`expoAutolinkingConfig:ios`"))).toBe(
+      true
+    );
+  });
+
+  test("module native dirs are selected per platform", () => {
+    const modules = [
+      { moduleId: "centraid-upload", hasIosDir: false, hasAndroidDir: true },
+      { moduleId: "centraid-ocr", hasIosDir: true, hasAndroidDir: true },
+    ];
+    expect(moduleNativeDirsFor("ios", modules)).toEqual([
+      "modules/centraid-ocr/ios",
+    ]);
+    expect(moduleNativeDirsFor("android", modules)).toEqual([
+      "modules/centraid-ocr/android",
+      "modules/centraid-upload/android",
+    ]);
+  });
+
+  // The host-independence layer. A prebuilt worktree has ios/ and a fresh
+  // checkout does not; if either contributed content the ratchet could never
+  // settle, and no edit would fix it.
+  test("L3 fails when a prebuild output contributes to the hash", () => {
+    const errors = validateGeneratedTreesNotHashed({
+      platform: "ios",
+      sources: [
+        { filePath: "ios", hash: "deadbeef" },
+        { filePath: "plugins/withCentraidIos.cjs", hash: "cafe" },
+      ],
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("hashes ios");
+    expect(classifyNativeStateError(errors[0])).toBe("L3");
+  });
+
+  test("L3 accepts the emptied bareNativeDir source", () => {
+    expect(
+      validateGeneratedTreesNotHashed({
+        platform: "android",
+        sources: [
+          { filePath: "android", hash: null },
+          { filePath: "modules/centraid-upload/android", hash: "abc" },
+        ],
+      })
+    ).toEqual([]);
+  });
+
+  test("L2 module shape fails when a platform directory is undeclared", () => {
     const errors = validateModulePlatformShape({
       moduleId: "centraid-ocr",
       config: {
@@ -186,12 +202,12 @@ SPEC CHECKSUMS:
       hasAndroidDir: true,
     });
     expect(errors).toEqual([
-      'L1 Android/shape: module centraid-ocr has an android/ directory but expo-module.config.json platforms omit "android" (fix the native recipe first (complete Podfile.lock / module configs), then re-run verify; do not run --write until L1–L3 pass)',
+      'L2 module shape: module centraid-ocr has an android/ directory but expo-module.config.json platforms omit "android" (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)',
     ]);
-    expect(classifyNativeStateError(errors[0])).toBe("L1");
+    expect(classifyNativeStateError(errors[0])).toBe("L2");
   });
 
-  test("L1 Android shape fails when platforms list a missing config block", () => {
+  test("L2 module shape fails when platforms list a missing config block", () => {
     expect(
       validateModulePlatformShape({
         moduleId: "centraid-storage",
@@ -200,38 +216,42 @@ SPEC CHECKSUMS:
         hasAndroidDir: true,
       })
     ).toEqual([
-      'L1 Android/shape: module centraid-storage lists platform "android" but has no android config block (fix the native recipe first (complete Podfile.lock / module configs), then re-run verify; do not run --write until L1–L3 pass)',
+      'L2 module shape: module centraid-storage lists platform "android" but has no android config block (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)',
     ]);
   });
 
-  test("module↔lock delta reports present vs missing", () => {
-    const lock = `DEPENDENCIES:
-  - CentraidStorage (from \`../modules/centraid-storage/ios\`)
-
-EXTERNAL SOURCES:
-  CentraidStorage:
-    :path: "../modules/centraid-storage/ios"
-`;
-    expect(
-      moduleLockDelta({
-        localPodNames: ["CentraidOcr", "CentraidStorage"],
-        lock,
-      })
-    ).toEqual({
-      present: ["CentraidStorage"],
-      missing: ["CentraidOcr"],
-    });
+  test("L4 rejects committed iOS and Android fingerprint drift", () => {
+    const errors = validateFingerprints(
+      { ios: "committed-ios", android: "committed-android" },
+      { ios: "current-ios", android: "current-android" }
+    );
+    expect(errors).toEqual([
+      "ios native fingerprint mismatch: committed committed-ios, current current-ios; review the input diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
+      "android native fingerprint mismatch: committed committed-android, current current-android; review the input diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
+    ]);
+    const withNext = attachRemediation(errors);
+    expect(withNext.at(-1)).toContain("ci:native-state --write");
+    expect(withNext.at(-1)).toContain("L4 identity only");
   });
 
-  test("--status report distinguishes L1 recipe from L4 identity", () => {
+  test("attachRemediation refuses --write messaging when an input layer is dirty", () => {
+    const errors = attachRemediation([
+      "L1 generated tree: 1 tracked file(s) under the prebuild outputs",
+      "ios native fingerprint mismatch: committed a, current b; review",
+    ]);
+    expect(errors.at(-1)).toMatch(/fix the native inputs first/u);
+    expect(errors.at(-1)).toContain("--write");
+  });
+
+  test("--status report distinguishes the input layers from L4 identity", () => {
     const text = formatStatusReport({
       errors: [
-        "L1 recipe incomplete: local module pod CentraidOcr is missing from Podfile.lock DEPENDENCIES",
-        "ios native fingerprint mismatch: committed a, current b; review the native diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
+        "L1 generated tree: 1 tracked file(s) under the prebuild outputs",
+        "ios native fingerprint mismatch: committed a, current b; review",
       ],
-      moduleDelta: {
-        present: ["CentraidStorage"],
-        missing: ["CentraidOcr"],
+      inputInventory: {
+        pluginFiles: ["plugins/withCentraidIos.cjs"],
+        modules: ["centraid-ocr"],
       },
       fingerprints: {
         expected: { ios: "a", android: "c" },
@@ -239,26 +259,27 @@ EXTERNAL SOURCES:
       },
     });
     expect(text).toContain("L1: FAIL");
+    expect(text).toContain("L2: ok");
+    expect(text).toContain("L3: ok");
     expect(text).toContain("L4: FAIL");
-    expect(text).toContain("recipe completeness");
+    expect(text).toContain("generated-tree purity");
     expect(text).toContain("identity ratchet");
-    expect(text).toContain("missing [CentraidOcr]");
+    expect(text).toContain("plugins [plugins/withCentraidIos.cjs]");
   });
 
-  test("--write curated summary names platforms moved and module delta", () => {
+  test("--write curated summary names platforms moved and the inputs validated", () => {
     const summary = formatWriteSummary({
       previous: { ios: "old-ios", android: "old-android" },
       next: { ios: "new-ios", android: "old-android" },
-      moduleDelta: {
-        present: ["CentraidStorage", "CentraidTunnel"],
-        missing: [],
+      inputInventory: {
+        pluginFiles: ["plugins/withCentraidIos.cjs"],
+        modules: ["centraid-storage", "centraid-tunnel"],
       },
       platformsMoved: ["ios"],
     });
     expect(summary).toContain("platforms moved: ios");
     expect(summary).toContain("old-ios → new-ios");
-    expect(summary).toContain("CentraidStorage");
-    expect(summary).toContain("missing [none]");
+    expect(summary).toContain("centraid-storage");
   });
 
   test("parseNativeStateArgs accepts --status and --write", () => {
@@ -269,36 +290,34 @@ EXTERNAL SOURCES:
     expect(() => parseNativeStateArgs(["--bogus"])).toThrow(/unknown flag/u);
   });
 
-  test("attachRemediation refuses --write messaging when L1 is dirty", () => {
-    const errors = attachRemediation([
-      "L1 recipe incomplete: local module pod CentraidOcr is missing from Podfile.lock DEPENDENCIES",
-      "ios native fingerprint mismatch: committed a, current b; review",
-    ]);
-    expect(errors.at(-1)).toMatch(/fix the native recipe first/u);
-    expect(errors.at(-1)).toContain("--write");
-  });
-
-  test("fingerprint options deafen package.json scripts (#646)", () => {
+  test("fingerprint options ignore the prebuild outputs and deafen scripts", () => {
     expect(NATIVE_FINGERPRINT_SOURCE_SKIPS).toBe(
       SourceSkips.PackageJsonScriptsAll
     );
+    expect(NATIVE_FINGERPRINT_IGNORE_PATHS).toContain("ios/**");
+    expect(NATIVE_FINGERPRINT_IGNORE_PATHS).toContain("android/**");
     const opts = nativeFingerprintOptions("ios");
     expect(opts.sourceSkips).toBe(SourceSkips.PackageJsonScriptsAll);
     expect(opts.ignorePaths).toEqual(NATIVE_FINGERPRINT_IGNORE_PATHS);
   });
 
-  test("shipped fingerprint options omit packageJson:scripts source on both platforms", async () => {
+  test("shipped fingerprint options omit packageJson:scripts and never hash a prebuild output", async () => {
     // Drives createFingerprintAsync with the real options object from
-    // native-fingerprint.mjs — proves PackageJsonScriptsAll is wired, not just
-    // declared. Without the skip, Bare.js would emit id packageJson:scripts.
+    // native-fingerprint.mjs — proves both properties are wired, not declared.
+    // The L3 half is asserted on the real source list rather than on the ignore
+    // array, so it holds whether or not this machine has prebuilt.
     const { createFingerprintAsync } = await import("@expo/fingerprint");
     const mobileRoot = path.resolve(import.meta.dirname, "..");
     const fingerprints = await Promise.all(
-      ["ios", "android"].map((platform) =>
-        createFingerprintAsync(mobileRoot, nativeFingerprintOptions(platform))
-      )
+      ["ios", "android"].map(async (platform) => ({
+        platform,
+        fp: await createFingerprintAsync(
+          mobileRoot,
+          nativeFingerprintOptions(platform)
+        ),
+      }))
     );
-    for (const fp of fingerprints) {
+    for (const { platform, fp } of fingerprints) {
       expect(fp.hash).toMatch(/^[a-f0-9]{40}$/u);
       const scriptSources = fp.sources.filter(
         (s) =>
@@ -307,6 +326,9 @@ EXTERNAL SOURCES:
             s.reasons.includes("packageJson:scripts"))
       );
       expect(scriptSources).toEqual([]);
+      expect(
+        validateGeneratedTreesNotHashed({ platform, sources: fp.sources })
+      ).toEqual([]);
     }
   }, 300_000);
 
@@ -338,39 +360,6 @@ EXTERNAL SOURCES:
       await writeFile(pkgPath, original, "utf8");
     }
   }, 600_000);
-
-  test("write refuses when L1–L3 dirty — unit path via recipe validators", async () => {
-    // Simulate the --write gate: recipe errors present ⇒ no fingerprint write.
-    // Uses a temp fingerprints file to prove we never touch it on L1 failure.
-    const dir = await tempDir("native-state-");
-    const fpPath = path.join(dir, "native-fingerprints.json");
-    const before = { ios: "keep-me", android: "keep-me-too" };
-    await writeFile(fpPath, JSON.stringify(before), "utf8");
-    const incompleteLock = `DEPENDENCIES:
-  - CentraidStorage (from \`../modules/centraid-storage/ios\`)
-
-EXTERNAL SOURCES:
-  CentraidStorage:
-    :path: "../modules/centraid-storage/ios"
-`;
-    const recipeErrors = validateIosModuleLockCompleteness({
-      localPodNames: ["CentraidNetworkStatus", "CentraidStorage"],
-      lock: incompleteLock,
-    });
-    expect(recipeErrors.length).toBeGreaterThan(0);
-    // The CLI path returns early before writeFile when recipeErrors.length > 0.
-    if (recipeErrors.length === 0) {
-      await writeFile(fpPath, JSON.stringify({ ios: "mutated" }), "utf8");
-    }
-    const after = JSON.parse(await readFile(fpPath, "utf8"));
-    expect(after).toEqual(before);
-  });
-
-  test("ignores Xcode's uncommitted nested workspace metadata", () => {
-    expect(NATIVE_FINGERPRINT_IGNORE_PATHS).toContain(
-      "ios/Centraid.xcodeproj/project.xcworkspace/**/*"
-    );
-  });
 
   test("parses and compares the React Native Xcode contract", () => {
     expect(

@@ -60,7 +60,7 @@ import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 import { createCustody } from "./custody-store.ts";
 import { $ } from "./dom.ts";
 import { createDuplicates } from "./duplicates.tsx";
-import { createEnrichmentGate } from "./enrichment-gate.ts";
+import { createPeopleEmptyState } from "./enrichment-gate.ts";
 import { filterByKind, scopeIsOn, writeScopeFor } from "./filters.ts";
 import type { KindFilter } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
@@ -830,17 +830,17 @@ export function Root({
         void people.ensureLoaded();
         const roster = people.list();
         const proposalRoster = people.proposalList() ?? [];
-        // Gate = empty body only while there is nothing to browse (#712).
+        // The shelf's own empty state replaces the body only while there is
+        // nothing to browse (#712).
         const rosterEmpty =
           roster !== null && roster.length === 0 && proposalRoster.length === 0;
-        if (rosterEmpty) enrichGate.ensurePolicyLoaded();
-        const gateProps = rosterEmpty
-          ? enrichGate.props(ownAssets.length)
+        if (rosterEmpty) peopleEmpty.ensurePolicyLoaded();
+        const emptyProps = rosterEmpty
+          ? peopleEmpty.props(ownAssets.length)
           : null;
-        // An unanswered roster is not an empty one; suppress the generic empty
-        // block while the gate shows.
+        // The shelf says it better than the generic block; suppress that one.
         applyEmptyState(
-          gateProps
+          emptyProps
             ? NO_EMPTY_STATE
             : emptyFor(roster?.length ?? 0, { suppressed: roster === null })
         );
@@ -864,7 +864,7 @@ export function Root({
                 faceReviewFocusRegionId = regionId;
                 renderMain();
               }}
-              {...(gateProps ? { gate: gateProps } : {})}
+              {...(emptyProps ? { emptyState: emptyProps } : {})}
             />
           )
         );
@@ -1257,8 +1257,8 @@ export function Root({
       },
     });
 
-    // Consent gate lives in the People shelf's empty state (#712).
-    const enrichGate = createEnrichmentGate({
+    // The People shelf's empty state, and its priority action (#712).
+    const peopleEmpty = createPeopleEmptyState({
       onData: () => {
         if (disposed) return;
         renderMain();

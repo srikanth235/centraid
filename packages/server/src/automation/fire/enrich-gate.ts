@@ -43,8 +43,15 @@ export interface EnrichGateInput {
   readonly domain: EnrichDomain;
   readonly capability: string;
   readonly lane: EnrichLane;
-  /** undefined is a REFUSAL, never a default. */
+  /** undefined is a REFUSAL, never a default — except for a system automation,
+   *  where an unwritten policy is not an answer to anything. */
   readonly tier: EnrichTier | undefined;
+  /** First-party provenance (`SYSTEM_AUTOMATION_IDS`). Consent is required for
+   *  EGRESS only: on-device work over the member's own bytes needs none, so a
+   *  missing tier and a device tier both run the deterministic engine with
+   *  model turns sealed instead of refusing the fire. An explicit `off` is
+   *  still an answer, and is still honoured. */
+  readonly system?: boolean;
   readonly policy?: ResolvedEnrichPolicy;
   readonly profileEgress?: EnrichEgressClass | undefined;
   /** LOOKUP NOT GRANT; wiring nothing fails closed; null = never asked. */
@@ -68,7 +75,14 @@ export function decideEnrichmentGate(
   input: EnrichGateInput
 ): EnrichGateDecision {
   const who = `${input.automationRef} (enrichment "${input.capability}", domain "${input.domain}")`;
-  if (input.tier === undefined) {
+  const system = input.system === true;
+  // A system automation with no readable vault tier is NOT refused: first-party
+  // on-device work over the member's own bytes needs no consent, and an
+  // unwritten policy is not an answer to anything. Read as `device` so every
+  // remaining check — the capability switch, the profile, the egress ceiling —
+  // still runs exactly as it does for any other automation.
+  const tier = input.tier === undefined && system ? "device" : input.tier;
+  if (tier === undefined) {
     return {
       allowed: false,
       reason:
@@ -78,7 +92,7 @@ export function decideEnrichmentGate(
   }
   // Before the rank check so the refusal names the switch, not a tier.
   const policy = input.policy;
-  if (policy && !policy.enabled && input.tier !== "off") {
+  if (policy && !policy.enabled && tier !== "off") {
     return {
       allowed: false,
       reason:
@@ -86,8 +100,14 @@ export function decideEnrichmentGate(
         `at the scope that decides it.`,
     };
   }
-  if (RANK[input.lane] > RANK[input.tier]) {
-    if (input.tier === "off") {
+  if (RANK[input.lane] > RANK[tier]) {
+    // `off` is the member's own answer and refuses every tier, system included.
+    // Below it, a system automation is not refused for wanting the gateway
+    // lane: it runs with model turns sealed, which is the on-device half of
+    // its work — the half that needed no consent in the first place.
+    if (system && tier !== "off")
+      return { allowed: true, sealModelTurns: true };
+    if (tier === "off") {
       return {
         allowed: false,
         reason: `${who} refused: enrichment is switched off for "${input.domain}" in this vault's privacy settings.`,
@@ -96,14 +116,13 @@ export function decideEnrichmentGate(
     return {
       allowed: false,
       reason:
-        `${who} refused: enrichment for "${input.domain}" is set to "${input.tier}", and this enricher needs the ` +
+        `${who} refused: enrichment for "${input.domain}" is set to "${tier}", and this enricher needs the ` +
         `"${input.lane}" lane — a model turn through the harness registry, which every harness in this runtime ` +
         `routes to a third-party provider, so the run would leave this member's trust domain. Set the tier to ` +
         `"gateway" to allow that, or use the device lane.`,
     };
   }
-  if (!policy)
-    return { allowed: true, sealModelTurns: input.tier !== "gateway" };
+  if (!policy) return { allowed: true, sealModelTurns: tier !== "gateway" };
 
   // Deeper levels pick engines only within the vault ceiling.
   const egress = input.profileEgress;
