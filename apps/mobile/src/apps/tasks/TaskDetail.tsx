@@ -206,6 +206,7 @@ export default function TaskDetail({
           onAnchor={(anchor) =>
             act("organize-task", anchorWrite(task, anchor, timeZone))
           }
+          onEdit={(input) => act("edit", input)}
           onPriority={(priority) =>
             act("edit", { task_id: task.task_id, priority })
           }

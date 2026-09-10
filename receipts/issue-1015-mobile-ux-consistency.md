@@ -77,3 +77,23 @@ Files:
 - `apps/mobile/src/apps/agenda/AgendaHome.tsx` — the frame is the `TopSafeArea`; the body is a plain view.
 - `apps/mobile/src/apps/agenda/AgendaCreateModal.tsx`, `AgendaEventEditor.tsx` — both pickers read `guestOptions`.
 - `apps/mobile/src/apps/agenda/AgendaHome.test.tsx` — a claim that the frame, not a wrapper below the bar, owns the top inset.
+
+### Lane APPS-A — slice 3: a task can be dated, timed, reminded and repeated (B4)
+
+Closes audit `tasks/findings.md#2`, a blocker.
+
+The detail place drew **When**, **Time**, **Reminder** and **Repeats** as field rows with a value and up to two explanatory notes, and `FieldControl` fell through to `null` for every one of them — a `REMINDER —` row followed by two sentences about how reminders are delivered on your phone, over a field that could not carry one. The only ways to date a task on this seat were the quick-add chip row at creation and the "Move all to today" bulk verb: no reschedule, no snooze, no clear-the-date, no picker of any kind. The `edit` action accepted all four the whole time (`due_at`/`clear_due`, `remind_before_min`/`clear_remind`, `rrule`/`clear_rrule`); only the seat was missing.
+
+The four rows now carry controls: When and Time open the native picker (DESIGN.md — `DateTimeField` uses the native picker on mobile), each with a clear verb beside it, because a date a member cannot remove is half a control; Reminder and Repeats are chip rows over the seat's shortcut sets. `missed` stays read-only display, as the audit asks.
+
+A due stamp is written as **local wall clock**, never UTC: `timeOfDay` reads `value.slice(11, 16)`, so a `toISOString()` round trip would move the clock and, near midnight, the civil day. Moving the day KEEPS the time — a Friday 09:00 task rescheduled to Monday is still due at 09:00 — and setting a time on an undated task dates it today rather than refusing in silence.
+
+Files:
+
+- `apps/mobile/src/apps/tasks/task-when-write.ts` (new) — `whenWrite`, `timeWrite`, `reminderWrite`, `repeatWrite`, and the local-wall-clock helpers.
+- `apps/mobile/src/apps/tasks/task-when-write.test.ts` (new) — the mapping, the wall-clock rule, the keep-the-time rule and the clear paths.
+- `apps/mobile/src/apps/tasks/TaskDetailFields.tsx` — `DateField`, the four controls, and `onEdit` on the acts interface.
+- `apps/mobile/src/apps/tasks/TaskDetail.tsx` — `onEdit` wired to the `edit` action.
+- `apps/mobile/src/apps/tasks/tasks-seat-copy.ts` — the pick/clear verbs, `REMINDER_LEADS`, `REPEAT_RULES`.
+
+**Gap reported, not stubbed**: the shared `taskFields` projection only emits a `repeats` row when the task already carries a `recurrence_summary`, so a non-repeating task still has no door to a first rule. Changing that projection changes every seat, so the root is asked whether it belongs in this umbrella.
