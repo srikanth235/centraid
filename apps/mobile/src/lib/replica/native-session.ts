@@ -94,6 +94,8 @@ const MAX_INTENT_RETRY_DELAY_MS = 5 * 60_000;
 
 export class NativeReplicaSession implements MobileReplicaSession {
   readonly #gatewayAuth: GatewayAuth;
+  /** #1014 C7: a later read of the mutable id could unprotect another vault. */
+  readonly #vaultId: string;
   readonly #fetcher: ReplicaFetcher;
   readonly #feed: NativeChangeFeed;
   readonly #seat: NativeSeatPort;
@@ -137,6 +139,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
     }
   ) {
     this.#gatewayAuth = options.gatewayAuth;
+    if (!options.gatewayAuth.vaultId)
+      throw new ReplicaProtocolError("An addressed vault is required");
+    this.#vaultId = options.gatewayAuth.vaultId;
     this.#fetcher = options.fetcher;
     this.#feed = options.changeFeed;
     this.#seat = options.seat;
@@ -436,8 +441,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
    * and carries the outbox and the pins across (R23).
    */
   requireBootstrap(detail?: unknown): void {
-    if (detail !== undefined)
-      noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
+    if (detail !== undefined) noteResyncVerdict(detail, this.#vaultId);
     if (this.#closed) return;
     // Set BEFORE the refetch is scheduled: the window this closes is the one
     // between deciding to replace the copy and starting to.
@@ -456,7 +460,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#admission.rejectAll(
       new ReplicaProtocolError("Replica session closed")
     );
-    forgetPendingContentRefs();
+    forgetPendingContentRefs(this.#vaultId);
     this.#queue.close();
     await this.#seat.close();
   }
@@ -471,7 +475,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     );
     this.#bus.emit(seatPurgeInvalidation());
     this.#bus.clear();
-    forgetPendingContentRefs();
+    forgetPendingContentRefs(this.#vaultId);
     await this.#seat.purge();
   }
 
@@ -584,10 +588,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
    */
   private async publishProtectedContent(): Promise<void> {
     try {
-      publishPendingContentRefs(await this.#queue.pending());
+      publishPendingContentRefs(this.#vaultId, await this.#queue.pending());
     } catch {
-      // A store that cannot be read protects nothing NEW; the previous answer
-      // stands, which over-keeps rather than over-evicts.
+      // Unreadable store: the previous answer stands, over-keeping.
     }
   }
 
@@ -601,9 +604,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
 export async function createNativeReplicaSession(
   options: CreateNativeReplicaSessionOptions
 ): Promise<NativeReplicaSession> {
-  if (!options.gatewayAuth.vaultId) {
-    throw new ReplicaProtocolError("An addressed vault is required");
-  }
   // Loaded only when the caller supplies neither, so `node:test` runs (which
   // inject both) never resolve expo-crypto's native module.
   let digest = options.digest;

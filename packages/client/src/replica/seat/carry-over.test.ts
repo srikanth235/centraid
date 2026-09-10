@@ -15,7 +15,7 @@ import {
   readSeatCarryOver,
   seatCarryOverApplied,
   serializeSeatCarryOver,
-  shasPendingIntentsNeed,
+  contentPendingIntentsNeed,
   writeSeatCarryOver,
 } from "./carry-over.js";
 import { openSeatFile } from "./driver.js";
@@ -157,7 +157,42 @@ describe("what survives a re-bootstrap", () => {
     core.close();
   });
 
-  it("names the hashes no eviction may touch, and forgets them once settled", () => {
+  it("populates what an intent needs from the real write path", async () => {
+    const driver = new NodeSeatDriver();
+    openSeatFile(driver);
+    const store = SeatIntentStore.create(driver);
+    // THE REAL PATH (#1014, C6). `SeatIntentStore.#bind` bound a literal
+    // `null` here, so this answered `[]` on every seat that ever ran and
+    // R25's "an intent's bytes may not be evicted" had no data behind it.
+    await store.add({
+      intentId: "i-1",
+      payloadHash: "h1",
+      appId: "photos",
+      action: "photos.attach",
+      input: { content_id: "sha-capture", album_id: "album-1" },
+      state: "queued",
+      attempts: 0,
+      optimistic: [],
+    });
+    expect(
+      contentPendingIntentsNeed({ outbox: readSeatOutbox(driver) }).sort()
+    ).toStrictEqual(["album-1", "sha-capture"]);
+
+    // A revision moves what is needed with it.
+    await store.transition("i-1", ["queued"], {
+      input: { content_id: "sha-recaptured", album_id: "album-1" },
+    });
+    expect(
+      contentPendingIntentsNeed({ outbox: readSeatOutbox(driver) }).sort()
+    ).toStrictEqual(["album-1", "sha-recaptured"]);
+
+    // And it survives the swap the rest of this file is about.
+    const carried = readSeatCarryOver(driver);
+    expect(carried.outbox[0]?.needsBlobs).toContain("sha-recaptured");
+    driver.close();
+  });
+
+  it("names the content no eviction may touch, and forgets it once settled", () => {
     const driver = new NodeSeatDriver();
     openSeatFile(driver);
     createSeatOutbox(driver);
@@ -179,7 +214,7 @@ describe("what survives a re-bootstrap", () => {
       state: "executed",
     });
     expect(
-      shasPendingIntentsNeed({ outbox: readSeatOutbox(driver) }).sort()
+      contentPendingIntentsNeed({ outbox: readSeatOutbox(driver) }).sort()
     ).toStrictEqual(["sha-a"]);
     driver.close();
   });

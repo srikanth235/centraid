@@ -173,8 +173,16 @@ export function writeSeatCarryOver(
   }
 }
 
-/** Hashes no eviction and no purge may touch: a pending intent needs them. */
-export function shasPendingIntentsNeed(
+/**
+ * Content no eviction and no purge may touch: a pending intent needs it.
+ *
+ * NAMED FOR WHAT IT ACTUALLY HOLDS (#1014, C6). It was `shasPendingIntentsNeed`
+ * and it answered `[]` on every seat that ever ran, because the column behind
+ * it was bound to a literal `null` by the only write path. The values are the
+ * content references the intent's input names (`namedRowIds`), which is what
+ * both the phone's byte store and the seat's own sweeps address content by.
+ */
+export function contentPendingIntentsNeed(
   carried: Pick<SeatCarryOver, "outbox">
 ): string[] {
   const held = new Set<string>();

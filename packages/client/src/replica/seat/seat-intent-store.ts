@@ -26,9 +26,16 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "../intent-record-store.js";
+import { namedRowIds } from "../intent-revision.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "../types.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { createSeatOutbox } from "./outbox.js";
+
+/** The content this intent names, as the column stores it. */
+function needsContentJson(record: ReplicaIntent): string | null {
+  const named = namedRowIds(record.input ?? null);
+  return named.length > 0 ? JSON.stringify([...new Set(named)]) : null;
+}
 
 /** Journal cap: `listSettled` cannot read past it. Same bound as its siblings. */
 export const SETTLED_JOURNAL_LIMIT = 5_000;
@@ -280,7 +287,8 @@ export class SeatIntentStore implements IntentRecordStore {
     this.driver.run(
       `UPDATE seat_outbox SET state = ?, attempts = ?, depends_on_json = ?,
               base_versions_json = ?, optimistic_json = ?, commit_seq = ?,
-              waiting_on_json = ?, updated_at = ?, record_json = ?
+              waiting_on_json = ?, needs_blobs_json = ?, updated_at = ?,
+              record_json = ?
         WHERE intent_id = ?`,
       [
         record.state,
@@ -292,6 +300,9 @@ export class SeatIntentStore implements IntentRecordStore {
         record.optimistic.length > 0 ? JSON.stringify(record.optimistic) : null,
         record.commitSeq ?? null,
         record.waitingOn ? JSON.stringify(record.waitingOn) : null,
+        // A REVISION CHANGES WHAT IS NEEDED. A queued write the member edits
+        // again is replaced in place, and its content references move with it.
+        needsContentJson(record),
         new Date().toISOString(),
         json,
         record.intentId,
@@ -317,7 +328,14 @@ export class SeatIntentStore implements IntentRecordStore {
       record.optimistic.length > 0 ? JSON.stringify(record.optimistic) : null,
       record.commitSeq ?? null,
       record.waitingOn ? JSON.stringify(record.waitingOn) : null,
-      null,
+      // WHAT THIS INTENT STILL NEEDS ON THIS DEVICE (#1014, C6). It used to
+      // be a literal `null` here, so `contentPendingIntentsNeed()` answered
+      // `[]` for every seat that ever existed and R25's "an intent's bytes may
+      // not be evicted" had no data behind it at all. The reading is
+      // `namedRowIds` — the SAME one the chain derives its edges from and the
+      // phone's byte protection publishes — so the durable column and the live
+      // answer cannot disagree.
+      needsContentJson(record),
       record.enqueuedAt ?? now,
       now,
       json,
