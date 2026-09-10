@@ -67,6 +67,7 @@ export * from "./seat/in-process-channel.js";
 export * from "./seat/outbox.js";
 export * from "./seat/seat-bootstrap-no-room-error.js";
 export * from "./seat/seat-drift-error.js";
+export * from "./seat/seat-drift-parked-error.js";
 export * from "./seat/seat-intent-store.js";
 export * from "./seat/seat-loop.js";
 export * from "./seat/seat-page-reader.js";

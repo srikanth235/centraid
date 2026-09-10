@@ -386,9 +386,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
    * seat came back level — `SeatSyncLoop` answers with the watermark it
    * reached, and `undefined` for the outage it swallowed.
    *
-   * OUT OF ROOM PARKS IT rather than retrying (docs/mobile-offline.md): every
-   * attempt would fail the same way a second later, and nothing is wiped —
-   * replica rows and pending intents are exactly what must survive it.
+   * OUT OF ROOM PARKS IT rather than retrying (docs/mobile-offline.md), and so
+   * does a drift no re-bootstrap resolves; nothing is wiped. Both were
+   * unreachable until #1014 (C13/C14): `SeatSyncLoop` swallowed them.
    */
   private async catchUp(): Promise<boolean> {
     // NOT WHILE THE MOUNT BELIEVES IT IS OFFLINE (#905). `start()` fires this

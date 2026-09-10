@@ -8,6 +8,13 @@
  */
 export class SeatBootstrapNoRoomError extends Error {
   readonly code = "seat_bootstrap_no_room";
+  /**
+   * Terminal for the catch-up loop (#1014, C13). Every retry fails the same
+   * way a second later, and `SeatSyncLoop` swallowing it made the phone's
+   * "out of room" park unreachable code — the documented behaviour that did
+   * not happen, while a doomed multi-MB download ran again and again.
+   */
+  readonly recovery = "park" as const;
   constructor(
     readonly required: number,
     readonly free: number

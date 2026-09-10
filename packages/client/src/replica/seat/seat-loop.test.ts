@@ -8,7 +8,8 @@ import { inProcessSeatChannel } from "./in-process-channel.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
 import { seatArtifact } from "./seat-artifact.test-fixtures.js";
-import { SeatLoop } from "./seat-loop.js";
+import { SeatDriftParkedError } from "./seat-drift-parked-error.js";
+import { parseSeatLogPage, SeatLoop } from "./seat-loop.js";
 import { SeatWorkerCore } from "./worker-core.js";
 
 /**
@@ -201,5 +202,133 @@ describe("the seat loop with no worker in it", () => {
     await expect(
       inProcessSeatChannel(core).query({ sql: "SELECT 1" })
     ).rejects.toThrow(/has not been opened/u);
+  });
+  // #1014, C15. `return body as unknown as SeatLogPageWire` — a cast, on JSON
+  // off the wire, straight into a transaction that writes the member's file
+  // and moves the cursor with it.
+  describe("a page the door should not have served", () => {
+    it.each([
+      ["carries no rows array", { rows: undefined }],
+      ["a watermark that is a string", { watermark: "11" }],
+      ["a negative seq on a row", { negativeSeq: true }],
+      ["an op this seat cannot read", { op: "upsert" }],
+      ["no vault id", { vaultId: undefined }],
+    ])("is refused rather than applied: %s", (_name, mutation) => {
+      const shape = mutation as Record<string, unknown>;
+      const page: Record<string, unknown> = {
+        vaultId: "vault-1",
+        epoch: "e1",
+        schemaEpoch: 2,
+        ddlVersion: 0,
+        floor: 0,
+        watermark: 11,
+        next: 11,
+        hasMore: false,
+        rows: [
+          {
+            seq: shape["negativeSeq"] === true ? -1 : 11,
+            commitSeq: 4,
+            schemaEpoch: 2,
+            ddlVersion: 0,
+            table: "note",
+            op: shape["op"] ?? "insert",
+            pk: ["n1"],
+            producer: "gateway",
+            committedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      };
+      if ("rows" in shape) page["rows"] = shape["rows"];
+      if ("watermark" in shape) page["watermark"] = shape["watermark"];
+      if ("vaultId" in shape) page["vaultId"] = shape["vaultId"];
+      expect(() => parseSeatLogPage(page)).toThrow(/seat log page/u);
+    });
+
+    it("takes the page the gateway actually serves", () => {
+      expect(
+        parseSeatLogPage({
+          vaultId: "vault-1",
+          epoch: "e1",
+          schemaEpoch: 2,
+          ddlVersion: 0,
+          floor: 0,
+          watermark: 11,
+          next: 11,
+          hasMore: false,
+          rows: [],
+        })
+      ).toMatchObject({ watermark: 11 });
+    });
+  });
+
+  // #1014, C14. A drift the gateway cannot resolve was one full artifact
+  // download every retry interval, forever, with no user-visible cause: R25
+  // measured ~6 s and 560 lines of gateway log.
+  it("parks after three drift re-bootstraps in a row instead of a fourth", async () => {
+    const root = tempDirSync("seat-loop-drift-");
+    const artifact = seatArtifact(root);
+    let asked = 0;
+    // Every page names another vault, so every apply refuses as drift and the
+    // re-bootstrap that follows cannot help.
+    const call = (input: RequestInfo | URL): Promise<Response> => {
+      asked += 1;
+      const since = Number(new URL(String(input)).searchParams.get("since"));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            vaultId: "someone-elses-vault",
+            epoch: "e1",
+            schemaEpoch: 2,
+            ddlVersion: 0,
+            floor: 0,
+            watermark: since + 1,
+            next: since + 1,
+            hasMore: false,
+            rows: [
+              {
+                seq: since + 1,
+                commitSeq: since + 1,
+                schemaEpoch: 2,
+                ddlVersion: 0,
+                table: "note",
+                op: "insert",
+                pk: ["n1"],
+                row: { note_id: "n1", title: "not this vault" },
+                producer: "gateway",
+                committedAt: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    };
+    const loop = loopOver(
+      root,
+      call as unknown as typeof globalThis.fetch,
+      () => artifact
+    );
+    await loop.open();
+
+    let parked: unknown;
+    for (
+      let attempt = 0;
+      attempt < 6 && !(parked instanceof SeatDriftParkedError);
+      attempt += 1
+    ) {
+      // The host's retry timer without the timer: each pass is one `sync()`.
+      // oxlint-disable-next-line no-await-in-loop
+      parked = await loop.sync().then(
+        () => undefined,
+        (error: unknown) => error
+      );
+    }
+    expect(parked).toBeInstanceOf(SeatDriftParkedError);
+    expect((parked as SeatDriftParkedError).drift.reason).toBe("vault");
+    // Bounded: three drift re-bootstraps, not one per retry until the phone
+    // is out of battery.
+    expect(asked).toBeLessThanOrEqual(4);
+    // And it stays parked: another pass does not start the count over.
+    await expect(loop.sync()).rejects.toBeInstanceOf(SeatDriftParkedError);
   });
 });

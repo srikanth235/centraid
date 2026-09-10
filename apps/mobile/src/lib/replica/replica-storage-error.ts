@@ -23,7 +23,14 @@ export class ReplicaStorageFullError extends Error {
   }
 }
 
-/** op-sqlite varies by platform: match its code, SQLite errcode, and message. */
+/**
+ * op-sqlite varies by platform: match its code, SQLite errcode, and message.
+ *
+ * AND THE SEAT'S OWN ROOM CHECK (#1014, C13). `SeatBootstrapNoRoomError` is
+ * thrown BEFORE the download rather than by SQLite during it, but it is the
+ * same fact about the same phone and it wants the same park; treating it as a
+ * separate class left the door open to handling one and forgetting the other.
+ */
 export function isReplicaStorageFullError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as {
@@ -32,6 +39,7 @@ export function isReplicaStorageFullError(error: unknown): boolean {
     message?: unknown;
   };
   return (
+    candidate.code === "seat_bootstrap_no_room" ||
     candidate.code === "SQLITE_FULL" ||
     candidate.code === "ENOSPC" ||
     candidate.errcode === 13 ||

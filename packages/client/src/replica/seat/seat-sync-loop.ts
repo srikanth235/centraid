@@ -14,6 +14,7 @@
 // coalescing has, for the same reason, and it is here rather than in each host
 // because a host that got it wrong would look correct.
 
+import { isSeatTerminalError } from "./seat-drift-parked-error.js";
 import type { SeatWatermark } from "./watermark.js";
 
 export interface SeatSyncTarget {
@@ -49,27 +50,40 @@ export class SeatSyncLoop {
   /**
    * Catch up, or join the catch-up already running.
    *
-   * Never rejects: a seat that could not reach the gateway is a seat with a
-   * slightly older copy, which is the normal state of the thing and not an
-   * error a screen can act on.
+   * Rejects for exactly two failures and swallows every other one. An outage
+   * is not an error a screen can act on — a seat that could not reach the
+   * gateway is a seat with a slightly older copy, which is the normal state of
+   * the thing. Out of room and a parked drift ARE (#1014, C13, C14): both fail
+   * identically on every retry, and the host has a state to show for each.
+   * Swallowing them made the phone's storage-full park unreachable code
+   * (`native-session.ts`) and left the drift re-bootstrap loop unbounded.
    */
   sync(): Promise<SeatWatermark | undefined> {
     if (this.#running) {
       this.#again = true;
       return this.#running;
     }
-    this.#running = this.seat
-      .sync()
-      .catch((error: unknown) => {
-        this.options.onError?.(error);
-        return undefined;
-      })
+    let terminal = false;
+    const run = this.seat.sync().catch((error: unknown) => {
+      this.options.onError?.(error);
+      if (!isSeatTerminalError(error)) return undefined;
+      terminal = true;
+      throw error;
+    });
+    this.#running = run;
+    void run
       .finally(() => {
         this.#running = undefined;
-        if (!this.#again) return;
+        const again = this.#again;
         this.#again = false;
-        void this.sync();
-      });
-    return this.#running;
+        // A PARKED SEAT GETS NO FOLLOW-UP PASS (#1014, C13, C14). The absorbed
+        // callers behind this one would each be one more doomed attempt, which
+        // is the loop the park exists to end.
+        if (again && !terminal) void this.sync().catch(() => undefined);
+      })
+      // The rejection is the CALLER's to handle; this arm exists only so the
+      // bookkeeping above is not itself an unhandled rejection.
+      .catch(() => undefined);
+    return run;
   }
 }
