@@ -24,6 +24,7 @@
 // corrupted projection still invalidates the memo and is repaired (#792).
 import type { DatabaseSync } from "node:sqlite";
 
+import { withReplicaCommit } from "../gateway/replica-commit.js";
 import { nowIso } from "../ids.js";
 import { UnionFind } from "./clusters.js";
 import type {
@@ -358,39 +359,42 @@ export function rebuildMemories(
     return projection.result;
   }
 
-  vault.exec("BEGIN IMMEDIATE");
-  try {
-    vault.exec("DELETE FROM media_memory_member");
-    vault.exec("DELETE FROM media_memory");
-    const insertMemory = vault.prepare(
-      `INSERT INTO media_memory
-         (memory_id, kind, title_hint, day_key, place_id, started_at, ended_at, computed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    const insertMember = vault.prepare(
-      `INSERT INTO media_memory_member (memory_id, asset_id, ordinal)
-       VALUES (?, ?, ?)`
-    );
-    for (const draft of drafts) {
-      insertMemory.run(
-        draft.memoryId,
-        draft.kind,
-        draft.titleHint,
-        draft.dayKey,
-        draft.placeId,
-        draft.startedAt,
-        draft.endedAt,
-        now
+  // BRACKETED (#1014, G5): `media_memory` and `media_memory_member` replicate,
+  // and the sweep rebuilt them in a bare transaction — outside the commit pair,
+  // so a rebuilt projection never reached a seat.
+  withReplicaCommit(
+    vault,
+    () => {
+      vault.exec("DELETE FROM media_memory_member");
+      vault.exec("DELETE FROM media_memory");
+      const insertMemory = vault.prepare(
+        `INSERT INTO media_memory
+           (memory_id, kind, title_hint, day_key, place_id, started_at, ended_at, computed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       );
-      draft.members.forEach((assetId, ordinal) => {
-        insertMember.run(draft.memoryId, assetId, ordinal);
-      });
-    }
-    vault.exec("COMMIT");
-    projection.remember();
-    return projection.result;
-  } catch (error) {
-    vault.exec("ROLLBACK");
-    throw error;
-  }
+      const insertMember = vault.prepare(
+        `INSERT INTO media_memory_member (memory_id, asset_id, ordinal)
+         VALUES (?, ?, ?)`
+      );
+      for (const draft of drafts) {
+        insertMemory.run(
+          draft.memoryId,
+          draft.kind,
+          draft.titleHint,
+          draft.dayKey,
+          draft.placeId,
+          draft.startedAt,
+          draft.endedAt,
+          now
+        );
+        draft.members.forEach((assetId, ordinal) => {
+          insertMember.run(draft.memoryId, assetId, ordinal);
+        });
+      }
+    },
+    { producer: "sweep" }
+  );
+  // Only after the write settles: the memo stands for a COMMITTED pass.
+  projection.remember();
+  return projection.result;
 }

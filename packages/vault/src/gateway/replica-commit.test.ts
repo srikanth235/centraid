@@ -195,6 +195,24 @@ describe("bracketReplicaWrites (a by-path connection brackets its own writes)", 
     }
   });
 
+  test("a savepoint rollback keeps the pair and drops only the undone row", () => {
+    const db = openVaultDb();
+    try {
+      bracketReplicaWrites(db.vault, { producer: "worker" });
+      db.vault.exec("BEGIN IMMEDIATE");
+      insertScheme(db.vault, "kept");
+      db.vault.exec("SAVEPOINT sp");
+      insertScheme(db.vault, "undone");
+      db.vault.exec("ROLLBACK TO sp");
+      db.vault.exec("RELEASE sp");
+      db.vault.exec("COMMIT");
+      const rows = loggedRows(db.vault, "core_concept_scheme");
+      expect(rows.map((row) => row.primaryKey[0])).toStrictEqual(["kept"]);
+    } finally {
+      db.vault.close();
+    }
+  });
+
   test("it is idempotent per connection", () => {
     const db = openVaultDb();
     try {

@@ -44,6 +44,7 @@ import {
 } from "./evidence.js";
 import { validateJson } from "./json-schema.js";
 import { stampLockerKeyOnWrite } from "./locker-key-plane.js";
+import { withReplicaCommit } from "./replica-commit.js";
 import {
   closeRevisionCapture,
   drainRevisionCapture,
@@ -642,36 +643,48 @@ export function runContractAndExecute(
     if (failedPost) {
       rollbackInvocationTransaction(db.vault, vaultTransaction);
       closeRevisionCapture(db.vault);
-      for (const r of postResults)
-        writeCheck(
-          db.audit,
-          invocationId,
-          "post",
-          r.predicate,
-          r.passed,
-          r.observed
-        );
-      setInvocationStatus(db, invocationId, "rolled_back");
       // Same split as the precondition path: friendly for the app, raw in the
       // receipt detail.
       const friendly = failedPost.message ?? failedPost.predicate;
-      const receiptId = writeAuthorityReceipt(db, {
-        authorityId: access.authorityId,
-        invocationId,
-        action: `act ${command.name}`,
-        objectType: "agent.command",
-        objectId: command.command_id,
-        decision: "deny",
-        detail: {
-          stage: "execution",
-          predicate: failedPost.predicate,
-          risk: command.risk,
+      // BOOKKEEPING IS A REPLICATED WRITE TOO (#1014, G24). `agent_*` and
+      // `access_receipt` all replicate, and this ran after the ROLLBACK with no
+      // pair open — the failure path, where a restart before the next member
+      // command is most likely, and where the rows were therefore most likely
+      // to be lost outright rather than merely mis-attributed.
+      const receiptId = withReplicaCommit(
+        db.vault,
+        () => {
+          for (const r of postResults)
+            writeCheck(
+              db.audit,
+              invocationId,
+              "post",
+              r.predicate,
+              r.passed,
+              r.observed
+            );
+          setInvocationStatus(db, invocationId, "rolled_back");
+          const id = writeAuthorityReceipt(db, {
+            authorityId: access.authorityId,
+            invocationId,
+            action: `act ${command.name}`,
+            objectType: "agent.command",
+            objectId: command.command_id,
+            decision: "deny",
+            detail: {
+              stage: "execution",
+              predicate: failedPost.predicate,
+              risk: command.risk,
+            },
+          });
+          writeExplanation(
+            db.audit,
+            invocationId,
+            `${command.name} rolled back: ${friendly}.`
+          );
+          return id;
         },
-      });
-      writeExplanation(
-        db.audit,
-        invocationId,
-        `${command.name} rolled back: ${friendly}.`
+        { producer: "gateway" }
       );
       return {
         status: "failed",
@@ -774,24 +787,33 @@ export function runContractAndExecute(
   } catch (error) {
     rollbackInvocationTransaction(db.vault, vaultTransaction);
     closeRevisionCapture(db.vault);
-    setInvocationStatus(db, invocationId, "failed");
     // A message echoing its input would put a secret in the journal (#298).
     const reason = scrub(
       error instanceof Error ? error.message : String(error)
     );
-    const receiptId = writeAuthorityReceipt(db, {
-      authorityId: access.authorityId,
-      invocationId,
-      action: `act ${command.name}`,
-      objectType: "agent.command",
-      objectId: command.command_id,
-      decision: "deny",
-      detail: { stage: "execution", error: reason, risk: command.risk },
-    });
-    writeExplanation(
-      db.audit,
-      invocationId,
-      `${command.name} failed during execution: ${reason}.`
+    // Bracketed for the same reason as the post-condition path above (#1014,
+    // G24): the status, the receipt and the explanation all replicate.
+    const receiptId = withReplicaCommit(
+      db.vault,
+      () => {
+        setInvocationStatus(db, invocationId, "failed");
+        const id = writeAuthorityReceipt(db, {
+          authorityId: access.authorityId,
+          invocationId,
+          action: `act ${command.name}`,
+          objectType: "agent.command",
+          objectId: command.command_id,
+          decision: "deny",
+          detail: { stage: "execution", error: reason, risk: command.risk },
+        });
+        writeExplanation(
+          db.audit,
+          invocationId,
+          `${command.name} failed during execution: ${reason}.`
+        );
+        return id;
+      },
+      { producer: "gateway" }
     );
     return { status: "failed", invocationId, receiptId, reason };
   }

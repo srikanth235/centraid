@@ -14,6 +14,7 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { readLiveShareGrant } from "../grant/grant-store.js";
 import { uuidv7 } from "../ids.js";
+import { readReplicaLog } from "../replica/log.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import type { CommandDefinition, Credential } from "./types.js";
@@ -853,13 +854,13 @@ describe("duties", () => {
       .run(PAST);
     gw.sweep(owner);
 
-    const changesBefore = (
-      db.vault.prepare("SELECT total_changes() AS n").get() as { n: number }
-    ).n;
+    const loggedThreadRows = (): number =>
+      readReplicaLog(db.vault).rows.filter(
+        (row) => row.table === "social_thread"
+      ).length;
+    const threadRowsBefore = loggedThreadRows();
     gw.sweep(owner);
-    const settled = (
-      db.vault.prepare("SELECT total_changes() AS n").get() as { n: number }
-    ).n;
+    const settledThreadRows = loggedThreadRows();
 
     // Now drift one row by hand and prove the heal still fires for it.
     db.vault
@@ -879,7 +880,13 @@ describe("duties", () => {
       "a thread whose projection drifted is repaired"
     ).toBe(PAST);
     // Neither settled thread was rewritten by the idle tick in between.
-    expect(settled - changesBefore).toBeLessThan(2);
+    //
+    // Counted from `replica_log`, not from `total_changes()` (#1014): every
+    // sweep pass now runs inside a commit pair, so the global counter also
+    // carries the pair's own `replica_meta` bookkeeping. The log says exactly
+    // what this test means — which THREAD ROWS the idle tick rewrote — and says
+    // it about the record a seat actually receives.
+    expect(settledThreadRows - threadRowsBefore).toBe(0);
   });
 
   test("lifecycle sweep declines a lapsed content item whose asset is a lineage source (issue #711 S8)", () => {

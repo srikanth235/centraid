@@ -291,13 +291,13 @@ export function bracketReplicaWrites(
         state.depth = 0;
         return result;
       }
-      case "rollback-to": {
-        // A savepoint rollback does NOT un-record what the open session already
-        // saw, so the pair is dropped and the surviving work is captured by the
-        // next one rather than shipping a change that was undone.
-        dropPair();
+      case "rollback-to":
+        // The pair SURVIVES a savepoint rollback. SQLite's session extension
+        // un-records what a `ROLLBACK TO` undid (verified in
+        // `replica-commit.test.ts`), so the changeset already describes only
+        // what stayed — dropping the pair here would throw away the work that
+        // did survive.
         return run();
-      }
       default:
         return run();
     }
