@@ -52,6 +52,7 @@ export const SHELL_ERROR = {
   desktopLink: "This phone could not link to your desktop",
   enrichment: "Your enrichment settings could not be read",
   scan: "This code could not be read",
+  sharing: "Your sharing links could not be read",
   vault: "Your vault's contents could not be read",
   vaultSettings: "Your vault settings could not be saved",
 } as const;

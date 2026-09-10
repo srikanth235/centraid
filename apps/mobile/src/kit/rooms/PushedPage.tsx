@@ -47,6 +47,12 @@ export interface PushedPageProps {
   error?: RoomError;
   empty?: RoomEmpty;
   children?: React.ReactNode;
+  /**
+   * The docked strip under the body — Assistant's composer, a health line.
+   * A SIBLING of the body, not the last row inside it, so it stays put while
+   * the body scrolls and the room keeps owning the page's vertical order.
+   */
+  footer?: React.ReactNode;
   /** The modals this page owns; siblings of the body, never inside it. */
   overlay?: React.ReactNode;
   /** For the end-to-end flows that name a page by id, not by its title. */
@@ -93,6 +99,7 @@ export default function PushedPage({
   error,
   empty,
   children,
+  footer,
   overlay,
   testID,
 }: PushedPageProps): React.JSX.Element {
@@ -127,6 +134,7 @@ export default function PushedPage({
       <RoomBody empty={empty} error={error} loading={loading}>
         {children}
       </RoomBody>
+      {footer}
       {selecting && selection ? (
         <SelectionActions selection={selection} />
       ) : null}

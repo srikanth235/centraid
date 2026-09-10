@@ -4,19 +4,21 @@
 
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import { formatDateShort } from "../../kit/format";
-import { memberFacingError } from "../../kit/member-error";
 import type { DeviceRow, DeviceTicket } from "../../lib/devices";
 import type { VaultRow } from "../../lib/gateway";
 
 export const FULL_ROSTER = 8;
 
-/** Member-facing: architecture vocabulary is lowered. */
-export function memberDeviceError(error: unknown, fallback: string): string {
-  const message = error instanceof Error ? error.message : fallback;
-  return memberFacingError(message).replace(
-    /\bvault host\b/giu,
-    "home machine"
-  );
+/**
+ * What this page says when an act does not land (#1015, S14).
+ *
+ * It used to lower the vocabulary of `error.message` and print it. Lowering
+ * "gateway" to "vault host" makes an exception READ better; it does not make
+ * it a fact about the member's vault. The exception is not seen here at all —
+ * the caller's own noun is the whole answer.
+ */
+export function memberDeviceError(_error: unknown, fallback: string): string {
+  return fallback;
 }
 
 export interface DeviceRowCopy {

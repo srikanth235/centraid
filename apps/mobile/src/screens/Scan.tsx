@@ -63,6 +63,7 @@ import {
   PrimaryButton,
   scanStyles as styles,
 } from "./scan-ui";
+import { SHELL_ERROR } from "./shell-copy";
 import { useShellParent } from "./shell-places";
 
 type Destination = "tally" | "docs" | "photos" | "locker";
@@ -192,8 +193,9 @@ export default function ScanScreen({
         const draft = parseReceiptText(next.text);
         setReceipt(draft);
         setAllocations({});
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : String(error));
+      } catch {
+        // S14 (#1015): the extractor's own sentence is the program's.
+        setErrorMessage(SHELL_ERROR.scan);
       } finally {
         setBusy(false);
       }
@@ -256,8 +258,8 @@ export default function ScanScreen({
       setMediaType("image/jpeg");
       setFileUri(photo.uri);
       setExtraction(undefined);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } catch {
+      setErrorMessage(SHELL_ERROR.scan);
       setBusy(false);
     }
   };

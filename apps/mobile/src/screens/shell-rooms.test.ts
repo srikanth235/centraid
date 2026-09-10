@@ -37,6 +37,7 @@ const SHELL = [
  * fall back out of its room later.
  */
 const MIGRATED = [
+  "apps/mobile/src/apps/assistant/Assistant.tsx",
   "apps/mobile/src/apps/automations/Automations.tsx",
   "apps/mobile/src/apps/insights/GatewayAlerts.tsx",
   "apps/mobile/src/apps/insights/Insights.tsx",
