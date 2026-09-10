@@ -38,6 +38,8 @@ export interface PushedPageProps {
   /** At most one filled commit, per DESIGN.md. */
   action?: RoomAction;
   secondary?: RoomAction;
+  /** The frame's lockup above the back key; see `AppPlaceProps.lockup`. */
+  lockup?: React.ReactNode;
   search?: SearchFieldProps;
   selection?: RoomSelection;
   band?: (state: BandState) => React.ReactNode;
@@ -79,6 +81,7 @@ export default function PushedPage({
   onBack,
   action,
   secondary,
+  lockup,
   search,
   selection,
   band,
@@ -93,6 +96,7 @@ export default function PushedPage({
   const selecting = !bandState.interactive;
   return (
     <TopSafeArea style={[styles.room, ink]}>
+      {lockup}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (
