@@ -17,6 +17,10 @@
 //      names a private table, then the private tables themselves. A seat runs
 //      no DDL generator and no triggers but FTS sync; a trigger that survives
 //      would fire against a table the seat's writer does not have.
+//   3d. Redact what replicates but not whole: the JSON keys declared in
+//      `REPLICATED_COLUMN_EXCLUSIONS` (#1014, G14). Between 3a and 5 on
+//      purpose — after the append-only triggers went, before the VACUUM that
+//      frees the old text under `secure_delete`.
 //   4. Truncate the log, LEAVING ITS CURSOR. The seat needs to know where the
 //      copy sits in the gateway's sequence — that is the whole point of
 //      bootstrapping from a file rather than from seq 0 — and it needs none of
@@ -35,7 +39,10 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-import { PRIVATE_TABLE_NAMES } from "../schema/private-tables.js";
+import {
+  PRIVATE_TABLE_NAMES,
+  REPLICATED_COLUMN_EXCLUSIONS,
+} from "../schema/private-tables.js";
 
 export interface SeatSnapshotResult {
   /** Where the snapshot was written. */
@@ -190,6 +197,32 @@ export function buildSeatSnapshot(
       if (!present.has(table)) continue;
       copy.exec(`DROP TABLE IF EXISTS ${quoted(table)}`);
       droppedTables.push(table);
+    }
+
+    // 3d. WHAT REPLICATES BUT NOT WHOLE (#1014, G14). The table drops above
+    //     are the only row-level filter this pipeline had, and one cell of a
+    //     replicated table carries more than a seat needs: every command's
+    //     verbatim return value, under `access_receipt.detail_json.output`,
+    //     kept for gateway-side replay and read by nothing on a seat. It is
+    //     removed HERE — after the triggers went at 3a, so the append-only
+    //     trigger does not refuse the UPDATE, and before the VACUUM at 5, so
+    //     `secure_delete` frees the old text rather than leaving it legible.
+    for (const exclusion of REPLICATED_COLUMN_EXCLUSIONS) {
+      if (!present.has(exclusion.table)) continue;
+      const column = quoted(exclusion.column);
+      // `json_remove` with no matching path returns the document unchanged,
+      // so the WHERE keeps the no-op rows byte-identical instead of rewriting
+      // every receipt the vault has ever written.
+      const paths = exclusion.jsonKeys.map((key) => `$.${key}`);
+      copy
+        .prepare(
+          `UPDATE ${quoted(exclusion.table)}
+              SET ${column} = json_remove(${column}, ${paths.map(() => "?").join(", ")})
+            WHERE ${column} IS NOT NULL
+              AND json_valid(${column})
+              AND (${paths.map(() => `json_type(${column}, ?) IS NOT NULL`).join(" OR ")})`
+        )
+        .run(...paths, ...paths);
     }
 
     // 4. The log goes; the cursor stays. `floor_seq` is where this file sits,

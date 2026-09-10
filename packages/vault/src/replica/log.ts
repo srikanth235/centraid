@@ -28,6 +28,7 @@ import type { SeatLogRowWire, WireValue } from "@centraid/core/protocol";
 import {
   isPrivateTable,
   isReplicatedTable,
+  redactReplicatedRowImage,
   replicatedTablesOf,
 } from "../schema/private-tables.js";
 import {
@@ -335,6 +336,11 @@ export function decodeChangeset(
         if (value.kind === "absent") continue;
         image[column] = encodeWireValue(changesetValueToBindable(value));
       }
+      // WHAT REPLICATES BUT NOT WHOLE (#1014, G14). Both images go through it:
+      // a DELETE carries the old row verbatim, so skipping this branch would
+      // have leaked on the way out what the INSERT branch withheld on the way
+      // in.
+      redactReplicatedRowImage(table, image);
       decoded.push({
         table,
         op: "delete",
@@ -355,6 +361,7 @@ export function decodeChangeset(
     const image: Record<string, WireValue> = {};
     for (const [column, value] of Object.entries(current))
       image[column] = encodeWireValue(value);
+    redactReplicatedRowImage(table, image);
     decoded.push({
       table,
       op: change.op,
