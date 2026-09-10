@@ -472,6 +472,8 @@ function SearchBody({
       <View style={styles.searchBleed}>
         <SearchField
           accessibilityLabel={FIELDS.searchPlaceholder}
+          // The search destination opens with the keyboard up (#1015, S4).
+          autoFocus
           clearLabel={VERBS.clearSearch}
           onChangeText={onTerm}
           placeholder={FIELDS.searchPlaceholder}

@@ -445,6 +445,10 @@ export function PhotosSearchView({
           an auto-capitalised term silently searched for something else. */}
       <SearchField
         accessibilityLabel="Search photographs"
+        // A search PLACE opens with the keyboard up: arriving at a field the
+        // member came here to type in and having to tap it is a wasted tap
+        // (#1015, S4). Restored on the kit's own prop, not a local ref.
+        autoFocus
         clearLabel="Clear the query"
         onChangeText={onTerm}
         placeholder={PHOTOS_SEARCH_PLACEHOLDER}
