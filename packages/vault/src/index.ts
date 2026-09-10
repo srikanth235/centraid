@@ -730,8 +730,10 @@ export {
 } from "./replica/intents.js";
 export {
   expiredOutcomeRecovery,
+  producedRowKey,
   pruneReplicaIntentOutcomes,
   replicaDependencyVerdict,
+  replicaPredecessorRowVersions,
   resolvePredecessorReferences,
   stampReplicaOutcomeCommitInTransaction,
   stampReplicaOutcomeCommitsInTransaction,

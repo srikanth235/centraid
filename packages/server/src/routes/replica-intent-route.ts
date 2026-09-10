@@ -22,6 +22,7 @@ import {
   hasCanonicalCommit,
   parseBaseVersions,
   parseDependsOn,
+  rebaseChainedBaseVersions,
 } from "./replica-intent-shape.js";
 import type { ReplicaIntentBaseVersion } from "./replica-intent-shape.js";
 import { replicaOutcomeWire } from "./replica-projection.js";
@@ -428,7 +429,13 @@ export async function handleReplicaIntent(
     const conflict = currentConflict(
       context.plane.db.vault,
       context.access,
-      baseVersions
+      baseVersions,
+      // A CHAINED WRITE IS CHECKED AGAINST ITS PARENT (#1014, R18). The seat
+      // now sends the version it observed for every row it edits, chained or
+      // not; the predecessors ran first and moved those rows, so the number
+      // to compare is the one they produced. A row nobody in the chain
+      // produced keeps the seat's own.
+      rebaseChainedBaseVersions(context.plane.db.vault, dependsOn)
     );
     if (conflict) {
       try {

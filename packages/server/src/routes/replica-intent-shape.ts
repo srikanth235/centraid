@@ -14,6 +14,8 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   currentReplicaLogState,
   operationReadSet,
+  producedRowKey,
+  replicaPredecessorRowVersions,
   replicaRowIdsOf,
   resolveEntity,
 } from "@centraid/vault";
@@ -239,7 +241,16 @@ export function hasCanonicalCommit(
 export function currentConflict(
   vault: DatabaseSync,
   access: ReplicaShapeAccess,
-  baseVersions: readonly ReplicaIntentBaseVersion[]
+  baseVersions: readonly ReplicaIntentBaseVersion[],
+  /**
+   * The versions this intent's own predecessors produced (#1014, R18), keyed
+   * by `producedRowKey`. A chained write states the version its seat OBSERVED
+   * before the chain ran; by the time it executes, its parent has bumped the
+   * row, so the number to check against is the parent's — see
+   * `rebaseChainedBaseVersions`. Absent for an unchained intent, where the
+   * seat's own number is the only one there is.
+   */
+  producedVersions?: ReadonlyMap<string, number>
 ): ReplicaIntentConflict | undefined {
   if (baseVersions.length === 0) return undefined;
   const epoch = currentReplicaLogState(vault).epoch;
@@ -311,17 +322,60 @@ export function currentConflict(
       base.entity,
       canonicalRowId
     );
-    if (actualVersion !== base.version) {
+    // THE PARENT'S NUMBER WHEN THERE IS ONE (#1014, R18). `expectedVersion`
+    // is reported as the number this check actually used, because that is
+    // what the seat has to reconcile against — reporting the pre-chain one
+    // would tell the member their edit was against a version the gateway
+    // never compared.
+    const expectedVersion = rebasedVersion(
+      vault,
+      base.entity,
+      canonicalRowId,
+      base.version,
+      producedVersions
+    );
+    if (actualVersion !== expectedVersion) {
       return {
         ...(resolvedShapeId === undefined ? {} : { shapeId: resolvedShapeId }),
         entity: base.entity,
         rowId: base.rowId,
-        expectedVersion: base.version,
+        expectedVersion,
         actualVersion,
       };
     }
   }
   return undefined;
+}
+
+/**
+ * The versions this intent's predecessors produced, ready for `currentConflict`.
+ *
+ * A thin, named wrapper so the two doors — the device door and the peer door —
+ * arm the same rebase with one call each rather than each assembling it.
+ */
+export function rebaseChainedBaseVersions(
+  vault: DatabaseSync,
+  dependsOn: readonly string[]
+): ReadonlyMap<string, number> | undefined {
+  if (dependsOn.length === 0) return undefined;
+  const produced = replicaPredecessorRowVersions(vault, dependsOn);
+  return produced.size > 0 ? produced : undefined;
+}
+
+function rebasedVersion(
+  vault: DatabaseSync,
+  entity: string,
+  canonicalRowId: string,
+  observed: number,
+  producedVersions: ReadonlyMap<string, number> | undefined
+): number {
+  if (!producedVersions) return observed;
+  const ref = resolveEntity(entity, vault);
+  if (!ref) return observed;
+  return (
+    producedVersions.get(producedRowKey(ref.physical, canonicalRowId)) ??
+    observed
+  );
 }
 
 /**

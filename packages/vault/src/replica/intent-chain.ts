@@ -12,7 +12,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { TERMINAL, intentRowById } from "./intents.js";
-import type { ReplicaProducedRowWire } from "./intents.js";
+import type { IntentRow, ReplicaProducedRowWire } from "./intents.js";
 
 /**
  * Stamp an executed outcome with the commit it produced (#996, R24).
@@ -227,6 +227,57 @@ export function resolvePredecessorReferences(
     );
   };
   return walk(input);
+}
+
+/**
+ * The row versions a chain's predecessors PRODUCED, keyed `table\0primaryKey`.
+ *
+ * WHY A CHAINED WRITE NEEDS THIS (#1014, R18). The seat states the version it
+ * OBSERVED on the row — the only honest number it has — but by the time a
+ * chained write runs, its own predecessor has already bumped that row. Without
+ * this the gateway would refuse every second edit of a row as a conflict with
+ * the member's own first edit, which is why the seat used to drop the base
+ * version entirely and why nothing was left guarding the write. The rebase is
+ * what makes carrying the base version correct AND useful: the child is
+ * checked against the version its parent produced, so a THIRD party's edit
+ * landing between the two is still a conflict.
+ *
+ * ORDERED BY COMMIT POSITION so the LAST predecessor to touch a row wins — a
+ * chain of three edits on one row rebases onto the third, not whichever id
+ * sorted first. A predecessor that has not executed, or that produced no
+ * version for the row, contributes nothing and the seat's own number stands.
+ */
+export function replicaPredecessorRowVersions(
+  vault: DatabaseSync,
+  dependsOn: readonly string[]
+): Map<string, number> {
+  const versions = new Map<string, number>();
+  const rows = dependsOn
+    .map((intentId) => intentRowById(vault, intentId))
+    .filter(
+      (row): row is IntentRow =>
+        row !== undefined &&
+        row.status === "executed" &&
+        row.produced_json !== null
+    )
+    .sort((left, right) => (left.commit_seq ?? 0) - (right.commit_seq ?? 0));
+  for (const row of rows) {
+    const produced = JSON.parse(
+      row.produced_json as string
+    ) as ReplicaProducedRowWire[];
+    for (const entry of produced) {
+      if (entry.rowVersion === undefined || entry.pk.length !== 1) continue;
+      const key = entry.pk[0];
+      if (typeof key !== "string") continue;
+      versions.set(producedRowKey(entry.table, key), entry.rowVersion);
+    }
+  }
+  return versions;
+}
+
+/** The key `replicaPredecessorRowVersions` answers by: physical table, NUL, id. */
+export function producedRowKey(table: string, rowId: string): string {
+  return `${table}\u0000${rowId}`;
 }
 
 export interface ExpiredOutcomeRecovery {
