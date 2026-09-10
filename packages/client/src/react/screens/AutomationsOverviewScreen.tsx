@@ -348,7 +348,7 @@ export default function AutomationsOverviewScreen({
   if (state === "loading") {
     return (
       <div className={styles.page} data-testid="automations-loading">
-        <PageSkeleton label="Loading automations" rows={6} />
+        <PageSkeleton label="Loading rules" rows={6} />
         <NoteBlock>{LOADING_NOTE}</NoteBlock>
       </div>
     );
@@ -434,7 +434,7 @@ export default function AutomationsOverviewScreen({
         <>
           {v.full ? (
             <ChipsBlock
-              ariaLabel="Filter automations"
+              ariaLabel="Filter rules"
               chips={CHIP_ORDER.map((id) => ({
                 id,
                 label: CHIP_LABEL[id],

@@ -276,9 +276,7 @@ describe("AutomationsOverviewScreen suite", () => {
 
     it("shows the filter chips only when the fleet is full, and filters on them", async () => {
       const small = await mount(makeProps());
-      expect(
-        small.querySelector('[aria-label="Filter automations"]')
-      ).toBeNull();
+      expect(small.querySelector('[aria-label="Filter rules"]')).toBeNull();
       act(() => root?.unmount());
       small.remove();
 
@@ -289,7 +287,7 @@ describe("AutomationsOverviewScreen suite", () => {
             .mockResolvedValue(bigData()),
         })
       );
-      const chips = el.querySelector('[aria-label="Filter automations"]');
+      const chips = el.querySelector('[aria-label="Filter rules"]');
       expect(chips).toBeTruthy();
       expect(readVitals("automations")?.state).toBe("full");
       await click(
