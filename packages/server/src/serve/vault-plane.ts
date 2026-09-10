@@ -2133,9 +2133,10 @@ export class VaultPlane {
       // question about the same seats — held above the lowest LIVE seat's
       // COMMIT position, so an answer a phone has not caught up to keeps its
       // payload and the pending badge still clears.
-      const intentPrune = pruneReplicaIntentOutcomes(this.db.vault, {
-        ...(intentHold === undefined ? {} : { holdAtOrAbove: intentHold }),
-      });
+      const intentPrune = pruneReplicaIntentOutcomes(
+        this.db.vault,
+        intentHold === undefined ? {} : { holdAtOrAbove: intentHold }
+      );
       if (intentPrune.pruned > 0) {
         this.logger.info(
           `vault plane: intent window prune tombstoned=${intentPrune.pruned} ` +
