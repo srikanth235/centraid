@@ -480,6 +480,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   private detach(): void {
+    // #1014 P17: its trailing follow-up fired after the file was unlinked.
+    this.#syncLoop.close();
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
     this.#appStateSub?.remove();
@@ -579,18 +581,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#retryTimer = undefined;
   }
 
-  /**
-   * Tell the byte store which content ids this queue still needs (R25).
-   *
-   * Pushed rather than pulled: the eviction sweep is synchronous and the outbox
-   * is not, so the seat publishes on every move of the queue and the sweep
-   * reads the last publication.
-   */
+  /** Which content ids this queue still needs (R25), told to the byte store.
+   *  Pushed, not pulled: the eviction sweep is synchronous and this is not. */
   private async publishProtectedContent(): Promise<void> {
     try {
       publishPendingContentRefs(this.#vaultId, await this.#queue.pending());
     } catch {
-      // Unreadable store: the previous answer stands, over-keeping.
+      // Unreadable store: the previous answer stands, which over-keeps.
     }
   }
 

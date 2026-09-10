@@ -41,6 +41,7 @@ export interface SeatSyncLoopOptions {
 export class SeatSyncLoop {
   #running: Promise<SeatWatermark | undefined> | undefined;
   #again = false;
+  #closed = false;
 
   constructor(
     private readonly seat: SeatSyncTarget,
@@ -58,7 +59,22 @@ export class SeatSyncLoop {
    * Swallowing them made the phone's storage-full park unreachable code
    * (`native-session.ts`) and left the drift re-bootstrap loop unbounded.
    */
+  /**
+   * THE HOST IS GONE (#1014, P17).
+   *
+   * Nothing used to stop this loop: a follow-up scheduled by the `finally`
+   * below fired after `close()` or `purge()` had already unlinked the file,
+   * so a pass ran against a closed driver — and a caller that had joined the
+   * earlier pass was answered with ITS watermark as the verdict for a seat
+   * that no longer exists. A closed loop absorbs nothing and starts nothing.
+   */
+  close(): void {
+    this.#closed = true;
+    this.#again = false;
+  }
+
   sync(): Promise<SeatWatermark | undefined> {
+    if (this.#closed) return Promise.resolve(undefined);
     if (this.#running) {
       this.#again = true;
       return this.#running;
@@ -79,7 +95,8 @@ export class SeatSyncLoop {
         // A PARKED SEAT GETS NO FOLLOW-UP PASS (#1014, C13, C14). The absorbed
         // callers behind this one would each be one more doomed attempt, which
         // is the loop the park exists to end.
-        if (again && !terminal) void this.sync().catch(() => undefined);
+        if (again && !terminal && !this.#closed)
+          void this.sync().catch(() => undefined);
       })
       // The rejection is the CALLER's to handle; this arm exists only so the
       // bookkeeping above is not itself an unhandled rejection.

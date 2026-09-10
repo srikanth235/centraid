@@ -508,3 +508,40 @@ describe("the overlay clears in the transaction that carries its commit", () => 
     driver.close();
   });
 });
+
+describe("two writers over one seat file (#1014, C8)", () => {
+  it("mints created_order under a write lock, never twice for one position", async () => {
+    const root = tempDirSync("seat-two-writers-");
+    const databasePath = path.join(root, "seat.db");
+    const first = new NodeSeatDriver(databasePath);
+    openSeatFile(first);
+    const one = SeatIntentStore.create(first);
+    // The background pass's own store over the SAME file — what C8 is about.
+    const second = new NodeSeatDriver(databasePath);
+    openSeatFile(second);
+    const two = SeatIntentStore.create(second);
+
+    const queue = (store: SeatIntentStore, id: string): Promise<unknown> =>
+      store.add({
+        intentId: id,
+        payloadHash: `h-${id}`,
+        appId: "notes",
+        action: "notes.create_note",
+        input: {},
+        state: "queued",
+        attempts: 0,
+        optimistic: [],
+      });
+    await queue(one, "i-a");
+    await queue(two, "i-b");
+    await queue(one, "i-c");
+
+    const orders = readSeatOutbox(first).map((row) => row.createdOrder);
+    // R23 makes this the order the member's work drains in, so a collision is
+    // two writes swapping places, not a cosmetic tie.
+    expect(orders).toStrictEqual([1, 2, 3]);
+    expect(new Set(orders).size).toBe(orders.length);
+    first.close();
+    second.close();
+  });
+});

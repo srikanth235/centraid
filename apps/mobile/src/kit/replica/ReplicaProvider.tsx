@@ -26,8 +26,6 @@ import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { describeSyncError } from "../../lib/replica/seat-sync-error";
-import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
-import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import {
   nativeRowSyncAllowed,
   nativeSyncAllowed,
@@ -55,12 +53,10 @@ import type {
   ReplicaContextValue,
 } from "./replica-context";
 import {
-  deleteReplicaDatabaseFamily,
   discardRestoredReplicaCache,
   fetcher,
   loadFreshness,
   refreshCachedScopes,
-  removeCachedScope,
   resolveIdentity,
   startCompatibilityWall,
   vaultScopes,
@@ -71,6 +67,7 @@ import {
   loadRevokedNotices,
   settledReachability,
 } from "./replica-status";
+import { reclaimRevokedReplica, reclaimRevokedScope } from "./revoke-scope";
 
 export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
@@ -145,6 +142,17 @@ export function ReplicaProvider({
     mountKey: string;
     value: ReplicaContextValue;
   }>();
+  /**
+   * THE PREVIOUS MOUNT'S CLOSE, AS A PROMISE TO WAIT ON (#1014, P12).
+   *
+   * React's cleanup is synchronous, so teardown could only ever FIRE the
+   * closes — `void session?.close()` — and a remount on the same `mountKey`
+   * reopened the same file name while the old close was in flight. Per P1 that
+   * is the SAME expo-sqlite connection object, so the old `closeSync()` lands
+   * on the new handle and every read after it throws. Teardown parks its work
+   * here; the next mount awaits it.
+   */
+  const teardown = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     if (!hydrated || gatewayKey === "loading") return undefined;
@@ -170,8 +178,12 @@ export function ReplicaProvider({
       );
     };
 
+    const previousTeardown = teardown.current;
     void (async () => {
       try {
+        // BEFORE ANYTHING OPENS A FILE (#1014, P12).
+        await previousTeardown.catch(() => undefined);
+        if (cancelled) return;
         // Opening a replica per scope runs migrations synchronously — yield first.
         await afterInteractions();
         if (cancelled) return;
@@ -242,17 +254,6 @@ export function ReplicaProvider({
           reachabilityWork?.signal();
         };
         const revokedScopeIds = new Set<string>();
-        const reclaimRevokedReplica = (scope: ReplicaVaultScope): void => {
-          // THE OPEN SCOPE'S FILE IS DELETED BY ITS OWN PURGE (#996, W5).
-          // `session.purge()` unlinks it through the seat, which closes the
-          // handle first — a file cannot be replaced under an open SQLite
-          // connection — so there is no second handle for this to reclaim.
-          // A vault this seat is NOT holding open has no handle at all, so its
-          // file is deletable outright — which is the whole reason one open
-          // file is simpler than four: revocation of a closed vault is a file
-          // deletion and nothing else.
-          deleteReplicaDatabaseFamily(scope.databaseName);
-        };
         const bootstrap = createBootstrapTracker(publish);
         const freshness = createFreshnessStore({
           storage: AsyncStorage,
@@ -287,35 +288,20 @@ export function ReplicaProvider({
           onScopeUpdated: updateScopeFreshness,
           onScopeRevoked: (vaultId) => {
             revokedScopeIds.add(vaultId);
-            void (async () => {
-              try {
-                const scope = scopes.find(
-                  (candidate) => candidate.vaultId === vaultId
-                );
-                // Announce BEFORE the purge: the label is about to be erased
-                // along with the rows, and a member told nothing is a vault
-                // that vanished silently.
-                if (scope) revoked.note(scope);
-                // The purge closes the handle and unlinks the file, so a vault
-                // this phone may never see again costs nothing on disk.
-                if (vaultId === openScope.vaultId) await session?.purge();
-                if (scope) reclaimRevokedReplica(scope);
-              } finally {
-                bootstrap.forget(vaultId);
-                clearPinnedThumbnailPack(vaultId);
-                freshness.forget(vaultId);
-                await removeCachedScope(identity.gatewayId, vaultId).catch(
-                  () => undefined
-                );
-                publish((value) => ({
-                  ...value,
-                  scopes: (value.scopes ?? []).filter(
-                    (scope) => scope.vaultId !== vaultId
-                  ),
-                  bootstrapProgress: bootstrap.current(),
-                }));
-              }
-            })().catch(() => undefined);
+            void reclaimRevokedScope(
+              {
+                gatewayId: identity.gatewayId,
+                openVaultId: openScope.vaultId,
+                scopes,
+                session: () => session,
+                note: revoked.note,
+                forgetBootstrap: bootstrap.forget,
+                forgetFreshness: freshness.forget,
+                bootstrapProgress: bootstrap.current,
+                publish,
+              },
+              vaultId
+            ).catch(() => undefined);
           },
         });
         // THE FILE BEFORE THE SESSION (#996, W5): the outbox is a table in it,
@@ -419,13 +405,15 @@ export function ReplicaProvider({
           }));
         };
         const refreshReachability = async (
-          network: Network.NetworkState
+          network: Network.NetworkState,
+          /** Cancelled work stops here too (#1014, P16), not only at teardown. */
+          signal?: AbortSignal
         ): Promise<void> => {
           const deviceOnline = network.isConnected === true;
           const liveBase = deviceOnline
             ? await resolveGatewayBase().catch(() => undefined)
             : undefined;
-          if (cancelled) return;
+          if (cancelled || signal?.aborted) return;
           connected = liveBase !== undefined;
           if (!liveBase)
             console.error(
@@ -560,10 +548,13 @@ export function ReplicaProvider({
         // A handoff emits several states in a row and only the settled one is
         // actionable, so they collapse into one pass. Manual refresh stays direct.
         let latestNetwork: Network.NetworkState | undefined;
-        reachabilityWork = coalesceWork(async () => {
+        reachabilityWork = coalesceWork(async (signal) => {
           const network =
             latestNetwork ?? (await Network.getNetworkStateAsync());
-          await refreshReachability(network);
+          // THE MOUNT MAY HAVE GONE WHILE THAT AWAITED (#1014, P16): this pass
+          // writes a base and pulls on a session teardown has already closed.
+          if (signal.aborted || cancelled) return;
+          await refreshReachability(network, signal);
         }, NETWORK_FLAP_WINDOW_MS);
         networkSubscription = Network.addNetworkStateListener((network) => {
           latestNetwork = network;
@@ -600,13 +591,20 @@ export function ReplicaProvider({
       cancelled = true;
       reachabilityWork?.cancel();
       freshnessWork?.cancel();
-      // Cancel drops the timer, not the stamps: land them before the mount goes.
-      void flushFreshness();
       networkSubscription?.remove();
-      void session?.close();
-      void seat?.close().catch(() => undefined);
       multiplex?.close();
-      for (const held of looseSeats) void held.close().catch(() => undefined);
+      // AWAITED, IN ORDER, AND HANDED TO THE NEXT MOUNT (#1014, P12). The
+      // session owns the seat, so its close runs first; the loose seats are
+      // ones no session ever took. Cancel drops the freshness timer, not the
+      // stamps, so they are landed here too.
+      teardown.current = (async () => {
+        await flushFreshness().catch(() => undefined);
+        await session?.close().catch(() => undefined);
+        await seat?.close().catch(() => undefined);
+        await Promise.all(
+          looseSeats.map((held) => held.close().catch(() => undefined))
+        );
+      })();
     };
   }, [mountKey, gatewayKey, hydrated, retryNonce]);
 

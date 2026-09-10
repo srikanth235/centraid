@@ -107,3 +107,43 @@ describe("the seat catch-up coalescer", () => {
     expect(started).toBe(1);
   });
 });
+
+describe("a closed loop (#1014, P17)", () => {
+  it("never fires the trailing follow-up after close", async () => {
+    let started = 0;
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const loop = new SeatSyncLoop({
+      sync: async () => {
+        started += 1;
+        await held;
+        return WATERMARK;
+      },
+    });
+    const first = loop.sync();
+    // A wake frame arrives behind it: without a close this queues one pass.
+    void loop.sync();
+    // The mount goes: `close()`/`purge()` unlink the file the pass would read.
+    loop.close();
+    release();
+    await first;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(started).toBe(1);
+  });
+
+  it("answers a later sync with nothing rather than opening the file", async () => {
+    let started = 0;
+    const loop = new SeatSyncLoop({
+      sync: () => {
+        started += 1;
+        return Promise.resolve(WATERMARK);
+      },
+    });
+    loop.close();
+    await expect(loop.sync()).resolves.toBeUndefined();
+    expect(started).toBe(0);
+  });
+});

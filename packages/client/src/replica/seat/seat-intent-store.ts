@@ -85,25 +85,61 @@ export class SeatIntentStore implements IntentRecordStore {
     return new SeatIntentStore(driver);
   }
 
+  /**
+   * Queue an intent.
+   *
+   * READ-MODIFY-WRITE INSIDE ONE TRANSACTION (#1014, C8). The read that
+   * decides "is this id already here" and the `MAX(created_order) + 1` that
+   * decides where it goes were both taken OUTSIDE any transaction, so a second
+   * writer over the same file — the background pass's own store, which is what
+   * C8 is about — could interleave between them and mint two intents with the
+   * same `created_order`. R23 makes that order the order the member's work
+   * drains in, so a collision is not a cosmetic tie: it is two writes swapping
+   * places. `BEGIN IMMEDIATE` takes the write lock before the read.
+   */
   add(intent: NewStoredIntent): Promise<ReplicaIntent> {
-    const existing = this.#read(intent.intentId);
-    if (existing) {
-      if (existing.payloadHash !== intent.payloadHash) {
-        return Promise.reject(
-          new ReplicaProtocolError(
+    return this.#inTransaction(() => {
+      const existing = this.#read(intent.intentId);
+      if (existing) {
+        if (existing.payloadHash !== intent.payloadHash) {
+          throw new ReplicaProtocolError(
             `Intent id ${intent.intentId} was reused with another payload`
-          )
-        );
+          );
+        }
+        return existing;
       }
-      return Promise.resolve(existing);
+      const next =
+        this.driver.all<{ next: number }>(
+          `SELECT COALESCE(MAX(created_order), 0) + 1 AS next FROM seat_outbox`
+        )[0]?.next ?? 1;
+      const record: ReplicaIntent = { ...clone(intent), createdOrder: next };
+      this.#write(record, "insert");
+      return clone(record);
+    });
+  }
+
+  /**
+   * One write lock around a read-modify-write, and the answer it produced.
+   *
+   * `BEGIN IMMEDIATE` rather than `BEGIN`: a deferred transaction takes the
+   * read lock first and upgrades on the first write, which is exactly the
+   * shape that returns SQLITE_BUSY under two writers instead of serialising
+   * them. Rejects rather than throws synchronously, because every caller of
+   * this store awaits.
+   */
+  #inTransaction<T>(work: () => T): Promise<T> {
+    this.driver.exec("BEGIN IMMEDIATE");
+    let answer: T;
+    try {
+      answer = work();
+      this.driver.exec("COMMIT");
+    } catch (error) {
+      this.driver.exec("ROLLBACK");
+      return Promise.reject(
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
-    const next =
-      this.driver.all<{ next: number }>(
-        `SELECT COALESCE(MAX(created_order), 0) + 1 AS next FROM seat_outbox`
-      )[0]?.next ?? 1;
-    const record: ReplicaIntent = { ...clone(intent), createdOrder: next };
-    this.#write(record, "insert");
-    return Promise.resolve(clone(record));
+    return Promise.resolve(answer);
   }
 
   get(intentId: string): Promise<ReplicaIntent | undefined> {
@@ -148,16 +184,21 @@ export class SeatIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const existing = this.#require(intentId, allowed, "transition");
-    if (existing instanceof Error) return Promise.reject(existing);
-    const updated: ReplicaIntent = {
-      ...existing,
-      ...clone(patch),
-      intentId,
-      createdOrder: existing.createdOrder,
-    };
-    this.#write(updated, "update");
-    return Promise.resolve(clone(updated));
+    // The state check and the write it authorises are one transaction
+    // (#1014, C8): between them, another writer could have settled this very
+    // intent, and the update would then resurrect a row the journal says went.
+    return this.#inTransaction(() => {
+      const existing = this.#require(intentId, allowed, "transition");
+      if (existing instanceof Error) throw existing;
+      const updated: ReplicaIntent = {
+        ...existing,
+        ...clone(patch),
+        intentId,
+        createdOrder: existing.createdOrder,
+      };
+      this.#write(updated, "update");
+      return clone(updated);
+    });
   }
 
   /**
@@ -173,17 +214,19 @@ export class SeatIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const existing = this.#require(intentId, allowed, "settle");
-    if (existing instanceof Error) return Promise.reject(existing);
-    const settled: ReplicaIntent = {
-      ...existing,
-      ...clone(patch),
-      intentId,
-      createdOrder: existing.createdOrder,
-    };
-    const outcome = buildIntentOutcome(settled);
-    this.driver.exec("BEGIN IMMEDIATE");
-    try {
+    // THE READ IS INSIDE THE TRANSACTION TOO (#1014, C8). It used to sit in
+    // front of the `BEGIN IMMEDIATE` below, so the state it checked could have
+    // changed by the time the delete ran.
+    return this.#inTransaction(() => {
+      const existing = this.#require(intentId, allowed, "settle");
+      if (existing instanceof Error) throw existing;
+      const settled: ReplicaIntent = {
+        ...existing,
+        ...clone(patch),
+        intentId,
+        createdOrder: existing.createdOrder,
+      };
+      const outcome = buildIntentOutcome(settled);
       this.driver.run(`DELETE FROM seat_outbox WHERE intent_id = ?`, [
         intentId,
       ]);
@@ -200,12 +243,8 @@ export class SeatIntentStore implements IntentRecordStore {
         ]
       );
       this.#pruneJournal();
-      this.driver.exec("COMMIT");
-    } catch (error) {
-      this.driver.exec("ROLLBACK");
-      throw error;
-    }
-    return Promise.resolve(clone(settled));
+      return clone(settled);
+    });
   }
 
   listSettled(limit = 500): Promise<IntentOutcome[]> {
