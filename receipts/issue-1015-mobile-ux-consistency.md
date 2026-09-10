@@ -1153,3 +1153,55 @@ Five commits: `aec968bcb` Tally · `94951d4ae` Locker · `0c9648d5a` People · `
 5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**.
 6. `bun run format` then `bun run check:push:static` → **4/4**.
 7. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see below.
+
+## Wave 3 round 2 — lane APPS-B: three rulings, and what the owner still holds
+
+Three commits, one ruling each: `1ef57b0dc` R-B-15 (the resting search eyebrow) · `42812b1f4` R-B-16 (`Icon`'s fill, and People's hand-rolled star) · `27c424a63` R-B-18 (`hapticLanded()` at the write's resolution).
+
+**R-B-15 — one eyebrow, in the app's own noun.** `Nothing typed` was a state report printed as signage, and the previous round left it in place on the ground that fixing one app would trade a copy defect for a cross-app inconsistency. It is fixed in the shared source instead: `_shared/search-scaffold.ts` gains `searchRestingEyebrow(noun)` — "Search your photos" — and `SearchStateCopy.resting.eyebrow` is **deleted from the type**, so a seat supplies only its plural noun and cannot type a state report back in (v0, no compat field). Five seats came into line, not three: Docs (`documents`), Notes (`notes`), Photos (`photos`) all said `Nothing typed`; Tally (`expenses`) and Locker (`keys`) said `Search`, which is the same defect in a shorter word. Both mobile surfaces that printed the eyebrow themselves — `PhotosSearchRestingState.tsx` and `TallySearchScreen.tsx` — now call the shared helper. Closes photos/findings #9's last half, and the same string on Docs and Notes.
+
+**R-B-16 — filled is the icon's contract.** `kit/Icon` takes `fill`: one tone, the glyph's own stroke ink, because there is no second fill colour in the system. The rule lives in `icon-fill.ts` for the reason `icon-stroke-width.ts` does — no `react-native-svg` or theme import, so the node tier asserts it directly. Two defaults keep every existing glyph exactly where it is: `fill` is off, and a registry path that already declares `fill: "currentColor"` (`Compass`'s needle) still fills unasked. People's `StarButton` drew its own `<Svg>` at stroke 1.5 over a path that was **not** the registry's `Star`; it is deleted, and the row draws the house glyph, filled when starred. Closes people/findings #9's last half.
+
+**R-B-18 — the buzz belongs to the write.** `ConfirmSheet` fired `hapticLanded()` inside the press handler, before `onConfirm` ran: it promised "the thing is gone" while the vault was still being asked, and buzzed just as confidently when the write failed. `onConfirm` may now return `Promise<void>`, and the buzz rides its resolution — never its rejection, which the caller surfaces on StatusLine itself. Two tests in `ConfirmSheet.test.tsx` fail on the old ordering and pass on the new one (measured: reverting the handler turns both red). This supersedes the "noted for the root rather than changed from an app lane" judgement call in the section above.
+
+### Files
+
+- `packages/blueprints/apps/_shared/{search-scaffold.ts,SearchScaffold.tsx,SearchScaffold.test.tsx}`
+- `packages/blueprints/apps/docs/drive-copy.ts`, `packages/blueprints/apps/notes/view-copy.ts`, `packages/blueprints/apps/photos/view-copy.ts`, `packages/blueprints/apps/tally/view-copy.ts`, `packages/blueprints/apps/locker/route-copy.ts`
+- `packages/blueprints/src/search-scaffold-reach.test.ts`
+- `apps/mobile/src/apps/photos/{PhotosSearchRestingState.tsx,PhotosHome.test.tsx}`, `apps/mobile/src/apps/tally/TallySearchScreen.tsx`
+- `apps/mobile/src/apps/people/PeopleKit.tsx`
+- `apps/mobile/src/kit/components/{Icon.tsx,Icon.test.tsx,ConfirmSheet.tsx,ConfirmSheet.test.tsx}`, new `apps/mobile/src/kit/components/icon-fill.ts`
+
+### What the owner still holds — the four apps' residue, with a recommendation each
+
+Every row below is left deliberately; none is a defect this lane could close without making a product or kit decision that is not its to make.
+
+| item | what it is | recommendation |
+| --- | --- | --- |
+| **R-B-17a** · tally #13 | Groups is a band destination holding Balances' own section plus an empty one | **Delete the tab.** Four destinations is the band's shape everywhere else, and a destination that restates a section teaches a member the app has two answers |
+| **R-B-17b** · photos #16 | Photos' More slot, whose footer claimed destinations that are not there (the footer is fixed; the slot is not) | **Keep the slot, drop nothing.** Photos genuinely has more places than a band holds; the fix already landed is the honest footer |
+| tally #8 | detail screens do not name their subject | `PushedPage` owns the header and has no subject slot. **A kit prop** (`subject`, under the title) is the fix; it is a kit-lane change, and it would serve Locker's item screens too |
+| tally #14 | no loading state on ten Tally routes | **`SkeletonRows` adoption as its own slice.** Not copy work; each route needs its own row shape |
+| tally #16 | no pending-changes pill | Mounting `ReplicaStatusBar` in a third app is a **replica-surface decision** (which apps show the pill at all), owed a ruling before adoption |
+| people #1 | the editor cannot represent the person it edits — a stored channel kind the chip set cannot express | **Widen the chip set from the stored vocabulary**, in `PersonEditor`; a control change, and it needs the owner's view on which kinds are member-facing |
+| people #2 | two `Save` buttons with opposite validation | D3 (autosave everywhere, close = done) **supersedes the shape**, so the fix is to delete both buttons, not to reconcile them. That is a People editor rewrite |
+| people #10 | header verbs vanish · one filter serves two rails | `PeopleHome` state and header shape. **Own slice**; the filter's second rail needs a product answer about what it filters |
+| people #15 | filter chips announced as tabs | `kit/components/ChipsBlock.tsx` — **the kit lane's file**, not this one's. The `★`-as-a-name half is already closed |
+| photos #14 | place tiles all read `A place with n…` | A real name needs a **reverse-geocode the seat does not have**. Either ship the lookup or accept the honest generic name |
+| photos #15 | the 30-day rule stated three times | Three surfaces each state it for a different reader. **Owner call** on which two to drop; the header subtitle is the one I would keep |
+| tally #12, #17, #18 · locker #1, #5, #12 · photos #18 | recorded in the Wave 3 register above with their reasons; unchanged | — |
+
+`tally-store.ts:192`'s dead `readError` is **APPS-A's** lane-wide `surfaceWriteFailure` sweep (R-A-15), and `packages/blueprints/apps/docs/view-copy.ts`'s apostrophes are theirs too; neither is touched here.
+
+**One more, found this round and not in any findings file.** No caller of `useConfirmDestructive` in these four trees can yet return a landing-truthful promise: `confirmFreeSpace` and `runTrash` catch their own failure and resolve either way, and `writeReason` resolves **with** the refusal string. Returning any of them today would re-create exactly the false buzz R-B-18 removes. The primitive is correct and the contract is documented; adopting it per caller means giving each write an honest resolution first, which is a slice of its own.
+
+### Verification, from the lane worktree
+
+1. `cd apps/mobile && bunx vitest run src/apps/photos src/apps/people src/apps/locker src/apps/tally src/kit` → **171 files, 1541 passed, 0 failed**.
+2. `bun run --cwd apps/mobile typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 124`, `back-literal 0`, `page-margin 2`, `identity-tint 0`, `copy-title-case 0`. The two `page-margin` findings are the same ruled sub-base `paddingHorizontal: 3` chip inset in `PhotoTile.tsx` (R-B-6).
+4. `grep -rn "expo-haptics" apps/mobile/src/apps/{tally,locker,people,photos}` → **3**, all test seams or a comment about one; no app source imports it.
+5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**.
+6. `bun run format` then `bun run check:push:static` → **4/4**.
+7. Blueprints: `bunx vitest run packages/blueprints/apps/{tally,locker,people,photos,docs,notes,_shared} packages/blueprints/src` → **191 passed, 3 failed**. All three are **inherited from the umbrella base**, measured failure-for-failure by detaching this worktree at `6924fb797` and rerunning the same three files (`3 failed | 12 passed` there and here): `src/photos-vocabulary.test.ts` (`PHOTOS_ERROR_FREE_UP_PAUSED`'s storage noun), `src/one-computation.test.ts` (`kit: subscribeStatus,subscribeVitals ↔ subscribeStatusHost`), `src/pending-projection-tripwire.test.ts` (Docs' action count 15 → 16, which is D1's Empty trash). None is in this lane's slice and none is touched here.
