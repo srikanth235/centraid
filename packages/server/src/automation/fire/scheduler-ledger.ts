@@ -62,10 +62,32 @@ export interface SchedulerLedgerKv {
     valueJson: string,
     updatedAt: number
   ) => void;
+  /**
+   * READ-MODIFY-WRITE, ATOMICALLY (#1014, B9). The whole ledger is one JSON
+   * blob under one key, so a `recordTick` and a `recordMissed` that
+   * interleaved each read the same snapshot and the second write erased the
+   * first — the missed-run record an outage exists to leave behind, lost to
+   * the tick that noticed the outage. Optional so an injected KV in a test
+   * needs only the two accessors; absent means "no transaction available",
+   * which is the behaviour this replaces, never worse.
+   */
+  runInTransaction?: <T>(fn: () => T) => T;
 }
 
 export class SchedulerLedgerStore {
   constructor(private readonly store: SchedulerLedgerKv) {}
+
+  /** Every mutation below is one read-modify-write, and takes this door. */
+  private update(
+    mutate: (current: SchedulerLedgerSnapshot) => SchedulerLedgerSnapshot | null
+  ): void {
+    const apply = (): void => {
+      const next = mutate(this.load());
+      if (next !== null) this.write(next);
+    };
+    if (this.store.runInTransaction) this.store.runInTransaction(apply);
+    else apply();
+  }
 
   load(): SchedulerLedgerSnapshot {
     const entry = this.store.stateGet(
@@ -85,26 +107,26 @@ export class SchedulerLedgerStore {
   }
 
   recordTick(at: Date): void {
-    const current = this.load();
-    const { dormant: _dormant, ...active } = current;
-    this.write({ ...active, lastTickAt: at.toISOString() });
+    this.update((current) => {
+      const { dormant: _dormant, ...active } = current;
+      return { ...active, lastTickAt: at.toISOString() };
+    });
   }
 
   setDormant(dormant: boolean, at: Date): void {
-    const current = this.load();
-    if (dormant) {
-      this.write({ ...current, dormant: true });
-      return;
-    }
-    const { dormant: _dormant, ...active } = current;
-    this.write({ ...active, lastTickAt: at.toISOString() });
+    this.update((current) => {
+      if (dormant) return { ...current, dormant: true };
+      const { dormant: _dormant, ...active } = current;
+      return { ...active, lastTickAt: at.toISOString() };
+    });
   }
 
   recordMissed(entries: readonly MissedWindowEntry[]): void {
     if (entries.length === 0) return;
-    const current = this.load();
-    const merged = [...current.missed, ...entries].slice(-MAX_MISSED_ENTRIES);
-    this.write({ ...current, missed: merged });
+    this.update((current) => ({
+      ...current,
+      missed: [...current.missed, ...entries].slice(-MAX_MISSED_ENTRIES),
+    }));
   }
 }
 

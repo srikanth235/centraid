@@ -7,7 +7,8 @@
   "triggers": [
     {
       "kind": "cron",
-      "expr": "10 * * * *"
+      "expr": "10 * * * *",
+      "backfill": "latest"
     }
   ],
   "requires": {},
@@ -17,7 +18,12 @@
   },
   "vault": {
     "why": "Stages Google Calendar events into the vault's review band and tracks the incremental syncToken cursor on the pull.gcal connection.",
-    "scopes": [{ "schema": "sync", "verbs": "read+act" }]
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
   },
   "history": {
     "keep": {

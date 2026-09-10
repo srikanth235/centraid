@@ -7,10 +7,11 @@ import { resolveCronTimezone } from "../cron-timezone.js";
 import {
   CONDITION_DEFAULT_EVERY,
   DATA_DEFAULT_EVERY,
+  DEFAULT_CRON_BACKFILL,
   EVENT_DEFAULT_EVERY,
   isDeniedTriggerCursorEntity,
 } from "../manifest/manifest.js";
-import type { Trigger } from "../manifest/manifest.js";
+import type { CronBackfillClass, Trigger } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";
 import type { Host } from "./host.js";
 
@@ -232,6 +233,8 @@ export interface VaultCursorEngineOptions {
 export type CronSchedule = {
   readonly expr: string;
   readonly timeZone?: string;
+  /** @see CronTrigger.backfill (#1014, B9). */
+  readonly backfill?: CronBackfillClass;
 };
 
 export interface CursorRegistration {
@@ -258,7 +261,11 @@ export function registrationsFor(
     if (trigger.kind !== "cron") return [];
     const timeZone = resolveCronTimezone(trigger.tz, defaultTimeZone);
     return [
-      { expr: trigger.expr, ...(timeZone === undefined ? {} : { timeZone }) },
+      {
+        expr: trigger.expr,
+        ...(timeZone === undefined ? {} : { timeZone }),
+        backfill: trigger.backfill ?? DEFAULT_CRON_BACKFILL,
+      },
     ];
   });
   const firstCron = row.triggers.findIndex(

@@ -7,7 +7,8 @@
   "triggers": [
     {
       "kind": "cron",
-      "expr": "44 * * * *"
+      "expr": "44 * * * *",
+      "backfill": "latest"
     }
   ],
   "requires": {},
