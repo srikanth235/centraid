@@ -4,11 +4,12 @@ import type { ListRenderItemInfo } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 
 import { PHOTOS_ERROR_FREE_UP_PAUSED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { RETRY_ACTION } from "@centraid/client/surface-copy";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
@@ -118,6 +119,7 @@ export default function PhotosLibrary({
   const [pinsReady, setPinsReady] = useState(false);
   const [freeing, setFreeing] = useState(false);
   const [newAlbum, setNewAlbum] = useState(false);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const [title, setTitle] = useState("");
   useFocusEffect(
     useCallback(() => {
@@ -287,18 +289,13 @@ export default function PhotosLibrary({
       );
       return;
     }
-    Alert.alert(
-      "Free up vault",
-      `${eligibleCount} verified originals (${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB) are eligible. Bytes are re-hashed at delete time and anything changed since backup is kept. Albums pinned to this device are excluded. This is the only action here that touches device originals.`,
-      [
-        { text: "Cancel" },
-        {
-          text: "Delete from device",
-          style: "destructive",
-          onPress: () => void confirmFreeSpace(),
-        },
-      ]
-    );
+    confirmDestructive({
+      body: `${eligibleCount} verified originals (${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB) are eligible. Bytes are re-hashed at delete time and anything changed since backup is kept. Albums pinned to this device are excluded. This is the only action here that touches device originals.`,
+      count: eligibleCount,
+      noun: "device original",
+      onConfirm: () => void confirmFreeSpace(),
+      verb: "Delete from device",
+    });
   };
   return (
     // The band is the way out now (§F, proto:4953-4954), so the head carries
@@ -508,6 +505,7 @@ export default function PhotosLibrary({
           </Pressable>
         </View>
       </Modal>
+      {confirmSheet}
     </PhotosScreen>
   );
 }

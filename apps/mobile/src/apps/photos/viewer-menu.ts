@@ -10,9 +10,10 @@
 // Adjust location OPENS the info sheet rather than growing a second place
 // editor here — `PhotoInfoSheet.tsx` already owns place.
 //
-// Album pickers are the consumer's `Alert.alert`, NEVER a nested submenu: the
-// kit's `MenuSubmenuRow` carries no `disabled` field, so a submenu row cannot
-// state "this vault is read-only" the way an action row can.
+// Album pickers are the consumer's own SHEET (`PhotosChoiceSheet`, #1015 D4),
+// NEVER a nested submenu: the kit's `MenuSubmenuRow` carries no `disabled`
+// field, so a submenu row cannot state "this vault is read-only" the way an
+// action row can.
 //
 // Delete is here AND on the toolbar chip, as it is on iOS. The safety is the
 // confirm step behind it, never the row being hard to find.

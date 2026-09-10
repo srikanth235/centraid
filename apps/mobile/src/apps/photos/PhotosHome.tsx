@@ -9,12 +9,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BAND_INSET } from "../../kit/band-surface";
 import { useBandOwner } from "../../kit/band/band-owner";
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
@@ -48,12 +49,14 @@ import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
 import { COLLECTION_SECTION_KEYS } from "./photos-collections";
 import type { CollectionSectionKey } from "./photos-collections";
 import { collectionsMenuGroups } from "./photos-collections-menu";
+import { TRASH_KEEPS_THE_ORIGINAL } from "./photos-confirm-copy";
 import { libraryMenuGroups } from "./photos-library-menu";
 import type { LibraryFilter } from "./photos-library-menu";
 import { usePhotosRung } from "./photos-rung-store";
 import { selectionCountLabel } from "./photos-selection-copy";
 import { batchTrash, vaultAssets } from "./photos-selection-writes";
 import PhotosBand from "./PhotosBand";
+import PhotosChoiceSheet from "./PhotosChoiceSheet";
 import PhotosCollectionsView from "./PhotosCollectionsView";
 import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import { makeStyles } from "./PhotosHome.styles";
@@ -349,75 +352,66 @@ export default function PhotosHome({
     }
   };
 
+  const [pickingAlbum, setPickingAlbum] = useState(false);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
+  // The whole list, not the six an alert would fit: this is a sheet (D4).
+  const albumChoices = collections.rows.map((album) => ({
+    id: String(album.collection_id),
+    label: String(album.name ?? "Album"),
+  }));
+
   const addToAlbum = (): void => {
-    const albums = collections.rows.slice(0, 6);
-    if (!albums.length) {
+    if (!albumChoices.length) {
       navigation.navigate("PhotosLibrary");
       return;
     }
-    Alert.alert("Add to album", `${selection.size} selected`, [
-      ...albums.map((album) => ({
-        text: String(album.name ?? "Album"),
-        onPress: () =>
-          void (async () => {
-            if (!session) return;
-            const assets = timeline.assets.filter(
-              (item) => selection.has(item.id) && item.assetId
-            );
-            try {
-              // Serial by contract: `position` derives from the rows the
-              // previous write landed. Parallel writes race it.
-              for (const [index, asset] of assets.entries()) {
-                const albumId = String(album.collection_id);
-                const position =
-                  albumEntryCount(
-                    entries.rows,
-                    albumId,
-                    (row) => row.collection_id
-                  ) + index;
-                // oxlint-disable-next-line no-await-in-loop
-                const result = await session.write("photos", {
-                  action: "add-to-album",
-                  input: {
-                    album_id: albumId,
-                    asset_id: asset.assetId!,
-                    position,
-                  },
-                });
-                surfaceWriteOutcome(result);
-              }
-              setSelection(new Set());
-            } catch (error) {
-              surfaceWriteFailure(error, "Photos not added");
-            }
-          })(),
-      })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    setPickingAlbum(true);
   };
+
+  const addSelectionToAlbum = (albumId: string): void =>
+    void (async () => {
+      if (!session) return;
+      const assets = timeline.assets.filter(
+        (item) => selection.has(item.id) && item.assetId
+      );
+      try {
+        // Serial by contract: `position` derives from the rows the previous
+        // write landed. Parallel writes race it.
+        for (const [index, asset] of assets.entries()) {
+          const position =
+            albumEntryCount(entries.rows, albumId, (row) => row.collection_id) +
+            index;
+          // oxlint-disable-next-line no-await-in-loop
+          const result = await session.write("photos", {
+            action: "add-to-album",
+            input: { album_id: albumId, asset_id: asset.assetId!, position },
+          });
+          surfaceWriteOutcome(result);
+        }
+        setSelection(new Set());
+      } catch (error) {
+        surfaceWriteFailure(error, "Photos not added");
+      }
+    })();
 
   // Shared `batchTrash`. Confirmation must say the device original survives.
   const trashSelection = (): void => {
     if (!session) return;
     const targets = vaultAssets(timeline.assets, selection);
-    Alert.alert(
-      `Move ${selection.size} to trash?`,
-      "The device original is never deleted by this action.",
-      [
-        { text: "Cancel" },
-        {
-          text: "Trash",
-          style: "destructive",
-          onPress: () => {
-            void batchTrash(session, targets, surfaceWriteOutcome)
-              .then(() => setSelection(new Set()))
-              .catch((error: unknown) =>
-                surfaceWriteFailure(error, "Photos not trashed")
-              );
-          },
-        },
-      ]
-    );
+    confirmDestructive({
+      body: TRASH_KEEPS_THE_ORIGINAL,
+      count: selection.size,
+      noun: "photograph",
+      onConfirm: () => {
+        void batchTrash(session, targets, surfaceWriteOutcome)
+          .then(() => setSelection(new Set()))
+          .catch((error: unknown) =>
+            surfaceWriteFailure(error, "Photos not trashed")
+          );
+      },
+      verb: "Trash",
+    });
   };
 
   // Destination + size (#712): residual selection must not outlive a destination change.
@@ -751,6 +745,18 @@ export default function PhotosHome({
         groups={menuGroups}
         onClose={() => setViewOptionsOpen(false)}
       />
+
+      {/* A choice is a sheet and a confirm is a sheet (D4, S7); neither is an
+          alert with rows in it. */}
+      <PhotosChoiceSheet
+        choices={albumChoices}
+        onChoose={addSelectionToAlbum}
+        onClose={() => setPickingAlbum(false)}
+        subject={`${selection.size} selected`}
+        title="Add to album"
+        visible={pickingAlbum}
+      />
+      {confirmSheet}
     </View>
   );
 }

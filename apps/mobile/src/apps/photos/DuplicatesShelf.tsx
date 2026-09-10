@@ -8,7 +8,6 @@
 
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -20,6 +19,7 @@ import {
   PHOTOS_EMPTY_DUPLICATES,
 } from "@centraid/blueprints/apps/photos/shared-copy";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -39,6 +39,7 @@ import {
 } from "./duplicate-clusters";
 import type { DuplicateCluster } from "./duplicate-clusters";
 import { justify } from "./justify";
+import { TRASH_KEEPS_THE_COPY_IN_ITS_ALBUMS } from "./photos-confirm-copy";
 import { usePhotosRung } from "./photos-rung-store";
 import { rungHeight } from "./photos-rungs";
 import {
@@ -66,6 +67,7 @@ export default function DuplicatesShelf({
   const { session, online } = useReplica();
   const timeline = usePhotoTimeline();
   const [selection, setSelection] = useState(new Set<string>());
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const clusters = useMemo(
     () => duplicateClusters(timeline.assets),
     [timeline.assets]
@@ -134,21 +136,16 @@ export default function DuplicatesShelf({
       ? { unavailableReason: writeBlockedReason }
       : {
           run: () =>
-            Alert.alert(
-              `Move ${selection.size} to trash?`,
-              "The copy you keep stays in every album it is already in. The device original is never deleted by this action.",
-              [
-                { text: "Cancel" },
-                {
-                  text: "Trash",
-                  style: "destructive" as const,
-                  onPress: runSelection(
-                    () => batchTrash(session!, selected, emit),
-                    "Photos not trashed"
-                  ),
-                },
-              ]
-            ),
+            confirmDestructive({
+              body: TRASH_KEEPS_THE_COPY_IN_ITS_ALBUMS,
+              count: selection.size,
+              noun: "photograph",
+              onConfirm: runSelection(
+                () => batchTrash(session!, selected, emit),
+                "Photos not trashed"
+              ),
+              verb: "Trash",
+            }),
         },
   };
 
@@ -199,6 +196,7 @@ export default function DuplicatesShelf({
         onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
+      {confirmSheet}
     </PhotosScreen>
   );
 }
