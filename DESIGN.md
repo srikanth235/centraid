@@ -495,6 +495,25 @@ The three renderers are generated from the same recipe table: the blueprint rend
 
 One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Every icon shares one contract regardless of which app claims it: single-tone stroke on a 24 grid, `fill: none`, round caps and joins, and `aria-hidden` on the `<svg>` — an app-specific mark (Photos' `heart`, `album`, `place`, `person`, `dupe`, `restore`, `removeFrom`, `info`, `more`, and its shared `trash`/`add`/`share`/`download`) draws new artwork inside that same contract rather than a one-off. Identity uses one initials formatter and one identity-colour resolver. Relative time and bytes use one formatter module. `aria-label` on a container is a REPLACEMENT, not an addition: use it only on controls whose visible content is an icon, and mark decorative SVG `aria-hidden`.
 
+### The six rooms (mobile)
+
+A mobile screen is one of six rooms, and nothing else ([apps/mobile/src/kit/rooms/README.md](apps/mobile/src/kit/rooms/README.md)). The recipes above say what a control looks like; the rooms say what a SCREEN is, which is the half the audit of #1015 found missing — nine surfaces sharing no header, back affordance, search field, confirm, empty state or date format, because the kit was optional and nothing noticed a screen ignoring it.
+
+| Room | Anatomy | Examples |
+| --- | --- | --- |
+| `HomeRoom` | cover grid of app marks, one status line, no floating key, one trailing verb (Settings) | Home |
+| `AppPlace` | `AppHeader` (mark + name + ≤1 trailing action), optional search under it, app band as a render prop | Photos grid, Tasks list, Tally ledger |
+| `PushedPage` | `PlaceHeader`, back to the **named parent** (a computed `PlaceRef`, never a string), ≤1 trailing action | album, contact, document, settings sub-page |
+| `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
+| `SheetRoom` | grabber, title carrying the noun, ≤1 ink button, status line hosted inside | confirm delete, pick date, add to album |
+| `SystemPlace` | `PlaceHeader` + `SectionBlock` / `RowsBlock` only, `HomeKey` in the header's leading slot | Settings, Vault, Copies, Backup health |
+
+The room owns the header, the back control, search, the empty/loading/error states, the status host, selection and the gutter; the app supplies content and copy. A screen that hand-rolls any of those is a finding, not a variant.
+
+Six product rulings sit behind the rooms and are not re-decided per screen — trash, casing, editors, push-versus-sheet, the band under a selection, and where Settings is reachable from: [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015), D1–D6.
+
+`node scripts/lint-mobile-rooms.mjs --enforce` is the enforcement, wired into `bun run lint:product`: a hand-rolled screen root, a back destination written as a string, a gutter typed as a number, an identity hue on a control, a Title Case label, or an exception rendered as member copy fails the push gate.
+
 ## Copy
 
 **Copy is signage, not conversation.** The voice is calm, concrete, and specific — the same voice the rest of this document is written in — and it is read at a glance, on the way to something else. One glance is the unit: a label a member has to parse twice has already failed, and a second sentence explaining the first one is the label admitting it did not work. Crisp is not curt. "Photo deleted" is the register; "Deleted" throws away the noun that made it legible, and "Your photo has been successfully deleted." pads a fact into an announcement.

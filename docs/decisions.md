@@ -987,6 +987,27 @@ Appended as the umbrella's lanes reached them; each row is dated and does not re
 | --- | --- | --- |
 | 2026-09-10 | **A notebook is a place reached only by tapping Notebooks.** The Notes band offers no notebook tab, and `notes-band.test.ts`'s pin that "a filter is not a place" is superseded for notebooks only — a filter over the note list still is not one. | The band's five seats are the app's rooms; a notebook is one of an unbounded set, so putting one on the band makes the band a function of the member's data. Reaching it through Notebooks keeps the band fixed and still gives a notebook a real back target (D4). |
 | 2026-09-10 | **Emptying the Docs trash is one vault command, `core.empty_document_trash`, that collapses every trashed document's grace window onto its own `deleted_at`.** The gateway's lifecycle sweep stays the only thing that destroys a document. | D1 asked for the control, and the vault had no door: `core.trash_document` refuses an already-trashed document and nothing could bring a purge date forward. Making the command a DATE rather than a second destruction path keeps the sweep's rent checks, authority revocations and provenance receipts as the single audited way a document leaves the vault. |
+| 2026-09-10 | **R-KIT-2 · An editor hides the band and carries its leave key in its own header.** S13 reduces to "the band's `current` is computed, never written down". | Two bars at the foot with a live band under them is D5's failure. An editor that keeps the band needs a rule for which bar owns the foot; an editor that hides it needs none. |
+| 2026-09-10 | **R-KIT-6 · `knip` is the root's full run at close**, not a lane's. | An unused export in one lane is usually another lane's not-yet-merged caller. |
+| 2026-09-10 | **R-A-6 · The Docs web-seat half of D1 stays** (the copy module is shared). | The two seats read one copy module, so a mobile-only fix would fork it. |
+| 2026-09-10 | **R-A-7 · `tests/inventory.json`'s TrashAsk row is refreshed at close**, not per lane. | It is one file that every lane touches; per-lane edits are pure merge conflict. |
+| 2026-09-10 | **R-B-4 · `viewer-toolbar-states.ts` extraction accepted.** | The toolbar's states were a switch inside a render; a table can be swept. |
+| 2026-09-10 | **R-B-5 · The Prioritise identifier sweep is Wave 3.** | It is a rename across trees two lanes were editing. |
+| 2026-09-10 | **R-B-6 · `subBase` is re-exported through `kit/theme`** (SHELL lane owns it). | A documented sub-base seam belongs to the theme, not to whichever component discovered it. |
+| 2026-09-10 | **R-B-7 · `SearchField` gains an `autoFocus` pass-through**; callers restore their own. | The kit field replaced three hand-rolled ones, two of which focused on mount. |
+| 2026-09-10 | **R-B-8 · Nearest-rung snaps accepted** where a literal was within a rung of the scale. | The alternative is a second scale, which the zero-debt gate forbids. |
+| 2026-09-10 | **R-B-9 · `PhotosHome` migrates to `AppPlace` in its own round.** | It is the largest screen in the tree and the pattern-setter; it does not ride along. |
+| 2026-09-10 | **R-B-10 · `PeopleConfirm` on `SheetRoom` with named titles accepted**; `ConfirmSheet` gains a title override at Wave 4 only if a third caller needs it. | One caller is not a contract. |
+| 2026-09-10 | **R-B-11 / R-SH-4 · The `screen-root` predicate is scoped at Wave 4** to files the app REGISTERS as screens. | 153 findings, ~96 of them leaf components. A rule that cries about a hundred non-problems is a rule nobody wires. |
+| 2026-09-10 | **R-B-12 · Retiring `locker-gate-field` accepted** ([#1002](https://github.com/srikanth235/centraid/issues/1002) removed the field). | The id outlived the control it named. |
+| 2026-09-10 | **R-B-13 · `selectedSentence` takes the SINGULAR noun**; every caller passes singular. | One pluraliser, at the one place that knows the count. |
+| 2026-09-10 | **R-B-14 · `PhotosBand`'s in-place destination switch stays**; band unification is not in this umbrella. | It is a navigation model change, not a consistency fix. |
+| 2026-09-10 | **R-SH-1 · Automations stays a `SystemPlace`.** | It is a place in `places.ts` with no app mark; `AppPlace` would make an identity claim the product does not make. |
+| 2026-09-10 | **R-SH-2 · `RoomError.detail` is kept, and never receives an exception string**; `lint-mobile-rooms` gains the `error-detail` rule at Wave 4. | A detail line is where a member learns what to do next. The fix is a rule that forbids the payload, not deleting the slot. |
+| 2026-09-10 | **R-SH-3 · Section-level empties stay per-screen.** | A section's empty is about that section's rows; the room's empty is about the page. |
+| 2026-09-10 | **R-SH-5 · `SheetRoom`'s `maxHeight: 85%` accepted**; the root checks it on device at the re-audit. | A sheet taller than the screen is worse than one capped a little low, and the cap is one number in one room. |
+| 2026-09-10 | **R-SH-6 · `HomeRoom.head` is the permanent shape.** The cover's own title row is a leaf the room hosts, not a `trailing` action. | It carries the vault lockup, the Settings key (D6) and its own tests; folding it into `trailing` would flatten three things into one slot. |
+| 2026-09-10 | **R-SH-7 · A pending change that is not accepted says "Your vault did not accept this change. Try again."** | It was the gateway's own `reason` — an exception string wearing a sentence's clothes (S14). The states the kit has words for keep them; everything else gets one noun and one verb. |
 
 ## Related docs
 
