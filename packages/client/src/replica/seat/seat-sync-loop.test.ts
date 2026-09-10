@@ -15,6 +15,7 @@ import type { SeatWatermark } from "./watermark.js";
 const WATERMARK: SeatWatermark = {
   epoch: "epoch-a",
   applied: 3,
+  appliedCommitSeq: 3,
   head: 3,
   behind: 0,
   deferredPending: false,

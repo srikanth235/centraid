@@ -140,6 +140,76 @@ describe("intents", () => {
     }).toStrictEqual({ n: 0 });
   });
 
+  /*
+   * WHAT A TRANSITION MAY NOT ERASE (#1014, G18/B16), and what a recovery
+   * read must return (#1014, G19).
+   *
+   * Red-first on the tree before this: the transition below drops
+   * `waitingOn`/`answeredVersions` because the UPDATE binds them
+   * unconditionally and only four fields were forwarded, and the list query
+   * selected nine of the sixteen columns — so an outcome recovered after a
+   * reconnect arrived with no commit position and wedged the seat exactly the
+   * way R1 did on the client.
+   */
+  test("a re-park keeps who it waits on, so a chain park stays re-enterable", () => {
+    db = openVaultDb();
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "parked",
+      reason: "waiting for intent-0",
+      waitingOn: { seat: "intent", label: "intent-0" },
+      answeredVersions: [{ entity: "task", rowId: "task-1", version: 3 }],
+    });
+    const reparked = transitionReplicaIntentOutcome(
+      db.vault,
+      identity.intentId,
+      { status: "parked", reason: "still waiting for intent-0" }
+    );
+    expect(reparked?.waitingOn).toStrictEqual({
+      seat: "intent",
+      label: "intent-0",
+    });
+    expect(reparked?.answeredVersions).toStrictEqual([
+      { entity: "task", rowId: "task-1", version: 3 },
+    ]);
+  });
+
+  test("a park that settles is waiting on nobody", () => {
+    db = openVaultDb();
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "parked",
+      waitingOn: { seat: "owner", label: "Ada" },
+    });
+    const failed = transitionReplicaIntentOutcome(db.vault, identity.intentId, {
+      status: "failed",
+      reason: "consent grant revoked while awaiting confirmation",
+    });
+    expect(failed?.waitingOn).toBeUndefined();
+  });
+
+  test("the recovery list returns the whole outcome, commit position included", () => {
+    db = openVaultDb();
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "executed",
+      commitSeq: 41,
+      answeredVersions: [{ entity: "task", rowId: "task-1", version: 9 }],
+      dependsOn: ["intent-0"],
+      expiresAt: "2026-10-01T00:00:00.000Z",
+    });
+    const [recovered] = listReplicaIntentOutcomes(db.vault, identity.deviceId);
+    expect(recovered?.commitSeq).toBe(41);
+    expect(recovered?.answeredVersions).toStrictEqual([
+      { entity: "task", rowId: "task-1", version: 9 },
+    ]);
+    expect(recovered?.dependsOn).toStrictEqual(["intent-0"]);
+    expect(recovered?.expiresAt).toBe("2026-10-01T00:00:00.000Z");
+    expect(recovered).toStrictEqual(
+      readReplicaIntentOutcome(db.vault, identity.intentId, identity.deviceId)
+    );
+  });
+
   test("device recovery cleanup emits deletes but preserves an unfinalized repair marker", () => {
     db = openVaultDb();
     recordReplicaIntentOutcome(db.vault, { ...identity, status: "parked" });

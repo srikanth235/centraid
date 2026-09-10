@@ -50,6 +50,7 @@ function silentFeed(): NativeChangeFeed {
 const WATERMARK: SeatWatermark = {
   epoch: "epoch-a",
   applied: 12,
+  appliedCommitSeq: 12,
   head: 12,
   behind: 0,
   deferredPending: false,

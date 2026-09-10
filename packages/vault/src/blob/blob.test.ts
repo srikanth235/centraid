@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -46,6 +46,24 @@ describe("blob", () => {
     store.deleteSync(sha);
     expect(store.hasSync(sha)).toBe(false);
     expect(store.getSync(sha)).toBeNull();
+  });
+
+  test("staged bytes are adopted without a second read (#1014 V11)", () => {
+    // A caller that streamed a blob to disk hands the FILE over; nothing
+    // reads it back into memory, and the budget is accounted as an ingest.
+    const local = new FsBlobStore(path.join(tmp, "staged"));
+    const custody = new BlobCustody(local, () => null);
+    const bytes = Buffer.from("streamed in chunks");
+    const sha = sha256OfBytes(bytes);
+    const staging = custody.stagingPathSync(sha);
+    expect(staging).not.toBeNull();
+    writeFileSync(staging!, bytes);
+    expect(custody.adoptStagedSync(sha, staging!, bytes.length)).toBe(true);
+    expect(custody.getSync(sha)?.equals(bytes)).toBe(true);
+    // A tier with no staging seam says so, so the caller keeps buffering.
+    expect(
+      new BlobCustody(new MemoryBlobStore(), () => null).stagingPathSync(sha)
+    ).toBeNull();
   });
 
   test("memory store mirrors fs semantics", () => {

@@ -5,6 +5,7 @@ import {
   expiredOutcomeRecovery,
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
+  ReplicaIntentIdentityError,
   replicaDependencyVerdict,
   resolvePredecessorReferences,
 } from "@centraid/vault";
@@ -107,12 +108,57 @@ function sendOutcome(
   });
 }
 
-function concealIdentityConflict(res: ServerResponse, intentId: string): true {
-  // UUID collisions aren't actionable: ordinary in-flight ack, no existence oracle.
-  return sendJson(res, 202, {
-    protocolVersion: REPLICA_PROTOCOL_VERSION,
-    accepted: true,
-    outcome: { intentId, status: "in-flight" },
+/**
+ * AN ADMISSION THAT DID NOT HAPPEN IS NEVER ACKNOWLEDGED (#1014, X20).
+ *
+ * Every throw out of `recordReplicaIntentOutcome` used to become `202
+ * in-flight`, which tells the seat "accepted, ask again later" about a write
+ * that will never run: the phone re-sends it forever and the member's change
+ * is silently gone. There are exactly three answers here and they lead to
+ * three different behaviours on the seat:
+ *
+ *   - the device's OWN retained outcome, when a concurrent send of the same
+ *     intent won the race — a dedupe hit, which is what a retry wants;
+ *   - `409 intent_id_reused` for an id already held by a different admission,
+ *     which the drain treats as permanent so the member is told to act rather
+ *     than left waiting. The id is the caller's own and random, so there is no
+ *     existence to leak that the caller did not already hold;
+ *   - `500` for anything else, because the vault failed and a retry is right.
+ */
+function answerAdmissionFailure(
+  res: ServerResponse,
+  context: ReplicaIntentRouteContext,
+  intentId: string,
+  identity: {
+    deviceId: string;
+    appId: string;
+    action: string;
+    payloadHash: string;
+  },
+  error: unknown
+): true {
+  if (!(error instanceof ReplicaIntentIdentityError)) {
+    return sendJson(res, 500, {
+      error: "replica_intent_outcome_failed",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const retained = readReplicaIntentOutcome(
+    context.plane.db.vault,
+    intentId,
+    identity.deviceId
+  );
+  if (
+    retained &&
+    sameIdentity(retained, identity) &&
+    replicaOutcomeWire(retained)
+  )
+    return sendOutcome(res, retained);
+  return sendJson(res, 409, {
+    error: "intent_id_reused",
+    message:
+      "this intent id is already held by another admission; mint a new id for this change",
+    intentId,
   });
 }
 
@@ -273,8 +319,8 @@ export async function handleReplicaIntent(
         reason: deniedReason,
       });
       return sendOutcome(res, denied);
-    } catch {
-      return concealIdentityConflict(res, intentId);
+    } catch (error) {
+      return answerAdmissionFailure(res, context, intentId, identity, error);
     }
   }
 
@@ -291,8 +337,8 @@ export async function handleReplicaIntent(
         ...identity,
         status: "sending",
       });
-    } catch {
-      return concealIdentityConflict(res, intentId);
+    } catch (error) {
+      return answerAdmissionFailure(res, context, intentId, identity, error);
     }
     const answer = await (context.forwardProjectedEdit?.({
       route: projected,
@@ -370,8 +416,8 @@ export async function handleReplicaIntent(
           dependsOn,
         });
         return sendOutcome(res, parked);
-      } catch {
-        return concealIdentityConflict(res, intentId);
+      } catch (error) {
+        return answerAdmissionFailure(res, context, intentId, identity, error);
       }
     }
   }
@@ -394,8 +440,8 @@ export async function handleReplicaIntent(
           conflict,
         });
         return sendOutcome(res, denied);
-      } catch {
-        return concealIdentityConflict(res, intentId);
+      } catch (error) {
+        return answerAdmissionFailure(res, context, intentId, identity, error);
       }
     }
   }
@@ -407,9 +453,8 @@ export async function handleReplicaIntent(
       status: "sending",
       ...(dependsOn.length > 0 ? { dependsOn } : {}),
     });
-  } catch {
-    // Intentionally indistinguishable from any other immutable-id conflict.
-    return concealIdentityConflict(res, intentId);
+  } catch (error) {
+    return answerAdmissionFailure(res, context, intentId, identity, error);
   }
 
   const resolvedInput =

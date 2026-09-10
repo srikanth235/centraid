@@ -19,6 +19,10 @@ import type { PendingShareDelivery, VaultDb } from "@centraid/vault";
 
 import { PEER_REPLICA_CHANGES_PATH } from "../routes/peer-replica-route.js";
 import type { PeerDial } from "./peer-link-client.js";
+import {
+  clearShareSyncingNotice,
+  raiseShareSyncingNotice,
+} from "./share-notices.js";
 import type { LinkRoute } from "./vault-link-row.js";
 
 export interface ShareSubscriptionSweepInput {
@@ -30,6 +34,8 @@ export interface ShareSubscriptionSweepInput {
   now: () => string;
   /** Bounded per pass: a vault with a thousand stalled peers costs one page. */
   limit?: number;
+  /** How the owner should read a peer vault in a notice — the link's label. */
+  peerLabelFor?: (peerVaultId: string) => string | undefined;
 }
 
 export type ShareSweepOutcome =
@@ -134,14 +140,20 @@ export async function sweepShareSubscriptions(
     // oxlint-disable-next-line no-await-in-loop -- (#929) one audience never costs another: a dial that stalls must not fan out into every other peer at once
     const result = await ring(input, row);
     const now = input.now();
-    if (result.outcome === "delivered")
+    if (result.outcome === "delivered") {
       setFulfillmentState(input.origin.vault, {
         grantId: row.grantId,
         peerVaultId: row.peerVaultId,
         state: "delivered",
         updatedAt: now,
       });
-    else if (result.outcome === "removed")
+      clearShareSyncingNotice({
+        origin: input.origin,
+        grantId: row.grantId,
+        peerVaultId: row.peerVaultId,
+        now,
+      });
+    } else if (result.outcome === "removed")
       setFulfillmentState(input.origin.vault, {
         grantId: row.grantId,
         peerVaultId: row.peerVaultId,
@@ -151,7 +163,7 @@ export async function sweepShareSubscriptions(
           ? { detail: "the audience vault no longer held a projection" }
           : {}),
       });
-    else
+    else {
       setFulfillmentState(input.origin.vault, {
         grantId: row.grantId,
         peerVaultId: row.peerVaultId,
@@ -159,6 +171,23 @@ export async function sweepShareSubscriptions(
         updatedAt: now,
         detail: result.detail,
       });
+      // A CROSS-HOST DELIVERY NO LONGER PARKS IN SILENCE (#1014, T15). The row
+      // keeps the state it honestly holds and the sweep keeps trying; what
+      // changes is that after `SHARE_SYNCING_NOTICE_AFTER_MS` of never having
+      // been confirmed, the owner is told WHICH vault has not answered instead
+      // of reading a share as sent.
+      if (!row.revoked)
+        raiseShareSyncingNotice({
+          origin: input.origin,
+          grantId: row.grantId,
+          peerVaultId: row.peerVaultId,
+          ...(input.peerLabelFor?.(row.peerVaultId) === undefined
+            ? {}
+            : { peerLabel: input.peerLabelFor(row.peerVaultId) as string }),
+          detail: result.detail,
+          now,
+        });
+    }
     steps.push({ ...row, result });
   }
   return steps;

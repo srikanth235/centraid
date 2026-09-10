@@ -203,6 +203,76 @@ describe("a share is a subscription, across two gateways", () => {
     audience.vault.close();
   });
 
+  test("the blob door serves a RANGE, never the whole object (#1014 V11)", async () => {
+    const origin = makeSide("gp-range-origin");
+    const audience = makeSide("gp-range-audience");
+    await link(origin, audience);
+    const audienceParty = addAudienceParty(origin, audience);
+    const photo = seedEverySubject(
+      origin,
+      addLocalParty(origin, "Ledger member")
+    ).find((subject) => subject.subjectType === "media.asset")!;
+    const grant = createShareGrant(origin.vault.vault, {
+      audience: { kind: "party", id: audienceParty },
+      subjectType: "media.asset",
+      subjectId: photo.subjectId,
+      capability: "view",
+      grantedAt: nowIso(),
+      grantedBy: origin.ownerPartyId,
+    });
+    const { toAudience } = wireGoldenPair(origin, audience);
+    startShareSubscription({
+      origin: origin.vault,
+      originVaultId: origin.vaultId,
+      grantId: grant.grantId,
+      transportFor: () => ({
+        route: "peer",
+        deliver: () => ({ outcome: "unreachable", detail: "queued" }),
+        remove: () => ({ outcome: "unreachable", detail: "queued" }),
+      }),
+      now: nowIso(),
+    });
+
+    // Every read the blob door makes while the audience pulls must name a
+    // range: one whole-object read per 1 MiB chunk is what OOMed the origin.
+    const reads: (unknown | undefined)[] = [];
+    const original = origin.vault.blobs.local.getSync.bind(
+      origin.vault.blobs.local
+    );
+    const spy = vi
+      .spyOn(origin.vault.blobs.local, "getSync")
+      .mockImplementation((sha, range) => {
+        reads.push(range);
+        return original(sha, range);
+      });
+    try {
+      const swept = await sweepShareSubscriptions({
+        origin: origin.vault,
+        originVaultId: origin.vaultId,
+        dial: toAudience,
+        routeTo: () => ({
+          endpointId: audience.endpointId,
+          relayHints: [],
+          assertedAt: Date.now(),
+        }),
+        now: nowIso,
+      });
+      expect(swept.map((step) => step.result.outcome)).toStrictEqual(
+        swept.map(() => "delivered")
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.every((range) => range !== undefined)).toBe(true);
+    // And the audience really holds the bytes, staged to disk and adopted
+    // under the content address the manifest named.
+    expect(audience.vault.blobs.local.listSync().length).toBeGreaterThan(0);
+
+    origin.vault.close();
+    audience.vault.close();
+  });
+
   test("the origin refuses a shape the grant does not reach", async () => {
     const origin = makeSide("gp-refuse-origin");
     const audience = makeSide("gp-refuse-audience");

@@ -246,6 +246,61 @@ describe("gateway", () => {
       expect(observed[0]?.provenanceRows).toBeGreaterThanOrEqual(2);
     });
 
+    test("a batch rings provenance ONCE, after COMMIT, with the union (#1014 S1)", () => {
+      const observed: {
+        entityTypes: readonly string[] | undefined;
+        inTransaction: boolean;
+        events: number;
+      }[] = [];
+      gw = createGateway(db, {
+        onProvenanceCommitted: (entityTypes) => {
+          observed.push({
+            entityTypes,
+            // The bug S1 names: rung from inside the batch's still-open
+            // transaction, a listener reads the pre-commit vault and its
+            // throw is swallowed.
+            inTransaction: db.vault.isTransaction,
+            events: (
+              db.vault
+                .prepare("SELECT count(*) AS n FROM core_event")
+                .get() as { n: number }
+            ).n,
+          });
+          throw new Error("a hint must never change a committed outcome");
+        },
+      });
+      registerScheduleCommands(gw);
+
+      const outcomes = gw.invokeBatch(
+        Array.from(
+          { length: 3 },
+          (_, index) => () =>
+            gw.invoke(owner, {
+              command: "schedule.propose_event",
+              invocationId: `provenance-batch-${index}`,
+              input: proposeInput({
+                summary: `Batched event ${index}`,
+                dtstart: `2026-08-${String(index + 3).padStart(2, "0")}T10:00:00Z`,
+                dtend: `2026-08-${String(index + 3).padStart(2, "0")}T10:15:00Z`,
+              }),
+            })
+        )
+      );
+
+      expect(outcomes.map((outcome) => outcome.status)).toStrictEqual([
+        "executed",
+        "executed",
+        "executed",
+      ]);
+      expect(observed).toHaveLength(1);
+      expect(observed[0]?.inTransaction).toBe(false);
+      expect(observed[0]?.events).toBe(3);
+      expect([...(observed[0]?.entityTypes ?? [])].sort()).toStrictEqual([
+        "core.event",
+        "schedule.event_ext",
+      ]);
+    });
+
     test("group commit crosses exactly one vault + journal commit pair", () => {
       const vaultExec = vi.spyOn(db.vault, "exec");
       const journalExec = vi.spyOn(db.audit, "exec");
