@@ -607,30 +607,22 @@ export {
   type ReplicaCursorInput,
 } from "./replica/cursor.js";
 export {
-  REPLICA_COMPACTION_HELD_ENTITIES,
-  REPLICA_RETENTION_DAYS,
-  REPLICA_RETENTION_MAX_ENTRIES,
   ReplicaRebootstrapRequiredError,
   abandonReplicaCommit,
-  appendReplicaChange,
   beginReplicaCommit,
   bumpReplicaEpoch,
   currentReplicaLogState,
   endReplicaCommit,
   initializeReplicaProtocol,
-  pruneReplicaChanges,
   readReplicaChanges,
-  refreshReplicaTriggers,
-  type AppendReplicaChangeInput,
+  replicaRowIdFromKeyJson,
   type BumpReplicaEpochOptions,
-  type PruneReplicaChangesOptions,
   type ReadReplicaChangesOptions,
   type ReplicaChangeEntry,
   type ReplicaChangeOp,
   type ReplicaChangePage,
   type ReplicaCommitHandle,
   type ReplicaLogState,
-  type ReplicaPruneResult,
   type ReplicaRebootstrapReason,
 } from "./replica/change-log.js";
 
@@ -640,6 +632,7 @@ export {
   openReplicaCapture,
   primaryKeyOf,
   readReplicaLog,
+  REPLICA_LOCAL_TABLES,
   replicaCaptureOpen,
   lowestSeatCursor,
   lowestSeatCommitSeq,
@@ -659,8 +652,9 @@ export {
   type ReplicaLogOp,
   type ReplicaLogPage,
   type ReplicaLogRow,
-  // `ReplicaLogState` is still taken by the mechanism this replaces; the
-  // alias goes away with `replica_change`.
+  // `ReplicaLogState` is taken by the feed's view of the same log
+  // (`replica/change-log.ts`), which reports the same epoch, floor and
+  // watermark in the vocabulary the feed's callers speak.
   type ReplicaLogPruneResult,
   type ReplicaLogState as GatewayLogState,
 } from "./replica/log.js";

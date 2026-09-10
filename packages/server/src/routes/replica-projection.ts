@@ -139,8 +139,9 @@ export interface ReplicaIntentEntry {
 //
 // The verdict below reads the ENTRY, not the row's end state: an app that was
 // installed, revoked, then installed again must force a bootstrap for the
-// middle transition too. Retention compaction therefore may not fold these
-// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers this set.
+// middle transition too. One log row per (table, key) per COMMIT is what makes
+// that readable — the transitions are separate commits, and nothing folds them
+// (#1014, R-1014-1).
 export const SHAPE_CONTROL_ENTITIES = new Set(["access.app", "access.app_ext"]);
 
 const WIRE_OUTCOMES = new Set([
@@ -414,17 +415,18 @@ export function projectReplicaPage(
         { op: ReplicaChangeEntry["op"]; shapeIds: string[] }
       >();
       for (const shape of interested) {
-        // The PRIOR pair, never `first.op`/`first.oldValuesJson`: compaction
-        // may have folded older entries into `first`, and membership at the
-        // client's cursor is decided by the state before the OLDEST change
-        // `first` stands for (#883 C6). An unfolded entry reports itself.
+        // FIRST, NEVER LAST: membership at the client's cursor is decided by
+        // the state before the OLDEST change in this page for the row (#883
+        // C6). The prior pair this used to need is gone with the folding that
+        // needed it — the log carries one row per (table, key) per commit and
+        // each one states its own prior (#1014, R-1014-1).
         const previous =
-          first.priorOp === "insert"
+          first.op === "insert"
             ? { known: true }
             : replicaHistoricalRowState(
                 shape,
                 last.entity,
-                first.priorOldValuesJson
+                first.oldValuesJson
               );
         if (!previous.known) return rebootstrap();
         const shaped = row

@@ -11,6 +11,7 @@ import {
   listVaultEntities,
   readReplicaRow,
   readReplicaRows,
+  replicaRowIdFromKeyJson,
   replicaUnavailableColumnsOf,
   resolveEntity,
 } from "@centraid/vault";
@@ -98,7 +99,17 @@ const DAY_MS = 86_400_000;
 const INCREMENTAL_MEMBERSHIP_LIMIT = 50_000;
 const INCREMENTAL_CHANGE_LIMIT = 5_000;
 
-/** `undefined` past `limit`. Backed by `idx_replica_change_latest_row`. */
+/**
+ * `undefined` past `limit`. Backed by `idx_replica_log_row`, whose leading
+ * columns are `(epoch, "table")`.
+ *
+ * ONE LOG (#1014, R-1014-1): the probe reads the physical table's rows in
+ * `replica_log` and converts each stored key back to the canonical row id the
+ * shape plane speaks — the same conversion the feed does, from the same
+ * function, so a fingerprint and a projection can never disagree about which
+ * row moved. An entity the registry cannot resolve has no physical table to
+ * probe and therefore nothing changed.
+ */
 function changedRowIdsSince(
   db: DatabaseSync,
   epoch: string,
@@ -106,25 +117,31 @@ function changedRowIdsSince(
   sinceSeq: number,
   limit: number
 ): string[] | undefined {
+  const ref = resolveEntity(entity, db);
+  if (!ref) return [];
   const rows = preparedStatement(
     db,
-    `SELECT DISTINCT row_id FROM replica_change
-      WHERE epoch = ? AND entity = ? AND seq > ?
+    `SELECT DISTINCT pk_json FROM replica_log
+      WHERE epoch = ? AND "table" = ? AND seq > ?
       LIMIT ?`
-  ).all(epoch, entity, sinceSeq, limit + 1) as { row_id: string }[];
-  return rows.length > limit ? undefined : rows.map((row) => row.row_id);
+  ).all(epoch, ref.physical, sinceSeq, limit + 1) as { pk_json: string }[];
+  return rows.length > limit
+    ? undefined
+    : rows.map((row) => replicaRowIdFromKeyJson(row.pk_json));
 }
 
-/** Index probe, not a scan — `idx_replica_change_latest_row` covers it. */
+/** Index probe, not a scan — `idx_replica_log_row` covers it. */
 function entityChangeSeq(
   db: DatabaseSync,
   epoch: string,
   entity: string
 ): number {
+  const ref = resolveEntity(entity, db);
+  if (!ref) return 0;
   const row = preparedStatement(
     db,
-    `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ? AND entity = ?`
-  ).get(epoch, entity) as { seq: number | null } | undefined;
+    `SELECT MAX(seq) AS seq FROM replica_log WHERE epoch = ? AND "table" = ?`
+  ).get(epoch, ref.physical) as { seq: number | null } | undefined;
   return row?.seq ?? 0;
 }
 const temporalFingerprintCache = new WeakMap<

@@ -109,10 +109,7 @@ function isShadowTable(name: string): boolean {
     name.startsWith("fts_") ||
     name.startsWith("sqlite_") ||
     name === "replica_log" ||
-    name === "replica_meta" ||
-    // The trigger log #1014 retires. A log of the log is a loop; it leaves
-    // with the last of its triggers.
-    name === "replica_change"
+    name === "replica_meta"
   );
 }
 

@@ -57,7 +57,6 @@ const SEAT_OWN_TABLES: ReadonlySet<string> = new Set([
   "seat_outbox",
   "seat_outbox_settled",
   "replica_log",
-  "replica_change",
   "replica_meta",
 ]);
 

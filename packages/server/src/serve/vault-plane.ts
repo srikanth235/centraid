@@ -82,7 +82,6 @@ import {
   registerTallyCommands,
   registerTaskCommands,
   registerAtlasCommands,
-  pruneReplicaChanges,
   lowestSeatCommitSeq,
   pruneReplicaIntentOutcomes,
   pruneReplicaLog,
@@ -2095,21 +2094,7 @@ export class VaultPlane {
             `contentBlockedByLineage=${JSON.stringify(result.contentBlockedByLineage)}`
         );
       }
-      const replicaPrune = pruneReplicaChanges(this.db.vault);
-      if (
-        replicaPrune.expired +
-          replicaPrune.compacted +
-          replicaPrune.overflow +
-          replicaPrune.discardedPriorEpochs >
-        0
-      ) {
-        this.logger.info(
-          `vault plane: replica prune expired=${replicaPrune.expired} ` +
-            `compacted=${replicaPrune.compacted} overflow=${replicaPrune.overflow} ` +
-            `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`
-        );
-      }
-      // THE SEAT LOG'S OWN PRUNE, WIRED (#1014, G7/T1/V1). `replica_log`
+      // THE ONLY PRUNE THERE IS (#1014, G7/T1/V1, R-1014-1). `replica_log`
       // carries a full JSON row image per (table, pk) per commit in the file
       // the gateway SERVES, and until now nothing in production ever pruned
       // it: the 30-day/200,000-row window, the `retention` verdict and the

@@ -19,7 +19,6 @@
 import crypto from "node:crypto";
 
 import {
-  currentReplicaLogState,
   expiredOutcomeRecovery,
   judgeMemberIntent,
   partiesBoundToVault,
@@ -35,7 +34,7 @@ import type {
 } from "@centraid/vault";
 
 import type { Admission } from "./peer-replica-route.js";
-import { originConflict } from "./replica-intent-shape.js";
+import { originConflict, replicaRowVersion } from "./replica-intent-shape.js";
 
 export interface MemberIntentAnswer {
   status: number;
@@ -431,27 +430,35 @@ function recordSettleFailure(
   }
 }
 
+/**
+ * THE VERSION THIS ANSWER STANDS FOR IS THE ROW'S OWN COLUMN (#996, R6;
+ * #1014, R-1014-1).
+ *
+ * It read `MAX(seq)` over the trigger log — the position of the last projector
+ * entry that mentioned the container. The member's seat compares this number
+ * against the `row_version` it holds, so a transport position here cleared a
+ * pending badge against a version that never existed, or never cleared it at
+ * all. `replicaRowVersion` is the same reader the gateway's own conflict check
+ * uses; a container with no version (an append-only band, a row that is gone)
+ * answers with no entry rather than with a number in the wrong units.
+ */
 function answeredVersionsFor(
   admission: Admission,
   route: { containerType: string; containerId: string }
 ): { shapeId: string; entity: string; rowId: string; version: number }[] {
-  const state = currentReplicaLogState(admission.origin.vault);
-  const row = admission.origin.vault
-    .prepare(
-      `SELECT MAX(seq) AS seq FROM replica_change
-        WHERE epoch = ? AND entity = ? AND row_id = ?`
-    )
-    .get(state.epoch, route.containerType, route.containerId) as {
-    seq: number | null;
-  };
-  return row.seq === null
+  const version = replicaRowVersion(
+    admission.origin.vault,
+    route.containerType,
+    route.containerId
+  );
+  return version === 0
     ? []
     : [
         {
           shapeId: admission.shapeId,
           entity: route.containerType,
           rowId: route.containerId,
-          version: row.seq,
+          version,
         },
       ];
 }

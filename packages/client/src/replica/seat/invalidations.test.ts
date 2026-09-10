@@ -43,7 +43,6 @@ describe("a seat's change notice, as invalidations", () => {
           "seat_outbox",
           "seat_outbox_settled",
           "replica_log",
-          "replica_change",
           "replica_meta",
           "sqlite_sequence",
           "fts_schedule_task",
