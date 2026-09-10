@@ -699,6 +699,7 @@ export {
   DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaRow,
   readReplicaRows,
+  replicaRowIdsOf,
   withReplicaSnapshot,
   type ReadReplicaRowsOptions,
   type ReplicaRow,

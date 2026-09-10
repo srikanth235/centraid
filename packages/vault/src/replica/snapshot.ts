@@ -189,6 +189,34 @@ function publicRow(
 }
 
 /**
+ * EVERY CANONICAL ROW ID OF AN ENTITY, FROM THE ENTITY (#1014, G9).
+ *
+ * The gateway's opaque-key conflict check has to hash candidate ids to find
+ * the one behind a wire id, and it took its candidates from the change log —
+ * so after a prune or an epoch bump the candidate set was EMPTY and every
+ * opaque-shape base version passed unchecked. A log is a record of what
+ * changed; the question here is what EXISTS, and the table is the only thing
+ * that answers it. Key columns only, in the same canonical spelling
+ * `readReplicaRows` gives a row (a JSON tuple for a composite key), so the
+ * hashes match.
+ */
+export function replicaRowIdsOf(
+  vault: DatabaseSync,
+  entity: string,
+  limit = 100_000
+): string[] {
+  const shape = shapeOf(vault, entity);
+  if (shape.primaryKey.length === 0) return [];
+  const columns = shape.primaryKey.map(quoteIdentifier).join(", ");
+  const rows = vault
+    .prepare(
+      `SELECT ${columns} FROM ${quoteIdentifier(shape.physical)} LIMIT ?`
+    )
+    .all(limit) as Record<string, unknown>[];
+  return rows.map((row) => rowIdOf(row, shape.primaryKey));
+}
+
+/**
  * THE VERSION OF A ROW IS THE ROW'S OWN COLUMN (#996, R6) — here too.
  *
  * This is the PRODUCING half of the same rule the gateway's conflict check
