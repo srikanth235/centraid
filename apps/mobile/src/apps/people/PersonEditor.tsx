@@ -24,6 +24,7 @@ import {
   CADENCE_NEVER,
   FIELDS,
   LABELS,
+  ROUTE_TITLES,
   VERBS,
 } from "@centraid/blueprints/apps/people/people-copy";
 import { IDENTITY_HUE_KEYS } from "@centraid/design";
@@ -128,6 +129,7 @@ export default function PersonEditor({
           <BackRow
             destination={existing?.name ?? APP_TITLE}
             onPress={() => navigation.goBack()}
+            title={existing ? ROUTE_TITLES.editPerson : ROUTE_TITLES.newPerson}
           />
           {seeded ? (
             <ScrollView contentContainerStyle={styles.scroll}>

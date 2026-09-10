@@ -17,6 +17,7 @@ import {
   FIELDS,
   FRAGMENTS,
   MERGE_HEADS,
+  ROUTE_TITLES,
   SECTIONS,
   SENTENCES,
   VERBS,
@@ -117,6 +118,7 @@ export default function MergeView({
           <BackRow
             destination={keep?.name ?? "Person"}
             onPress={() => navigation.goBack()}
+            title={ROUTE_TITLES.merge}
           />
           {keep ? (
             <ScrollView contentContainerStyle={styles.scroll}>

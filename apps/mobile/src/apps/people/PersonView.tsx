@@ -106,6 +106,9 @@ export default function PersonView({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [composer, setComposer] = useState<Composer | null>(null);
   const [confirmTrash, setConfirmTrash] = useState(false);
+  const [confirmChannel, setConfirmChannel] = useState<ContactChannel | null>(
+    null
+  );
 
   const toggle = (key: string): void =>
     setCollapsed((state) => ({ ...state, [key]: !state[key] }));
@@ -349,12 +352,17 @@ export default function PersonView({
                   : {})}
                 trailing={
                   channel.channel_id ? (
+                    /* The WORD, not `✕`: that glyph is the search field's
+                       clear control two screens away, and one mark meaning
+                       both "clear this text" and "destroy this record" is the
+                       mis-tap this row invited. Through the modal, like every
+                       other act no reverse write can undo (#1015). */
                     <Verb
-                      label="✕"
+                      label={VERBS.remove}
                       quiet
                       disabled={!writable}
                       accessibilityLabel={LABELS.removeChannel(channel.kind)}
-                      onPress={() => void writes.deleteChannel(channel)}
+                      onPress={() => setConfirmChannel(channel)}
                     />
                   ) : undefined
                 }
@@ -486,6 +494,18 @@ export default function PersonView({
           {body()}
         </View>
       </TopSafeArea>
+      <PeopleConfirm
+        visible={confirmChannel !== null}
+        title={CONFIRMS.removeChannel.title(confirmChannel?.kind ?? "")}
+        body={CONFIRMS.removeChannel.body}
+        verb={CONFIRMS.removeChannel.verb}
+        onCancel={() => setConfirmChannel(null)}
+        onConfirm={() => {
+          const channel = confirmChannel;
+          setConfirmChannel(null);
+          if (channel) void writes.deleteChannel(channel);
+        }}
+      />
       <PeopleConfirm
         visible={confirmTrash}
         title={CONFIRMS.trash.title(person?.name ?? "")}

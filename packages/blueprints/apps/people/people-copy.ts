@@ -4,6 +4,19 @@
 // is not an act a member performs.
 
 export const APP_TITLE = "People";
+
+/**
+ * WHAT A PUSHED ROUTE IS CALLED (#1015 S2). Every pushed screen in People used
+ * to draw a back row and nothing else, so Trash and the new-person form were
+ * indistinguishable at a glance — both headed `‹ People` with no title at all.
+ */
+export const ROUTE_TITLES = {
+  trash: "Trash",
+  newPerson: "New person",
+  editPerson: "Edit person",
+  merge: "Merge",
+  logTouch: "Log a touch",
+} as const;
 export const TOUCH_TITLE = "Touch";
 export const SEARCH_TITLE = "Search";
 
@@ -158,6 +171,15 @@ export const CONFIRMS = {
     title: (dupe: string, keep: string) => `Merge ${dupe} into ${keep}?`,
     body: SENTENCES.mergeWarning,
     verb: VERBS.merge,
+  },
+  /** A channel has no reverse write, so it joins Trash and Merge on the modal
+   *  rather than on the status line's Undo (#1015, people/findings #7). The
+   *  `✕` used to destroy the row on one tap, from a 44pt target sitting beside
+   *  the row's own open-the-person target. */
+  removeChannel: {
+    title: (kind: string) => `Remove this ${kind}?`,
+    body: "There is no undo for this one.",
+    verb: VERBS.remove,
   },
 } as const;
 
