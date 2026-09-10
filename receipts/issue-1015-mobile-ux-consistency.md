@@ -236,3 +236,76 @@ Per lane. The umbrella's fresh-context attestation is the root's at close.
 | Unfinished work is stated, not implied | PASS | S13 is recorded as not done, with the contradiction between D5, S13 and S6 that stops it, and raised to the root. |
 
 Verdict: PASS / PASS / PASS / PASS.
+
+## What changed — round 2
+
+### Lane KIT — round 2, slice 1: S1 the six rooms
+
+Answers **Wave 2 / S1** and the Decision table in #1015.
+
+- **`apps/mobile/src/kit/rooms/README.md`** — new. The six rooms, their anatomies from the issue's Decision table, what a room decides that a screen may not, and why `OptionSheet` is not the sheet room.
+- **`apps/mobile/src/kit/rooms/place.ts`** — new. `PlaceRef` carries a `unique symbol` brand, so `backTo` cannot be written down: it is minted by `place()` from a route entry and read with `parentPlace()` / `currentPlace()` over the stack. Audit **B7** was thirteen Docs screens hardcoding `backTo="All"`, twelve of them wrong in the label and the VoiceOver word together.
+- **`apps/mobile/src/kit/rooms/room-contracts.ts`** — new, framework-free. `RoomAction`, `RoomLoading`, `RoomError`, `RoomEmpty`, `RoomSelection`, `BandState`, plus `bandStateFor()` and `selectedSentence()`.
+- **`apps/mobile/src/kit/rooms/RoomBody.tsx`** — new. One state order for every room: error, loading, empty, content. An empty state drawn over a failed read tells a member their vault is empty when it is only unreachable.
+- **`apps/mobile/src/kit/rooms/SelectionBars.tsx`** — new. Selection as a mode per **D5**: the header swaps in place to "N selected · Cancel", the verbs sit in one foot row, a destructive verb is outlined `--net`.
+- **`apps/mobile/src/kit/rooms/HomeRoom.tsx`**, **`AppPlace.tsx`**, **`PushedPage.tsx`**, **`EditorRoom.tsx`**, **`SheetRoom.tsx`**, **`SystemPlace.tsx`** — new: the six rooms. The band is the app's, so a room takes it as a render prop and hands it `BandState`; `EditorRoom` takes no band prop at all and hosts `StatusLineHost` inside itself (**R-KIT-2**, audit **B5**), as does `SheetRoom`.
+- **`apps/mobile/src/kit/rooms/rooms.styles.ts`** — new. Every room gutter is `pageMargin`; colourless, ink resolves at the call site.
+- **`apps/mobile/src/kit/rooms/index.ts`** — new. The six rooms and the place/contract helpers.
+- **`apps/mobile/src/kit/rooms/rooms.test.tsx`** — new, 18 cases: the state order, the parent-not-a-literal rule, the no-parent case, the selection swap and the band standing down, search hidden under a selection, Done-versus-Cancel, the editor taking no band, and the grid plate landing in the header.
+
+### Lane KIT — round 2, slice 2: S7 the one confirm
+
+- **`apps/mobile/src/kit/components/ConfirmSheet.tsx`** — new. `confirmTitle()` puts the noun and the count in the question ("Delete 3 documents?"), the destructive verb is outlined `--net` and never the view's filled commit, and `useConfirmDestructive()` makes asking as cheap as the `Alert.alert` it replaces — which is the only reason the alert won in 21 files. Undo stays the other half: `showUndoStatus` in `kit/components/status-line.ts` is already the one undo grammar (audited this round, unchanged), and a reversible write takes it *instead of* a confirm, never both.
+- **`apps/mobile/src/kit/components/ConfirmSheet.test.tsx`** — new, 4 cases.
+
+Call sites are NOT migrated: the 21 `Alert.alert` files live under `apps/mobile/src/apps` and `src/screens`, which the app lanes own this round.
+
+### Lane KIT — round 2, slice 3: Wave 4 enforcement, written and unwired
+
+- **`scripts/lint-mobile-rooms.mjs`** — new, five rules: `screen-root`, `back-literal`, `page-margin`, `identity-tint`, `copy-title-case`. Report-only by default (exit 0); `--enforce` and `--max <n>` are what Wave 4 turns on. Not added to `package.json`, `check:push` or CI. A silent no-op is a failure: zero screen files scanned exits 1.
+- **`scripts/lint-mobile-rooms.test.mjs`** — new, 7 cases, run with `node --test`; it holds the READER against the real tree, because a dead walker would make every rule vacuous.
+
+**The Wave 3 baseline, as it printed on this head** (558 files under `apps/mobile/src/{apps,screens}`):
+
+```
+  screen-root      180
+  back-literal      47
+  page-margin      135
+  identity-tint      0
+  copy-title-case    0
+report-only lint-mobile-rooms — 362 finding(s) over 558 file(s)
+```
+
+`identity-tint` at 0 is a real zero. `copy-title-case` at 0 is a SCOPE limit, not a clean bill: the rule reads `*copy*.ts` tables as the brief specifies, and the mobile copy tables are already sentence case — Photos' Title Case (D2) lives in menu option tables inside `.tsx`, which this rule does not read. Raised to the root.
+
+### Lane KIT — round 2 verification
+
+| Check | Result |
+| --- | --- |
+| `bunx vitest run src/kit` (apps/mobile) | 66 files, 510 passed |
+| `bun run --cwd apps/mobile typecheck` | exit 0 |
+| `node scripts/lint-mobile-rooms.mjs` | exit 0, counts above |
+| `node --test scripts/lint-mobile-rooms.test.mjs` | 7 pass, 0 fail |
+| `node scripts/lint-mobile-design.mjs` · `lint-container-opacity.mjs` · `lint-aria-labels.mjs` | all ok; `apps/mobile/src` still at container-opacity budget 0 |
+| `bun run format` then `bun run check:push:static` | 4/4 gates passed in 27.5s |
+| `bun run knip` | clean of this lane: `kit/rooms/index.ts` is reached through the test that imports the barrel, and no room export is unused. The two unused exports it still lists (`verifyModelAssets`, `hasDisplayRung`) are on the base head with this lane stashed |
+| `node .governance/law/run.mjs --brief-digest 514cb2fed327` | 10 rules, no findings. The blocker recorded while this round was in progress — `commit-message-format` on the umbrella's own merge commit `7e07b614` — was cleared by the root re-wording it to `Merge …` (`794a5dd34`); every commit in this round passed the pre-commit hook unforced. |
+
+### Lane KIT — round 2 audit
+
+| Check | Verdict | Notes |
+| --- | --- | --- |
+| What changed faithfully describes the diff | PASS | Every file above is named by full path; the diff contains nothing else. |
+| Each claim is realized in the diff | PASS | `kit/rooms/` exports six rooms with a test that mounts each; `ConfirmSheet.tsx` exists with a test; `scripts/lint-mobile-rooms.mjs` runs and prints the baseline. |
+| Nothing outside the lane's slice was changed to go green | PASS | Nothing under `apps/mobile/src/apps` or `src/screens` was touched; no lint config, budget, baseline or ledger was edited. |
+| Unfinished work is stated, not implied | PASS | Screen migration (Wave 2), the 21 `Alert.alert` call sites, and the `copy-title-case` scope limit are all recorded above. |
+
+Verdict: PASS / PASS / PASS / PASS.
+
+### Lane KIT — round 2 decisions
+
+| Id | Ruling | Reason |
+| --- | --- | --- |
+| **R-KIT-3** | `ConfirmSheet` is built on `SheetRoom`, not on `OptionSheet`. Accepted. | `OptionSheet`'s iOS path is `ActionSheetIOS`, a platform surface that can draw neither an outlined `--net` verb (DESIGN.md: a destructive verb is outlined, never filled) nor host a `StatusLine`. A confirm that cannot show its own undo afterwards is not the confirm this issue asks for. `OptionSheet` keeps the choice-list job (**D4**); the confirm is a room. |
+| **R-KIT-4** | Widening `copy-title-case` to read menu option tables in `.tsx` is Wave 3 copy-lane work, not this lane's. | The rule as briefed reads `*copy*.ts` tables and prints a true 0 over them. Photos' Title Case (**D2**) lives in `.tsx` option tables, so the 0 is a scope limit, not a clean bill — recorded above rather than papered over. Widening the reader is a change to the finding set the copy lane burns down, so it belongs with that lane, not ahead of it. |
+| **R-KIT-5** | **S13 is closed** by `PlaceRef` + `BandState`. | S13 asked that band `current` be computed and never literal. `PlaceRef` carries a `unique symbol` brand minted only by `place()`, so `backTo`/`current` cannot be written as a string at all — the rule is a type error, not a lint. `bandStateFor()` derives the band's state from the room, and `EditorRoom` takes no band prop (**R-KIT-2**, **D5**). `scripts/lint-mobile-rooms.mjs`'s `back-literal` rule (47 findings) measures the un-migrated screens for Wave 3; the kit contract itself is closed. |
