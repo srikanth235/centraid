@@ -653,3 +653,34 @@ Files changed or deleted, by full path:
 The two `page-margin` findings left are the same `paddingHorizontal: 3` chip inset in `PhotoTile.tsx`, twice. `subBase` names 2 (`gutter`) and 1 (`hair`); a third value there is a design-system change and not a call-site one, so the literal stays and is stated at the seam. `TimelineGrainControl.tsx`'s `2` is `subBase.gutter` now that the SHELL lane published the door.
 
 `screen-root 71` is the rule reading text rather than a render tree, and it splits cleanly: **22** are routes whose root is their own app frame — `<TallyScreen>`, `<LockerScreen>`, `<PeopleScreen>`, `<PhotosScreen>` — each of which IS one of the six rooms, one level of indirection the matcher cannot follow; **49** are leaf components and body views (`PhotoTile`, `BalancesView`, `LockerRow`, the bands, the map views) that are not screens and must not be rooted in a room. Driving this number to a literal zero would mean either deleting the four frames and repeating their gate, band and lockup wiring across forty routes, or wrapping leaf components in rooms. Neither is the rule's intent, so neither was done, and the count is stated here rather than engineered away.
+
+### Lane APPS-A — the merge round: the rooms reconciled, and R-A-12
+
+`umbrella/1015-mobile-ux` and `lane/1015-apps-a` extended the same three room
+files in parallel. Merged as a union, one definition per prop, nothing
+renamed:
+
+- `apps/mobile/src/kit/rooms/AppPlace.tsx` · `apps/mobile/src/kit/rooms/PushedPage.tsx`
+  — `chrome` (APPS-A) and `lockup` (APPS-B) are both kept and both rendered,
+  in that order, above the header. They were added for the same slot by two
+  lanes that could not see each other; renaming or collapsing either would
+  have broken its callers silently, which is the one thing the wave's rule
+  about room props forbids. `secondary` keeps ONE definition carrying both
+  lanes' reasons (Docs' drive needs the pair; People's roster reaches Trash
+  from here and nowhere else), with the `testID` pass-through APPS-A added.
+- `apps/mobile/src/kit/rooms/rooms.test.tsx` — every test from both sides
+  kept. The chrome claim (`words[0]`, so the order is pinned) and the lockup
+  claim (`toContain`) now stand side by side on both rooms.
+- `packages/blueprints/apps/notes/view-copy.ts` — `HISTORY_UNREADABLE`
+  deleted (R-A-12). `grep -rn HISTORY_UNREADABLE packages apps`, with `dist`
+  and sourcemaps set aside, returns the definition and no caller on any
+  seat, web included.
+
+**R-A-9 verified read-only across Photos, and it does not hold there.** Four
+screens build their `selectionBar` object unconditionally and pass it on every
+render, so `PhotosScreen` lowers a `RoomSelection` with `count: 0` while the
+member is merely looking: `AlbumDetail.tsx:313`/`:354`,
+`DuplicateReview.tsx:120`/`:159`, `DuplicatesShelf.tsx:112`/`:167`,
+`PhotoStateView.tsx:222`/`:266`. Under R-A-9 that is a dimmed band and a
+swapped header at rest. Not edited here — another worker holds those files;
+raised to the root as an owner item.
