@@ -323,6 +323,22 @@ describe(EditorRoom, () => {
     expect(words(fresh)).toContain("Cancel");
   });
 
+  // An editor that is STATE rather than a route presents itself, and hosting
+  // the line inside that presentation is the whole of audit B5.
+  it("renders nothing while a presented editor is closed", () => {
+    const container = render(
+      <EditorRoom onDone={noop} presented title="Note" visible={false} />
+    );
+    expect(words(container)).toStrictEqual([]);
+  });
+
+  it("carries the acts of the thing being edited in one foot row", () => {
+    const container = render(
+      <EditorRoom foot={<Text>Versions</Text>} onDone={noop} title="Note" />
+    );
+    expect(words(container)).toContain("Versions");
+  });
+
   it("hosts the status line inside, and takes no band", () => {
     const source = fs.readFileSync(
       path.resolve(import.meta.dirname, "EditorRoom.tsx"),
