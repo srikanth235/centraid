@@ -81,3 +81,69 @@ node .governance/law/run.mjs --door window --range b0c1949c..HEAD
 - **The `## Checklist` against the issue's execution plan.** PASS. The rows mirror [#1014](https://github.com/srikanth235/centraid/issues/1014)'s wave list — 0a, 0b, 0c, 0d, 1, A, B, C, D, E, F, S, G — in the issue's order and with each row's text taken from that wave's own description, preceded by this docs slice and closed by the close pass. It is a wave checklist rather than the issue's acceptance list because those criteria are per-wave gates the later sections carry; none is dropped.
 - **The `## Decisions` rulings against `docs/decisions.md`.** PASS. Each of **R-1014-1 … R-1014-12** appears in both files with the same substance, and each cites `#1014` in its own line, which is what `doctrine-citation` reads. `registry-completeness` is satisfied in both directions: the receipt records rulings and `docs/decisions.md` carries lines citing #1014; the change lands and `CHANGELOG.md` carries a line citing #1014.
 - **Claims against commands.** PASS. Every line in `## Verification` was run on this tree and is quoted with its result in the lane report; no gate, ledger, budget, allowlist or lint config was touched, and no test was skipped, quarantined or deleted.
+
+## Lane 0a — the gateway log: one floor, a live seat hold, and the capture's edges
+
+Wave 0a's box is **not** ticked. Six of its seven clauses landed; the headline one — `replica_change` retired as a transport — did not, and `## Not done, and why` below says what stopped it. The lane's findings are **G1, G2, G3, G6, G9, G13, G15, G20, G21, G25, V1, T1, T3, T7, T9**.
+
+### What changed
+
+Three commits on `lane/1014-0a`, all made after merging the umbrella branch at `5ac727e8`.
+
+- **`9b5b1261` — `fix(vault): replicated tables are an allow-list, not a deny-list (#1014)`** (G13). `packages/vault/src/schema/private-tables.ts` gains `REPLICATED_TABLE_NAMES` (109 names), `isReplicatedTable` (ext bands by their `ext_` / `extdraft_` prefix) and `unclassifiedTables`; `replicatedTablesOf` intersects the file's tables with that list instead of subtracting the private one, so a table added to the schema now replicates NOWHERE by default rather than EVERYWHERE. `packages/vault/src/schema/private-tables.test.ts` adds four golden cases, including a planted `zz_unclassified` table that must be caught. `packages/vault/src/index.ts` exports the two new predicates; [`ARCHITECTURE.md`](../ARCHITECTURE.md) describes two closed lists rather than one.
+- **`b3f15178` — `fix(replica): one floor per log, each derived from its own (#1014)`** (G1, G2, G3, G6, G7/T1, G15, G20, G21, G25, V1, T9, T7). Rung eight (`REPLICA_FLOOR_SPLIT_DDL` in `packages/vault/src/schema/replica.ts`, listed in `packages/vault/src/schema/migrate.ts`) adds `replica_meta.change_floor_seq` and `access_device_secret.sync_cursor_at`, moves an existing file's floor into the trigger log's column and re-derives `floor_seq` from the rows `replica_log` actually still holds. `packages/vault/src/replica/change-log.ts` reads and writes only `change_floor_seq`, and `bumpReplicaEpochInTransaction` derives each floor from its own log. `packages/vault/src/replica/log.ts` gains `inReadTransaction` (re-entrant, used by both readers), `recordSeatCursor`, `REPLICA_SEAT_HOLD_DAYS = 14`, a `lowestSeatCursor` that counts only devices seen inside that bound, `watchReplicaTable`, a `schema_version`-keyed `COLUMN_NAMES`, and a defer threshold that measures raw image bytes as well as rows. `packages/server/src/serve/vault-plane.ts:2118` calls `pruneReplicaLog` in the sweep; `packages/server/src/routes/seat-routes.ts` records the cursor the device sent, best-effort, after the page is served. `packages/vault/src/gateway/execution.ts` and `packages/vault/src/gateway/gateway.ts` abandon the capture on their full-rollback paths (never on a `ROLLBACK TO`, which would drop the enclosing transaction's rows); `packages/vault/src/gateway/ext.ts` declares each new ext physical to the open capture. `packages/vault/src/replica/seat-snapshot.ts` reads its epoch, schema epoch and floor from the COPY. Tests: `packages/vault/src/replica/log-retention.test.ts` (+7 cases), `packages/vault/src/schema/migrate.test.ts` and `packages/server/src/engine/stores/gateway-db.test.ts` moved to eight rungs.
+- **`ec814221` — `fix(replica): the opaque conflict check fails closed (#1014)`** (G9, T3, T9-doc). `packages/vault/src/replica/snapshot.ts` gains `replicaRowIdsOf`; `packages/server/src/routes/replica-intent-shape.ts` takes its opaque-key candidates from the entity's own table and no longer has a "no candidates ⇒ skip the check" branch. `packages/server/src/routes/replica-intent-route.test.ts` adds the pruned-log conflict case; `packages/vault/src/replica/log-capture-edges.test.ts` is new (G3, G15, G20, G21); `packages/vault/src/replica/seat-snapshot.test.ts` adds the artifact's own cursor (T7). Docs: [`docs/vault-ontology.md`](../docs/vault-ontology.md) replication row rewritten (T3), [`docs/mobile-offline.md`](../docs/mobile-offline.md) retention-pinning sentence corrected (T9).
+
+### Verification
+
+**PASS**, with three inherited reds named below. Every command was run at `/home/user/wt-0a` on `ec814221`'s tree, after `bun run build`.
+
+```sh
+bun run --cwd packages/vault typecheck            # PASS (exit 0)
+bun run --cwd packages/server typecheck           # PASS (exit 0)
+bun run --cwd packages/client typecheck           # PASS (exit 0)
+bun run --cwd packages/vault test                 # PASS — 214 files, 1799 passed, 2 skipped
+bun run --cwd packages/server test                # 3 failed / 3523 passed — all three inherited (below)
+bun run test:integration:mobile                   # 2 failed / 68 passed — inherited (below)
+bun run format && bun run check:push:static       # PASS — 4/4 gates in 86.0s
+node .governance/law/run.mjs                      # 0 errors; 1 warning, cross-lane (below)
+```
+
+Lane-specific exits:
+
+```sh
+grep -rn "pruneReplicaLog(" packages/server/src --include=*.ts | grep -v test
+# → packages/server/src/serve/vault-plane.ts:2118 — the sweep call site. PASS
+grep -rn "replica_change" packages apps tests --include=*.ts --include=*.tsx | grep -v dist/ | wc -l
+# → 94. FAIL against the brief's "only historical comments" — the transport is not retired.
+```
+
+Red-first evidence, each produced by reverting only the fix in the working tree and restoring it:
+
+- G1/G2 — with `pruneReplicaChanges` writing `floor_seq` again and the epoch bump deriving it from `sqlite_sequence`, the three `two logs, two floors` cases fail: `expected 6 to be +0`, `expected 6 to be 12`, `expected 9 to be less than or equal to 4`. With the fix: green.
+- G9 — with the candidates read from `replica_change` and the empty-set `continue` restored, `still checks opaque row versions after the change log is pruned` fails. With the fix: green.
+- G15 — with `COLUMN_NAMES` not keyed on `schema_version`, `a delete image keeps its column names after the schema changes` fails with `expected [ 'reps', 'set_id' ] to strictly equal [ 'note', 'set_id' ]` — the mislabelled delete image, exactly as G15 describes. With the fix: green.
+
+Inherited reds, with the evidence they are not this lane's:
+
+- `packages/server/src/serve/gateway-db-lock.integration.test.ts` — `command -v sqlite3` finds nothing on this machine and the test spawns `sqlite3`.
+- `packages/server/src/acp/backends/acp/launch.test.ts` (two cases) — the ambient environment has `IS_SANDBOX=yes`; the test asserts `"1"` and `undefined`.
+- `tests/integration-mobile/stale.integration.test.ts` — reproduced on the umbrella tip `5ac727e8` with this lane's `packages/` checked out to `5ac727e8` and rebuilt: three cases fail there (`locker`, `people`, `photos`) with the same `the stale signal never clears` assertion.
+- `node .governance/law/run.mjs` reports one warning, `estate-separation`, over the WHOLE range: it pairs lane 0b's `.governance/packs/.../bracketed-replica-writes/*` with every lane's product code. None of this lane's three commits touches a law-estate path (`git show --name-only` on each, filtered to the estate list, is empty); the split-or-waive decision belongs to whoever raises the pull request.
+
+### Not done, and why
+
+- **`replica_change` is not retired as a transport (G7/T2, R-1014-1).** The SSE feed is not a port away from `replica_log` but a redesign. `packages/server/src/routes/replica-projection.ts` decides a row's SHAPE MEMBERSHIP AT THE CLIENT'S CURSOR from `first.priorOp` / `first.priorOldValuesJson` (`:417-429`) and its shape-control verdict from `oldValuesJson` (`:264-286`) — the state BEFORE a change. `replica_log` stores only the new image (and the old image for deletes), so there is no equivalent to read: closing that gap means deciding, and testing, a new membership rule for a wire contract the shipped phone depends on. Attempting it alongside this lane's eleven other findings would have put an untested rewrite of the feed under the same commit as the loss fixes. **What did land against it**: the OCC candidate lookup no longer reads the trigger log at all, and the two floors no longer collide, which removes the loop and the silent staleness that made "two logs" a data-loss bug rather than a duplication.
+- **`currentRowVersion`'s `MAX(seq) FROM replica_change` fallback (G8) stands**, at `packages/server/src/routes/replica-intent-shape.ts:346`, with its twins at `packages/server/src/routes/peer-replica-intent-route.ts:287` and `packages/vault/src/replica/snapshot.ts:236` (composite keys and rows with no `row_version`). Both halves of the check must read the SAME units, and the seat half is in shipped mobile code; changing the unit on the gateway alone would conflict every offline edit of such a row. It belongs with the transport retirement.
+- **`docs/decisions.md` untouched.** Lane 0r owns the supersession pointer for `docs/decisions.md:86` and has landed it. **`docs/protocol.md` untouched**: `grep -n "replica_log\|replica_change\|seat log" docs/protocol.md` returns nothing, so it names neither log and has no drift for this lane to correct.
+- **G3's crash could not be reproduced on this SQLite build.** A top-level `ROLLBACK` with the capture left open did not make the next `captureReplicaCommit` throw `reads back as missing`, so the test that landed guards the invariant ("after a rollback the next commit's log carries that commit and nothing else") rather than asserting a failure this build does not exhibit. The call sites were still added: `abandonReplicaCommit` is the declared contract and had zero production callers.
+
+### Found, not mine
+
+- `packages/vault/src/replica/change-log.ts:1085-1092` — `pruneReplicaChanges` deletes by `epoch <> ?` while `packages/server/src/doctor/integrity-checks.ts:282-287` reports foreign-epoch rows as an integrity fault. With the two floors now separate, a doctor pass between an epoch bump and the next sweep will report a fault that is merely un-swept. Wave 0d or the doctor's owner.
+- `packages/vault/src/schema/entity-refs.ts:175` and `packages/vault/src/schema/local-tables.ts:77` name `replica_change` as a registered carrier and an unregistered table respectively; both entries go with the transport.
+- `tests/integration-mobile/stale.integration.test.ts` — the inherited red above is a real signal, not flake: which apps fail moves between runs, but the count does not go to zero. Something on the umbrella tip leaves log rows past a seat's cursor after a completed pull. Lane 0b or wave A.
+
+### Docs touched
+
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) (the two closed lists), [`docs/vault-ontology.md`](../docs/vault-ontology.md) (the replication enforced-commitment row, T3), [`docs/mobile-offline.md`](../docs/mobile-offline.md) (retention pinning is implemented and bounded, T9).
