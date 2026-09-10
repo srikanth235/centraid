@@ -145,6 +145,8 @@ describe("Tally on a plane", () => {
     await openTally();
     const state = readTallyVault();
     expect(state.loaded).toBe(false);
-    expect(state.readError).toContain("mounting");
+    // S14 (#1015, R-A-15): "replica not mounted" is the program's word for it
+    // and goes to the log; the pane gets Tally's own sentence.
+    expect(state.readError).toBe("Tally could not be read. Try again.");
   });
 });

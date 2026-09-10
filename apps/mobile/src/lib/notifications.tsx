@@ -105,6 +105,6 @@ async function handleNotificationResponse(
       else rootNavigationRef.navigate("Tally", { screen: "TallyHome" });
     }
   } catch (error) {
-    surfaceWriteFailure(error, "Notification action failed");
+    surfaceWriteFailure(error, "Notification action not completed");
   }
 }

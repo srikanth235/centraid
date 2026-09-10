@@ -136,7 +136,7 @@ export default function AgendaEvent({
       const result = await session.write("agenda", request);
       return apply(result, "Event edit");
     } catch (error) {
-      surfaceWriteFailure(error, "Event edit failed");
+      surfaceWriteFailure(error, "Event not saved");
       return false;
     }
   };
@@ -150,7 +150,7 @@ export default function AgendaEvent({
       });
       apply(result, "Cancellation");
     } catch (error) {
-      surfaceWriteFailure(error, "Cancellation failed");
+      surfaceWriteFailure(error, "Event not cancelled");
     }
   };
 
@@ -164,7 +164,7 @@ export default function AgendaEvent({
       });
       apply(result, "RSVP");
     } catch (error) {
-      surfaceWriteFailure(error, "RSVP failed");
+      surfaceWriteFailure(error, "Reply not sent");
     }
   };
 

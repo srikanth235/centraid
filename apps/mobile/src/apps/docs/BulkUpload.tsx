@@ -34,6 +34,10 @@ import type { DocsScreenProps } from "../../navigation";
 import { bulkStatus, uploadStateLabel } from "./docs-copy";
 import { useDocsRoom } from "./docs-room";
 
+/** One sentence for a transfer that did not land (#1015, S14 — R-A-15). What
+ *  the uploader throws is an HTTP status or a file-system errno. */
+const TRANSFER_NOT_LANDED = "the transfer did not land";
+
 interface PickedFile {
   key: string;
   uri: string;
@@ -94,11 +98,10 @@ export default function BulkUpload(
       });
       patch(file.key, { state: "landed" });
     } catch (error) {
-      patch(file.key, {
-        state: "failed",
-        error:
-          error instanceof Error ? error.message : "the transfer did not land",
-      });
+      // S14 (#1015, R-A-15): the exception is a fact about the program. It
+      // goes to the log (docs/logs.md); the row says what did not happen.
+      console.warn("[docs] bulk upload failed", file.name, error);
+      patch(file.key, { state: "failed", error: TRANSFER_NOT_LANDED });
     }
   };
 

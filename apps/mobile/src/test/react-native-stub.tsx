@@ -143,6 +143,15 @@ const noopAnimation = {
   reset: () => undefined,
 };
 
+/**
+ * `Keyboard.dismiss` calls, in order — the rooms own dismissal now
+ * (#1015, R-A-17), so a test needs to see that leaving actually called it.
+ */
+export const keyboardDismissals: { count: number } = { count: 0 };
+const keyboardDismiss = (): void => {
+  keyboardDismissals.count += 1;
+};
+
 /** Stubbed module object; spread into the factory above. */
 export function reactNativeStub(): Record<string, unknown> {
   const Animated = {
@@ -164,6 +173,8 @@ export function reactNativeStub(): Record<string, unknown> {
     ActivityIndicator: (props: Props) => host("div", props),
     Animated,
     Easing: { inOut: () => undefined, ease: undefined },
+    Keyboard: { dismiss: keyboardDismiss },
+    KeyboardAvoidingView: (props: Props) => host("div", props),
     Modal: (props: Props & { visible?: boolean }) =>
       props.visible === false ? null : host("div", props),
     Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios },

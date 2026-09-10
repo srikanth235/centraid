@@ -189,7 +189,7 @@ export function useTasksWrite(
           return undefined;
         return result;
       } catch (error) {
-        surfaceWriteFailure(error, "Task change failed");
+        surfaceWriteFailure(error, "Task change not saved");
         return undefined;
       }
     },

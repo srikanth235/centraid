@@ -361,6 +361,9 @@ export const DENIED = {
   title: "Tasks cannot read this vault",
   bodyA: "Ask the owner of this vault for access.",
   bodyB: "Your tasks, history and receipts are untouched.",
+  /** The gateway seat's gate still prints the vault's refusal beside this
+   *  label — a desk, with room for it. The PHONE does not (#1015, R-A-18):
+   *  what reaches it there is `caughtError.message`. */
   receipt: "Receipt",
   scope: "Scope",
   when: "When",

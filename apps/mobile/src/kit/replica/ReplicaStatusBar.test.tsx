@@ -48,6 +48,11 @@ vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   return {
     Alert: { alert: vi.fn<() => void>() },
+    // The rooms own keyboard avoidance and dismissal now (#1015, R-A-17).
+    Keyboard: { dismiss: (): void => undefined },
+    Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios },
+    KeyboardAvoidingView: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement("div", null, children),
     Modal: ({
       children,
       visible,

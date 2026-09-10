@@ -60,7 +60,7 @@ export function editorTitle(note?: { trashed?: boolean }): string {
  * exception's own message behind it.
  */
 export const NOTES_WRITE_REFUSED = "Note change not applied";
-export const NOTES_WRITE_FAILED = "Note change failed";
+export const NOTES_WRITE_FAILED = "Note change not saved";
 /** The pin/unpin verb pair, so neither word is spelled at a call site. */
 export const NOTES_PIN = { off: "Pin", on: "Unpin" } as const;
 

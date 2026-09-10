@@ -36,6 +36,7 @@ export const RAIL_MINI_MONTH = "Month at a glance";
  *  can share them (#834). */
 export {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
+  birthdayLeadPhrase,
   BIRTHDAY_LEADS,
   LAYERS,
   LAYERS_READ_ONLY,

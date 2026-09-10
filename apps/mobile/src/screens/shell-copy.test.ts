@@ -101,18 +101,27 @@ describe("the shell's copy", () => {
     // R-SH-11: a place named Rules whose rows are "automations" is exactly the
     // divergence this umbrella exists to end. `automations` survives as a WIRE
     // flag, a route key, a deep-link path, a module name and a file name — none
-    // of which a member reads — so the sweep looks only at sentences (a literal
-    // with a space in it), with comments stripped.
+    // of which a member reads — so the sweep looks only at SENTENCES: a string
+    // literal with a space in it, outside a comment, and not an argument to
+    // `console.*`. The log is the other half of S14's contract (docs/logs.md)
+    // and it keeps the engine's own tag on purpose — a debug session greps for
+    // `[automations]`, which is the module, not the place.
+    const LITERAL = /["'`](?<text>[^"'`\n]*[ \t][^"'`\n]*)["'`]/gu;
     const offenders: string[] = [];
     for (const file of [...shellSources, ...SHARED_COPY]) {
-      const source = read(file)
-        .replaceAll(/\/\*[\s\S]*?\*\//gu, " ")
-        .replaceAll(/(?<before>^|[^:])\/\/[^\n]*/gu, "$<before>");
-      for (const match of source.matchAll(
-        /["'`](?<text>[^"'`\n]*[ \t][^"'`\n]*)["'`]/gu
-      )) {
-        const text = match.groups?.text ?? "";
-        if (/\bautomations?\b/iu.test(text)) offenders.push(`${file}: ${text}`);
+      const lines = read(file)
+        // Blank block comments to spaces, keeping newlines so a line stays a
+        // line (the convention in `scripts/lint-container-opacity.mjs`).
+        .replaceAll(/\/\*[\s\S]*?\*\//gu, (m) => m.replaceAll(/[^\n]/gu, " "))
+        .split("\n")
+        .map((line) => line.replace(/(?<before>^|[^:])\/\/.*$/u, "$<before>"));
+      for (const line of lines) {
+        if (/\bconsole\.[a-z]+\s*\(/u.test(line)) continue;
+        for (const match of line.matchAll(LITERAL)) {
+          const text = match.groups?.text ?? "";
+          if (/\bautomations?\b/iu.test(text))
+            offenders.push(`${file}: ${text}`);
+        }
       }
     }
     expect(offenders).toStrictEqual([]);

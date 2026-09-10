@@ -8,13 +8,24 @@
 //    away from sideways, and a live band under a keyboard is two bars (D5).
 //    The leave key rides in the editor's own bar, which is why this room
 //    takes no `band` prop at all (R-KIT-2).
+//  - THE KEYBOARD IS THE ROOM'S (agenda/findings#15). Every editor in the
+//    audit autofocused a field and then let the keyboard sit over its own
+//    foot, so the first tap on Done or on a chip was spent dismissing it, and
+//    both Agenda forms had the bottom third of the composer behind it. One
+//    avoidance, one dismissal, here — never re-decided per screen.
 //  - THE STATUS LINE IS HOSTED HERE. Every editor on this seat is an iOS
 //    `Modal`, which renders above the app root, so a note posted from inside
 //    one painted underneath it and was never seen (audit B5). One channel,
 //    hosted where it can be read.
 
 import React, { useMemo } from "react";
-import { Modal, View } from "react-native";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  View,
+} from "react-native";
 
 import Button from "../components/Button";
 import { Text } from "../components/NativeText";
@@ -83,34 +94,46 @@ export default function EditorRoom({
     [colors]
   );
   if (presented && !visible) return null;
+  // LEAVING TAKES THE KEYBOARD WITH IT. An editor dismissed with a field still
+  // focused leaves the keyboard up over whatever is behind it, which on this
+  // seat is a band the member then cannot reach.
+  const leave = (): void => {
+    Keyboard.dismiss();
+    onDone();
+  };
   const room = (
     <TopSafeArea
       accessibilityViewIsModal={presented}
       style={[styles.room, ink.room]}
     >
-      <View style={[styles.bar, ink.bar]}>
-        <Text
-          accessibilityRole="header"
-          numberOfLines={1}
-          style={[styles.barTitle, ink.title]}
-        >
-          {title}
-        </Text>
-        <Button
-          label={cancellable ? "Cancel" : "Done"}
-          onPress={() => onDone()}
-          testID={leaveTestID}
-          variant={cancellable ? "quiet" : "primary"}
-        />
-      </View>
-      <RoomBody error={error} loading={loading}>
-        {children}
-      </RoomBody>
-      {foot ? (
-        <View style={[styles.foot, ink.foot]}>
-          <View style={styles.actionRow}>{foot}</View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.room}
+      >
+        <View style={[styles.bar, ink.bar]}>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={[styles.barTitle, ink.title]}
+          >
+            {title}
+          </Text>
+          <Button
+            label={cancellable ? "Cancel" : "Done"}
+            onPress={leave}
+            testID={leaveTestID}
+            variant={cancellable ? "quiet" : "primary"}
+          />
         </View>
-      ) : null}
+        <RoomBody error={error} loading={loading}>
+          {children}
+        </RoomBody>
+        {foot ? (
+          <View style={[styles.foot, ink.foot]}>
+            <View style={styles.actionRow}>{foot}</View>
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
       <StatusLineHost name="editor" />
     </TopSafeArea>
   );
@@ -118,7 +141,7 @@ export default function EditorRoom({
   return (
     <Modal
       animationType="slide"
-      onRequestClose={onDone}
+      onRequestClose={leave}
       presentationStyle="pageSheet"
       visible
     >

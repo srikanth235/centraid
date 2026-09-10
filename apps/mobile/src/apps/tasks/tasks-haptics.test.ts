@@ -68,11 +68,13 @@ describe("the four APPS-A trees keep to the one moment channel", () => {
           file,
           own: false,
         });
+    // The confirm fires it when the write RESOLVES, not on the press — so the
+    // claim is that the call lives there, not what its call form is.
     expect(
       readFileSync(
         path.join(APPS, "..", "kit", "components", "ConfirmSheet.tsx"),
         "utf8"
       )
-    ).toContain("hapticLanded();");
+    ).toContain("hapticLanded");
   });
 });

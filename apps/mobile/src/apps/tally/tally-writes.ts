@@ -30,9 +30,14 @@ import { postStatus, showUndoStatus } from "../../kit/components/status-line";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
+  surfaceWriteRefusal,
 } from "../../kit/replica/write-outcome";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import { refreshTally } from "./tally-store";
+
+/** Tally's ONE error noun (#1015, S14): every failure and every refusal this
+ *  seat surfaces says it, so a member never learns two names for one place. */
+const TALLY_NOT_RECORDED = "Expense not recorded";
 
 export interface TallyIssueOptions {
   /** What the status line says when the vault actually applied it. */
@@ -55,10 +60,7 @@ export async function issueTallyWrite(
   options: TallyIssueOptions
 ): Promise<boolean> {
   if (!session) {
-    surfaceWriteFailure(
-      new Error("This phone is not paired with a gateway."),
-      "Not recorded"
-    );
+    surfaceWriteRefusal("unpaired", TALLY_NOT_RECORDED);
     return false;
   }
   try {
@@ -67,7 +69,7 @@ export async function issueTallyWrite(
       input: write.input as never,
     });
     const ok = surfaceWriteOutcome(outcome, {
-      failureTitle: "Not recorded",
+      failureTitle: TALLY_NOT_RECORDED,
       // STATES.md, Tally / Add expense / offline: the commit says "queued on
       // this device". `COMPOSE_OUTCOMES.added` is that sentence, shared.
       queuedMessage: COMPOSE_OUTCOMES.added,
@@ -79,7 +81,7 @@ export async function issueTallyWrite(
     if (ok && options.refresh !== false) await refreshTally();
     return ok;
   } catch (error) {
-    surfaceWriteFailure(error, "Not recorded");
+    surfaceWriteFailure(error, TALLY_NOT_RECORDED);
     return false;
   }
 }
