@@ -479,3 +479,7 @@ Kit: `ConfirmSheet` gained `cancelLabel`, passed through to `SheetRoom`, because
 Two test fixtures completed, neither loosened: `src/screens/home/VaultsSwitcher.test.tsx`'s partial `@centraid/design` and `kit/theme` mocks gained `borders`, `metrics`, `targetMin` and `radii.sm` — the switcher mounts the kit confirm now, so its tree genuinely reads them. No assertion changed.
 
 Verification on this head: `bunx vitest run src` → 2469 passed, 295 files; the single failing file is the inherited `src/lib/replica/expo-seat-driver.test.ts` load failure, which fails identically on the base head. `bun run --cwd apps/mobile typecheck` → 0. `lint-mobile-rooms` → `screen-root 172` (from 181 at the start of this lane), `back-literal 47`, `page-margin 107`, `identity-tint 0`, `copy-title-case 0`.
+
+### Lane SHELL — doctrine citation for the `subBase` export
+
+`packages/design/src/index.ts` publishes `subBase` under [docs/decisions.md#typography-and-design-contracts](../docs/decisions.md#typography-and-design-contracts). It adds no value and changes no metric: `subBase` was already defined in `density.ts` beside `spacing`, already read by `contract.ts`, `css.ts` and `blueprint.ts`, and already the answer the contract gives for a seam below the 4px base. What was missing was the door — so the two mobile call sites that needed one could only write a bare `2` and leave a comment saying the right name existed and was unreachable. Publishing the existing name is what keeps the design contract enforceable at the call site rather than aspirational.
