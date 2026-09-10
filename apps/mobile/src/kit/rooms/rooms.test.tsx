@@ -292,6 +292,26 @@ describe(AppPlace, () => {
     expect(nodesOf(container, "input")).toStrictEqual([]);
   });
 
+  // The controls that pick what the body shows have to outlive the body's own
+  // state machine: a day stepper that vanished on the empty day is a control
+  // the member cannot use to leave that day.
+  it("keeps the toolbar above an empty body", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Agenda" }}
+        empty={{ body: "Nothing here", title: "Nothing on these days" }}
+        onBack={noop}
+        toolbar={<Text>Next day</Text>}
+      >
+        <Text>rows</Text>
+      </AppPlace>
+    );
+    const said = words(container);
+    expect(said).toContain("Next day");
+    expect(said).toContain("Nothing on these days");
+    expect(said).not.toContain("rows");
+  });
+
   // An end-to-end flow taps the app's write door by its handle; a room that
   // swallowed it would take those flows away from every screen it absorbed.
   it("passes the action's handle through to the control it draws", () => {

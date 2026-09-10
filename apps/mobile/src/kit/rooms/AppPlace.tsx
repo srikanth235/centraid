@@ -50,6 +50,14 @@ export interface AppPlaceProps {
   /** At most one, per DESIGN.md's one-primary rule. */
   action?: RoomAction;
   search?: SearchFieldProps;
+  /**
+   * The controls that pick WHICH content the body is showing — a day stepper,
+   * a lens and sort row. They sit under the search and ABOVE the body, and
+   * outside it: the body is a state machine, and a stepper that vanished on
+   * the empty day would be a control the member cannot use to leave that day
+   * (Agenda needed this first, #1015 audit agenda/findings#3).
+   */
+  toolbar?: React.ReactNode;
   selection?: RoomSelection;
   /** The app's own band, told what state the room puts it in. */
   band?: (state: BandState) => React.ReactNode;
@@ -74,6 +82,7 @@ export default function AppPlace({
   action,
   search,
   selection,
+  toolbar,
   band,
   loading,
   error,
@@ -113,6 +122,7 @@ export default function AppPlace({
         </View>
       )}
       {search && !selecting ? <SearchField {...search} /> : null}
+      {selecting ? null : toolbar}
       <RoomBody empty={empty} error={error} loading={loading}>
         {children}
       </RoomBody>
