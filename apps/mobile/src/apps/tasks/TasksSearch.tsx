@@ -9,8 +9,8 @@ import { FlatList, View } from "react-native";
 import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import { SEARCH_COPY } from "@centraid/blueprints/apps/tasks/view-copy";
 
-import { Text, TextInput } from "../../kit/components/NativeText";
-import { useTheme } from "../../kit/theme";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { appQuery } from "../../lib/gateway";
 import TaskRow from "./TaskRow";
 import {
@@ -34,7 +34,6 @@ export default function TasksSearch({
   onToggle,
   onOpen,
 }: TasksSearchProps): React.JSX.Element {
-  const { colors } = useTheme();
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Task[] | null>(null);
   const [unreachable, setUnreachable] = useState(false);
@@ -71,14 +70,13 @@ export default function TasksSearch({
 
   return (
     <View style={styles.pane}>
-      <TextInput
-        accessibilityLabel={SEARCH_COPY.placeholder}
-        autoFocus
-        placeholder={SEARCH_COPY.placeholder}
-        placeholderTextColor={colors.textGhost}
-        value={query}
+      {/* ONE SEARCH FIELD FOR THE SEAT (#1015, S4): the keyboard contract,
+          the clear control and the placement are the kit's, and only the words
+          are Tasks'. */}
+      <SearchField
         onChangeText={onChangeQuery}
-        style={styles.searchField}
+        placeholder={SEARCH_COPY.placeholder}
+        value={query}
       />
       {term.length === 0 ? (
         <Text style={styles.lead}>{SEARCH_IDLE}</Text>

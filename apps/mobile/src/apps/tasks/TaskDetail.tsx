@@ -9,7 +9,7 @@
 // `net` control in this room. Both name what happens before they happen.
 
 import React, { useCallback } from "react";
-import { Alert, FlatList, Pressable, View } from "react-native";
+import { FlatList, Pressable, View } from "react-native";
 
 import {
   PROMOTION_AT,
@@ -20,18 +20,16 @@ import {
   projectWrite,
   subtaskNotes,
 } from "@centraid/blueprints/apps/tasks/detail";
-import { TASK } from "@centraid/blueprints/apps/tasks/shelves";
 import type { Project, Task } from "@centraid/blueprints/apps/tasks/types";
 import {
-  CANCEL,
   DELETE_CONFIRM,
   FIELDS,
   PROMOTION_VERB,
   RELEASE_CONFIRM,
   familyProgress,
-  shelfCopy,
 } from "@centraid/blueprints/apps/tasks/view-copy";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import {
@@ -44,7 +42,6 @@ import TaskDetailFields from "./TaskDetailFields";
 import TaskRow, { isClosed } from "./TaskRow";
 import { NOTE_PLACEHOLDER } from "./tasks-seat-copy";
 import type { TasksStyles } from "./TasksHome.styles";
-import TasksPlaceHeader from "./TasksPlaceHeader";
 import type { TasksWrite } from "./useTasks";
 
 /** The vault carrying the row, or nothing — a personal task stays silent. */
@@ -63,8 +60,7 @@ export interface TaskDetailProps {
   now: string;
   projects: readonly Project[];
   styles: TasksStyles;
-  /** The place the member returns to — the one they opened this row from. */
-  backTo: string;
+  /** Leaves the row; the room draws the control and names the parent (#1015). */
   onBack: () => void;
   onOpen: (task: Task) => void;
   write: TasksWrite;
@@ -75,12 +71,12 @@ export default function TaskDetail({
   now,
   projects,
   styles,
-  backTo,
   onBack,
   onOpen,
   write,
 }: TaskDetailProps): React.JSX.Element {
   const { colors } = useTheme();
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const writable = rowCanWrite(task);
   const children = task.children ?? [];
   const lifecycle = lifecycleAct(task);
@@ -108,39 +104,30 @@ export default function TaskDetail({
     [setStatus]
   );
 
-  // Both exits name what happens to the row before it happens; the two-sentence
-  // body is the table's pair, rendered as the one paragraph a dialog can hold.
+  // ONE CONFIRM SHAPE (#1015, S7). Both exits still name what happens to the
+  // row before it happens, and the two-sentence body is the table's pair — but
+  // the sheet is the kit's, so the destructive verb is outlined `--net` and
+  // the noun is in the title rather than left to a system dialog.
   const confirmRelease = useCallback(() => {
-    Alert.alert(
-      RELEASE_CONFIRM.title,
-      `${RELEASE_CONFIRM.bodyA} ${RELEASE_CONFIRM.bodyB}`,
-      [
-        { text: CANCEL, style: "cancel" },
-        {
-          text: RELEASE_CONFIRM.verb,
-          onPress: () => setStatus(task, "cancelled"),
-        },
-      ]
-    );
-  }, [setStatus, task]);
+    confirmDestructive({
+      body: `${RELEASE_CONFIRM.bodyA} ${RELEASE_CONFIRM.bodyB}`,
+      noun: "task",
+      onConfirm: () => setStatus(task, "cancelled"),
+      verb: RELEASE_CONFIRM.verb,
+    });
+  }, [confirmDestructive, setStatus, task]);
 
   const confirmDelete = useCallback(() => {
-    Alert.alert(
-      DELETE_CONFIRM.title,
-      `${DELETE_CONFIRM.bodyA} ${DELETE_CONFIRM.bodyB}`,
-      [
-        { text: CANCEL, style: "cancel" },
-        {
-          text: DELETE_CONFIRM.verb,
-          style: "destructive",
-          onPress: () => {
-            act("delete", { task_id: task.task_id });
-            onBack();
-          },
-        },
-      ]
-    );
-  }, [act, onBack, task.task_id]);
+    confirmDestructive({
+      body: `${DELETE_CONFIRM.bodyA} ${DELETE_CONFIRM.bodyB}`,
+      noun: "task",
+      onConfirm: () => {
+        act("delete", { task_id: task.task_id });
+        onBack();
+      },
+      verb: DELETE_CONFIRM.verb,
+    });
+  }, [act, confirmDestructive, onBack, task.task_id]);
 
   const head = (
     <View>
@@ -286,30 +273,27 @@ export default function TaskDetail({
   );
 
   return (
-    <>
-      <TasksPlaceHeader
-        title={shelfCopy(TASK).title}
-        backTo={backTo}
-        onBack={onBack}
-        styles={styles}
-      />
-      <FlatList
-        data={children}
-        keyExtractor={(child) => child.task_id}
-        renderItem={({ item }) => (
-          <TaskRow
-            task={item}
-            now={now}
-            styles={styles}
-            child
-            onToggle={toggle}
-            onOpen={onOpen}
-          />
-        )}
-        ListHeaderComponent={head}
-        ListFooterComponent={foot}
-        contentContainerStyle={styles.listContent}
-      />
-    </>
+    <FlatList
+      data={children}
+      keyExtractor={(child) => child.task_id}
+      renderItem={({ item }) => (
+        <TaskRow
+          task={item}
+          now={now}
+          styles={styles}
+          child
+          onToggle={toggle}
+          onOpen={onOpen}
+        />
+      )}
+      ListHeaderComponent={head}
+      ListFooterComponent={
+        <>
+          {foot}
+          {confirmSheet}
+        </>
+      }
+      contentContainerStyle={styles.listContent}
+    />
   );
 }

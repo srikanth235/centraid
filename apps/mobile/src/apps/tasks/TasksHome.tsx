@@ -30,6 +30,7 @@ import {
 } from "@centraid/blueprints/apps/tasks/quick-add";
 import type { QuickAddDraft } from "@centraid/blueprints/apps/tasks/quick-add";
 import {
+  TASK,
   allowsQuickAdd,
   showsBoard,
 } from "@centraid/blueprints/apps/tasks/shelves";
@@ -42,6 +43,7 @@ import {
 } from "@centraid/blueprints/apps/tasks/view-copy";
 import { landedTaskId } from "@centraid/blueprints/apps/tasks/writes";
 
+import { useBandOwner } from "../../kit/band/band-owner";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -50,11 +52,16 @@ import {
   READ_ONLY_SOURCE_REASON,
   rowCanWrite,
 } from "../../kit/replica/row-provenance";
+import AppPlace from "../../kit/rooms/AppPlace";
+import { currentPlace, parentPlace, placeStack } from "../../kit/rooms/place";
+import PushedPage from "../../kit/rooms/PushedPage";
 import { useTheme } from "../../kit/theme";
+import { resolveAppMeta } from "../../lib/gateway";
 import type { TasksScreenProps as TasksRouteProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import TaskDetail from "./TaskDetail";
 import { isClosed } from "./TaskRow";
-import { TASKS_MORE_LABEL } from "./tasks-band";
+import type { TasksBandDestinationKey } from "./tasks-band";
 import {
   findTask,
   flattenGroups,
@@ -63,22 +70,24 @@ import {
 } from "./tasks-groups";
 import { bandKeyFor, placeTitle, shelfForPlace } from "./tasks-places";
 import type { TasksPlaceKey } from "./tasks-places";
+import TasksBand from "./TasksBand";
 import TasksCatchUp from "./TasksCatchUp";
 import TasksDenied from "./TasksDenied";
 import { makeTasksStyles } from "./TasksHome.styles";
 import TasksMoreSheet from "./TasksMoreSheet";
-import TasksPlaceHeader from "./TasksPlaceHeader";
 import TasksProject from "./TasksProject";
 import TasksProjects from "./TasksProjects";
 import TasksQuickAdd from "./TasksQuickAdd";
 import TasksReminders from "./TasksReminders";
 import TasksRows from "./TasksRows";
-import TasksScreen from "./TasksScreen";
 import TasksSearch from "./TasksSearch";
 import TasksToolbar from "./TasksToolbar";
 import { useTasks, useTasksWrite } from "./useTasks";
 
 const WINDOW_STEP = 50;
+
+/** The app's own mark and hue, from the one builtin table. */
+const TASKS = resolveAppMeta({ id: "tasks" });
 
 export default function TasksHome({
   navigation,
@@ -88,6 +97,9 @@ export default function TasksHome({
   const board = useTasks();
   const replica = useReplica();
   const write = useTasksWrite(navigation);
+  // The frame's latch, per app — handing the band back on one Tasks surface
+  // hands it back on all of them (`kit/band/band-owner.ts`).
+  const { bandOwner } = useBandOwner("tasks");
   const [place, setPlace] = useState<TasksPlaceKey>("today");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openProjectId, setOpenProjectId] = useState<string | null>(null);
@@ -289,7 +301,6 @@ export default function TasksHome({
       now={now}
       styles={styles}
       write={write}
-      onBack={() => setOpenProjectId(null)}
       onToggle={toggle}
       onOpen={openTask}
     />
@@ -308,42 +319,42 @@ export default function TasksHome({
     />
   );
 
-  const placeBody = ((): React.JSX.Element => {
-    if (place === "projects") return projectsPane;
-    if (place === "more")
-      return <TasksMoreSheet styles={styles} onSelect={setPlace} />;
-    if (place === "search")
-      return (
-        <TasksSearch
-          now={now}
-          styles={styles}
-          onToggle={toggle}
-          onOpen={openTask}
-        />
-      );
-    if (place === "reentry")
-      return (
-        <TasksCatchUp
-          tasks={board.tasks}
-          now={now}
-          styles={styles}
-          write={write}
-          onToggle={toggle}
-          onOpen={openTask}
-        />
-      );
-    if (place === "notify")
-      return (
-        <TasksReminders
-          tasks={board.tasks}
-          now={now}
-          styles={styles}
-          onToggle={toggle}
-          onOpen={openTask}
-        />
-      );
-    return rowsList;
-  })();
+  // Assignments, not an IIFE with returns: the first `return (<` in this
+  // component has to be the room it is rooted in (`lint-mobile-rooms`).
+  let placeBody: React.JSX.Element = rowsList;
+  if (place === "projects") placeBody = projectsPane;
+  else if (place === "more")
+    placeBody = <TasksMoreSheet styles={styles} onSelect={setPlace} />;
+  else if (place === "search")
+    placeBody = (
+      <TasksSearch
+        now={now}
+        styles={styles}
+        onToggle={toggle}
+        onOpen={openTask}
+      />
+    );
+  else if (place === "reentry")
+    placeBody = (
+      <TasksCatchUp
+        tasks={board.tasks}
+        now={now}
+        styles={styles}
+        write={write}
+        onToggle={toggle}
+        onOpen={openTask}
+      />
+    );
+  else if (place === "notify")
+    placeBody = (
+      <TasksReminders
+        tasks={board.tasks}
+        now={now}
+        styles={styles}
+        onToggle={toggle}
+        onOpen={openTask}
+      />
+    );
 
   const openRow = findTask(board.tasks, openTaskId);
   const behindMore = bandKeyFor(place) === "more" && place !== "more";
@@ -351,74 +362,136 @@ export default function TasksHome({
     !openRow && !openProject && allowsQuickAdd(shelf) && place !== "more";
   const refusal = board.error && board.tasks.length === 0 ? board.error : null;
 
-  const body = refusal ? (
-    <TasksDenied
-      receipt={refusal}
-      scope={TASKS_SCOPE}
-      when={now.slice(0, 16).replace("T", " ")}
-      styles={styles}
-    />
-  ) : openRow ? (
-    <TaskDetail
-      task={openRow}
-      now={now}
-      projects={board.projects}
-      styles={styles}
-      backTo={placeTitle(place)}
-      onBack={() => setOpenTaskId(null)}
-      onOpen={openTask}
-      write={write}
-    />
-  ) : (
+  // WHERE THIS SCREEN IS, AS A VALUE (#1015, B7). Tasks has one navigator
+  // entry, so its stack is the places it holds in state: the band place, then
+  // the lens behind More or the project or the row opened out of it. No
+  // caller writes the back word down; `parentPlace` reads it off the stack.
+  const bandTitle = placeTitle(bandKeyFor(place) === "more" ? "more" : place);
+  const entries: { key: string; title: string }[] = [
+    { key: bandKeyFor(place), title: bandTitle },
+  ];
+  if (behindMore) entries.push({ key: place, title: placeTitle(place) });
+  if (openProject) entries.push({ key: "project", title: openProject.name });
+  if (openRow) entries.push({ key: "task", title: shelfCopy(TASK).title });
+  const stack = placeStack(entries);
+  const backTo = parentPlace(stack);
+  const here = currentPlace(stack);
+
+  let body: React.JSX.Element;
+  if (refusal)
+    body = (
+      <TasksDenied
+        receipt={refusal}
+        scope={TASKS_SCOPE}
+        when={now.slice(0, 16).replace("T", " ")}
+        styles={styles}
+      />
+    );
+  else if (openRow)
+    body = (
+      <TaskDetail
+        task={openRow}
+        now={now}
+        projects={board.projects}
+        styles={styles}
+        onBack={() => setOpenTaskId(null)}
+        onOpen={openTask}
+        write={write}
+      />
+    );
+  else
+    body = (
+      <>
+        {boardPlace ? (
+          <TasksToolbar
+            count={shownItems.total}
+            unit={shelfCopy(shelf).unit}
+            lenses={lenses}
+            sort={sort}
+            styles={styles}
+            onLens={(key) => setLenses(toggleLens(lenses, key))}
+            onSort={() => setSort(nextSort(sort))}
+          />
+        ) : null}
+        {placeBody}
+      </>
+    );
+
+  const content = (
     <>
-      {behindMore ? (
-        <TasksPlaceHeader
-          title={placeTitle(place)}
-          backTo={TASKS_MORE_LABEL}
-          onBack={() => setPlace("more")}
-          styles={styles}
-        />
+      {readOnly ? (
+        <Text style={styles.readOnly}>{READ_ONLY_SOURCE_REASON}</Text>
       ) : null}
-      {boardPlace ? (
-        <TasksToolbar
-          count={shownItems.total}
-          unit={shelfCopy(shelf).unit}
-          lenses={lenses}
-          sort={sort}
-          styles={styles}
-          onLens={(key) => setLenses(toggleLens(lenses, key))}
-          onSort={() => setSort(nextSort(sort))}
-        />
-      ) : null}
-      {placeBody}
+      {body}
     </>
   );
 
-  return (
-    <TasksScreen
+  // The capture bar rides in the room's overlay, between the body and the
+  // band: it belongs to the place, not to the list that scrolls inside it.
+  const overlay =
+    quickAdd && !refusal ? (
+      <TasksQuickAdd
+        draft={draft}
+        projects={board.projects}
+        scopes={scopes}
+        styles={styles}
+        onDraft={setDraft}
+        onAdd={() => void capture()}
+      />
+    ) : null;
+
+  const chrome = (
+    <>
+      <VaultBar />
+      <ReplicaStatusBar />
+    </>
+  );
+  const band = (): React.JSX.Element => (
+    <TasksBand
+      owner={bandOwner}
       current={bandKeyFor(place)}
-      onDestination={(key) => {
+      onSelect={(key: TasksBandDestinationKey) => {
         setOpenTaskId(null);
         setOpenProjectId(null);
         setPlace(key);
       }}
       onHome={() => navigation.navigate("Home")}
+    />
+  );
+  const leave = (): void => {
+    if (openRow) setOpenTaskId(null);
+    else if (openProject) setOpenProjectId(null);
+    else if (behindMore) setPlace("more");
+  };
+
+  // A row, a project, or a lens reached through More descends from somewhere,
+  // and the room names that place rather than saying "Back".
+  if (backTo)
+    return (
+      <PushedPage
+        backTo={backTo}
+        band={band}
+        chrome={chrome}
+        onBack={leave}
+        overlay={overlay}
+        title={here?.title ?? bandTitle}
+      >
+        {content}
+      </PushedPage>
+    );
+  return (
+    <AppPlace
+      app={{
+        color: TASKS.color,
+        iconKey: TASKS.iconKey,
+        title: bandTitle,
+      }}
+      band={band}
+      chrome={chrome}
+      onBack={() => navigation.navigate("Home")}
+      overlay={overlay}
     >
-      <ReplicaStatusBar />
-      {readOnly ? (
-        <Text style={styles.readOnly}>{READ_ONLY_SOURCE_REASON}</Text>
-      ) : null}
-      {body}
-      {quickAdd && !refusal ? (
-        <TasksQuickAdd
-          draft={draft}
-          projects={board.projects}
-          scopes={scopes}
-          styles={styles}
-          onDraft={setDraft}
-          onAdd={() => void capture()}
-        />
-      ) : null}
-    </TasksScreen>
+      {content}
+    </AppPlace>
   );
 }

@@ -84,7 +84,7 @@ describe("which tab a shelf lights", () => {
   // notes/findings#5): a notebook is only ever reached by tapping Notebooks,
   // so lighting Library there named a place the member was not looking at —
   // the same reasoning Tasks already applies to a destination the band cannot
-  // show (`TasksScreen.tsx:23-25`).
+  // show (`tasks-places.ts`, `bandKeyFor`).
   it("lights Notebooks for a notebook, one level inside that place", () => {
     expect(notesBandKeyFor(notebookShelf("nb1"))).toBe("books");
   });

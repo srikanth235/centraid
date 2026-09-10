@@ -33,7 +33,11 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 import { resolveTheme } from "../../kit/theme";
 import { REPLICA_CAN_WRITE } from "../../lib/replica/vault-source";
 import TaskRow from "./TaskRow";
-import { TASKS_BAND_DESTINATIONS } from "./tasks-band";
+import {
+  TASKS_BAND_DESTINATIONS,
+  TASKS_MORE_LABEL,
+  TASKS_MORE_ROWS,
+} from "./tasks-band";
 import { flattenGroups, groupsFor, windowItems } from "./tasks-groups";
 import TasksHome from "./TasksHome";
 import { makeTasksStyles } from "./TasksHome.styles";
@@ -158,6 +162,32 @@ describe("Tasks, on the real React Native host tree", () => {
         (destination) => screen.queryAllByText(destination.label).length > 0
       )
     ).toHaveLength(TASKS_BAND_DESTINATIONS.length);
+  });
+
+  // THE ROOM IS THE ROOT (#1015, Wave 2). `TasksScreen.tsx` and
+  // `TasksPlaceHeader.tsx` are gone: the header, the back row and the frame's
+  // vault lockup are `AppPlace`'s, and a row opened out of a place is a
+  // `PushedPage` whose back control names that place rather than "Back".
+  it("is rooted in the app place, and names the place a lens descends from", () => {
+    const screen = render(
+      <TasksHome
+        navigation={{ navigate: vi.fn<() => void>() } as never}
+        route={{ params: {} } as never}
+      />
+    );
+    // The app header's own back control, which only `AppPlace` draws.
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+
+    // A lens the band has no room for is reached THROUGH More, so the room it
+    // lands in is a pushed page whose back control names More — the fact
+    // `TasksPlaceHeader` used to be handed as a string.
+    fireEvent.press(screen.getByRole("tab", { name: TASKS_MORE_LABEL }));
+    fireEvent.press(
+      screen.getByRole("button", { name: TASKS_MORE_ROWS[0]!.label })
+    );
+    expect(
+      screen.getByRole("button", { name: `Back to ${TASKS_MORE_LABEL}` })
+    ).toBeTruthy();
   });
 
   it("publishes each row as a native checkbox carrying its own checked trait", () => {

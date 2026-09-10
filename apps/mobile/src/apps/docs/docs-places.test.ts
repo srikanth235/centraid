@@ -17,9 +17,10 @@ const DOCS_DIR = import.meta.dirname;
 const NOTES_DIR = path.resolve(import.meta.dirname, "../notes");
 const TASKS_DIR = path.resolve(import.meta.dirname, "../tasks");
 
-/** The header components DEFINE the prop — they are what a call site must not
- *  feed a literal. */
-const HEADERS = new Set(["DocsShelfHeader.tsx", "TasksPlaceHeader.tsx"]);
+/** The header component DEFINES the prop — it is what a call site must not
+ *  feed a literal. Tasks' own head is gone: `PushedPage` draws it now, and a
+ *  `PlaceRef` cannot be written down at all (#1015). */
+const HEADERS = new Set(["DocsShelfHeader.tsx"]);
 
 function sources(root: string, acc: string[] = []): string[] {
   for (const item of fs.readdirSync(root, { withFileTypes: true })) {
