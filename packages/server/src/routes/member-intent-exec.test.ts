@@ -12,7 +12,7 @@ import { describe, expect, test } from "vitest";
 
 import type { ReplicaIntentOutcome } from "@centraid/vault";
 
-import { retainedPeerAnswer } from "./peer-replica-intent-route.js";
+import { retainedPeerAnswer } from "./member-intent-exec.js";
 
 function outcome(
   patch: Partial<ReplicaIntentOutcome> & {

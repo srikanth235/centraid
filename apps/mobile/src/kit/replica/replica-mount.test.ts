@@ -95,10 +95,17 @@ vi.mock(import("../../lib/replica/native-hash") as Promise<unknown>, () => ({
 }));
 
 vi.mock(import("../../lib/vault-links") as Promise<unknown>, () => ({
-  LAST_BASE: "replica.lastBase",
-  MANUAL_GATEWAY_ID: "manual",
+  DEFAULT_GATEWAY_BASE: "http://127.0.0.1",
+  LastBase: { hydrate: async () => "http://127.0.0.1", set: () => undefined },
   noteActiveIdentity,
 }));
+
+// The rename is a filesystem move; this suite is about identity, so the module
+// answers "nothing to move" and `manual-seat-migration.test.ts` covers the move.
+vi.mock(
+  import("../../lib/replica/manual-seat-migration") as Promise<unknown>,
+  () => ({ migrateManualSeatFiles: async () => "absent" })
+);
 
 const {
   deleteReplicaDatabaseFamily,
@@ -230,20 +237,29 @@ describe("resolveIdentity picks a durable gateway namespace", () => {
     expect(second.auth.baseUrl).not.toBe(first.auth.baseUrl);
   });
 
+  // #1014, P14 / ruling R-1014-11. This used to fall back to the literal
+  // `"manual"`, which named a seat file — and then `noteActiveIdentity`
+  // rewrote the link once a real endpoint id arrived, moving the path out
+  // from under every write queued in that file's outbox. There is no stable
+  // stand-in for a gateway id: a mount resolves one or it refuses.
   test.each([
     {
       name: "reports no endpoint id",
       body: { ...info, endpointId: undefined },
     },
     { name: "cannot be read at all", body: undefined },
-  ])("falls back to a stable id when the gateway $name", async ({ body }) => {
+  ])("refuses to name a seat file when the gateway $name", async ({ body }) => {
     resolveGatewayBase.mockResolvedValue("http://127.0.0.1:65277");
     stubInfo(body);
 
-    const identity = await resolveIdentity(undefined);
+    const refused = await resolveIdentity(undefined).catch(
+      (error: unknown) => error
+    );
 
-    expect(identity.gatewayId).toBe("manual");
-    expect(identity.gatewayId).not.toContain("127.0.0.1");
+    expect((refused as Error).name).toBe("SeatGatewayUnresolvedError");
+    // And nothing was written down: no link now points at a gateway nobody
+    // can name, so the next wake resolves cleanly instead of repairing.
+    expect(noteActiveIdentity).not.toHaveBeenCalled();
   });
 });
 

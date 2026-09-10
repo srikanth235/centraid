@@ -110,7 +110,32 @@ export function admitAtOrigin(
   if (verdict.state !== "ok") return undefined;
   const { originVaultId, audienceVaultId, shapeId } = verdict.credential;
   if (!peer.linkForPair(originVaultId, audienceVaultId)) return undefined;
-  const origin = deps.vaultFor(originVaultId);
+  return admitGrantAtOrigin(deps.vaultFor, {
+    originVaultId,
+    audienceVaultId,
+    shapeId,
+  });
+}
+
+/**
+ * THE GRANT HALF OF ADMISSION, without the link (#1014, R-1014-10).
+ *
+ * Two vaults on ONE gateway are linked with `remoteVaultId: null` and no
+ * `vault_routes` row — there is nothing to dial and no `linkForPair` to
+ * satisfy, and demanding one made every same-gateway pull `unreachable` and
+ * every same-gateway forwarded edit `retryable` forever. What actually
+ * authorizes a shape is what is checked here: this host mounts the origin,
+ * the shape names a LIVE grant, and that grant reaches THIS audience vault.
+ * The peer door adds the link on top because a REMOTE caller has to prove it
+ * is the couple it claims to be; a local caller is already inside the host
+ * that owns both vaults.
+ */
+export function admitGrantAtOrigin(
+  vaultFor: (vaultId: string) => VaultDb | undefined,
+  input: { originVaultId: string; audienceVaultId: string; shapeId: string }
+): Admission | undefined {
+  const { originVaultId, audienceVaultId, shapeId } = input;
+  const origin = vaultFor(originVaultId);
   if (!origin) return undefined;
   const grantId = shareShapeGrantId(shapeId);
   if (!grantId) return undefined;
@@ -228,14 +253,24 @@ export function handlePeerReplicaBlob(
     crossOwner: true,
   }).blobs.some((blob) => blob.sha256 === sha256);
   if (!claimed) return notFound(res);
-  const bytes = admission.origin.blobs.local.getSync(sha256);
-  if (!bytes) return notFound(res);
-  const chunk = bytes.subarray(offset, offset + PEER_REPLICA_BLOB_CHUNK_BYTES);
+  // ONE CHUNK IN MEMORY, NOT ONE BLOB (#1014, V11). Reading the whole object
+  // per 1 MiB request made a shared video cost its full size in RSS on every
+  // chunk of it; the store answers a range, so the door asks for one.
+  const stat = admission.origin.blobs.local.statSync(sha256);
+  if (!stat) return notFound(res);
+  const chunk = admission.origin.blobs.local.getSync(sha256, {
+    // `end` is INCLUSIVE and the store clamps it to the last byte.
+    start: offset,
+    end: offset + PEER_REPLICA_BLOB_CHUNK_BYTES - 1,
+  });
+  // An offset at or past the end is unsatisfiable, which is the audience
+  // asking for bytes that are not there — not a missing blob.
+  if (!chunk) return sendJson(res, 400, { state: "bad_request" });
   return sendJson(res, 200, {
     state: "chunk",
     sha256,
     offset,
-    total: bytes.byteLength,
+    total: stat.size,
     base64: chunk.toString("base64"),
   });
 }

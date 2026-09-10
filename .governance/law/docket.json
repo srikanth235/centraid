@@ -105,10 +105,20 @@
       "id": "D-11",
       "rule": "estate-separation",
       "path": null,
-      "reason": "#1005 spends this twice: the repeal touches the rules and the files being repealed in one act, and the law's test roster lived in the product's package.json until a glob replaced it. Both are one exception in docket terms — the rule is the same and neither is path-scoped — so they are one row rather than two identical ones.",
+      "reason": "#1005 spends this twice: the repeal touches the rules and the files being repealed in one act, and the law's test roster lived in the product's package.json until a glob replaced it. Both are one exception in docket terms \u2014 the rule is the same and neither is path-scoped \u2014 so they are one row rather than two identical ones.",
       "authority": "pending owner grant",
       "filedBy": "agent",
       "issue": "#1005",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "D-12",
+      "rule": "estate-separation",
+      "path": null,
+      "reason": "#1014 Wave 0b lands the bracketed-writes directive beside the writers it brackets, per the issue's execution plan; reviewed as one change. The rule that proves the invariant and the four writers it proves it about are one question \u2014 a directive landed alone would pass over a tree it was written from, and the writers landed alone would carry the invariant as a convention again. Expires at the umbrella's close.",
+      "authority": "issue #1014 execution plan, owner to confirm",
+      "filedBy": "agent",
+      "issue": "#1014",
       "expires": "2026-12-31"
     }
   ]

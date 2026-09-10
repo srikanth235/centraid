@@ -5,7 +5,7 @@
 // walk forward from. It is HISTORY now and does not grow: #929 needed to reach
 // files that already exist, which is the moment migrate.ts always said the
 // baseline text freezes and rung two begins. A fresh file runs every rung and
-// lands on `PRAGMA user_version = 5`; a file frozen at N runs the rungs above
+// lands on `PRAGMA user_version = 8`; a file frozen at N runs the rungs above
 // N and no others, which is why a shape change made after a release is a new
 // rung rather than an edit to one already climbed.
 //
@@ -62,7 +62,7 @@ import {
   READ_PATH_INDEX_DDL,
   SUBSCRIPTION_READ_PATH_INDEX_DDL,
 } from "./read-path-indexes.js";
-import { REPLICA_DDL } from "./replica.js";
+import { REPLICA_DDL, REPLICA_FLOOR_SPLIT_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
@@ -226,6 +226,14 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // a passphrase here. See the DDL's own note for why a dormant verifier is
   // worse than none.
   LOCKER_AUTH_DROP_DDL,
+  // RUNG EIGHT (#1014, G1/G2/V1) — one floor per log, and a time on the seat
+  // cursor. Its own rung and not an edit to the baseline for the reason rung
+  // five gives: a file that has climbed a rung never climbs it again, so a
+  // shape change made after the freeze is a new rung or it reaches nothing.
+  // A fresh file climbs it too, which is why the columns are added HERE and
+  // not in `REPLICA_DDL` / `ACCESS_DDL` — `ADD COLUMN` has no `IF NOT
+  // EXISTS`, so a column stated in both places would fail the rung.
+  REPLICA_FLOOR_SPLIT_DDL,
 ];
 
 /**

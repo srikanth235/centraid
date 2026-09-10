@@ -169,3 +169,54 @@ export const NETEM_UNBLOCK =
 
 /** The env flag that CLAIMS the netem rig exists. Claiming it must not be free. */
 export const NETEM_ENV = "CENTRAID_NET_CHAOS_NETEM";
+
+/*
+ * ── THE SHARE PATH (#1014, T16) ─────────────────────────────────────────────
+ *
+ * The #929 subscription plane had no chaos lane of its own: the tunnel faults
+ * above run over the DEVICE intent path, and the only owner of the peer share
+ * wire was `tests/scale/share-journey.scale.test.ts`, which measures cost on a
+ * cooperative link. These three are the adversity that wire actually supplies,
+ * named separately because they are injected at a different seam — the peer
+ * dial the subscriber pulls through — and because what they falsify is not the
+ * transport's job but the SEAT's: the six deterministic apply rules in
+ * `docs/protocol.md` must hold under every one of them.
+ *
+ * They are `in-process` for the same reason the tunnel faults are: a cut
+ * stream and a duplicated delivery are what a caller ABOVE QUIC can honestly
+ * see, and sub-QUIC loss stays declared at the `needs-netem` tier above.
+ */
+export const SHARE_PATH_FAULTS = [
+  {
+    id: "share-cut-mid-tail-page",
+    tier: "in-process",
+    scope: "stream",
+    injection:
+      "the origin's tail response is cut before the audience can read it, so the pass fails with the frame composed and the origin's membership already settled",
+    invariant:
+      "a tail the audience never applied does not advance its cursor, and the retry converges on the origin's rows exactly once",
+  },
+  {
+    id: "share-cut-mid-blob-chunk",
+    tier: "in-process",
+    scope: "stream",
+    injection:
+      "the blob door's second chunk is cut, so the audience holds a partial object under a content address it has not verified",
+    invariant:
+      "bytes that did not hash to the address the manifest named are never adopted, and no row lands claiming them",
+  },
+  {
+    id: "share-duplicate-delivery",
+    tier: "in-process",
+    scope: "stream",
+    injection:
+      "the same tail frame is delivered twice — the ambiguous retry after an acknowledgement the audience never saw",
+    invariant:
+      "every change is an idempotent upsert under the same version guard: no second row, no second lineage claim, and the cursor never goes backwards",
+  },
+] as const satisfies readonly NetworkFault[];
+
+export type SharePathFaultId = (typeof SHARE_PATH_FAULTS)[number]["id"];
+
+export const SHARE_PATH_FAULT_IDS: readonly SharePathFaultId[] =
+  SHARE_PATH_FAULTS.map((fault) => fault.id);

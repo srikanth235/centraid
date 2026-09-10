@@ -71,6 +71,12 @@ export interface MobileSeat {
 export interface OpenSeatOptions {
   /** Distinct per seat so two seats on one gateway keep separate replicas. */
   label?: string;
+  /** Which vault on this gateway. Defaults to the gateway's own default. */
+  vaultId?: string;
+  /** Where the file goes. Defaults to a directory of this seat's own. */
+  directory?: string;
+  /** The file's name in that directory — the shipped stem, for #1014's suite. */
+  fileName?: string;
   /**
    * The phone's own connectivity oracle, which is NOT the transport: the mount
    * resolves the gateway base once and carries the answer as a boolean, so a
@@ -101,15 +107,31 @@ export async function openSeat(
   const attempts: string[] = [];
   let live = true;
   let counter = 0;
+  const vaultId = options.vaultId ?? gateway.vaultId;
   const fetcher: ReplicaFetcher = (baseUrl, pathname, init) => {
     attempts.push(pathname);
-    return fetch(href(live ? baseUrl : dead, pathname), init as RequestInit);
+    // The device's `fetcher(vaultId)` stamps this on every request; a suite
+    // with two vaults on one gateway needs the same (#1014).
+    const headers = new Headers(init.headers);
+    headers.set("x-centraid-vault", vaultId);
+    return fetch(href(live ? baseUrl : dead, pathname), {
+      ...init,
+      headers,
+    } as RequestInit);
   };
   const seat = await openNodeSeat({
-    directory: path.join(gateway.dataDir, `seat-${label}`),
-    vaultId: gateway.vaultId,
+    directory: options.directory ?? path.join(gateway.dataDir, `seat-${label}`),
+    ...(options.fileName ? { fileName: options.fileName } : {}),
+    vaultId,
     baseUrl: gateway.url,
-    headers: { Authorization: `Bearer ${gateway.token}` },
+    // THE SEAT'S OWN DOORS ARE ADDRESSED TOO (#1014). Without the vault
+    // header the snapshot and log doors answer for the gateway's DEFAULT
+    // vault — which is precisely the mis-addressed bootstrap R25 recorded, so
+    // it must be arranged deliberately here and never by omission.
+    headers: {
+      Authorization: `Bearer ${gateway.token}`,
+      "x-centraid-vault": vaultId,
+    },
     fetch: (input, init) => {
       // THE SEAT'S OWN DOORS COUNT AS ATTEMPTS TOO (#996, W5). A bootstrap is a
       // snapshot download now, not a walk of the shaped bootstrap route, so a
@@ -127,7 +149,7 @@ export async function openSeat(
       baseUrl: gateway.url,
       token: gateway.token,
       gatewayId: "mobile-integration",
-      vaultId: gateway.vaultId,
+      vaultId,
     },
     fetcher,
     changeFeed: silentFeed(),

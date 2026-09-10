@@ -48,3 +48,40 @@ export async function readShareSection<T>(
     return { state: "absent", reach: shareReadReach(error, online) };
   }
 }
+
+/** The two sides of a link, as the gateway's directory names them. */
+export interface LinkSides {
+  vaultA: string;
+  vaultB: string;
+  labelA: string | null;
+  labelB: string | null;
+  remoteVaultId?: string | null;
+}
+
+/**
+ * THE ROW NAMES THE OTHER PERSON (#1014, S4).
+ *
+ * A link's DTO is symmetric — `labelA` names `vaultA`, `labelB` names `vaultB`
+ * — and which of the two this device is depends on which side redeemed the
+ * ticket. Picking `vaultB` unconditionally made the row read as this vault's
+ * OWN name on whichever device happened to be B: "Family" on the Family phone,
+ * where the counterparty is Personal.
+ *
+ * `remoteVaultId` is not the answer either: a link between two vaults on ONE
+ * gateway carries `null` there (there is no remote), which is exactly the case
+ * the wrong label showed up in. So the side is decided against the vault this
+ * device is looking at, and only a link naming neither falls back.
+ */
+export function linkCounterpartyLabel(
+  link: LinkSides,
+  myVaultId: string | undefined
+): string {
+  if (myVaultId === link.vaultA) return link.labelB ?? link.vaultB;
+  if (myVaultId === link.vaultB) return link.labelA ?? link.vaultA;
+  // Neither side is this device's vault — a roster spanning several mounted
+  // vaults. Name the far side of the link as the gateway sees it.
+  const remote = link.remoteVaultId;
+  if (remote === link.vaultA) return link.labelA ?? link.vaultA;
+  if (remote === link.vaultB) return link.labelB ?? link.vaultB;
+  return link.labelB ?? link.vaultB;
+}

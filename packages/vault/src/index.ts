@@ -369,7 +369,11 @@ export {
   type LocalOrphanSweepResult,
   type LocalOrphanSweepTarget,
 } from "./blob/local-orphan-sweep.js";
-export { type BlobPlacement, type BlobPlacementMode } from "./share/blobs.js";
+export {
+  placeBlob,
+  type BlobPlacement,
+  type BlobPlacementMode,
+} from "./share/blobs.js";
 export {
   S3BlobStore,
   MULTIPART_THRESHOLD_BYTES,
@@ -637,12 +641,15 @@ export {
   replicaCaptureOpen,
   lowestSeatCursor,
   pruneReplicaLog,
+  recordSeatCursor,
+  watchReplicaTable,
   replicaLogState,
   seatLogRowWire,
   REPLICA_DEFER_THRESHOLD_BYTES,
   REPLICA_LOG_RETENTION_DAYS,
   REPLICA_LOG_RETENTION_MAX_ROWS,
   REPLICA_PRODUCER_MAX_ROWS,
+  REPLICA_SEAT_HOLD_DAYS,
   ReplicaRebootstrapRequiredError as ReplicaLogRebootstrapRequiredError,
   type ReplicaCaptureResult,
   type ReplicaLogCursor,
@@ -669,10 +676,12 @@ export {
 } from "./replica/changeset.js";
 export {
   isPrivateTable,
+  isReplicatedTable,
   PRIVATE_TABLES,
   PRIVATE_TABLE_NAMES,
   replicatedReferencesToPrivate,
   replicatedTablesOf,
+  unclassifiedTables,
   type PrivateTableDeclaration,
   type PrivateTableKind,
 } from "./schema/private-tables.js";
@@ -694,6 +703,7 @@ export {
   DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaRow,
   readReplicaRows,
+  replicaRowIdsOf,
   withReplicaSnapshot,
   type ReadReplicaRowsOptions,
   type ReplicaRow,
