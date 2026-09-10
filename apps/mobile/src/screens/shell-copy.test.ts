@@ -20,7 +20,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { isTitleCase, walk } from "../../../../scripts/lint-mobile-rooms.mjs";
-import { PLACES, SHORT_NAME_DIVERGENCES } from "./home/places";
+import { PLACES } from "./home/places";
 import {
   DESKTOP_LINK_STATUS,
   SHELL_ERROR,
@@ -78,8 +78,10 @@ describe("the shell's copy", () => {
         .split(/\s+/u)
         .every((word) => words.has(word));
     }).map((place) => place.id);
-    // Every swap is written down with its reason, and spoken as it is painted.
-    expect(swapped).toStrictEqual(Object.keys(SHORT_NAME_DIVERGENCES));
+    // No exception, since R-SH-8: the one place that painted a second noun
+    // ("Automations" in the header, "Rules" on the band) is named "Rules" in
+    // both. A `short` may only drop words from `name` — never swap one in.
+    expect(swapped).toStrictEqual([]);
   });
 
   it("ends no error noun with a full stop, and gives each one a subject", () => {

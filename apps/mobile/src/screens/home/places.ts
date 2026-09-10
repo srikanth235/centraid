@@ -85,10 +85,10 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.automations,
     id: "autos",
     law: false,
-    name: "Automations",
+    name: "Rules",
     pin: false,
     short: "Rules",
-    what: "Rules that run on your vault's home machine",
+    what: "The standing rules that run on your vault's home machine",
   },
   {
     icon: DESTINATION_MARKS.connectors,
@@ -139,19 +139,6 @@ export const PLACES: readonly Place[] = [
 
 export const PLACE_COUNT = PLACES.length;
 
-/**
- * The one place whose band word is not its name (#1015, shell/findings 6+19).
- *
- * "Automations" does not fit 61px and cannot be shortened by dropping a word,
- * so the band paints "Rules" — a SECOND noun for one destination, which is the
- * defect this table otherwise forbids. It is written down here, and spoken as
- * "Rules" too (`HomeBand`), so no member hears a name they cannot see; the
- * naming itself is open with the owner. Every other place: `short` drops words
- * from `name` and nothing else, which `places.test.ts` holds.
- */
-export const SHORT_NAME_DIVERGENCES: Readonly<Record<string, string>> =
-  Object.freeze({ autos: "the name has no one-word short form" });
-
 const TOGGLEABLE_PLACES: readonly Place[] = PLACES.filter((p) => !p.law);
 
 export const DEFAULT_PLACE_PINS: readonly PlaceId[] = TOGGLEABLE_PLACES.filter(
@@ -180,7 +167,8 @@ export function bandPlaces(pins: readonly PlaceId[]): readonly Place[] {
   return home ? [home, ...rest.slice(0, BAND_PLACE_SLOTS)] : [];
 }
 
-/* v0 gates: a gateway may not mount Automations or Connectors, and a tab onto a
+/* v0 gates: a gateway may not mount Rules (the wire's `automations`) or
+ * Connectors, and a tab onto a
  * dead route is worse than a missing one, so the derivations below FILTER the
  * fixed table. `undefined` (UNKNOWN) never hides a place. */
 const PLACE_CAPABILITY: Partial<Record<PlaceId, keyof MobileGatewayFeatures>> =

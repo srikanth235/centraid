@@ -51,11 +51,12 @@ describe("the ten places", () => {
   });
 
   it("uses the exact short labels a 61px band tab needs", () => {
-    // Two names do not fit a 61px tab (:3480): Notifications reads Alerts,
-    // Automations reads Rules. Every other place's short label is its own
-    // name — Connectors is short enough to stand as both.
+    // One name does not fit a 61px tab (:3480): Notifications reads Alerts.
+    // Every other place's short label is its own name — Rules and Connectors
+    // are both short enough to stand as both.
     expect(getPlace("notifs").short).toBe("Alerts");
     expect(getPlace("autos").short).toBe("Rules");
+    expect(getPlace("autos").name).toBe("Rules");
     expect(getPlace("conn").short).toBe("Connectors");
     expect(getPlace("stats").short).toBe("Activity");
     expect(getPlace("data").short).toBe("Vault");

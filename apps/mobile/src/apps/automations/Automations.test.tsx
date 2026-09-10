@@ -364,7 +364,9 @@ describe(AutomationsScreen, () => {
   it("carries no filled commit, because no author flow exists here", async () => {
     wire.list.mockResolvedValue([row()]);
     const container = await render();
-    expect(buttonLabelled(container, "New automation")).toBeNull();
-    expect(textOf(container)).toContain("Automations");
+    expect(buttonLabelled(container, "New rule")).toBeNull();
+    // R-SH-8: the place is "Rules" in the title, the band and the page label.
+    expect(textOf(container)).toContain("Rules");
+    expect(textOf(container)).not.toContain("Automations");
   });
 });
