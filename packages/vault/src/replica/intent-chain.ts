@@ -313,13 +313,43 @@ export function expiredOutcomeRecovery(
 }
 
 /**
- * Drop outcomes past their window — but NEVER one a seat has not caught up to.
+ * Collapse outcomes past their window to TOMBSTONES — and never one a seat
+ * has not caught up to.
  *
- * The same rule the log's floor obeys (OQ-13), for the same reason: a seat
- * whose applied cursor is still behind an outcome's `commit_seq` is a seat
- * that has not yet cleared the pending projection that outcome answers.
- * Pruning it turns a badge that would have cleared into one that never does.
+ * A TOMBSTONE, NOT A DELETE (#1014, G16). This used to `DELETE` the row, and
+ * `expiredOutcomeRecovery` answers `undefined` when the row is gone — so the
+ * moment an outcome was pruned, the SAME intent id sailed past the dedupe
+ * check and executed a second time. That is the one thing the idempotency
+ * window exists to prevent, and pruning was quietly the way to defeat it. The
+ * row that stays behind is the id, the device, the app, the action, the
+ * payload hash and the window: no payload, no reason, no produced set, no
+ * chain — everything a re-execution would need is gone and everything an
+ * "I no longer know" answer needs is kept.
+ *
+ * THAT THE TOMBSTONE IS FOREVER IS THE RULING, not an oversight. Roughly a
+ * hundred and fifty bytes per intent ever admitted, against an id that can run
+ * twice. Nothing here promises a second horizon, because nothing would call
+ * it.
+ *
+ * ONLY A SETTLED ANSWER IS COLLAPSED (#1014, G17). The old predicate skipped
+ * the seat hold entirely for rows with no `commit_seq` — which is every
+ * `parked` outcome — so a confirmation the owner had not decided yet was
+ * deleted out from under them, contradicting the comment above it. A
+ * non-terminal intent is not past anything; it is still waiting.
+ *
+ * The hold is the same rule the log's floor obeys (OQ-13), for the same
+ * reason: a seat whose applied cursor is still behind an outcome's
+ * `commit_seq` has not yet cleared the pending projection that outcome
+ * answers, and collapsing it turns a badge that would have cleared into one
+ * that never does.
  */
+/**
+ * The `reason` a collapsed outcome carries. It is what makes the collapse
+ * idempotent — a second sweep over the same row changes nothing — and it says
+ * in the file itself why the row holds no payload.
+ */
+export const REPLICA_INTENT_TOMBSTONE_REASON = "aged-out";
+
 export function pruneReplicaIntentOutcomes(
   vault: DatabaseSync,
   options: { now?: Date; holdAtOrAbove?: number } = {}
@@ -329,11 +359,22 @@ export function pruneReplicaIntentOutcomes(
   const pruned = Number(
     vault
       .prepare(
-        `DELETE FROM replica_intent_outcome
+        `UPDATE replica_intent_outcome
+            SET invocation_id = NULL, reason = ?, conflict_json = NULL,
+                waiting_on = NULL, answered_versions = NULL,
+                produced_json = NULL, depends_on = NULL
           WHERE expires_at IS NOT NULL AND expires_at <= ?
-            AND (? IS NULL OR commit_seq IS NULL OR commit_seq <= ?)`
+            AND status IN ('executed', 'denied', 'failed', 'conflict')
+            AND (? IS NULL OR commit_seq IS NULL OR commit_seq <= ?)
+            AND (reason IS NULL OR reason <> ?)`
       )
-      .run(now, held ?? null, held ?? 0).changes
+      .run(
+        REPLICA_INTENT_TOMBSTONE_REASON,
+        now,
+        held ?? null,
+        held ?? 0,
+        REPLICA_INTENT_TOMBSTONE_REASON
+      ).changes
   );
   return { pruned, heldBySeat: held };
 }

@@ -11,6 +11,12 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import {
+  expiredOutcomeRecovery,
+  readReplicaIntentOutcome,
+  recordReplicaIntentOutcome,
+  REPLICA_INTENT_TOMBSTONE_REASON,
+} from "@centraid/vault";
 
 import { openVaultPlane } from "./vault-plane.js";
 
@@ -101,6 +107,60 @@ describe("vault-plane maintenance sweep", () => {
     expect(survivors.every((row) => row.revision_id.startsWith("live-"))).toBe(
       true
     );
+  }, 30_000);
+
+  test("collapses a lapsed intent outcome to a tombstone, and holds a parked one", async () => {
+    // #1014 G17: `expires_at` has been written on every outcome since #996 and
+    // nothing in production ever read it — the idempotency window closed on
+    // paper while the rows grew forever. This is the claim that the sweep
+    // actually runs the prune, and that it still refuses to touch a
+    // confirmation the owner has not decided.
+    const dir = await tempDir();
+    const plane = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    cleanups.push(() => plane.stop());
+
+    const lapsed = "2020-01-01T00:00:00.000Z";
+    recordReplicaIntentOutcome(plane.db.vault, {
+      intentId: "intent-settled",
+      deviceId: "device-a",
+      appId: "photos",
+      action: "update-asset",
+      payloadHash: "a".repeat(64),
+      status: "executed",
+      reason: "done",
+      expiresAt: lapsed,
+    });
+    recordReplicaIntentOutcome(plane.db.vault, {
+      intentId: "intent-waiting",
+      deviceId: "device-a",
+      appId: "photos",
+      action: "delete-asset",
+      payloadHash: "b".repeat(64),
+      status: "parked",
+      reason: "waiting for Priya to confirm",
+      expiresAt: lapsed,
+    });
+
+    sweep(plane);
+
+    expect(
+      readReplicaIntentOutcome(plane.db.vault, "intent-settled", "device-a")
+    ).toMatchObject({ reason: REPLICA_INTENT_TOMBSTONE_REASON });
+    // Still there, so the id can never run a second time.
+    expect(
+      expiredOutcomeRecovery(plane.db.vault, "intent-settled")
+    ).toMatchObject({ recovery: "resubmit-as-new-intent" });
+    expect(
+      readReplicaIntentOutcome(plane.db.vault, "intent-waiting", "device-a")
+    ).toMatchObject({
+      status: "parked",
+      reason: "waiting for Priya to confirm",
+    });
   }, 30_000);
 
   test("bounds one pass and drains the backlog over later sweeps, not over days", async () => {

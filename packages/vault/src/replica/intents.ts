@@ -234,12 +234,32 @@ export class ReplicaIntentIdentityError extends Error {
   }
 }
 
+/**
+ * THE INTENT'S IDENTITY IS ITS PAYLOAD, NOT THE DEVICE THAT CARRIED IT
+ * (#1014, G23/V9).
+ *
+ * The durable outbox lives in the SEAT FILE, and the seat file outlives the
+ * enrolment: a phone restored from a device backup, or an OS app clone,
+ * enrols under a new `endpointId` and then replays an outbox full of intents
+ * this vault has already executed. Keyed on the device, every one of them was
+ * a `409 intent_id_reused` the seat could not retry past — the second device's
+ * write refused with a conflict it could do nothing about — or, worse on the
+ * read side, a dedupe MISS that ran the write again.
+ *
+ * The id is client-minted and random and the payload hash covers the app, the
+ * action, the input and the base versions, so `(vaultId, intentId,
+ * payloadHash)` is the identity that actually means "this same change". The
+ * device is ATTRIBUTION, and the row keeps the one that first admitted it.
+ *
+ * A DIFFERENT PAYLOAD UNDER A KNOWN ID IS STILL A REUSE, from any device: the
+ * retained outcome answers the payload it was recorded for, and answering
+ * another with it would settle a change that never ran.
+ */
 function assertIdentity(
   prior: IntentRow,
   input: RecordReplicaIntentOutcomeInput
 ): void {
   if (
-    prior.device_id !== input.deviceId ||
     prior.app_id !== input.appId ||
     prior.action !== input.action ||
     prior.payload_hash !== input.payloadHash
@@ -461,6 +481,33 @@ export function readReplicaIntentOutcome(
 ): ReplicaIntentOutcome | undefined {
   const row = intentRowById(vault, intentId);
   return row?.device_id === deviceId ? outcomeOf(row) : undefined;
+}
+
+/**
+ * The retained outcome for a caller presenting THIS id with THIS payload
+ * (#1014, G23/V9).
+ *
+ * The device-scoped read above is the right question when the device is the
+ * durable identity — the peer door's `peer:<vaultId>` is exactly that. It is
+ * the wrong one for a seat, whose outbox lives in a file that outlives the
+ * enrolment: a restored phone asking about its own already-executed intent got
+ * `undefined` and re-ran it, or was told the id was reused by someone else.
+ *
+ * The payload hash is what makes this a non-oracle: the id is random and
+ * client-minted, and the hash covers the app, the action, the input and the
+ * base versions, so a caller who can state both is holding the same intent.
+ * Both are already this vault's own devices — the door authenticated them —
+ * so there is no existence here they could not already read.
+ */
+export function readReplicaIntentOutcomeForSeat(
+  vault: DatabaseSync,
+  intentId: string,
+  seat: { deviceId: string; payloadHash: string }
+): ReplicaIntentOutcome | undefined {
+  const row = intentRowById(vault, intentId);
+  if (!row) return undefined;
+  if (row.device_id === seat.deviceId) return outcomeOf(row);
+  return row.payload_hash === seat.payloadHash ? outcomeOf(row) : undefined;
 }
 
 export interface ListReplicaIntentOutcomesOptions {

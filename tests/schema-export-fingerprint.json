@@ -1,6 +1,6 @@
 {
   "algorithm": "sha256-of-sorted-file-sha256",
-  "schemaFingerprint": "3d4798aef154c11797493bf7c51fa363cb460d676ac7cf9124e7e9ea46ab51ec",
+  "schemaFingerprint": "38f3034c1064b2f3c2f0d03225429318d9fd9bce40b4b14aedbeb1669ab24cc6",
   "exportOwner": "packages/vault/src/gateway/portable-export.ts",
   "approvedDeviation": "#1014 (issue-1014) G8/G10/G11, the replication guard's coverage, re-pinned over the #996 W5 pin. What moved in packages/vault/src/schema:\\n(1) `ext.ts` gives every ext physical `row_version` and a touch trigger, reserves the column name against an app spec, and adds `refreshExtRowVersions` \u2014 the on-open ALTER that reaches a file whose ext tables predate the guard. Ext physicals are not stated DDL (their names come from `access_app_ext`), so this is a JS pass beside `refreshEntityTriggers`, not a rung.\\n(2) `migrate.ts` calls it, and `updated-at.ts` gains `REPLICA_ROW_VERSION_GAP` \u2014 a build-time register of the replicated tables that still carry no version column, asserted in both directions by `row-version-canary.test.ts` so it can only shrink \u2014 plus the recorded ruling on ABA across delete/re-insert.\\nEXPORT COMPLETENESS: nothing entered or left the walk. `row_version` rides an already-walked table's `SELECT *`; the trigger is DDL a restore replants from `extTableDdl`, as it does every index; the register is read by a test and never by the walk. The audit is recorded at the owner, packages/vault/src/gateway/portable-export.ts."
 }

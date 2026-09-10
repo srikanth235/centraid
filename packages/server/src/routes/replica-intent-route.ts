@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
   expiredOutcomeRecovery,
-  readReplicaIntentOutcome,
+  readReplicaIntentOutcomeForSeat,
   recordReplicaIntentOutcome,
   ReplicaIntentIdentityError,
   replicaDependencyVerdict,
@@ -70,6 +70,14 @@ export interface ReplicaIntentRouteContext {
 
 const NO_TRANSIENT_OUTPUT = Symbol("no transient replica output");
 
+/**
+ * THE PAYLOAD IS THE IDENTITY, NOT THE ENROLMENT (#1014, G23/V9). This also
+ * compared `deviceId`, so a phone restored from a device backup — a new
+ * `endpointId`, the same durable seat file and the same outbox — was told
+ * every already-executed intent in it was a payload mismatch it could not
+ * retry past. The hash covers the app, the action, the input and the base
+ * versions; the device is attribution.
+ */
 function sameIdentity(
   outcome: ReplicaIntentOutcome,
   input: {
@@ -80,7 +88,6 @@ function sameIdentity(
   }
 ): boolean {
   return (
-    outcome.deviceId === input.deviceId &&
     outcome.appId === input.appId &&
     outcome.action === input.action &&
     outcome.payloadHash === input.payloadHash
@@ -144,10 +151,10 @@ function answerAdmissionFailure(
       message: error instanceof Error ? error.message : String(error),
     });
   }
-  const retained = readReplicaIntentOutcome(
+  const retained = readReplicaIntentOutcomeForSeat(
     context.plane.db.vault,
     intentId,
-    identity.deviceId
+    identity
   );
   if (
     retained &&
@@ -258,10 +265,10 @@ export async function handleReplicaIntent(
     action,
     payloadHash,
   };
-  const existing = readReplicaIntentOutcome(
+  const existing = readReplicaIntentOutcomeForSeat(
     context.plane.db.vault,
     intentId,
-    identity.deviceId
+    identity
   );
   if (existing) {
     if (!sameIdentity(existing, identity)) {
@@ -356,10 +363,10 @@ export async function handleReplicaIntent(
       }));
     if (answer.status === "retryable") {
       // The row stays `sending`, which is exactly what a retry consumes.
-      const pending = readReplicaIntentOutcome(
+      const pending = readReplicaIntentOutcomeForSeat(
         context.plane.db.vault,
         intentId,
-        identity.deviceId
+        identity
       );
       if (!pending)
         return sendJson(res, 500, { error: "replica_intent_admission_lost" });
@@ -515,10 +522,10 @@ export async function handleReplicaIntent(
   } catch {
     // Dispatch failure is ambiguous (the command may have committed): keep
     // `sending` so retry consumes the marker.
-    const pending = readReplicaIntentOutcome(
+    const pending = readReplicaIntentOutcomeForSeat(
       context.plane.db.vault,
       intentId,
-      identity.deviceId
+      identity
     );
     if (!pending) {
       return sendJson(res, 500, { error: "replica_intent_admission_lost" });
@@ -535,10 +542,10 @@ export async function handleReplicaIntent(
     "pending"
   );
   if (dispatched.status === "retryable" || canonicalFinalizationPending) {
-    const pending = readReplicaIntentOutcome(
+    const pending = readReplicaIntentOutcomeForSeat(
       context.plane.db.vault,
       intentId,
-      identity.deviceId
+      identity
     );
     if (!pending) {
       return sendJson(res, 500, { error: "replica_intent_admission_lost" });

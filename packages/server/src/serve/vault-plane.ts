@@ -83,6 +83,8 @@ import {
   registerTaskCommands,
   registerAtlasCommands,
   pruneReplicaChanges,
+  lowestSeatCommitSeq,
+  pruneReplicaIntentOutcomes,
   pruneReplicaLog,
   runJournalArchival,
   blobCustodyProven,
@@ -2115,12 +2117,29 @@ export class VaultPlane {
       // lowest LIVE seat cursor (`access_device_secret.sync_cursor`, written
       // by the seat-log door), so wiring it cannot prune past a device that
       // is still tailing.
+      const intentHold = lowestSeatCommitSeq(this.db.vault);
       const seatLogPrune = pruneReplicaLog(this.db.vault);
       if (seatLogPrune.pruned > 0) {
         this.logger.info(
           `vault plane: seat log prune pruned=${seatLogPrune.pruned} ` +
             `retained=${seatLogPrune.retained} floor=${seatLogPrune.floor.seq} ` +
             `heldBySeat=${String(seatLogPrune.heldBySeat ?? "none")}`
+        );
+      }
+      // THE INTENT WINDOW'S OWN PRUNE, WIRED (#1014, G17). `expires_at` has
+      // been written on every outcome since #996 and nothing in production
+      // ever read it: the idempotency window closed on paper and the rows
+      // grew forever. Beside the seat log's prune because it is the same
+      // question about the same seats — held above the lowest LIVE seat's
+      // COMMIT position, so an answer a phone has not caught up to keeps its
+      // payload and the pending badge still clears.
+      const intentPrune = pruneReplicaIntentOutcomes(this.db.vault, {
+        ...(intentHold === undefined ? {} : { holdAtOrAbove: intentHold }),
+      });
+      if (intentPrune.pruned > 0) {
+        this.logger.info(
+          `vault plane: intent window prune tombstoned=${intentPrune.pruned} ` +
+            `heldBySeat=${String(intentPrune.heldBySeat ?? "none")}`
         );
       }
       // DETACHED, so remote latency never blocks the sweep (#296). Backoff
