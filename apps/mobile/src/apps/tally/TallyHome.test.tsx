@@ -25,6 +25,9 @@ import TallyHome from "./TallyHome";
 
 const vaultState = vi.hoisted(() => ({ current: null as unknown }));
 const navigated = vi.hoisted(() => ({ calls: [] as unknown[][] }));
+// TallyHome navigates through its own `navigation` PROP, not `useNavigation`,
+// so the two spies are separate on purpose.
+const homeNav = vi.hoisted(() => ({ calls: [] as unknown[][] }));
 
 vi.mock(
   import("@react-navigation/native"),
@@ -120,7 +123,13 @@ function mountTally(
 ) {
   return render(
     <TallyHome
-      navigation={{ navigate: vi.fn<() => void>() } as never}
+      navigation={
+        {
+          navigate: (...args: unknown[]) => {
+            homeNav.calls.push(args);
+          },
+        } as never
+      }
       route={{ params: destination ? { destination } : {} } as never}
     />
   );
@@ -129,6 +138,7 @@ function mountTally(
 describe("Tally, on the real React Native host tree", () => {
   beforeEach(() => {
     navigated.calls.length = 0;
+    homeNav.calls.length = 0;
     vaultState.current = vault({});
   });
 
@@ -200,5 +210,32 @@ describe("Tally, on the real React Native host tree", () => {
     // RNTL still resolves it as a button because RN publishes the role — and
     // that is exactly the substitution a source-level grep cannot check.
     expect(screen.getAllByRole("button").length).toBeGreaterThan(0);
+  });
+
+  // #1015 B2 — Add expense used to have exactly three doors: the day-one empty
+  // state, a text verb inside one group's LEDGER head, and edit-this-expense.
+  // A member with friends and no group could not record an expense at all.
+  it.each(["balances", "activity", "groups", "contrib"] as const)(
+    "offers Add expense from the bar on the %s destination, with no group required",
+    (destination) => {
+      vaultState.current = vault({
+        friends: [friend("f1", "Ada", 2500)],
+      });
+      const screen = mountTally(destination);
+
+      // No `accessibilityLabel`: RN builds the name from the `Text` child, and
+      // a hand-typed one would be a second copy of `ADD_COMMIT`.
+      const add = screen.getByRole("button", { name: "Add expense" });
+
+      fireEvent.press(add);
+      expect(homeNav.calls).toStrictEqual([["TallyAdd"]]);
+    }
+  );
+
+  it("withdraws Add expense with everything else behind the denied gate", () => {
+    vaultState.current = vault({ denied: { reason: "no grant" } as never });
+    const screen = mountTally();
+
+    expect(screen.queryByRole("button", { name: "Add expense" })).toBeNull();
   });
 });

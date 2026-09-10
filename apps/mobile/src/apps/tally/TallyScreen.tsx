@@ -22,6 +22,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ADD_COMMIT } from "@centraid/blueprints/apps/tally/compose-copy";
 import { routeStatus } from "@centraid/blueprints/apps/tally/route-copy";
 import { shelfLabel } from "@centraid/blueprints/apps/tally/shelves";
 import type { ShelfId } from "@centraid/blueprints/apps/tally/shelves";
@@ -63,6 +64,12 @@ export interface TallyScreenProps {
   onBack?: () => void;
   /** A route that is a SUBJECT rather than a place draws no band. */
   hideBand?: boolean;
+  /** The app's one create verb, in the bar's trailing slot (#1015 B2). Passed
+   *  by the four band destinations only: Add expense was reachable from a text
+   *  verb inside a group and from the day-one empty state, so a member with
+   *  friends and no group could not record an expense at all. Withdrawn with
+   *  everything else behind the denied gate. */
+  onAddExpense?: () => void;
   children: React.ReactNode;
 }
 
@@ -72,6 +79,7 @@ export default function TallyScreen({
   shared,
   onBack,
   hideBand,
+  onAddExpense,
   children,
 }: TallyScreenProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -141,6 +149,11 @@ export default function TallyScreen({
         color={META.color}
         iconKey={META.iconKey}
         onBack={onBack ?? (() => navigation.popTo("Home"))}
+        trailing={
+          denied || !onAddExpense
+            ? undefined
+            : { label: ADD_COMMIT, onPress: onAddExpense }
+        }
       />
 
       <View style={styles.body}>
