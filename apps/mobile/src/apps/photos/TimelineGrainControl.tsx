@@ -103,7 +103,7 @@ const makeStyles = (colors: ThemeColors) =>
       // exception (#1015, R-B-6).
       gap: subBase.gutter,
       overflow: "hidden",
-      paddingHorizontal: 2,
+      paddingHorizontal: subBase.gutter,
     },
     ruleHidden: { backgroundColor: "transparent" },
     segment: {
