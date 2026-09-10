@@ -30,7 +30,9 @@ import {
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import { useBandOwner } from "../../kit/band/band-owner";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
+import { postStatus } from "../../kit/components/status-line";
 import { AppPlace, PushedPage } from "../../kit/rooms";
 import { t, useTheme } from "../../kit/theme";
 import { resolveAppMeta } from "../../lib/gateway";
@@ -44,7 +46,13 @@ import {
   lockerParentPlace,
 } from "./locker-places";
 import type { LockerRouteKey } from "./locker-places";
-import { MASKED_LABEL } from "./locker-seat-copy";
+import {
+  DEVICE_FORGET,
+  DEVICE_FORGET_BODY,
+  DEVICE_FORGET_DONE,
+  DEVICE_FORGET_NOUN,
+  MASKED_LABEL,
+} from "./locker-seat-copy";
 import {
   noteLockerActivity,
   forgetLockerVaultKey,
@@ -89,6 +97,7 @@ export default function LockerScreen({
   const navigation = useNavigation<LockerShellNavigation>();
   const [moreOpen, setMoreOpen] = useState(false);
   const { bandOwner } = useBandOwner("locker");
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   useLockerBoundary();
   const vault = useLockerVault();
 
@@ -154,13 +163,29 @@ export default function LockerScreen({
             error={vault.session.error}
             mode={wallMode}
             notEnrolled={vault.notEnrolled}
-            onForgetKey={() => void forgetLockerVaultKey()}
+            onForgetKey={() =>
+              // #1015, locker/findings #3: the one IRREVERSIBLE act in this
+              // app was the only one with no guard and no acknowledgement,
+              // while a 30-day-restorable trash of one item had both.
+              confirmDestructive({
+                body: DEVICE_FORGET_BODY,
+                noun: DEVICE_FORGET_NOUN,
+                onConfirm: () => {
+                  void forgetLockerVaultKey().then(() => {
+                    postStatus(DEVICE_FORGET_DONE);
+                  });
+                },
+                verb: DEVICE_FORGET,
+              })
+            }
             onUnlock={() => void unlockLocker()}
           />
         ) : (
           children
         )}
       </View>
+
+      {confirmSheet}
 
       <LockerMoreSheet
         onClose={() => setMoreOpen(false)}
