@@ -39,13 +39,16 @@ function device(patch: Partial<DeviceRow> & { deviceId: string }): DeviceRow {
 }
 
 describe("device row copy", () => {
-  it("lowers architecture nouns out of member-facing connection errors", () => {
+  it("shows the caller's noun and never the exception (S14)", () => {
+    // #1015: this used to LOWER the vocabulary of `error.message` and print
+    // it — "Gateway returned HTTP 503" became "home machine returned HTTP
+    // 503", which reads better and is still a fact about the program.
     expect(memberDeviceError(new Error("Gateway returned HTTP 503"), "x")).toBe(
-      "home machine returned HTTP 503"
+      "x"
     );
     expect(
       memberDeviceError(new Error("Replica component is unavailable"), "x")
-    ).toBe("offline copy part is unavailable");
+    ).toBe("x");
     expect(memberDeviceError(null, "Could not read the copies.")).toBe(
       "Could not read the copies."
     );

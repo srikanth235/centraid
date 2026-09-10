@@ -3,7 +3,6 @@
 // (./TileBody) read as one grid. Home takes no identity hue (#707); the hue
 // belongs to the app a tile previews, on its chip alone.
 
-import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
@@ -43,9 +42,10 @@ function buildPressHandlers(scale: SharedValue<number>): {
 } {
   const timing = { duration: PRESS_DURATION, easing: PRESS_CURVE };
   return {
+    // The scale IS the press feedback. A buzz on every press-in is what made
+    // haptics mean nothing in this app (#1015, S15).
     pressIn: () => {
       scale.value = withTiming(0.97, timing);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
     pressOut: () => {
       scale.value = withTiming(1, timing);

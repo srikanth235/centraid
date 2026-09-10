@@ -29,6 +29,7 @@ import {
 } from "../lib/replica/thumbnail-pack";
 import { UPLOAD_DB_NAME, UploadQueue } from "../lib/upload/native-queue";
 import type { SettingsScreenProps } from "../navigation";
+import { SHELL_TITLES } from "./shell-copy";
 import { useShellParent } from "./shell-places";
 
 interface ScopeStorage {
@@ -157,7 +158,7 @@ export default function PhoneStorage({
       </Text>
       {route.params?.signalCause ? (
         <View
-          accessibilityLabel="Arrived from Notifications"
+          accessibilityLabel={`Arrived from ${SHELL_TITLES.alerts}`}
           accessibilityLiveRegion="polite"
           accessibilityRole="alert"
           style={[
@@ -170,7 +171,7 @@ export default function PhoneStorage({
           ]}
         >
           <Text style={[styles.attentionTitle, { color: colors.text }]}>
-            From Notifications
+            {`From ${SHELL_TITLES.alerts}`}
           </Text>
           <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
             {route.params.signalCause}
@@ -236,6 +237,7 @@ export default function PhoneStorage({
             ]}
           >
             <Pressable
+              accessibilityRole="button"
               accessibilityLabel={`Storage breakdown for ${row.label}`}
               style={styles.cardHeader}
               onPress={() =>
@@ -366,6 +368,7 @@ export default function PhoneStorage({
         ) : null}
       </View>
       <Pressable
+        accessibilityRole="button"
         style={[styles.button, { borderColor: colors.line }]}
         onPress={() =>
           confirmDestructive({

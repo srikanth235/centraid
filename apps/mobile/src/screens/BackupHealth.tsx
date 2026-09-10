@@ -56,6 +56,7 @@ import {
   formatSyncTime,
 } from "./BackupHealth.custody";
 import { styles } from "./BackupHealth.styles";
+import { SHELL_TITLES } from "./shell-copy";
 import { useShellParent } from "./shell-places";
 
 const EMPTY_QUEUE: TransferQueueCounts = {
@@ -204,7 +205,7 @@ export default function BackupHealth({
       </Text>
       {route.params?.signalCause ? (
         <View
-          accessibilityLabel="Arrived from Notifications"
+          accessibilityLabel={`Arrived from ${SHELL_TITLES.alerts}`}
           accessibilityLiveRegion="polite"
           accessibilityRole="alert"
           style={[

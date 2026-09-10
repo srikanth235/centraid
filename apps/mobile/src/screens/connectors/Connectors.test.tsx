@@ -239,7 +239,9 @@ describe(ConnectorsScreen, () => {
     expect(spans).toContain(
       "Connection health is unavailable; the connections themselves keep working."
     );
-    expect(spans).toContain("connect ECONNREFUSED");
+    // S14 (#1015): the exception is a fact about the program.
+    expect(spans).not.toContain("connect ECONNREFUSED");
+    expect(spans).toContain("Your connectors could not be loaded");
     const panel = nodesOf(container, "div").find(
       (node) => styleOf(node).borderColor === colors.net
     );

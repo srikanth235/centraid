@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * THE ROOMS GATE (#1015, Wave 4) — five rules over the mobile screen tree.
+ * THE ROOMS GATE (#1015, Wave 4) — six rules over the mobile screen tree.
  *
  * WHY THIS EXISTS. A nine-lane audit of the Expo app found six headers, seven
  * back affordances, five search placements, five confirm shapes, eight-plus
@@ -9,13 +9,30 @@
  * that noticed a screen ignoring it. So the six rooms (`kit/rooms/README.md`)
  * are only half the answer, and this is the other half.
  *
- * NOT WIRED YET, ON PURPOSE. Wave 2 migrates the screens; wiring this into
- * `check:push` before that would make every gate red on work that has not
- * happened. It runs REPORT-ONLY (exit 0) and prints the count per rule, which
- * is the baseline Wave 3 burns down. `--enforce` is what Wave 4 turns on, and
- * `--max <n>` is the ratchet in between.
+ * WIRED, as of Wave 4: `bun run lint:product` runs this with `--enforce`.
+ * Waves 2 and 3 migrated the screens; report-only (exit 0) is still the
+ * default so the numbers can be read without failing anything, and
+ * `--max <n>` remains as a ratchet.
  *
- * THE FIVE RULES.
+ * WHAT IS A SCREEN, EXACTLY. `screen-root` used to fire on every `.tsx` under
+ * the two trees, which counted 153 findings — and most of them were LEAF
+ * COMPONENTS. A row, a card, a section block, a header part: none of those is
+ * a screen, none of them may be a room, and every one of them was a finding.
+ * A rule that cries about a hundred non-problems does not get wired; it gets
+ * ignored. So a file is a screen iff the app REGISTERS it as one:
+ *
+ *   - `apps/mobile/lazy-screens.tsx` names it in a `lazyScreen(() =>
+ *     import("./src/…"))` — that file is the composition root's screen
+ *     registry, and a `component=` prop on a navigator is the only way any of
+ *     those bindings is reachable; or
+ *   - it is a `*Screen.tsx` / `*Home.tsx` frame, which is the naming the tree
+ *     uses for a cover a navigator mounts.
+ *
+ * Anything else is a leaf and is not a finding, however it is rooted. The
+ * registry is READ, not restated, so a screen added to the app is a screen
+ * here the same commit.
+ *
+ * THE SIX RULES.
  *
  *   screen-root      A screen file's default export returns a root that is not
  *     one of the six rooms. This is the rule the other four exist to make
@@ -34,6 +51,14 @@
  *     colour contract does not allow.
  *   copy-title-case  Two or more capitalised words in a label inside a copy
  *     table. Sentence case is the house rule (D2, superseding #712).
+ *   error-detail     `error.message`, `String(err)` or `err.toString()` flowing
+ *     into member copy — a room's `error`/`detail`/`secondary`, a `message`,
+ *     a `reason`, or the one status channel (`postStatus`/`showUndoStatus`).
+ *     S14: the audit found engine vocabulary and raw payloads on six shell
+ *     surfaces and in every app's error card — a Swift filename, a
+ *     `FetchRequestCanceledException`, a sandbox lane refusal. An exception is
+ *     a fact about the PROGRAM. Capturing one for a log is fine and this rule
+ *     does not see it; rendering one is the finding.
  *
  * WHAT THIS CANNOT SEE, said plainly: it matches text, not a render tree. It
  * proves a file's shape, not that the screen mounts, and a screen that renders
@@ -44,10 +69,23 @@
  * pass — the same rule `lint-app-conformance.mjs` and `lint-path-filters.mjs`
  * hold themselves to.
  *
+ * HOW `--enforce` ENFORCES, and why it is per-rule. Four of the six rules are
+ * at ZERO tree-wide and any new finding fails the gate outright — that is the
+ * brief's requirement: a new hand-rolled screen root, back literal, gutter
+ * literal, tint on a control or Title Case label is a red diff, not a
+ * six-month audit. The other two carry a recorded baseline
+ * (`lint-mobile-rooms.baseline.json`), because the app waves that burn them
+ * down have not merged yet, and a gate that is red on arrival is a gate
+ * everyone learns to skip. A baseline is a RATCHET: above it fails, and BELOW
+ * it prints the number to lower it to. It may only ever go down.
+ *
+ * A baseline is not a licence. Each entry names the wave that clears it; when
+ * that wave lands, the entry goes to 0 and stays there.
+ *
  * Usage:
  *   node scripts/lint-mobile-rooms.mjs             # report-only, exit 0
- *   node scripts/lint-mobile-rooms.mjs --enforce   # exit 1 on any finding
- *   node scripts/lint-mobile-rooms.mjs --max 40    # exit 1 above a ratchet
+ *   node scripts/lint-mobile-rooms.mjs --enforce   # per-rule baselines
+ *   node scripts/lint-mobile-rooms.mjs --max 40    # one whole-tree ratchet
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -68,13 +106,67 @@ export const ROOMS = [
 /** Where screens live. `kit/` is the kit's own tree and is exempt by design. */
 const SCREEN_DIRS = ["apps/mobile/src/apps", "apps/mobile/src/screens"];
 
-const RULES = [
+export const RULES = [
   "screen-root",
   "back-literal",
   "page-margin",
   "identity-tint",
   "copy-title-case",
+  "error-detail",
 ];
+
+/** The recorded ratchet, per rule. Read, never written by this script. */
+const BASELINE_FILE = "scripts/lint-mobile-rooms.baseline.json";
+
+/**
+ * The per-rule ratchet. A rule the file does not name is at ZERO.
+ *
+ * @param {string} [root] Repo root.
+ * @returns {Record<string, number>} Rule → the highest count that passes.
+ */
+export function readBaseline(root = ROOT) {
+  /** @type {Record<string, number>} */
+  const floor = Object.fromEntries(RULES.map((rule) => [rule, 0]));
+  let raw;
+  try {
+    raw = readFileSync(path.join(root, BASELINE_FILE), "utf8");
+  } catch {
+    return floor;
+  }
+  const parsed = JSON.parse(raw);
+  for (const rule of RULES)
+    if (typeof parsed.rules?.[rule]?.max === "number")
+      floor[rule] = parsed.rules[rule].max;
+  return floor;
+}
+
+/** The composition root's screen registry; see "WHAT IS A SCREEN" above. */
+const SCREEN_REGISTRY = "apps/mobile/lazy-screens.tsx";
+
+/**
+ * Every screen module the app registers, as repo-relative `.tsx` paths.
+ *
+ * Read from the registry rather than restated here, so a screen added to the
+ * app is a screen to this rule in the same commit. An unreadable registry
+ * answers with an EMPTY set, which the caller turns into a hard failure rather
+ * than a quiet pass — the same reason `scanned === 0` is an error.
+ *
+ * @param {string} [root] Repo root.
+ * @returns {Set<string>} Repo-relative paths.
+ */
+export function registeredScreens(root = ROOT) {
+  let source;
+  try {
+    source = readFileSync(path.join(root, SCREEN_REGISTRY), "utf8");
+  } catch {
+    return new Set();
+  }
+  return new Set(
+    [...source.matchAll(/import\("\.\/(?<module>src\/[^"]+)"\)/gu)].map(
+      (match) => `apps/mobile/${match.groups?.module ?? ""}.tsx`
+    )
+  );
+}
 
 /**
  * Every file under `dir`, recursively.
@@ -95,11 +187,24 @@ export function walk(dir) {
   });
 }
 
-/** A file that renders a screen, as opposed to a model, a style sheet or a test. */
-const isScreenFile = (relative) =>
-  relative.endsWith(".tsx") &&
-  !relative.includes(".test.") &&
-  !relative.endsWith(".styles.tsx");
+/**
+ * A file the APP treats as a screen — not merely a `.tsx` that renders.
+ *
+ * A leaf component (a row, a card, a section) is not a screen, may not be a
+ * room, and is not a finding. Two ways in: the registry names the module, or
+ * the file is a `*Screen.tsx` / `*Home.tsx` frame.
+ *
+ * @param {string} relative Repo-relative path.
+ * @param {Set<string>} registry Registered screen modules.
+ * @returns {boolean} True when the six-rooms rule applies to this file.
+ */
+export function isScreenFile(relative, registry = new Set()) {
+  if (!relative.endsWith(".tsx")) return false;
+  if (relative.includes(".test.") || relative.endsWith(".styles.tsx"))
+    return false;
+  if (registry.has(relative)) return true;
+  return /(?:Screen|Home)\.tsx$/u.test(relative);
+}
 
 /**
  * The JSX tag a default-exported component returns first.
@@ -120,18 +225,34 @@ export function rootTagOf(source) {
   return match?.groups?.tag ?? null;
 }
 
+/** Where an exception would become member copy. */
+const COPY_SINK =
+  /(?:postStatus|showUndoStatus)\s*\(|\b(?:detail|message|reason|secondary|error|body|title|label)\s*:/u;
+
+/** An exception's own words, however they are extracted. */
+const RAW_EXCEPTION =
+  /\b(?:error|err|e|cause|reason)\.message\b|\bString\((?:error|err|e|cause)\)|\b(?:error|err|e)\.toString\(\)/u;
+
 /**
- * Run the five rules over one file.
+ * Run the six rules over one file.
  *
  * @param {string} relative Repo-relative path.
  * @param {string} source File text.
+ * @param {Set<string>} [registry] Registered screen modules.
  * @returns {{rule: string, path: string, detail: string}[]} Findings.
  */
-export function lintFile(relative, source) {
+export function lintFile(relative, source, registry = new Set()) {
   const findings = [];
   const add = (rule, detail) => findings.push({ detail, path: relative, rule });
 
-  if (isScreenFile(relative)) {
+  // S14 (#1015). Line-scoped: the sink and the extraction have to be the same
+  // expression, so `catch (error) { log(error.message) }` beside an unrelated
+  // `message:` two lines away is not a finding.
+  for (const line of source.split("\n"))
+    if (COPY_SINK.test(line) && RAW_EXCEPTION.test(line))
+      add("error-detail", line.trim().slice(0, 90));
+
+  if (isScreenFile(relative, registry)) {
     const root = rootTagOf(source);
     if (root !== null && !ROOMS.includes(root))
       add("screen-root", `root is <${root}>, not one of the six rooms`);
@@ -190,13 +311,14 @@ export function isTitleCase(label) {
  */
 export function lintTree(root = ROOT) {
   const files = SCREEN_DIRS.flatMap((dir) => walk(path.join(root, dir)));
+  const registry = registeredScreens(root);
   const findings = [];
   for (const file of files) {
     if (!/\.tsx?$/u.test(file) || file.includes(".test.")) continue;
     const relative = path.relative(root, file);
-    findings.push(...lintFile(relative, readFileSync(file, "utf8")));
+    findings.push(...lintFile(relative, readFileSync(file, "utf8"), registry));
   }
-  return { findings, scanned: files.length };
+  return { findings, registry, scanned: files.length };
 }
 
 /** Rule counts, every rule present even at zero. */
@@ -208,27 +330,58 @@ export function countByRule(findings) {
 
 /** The rules, proven against fixtures before the tree is touched. */
 export function selfTest() {
+  const HAND_ROLLED =
+    "export default function A() {\n return (\n <SafeAreaView>x</SafeAreaView>);}";
   const cases = [
-    [
-      "screen-root",
-      "a.tsx",
-      "export default function A() {\n return (\n <SafeAreaView>x</SafeAreaView>);}",
-    ],
+    ["screen-root", "apps/mobile/src/apps/x/AScreen.tsx", HAND_ROLLED],
     ["back-literal", "b.tsx", '<DocsShelfHeader backTo="All" />'],
     ["page-margin", "apps/mobile/src/apps/x/c.tsx", "paddingHorizontal: 18,"],
     ["identity-tint", "d.tsx", '<Button label="x" color={appIdentity} />'],
     ["copy-title-case", "view-copy.ts", 'export const A = "Empty Trash";'],
+    [
+      "error-detail",
+      "f.tsx",
+      "postStatus(error instanceof Error ? error.message : String(error));",
+    ],
+    ["error-detail", "g.tsx", "setState({ message: err.message });"],
   ];
   for (const [rule, file, source] of cases) {
     const hit = lintFile(file, source).some((finding) => finding.rule === rule);
     if (!hit) throw new Error(`lint-mobile-rooms: rule ${rule} does not fire`);
   }
+
+  // A LEAF IS NOT A SCREEN. This is the whole point of the predicate: the
+  // same hand-rolled root in a row component is not a finding.
+  const leaf = lintFile("apps/mobile/src/apps/x/RowCard.tsx", HAND_ROLLED);
+  if (leaf.some((finding) => finding.rule === "screen-root"))
+    throw new Error("lint-mobile-rooms: a leaf component is a screen-root");
+
+  // …and the registry is the other way in, for a screen named anything.
+  const registered = lintFile(
+    "apps/mobile/src/apps/x/Lightbox.tsx",
+    HAND_ROLLED,
+    new Set(["apps/mobile/src/apps/x/Lightbox.tsx"])
+  );
+  if (!registered.some((finding) => finding.rule === "screen-root"))
+    throw new Error("lint-mobile-rooms: the registry does not name a screen");
+
+  // Capturing an exception for a log is not rendering it.
+  const captured = lintFile(
+    "h.ts",
+    "catch (error) {\n  console.warn(error.message);\n}"
+  );
+  if (captured.length > 0)
+    throw new Error("lint-mobile-rooms: a captured exception is a finding");
+
   const clean = lintFile(
-    "apps/mobile/src/apps/x/e.tsx",
+    "apps/mobile/src/apps/x/EScreen.tsx",
     "export default function E() {\n return (\n <AppPlace>x</AppPlace>);}"
   );
   if (clean.length > 0)
     throw new Error("lint-mobile-rooms: a room root is a finding");
+
+  if (registeredScreens().size === 0)
+    throw new Error("lint-mobile-rooms: the screen registry read as empty");
 }
 
 function main(argv) {
@@ -246,10 +399,27 @@ function main(argv) {
   console.log(
     `${enforce || max !== null ? "" : "report-only "}lint-mobile-rooms — ${findings.length} finding(s) over ${scanned} file(s)`
   );
-  if (enforce && findings.length > 0) {
-    for (const finding of findings)
-      console.error(`  ${finding.rule}  ${finding.path}: ${finding.detail}`);
-    return 1;
+  if (enforce) {
+    const baseline = readBaseline();
+    let failed = false;
+    for (const rule of RULES) {
+      const at = counts[rule];
+      const ceiling = baseline[rule];
+      if (at > ceiling) {
+        failed = true;
+        console.error(
+          ceiling === 0
+            ? `fail lint-mobile-rooms — ${rule}: ${at} finding(s), and this rule is at zero`
+            : `fail lint-mobile-rooms — ${rule}: ${at} above the recorded ${ceiling}`
+        );
+        for (const finding of findings.filter((f) => f.rule === rule))
+          console.error(`  ${finding.path}: ${finding.detail}`);
+      } else if (at < ceiling)
+        console.log(
+          `  NOTE ${rule} is ${at}, under its recorded ${ceiling} — lower it in ${BASELINE_FILE}`
+        );
+    }
+    if (failed) return 1;
   }
   if (max !== null && findings.length > max) {
     console.error(

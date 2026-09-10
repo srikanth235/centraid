@@ -9,14 +9,10 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import {
-  GatewayError,
-  listVaults,
-  resolveGatewayBase,
-  updateVault,
-} from "../../lib/gateway";
+import { listVaults, resolveGatewayBase, updateVault } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
 import { getActiveVaultId, subscribeVaultLinks } from "../../lib/vault-links";
+import { SHELL_ERROR } from "../shell-copy";
 import ColorSwatchRow from "./ColorSwatchRow";
 import SettingsSection from "./SettingsSection";
 
@@ -106,12 +102,9 @@ async function loadVault(setters: VaultFormSetters): Promise<void> {
     }
     seedForm(setters, active);
     setters.setState({ kind: "ready", vault: active });
-  } catch (error) {
-    const message =
-      error instanceof GatewayError || error instanceof Error
-        ? error.message
-        : "Could not load your vault.";
-    setters.setState({ kind: "error", message });
+  } catch {
+    // S14 (#1015): a `GatewayError`'s own sentence is the program's.
+    setters.setState({ kind: "error", message: SHELL_ERROR.vault });
   }
 }
 
@@ -181,10 +174,8 @@ export default function VaultSection(): React.JSX.Element {
         seedForm(setters, updated);
         setState({ kind: "ready", vault: updated });
       })
-      .catch((error: unknown) => {
-        setSaveError(
-          error instanceof Error ? error.message : "Could not save your vault."
-        );
+      .catch(() => {
+        setSaveError(SHELL_ERROR.vaultSettings);
       })
       .finally(() => setSaving(false));
   };

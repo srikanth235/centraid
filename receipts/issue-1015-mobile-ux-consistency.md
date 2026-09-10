@@ -753,6 +753,96 @@ Files changed or deleted, by full path:
 7. `bun run format` then `bun run check:push:static` → **4/4**.
 8. `node .governance/law/run.mjs` at each commit door → 6 rules, no findings.
 
+## Lane SHELL, Wave 3 + Wave 4 — the moment channel, one noun, and the gate that holds all of it
+
+Merged `umbrella/1015-mobile-ux` (`e52e69962`) into the lane at `c83144ccc`. One conflict, `apps/mobile/src/kit/rooms/PushedPage.tsx`: three lanes had each added a prop to the same room (`overlay`/`testID` here, `lockup` from APPS-B). Union, one definition each, nothing renamed, every test kept. `bun run --cwd packages/design build` after the merge.
+
+### The one moment channel (`b085611cf`)
+
+`apps/mobile/src/kit/haptics.ts` is new, with `apps/mobile/src/kit/haptics.test.ts` and `apps/mobile/src/test/haptics-stub.ts` (the device seam for the stub tier — the RNTL tier already had one, and eight app-lane tests would otherwise each restate the literal).
+
+`expo-haptics` was reached for directly in seven files, each picking its own feedback for its own reason: a launcher tile buzzed on **every press-in**, a first-move buzzed on press, onboarding fired a **success notification for arriving at a screen**, and a real destructive write that landed said nothing at all. Haptics had stopped meaning anything because everything meant it. The module names exactly three moments — `hapticSelect()` on a band selection, `hapticMode()` on a mode-changing long-press, `hapticLanded()` on a landed destructive write — and every call swallows an absent or rejecting native module, because a silenced phone is not an error worth a member's attention and must never take down the interaction the buzz was decorating.
+
+Adopted in the kit at the two places the kit owns: the band's place select (`screens/home/HomeBand.tsx`) and the one confirm's destructive verb, **where the write actually lands** rather than where the sheet opened (`kit/components/ConfirmSheet.tsx`). Deleted everywhere else in this lane's trees (`dabba1919`, shell/findings 23): `screens/Onboarding.tsx` (two sites), `screens/home/LauncherGrid.tsx` (the 0.97 scale IS the press feedback), `screens/home/FirstMoves.tsx`.
+
+### The shell says one noun, and no exception (`323dd1e8a`)
+
+**S11 — one noun per destination (shell/findings 6).** The Alerts place wore four names at once: `Alerts` in the band, `Notifications` in More and in its own bar (clipped to `Notificati…`), and a Settings section headed NOTIFICATIONS over a row reading "Decisions and updates". Worse, `HomeBand` set `accessibilityLabel={tab.name}` while painting `tab.short`, so a VoiceOver member and a sighted member were told different words for the same tab. `places.ts` names it **Alerts**, the band **speaks what it paints**, and `screens/shell-copy.ts` is new: the tables a sweep can read, rather than a `switch` buried in a render. The one remaining swap (`autos`: name "Automations", band "Rules") is written down in `SHORT_NAME_DIVERGENCES` with its reason and is an open question for the owner — see the report.
+
+**S14 — no engine vocabulary, no payloads (shell/findings 13, 18, 22).** The desktop-link row read `Connected (port 8787)` and, on failure, `Error: <the module's own sentence>`; pairing, connectors, alerts, vault settings, enrichment, an automation thread, Scan, the sharing read and the kit's own `ReplicaStateCard` each printed `error.message`. `devices-model.ts` was the sharpest case: it **lowered the vocabulary** of an exception and printed it — "Gateway returned HTTP 503" became "home machine returned HTTP 503", which reads better and is still a fact about the program. Each surface says one noun from `SHELL_ERROR`; `ReplicaStateCard`'s `error` prop is documented as the SIGNAL it always was and is never rendered. `Retry` becomes `RETRY_ACTION` ("Try again") in `PendingChangesSheet` and `ReplicaStateCard`. Settings' `Advanced (developer)` and `Gateway connection` lose the developer's words.
+
+**a11y.** `screens/shell-copy.test.ts` is the sweep: sentence case over the tables AND over `.tsx` option arrays (proper nouns exempted from the word-shape heuristic by the tables themselves, so a label can only borrow a name the product HAS), the one-noun rule, the S14 sinks, no `accessibilityLabel` on a container that carries its own text, and a role on every pressable — **twelve role-less pressables** fixed across `Onboarding`, `PhoneStorage`, `Settings` and `data/RecordSheet`.
+
+Tests updated because they were fixtures for the defect, not because they were in the way: `ReplicaStateCard.test.tsx` (asserted the raw error was shown), `ReplicaStatusBar.test.tsx` (`Retry`), `Connectors.test.tsx` (asserted `connect ECONNREFUSED` reached the member), `EnrichmentSection.test.tsx`, `devices-model.test.ts`, `useAssistant.test.ts`, `Onboarding.test.tsx`.
+
+### Shell residue (`1d7098e80`)
+
+- **21 — four date registers inside one navigation stack.** Backup health counted with `toLocaleString()` (locale-numeric, with SECONDS: "10/09/2026, 2:11:39 PM"), Access with its own option bag, Copies with a third ("10 September"). All three take `kit/format.ts`.
+- **16 — the Vault page disagreed with itself.** Header `KINDS 61`, footer `38 kinds`, 25pt apart: one counted the rows the page renders, the other read `totals.populatedKinds`. `censusDetail` derives from `censusKinds` — the list a member can count is the one that wins.
+- **15 — destructive grammar.** `Unpair` was a `secondary` button visually identical to "Pair another" directly above it; it is `destructive` (outlined `--net`). `Archive` drops to `quiet` so a notice row has a hierarchy rather than three buttons at one weight.
+- **24 — the icon registry.** The New-chat glyph was an inline `<Svg>` with a hardcoded `strokeWidth={1.5}`, bypassing the registry and the stroke ramp. `NewChat` is in `packages/design/src/icons.ts` ([docs/decisions.md#typography-and-design-contracts](../docs/decisions.md#typography-and-design-contracts)).
+
+### Wave 4 — the gate (`ea022320e`, `8f3add239`)
+
+**The predicate (R-SH-4 / R-B-11).** `screen-root` fired on every `.tsx` under the two trees: **153 findings, roughly ninety-six of them leaf components** — a row, a card, a section block. None of those is a screen, none may be a room, and every one was a finding. A rule that cries about a hundred non-problems does not get wired; it gets ignored. A file is a screen iff the app REGISTERS it: `apps/mobile/lazy-screens.tsx` names the module in a `lazyScreen(() => import("./src/…"))` — that file is the composition root's screen registry, and a `component=` prop is the only way any of those bindings is reachable — or it is a `*Screen.tsx` / `*Home.tsx` frame. The registry is READ, not restated, so a screen added to the app is a screen to the rule in the same commit. **153 → 56**, and every one of the 56 is a real screen outside a room.
+
+**The sixth rule (R-SH-2).** `error-detail`: `error.message` / `String(err)` / `err.toString()` on the same line as a copy sink (a room's `error`/`detail`/`secondary`, a `message`, a `reason`, `postStatus`, `showUndoStatus`). Line-scoped, so `catch (error) { log(error.message) }` beside an unrelated `message:` is not a finding — capturing an exception is fine, rendering one is not. 23 at first measure, **10 of them in this lane's trees and now 0**. `Assistant.tsx` also takes `PushedPage`, the last hand-rolled root here; `PushedPage` gains a `footer` for its composer.
+
+**Wired.** `bun run lint:product` runs `node scripts/lint-mobile-rooms.mjs --enforce` (`package.json` `lint:mobile-rooms`, `scripts/lint-product.mjs`, `scripts/ci/gate-classes.json` — the last in its own commit, because `gate-classes.json` is law and everything else is territory). Adding a gate is a change inside the settled PR-gate doctrine ([docs/decisions.md#the-pr-gate-loop-892](../docs/decisions.md#the-pr-gate-loop-892), [#892](https://github.com/srikanth235/centraid/issues/892)): `lint:mobile-rooms` is a **rung-1 product** gate in the `lint:product` bundle, not a new name in `check:push` and not a hygiene-lane member, which is what that doctrine asks of a new gate.
+
+Enforcement is **per rule**, not per tree, and this is the ruled allowlist question answered honestly: `identity-tint` and `copy-title-case` are **0 tree-wide** and any new finding fails outright. The other four carry a recorded ratchet in `scripts/lint-mobile-rooms.baseline.json` — `screen-root 56`, `page-margin 93`, `back-literal 15`, `error-detail 13` — every one of them an APPS-A/APPS-B Wave-3 tree whose lane had not merged when this was measured, each entry naming the wave that clears it. A baseline may only go DOWN: above it fails, under it prints the number to lower it to. **A new hand-rolled screen root, back literal, gutter literal, tint on a control, Title Case label or rendered exception fails the push gate today** — verified by planting one and reading exit 1, then removing it and reading exit 0. What the baseline does not yet do is force the burn-down, and it must not become a licence: when the app lanes land, every entry goes to 0.
+
+`scripts/lint-mobile-rooms.test.mjs` gains four cases the `selfTest` cannot make: a leaf is not a screen, the registry names real existing modules (>40 of them), the recorded baseline names only rules that exist and no rule is above it, and a logged exception is not a finding. It is registered in `scripts:test` — it was reachable by no runner before, which `lint:test-reachability` had been red about.
+
+### Wave 4 — docs (`95e66952d`)
+
+- **DESIGN.md** gains `### The six rooms (mobile)` under Components: the room table, what the room owns versus what an app supplies, D1–D6 by pointer, and the gate named. The recipe inventory said what a control looks like and never what a SCREEN is; that was the half the audit found missing.
+- **docs/decisions.md** `#1015` later-rulings table gains **21 dated rows** — R-KIT-2, R-KIT-6, R-A-6, R-A-7, R-B-4 … R-B-14, R-SH-1 … R-SH-7 — read out of the umbrella's own merge bodies. **R-A-8 … R-A-14 are not on this head**; the root holds them.
+- **docs/design-divergences.md** is a state doc, so the closed row is GONE rather than annotated. Removed: **"Photos menu and control copy in Title Case"** (closed by D2). Revised: the Docs trash paragraph, which said the platform has no way to bring a purge date forward — D1 and `core.empty_document_trash` made that false. Added: a paragraph at the top stating that the phone's FRAME has no rows in that register at all, because it is the six rooms and the gate fails a screen that hand-rolls one.
+- **docs/mobile-offline.md**: the retained conflict `reason` is retained, not shown (R-SH-7).
+- **CHANGELOG.md**: one new Unreleased bullet for the rooms half; the existing #1015 bullet says "this wave is the kit half" and is untouched.
+
+### Findings ledger — `shell/findings.md`, every id
+
+| id | closed by | or the reason it is left |
+| --- | --- | --- |
+| 1 three backup claims | Wave 0 (`B13`, one custody arithmetic) | — |
+| 2 floating Home key over the health line | Wave 1 (the floating variant is deleted) | — |
+| 3 Settings unreachable, Starred pinnable | Wave 0 (`B15`/D6) | — |
+| 4 nine kit-native places, eleven hand-rolled screens | Wave 2 (every shell screen is a room) | — |
+| 5 four back affordances, four title rungs | Wave 2 (the room owns both) | — |
+| 6 "Notifications" names four things | `323dd1e8a` | the `autos` band word is an open question for the owner |
+| 7 the Access dashboard | — | **Left.** It needs a revoke command the vault does not expose and a grouping model over principals; that is product work, not a copy wave. Its two copy defects (the ~17-word read failure, the raw `last used` format) ARE fixed here. |
+| 8 the clipped health sentence | — | **Left.** The fix is to drop `APPROVALS_HEALTH_DETAIL`, which is `packages/client` copy shared with the web seat; a mobile-only edit would fork it. Raised to the root. |
+| 9 Browse changes the page 60 rows below the tap | — | **Left.** Needs a scroll-to or a pushed route on `Data.tsx`; it is a navigation change, not a consistency fix. |
+| 10 the More sheet's header contradicts the screen | `323dd1e8a` (pinned apps **come first**, not **appear**) | — |
+| 11 Assistant is two products behind one name | partly `ea022320e` (the full screen is a `PushedPage` with a real back target) | **The two-surfaces question is left**: which of the sheet and the screen survives is a product decision. |
+| 12 global search wears the opposite treatment | Wave 2 (`SearchOverlay` is a `PushedPage` with the kit's `SearchField`) | — |
+| 13 engine vocabulary on six surfaces | `323dd1e8a`, `ea022320e` | the Access ids ride finding 7 |
+| 14 four gutters, arithmetic on a token | Wave 2 (the room's gutter) | — |
+| 15 destructive grammar | `1d7098e80` | the "Never move bytes off this device" switch no longer exists on that screen |
+| 16 header and footer disagree about kinds | `1d7098e80` | — |
+| 17 four names for Sharing | partly `323dd1e8a` (`SHELL_TITLES.sharing`) | the page's own "People & circles" title is APPS-lane copy |
+| 18 Retry vs Try again | `323dd1e8a` | the web seat's own `Retry` is out of this umbrella's scope |
+| 19 Automations and Connectors unreachable | — | **Left.** It is a gateway capability gate, not a UI defect; a member cannot reach a place the gateway does not serve. The NAMING half rides finding 6. |
+| 20 six empty registers | Wave 2 (`RoomEmpty`) + `ea022320e` (Assistant's) | Settings/Access/Backup section-level empties stay per-screen (**R-SH-3**) |
+| 21 four date formats, two identity marks | `1d7098e80` (dates) | the vault-lockup vs switcher mark is APPS/design work |
+| 22 copy-budget breaches | `323dd1e8a` | — |
+| 23 haptics in three files | `b085611cf`, `dabba1919` | — |
+| 24 cover, mark and elevation nits | `1d7098e80` (the inline SVG) | the mark-hue and half-cover truncation nits are APPS-lane and design work |
+
+### Exit list
+
+1. `cd apps/mobile && bunx vitest run src/screens src/apps/{assistant,automations,insights} src/kit` → **962 passed, 107 files**.
+2. `bun run --cwd apps/mobile typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 56 · back-literal 15 · page-margin 93 · identity-tint 0 · copy-title-case 0 · error-detail 13`. This lane's trees are **0 on every rule**; all 177 are APPS-A/APPS-B trees, recorded in the baseline with the wave that clears them.
+4. `grep -rn "expo-haptics"` over `screens`, `apps/{assistant,automations,insights}` → **0**; `kit/haptics.ts` is the only importer.
+5. `lint-mobile-design`, `lint-container-opacity`, `lint-aria-labels`, `lint-mobile-testids` → **ok**.
+6. `bun run lint:mobile-rooms` (the wired gate) → **exit 0**; with a planted hand-rolled screen root → **exit 1**.
+7. `bun run format` then `bun run check:push:static` → see below.
+8. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see below.
+
+Files changed by this lane's Wave 3 + Wave 4 commits, in full: `CHANGELOG.md`, `DESIGN.md`, `docs/decisions.md`, `docs/design-divergences.md`, `docs/mobile-offline.md`, `package.json`, `packages/design/src/icons.ts`, `scripts/ci/gate-classes.json`, `scripts/lint-product.mjs`, `scripts/lint-mobile-rooms.mjs`, `scripts/lint-mobile-rooms.test.mjs`, `scripts/lint-mobile-rooms.baseline.json` (new), `apps/mobile/src/kit/haptics.ts` (new), `apps/mobile/src/kit/haptics.test.ts` (new), `apps/mobile/src/test/haptics-stub.ts` (new), `apps/mobile/src/screens/shell-copy.ts` (new), `apps/mobile/src/screens/shell-copy.test.ts` (new), `apps/mobile/src/kit/components/{ConfirmSheet.tsx,ConfirmSheet.test.tsx}`, `apps/mobile/src/kit/replica/{PendingChangesSheet.tsx,ReplicaStateCard.tsx,ReplicaStateCard.test.tsx,ReplicaStatusBar.test.tsx}`, `apps/mobile/src/kit/rooms/PushedPage.tsx`, `apps/mobile/src/apps/assistant/{Assistant.tsx,AssistantCompanionSheet.tsx,useAssistant.ts,useAssistant.test.ts}`, `apps/mobile/src/apps/automations/AutomationThread.tsx`, `apps/mobile/src/screens/{Approvals,BackupHealth,BackupHealth.custody,Onboarding,PhoneStorage,Scan,Settings,SignalNotification}.tsx`, `apps/mobile/src/screens/{Onboarding.test.tsx,shell-places.ts,shell-rooms.test.ts}`, `apps/mobile/src/screens/approvals/{RowParts.tsx,useApprovals.ts}`, `apps/mobile/src/screens/connectors/{Connectors.test.tsx,useConnectors.ts}`, `apps/mobile/src/screens/data/{RecordSheet.tsx,VaultSections.tsx,data-model.ts}`, `apps/mobile/src/screens/devices/{devices-model.ts,devices-model.test.ts}`, `apps/mobile/src/screens/home/{AllAppsSheet,FirstMoves,HomeBand,LauncherGrid,VaultHeader}.tsx`, `apps/mobile/src/screens/home/{VaultsSwitcher.test.tsx,places.ts}`, `apps/mobile/src/screens/settings/{AccessSection.tsx,EnrichmentSection.tsx,EnrichmentSection.test.tsx,VaultSection.tsx}`. Deleted: `NewChatIcon` and `NEW_CHAT_PATHS` (exports, not files) from `screens/home/VaultHeader.tsx`; `tunnelStatusLabel` from `screens/Settings.tsx`.
 ## Lane APPS-A, merge round 2 + Wave 3 — Agenda, Tasks, Notes, Docs
 
 Branch `lane/1015-apps-a`. Two merges of `umbrella/1015-mobile-ux`, two
@@ -1205,3 +1295,60 @@ Every row below is left deliberately; none is a defect this lane could close wit
 5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**.
 6. `bun run format` then `bun run check:push:static` → **4/4**.
 7. Blueprints: `bunx vitest run packages/blueprints/apps/{tally,locker,people,photos,docs,notes,_shared} packages/blueprints/src` → **191 passed, 3 failed**. All three are **inherited from the umbrella base**, measured failure-for-failure by detaching this worktree at `6924fb797` and rerunning the same three files (`3 failed | 12 passed` there and here): `src/photos-vocabulary.test.ts` (`PHOTOS_ERROR_FREE_UP_PAUSED`'s storage noun), `src/one-computation.test.ts` (`kit: subscribeStatus,subscribeVitals ↔ subscribeStatusHost`), `src/pending-projection-tripwire.test.ts` (Docs' action count 15 → 16, which is D1's Empty trash). None is in this lane's slice and none is touched here.
+## Lane SHELL, final round — the last merge, one noun for the place, and the ratchet at its floor
+
+Commits `95e38b8b8` (merge), `305dd80a5` (R-SH-8), `e24d9cf6c` (R-SH-10 + baselines).
+
+### What changed
+
+**The merge (`95e38b8b8`).** `umbrella/1015-mobile-ux` at `6924fb797` (APPS-A Wave 3 and APPS-B Wave 3) into `lane/1015-kit`. One conflict, `apps/mobile/src/kit/rooms/PushedPage.tsx`: this lane's `footer` and `overlay` against the app lanes' `backTestID`, `chrome` and `lockup`. Resolved as a union — one definition per prop, nothing renamed, every test kept. `overlay` had been declared on both sides; the duplicate is gone and the surviving declaration is the app lanes' (its comment says why a presentation mounts outside `RoomBody`). In the JSX, `{footer}` stays a sibling directly under the body and `{overlay}` stays LAST, after the band: a modal that renders before the band is a modal the band can paint over.
+
+**R-SH-8 — the place is Rules (`305dd80a5`).** Option (a) of the question this lane raised at Wave 3. `apps/mobile/src/screens/home/places.ts`: `autos.name` "Automations" → "Rules" (`short` was already "Rules"), and `what` re-worded so the row does not repeat its own name. `SHORT_NAME_DIVERGENCES` — the register that wrote the exception down — is DELETED, and `apps/mobile/src/screens/shell-copy.test.ts` now asserts the invariant unconditionally: a `short` may drop words from `name`, never swap one in, with no allowlist to consult. `apps/mobile/src/screens/home/places.test.ts` pins `name` as well as `short`.
+
+The screen followed: `apps/mobile/src/apps/automations/Automations.tsx` (both `title=`, the error `eyebrow=`, the `SectionBlock label=`, the `RowsBlock accessibilityLabel=`), `apps/mobile/src/apps/assistant/assistant-companion.ts` (`PAGE_LABELS`), and the feature-off wall in `apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts` ("Rules are off"), which is member copy and not a wire fact ([decisions.md#one-vault-every-seat-996](../docs/decisions.md#one-vault-every-seat-996) — one replica contract, seat-local signage). `apps/mobile/src/apps/automations/Automations.test.tsx` asserts the screen says "Rules" and NOT "Automations".
+
+The wire capability flag, the route key, the deep-link path and the module name stay `automations`. Those are identifiers; renaming them is churn with no member on the other end.
+
+**R-SH-10 and the ratchet (`e24d9cf6c`).** Twenty-one rulings that existed only in merge-commit bodies are rows in `docs/decisions.md` → `## Mobile UX consistency (#1015)` → **Later rulings**: R-A-8..R-A-20, R-B-15..R-B-18, R-SH-8, R-SH-9, R-SH-10.
+
+`scripts/lint-mobile-rooms.baseline.json` re-measured on this head, after every lane merged:
+
+| Rule | Wave 3 baseline | Now | Owner |
+| --- | --- | --- | --- |
+| `screen-root` | 56 | **33** | #1015, unclosed — Locker (6), People (6), Photos (9), Tally (12). The shell, Agenda, Docs and Notes are at 0. |
+| `page-margin` | 93 | **2** | **Nobody.** Both are `PhotoTile.tsx`'s `paddingHorizontal: 3`, the sub-base exceptions ruled at Wave 3. This entry is an allowlist wearing the ratchet's shape, and the file says so. |
+| `error-detail` | 13 | **12** | #1015 R-A-15, ruled and not landed — Docs (2), Locker (4), Photos (5), Tally (1). |
+| `back-literal` | 15 | **0 — entry deleted** | Closed. |
+| `identity-tint` | (absent) | **0** | Closed. |
+| `copy-title-case` | (absent) | **0** | Closed. |
+
+A rule absent from the file is at zero and unconditional, so deleting `back-literal` is the ratchet tightening, not loosening. Each of the six rules was checked with a planted violation under `--enforce`: `back-literal` (`backTo="All"`), `identity-tint` (`<Button appIdentity>`), `copy-title-case` ("Empty Trash Now" in a `*copy*.ts`), `page-margin` (a 19th `paddingHorizontal`), `error-detail` (a `detail:` taking `error.message`), `screen-root` (`AgendaHome`'s root swapped to `<View>`). All six failed the gate; every plant was reverted.
+
+### Not done, and why
+
+- **R-SH-9 (`kit/member-error.ts` dies) — SKIPPED, as the brief instructs.** It waits on R-A-15, and R-A-15 has not landed: `apps/mobile/src/kit/replica/write-outcome.ts:101` still reads `error instanceof Error ? error.message : …`. Five callers remain (`kit/transfer/backup-verdict.ts`, `kit/transfer/transfer-queue.ts`, `screens/home/origin-health.ts`, `apps/insights/Insights.tsx`, `apps/insights/GatewayAlerts.tsx`), so deleting the module now would delete a filter that is still the only thing lowering engine vocabulary on those five paths.
+- **The ITEM noun is still "automation".** R-SH-8 renamed the DESTINATION. The row's noun is untouched in `apps/mobile/src/apps/automations/{Automations.tsx,AutomationThread.tsx,automations-model.ts}` and `apps/mobile/src/screens/approvals/approvals-model.ts:131`, and one of its sentences — `AUTOMATIONS_EMPTY_BODY`, "An automation is a trigger and a thing to do." — lives in `packages/client/src/.../automations-copy.ts`, shared with the desktop overview, which names the whole place "Automations" (`packages/client/src/react/shell/launcherModel.ts`: `label: "Automations"`, `shortLabel: "Autos"`). Renaming half a shared pool is worse than the divergence. Owner item, with the sites above.
+- **`DESTINATION_MARKS.automations` was NOT renamed.** `packages/design/src/destinations.ts` types the key as "a place named the way a member would name it", so it does name it — but both seats map their own place onto that key and the desktop's word is still "Automations". Out of this lane's ruled diff scope and an owner item, not a silent choice.
+- **`docs/design-divergences.md` gained no row for any of the above.** A divergence a lane would keep gets an explicit question to the owner, not a register row that reads as settled.
+
+### Files
+
+- `apps/mobile/src/kit/rooms/PushedPage.tsx` (merge resolution)
+- `apps/mobile/src/screens/home/places.ts`, `apps/mobile/src/screens/home/places.test.ts`, `apps/mobile/src/screens/shell-copy.test.ts`
+- `apps/mobile/src/apps/automations/Automations.tsx`, `apps/mobile/src/apps/automations/Automations.test.tsx`
+- `apps/mobile/src/apps/assistant/assistant-companion.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts`
+- `docs/decisions.md`
+- `scripts/lint-mobile-rooms.baseline.json`
+
+### Verification, from the lane worktree
+
+1. `cd apps/mobile && bunx vitest run src/screens src/kit src/apps/automations src/apps/assistant src/lib/replica/mobile-gateway-compatibility` → **108 files, 941 passed, 0 failed**.
+2. `bun run --cwd apps/mobile typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 33`, `back-literal 0`, `page-margin 2`, `identity-tint 0`, `copy-title-case 0`, `error-detail 12` — 47 over 594 files. `--enforce` → **pass**.
+4. `grep -rn "expo-haptics" apps/mobile/src` → no product source; only `kit/haptics.ts`, `src/test/native-device-seams.ts` and stub-tier test mocks. `apps/tasks/tasks-haptics.test.ts`'s SABOTAGE case holds it.
+5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok** (`lint-mobile-testids` was red on the base at Wave 2 and is green here).
+6. `bun run format` then `bun run check:push:static` → **4/4**.
+7. `bun run lint:product` → **38/43**. `lint:mobile-rooms` passes. Five red, none of them this umbrella's: `lint:no-nul-bytes` (`packages/server/src/preview/fixtures/hevc-photo.heic`), `lint:quality-knobs` (stale fingerprints for `packages/server/src/automation/manifest/manifest.ts`, `packages/server/src/serve/health-registry.ts`), `lint:e2e-wiring` (`mobile-volume-proof` claimed by the ledger and scheduled by no lane) — none of those four files is touched between `main` and this head — plus `lint:hairline` (`apps/mobile/src/apps/photos/PhotosChoiceSheet.tsx:87` uses `hairlineWidth`, arrived with APPS-B's `62fc18ac4`) and `check:ui-receipt`, which is the umbrella's own PR-window gate and needs a screenshot from a changed e2e harness — no lane has a simulator.
+8. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → **10 rules, 0 errors, 1 warning** — `estate-separation`, unchanged in kind since Wave 4 and now larger: the umbrella edits `scripts/ci/gate-classes.json` (law) and 430 territory files in one PR. It is the root's to waive or split.
+9. `bunx vitest run src/lib/replica/expo-seat-driver.test.ts` → **red on the base**: "Flow is not supported" parsing `node_modules/react-native/index.js` under the stub-tier project. The file is byte-identical to `main`, as are `vitest.config.ts` and `vitest.projects.ts`; re-running it with `main`'s copy of the one `lib/replica` file this lane touched reproduces the failure exactly. Inherited, measured, not fixed.

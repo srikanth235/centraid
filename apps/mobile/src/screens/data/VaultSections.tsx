@@ -7,7 +7,6 @@ import RowsBlock from "../../kit/components/RowsBlock";
 import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import { memberFacingError } from "../../kit/member-error";
 import { VAULT_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import type { GatewayLink } from "../../lib/replica/links-transport";
@@ -18,6 +17,7 @@ import {
   rosterGroups,
 } from "../devices/devices-model";
 import { useDevices } from "../devices/useDevices";
+import { SHELL_ERROR } from "../shell-copy";
 
 interface VaultSectionsProps {
   openCopies: () => void;
@@ -117,14 +117,10 @@ export function VaultSharingSection({
     if (!replica.gatewayBase) return;
     void listLinks(replica.gatewayBase)
       .then((links) => setRead({ links, state: "ready" }))
-      .catch((error: unknown) =>
-        setRead({
-          error: memberFacingError(
-            error instanceof Error ? error.message : String(error)
-          ),
-          links: [],
-          state: "error",
-        })
+      // S14 (#1015): `memberFacingError` lowers the vocabulary of a
+      // sentence the member should never have been shown at all.
+      .catch(() =>
+        setRead({ error: SHELL_ERROR.sharing, links: [], state: "error" })
       );
   }, [replica.gatewayBase]);
 

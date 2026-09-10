@@ -5,7 +5,6 @@
 // dashed placeholder cards (they scale to identical apologies and open empty
 // apps). Every move lands somewhere that can TAKE content.
 
-import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -139,10 +138,7 @@ function MoveRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${move.label}. ${move.hint}`}
-      onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onPress();
-      }}
+      onPress={onPress}
       style={({ pressed }) => [styles.move, pressed && styles.movePressed]}
     >
       <AppMark

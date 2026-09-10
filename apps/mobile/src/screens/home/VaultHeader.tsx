@@ -4,7 +4,6 @@
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
 
 import { iconChipFinish, radii } from "@centraid/design";
 
@@ -16,29 +15,6 @@ import type { ThemeColors } from "../../kit/theme";
 
 /** :5363. A wash-ground chip, never a solid avatar. */
 const MARK = 30;
-
-/** :3446, inlined: the `Icon` registry has no such glyph. */
-const NEW_CHAT_PATHS = [
-  "M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z",
-  "M9 10h6M12 7v6",
-];
-
-function NewChatIcon({ color }: { color: string }): React.JSX.Element {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      {NEW_CHAT_PATHS.map((d) => (
-        <Path
-          key={d}
-          d={d}
-          stroke={color}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
-    </Svg>
-  );
-}
 
 export interface VaultHeaderProps {
   vaultName: string | undefined;
@@ -121,7 +97,7 @@ export default function VaultHeader({
         hitSlop={10}
         style={({ pressed }) => [styles.action, pressed && styles.pressed]}
       >
-        <NewChatIcon color={colors.textSoft} />
+        <Icon name="NewChat" size={16} color={colors.textSoft} />
       </Pressable>
     </View>
   );

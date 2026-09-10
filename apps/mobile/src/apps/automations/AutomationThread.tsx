@@ -14,6 +14,12 @@ import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
 
+/** One noun for this page (#1015, S14). */
+const AUTOMATION_NOT_READ = "This automation could not be read";
+
+/** …and when a run does not start. */
+const AUTOMATION_NOT_RUN = "This automation did not run. Try again.";
+
 type State =
   | { kind: "loading" }
   | { kind: "ready"; turns: AutomationTurnRow[] }
@@ -36,11 +42,9 @@ export default function AutomationThread(props: {
         kind: "ready",
         turns: await listAutomationTurns(props.automationRef),
       });
-    } catch (error) {
-      setState({
-        kind: "error",
-        message: error instanceof Error ? error.message : "Could not load.",
-      });
+    } catch {
+      // S14 (#1015): the exception is a fact about the program.
+      setState({ kind: "error", message: AUTOMATION_NOT_READ });
     }
   }, [props.automationRef]);
 
@@ -54,11 +58,7 @@ export default function AutomationThread(props: {
     setRunning(true);
     void runAutomation(props.automationRef)
       .then(load)
-      .catch((error: unknown) =>
-        postStatus(
-          `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
-        )
-      )
+      .catch(() => postStatus(AUTOMATION_NOT_RUN))
       .finally(() => setRunning(false));
   };
 
