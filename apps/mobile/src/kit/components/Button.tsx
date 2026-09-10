@@ -16,6 +16,16 @@ import { Text } from "./NativeText";
  *
  * There is no `size`: the 44px touch floor is the size. There is no `commit`
  * either, and that is a decision rather than a gap — see `ButtonData`.
+ *
+ * THE DISABLED CONTRACT (#1015, S9), which every kit control keeps and no
+ * caller re-invents: the LEAF takes `textDisabled` — here through
+ * `nativeButtonStyle(variant, …, disabled)`, which resolves the label's ink
+ * and the plate's edge — and the control reports `accessibilityState.disabled`
+ * AND refuses the responder. Never a container `opacity`: it dims the whole
+ * plate including its rule, reads as "loading" rather than "not available",
+ * and is what `scripts/lint-container-opacity.mjs` counts. A disabled control
+ * that a caller cannot explain is a caller that should not be rendering one —
+ * `AnchoredMenu`'s rows carry a `reason` line for exactly that.
  */
 export interface ButtonProps extends ButtonData {
   label: string;
@@ -50,6 +60,9 @@ export default function Button({
       accessibilityHint={accessibilityHint}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
+      // Both halves: the responder short-circuits, and the state is spoken.
+      // `onPress={undefined}` alone still lets the press ripple through.
+      disabled={disabled === true}
       onPress={disabled ? undefined : onPress}
       testID={testID}
       style={({ pressed }) => [

@@ -98,6 +98,7 @@ vi.mock(
       borders: { hairline: 1 },
       family: { sansMedium: "sans-medium", sansRegular: "sans-regular" },
       radii: { lg: 12, md: 7 },
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
       t: () => ({}),
       useTheme: () => ({
         colors: {

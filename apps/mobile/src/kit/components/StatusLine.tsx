@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BAND_HEIGHT } from "../band-surface";
-import { borders, radii, t, useTheme } from "../theme";
+import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
 import {
@@ -150,7 +150,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       left: 0,
       minHeight: 32,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[3],
       paddingVertical: 8,
       position: "absolute",
       right: 0,

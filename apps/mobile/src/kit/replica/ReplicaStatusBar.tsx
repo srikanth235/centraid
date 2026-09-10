@@ -13,7 +13,7 @@ import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
 import OutOfRoom from "../components/OutOfRoom";
 import Tappable from "../components/Tappable";
-import { borders, family, radii, t, useTheme } from "../theme";
+import { borders, family, radii, spacing, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import PendingChangesSheet from "./PendingChangesSheet";
 import {
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 7,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing[3],
     paddingVertical: 7,
   },
   bootstrapText: {
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: 3,
-    paddingHorizontal: 9,
+    paddingHorizontal: spacing[2],
     paddingVertical: 5,
   },
   pendingText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
@@ -383,6 +383,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
     minHeight: 36,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing[3],
   },
 });

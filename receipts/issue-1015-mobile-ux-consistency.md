@@ -75,3 +75,17 @@ Answers audit **S4**. Eight hand-rolled fields across nine surfaces: five placem
 - **`apps/mobile/src/kit/components/SearchField.test.tsx`** — new. The keyboard contract (from source — the host stub drops unmapped props, so a DOM assertion would pass whatever the field set), the spoken label and its override, no clear control while the term is empty, clearing through `onChangeText` plus `onClear`, the count line present and absent.
 
 **Not done, deliberately**: no app call site is migrated. Adoption is each app lane's, per R-KIT-1.
+
+### Lane KIT — slice 4: S8 one formatter module, S9 the disabled contract, S10 the kit's own margins
+
+Answers audit **§3.13**, **S9** and **S10** (the kit's half).
+
+- **`apps/mobile/src/kit/format.ts`** — new. `formatRelative(value, now)` **delegates** to `dueLabel` in `@centraid/blueprints/apps/tasks/when` rather than re-implementing it, so the register is literally Tasks' and the web seat reads the same module; it adds Docs' sub-hour past grain (`moments ago`, `12 minutes ago`, `3 hours ago`), which is the only information the day grain does not carry. `formatDateShort` prints the year only when it is not the current one. `formatBytes` re-exports `@centraid/design`'s. An unreadable stamp returns `""` — an absent clause, never an invented one. The file header records why the register is Tasks' and that a caller owns its own preposition.
+- **`apps/mobile/src/kit/format.test.ts`** — new. The day register case by case, the sub-hour and hour grains, the future-today case, the year rule, the byte register, and every unreadable-input path.
+- **`apps/mobile/src/lib/insights.ts`** — `formatBytes` now re-exports the kit module's, so the seat has one byte register with one owner.
+- **`apps/mobile/src/kit/components/Button.tsx`** — the disabled contract written down at the component that defines it, and the responder half fixed: the control now passes `disabled` to `Pressable` as well as reporting `accessibilityState.disabled`; `onPress={undefined}` alone still let the press ripple through.
+- **`apps/mobile/src/kit/components/Tappable.tsx`** — the same contract stated for the bare target, where the caller owns the leaf and therefore owns putting `textDisabled` on it.
+- **`apps/mobile/src/kit/components/StatusLine.tsx`**, **`OutOfRoom.tsx`**, **`SelectChip.tsx`**, **`apps/mobile/src/kit/replica/ReplicaStateCard.tsx`**, **`ReplicaStatusBar.tsx`** — the kit's eight `paddingHorizontal` literals (14, 9, 20, 16, 8) become `spacing` steps. App sites are the app lanes'.
+- **`apps/mobile/src/kit/replica/ReplicaStateCard.test.tsx`**, **`ReplicaStatusBar.test.tsx`** — their theme mocks gain `spacing`.
+
+**Not done, and why**: **S13** (band truth) is not in this commit. Its two halves contradict each other as written — D5 says the editor HIDES the band, while S13 says `hideBand` must never drop the Home capsule, and the only way to keep a capsule with no band is a docked plate on the bottom edge, which is exactly the affordance S6 deleted three commits ago. The band is also per-app (`DocsScreen`, `TallyScreen`, `LockerTrashScreen` each render their own), so there is no kit half to change without inventing a component no caller asks for yet. Raised to the root as a question.

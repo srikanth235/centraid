@@ -4,7 +4,7 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { borders, t, useTheme, radii } from "../theme";
+import { borders, spacing, t, useTheme, radii } from "../theme";
 import { Text } from "./NativeText";
 
 export interface OutOfRoomProps {
@@ -89,7 +89,7 @@ const makeStyles = () =>
       borderRadius: radii.md,
       borderWidth: 1,
       marginTop: 4,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[3],
       paddingVertical: 8,
     },
     actionPressed: { opacity: 0.6 },
