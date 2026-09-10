@@ -243,6 +243,34 @@ Assist deliberately supports self-hosted gateways without a Centraid cloud accou
 - Assist does not proxy Google API calls, store connection rows in Centraid cloud, protect against compromise of the gateway/paired client, or remove Google Workspace administrator policy.
 - Standard Assist must not be called GA until the production consent/brand and sensitive-scope evidence passes. Restricted Gmail/Drive scopes remain disabled until restricted-scope verification and CASA evidence pass. The executable evidence checklist is [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md).
 
+## The claim register ([#1014](https://github.com/srikanth235/centraid/issues/1014))
+
+Every security claim this document makes, what enforces it, and — where nothing does — who owns the gap. The register exists because a security document is read as a promise: a sentence here with no test behind it is indistinguishable, to a reader, from one with a canary over the file's bytes. A row is **ENFORCED-BY-TEST** only when the named file fails if the property stops holding; anything weaker says so in its own words. There are no rows whose claim the code contradicts — the four that did were corrected under #1014 rather than annotated (the audit and ledger bands' replication, the `seal-key` manifest kind, `acceptTruncation`, and the disk-full rig).
+
+Adding a claim to this document without adding its row is the thing this table is here to stop.
+
+| Claim | Status | Enforced by |
+| --- | --- | --- |
+| A device replica carries no private table, and no readable trace of one in freed pages | ENFORCED-BY-TEST | `packages/vault/src/replica/seat-snapshot.test.ts` — asserted over the FILE'S BYTES, not `sqlite_schema` |
+| No replicated table references a private one, so a seat satisfies its own foreign keys | ENFORCED-BY-TEST | `assertNoReplicatedReferencesToPrivate`, `packages/vault/src/schema/private-tables.test.ts` |
+| A table replicates only because it is named; a new table replicates nowhere by default | ENFORCED-BY-TEST | the allow-list + `unclassifiedTables`, `packages/vault/src/schema/private-tables.test.ts` |
+| Command output never reaches a seat, by either path that carries a receipt | ENFORCED-BY-TEST | `packages/vault/src/replica/replicated-column-exclusions.test.ts` (bootstrap file bytes and log capture) |
+| The evidence bands are excluded from the portable export and the support bundle | ENFORCED-BY-TEST | `packages/vault/src/schema/lifecycle.test.ts` for the walk; `tests/quality/diagnostics-redaction-canary.test.ts` for the bundle |
+| The evidence bands are append-only in the engine | ENFORCED-BY-TEST | the RAISE triggers, `packages/vault/src/schema/audit.ts`, exercised in `packages/vault/src/schema/audit-band.test.ts` |
+| A snapshot never carries a key; key custody rides the recovery kit alone | ENFORCED-BY-TEST | `packages/server/src/backup/backup-sources.test.ts` — no `seal-key` entry from a fresh or a sealed vault |
+| Sealed-column confidentiality holds across storage, SQL, export, ledger, FTS, replica, backup and provider context | ENFORCED-BY-TEST | T3 canary, `tests/quality/user-facing-qualities.test.ts` |
+| Every HTTP prefix is classified fail-closed at boot | ENFORCED-BY-TEST | T4 in the same file, over `packages/server/src/routes/route-security.ts` |
+| Bearer tokens and seal-key material are never echoed on an error path or into a log | ENFORCED-BY-TEST | `packages/server/src/serve/secret-log.smoke.test.ts` |
+| A revoked device reaches no vault door | ENFORCED-BY-TEST | `packages/server/src/serve/revocation-severs-planes.test.ts`, `packages/server/src/serve/authz-deny-matrix.test.ts`, `packages/server/src/routes/device-work-routes.test.ts` (the last added under #1014, X19) |
+| A stored media type never becomes script execution in the shell's origin | ENFORCED-BY-TEST | `packages/server/src/routes/blob-routes-hardening.test.ts` |
+| A web-push wake endpoint is refused unless it resolves to public internet space | ENFORCED-BY-TEST | `packages/server/src/push/endpoint-guard.test.ts` |
+| A forgotten person cascades through every derived row and every replica | ENFORCED-BY-TEST | `packages/vault/src/commands/media-forget-person.test.ts` |
+| A pairing ticket is single-use, and the affected row count is the authority | ENFORCED-BY-TEST | `packages/server/src/serve/pairing-store.ts`; `packages/server/src/routes/vault-links-ticket-routes.test.ts` |
+| Send-time does not re-resolve a web-push hostname (DNS-rebinding TOCTOU) | DOCUMENTED NON-CLAIM | stated as a known gap in "Blob egress" above; real endpoints are FCM/Mozilla, not attacker DNS |
+| A byte-plane handoff ticket is single-use and bound to the device that was handed it | **NOT ENFORCED — open** | the ticket carries a nonce and the TypeScript reference plane consumes it (`packages/server/src/lifecycle/byte-plane-reference.ts`), but the production Rust plane verifies only signature and a 10 s expiry (`packages/tunnel/data-plane/src/ticket.rs`) and the ticket names no device or vault. Owned by [#1014](https://github.com/srikanth235/centraid/issues/1014) V22 |
+| A key-store custody read that FAILS is distinguished from one that finds nothing | **NOT ENFORCED — open** | on macOS a `security find-generic-password` failure with no explicit service/account configured falls through to minting a fresh 0600 file credential, so a locked keychain reads as an absent one (`packages/server/src/cli/key-store.ts`). Owned by [#1014](https://github.com/srikanth235/centraid/issues/1014) X15 |
+| A recovery-kit passphrase meets a strength floor | **NOT ENFORCED — open** | `packages/backup/src/password-wrap.ts` refuses only the empty string. Owned by [#1014](https://github.com/srikanth235/centraid/issues/1014) X13 |
+
 ## Automated security gates (#671)
 
 Complementary controls on top of manual review and the threat model above. These are **not** a substitute for CodeQL or for the local toolchain (oxlint, TypeScript, knip, Vitest/mutation floors).
