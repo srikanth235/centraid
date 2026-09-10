@@ -13,9 +13,36 @@
 // `entity.replace(".", "_")` scattered through the read paths is a second owner
 // for a name that has one.
 
-/** `schedule.task` → `schedule_task`. The vault's own composition. */
+/**
+ * `schedule.task` → `schedule_task`. The vault's own composition.
+ *
+ * THE EXT BAND IS THREE PARTS, NOT TWO (#1014, G8). An app's own table is
+ * `ext.<appId>.<table>` and its physical is `ext_<appId>_<table>` with the
+ * app id's hyphens normalised to underscores — `schema/ext.ts#extPhysical`,
+ * which is the vault's own composition for that band. This replaced only the
+ * FIRST dot, so `ext.gym.workout` came out as `ext_gym.workout`: every SQL
+ * statement a seat built for a third-party app's table named a table that does
+ * not exist. On the base-version read that failure is swallowed (a table the
+ * seat's file does not have is a table with no version to capture), so an ext
+ * row's write went out with no precondition at all and two members editing one
+ * row overwrote each other silently.
+ */
 export function vaultPhysicalTable(entity: string): string {
+  const ext = parseExtEntity(entity);
+  if (ext) return `${ext.band}_${ext.appId.replaceAll("-", "_")}_${ext.table}`;
   return entity.replace(".", "_");
+}
+
+/** `ext.gym.workout` / `extdraft.gym.workout`, or undefined for anything else. */
+function parseExtEntity(
+  entity: string
+): { band: "ext" | "extdraft"; appId: string; table: string } | undefined {
+  const parts = entity.split(".");
+  if (parts.length !== 3) return undefined;
+  const [band, appId, table] = parts;
+  if (band !== "ext" && band !== "extdraft") return undefined;
+  if (!appId || !table) return undefined;
+  return { band, appId, table };
 }
 
 /**
@@ -47,6 +74,20 @@ const SEAT_OWN_TABLES: ReadonlySet<string> = new Set([
 export function vaultEntityOfTable(table: string): string | undefined {
   if (SEAT_OWN_TABLES.has(table)) return undefined;
   if (table.startsWith("sqlite_") || table.startsWith("fts_")) return undefined;
+  // THE EXT BAND SPLITS TWICE (#1014, G8): `ext_gym_workout` is the app `gym`'s
+  // table `workout`, not an entity called `ext.gym_workout`. A screen watching
+  // `ext.gym.workout` would never have been told its own rows moved. The app
+  // id's own underscores are not recoverable from the physical — `my-app` and
+  // `my_app` normalise to the same name — so this composes the entity the same
+  // way `vaultPhysicalTable` decomposes it, and the round trip is what a seat's
+  // invalidation needs to match.
+  for (const band of ["ext_", "extdraft_"] as const) {
+    if (!table.startsWith(band)) continue;
+    const rest = table.slice(band.length);
+    const underscore = rest.indexOf("_");
+    if (underscore <= 0) return undefined;
+    return `${band.slice(0, -1)}.${rest.slice(0, underscore)}.${rest.slice(underscore + 1)}`;
+  }
   const underscore = table.indexOf("_");
   if (underscore <= 0) return undefined;
   return `${table.slice(0, underscore)}.${table.slice(underscore + 1)}`;
