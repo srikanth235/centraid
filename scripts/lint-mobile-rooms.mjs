@@ -186,7 +186,7 @@ export function isTitleCase(label) {
  * Lint the whole tree.
  *
  * @param {string} [root] Repo root.
- * @returns {{findings: object[], scanned: number}} The run.
+ * @returns {{findings: {rule: string, path: string, detail: string}[], scanned: number}} The run.
  */
 export function lintTree(root = ROOT) {
   const files = SCREEN_DIRS.flatMap((dir) => walk(path.join(root, dir)));

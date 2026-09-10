@@ -115,6 +115,27 @@ describe(SearchField, () => {
     );
   });
 
+  it("opens closed unless the caller asked for the keyboard", () => {
+    const container = render(
+      <SearchField onChangeText={noop} placeholder="Search" value="" />
+    );
+    expect(input(container).dataset.autofocus).toBe("false");
+  });
+
+  it("focuses on arrival when the caller asks, and carries its handle", () => {
+    const container = render(
+      <SearchField
+        autoFocus
+        onChangeText={noop}
+        placeholder="Search"
+        testID="photos-search-field"
+        value=""
+      />
+    );
+    expect(input(container).dataset.autofocus).toBe("true");
+    expect(input(container).dataset.testid).toBe("photos-search-field");
+  });
+
   it("leaves the count line out when the caller says nothing", () => {
     const container = render(
       <SearchField onChangeText={noop} placeholder="Search" value="tax" />

@@ -404,3 +404,82 @@ Verdict: PASS / PASS / PASS / PASS.
 | **R-KIT-3** | `ConfirmSheet` is built on `SheetRoom`, not on `OptionSheet`. Accepted. | `OptionSheet`'s iOS path is `ActionSheetIOS`, a platform surface that can draw neither an outlined `--net` verb (DESIGN.md: a destructive verb is outlined, never filled) nor host a `StatusLine`. A confirm that cannot show its own undo afterwards is not the confirm this issue asks for. `OptionSheet` keeps the choice-list job (**D4**); the confirm is a room. |
 | **R-KIT-4** | Widening `copy-title-case` to read menu option tables in `.tsx` is Wave 3 copy-lane work, not this lane's. | The rule as briefed reads `*copy*.ts` tables and prints a true 0 over them. Photos' Title Case (**D2**) lives in `.tsx` option tables, so the 0 is a scope limit, not a clean bill — recorded above rather than papered over. Widening the reader is a change to the finding set the copy lane burns down, so it belongs with that lane, not ahead of it. |
 | **R-KIT-5** | **S13 is closed** by `PlaceRef` + `BandState`. | S13 asked that band `current` be computed and never literal. `PlaceRef` carries a `unique symbol` brand minted only by `place()`, so `backTo`/`current` cannot be written as a string at all — the rule is a type error, not a lint. `bandStateFor()` derives the band's state from the room, and `EditorRoom` takes no band prop (**R-KIT-2**, **D5**). `scripts/lint-mobile-rooms.mjs`'s `back-literal` rule (47 findings) measures the un-migrated screens for Wave 3; the kit contract itself is closed. |
+
+### Lane SHELL — the sub-base seams, the search field's focus, and the test handle (R-B-6, R-B-7)
+
+Changed:
+
+- `packages/design/src/index.ts` — `subBase` joins the `./density` export block. It was defined and used inside the package (`contract.ts`, `css.ts`, `blueprint.ts`) but never published, which is why two call sites could only eyeball a `2` and leave a comment saying so.
+- `apps/mobile/src/kit/theme/native.ts` · `apps/mobile/src/kit/theme/index.ts` — `subBase` re-exported through the mobile design boundary. It is deliberately NOT folded into `NativeTheme`: it is a named list of seams, not a rhythm scale, and a scale is what a call site would then reach for.
+- `apps/mobile/src/kit/theme/native.test.ts` — pins the re-export equal to the canonical object (`gutter` 2, `hair` 1).
+- `apps/mobile/src/apps/photos/TimelineGrainControl.tsx` · `apps/mobile/src/apps/photos/PhotoTile.tsx` — the two documented seams claim the name: `gap: subBase.gutter` and `paddingVertical: subBase.gutter`. One token each, plus the comment that pointed at the missing export.
+- `apps/mobile/src/kit/components/SearchField.tsx` · `.test.tsx` — `autoFocus?: boolean` (default `false`) and `testID?: string` pass-throughs.
+- `apps/mobile/src/screens/home/SearchOverlay.tsx` — `autoFocus` restored. The overlay IS the search: the member opened it in order to type.
+- `apps/mobile/src/test/react-native-stub.tsx` — records `autoFocus` as `data-autofocus` rather than applying it; jsdom would take focus off the runner.
+
+**`TEST_IDS.photos.searchField` is NOT deleted.** The brief's condition was "if no caller remains", and one does: `tests/agent-e2e-mobile/flows/photos-search.mjs` takes the query field by that handle twice, and `flows/photos-search.md` records why it is a handle and not the word "Search". `node scripts/lint-mobile-testids.mjs` fails on this head with two `unapplied-id` breaks — `photos-search-field` and `locker-gate-field` — both because the adopting screen dropped its `testID` when it moved onto the kit field. Deleting the entry would break the flow instead of fixing it, so the pass-through is added here and the two screens (both outside this lane's trees) must apply it. Raised to the root; the lint is red on the base head with this lane stashed, not caused by it.
+
+### Lane SHELL — the kit-native places move into `SystemPlace` (Wave 2, S1)
+
+Seven screens whose whole frame was already a hand-copy of one shape — safe area, a head row with `HomeKey` beside a `PlaceHeader`, a `ScrollView` with its own gutter, a docked `HealthLine`, and each with its own order for loading/error/empty. All of that is `SystemPlace` now; the screens supply content and copy.
+
+Migrated (root is `<SystemPlace>`, gutter and states are the room's):
+
+- `apps/mobile/src/screens/SystemOnPhone.tsx` — 49 lines to 27; its whole `StyleSheet` deleted.
+- `apps/mobile/src/screens/SignalNotification.tsx` — 63 lines to 38; its whole `StyleSheet` deleted.
+- `apps/mobile/src/screens/data/Data.tsx` (+ `data/Data.styles.ts`, trimmed to the record sheet's plate).
+- `apps/mobile/src/screens/devices/Devices.tsx` (+ `devices/Devices.styles.ts`, trimmed to the dock and the rename dialog).
+- `apps/mobile/src/screens/connectors/Connectors.tsx`.
+- `apps/mobile/src/screens/Approvals.tsx` (+ `screens/approvals/view-types.ts`).
+- `apps/mobile/src/apps/automations/Automations.tsx`.
+
+Deleted, with the grep proving no caller remains (`grep -rn FeatureOffPlace apps/mobile/src` → 0):
+
+- `apps/mobile/src/kit/components/FeatureOffPlace.tsx` · `FeatureOffPlace.styles.ts` — it drew a whole place frame of its own (a second header, a second leave key, a second gutter) to say one sentence. A closed feature gate is a room STATE, so it is now `featureOffEmpty(feature)` in `apps/mobile/src/kit/rooms/feature-off.ts`, a `RoomEmpty` the screen passes to its own `SystemPlace`. Same copy, from the same compatibility core.
+
+Room props this wave added, each named by the screen that needed it (`apps/mobile/src/kit/rooms/`):
+
+- `SystemPlace` — `onRefresh`/`refreshing` (Data, Connectors, Approvals, Automations all pulled to re-read), `bodyRef` (Automations scrolls itself to the suggestions section it just named), and `placeBody` in `rooms.styles.ts`: the ROOM owns the scrolling gutter now.
+- `RoomLoading.note` — the reflow sentence four of these screens drew under their skeleton (`SKELETON_NOTE`). A skeleton cannot know a fraction, so it is prose.
+- `RoomError.secondary` — the unpaired phone's "Open Settings" on Approvals; quiet, never a second filled verb.
+- `RoomError.detail` — ONE more sentence of the app's own when the general body cannot say which of two things went wrong ("This phone is not paired with a gateway yet."). Documented as never an exception string, which is the S14 rule it must not become a hole in.
+- `RoomBody`'s error eyebrow was a hardcoded `"THIS PAGE COULD NOT LOAD"`. It is `ERROR_HEALTH` from `@centraid/client/surface-copy` now — the same word every other seat says, and sentence case like every other label (**D2**).
+
+Two judgement calls, both visible in the diff:
+
+- **Approvals keeps its EMPTY in the body, not on the room.** It is the QUEUE that is empty; the standing grants below it are still the record the page exists to show, and a room empty replaces the body wholesale. `RoomBody`'s fixed order is right for a page-level empty and wrong for a section's — `screens/approvals/view-types.ts` says so where `reviewGrants` is declared.
+- **Automations is a `SystemPlace`, not an `AppPlace`.** The brief said `AppPlace`, but the screen draws `PlaceHeader` + `HomeKey` and no app mark, and `screens/home/places.ts` lists `autos` as one of the ten PLACES. A place spends no colour on itself (`kit/rooms/README.md`); giving it an app mark and an identity hue would be a new product claim, not a migration. Raised to the root.
+
+Tests: `apps/mobile/src/screens/shell-rooms.test.ts` is new — it reads `scripts/lint-mobile-rooms.mjs`'s own rules (one definition of "a room", not a second copy) and asserts, per migrated file, that the root is a room and the gutter is the room's, plus tree-wide that no shell file writes `backTo`/`current` down as a string. `MIGRATED` only ever grows, so a screen cannot quietly fall back out of its room later. `scripts/lint-mobile-rooms.mjs` gained a real JSDoc shape for `lintTree`'s findings so the test typechecks against it.
+
+### Lane SHELL — Activity and its alerts (Wave 2, S2)
+
+- `apps/mobile/src/apps/insights/Insights.tsx` — root is `SystemPlace`. Loading and error are room states; the EMPTY stays in the body, because the window chips sit above it and a member must still be able to widen the window that found nothing. `AnalyticsBody` now returns `null` while the read is not ready — the narrowing the two deleted branches left behind, never a second error plate. Its private `ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD"` is deleted; the room says `ERROR_HEALTH`.
+- `apps/mobile/src/apps/insights/Insights.test.tsx` — the eyebrow assertion moves to `"This page could not load"`. This is the **D2** correction landing, not a test loosened to pass: the same string, sentence case, from the copy module every other seat reads.
+- `apps/mobile/src/apps/insights/GatewayAlerts.tsx` — the biggest single reduction in this lane. It drew its own `TopSafeArea`, its own header row with a `display` title and a subtitle nothing else in the shell has, its own gutter, and three bare `Text` lines standing in for loading, error and empty. **Its error line was the exception**: `state.message` was `memberFacingError(error.message)` printed as the whole page. That is exactly S14. The `State` union no longer carries a `message` at all — `{ kind: "error" }` — so there is no longer anywhere for an exception to be stored, let alone shown; the room says one noun and one verb. Loading is a skeleton, empty is the routine block, and the subtitle is a `NoteBlock` in the body. Seven style keys deleted (`empty`, `header`, `headerCopy`, `list`, `safe`, `subtitle`, `title`).
+
+`apps/mobile/src/screens/shell-rooms.test.ts` — both files added to `MIGRATED`.
+
+### Lane SHELL — every system alert in the shell, replaced (Wave 2, S7/D4)
+
+`grep -rn "Alert.alert" apps/mobile/src/screens apps/mobile/src/apps/{assistant,automations,insights}` → **0 call sites** (the seven remaining matches are the comments naming what was replaced). A new sweep test, `src/screens/shell-rooms.test.ts` → "asks with the kit confirm, never a system alert", holds it there over the whole tree, not just the seven files.
+
+Five were destructive confirms and are `useConfirmDestructive` now — the noun in the title, an outlined `--net` verb, and a sheet that can host the status line the undo would post into:
+
+- `apps/mobile/src/screens/devices/DeviceActions.tsx` — "Revoke this device?" / "Sign out this device?".
+- `apps/mobile/src/screens/Settings.tsx` — "Unpair this device?".
+- `apps/mobile/src/screens/home/VaultsSwitcher.tsx` — "Remove this vault from this phone?". The old title was "Remove from this phone?", which names no noun at all.
+- `apps/mobile/src/screens/BackupHealth.tsx` — "Stop backing up this device?", keeping "Keep backing up" as the way out.
+- `apps/mobile/src/screens/PhoneStorage.tsx` — "Free up the offline thumbnails?".
+
+Two were a CHOICE, not a confirm, and are a `SheetRoom` (**D4**): `apps/mobile/src/apps/assistant/ConsentSheet.tsx` is new, and `Assistant.tsx` and `AssistantCompanionSheet.tsx` both mount it. It replaces two spellings of one question in two files. The ink verb is the ALLOW and the quiet way out declines, which the system alert could not express — it gave both buttons the same weight, so the consent ask read as a destructive confirm on one screen and as a neutral prompt on the other. Dismissing still declines: silence is not consent, and both `useEffect`s (the whole imperative-alert-in-an-effect pattern) are gone.
+
+Kit: `ConfirmSheet` gained `cancelLabel`, passed through to `SheetRoom`, because "Keep backing up" is a truer word for staying than "Cancel" — and `SheetRoom`'s own default moved from a parameter default to a `??` so an explicit `undefined` still resolves.
+
+Two test fixtures completed, neither loosened: `src/screens/home/VaultsSwitcher.test.tsx`'s partial `@centraid/design` and `kit/theme` mocks gained `borders`, `metrics`, `targetMin` and `radii.sm` — the switcher mounts the kit confirm now, so its tree genuinely reads them. No assertion changed.
+
+Verification on this head: `bunx vitest run src` → 2469 passed, 295 files; the single failing file is the inherited `src/lib/replica/expo-seat-driver.test.ts` load failure, which fails identically on the base head. `bun run --cwd apps/mobile typecheck` → 0. `lint-mobile-rooms` → `screen-root 172` (from 181 at the start of this lane), `back-literal 47`, `page-margin 107`, `identity-tint 0`, `copy-title-case 0`.
+
+### Lane SHELL — doctrine citation for the `subBase` export
+
+`packages/design/src/index.ts` publishes `subBase` under [docs/decisions.md#typography-and-design-contracts](../docs/decisions.md#typography-and-design-contracts). It adds no value and changes no metric: `subBase` was already defined in `density.ts` beside `spacing`, already read by `contract.ts`, `css.ts` and `blueprint.ts`, and already the answer the contract gives for a seam below the 4px base. What was missing was the door — so the two mobile call sites that needed one could only write a bare `2` and leave a comment saying the right name existed and was unreachable. Publishing the existing name is what keeps the design contract enforceable at the call site rather than aspirational.

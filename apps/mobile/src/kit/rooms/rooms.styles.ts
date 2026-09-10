@@ -35,6 +35,13 @@ export const styles = StyleSheet.create({
   },
   barTitle: { ...t("bodyStrong"), flex: 1, minWidth: 0 },
   body: { flex: 1 },
+  // The scrolling body of a system place. The gutter is the ROOM's — a place
+  // whose header and list disagree by 4pt was the commonest audit finding.
+  placeBody: {
+    paddingBottom: spacing[6],
+    padding: pageMargin,
+    gap: spacing[4],
+  },
   coverHead: {
     alignItems: "center",
     flexDirection: "row",

@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from "expo-file-system";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { formatBytes } from "@centraid/design";
 
@@ -8,6 +8,7 @@ import {
   pathToFileUri,
   replicaStorageDirectoryUri,
 } from "../../modules/centraid-storage";
+import { useConfirmDestructive } from "../kit/components/ConfirmSheet";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import TopSafeArea from "../kit/components/TopSafeArea";
@@ -49,6 +50,11 @@ export default function PhoneStorage({
   route,
 }: SettingsScreenProps<"PhoneStorage">): React.JSX.Element {
   const { colors } = useTheme();
+  // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
+  // title, and a status line it can host - none of which `Alert.alert` can
+  // draw.
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
   const { scopes = [], session, refresh: refreshReplica } = useReplica();
   const [background, setBackground] =
     useState<ReplicaBackgroundRegistrationStatus>();
@@ -136,6 +142,7 @@ export default function PhoneStorage({
   const thumbnailTotal = rows.reduce((sum, row) => sum + row.thumbnailBytes, 0);
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
+      {confirmSheet}
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Settings"
@@ -373,27 +380,21 @@ export default function PhoneStorage({
         <Pressable
           style={[styles.button, { borderColor: colors.line }]}
           onPress={() =>
-            Alert.alert(
-              "Free up offline thumbnails?",
-              "This clears thumbnail packs only. Vault databases and pending uploads stay; only-here videos cannot be cleared.",
-              [
-                { text: "Cancel" },
-                {
-                  text: "Free up",
-                  style: "destructive",
-                  onPress: () => {
-                    clearPinnedThumbnailPacks();
-                    // Room alone does not restart sync: the coordinator parked
-                    // the feed when the disk filled and stays parked until it
-                    // is told the space exists (coordinator.ts). The pull that
-                    // follows is what clears `out of room` from the status bar.
-                    session?.resumeAfterStorageFull();
-                    void refreshReplica?.();
-                    refresh();
-                  },
-                },
-              ]
-            )
+            confirmDestructive({
+              body: "This clears thumbnail packs only. Vault databases and pending uploads stay; only-here videos cannot be cleared.",
+              noun: "the offline thumbnails",
+              onConfirm: () => {
+                clearPinnedThumbnailPacks();
+                // Room alone does not restart sync: the coordinator parked the
+                // feed when the disk filled and stays parked until it is told
+                // the space exists (coordinator.ts). The pull that follows is
+                // what clears `out of room` from the status bar.
+                session?.resumeAfterStorageFull();
+                void refreshReplica?.();
+                refresh();
+              },
+              verb: "Free up",
+            })
           }
         >
           <Icon name="trash-2" size={18} color={colors.text} />
