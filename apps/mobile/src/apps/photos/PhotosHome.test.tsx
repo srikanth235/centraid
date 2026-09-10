@@ -461,7 +461,7 @@ describe("Photos native component coverage", () => {
 
   it("distinguishes the empty-query search state from no hits", () => {
     const screen = render(<PhotosSearchRestingState />);
-    expect(screen.getByText("Nothing typed")).toBeTruthy();
+    expect(screen.getByText("Search your photos")).toBeTruthy();
     expect(screen.getByText("Search the whole library")).toBeTruthy();
     expect(screen.queryByText(/Nothing matches/u)).toBeNull();
   });

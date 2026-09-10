@@ -9,6 +9,7 @@
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
+import { searchRestingEyebrow } from "@centraid/blueprints/apps/_shared/search-scaffold";
 import { entryFacts } from "@centraid/blueprints/apps/tally/entry-facts";
 import { SEARCH } from "@centraid/blueprints/apps/tally/shelves";
 import {
@@ -63,7 +64,7 @@ export default function TallySearchScreen({
         {resting ? (
           <>
             <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
-              {SEARCH_COPY.resting.eyebrow}
+              {searchRestingEyebrow(SEARCH_COPY.resting.noun)}
             </Text>
             <Text style={[styles.title, { color: colors.text }]}>
               {SEARCH_COPY.resting.title}

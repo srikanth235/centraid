@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { searchRestingEyebrow } from "@centraid/blueprints/apps/_shared/search-scaffold";
 import { SEARCH_COPY } from "@centraid/blueprints/apps/photos/view-copy";
 
 import { Text } from "../../kit/components/NativeText";
@@ -19,7 +20,9 @@ export default function PhotosSearchRestingState(): React.JSX.Element {
   return (
     <ScrollView contentContainerStyle={styles.pad}>
       <View style={styles.panel}>
-        <Text style={styles.eyebrow}>{SEARCH_COPY.resting.eyebrow}</Text>
+        <Text style={styles.eyebrow}>
+          {searchRestingEyebrow(SEARCH_COPY.resting.noun)}
+        </Text>
         <Text style={styles.title}>{SEARCH_COPY.resting.title}</Text>
         <Text style={styles.body}>{SEARCH_COPY.resting.body}</Text>
       </View>

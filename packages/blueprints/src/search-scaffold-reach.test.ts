@@ -30,7 +30,7 @@ interface SearchGroupRow {
   openTarget: string;
 }
 interface SearchStateCopy {
-  resting: { eyebrow: string; title: string; body: string };
+  resting: { noun: string; title: string; body: string };
   searching: { lead: string; trail: (count: number) => string };
   miss: {
     eyebrow: string;
@@ -56,7 +56,7 @@ const { SearchScaffold } = (await import(moduleUrl)) as {
 
 const COPY: SearchStateCopy = {
   resting: {
-    eyebrow: "Nothing typed",
+    noun: "things",
     title: "Search everything",
     body: "Try one of these.",
   },
