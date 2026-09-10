@@ -25,7 +25,13 @@ import {
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
-import { DEVICE_FORGET, DEVICE_NOTE, DEVICE_UNLOCK } from "./locker-seat-copy";
+import {
+  DEVICE_FORGET,
+  DEVICE_NOT_ENROLLED_BODY,
+  DEVICE_NOT_ENROLLED_TITLE,
+  DEVICE_NOTE,
+  DEVICE_UNLOCK,
+} from "./locker-seat-copy";
 import LockerWall from "./LockerWall";
 
 vi.mock(import("react-native"), async () => {
@@ -56,6 +62,7 @@ function wall(
       busy={false}
       error=""
       mode="lock"
+      notEnrolled={false}
       onForgetKey={noop}
       onUnlock={noop}
       {...overrides}
@@ -135,6 +142,45 @@ describe("denial", () => {
     expect(textOf(container)).toContain(DENIED_SCOPE);
     expect(nodesOf(container, "button")).toHaveLength(0);
     expect(nodesOf(container, "input")).toHaveLength(0);
+    unmount();
+  });
+});
+
+// #1015 B1 — `storeLockerVaultKey` has no non-test caller in the repo, so
+// nothing on this seat ever writes `K`: the wall's one primary refused every
+// time it was pressed, with a "yet" that no gesture here could resolve. The
+// key plane that would hand `K` over is #996 wave 6 and is not built, so the
+// wall states the absence instead.
+describe("the lock wall on a phone that holds no key", () => {
+  it("offers no unlock, because pressing it could not succeed", () => {
+    const { container, unmount } = mountBlock(wall({ notEnrolled: true }));
+    expect(
+      container.querySelector('[data-testid="locker-gate-submit"]')
+    ).toBeNull();
+    expect(textOf(container)).not.toContain(DEVICE_UNLOCK);
+    unmount();
+  });
+
+  it("offers no Forget either — there is no key on this phone to drop", () => {
+    const { container, unmount } = mountBlock(wall({ notEnrolled: true }));
+    expect(textOf(container)).not.toContain(DEVICE_FORGET);
+    unmount();
+  });
+
+  it("says what is true, as the heading, and says it once", () => {
+    const { container, unmount } = mountBlock(
+      wall({ error: DEVICE_NOT_ENROLLED_BODY, notEnrolled: true })
+    );
+    const text = textOf(container);
+    expect(text).toContain(DEVICE_NOT_ENROLLED_TITLE);
+    expect(text.split(DEVICE_NOT_ENROLLED_BODY)).toHaveLength(2);
+    unmount();
+  });
+
+  it("keeps both verbs on a phone that IS enrolled", () => {
+    const { container, unmount } = mountBlock(wall({ notEnrolled: false }));
+    expect(textOf(container)).toContain(DEVICE_UNLOCK);
+    expect(textOf(container)).toContain(DEVICE_FORGET);
     unmount();
   });
 });

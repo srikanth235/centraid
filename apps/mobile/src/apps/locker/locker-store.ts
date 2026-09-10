@@ -75,6 +75,10 @@ export interface LockerVaultState {
   readError: string;
   /** The door's refusal, in its own words, on the reveal that asked for it. */
   revealError: string;
+  /** This phone holds no `K` for this vault, and no gesture here can get one
+   *  (#1015 B1, #996 W6). The wall states the absence instead of offering an
+   *  unlock that refuses every time. */
+  notEnrolled: boolean;
   revealBusy: boolean;
   /** A reveal took itself off the screen with nothing left (STATES.md). */
   reauth: boolean;
@@ -121,6 +125,7 @@ function initialState(): LockerVaultState {
     reading: false,
     readError: "",
     revealError: "",
+    notEnrolled: false,
     revealBusy: false,
     reauth: false,
     masked: false,
@@ -308,6 +313,7 @@ export async function unlockLocker(): Promise<void> {
     set({
       session: answer.ok ? session : { ...session, error: answer.message },
       busy: false,
+      notEnrolled: !answer.ok && answer.reason === "not_enrolled",
       revealError: "",
     });
     if (isOpen(state.session)) {

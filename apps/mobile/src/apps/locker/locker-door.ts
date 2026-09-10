@@ -27,6 +27,7 @@ import {
 } from "@centraid/client/locker";
 
 import { lockerUnlocked, readLockerVaultKey } from "./locker-device-auth";
+import { DEVICE_NOT_ENROLLED_BODY } from "./locker-seat-copy";
 
 /** Why a reveal was refused. The screen renders the reason, never "failed". */
 export type LockerRefusalReason =
@@ -92,10 +93,9 @@ export async function unlockLockerDoor(
   try {
     const record = await readLockerVaultKey(vaultId);
     if (!record) {
-      return refuse(
-        "not_enrolled",
-        "This device does not hold this vault's key yet."
-      );
+      // NOT A RETRY (#1015 B1): nothing writes `K` to this keychain today, so
+      // "yet" was the whole of the lie — pressing again could not change it.
+      return refuse("not_enrolled", DEVICE_NOT_ENROLLED_BODY);
     }
     return { ok: true };
   } catch (error) {
@@ -132,10 +132,7 @@ export async function revealLockerRow(
     );
   }
   if (!record) {
-    return refuse(
-      "not_enrolled",
-      "This device does not hold this vault's key yet."
-    );
+    return refuse("not_enrolled", DEVICE_NOT_ENROLLED_BODY);
   }
   if (request.keyId !== null && request.keyId !== record.keyId) {
     return refuse(
