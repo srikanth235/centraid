@@ -25,6 +25,7 @@ import {
 } from "@centraid/blueprints/apps/tally/view-copy";
 import { restoreExpenseWrite } from "@centraid/blueprints/apps/tally/writes";
 
+import { formatDateShort, formatRelative } from "../../kit/format";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { spacing } from "../../kit/theme";
 import type { TallyScreenProps } from "../../navigation";
@@ -59,9 +60,9 @@ export default function TallyTrashScreen({
               title={row.description}
               meta={metaSentence([
                 row.group_name,
-                trashedOn(row.deleted_at.slice(0, 10)),
+                trashedOn(formatRelative(row.deleted_at, vault.now)),
                 row.purge_at
-                  ? purgesOn(row.purge_at.slice(0, 10))
+                  ? purgesOn(formatDateShort(row.purge_at, vault.now))
                   : PURGE_UNKNOWN,
               ])}
               figure={{

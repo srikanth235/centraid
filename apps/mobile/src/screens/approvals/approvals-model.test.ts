@@ -266,7 +266,10 @@ describe("the queue", () => {
   });
 
   it("dates things the way a member would say them", () => {
-    expect(agoPhrase(NOW, NOW)).toBe("just now");
+    // The seat's ONE relative register (`kit/format`, #1015 S8): this
+    // ladder was typed out twice, and `moments ago` is the word the whole
+    // product now uses where this copy said `just now`.
+    expect(agoPhrase(NOW, NOW)).toBe("moments ago");
     expect(agoPhrase(NOW - 3 * 60_000, NOW)).toBe("3 minutes ago");
     expect(agoPhrase(NOW - 2 * 3_600_000, NOW)).toBe("2 hours ago");
   });

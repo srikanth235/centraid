@@ -28,6 +28,7 @@ import {
 
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import SeatList from "../../kit/components/SeatList";
+import { formatRelative } from "../../kit/format";
 import { spacing } from "../../kit/theme";
 import { tallyWindowFoot } from "./tally-view-model";
 import TallyEntryRow from "./TallyEntryRow";
@@ -93,7 +94,7 @@ export default function ActivityView(
         <LedgerRow
           title={settlementTitle(row.from_name, row.to_name)}
           meta={metaSentence([
-            row.date,
+            formatRelative(row.date, props.now),
             money(row.amount_minor, currency),
             row.group_name,
             mine ? "" : SETTLEMENT_NOT_YOURS,

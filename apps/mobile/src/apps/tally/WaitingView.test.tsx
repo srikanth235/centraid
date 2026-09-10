@@ -60,6 +60,7 @@ function view(
     <WaitingView
       names={new Map([["ana", "Ana"]])}
       notice={{ pending: rows.length, state: "ready" }}
+      now="2026-09-10T12:00:00.000Z"
       nudges={nudges}
       onVerb={noop}
       sections={tallyWaiting(rows, "owner")}
