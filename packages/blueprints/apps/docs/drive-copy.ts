@@ -237,7 +237,7 @@ export const SEARCH_EXAMPLES: readonly string[] = [
  */
 export const SEARCH_COPY = {
   resting: {
-    eyebrow: "Nothing typed",
+    noun: "documents",
     title: "Search titles and contents, across the whole library",
     body: "Not the page that happens to be loaded — try one of these.",
   },

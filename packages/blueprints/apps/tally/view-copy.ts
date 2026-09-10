@@ -298,7 +298,7 @@ export const SEARCH_PLACEHOLDER = "Search expense descriptions";
 export const SEARCH_SCOPE = "expense descriptions in this vault";
 export const SEARCH_COPY = {
   resting: {
-    eyebrow: "Search",
+    noun: "expenses",
     title: "Descriptions only",
     body: "An expense is found by what it was called — amounts and people are not searched.",
   },

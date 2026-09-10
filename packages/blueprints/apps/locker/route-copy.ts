@@ -277,7 +277,7 @@ export const SEARCH_NO_MATCH_BODY = `Nothing in this locker matched the ${SEARCH
 
 export const SEARCH_COPY: SearchStateCopy = {
   resting: {
-    eyebrow: "Search",
+    noun: "keys",
     title: "Title, username, address",
     body: "A secret value is never searched, and neither is a note.",
   },

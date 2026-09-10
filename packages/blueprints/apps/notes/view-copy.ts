@@ -115,7 +115,7 @@ export const SEARCH_EXAMPLES: readonly string[] = [
  *  an empty shelf are two different sentences. */
 export const SEARCH_COPY = {
   resting: {
-    eyebrow: "Nothing typed",
+    noun: "notes",
     title: "Search the half-remembered",
     body: SEARCH_EMPTY,
   },

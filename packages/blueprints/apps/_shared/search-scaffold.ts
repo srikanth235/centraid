@@ -118,9 +118,26 @@ export function searchStatusLine(count: number, scope: string): string {
   return `${count} ${count === 1 ? "result" : "results"} · searched ${scope}`;
 }
 
+/**
+ * The resting eyebrow is the HOUSE's word, not the seat's (#1015, S11): a
+ * search at rest tells a member what to do in the app's own noun ("Search your
+ * photos"), never reports the state it is in ("Nothing typed", "Search"). Five
+ * seats had drifted across three strings; the string is written once, here, and
+ * a seat supplies only its noun.
+ */
+export function searchRestingEyebrow(noun: string): string {
+  return `Search your ${noun}`;
+}
+
 /** Copy as config: values/formatters only, never a branch on which app is asking. */
 export interface SearchStateCopy {
-  resting: { eyebrow: string; title: string; body: string };
+  resting: {
+    /** The app's own plural noun, lower case ("photos", "expenses") — the
+     *  eyebrow is built from it by `searchRestingEyebrow`, never typed here. */
+    noun: string;
+    title: string;
+    body: string;
+  };
   searching: {
     lead: string;
     trail: (count: number) => string;
