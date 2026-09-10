@@ -48,14 +48,12 @@ import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
 import { usePeopleWrites } from "./people-writes";
 import PeopleConfirm from "./PeopleConfirm";
 import {
-  BackRow,
   Commits,
   EmptyLine,
   FieldRow,
@@ -484,16 +482,12 @@ export default function PersonView({
   };
 
   return (
-    <PeopleScreen current="people">
-      <TopSafeArea edges={[]} style={styles.page}>
-        <View style={styles.body}>
-          <BackRow
-            destination={APP_TITLE}
-            onPress={() => navigation.popTo("PeopleHome", {})}
-          />
-          {body()}
-        </View>
-      </TopSafeArea>
+    <PeopleScreen
+      onBack={() => navigation.popTo("PeopleHome", {})}
+      route="person"
+      subject={person?.name ?? APP_TITLE}
+    >
+      <View style={styles.body}>{body()}</View>
       <PeopleConfirm
         visible={confirmChannel !== null}
         title={CONFIRMS.removeChannel.title(confirmChannel?.kind ?? "")}
@@ -536,7 +530,6 @@ const styles = StyleSheet.create({
   },
   heroText: { flex: 1, gap: 2, minWidth: 0 },
   numeric: { fontVariant: t("mono").fontVariant },
-  page: { flex: 1 },
   scroll: { paddingBottom: spacing[6] },
   tags: {
     flexDirection: "row",

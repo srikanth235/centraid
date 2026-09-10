@@ -17,7 +17,6 @@ import {
   FIELDS,
   FRAGMENTS,
   MERGE_HEADS,
-  ROUTE_TITLES,
   SECTIONS,
   SENTENCES,
   VERBS,
@@ -26,13 +25,12 @@ import type { PersonRow as PersonRowModel } from "@centraid/blueprints/apps/peop
 
 import Button from "../../kit/components/Button";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { pageMargin, spacing } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
+import { personPlace } from "./people-places";
 import { usePeopleWrites } from "./people-writes";
 import PeopleConfirm from "./PeopleConfirm";
 import {
-  BackRow,
   Caption,
   Commits,
   EmptyLine,
@@ -112,93 +110,88 @@ export default function MergeView({
     : [];
 
   return (
-    <PeopleScreen current="people">
-      <TopSafeArea edges={[]} style={styles.page}>
-        <View style={styles.body}>
-          <BackRow
-            destination={keep?.name ?? "Person"}
-            onPress={() => navigation.goBack()}
-            title={ROUTE_TITLES.merge}
-          />
-          {keep ? (
-            <ScrollView contentContainerStyle={styles.scroll}>
-              <PeopleSection title={MERGE_HEADS.keep}>
-                <PersonRow
-                  avatar={keep}
-                  name={keep.name}
-                  {...(keep.role ? { sub: keep.role } : {})}
-                  last
-                />
-              </PeopleSection>
-
-              <PeopleSection
-                title={MERGE_HEADS.mergeIn}
-                count={candidates.length}
-              >
-                {candidates.length === 0 ? (
-                  <EmptyLine text={EMPTY.merge} />
-                ) : (
-                  candidates.map((candidate, index) => (
-                    <PersonRow
-                      key={candidate.party_id}
-                      avatar={candidate}
-                      name={candidate.name}
-                      {...(candidate.role ? { sub: candidate.role } : {})}
-                      // Selection is the row's own meta word — a weight change
-                      // alone does not survive the phone's smaller rungs, and
-                      // the shared row carries no selected state to borrow.
-                      {...(candidate.party_id === sourceId
-                        ? { meta: "✓" }
-                        : {})}
-                      onOpen={() =>
-                        setSourceId((current) =>
-                          current === candidate.party_id
-                            ? null
-                            : candidate.party_id
-                        )
-                      }
-                      last={index === candidates.length - 1}
-                    />
-                  ))
-                )}
-              </PeopleSection>
-
-              <PeopleSection title={SECTIONS.result}>
-                {rows.map((row, index) => (
-                  <PersonRow
-                    key={row.sub}
-                    name={row.name}
-                    sub={row.sub}
-                    last={index === rows.length - 1}
-                  />
-                ))}
-              </PeopleSection>
-
-              <Caption
-                text={merged ? SENTENCES.merged : SENTENCES.mergeWarning}
+    <PeopleScreen
+      onBack={() => navigation.goBack()}
+      parent={keep ? personPlace(keep.name, keep.party_id) : undefined}
+      route="merge"
+    >
+      <View style={styles.body}>
+        {keep ? (
+          <ScrollView contentContainerStyle={styles.scroll}>
+            <PeopleSection title={MERGE_HEADS.keep}>
+              <PersonRow
+                avatar={keep}
+                name={keep.name}
+                {...(keep.role ? { sub: keep.role } : {})}
+                last
               />
+            </PeopleSection>
 
-              <Commits>
-                <Button
-                  label={merged ? VERBS.merged : VERBS.merge}
-                  variant="destructive"
-                  disabled={merged || !source}
-                  onPress={() => setConfirming(true)}
+            <PeopleSection
+              title={MERGE_HEADS.mergeIn}
+              count={candidates.length}
+            >
+              {candidates.length === 0 ? (
+                <EmptyLine text={EMPTY.merge} />
+              ) : (
+                candidates.map((candidate, index) => (
+                  <PersonRow
+                    key={candidate.party_id}
+                    avatar={candidate}
+                    name={candidate.name}
+                    {...(candidate.role ? { sub: candidate.role } : {})}
+                    // Selection is the row's own meta word — a weight change
+                    // alone does not survive the phone's smaller rungs, and
+                    // the shared row carries no selected state to borrow.
+                    {...(candidate.party_id === sourceId ? { meta: "✓" } : {})}
+                    onOpen={() =>
+                      setSourceId((current) =>
+                        current === candidate.party_id
+                          ? null
+                          : candidate.party_id
+                      )
+                    }
+                    last={index === candidates.length - 1}
+                  />
+                ))
+              )}
+            </PeopleSection>
+
+            <PeopleSection title={SECTIONS.result}>
+              {rows.map((row, index) => (
+                <PersonRow
+                  key={row.sub}
+                  name={row.name}
+                  sub={row.sub}
+                  last={index === rows.length - 1}
                 />
-                <Button
-                  label={VERBS.cancel}
-                  variant="quiet"
-                  onPress={() => navigation.goBack()}
-                />
-              </Commits>
-            </ScrollView>
-          ) : loading ? (
-            <SkeletonRows rows={5} accessibilityLabel="Reading this person" />
-          ) : (
-            <EmptyLine text={EMPTY.noMatch} />
-          )}
-        </View>
-      </TopSafeArea>
+              ))}
+            </PeopleSection>
+
+            <Caption
+              text={merged ? SENTENCES.merged : SENTENCES.mergeWarning}
+            />
+
+            <Commits>
+              <Button
+                label={merged ? VERBS.merged : VERBS.merge}
+                variant="destructive"
+                disabled={merged || !source}
+                onPress={() => setConfirming(true)}
+              />
+              <Button
+                label={VERBS.cancel}
+                variant="quiet"
+                onPress={() => navigation.goBack()}
+              />
+            </Commits>
+          </ScrollView>
+        ) : loading ? (
+          <SkeletonRows rows={5} accessibilityLabel="Reading this person" />
+        ) : (
+          <EmptyLine text={EMPTY.noMatch} />
+        )}
+      </View>
       <PeopleConfirm
         visible={confirming && !!source && !!keep}
         title={CONFIRMS.merge.title(source?.name ?? "", keep?.name ?? "")}
@@ -221,6 +214,5 @@ export default function MergeView({
 
 const styles = StyleSheet.create({
   body: { flex: 1, paddingHorizontal: pageMargin },
-  page: { flex: 1 },
   scroll: { paddingBottom: spacing[6] },
 });
