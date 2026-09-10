@@ -1516,3 +1516,39 @@ Both are OUT OF SCOPE for this umbrella and are listed here with the options and
 - `kit/share/grant-seat.ts` (+ its test): the SOURCE of the raw leak into `PersonGrants` and `TallyShareGroup`, and not a file any ruling named. Fixed under the lane-wide S14 licence rather than left as a known leak with two app-tree consumers. **Flagged for the root.**
 - `apps/{locker,photos,tally,people,automations}` and `screens/**` call sites, and the four tests that pinned the old strings: the R-A-15 sweep is lane-wide by the root's design.
 - The merge of `umbrella/1015-mobile-ux` needed one `governance: allow-estate-separation` waiver: the umbrella's own law file (`scripts/ci/gate-classes.json`) and its territory arrive in the same merge, which cannot be split.
+
+## Lane SHELL, closing round — addendum: APPS-A merged, and R-SH-9 answered
+
+Merge `db418b6f4` brought `umbrella/1015-mobile-ux` at `b59b6b1cc` (APPS-A's final round, R-A-15) into `lane/1015-kit` after the section above was written. This addendum corrects it where the merge changed the facts.
+
+**The merge.** One conflict, `apps/mobile/src/apps/automations/AutomationThread.tsx`: APPS-A's R-A-15 removed the glued `Try again.` from `AUTOMATION_NOT_RUN` because the failure door adds the product's one retry word; this lane's R-SH-11 changed its noun. Both are kept — `"This rule did not run"` with APPS-A's comment and R-SH-11 named beside it.
+
+**The one-noun sweep went red on the merge, and was narrowed rather than weakened.** APPS-A's S14 rework logs the exception with the module's own tag, `console.warn("[automations] thread read failed", error)`. That is not member copy — it is the other half of S14's contract, the log a debug session starts from ([docs/logs.md](../docs/logs.md)), and `[automations]` there is the MODULE, which R-SH-11 explicitly leaves alone. `shell-copy.test.ts`'s sweep now scans line by line and skips a line containing a `console.*` call; block comments are blanked to spaces keeping newlines, the convention `scripts/lint-container-opacity.mjs` uses. Re-proven after the narrowing: planting `"An automation is a trigger and a thing to do."` back into `packages/client/src/automations-copy.ts` AND `"This automation did not run"` back into `AutomationThread.tsx` turns it red on both, plus the value-level case; both plants reverted.
+
+**R-SH-9 — `kit/member-error.ts` STAYS. The ruling's condition is not met.** R-A-15 landed and did what it said: `apps/mobile/src/kit/replica/write-outcome.ts` no longer interpolates `error.message` anywhere, `surfaceWriteRefusal` is its new channel, and `error-detail` is **0** on this head (APPS-A's `scripts/lint-mobile-rooms.baseline.json` already records it as gone from the file, which makes the rule unconditional). But R-SH-9 said the module dies "once R-A-15 leaves it with no caller", and it has **five product callers, none of them an exception at the call site**:
+
+| caller | what it lowers | why R-A-15 does not reach it |
+| --- | --- | --- |
+| `apps/mobile/src/kit/transfer/backup-verdict.ts:102` | the first failure in a backup verdict | a stored verdict string, not a thrown error |
+| `apps/mobile/src/kit/transfer/transfer-queue.ts:59` | a queue item's `lastError` | persisted on the item by the transfer engine |
+| `apps/mobile/src/screens/home/origin-health.ts:52` | `queue.failures[0].lastError` in the Home notification cause | the same persisted string, read a second time |
+| `apps/mobile/src/apps/insights/Insights.tsx:264, 291` | the run-log load reason and the export error | gateway-supplied strings on the wire |
+| `apps/mobile/src/apps/insights/GatewayAlerts.tsx:123, 169` | an alert headline and its detail | the gateway's own alert text, the whole page |
+
+Every one of them lowers vocabulary in a string the seat RECEIVED — from the transfer engine's own record or from the gateway over the wire — not one it threw. R-A-15 fixed the class where the seat manufactured the string, which is the class the ruling's reasoning describes ("a string that should never have carried the vocabulary"). These five are a different class and deleting the filter would put engine words straight onto five member surfaces. **Recommendation to the owner: R-SH-9 is answered NO on the evidence, and should be recorded as superseded rather than left as a pending condition.** The honest follow-up is not "delete the filter" but "does the gateway owe the seat a member-facing string?", which is a protocol question, not a copy one.
+
+**Corrections to the section above.**
+
+- `error-detail 12` → **0**. `node scripts/lint-mobile-rooms.mjs` on this head reads `screen-root 33 · back-literal 0 · page-margin 2 · identity-tint 0 · copy-title-case 0 · error-detail 0` — **35 findings over 594 files**, and `--enforce` passes.
+- The inherited-red table loses one row: `apps/mobile` `src/apps/tasks/tasks-haptics.test.ts` is **green** after the merge. The full mobile run on this head is **252 files, 2307 passed, 0 failed**.
+- The docs pass's claim that R-SH-9 is "outstanding, with the baseline `error-detail 12` un-re-measured" is superseded by this addendum on both halves.
+
+### Verification, from the lane worktree, on the merged head
+
+1. `cd apps/mobile && bunx vitest run src/screens src/apps src/kit` → **252 files, 2307 passed, 0 failed**.
+2. `bun run --cwd apps/mobile typecheck` → **0**; `bun run --cwd packages/client typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → the six counts above; `--enforce` → **exit 0**.
+4. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → see the report.
+5. `bun run format` then `bun run check:push:static`, `bun run lint:product`, `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see the report.
+
+STOPPED here per the owner: no `check:push`, no push, no PR, no simulator.
