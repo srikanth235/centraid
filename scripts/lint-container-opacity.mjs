@@ -63,10 +63,15 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 // layers and their faded presentation branches; #739 concurrently added the
 // Places graticule leaf. Generated app-boot mirrors are excluded above so this
 // source budget remains stable under concurrent gates.
+// 2026-09-10 — #1015 (R-SH-13), re-measured after the room wave: client 21 → 13,
+// blueprints 4 → 2, design/elements 12 → 3. Nothing was reclassified; the
+// rooms and the kit's leaf-token disabled state simply removed the container
+// fades these budgets were still holding room for. The ratchet takes the
+// measured value, which is what a ratchet is for.
 const BUDGETS = {
-  "packages/client/src": 21,
-  "packages/blueprints": 4,
-  "packages/design/src/elements": 12,
+  "packages/client/src": 13,
+  "packages/blueprints": 2,
+  "packages/design/src/elements": 3,
 };
 
 const SKIP_DIRS = new Set([
