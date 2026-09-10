@@ -53,6 +53,14 @@ export interface AppPlaceProps {
   selection?: RoomSelection;
   /** The app's own band, told what state the room puts it in. */
   band?: (state: BandState) => React.ReactNode;
+  /**
+   * Presentations this screen owns: a confirm sheet, an editor that is state
+   * rather than a route. They mount OUTSIDE `RoomBody`, because the body is a
+   * state machine — an empty state replaces the children — and an editor that
+   * unmounted the moment its list went empty would be a room deciding
+   * something no screen asked it to.
+   */
+  overlay?: React.ReactNode;
   loading?: RoomLoading;
   error?: RoomError;
   empty?: RoomEmpty;
@@ -70,6 +78,7 @@ export default function AppPlace({
   loading,
   error,
   empty,
+  overlay,
   children,
 }: AppPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -106,6 +115,7 @@ export default function AppPlace({
       <RoomBody empty={empty} error={error} loading={loading}>
         {children}
       </RoomBody>
+      {overlay}
       {selecting && selection ? (
         <SelectionActions selection={selection} />
       ) : null}

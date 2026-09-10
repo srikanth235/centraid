@@ -292,6 +292,25 @@ describe(AppPlace, () => {
     expect(nodesOf(container, "input")).toStrictEqual([]);
   });
 
+  // A confirm sheet and a presented editor have to survive the body's own
+  // state machine: an empty list must not unmount the editor over it.
+  it("keeps an overlay mounted while the body shows an empty state", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        empty={{ body: "Nothing yet", title: "No photos" }}
+        onBack={noop}
+        overlay={<Text>Delete photo?</Text>}
+      >
+        <Text>rows</Text>
+      </AppPlace>
+    );
+    const said = words(container);
+    expect(said).toContain("No photos");
+    expect(said).toContain("Delete photo?");
+    expect(said).not.toContain("rows");
+  });
+
   // The vault lockup is chrome on every route of an app, and it sits ABOVE
   // the header rather than inside the body, so it does not scroll away.
   it("draws frame chrome above the app header", () => {
