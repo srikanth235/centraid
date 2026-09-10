@@ -530,7 +530,9 @@ export default function PhotosHome({
         connection={collections.connection}
         error={collections.error ?? timeline.error}
         unavailableReason={collections.unavailableReason}
-        noun="Photo vault"
+        // The app's own name. `Photo vault` was a term the interface used
+        // nowhere else (#1015, photos/findings #9).
+        noun={PHOTOS_META.name}
         onRetry={() => void refreshLibrary()}
       />
 

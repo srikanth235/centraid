@@ -7,6 +7,8 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  BAND_ACTIVE_RULE,
+  BAND_ACTIVE_RULE_INSET,
   BAND_BORDER,
   BAND_HEIGHT,
   BAND_INSET,
@@ -26,8 +28,9 @@ import type { BandDestinationKey } from "./photos-band";
 
 const GROUP_GUTTER = 2;
 const PLATE_GAP = 8;
-const ACTIVE_RULE = 2;
-const ACTIVE_RULE_INSET = 14;
+// The selection rule is the KIT's (#1015, photos/findings #20): this file used
+// to declare its own `2` / `14`, and the values agreeing today is exactly the
+// drift `kit/band-surface.ts` exists to prevent. Docs' band already imports them.
 
 export interface PhotosBandProps {
   owner: BandOwner;
@@ -146,9 +149,9 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     activeRule: {
       borderRadius: radii.xs,
-      height: ACTIVE_RULE,
-      insetInlineEnd: ACTIVE_RULE_INSET,
-      insetInlineStart: ACTIVE_RULE_INSET,
+      height: BAND_ACTIVE_RULE,
+      insetInlineEnd: BAND_ACTIVE_RULE_INSET,
+      insetInlineStart: BAND_ACTIVE_RULE_INSET,
       position: "absolute",
       top: 0,
     },

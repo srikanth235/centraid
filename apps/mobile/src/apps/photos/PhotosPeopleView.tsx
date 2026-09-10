@@ -7,7 +7,7 @@ import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import {
   ENRICHMENT_PRIORITISED_NOTE,
   ENRICHMENT_QUEUED_NOTE,
-  prioritiseAnswerFor,
+  prioritizeAnswerFor,
 } from "@centraid/blueprints/apps/photos/enrichment-consent";
 import type { PageQuery } from "@centraid/core/page";
 import { identityColor, tileFinish } from "@centraid/design";
@@ -57,17 +57,17 @@ export default function PhotosPeopleView({
   const policies = usePhotoEntity("enrichPolicies");
 
   const [enrichBusy, setEnrichBusy] = useState(false);
-  const [prioritised, setPrioritised] = useState(false);
+  const [prioritized, setPrioritized] = useState(false);
   const enrichPolicy = policies.rows.find((row) => row.domain === "photos");
   const enrichTier = policies.loading
     ? null
     : ((enrichPolicy?.tier as string | undefined) ?? "off");
-  const prioritiseAnswer = prioritiseAnswerFor(enrichTier);
+  const prioritizeAnswer = prioritizeAnswerFor(enrichTier);
   // THE ONE WRITE — front of the queue, never whether. Gated here, never by
   // a disabled prop alone.
-  const prioritise = async (): Promise<void> => {
-    if (!session || enrichBusy || prioritised) return;
-    if (!prioritiseAnswer.available) return;
+  const prioritize = async (): Promise<void> => {
+    if (!session || enrichBusy || prioritized) return;
+    if (!prioritizeAnswer.available) return;
     setEnrichBusy(true);
     try {
       const result = await session.write("photos", {
@@ -77,7 +77,7 @@ export default function PhotosPeopleView({
       if (
         surfaceWriteOutcome(result, { queuedMessage: ENRICHMENT_QUEUED_NOTE })
       ) {
-        setPrioritised(true);
+        setPrioritized(true);
         postStatus(ENRICHMENT_PRIORITISED_NOTE);
       }
     } catch (error) {
@@ -127,10 +127,10 @@ export default function PhotosPeopleView({
         columnWrapperStyle={styles.row}
         ListEmptyComponent={
           <PeopleEmptyState
-            prioritise={prioritiseAnswer}
+            prioritize={prioritizeAnswer}
             busy={enrichBusy}
-            prioritised={prioritised}
-            onPrioritise={() => void prioritise()}
+            prioritized={prioritized}
+            onPrioritize={() => void prioritize()}
           />
         }
         ListFooterComponent={

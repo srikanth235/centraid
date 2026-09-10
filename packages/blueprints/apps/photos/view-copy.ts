@@ -256,6 +256,12 @@ export const SEARCH_EXAMPLES: readonly string[] = [
 
 export const SEARCH_COPY = {
   resting: {
+    // NOT CHANGED, AND WHY (#1015, photos/findings #9). `Nothing typed` is the
+    // name of an internal state read as signage, but it is the HOUSE's word:
+    // Docs, Notes and `_shared/SearchScaffold` all print it. Fixing it in one
+    // app would trade a copy defect for a cross-app inconsistency, which is
+    // the thing this umbrella exists to remove. Raised to the root as a
+    // one-ruling change across the four surfaces at once.
     eyebrow: "Nothing typed",
     title: "Search the whole library",
     body: "Not only what is loaded here — try one of these.",

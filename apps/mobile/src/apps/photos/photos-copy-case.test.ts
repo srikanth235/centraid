@@ -4,6 +4,9 @@
 // sweeps every Photos copy table a pure module owns, so a Title Case label
 // cannot come back in unnoticed.
 
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { selectedSentence } from "../../kit/rooms/room-contracts";
@@ -150,5 +153,31 @@ describe("every Photos copy table is sentence case (D2, #1015)", () => {
   it("ships one English: the faces ask is spelled the American way, like `favorite`", () => {
     expect(libraryLabels).toContain("Prioritize faces");
     expect(libraryLabels.join(" ")).not.toContain("Prioritise");
+  });
+
+  // R-KIT-4 (#1015): `scripts/lint-mobile-rooms.mjs`'s `copy-title-case` rule
+  // reads `*copy*.ts` tables, and Photos' Title Case lived in option arrays
+  // written inline in `.tsx` — so the rule's 0 was a scope limit, not a clean
+  // bill. This is the other half, over the tree's own source text.
+  it("has no Title Case label written inline in a .tsx option array", () => {
+    const dir = import.meta.dirname;
+    const files = readdirSync(dir).filter(
+      (name) => name.endsWith(".tsx") && !name.includes(".test.")
+    );
+    expect(files.length).toBeGreaterThan(20);
+    const offenders: string[] = [];
+    let seen = 0;
+    for (const file of files) {
+      const source = readFileSync(path.join(dir, file), "utf8");
+      for (const match of source.matchAll(/\blabel: "(?<label>[^"]+)"/gu)) {
+        const label = match.groups?.label ?? "";
+        seen += 1;
+        if (titleCaseWords(label).length > 0)
+          offenders.push(`${file}: ${label}`);
+      }
+    }
+    // A silent no-op is a failure: zero labels read means the sweep moved.
+    expect(seen).toBeGreaterThan(5);
+    expect(offenders).toStrictEqual([]);
   });
 });

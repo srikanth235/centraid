@@ -79,8 +79,12 @@ const SEARCH_EXAMPLES: readonly string[] = [
 /** Diverges from proto:3961's "the live library" on purpose: `session.search`
  *  resolves against the replica's eager-metadata surface (`REPLICA_LOCAL_SEARCH`)
  *  and every group below comes from replica rows, so the live-library claim is
- *  a sentence this code does not keep. */
-const SEARCH_SCOPE = "searched the whole replica on this device";
+ *  a sentence this code does not keep.
+ *
+ *  `replica` IS AN IMPLEMENTATION NOUN (#1015, photos/findings #9). The scope
+ *  the sentence states is unchanged — everything this phone holds, not the
+ *  gateway's index — and it is said in the app's own vocabulary. */
+const SEARCH_SCOPE = "searched everything this device holds";
 
 const UNREACHABLE_EYEBROW = "Cannot reach the vault";
 const UNREACHABLE_TITLE = "Search needs the gateway";
