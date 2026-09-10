@@ -24,6 +24,7 @@ import { nativeEventBounds } from "../../kit/schedule/recurrence";
 import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
+import { guestOptions } from "./agenda-guests";
 
 type Scope = "occurrence" | "future" | "series";
 
@@ -120,14 +121,8 @@ export default function AgendaEventEditor({
   const [saving, setSaving] = useState(false);
 
   const isRecurring = Boolean(rrule) || event.isRecurrenceInstance;
-  const partyOptions = useMemo(
-    () =>
-      parties.map((party) => ({
-        id: String(party["party_id"]),
-        name: String(party["display_name"] ?? party["name"] ?? "Person"),
-      })),
-    [parties]
-  );
+  // People only — the enrichment runners are parties too (#1015).
+  const partyOptions = useMemo(() => guestOptions(parties), [parties]);
 
   const submit = async (): Promise<void> => {
     if (!summary.trim()) return;

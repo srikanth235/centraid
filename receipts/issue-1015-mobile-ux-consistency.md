@@ -61,3 +61,19 @@ Files:
 - `apps/mobile/src/apps/notes/NotesHome.styles.ts` — `back` / `backLabel`.
 - `apps/mobile/src/apps/notes/notes-band.ts` — a notebook shelf lights `books`.
 - `apps/mobile/src/apps/notes/notes-band.test.ts` — the superseded assertion replaced.
+
+### Lane APPS-A — slice 2: Agenda clears the notch, and a guest is a person (B11 / B12)
+
+Closes audit `agenda/findings.md#1` and `#2`, both blockers.
+
+Agenda was the one app in the product that put the top inset on the BODY and left `VaultBar` above it, so the vault name and the gateway drew inside the status bar — the Search and New-event controls sat entirely under the clock — while the inset that should have cleared the notch opened a dead band between the bar and the title. The inset moves to the frame, where Tasks, Notes, Photos and the shell already carry it.
+
+`core_party` holds five kinds and the Agenda query has always selected `kind`; both guest pickers mapped every row to a chip regardless. A new event therefore offered "Photo OCR", "Face recognition", "Image embeddings", "Text embeddings", "Transcript", "Document text", "Place names" and the "Family" group as guests — eight of eighteen chips were the vault's own enrichment runners, and tapping one wrote a real attendee row. One pure `guestOptions` now answers for both forms: people only, named by display name, ordered by the sort name the vault keeps for exactly this.
+
+Files:
+
+- `apps/mobile/src/apps/agenda/agenda-guests.ts` (new) — `guestOptions`, `GUEST_KIND`.
+- `apps/mobile/src/apps/agenda/agenda-guests.test.ts` (new) — the runners, the group, the org and the animal are not offered; sort name orders; an id-less row is dropped.
+- `apps/mobile/src/apps/agenda/AgendaHome.tsx` — the frame is the `TopSafeArea`; the body is a plain view.
+- `apps/mobile/src/apps/agenda/AgendaCreateModal.tsx`, `AgendaEventEditor.tsx` — both pickers read `guestOptions`.
+- `apps/mobile/src/apps/agenda/AgendaHome.test.tsx` — a claim that the frame, not a wrapper below the bar, owns the top inset.

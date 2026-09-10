@@ -8,7 +8,7 @@
 // what the `DateTimeField` recipe lowers to on this seat.
 
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
@@ -17,6 +17,7 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
 import { radii, t, useTheme } from "../../kit/theme";
+import { guestOptions } from "./agenda-guests";
 
 /** The `propose` payload, in the shape the native write path takes. The
  *  vault's own input schema (app.json) is the contract; this is the local
@@ -50,6 +51,8 @@ export default function AgendaCreateModal({
   const [durationHours, setDurationHours] = useState(1);
   const [calendarId, setCalendarId] = useState(defaultCalendarId);
   const [guests, setGuests] = useState<Set<string>>(() => new Set());
+  // People only — the enrichment runners are parties too (#1015).
+  const guestChoices = useMemo(() => guestOptions(parties), [parties]);
   const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -202,11 +205,7 @@ export default function AgendaCreateModal({
 
           <Text style={[styles.label, { color: colors.textSoft }]}>Guests</Text>
           <View style={styles.chipRow}>
-            {parties.map((party) => {
-              const id = String(party["party_id"] ?? "");
-              const name = String(
-                party["display_name"] ?? party["name"] ?? "Person"
-              );
+            {guestChoices.map(({ id, name }) => {
               const on = guests.has(id);
               return (
                 <Pressable

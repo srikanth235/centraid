@@ -288,11 +288,16 @@ export default function AgendaHome({
   return (
     // There is one page for the shell and every app in it — no per-app surface
     // tone (docs/traps/design-tokens.md).
-    <View style={[styles.frame, { backgroundColor: colors.bg }]}>
+    // The inset belongs to the FRAME, not to the body: it is the vault lockup
+    // that has to clear the notch, and Agenda was the one app insetting below
+    // it, so the bar drew under the clock and the battery while a dead band
+    // opened between the bar and the title (#1015, audit agenda/findings#1).
+    // Tasks, Notes, Photos and the shell all inset the frame.
+    <TopSafeArea style={[styles.frame, { backgroundColor: colors.bg }]}>
       {/* The vault lockup on every route (see `VaultBar`). This surface hosts
           its own band rather than a shared frame, so it mounts the bar. */}
       <VaultBar />
-      <TopSafeArea style={styles.body}>
+      <View style={styles.body}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={[styles.title, { color: colors.text }]}>Agenda</Text>
@@ -383,7 +388,7 @@ export default function AgendaHome({
           }
           renderItem={renderDay}
         />
-      </TopSafeArea>
+      </View>
 
       <OptionSheet
         visible={moreOpen}
@@ -461,7 +466,7 @@ export default function AgendaHome({
         // `navigate` pushes a second Home on React Navigation 7.
         onHome={() => navigation.popTo("Home")}
       />
-    </View>
+    </TopSafeArea>
   );
 }
 

@@ -17,6 +17,7 @@
 
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
+import { StyleSheet } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
@@ -100,6 +101,19 @@ function litTabs(
 describe("Agenda, on the real React Native host tree", () => {
   beforeEach(() => {
     replicaRows.byEntity.clear();
+  });
+
+  it("insets the FRAME, so the vault lockup clears the notch (#1015)", () => {
+    // Agenda was the one app that inset the BODY and left `VaultBar` above it,
+    // so the vault name and the gateway drew under the clock and the battery
+    // while a dead band opened between the bar and the title
+    // (audit agenda/findings#1). The inset is zero off-device — this tier may
+    // not depend on a notch — so what is asserted is WHICH element owns the
+    // top inset: the frame, above the bar, not a wrapper below it.
+    const root = mountAgenda().toJSON();
+    const style = (Array.isArray(root) ? root[0] : root)?.props["style"];
+    const flat = StyleSheet.flatten(style) as Record<string, unknown>;
+    expect(Object.hasOwn(flat, "paddingTop")).toBe(true);
   });
 
   it("lights exactly one band place and moves it on a real press", () => {
