@@ -7,17 +7,15 @@ import {
 } from "@centraid/client/capture";
 import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 
-import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
-import Tappable from "../kit/components/Tappable";
-import TopSafeArea from "../kit/components/TopSafeArea";
 import { useSeatPages } from "../kit/hooks/useSeatPages";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../kit/replica/write-outcome";
-import { family, useTheme, radii, t } from "../kit/theme";
+import { PushedPage } from "../kit/rooms";
+import { family, pageMargin, radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { authHeader } from "../lib/gateway";
 import type { NativeWriteResult } from "../lib/replica/native-session";
@@ -27,6 +25,7 @@ import {
   CAPTURE_GROUPS,
   CAPTURE_VAULT,
 } from "./capture-queries";
+import { useShellParent } from "./shell-places";
 
 const KINDS: CaptureKind[] = ["task", "expense", "note", "event"];
 
@@ -35,6 +34,7 @@ export default function CaptureScreen({
   route,
 }: CaptureScreenProps): React.JSX.Element {
   const { colors } = useTheme();
+  const backTo = useShellParent();
   const { gatewayBase, session } = useReplica();
   const initial = route.params?.text ?? "";
   const [text, setText] = useState(initial);
@@ -162,29 +162,15 @@ export default function CaptureScreen({
   };
 
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <View style={styles.header}>
-        <Tappable
-          accessibilityRole="button"
-          accessibilityLabel="Close quick capture"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="x" size={24} color={colors.text} />
-        </Tappable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.navigate("Scan")}
-          style={[styles.previewButton, { borderColor: colors.lineStrong }]}
-        >
-          <Text style={[styles.previewText, { color: colors.text }]}>
-            Scan with camera
-          </Text>
-        </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>
-          Quick capture
-        </Text>
-        <View style={styles.headerGap} />
-      </View>
+    <PushedPage
+      backTo={backTo}
+      onBack={() => navigation.goBack()}
+      secondary={{
+        label: "Scan with camera",
+        onPress: () => navigation.navigate("Scan"),
+      }}
+      title="Quick capture"
+    >
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.help, { color: colors.textSoft }]}>
           Centraid routes obvious captures offline, and asks the local harness
@@ -336,7 +322,7 @@ export default function CaptureScreen({
           </>
         ) : null}
       </ScrollView>
-    </TopSafeArea>
+    </PushedPage>
   );
 }
 
@@ -423,7 +409,7 @@ function withoutStartsAt(preview: CapturePreview): CapturePreview {
 const styles = StyleSheet.create({
   choice: { borderRadius: radii.lg, borderWidth: 1, padding: 11 },
   choices: { gap: 8 },
-  content: { gap: 14, padding: 20, paddingBottom: 60 },
+  content: { gap: spacing[4], padding: pageMargin, paddingBottom: spacing[6] },
   editor: {
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -435,13 +421,6 @@ const styles = StyleSheet.create({
   },
   field: { gap: 7 },
   fieldLabel: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 56,
-    paddingHorizontal: 18,
-  },
-  headerGap: { width: 24 },
   help: {
     ...t("body"),
   },
@@ -472,11 +451,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: radii.lg,
     borderWidth: 1,
-    padding: 12,
+    padding: spacing[3],
   },
   previewText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   review: { fontFamily: family.sansMedium, fontSize: t("control").fontSize },
-  safe: { flex: 1 },
   save: {
     alignItems: "center",
     borderRadius: radii.lg,
@@ -484,10 +462,4 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   saveText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
-  title: {
-    flex: 1,
-    fontFamily: family.sansMedium,
-    fontSize: t("title").fontSize,
-    textAlign: "center",
-  },
 });

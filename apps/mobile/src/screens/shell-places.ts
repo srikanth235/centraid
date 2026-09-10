@@ -20,6 +20,7 @@ import type { PlaceRef } from "../kit/rooms";
 const SHELL_TITLES: Readonly<Record<string, string>> = Object.freeze({
   Approvals: "Notifications",
   BackupHealth: "Backup health",
+  Home: "Home",
   PhoneStorage: "On this phone",
   SettingsHome: "Settings",
   Sharing: "Sharing",

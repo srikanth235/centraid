@@ -1,35 +1,11 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
-import Tappable from "../kit/components/Tappable";
-import { family, radii, t } from "../kit/theme";
+import { family, pageMargin, radii, spacing, t } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 
 export { parseCard } from "@centraid/client/capture";
-
-export function CloseHeader({
-  colors,
-  onClose,
-}: {
-  colors: ThemeColors;
-  onClose: () => void;
-}): React.JSX.Element {
-  return (
-    <View style={styles.header}>
-      <Tappable
-        accessibilityRole="button"
-        accessibilityLabel="Close scan"
-        onPress={onClose}
-      >
-        <Icon name="x" size={24} color={colors.text} />
-      </Tappable>
-      <Text style={[styles.title, { color: colors.text }]}>Scan & review</Text>
-      <View style={styles.headerGap} />
-    </View>
-  );
-}
 
 export function PrimaryButton({
   label,
@@ -152,22 +128,15 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: radii.pill,
     borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
   },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  content: { gap: 14, padding: 20, paddingBottom: 60 },
+  content: { gap: spacing[4], padding: pageMargin, paddingBottom: spacing[6] },
   destination: { borderRadius: radii.lg, borderWidth: 1, padding: 11 },
   destinationGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   field: { gap: 7 },
   fieldLabel: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 56,
-    paddingHorizontal: 18,
-  },
-  headerGap: { width: 24 },
   help: {
     ...t("body"),
   },
@@ -188,13 +157,6 @@ const styles = StyleSheet.create({
   permission: { flex: 1, justifyContent: "center", padding: 28 },
   primary: { alignItems: "center", borderRadius: radii.lg, padding: 14 },
   primaryText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
-  safe: { flex: 1 },
-  title: {
-    flex: 1,
-    fontFamily: family.sansMedium,
-    fontSize: t("title").fontSize,
-    textAlign: "center",
-  },
   total: { fontFamily: family.sansMedium, fontSize: t("reading").fontSize },
 });
 

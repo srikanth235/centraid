@@ -45,6 +45,10 @@ export interface PushedPageProps {
   error?: RoomError;
   empty?: RoomEmpty;
   children?: React.ReactNode;
+  /** The modals this page owns; siblings of the body, never inside it. */
+  overlay?: React.ReactNode;
+  /** For the end-to-end flows that name a page by id, not by its title. */
+  testID?: string;
 }
 
 /** The back control: a chevron and the parent's real name, spoken together. */
@@ -86,13 +90,15 @@ export default function PushedPage({
   error,
   empty,
   children,
+  overlay,
+  testID,
 }: PushedPageProps): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
   const bandState = bandStateFor(selection);
   const selecting = !bandState.interactive;
   return (
-    <TopSafeArea style={[styles.room, ink]}>
+    <TopSafeArea style={[styles.room, ink]} testID={testID}>
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (
@@ -121,6 +127,7 @@ export default function PushedPage({
         <SelectionActions selection={selection} />
       ) : null}
       <View>{band?.(bandState)}</View>
+      {overlay}
     </TopSafeArea>
   );
 }
