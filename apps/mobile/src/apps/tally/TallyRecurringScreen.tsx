@@ -60,11 +60,7 @@ export default function TallyRecurringScreen({
   const due = dueNext(templates, vault.now);
 
   return (
-    <TallyScreen
-      current="more"
-      shelf={RECURRING}
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={RECURRING} onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Section
           label={RECURRING_SECTIONS.templates}

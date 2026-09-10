@@ -147,11 +147,7 @@ export default function TallyFriendScreen({
   })();
 
   return (
-    <TallyScreen
-      current="balances"
-      shelf={FRIEND}
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={FRIEND} onBack={() => navigation.goBack()}>
       {body}
     </TallyScreen>
   );

@@ -4,6 +4,9 @@
 // (`shelves.shelfLabel`) and meta (`route-copy.moreMeta`), so the sheet cannot
 // drift from what the desktop rail calls the same surfaces.
 //
+// The room is `SheetRoom` (#1015): grabber, the noun in the title, one quiet
+// way out. The close glyph is gone — the room owns leaving.
+//
 // LENSES AND ACTS, NEVER PLACES. The four places are in the band; what is here
 // is Recurring, Spending, Search, Trash and Export. Four of them are routes on
 // this phone and one is not — Export's door is beside the gateway
@@ -11,18 +14,17 @@
 // teaches that Export is broken rather than that it is elsewhere.
 
 import React, { useMemo } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import {
   MORE_FOOT,
   MORE_TITLE,
-  VERBS,
 } from "@centraid/blueprints/apps/tally/view-copy";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
+import { SheetRoom } from "../../kit/rooms";
+import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { TALLY_MORE_ROWS } from "./tally-band";
 import type { TallyMoreRowKey } from "./tally-band";
@@ -42,45 +44,19 @@ export default function TallyMoreSheet({
   onSelect,
 }: TallyMoreSheetProps): React.JSX.Element {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={VERBS.close}
-        onPress={onClose}
-        style={[styles.scrim, { backgroundColor: colors.scrim }]}
-      />
-      <View
-        style={[styles.sheet, { paddingBottom: insets.bottom + spacing[3] }]}
-        accessibilityViewIsModal
-      >
-        <View style={styles.head}>
-          <Text style={styles.headTitle}>{MORE_TITLE}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={VERBS.close}
-            onPress={onClose}
-            style={styles.closeButton}
-          >
-            <Icon name="X" size={16} color={colors.text} />
-          </Pressable>
-        </View>
+    <SheetRoom onClose={onClose} title={MORE_TITLE} visible={visible}>
+      <View>
         {TALLY_MORE_ROWS.map((row) => (
           <Pressable
-            key={row.key}
-            accessibilityRole="button"
             accessibilityLabel={`${row.label}. ${row.meta}`}
+            accessibilityRole="button"
+            key={row.key}
             onPress={() => onSelect(row.key)}
             style={styles.row}
           >
-            <Icon name={row.icon} size={16} color={colors.textFaint} />
+            <Icon color={colors.textFaint} name={row.icon} size={16} />
             <Text style={styles.rowLabel}>{row.label}</Text>
             <Text style={styles.rowMeta}>
               {row.reach === "here" ? row.meta : ELSEWHERE}
@@ -89,36 +65,19 @@ export default function TallyMoreSheet({
         ))}
         <Text style={styles.foot}>{MORE_FOOT}</Text>
       </View>
-    </Modal>
+    </SheetRoom>
   );
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    closeButton: {
-      alignItems: "center",
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      height: 34,
-      justifyContent: "center",
-      width: 34,
-    },
     foot: {
       ...t("mono"),
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       color: colors.textFaint,
-      paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
-    head: {
-      alignItems: "center",
-      flexDirection: "row",
-      paddingBottom: spacing[3],
-      paddingHorizontal: spacing[4],
-    },
-    headTitle: { ...t("smallStrong"), color: colors.text, flex: 1 },
     row: {
       alignItems: "center",
       borderTopColor: colors.line,
@@ -126,22 +85,8 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: spacing[3],
       minHeight: 44,
-      paddingHorizontal: spacing[4],
       paddingVertical: spacing[2],
     },
     rowLabel: { ...t("small"), color: colors.text, flex: 1 },
     rowMeta: { ...t("mono"), color: colors.textFaint },
-    scrim: { ...StyleSheet.absoluteFill },
-    sheet: {
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderTopLeftRadius: radii.lg,
-      borderTopRightRadius: radii.lg,
-      borderWidth: borders.hairline,
-      bottom: 0,
-      insetInlineEnd: 0,
-      insetInlineStart: 0,
-      paddingTop: spacing[2],
-      position: "absolute",
-    },
   });
