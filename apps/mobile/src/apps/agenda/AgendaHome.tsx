@@ -42,7 +42,7 @@ import { useTheme } from "../../kit/theme";
 import {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
   BIRTHDAY_LEADS,
-  leadLabel,
+  birthdayLeadPhrase,
 } from "../../lib/birthday-notifications";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { AgendaScreenProps } from "../../navigation";
@@ -368,7 +368,7 @@ export default function AgendaHome({
               {
                 id: BIRTHDAY_LEAD_ROW,
                 label: "Birthday reminder",
-                detail: `Inner circle · ${leadLabel(leadDays)} ahead`,
+                detail: `Inner circle · ${birthdayLeadPhrase(leadDays)}`,
               },
             ]}
             onSelect={(id) => {

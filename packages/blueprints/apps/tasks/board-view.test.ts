@@ -119,8 +119,19 @@ describe("denial is data", () => {
       { key: "scope", label: DENIED.scope, value: TASKS_SCOPE },
       { key: "when", label: DENIED.when, value: "2026-08-28 09:00" },
     ]);
+    expect(deniedFacts({ scope: null, when: null })).toStrictEqual([]);
+  });
+
+  it("has no row for the refusal string itself", () => {
+    // #1015, S14 — R-A-18. What reached that row on the phone was
+    // `caughtError.message`: a transport sentence or a SQL fragment, labelled
+    // "Receipt" because the gateway seat calls a vault refusal one.
     expect(
-      deniedFacts({ receipt: null, scope: null, when: null })
-    ).toStrictEqual([]);
+      deniedFacts({ scope: TASKS_SCOPE, when: "2026-08-28 09:00" }).map(
+        (fact) => fact.key
+      )
+    ).toStrictEqual(["scope", "when"]);
+    // The label itself stays: the gateway seat's own gate still prints it.
+    expect(DENIED.receipt).toBe("Receipt");
   });
 });
