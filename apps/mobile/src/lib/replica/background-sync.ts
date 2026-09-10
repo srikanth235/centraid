@@ -20,7 +20,7 @@ import { NativeVaultChangeFeed } from "./native-change-feed";
 import { nativeReplicaDigest } from "./native-hash";
 import { NativeSeat } from "./native-seat";
 import type { NativeSeatPort } from "./native-seat";
-import { createNativeReplicaSession } from "./native-session";
+import { createNativeReplicaSession } from "./native-session-open";
 import { flushNativeTraces } from "./native-trace";
 import { SeatLeaseHeldError } from "./seat-lease-held-error";
 

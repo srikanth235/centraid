@@ -26,8 +26,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openNodeNativeSeat } from "./native-seat.test-fixtures";
-import { createNativeReplicaSession } from "./native-session";
 import type { NativeChangeFeed, NativeReplicaSession } from "./native-session";
+import { createNativeReplicaSession } from "./native-session-open";
 
 const VAULT_SCHEMA = `
   CREATE TABLE IF NOT EXISTS schedule_task (

@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { SeatAuthorizationRevokedError } from "./seat-authorization-revoked-error.js";
 import { SeatBootstrapNoRoomError } from "./seat-bootstrap-no-room-error.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import { SeatDriftParkedError } from "./seat-drift-parked-error.js";
@@ -146,5 +147,25 @@ describe("a closed loop (#1014, P17)", () => {
     loop.close();
     await expect(loop.sync()).resolves.toBeUndefined();
     expect(started).toBe(0);
+  });
+});
+
+describe("a revoked device (#1014, X8)", () => {
+  it("rejects rather than swallowing, so the host can purge", async () => {
+    let started = 0;
+    const loop = new SeatSyncLoop({
+      sync: () => {
+        started += 1;
+        return Promise.reject(new SeatAuthorizationRevokedError("vault-1"));
+      },
+    });
+    // Purge-on-revocation used to fire only from the intent DRAIN, so a seat
+    // that only reads kept its whole copy of a vault the gateway had refused.
+    await expect(loop.sync()).rejects.toBeInstanceOf(
+      SeatAuthorizationRevokedError
+    );
+    // And no follow-up: a retry fails identically, forever.
+    await Promise.resolve();
+    expect(started).toBe(1);
   });
 });

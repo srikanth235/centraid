@@ -14,6 +14,7 @@
 // coalescing has, for the same reason, and it is here rather than in each host
 // because a host that got it wrong would look correct.
 
+import { isSeatAuthorizationRevoked } from "./seat-authorization-revoked-error.js";
 import { isSeatTerminalError } from "./seat-drift-parked-error.js";
 import type { SeatWatermark } from "./watermark.js";
 
@@ -51,13 +52,15 @@ export class SeatSyncLoop {
   /**
    * Catch up, or join the catch-up already running.
    *
-   * Rejects for exactly two failures and swallows every other one. An outage
+   * Rejects for exactly three failures and swallows every other one. An outage
    * is not an error a screen can act on — a seat that could not reach the
    * gateway is a seat with a slightly older copy, which is the normal state of
-   * the thing. Out of room and a parked drift ARE (#1014, C13, C14): both fail
-   * identically on every retry, and the host has a state to show for each.
-   * Swallowing them made the phone's storage-full park unreachable code
-   * (`native-session.ts`) and left the drift re-bootstrap loop unbounded.
+   * the thing. Out of room, a parked drift and a REVOKED device ARE (#1014,
+   * C13, C14, X8): all three fail identically on every retry, and the host has
+   * a state to show for each. Swallowing them made the phone's storage-full
+   * park unreachable code (`native-session.ts`), left the drift re-bootstrap
+   * loop unbounded, and let a read-only seat keep a copy the gateway had
+   * already refused it.
    */
   /**
    * THE HOST IS GONE (#1014, P17).
@@ -82,7 +85,11 @@ export class SeatSyncLoop {
     let terminal = false;
     const run = this.seat.sync().catch((error: unknown) => {
       this.options.onError?.(error);
-      if (!isSeatTerminalError(error)) return undefined;
+      // REVOCATION STOPS THE LOOP TOO (#1014, X8). It fails identically on
+      // every retry and the host has a state to show for it — one that is not
+      // "try again" but "this copy must go".
+      if (!isSeatTerminalError(error) && !isSeatAuthorizationRevoked(error))
+        return undefined;
       terminal = true;
       throw error;
     });

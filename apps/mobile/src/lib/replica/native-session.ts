@@ -28,9 +28,9 @@ import {
   admissionDuringRebootstrap,
   AdmissionWaiters,
   drainIntents,
-  IntentQueue,
   InvalidationBus,
   isAuthorizationError,
+  isSeatAuthorizationRevoked,
   postReplicaIntent,
   replicaIntentInvalidations,
   ReplicaProtocolError,
@@ -38,9 +38,11 @@ import {
 } from "@centraid/client/replica/native";
 import type {
   GatewayAuth,
+  IntentQueue,
   OptimisticMutation,
   ReplicaFetcher,
   ReplicaIdFactory,
+  ReplicaIntent,
   ReplicaInvalidation,
   ReplicaSearchWireResult,
   ReplicaValue,
@@ -113,6 +115,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #scope: VaultSource | undefined;
   readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
   readonly #onStorageFull: ((error: unknown) => void) | undefined;
+  readonly #onAuthorizationRevoked: (() => void) | undefined;
   readonly #writes: NativeWriteRail;
   /**
    * A re-bootstrap is being prepared or is running (#996 R23/R25).
@@ -167,6 +170,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#intentIds = new MobileIntentIds(options.idFactory);
     this.#onGatewayOutcome = options.onGatewayOutcome;
     this.#onStorageFull = options.onStorageFull;
+    this.#onAuthorizationRevoked = options.onAuthorizationRevoked;
     this.#waitingOnLabel = options.origin
       ? waitingOnLabel(options.origin.displayName)
       : undefined;
@@ -430,6 +434,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.#storageFullError = error;
         this.#onStorageFull?.(error);
       }
+      // #1014 X7/X8: the phone used to answer a refusal by re-fetching the
+      // vault from the gateway that had just revoked it, forever.
+      if (isSeatAuthorizationRevoked(error)) this.#onAuthorizationRevoked?.();
       return false;
     }
   }
@@ -465,7 +472,20 @@ export class NativeReplicaSession implements MobileReplicaSession {
     await this.#seat.close();
   }
 
-  /** Membership revocation: close and delete this scope's file and queue. */
+  /** Stop the drain and wait for what is in flight, before the outbox is read
+   *  for the revocation export (#1014, C25). */
+  quiesce(): Promise<void> {
+    this.detach();
+    return (this.#drainPromise ?? Promise.resolve()).catch(() => undefined);
+  }
+
+  /** Everything this seat's queue still holds — the revocation export reads it. */
+  listIntents(): Promise<ReplicaIntent[]> {
+    return this.#queue.list();
+  }
+
+  /** Membership revocation: delete this scope's file and queue. `quiesce()`
+   *  and the unsent export run FIRST, in `revoke-scope.ts` (R-1014-12). */
   async purge(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -539,10 +559,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
       },
       appliedCommitSeq: () => this.#seat.watermark()?.appliedCommitSeq,
       isAuthorizationError,
-      onAuthorizationRevoked: () => {
-        this.queueEveryoneWaiting("saved locally; the session is reconnecting");
-        this.requireBootstrap();
-      },
+      // #1014 X7: no requeue-and-re-bootstrap loop against a 403.
+      onAuthorizationRevoked: () => this.#onAuthorizationRevoked?.(),
       scheduleRetry: () => this.scheduleRetry(),
       onGatewayOutcome: (reachable) => {
         if (reachable) this.#retryBackoff.reset();
@@ -596,24 +614,4 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#closed)
       throw new ReplicaProtocolError("Replica session is closed");
   }
-}
-
-/** The seat's file holds the queue; both are opened before the session. */
-export async function createNativeReplicaSession(
-  options: CreateNativeReplicaSessionOptions
-): Promise<NativeReplicaSession> {
-  // Loaded only when the caller supplies neither, so `node:test` runs (which
-  // inject both) never resolve expo-crypto's native module.
-  let digest = options.digest;
-  let idFactory = options.idFactory;
-  if (!digest || !idFactory) {
-    const { nativeReplicaDigest, nativeReplicaIdFactory } =
-      await import("./native-hash");
-    digest ??= nativeReplicaDigest;
-    idFactory ??= nativeReplicaIdFactory;
-  }
-  const queue = new IntentQueue(options.seat.outbox(), { digest, idFactory });
-  const session = new NativeReplicaSession({ ...options, queue, idFactory });
-  await session.start();
-  return session;
 }

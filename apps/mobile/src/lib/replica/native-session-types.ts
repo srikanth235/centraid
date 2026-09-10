@@ -106,6 +106,17 @@ export interface CreateNativeReplicaSessionOptions {
   idFactory?: ReplicaIdFactory;
   /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
+  /**
+   * THE GATEWAY REFUSED THIS DEVICE (#1014, X7/X8; R-1014-12).
+   *
+   * Raised from the seat's own log door (a read-only seat never touches the
+   * drain) and from the drain, and answered by the mount the same way the
+   * browser answers it: quiesce, export what is unsent, purge. Absent leaves a
+   * session that reports the refusal and does nothing with it, which is what
+   * every phone did — it re-bootstrapped against a gateway that had revoked
+   * it, forever.
+   */
+  onAuthorizationRevoked?: () => void;
   onGatewayOutcome?: (reachable: boolean) => void;
   /**
    * Who a queued write into THIS vault may wait for. Set only where

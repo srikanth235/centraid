@@ -33,6 +33,7 @@ import { OnlineOnlyError } from "../errors.js";
 import type { IntentRecordStore } from "../intent-record-store.js";
 import { ReplicaProtocolError } from "../replica-protocol-error.js";
 import type { SeatBootstrapResult } from "./bootstrap.js";
+import { SeatAuthorizationRevokedError } from "./seat-authorization-revoked-error.js";
 import type { SeatChannel } from "./seat-channel.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import {
@@ -279,6 +280,16 @@ export class SeatLoop {
       throw new SeatRebootstrapRequiredError(
         String(body["reason"] ?? "unknown")
       );
+    // REVOCATION IS NOT A TRANSPORT FAILURE (#1014, X8). Same two answers the
+    // intent transport already recognises (`shell-transport.ts`): a 401, or a
+    // 403 naming `replica_device_not_enrolled`. A read-only seat never touches
+    // the drain, so this was the only place it could ever learn.
+    if (
+      response.status === 401 ||
+      (response.status === 403 &&
+        body["error"] === "replica_device_not_enrolled")
+    )
+      throw new SeatAuthorizationRevokedError(this.options.vaultId);
     if (!response.ok) {
       throw new Error(
         `seat log door answered ${response.status}: ${String(body["error"] ?? "")}`

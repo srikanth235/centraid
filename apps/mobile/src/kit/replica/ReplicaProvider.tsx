@@ -22,8 +22,8 @@ import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
 import { NativeMultiplexChangeFeed } from "../../lib/replica/native-multiplex-change-feed";
-import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import { createNativeReplicaSession } from "../../lib/replica/native-session-open";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { describeSyncError } from "../../lib/replica/seat-sync-error";
 import {
@@ -67,7 +67,7 @@ import {
   loadRevokedNotices,
   settledReachability,
 } from "./replica-status";
-import { reclaimRevokedReplica, reclaimRevokedScope } from "./revoke-scope";
+import { revokedScopeReclaimer } from "./revoke-scope";
 
 export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
@@ -146,11 +146,9 @@ export function ReplicaProvider({
    * THE PREVIOUS MOUNT'S CLOSE, AS A PROMISE TO WAIT ON (#1014, P12).
    *
    * React's cleanup is synchronous, so teardown could only ever FIRE the
-   * closes — `void session?.close()` — and a remount on the same `mountKey`
-   * reopened the same file name while the old close was in flight. Per P1 that
-   * is the SAME expo-sqlite connection object, so the old `closeSync()` lands
-   * on the new handle and every read after it throws. Teardown parks its work
-   * here; the next mount awaits it.
+   * closes and a remount on the same `mountKey` reopened the file while the
+   * old close was in flight — per P1 the SAME expo-sqlite connection object,
+   * so the old `closeSync()` landed on the new handle.
    */
   const teardown = useRef<Promise<void>>(Promise.resolve());
 
@@ -278,6 +276,20 @@ export function ReplicaProvider({
           initial: await loadRevokedNotices(AsyncStorage, identity.gatewayId),
           publish,
         });
+        // Every way a revocation reaches this mount goes through here (#1014,
+        // X7/X8) — see `revoke-scope.ts`.
+        const revokeOpenScope = revokedScopeReclaimer({
+          gatewayId: identity.gatewayId,
+          openVaultId: openScope.vaultId,
+          scopes,
+          session: () => session,
+          note: revoked.note,
+          noteUnsent: revoked.noteUnsent,
+          forgetBootstrap: bootstrap.forget,
+          forgetFreshness: freshness.forget,
+          bootstrapProgress: bootstrap.current,
+          publish,
+        });
         multiplex = new NativeMultiplexChangeFeed({
           gatewayAuth: {
             baseUrl: identity.auth.baseUrl,
@@ -288,20 +300,7 @@ export function ReplicaProvider({
           onScopeUpdated: updateScopeFreshness,
           onScopeRevoked: (vaultId) => {
             revokedScopeIds.add(vaultId);
-            void reclaimRevokedScope(
-              {
-                gatewayId: identity.gatewayId,
-                openVaultId: openScope.vaultId,
-                scopes,
-                session: () => session,
-                note: revoked.note,
-                forgetBootstrap: bootstrap.forget,
-                forgetFreshness: freshness.forget,
-                bootstrapProgress: bootstrap.current,
-                publish,
-              },
-              vaultId
-            ).catch(() => undefined);
+            void revokeOpenScope(vaultId);
           },
         });
         // THE FILE BEFORE THE SESSION (#996, W5): the outbox is a table in it,
@@ -359,14 +358,19 @@ export function ReplicaProvider({
           // what ran out.
           onStorageFull: () =>
             publish((value) => ({ ...value, storageFull: true })),
+          // The seat door's or the drain's refusal, answered exactly as the
+          // feed's revoked frame is (#1014, X7/X8; R-1014-12).
+          onAuthorizationRevoked: () => {
+            revokedScopeIds.add(openScope.vaultId);
+            void revokeOpenScope(openScope.vaultId);
+          },
         });
         looseSeats.splice(looseSeats.indexOf(openedSeat), 1);
         seat = openedSeat;
         publish((value) => ({ ...value, seat: openedSeat }));
-        if (revokedScopeIds.has(openScope.vaultId)) {
-          await session.purge();
-          reclaimRevokedReplica(openScope);
-        }
+        // Same entry point (#1014, X7): revoked mid-open still gets the export.
+        if (revokedScopeIds.has(openScope.vaultId))
+          await revokeOpenScope(openScope.vaultId);
         const liveScopes = scopes.filter(
           (scope) => !revokedScopeIds.has(scope.vaultId)
         );
@@ -551,8 +555,7 @@ export function ReplicaProvider({
         reachabilityWork = coalesceWork(async (signal) => {
           const network =
             latestNetwork ?? (await Network.getNetworkStateAsync());
-          // THE MOUNT MAY HAVE GONE WHILE THAT AWAITED (#1014, P16): this pass
-          // writes a base and pulls on a session teardown has already closed.
+          // #1014 P16: this pass writes a base and pulls on a closed session.
           if (signal.aborted || cancelled) return;
           await refreshReachability(network, signal);
         }, NETWORK_FLAP_WINDOW_MS);
@@ -594,9 +597,8 @@ export function ReplicaProvider({
       networkSubscription?.remove();
       multiplex?.close();
       // AWAITED, IN ORDER, AND HANDED TO THE NEXT MOUNT (#1014, P12). The
-      // session owns the seat, so its close runs first; the loose seats are
-      // ones no session ever took. Cancel drops the freshness timer, not the
-      // stamps, so they are landed here too.
+      // session owns the seat, so its close runs first. Cancel drops the
+      // freshness timer, not the stamps, so they are landed here too.
       teardown.current = (async () => {
         await flushFreshness().catch(() => undefined);
         await session?.close().catch(() => undefined);
