@@ -161,6 +161,17 @@ Minting a share is not one of those offline writes. `tally.group` is v1's one ed
 
 Five changes made offline against one row execute in order, once each, when the radio returns ([#996](https://github.com/srikanth235/centraid/issues/996) R23). The edges are derived on the seat from what the outbox minted, the held dependents say "Waiting on an earlier change" rather than "failed", and a conflict raised by a second writer stops the head of the chain with both versions on the row and Retry/Discard beside it.
 
+**Every write states a base version, including the chained ones and the destructive ones** ([#1014](https://github.com/srikanth235/centraid/issues/1014) R18/R23/R24). The chain's _dependency_ and the write's _base_ are different facts and are derived separately:
+
+- `dependsOn` says this write may not run before that one. It comes from the ids the input names against the ids the outbox has minted.
+- The base version is the `row_version` the seat OBSERVED on the row, read from canonical rows only — the overlay is bypassed, so a queued edit never becomes its own base and a retry observes the row that rejected it.
+
+The one case with nothing to observe is a row only a queued predecessor will mint: the gateway has never seen it and never will, so the write names the predecessor (`{"$intent": …}`) instead of a version. Every other row — an existing photograph edited twice, a row being trashed — carries the number.
+
+The gateway then REBASES a chained write before checking it: the predecessors executed first and moved the row, so the child is compared against the version its parent produced (read out of the parent's durable outcome, ordered by commit position). A third party's edit landing between parent and child is still a conflict, which is the point.
+
+A base version is a `row_version`, never a log position. The two are different numbers in different units, and comparing one against the other is how an offline edit of a much-touched row used to come back "expected 432, found 2".
+
 Four intervals of that arc are measured on node against the production session and a real file — `mobile/durable-save`, `mobile/pending-render`, `mobile/restart-recovery` and `mobile/reconnect-drain` in `tests/journeys.json`, all at `none/ci-linux-x64-4c`. Every one is a LOWER BOUND on the phone: no network RTT, no flash, no render. The phone's own numbers are the `device-fixture/ci-android-emu` rows, which are `unmeasured` and name the Android airplane flow as their probe.
 
 ## Background work and push privacy

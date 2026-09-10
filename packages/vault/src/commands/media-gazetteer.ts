@@ -104,6 +104,20 @@ function setPlaceGazetteer(ctx: HandlerCtx): Record<string, unknown> {
         ...(input.snapshot === undefined ? {} : { snapshot: input.snapshot }),
         checked_at: ctx.now,
       };
+  // THIS BUMPS THE MEMBER'S `row_version` FOR A COLUMN THEY DID NOT EDIT
+  // (#1014, B11 — open). The command owns only `$.gazetteer` and never touches
+  // `name`, but the touch trigger on `core_place` cannot see that: it bumps on
+  // any UPDATE, and the gateway's conflict check is row-level
+  // (`routes/replica-intent-route.ts`). So a member's offline rename of this
+  // place is refused against a background write they cannot see, with no way
+  // to reconcile it.
+  //
+  // A COLUMN-LEVEL EXEMPTION CANNOT EXPRESS THIS: the derived data is a
+  // sub-document INSIDE `address_json`, which also holds the member's own
+  // address. The fix is the one #1014's R-1014-5 states — derived data is not
+  // replicated data — and it is a move, not a trigger clause: `$.gazetteer`
+  // belongs in a derived row keyed to the place, which needs a ladder rung and
+  // an ontology ruling rather than an edit here.
   ctx.db
     .prepare(
       `UPDATE core_place
