@@ -1,7 +1,7 @@
 import { pendingOverlayCopy } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import type { NativeWriteResult } from "../../lib/replica/native-session";
-import { postStatus } from "../components/status-line";
+import { postStatus, readStatus } from "../components/status-line";
 
 /** Where a conflicted write waits, and what can be done to it there. */
 const CONFLICT_ROUTE = "Open Pending changes to retry or discard.";
@@ -41,7 +41,18 @@ export function surfaceWriteOutcome(
   }
   if (result.status === "queued") {
     if (options.onQueued) options.onQueued();
-    else
+    // AN ACTIONABLE NOTE OUTRANKS NEWS (#1015, S3 — audit B3). There is one
+    // line, updated in place, with at most one inline action (DESIGN.md
+    // invariant 5), so "queue behind it" would need a second slot and "post it
+    // anyway" is what destroyed Tasks' own Undo: check-off posted
+    // `DONE + Undo`, the queued outcome of the very write that caused it
+    // landed a beat later, and the only door back was gone.
+    //
+    // The queued fact is therefore SUPPRESSED while an action is live, not
+    // deferred: it is not lost, because the same change is listed in Pending
+    // changes with its own reason, whereas an undo that has already been
+    // painted over cannot be recovered by anything the member can reach.
+    else if (!readStatus()?.action)
       postStatus(
         options.queuedMessage ??
           "Saved offline — it will sync when the gateway reconnects."
@@ -74,7 +85,10 @@ export function surfaceWriteOutcome(
   }
   if (result.status === "in-flight") {
     if (options.onInFlight) options.onInFlight();
-    else
+    // Same rank as queued above: this is news about the write the member just
+    // made, and it must not paint over the door back from it. A refusal or a
+    // failure still posts — those are not news, they are the answer.
+    else if (!readStatus()?.action)
       postStatus("Saving — the final status remains visible in sync status.");
     return true;
   }
