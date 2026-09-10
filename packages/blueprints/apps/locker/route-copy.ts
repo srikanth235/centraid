@@ -265,6 +265,12 @@ export const SEARCH_SCOPE = "titles, usernames and addresses";
 export const SEARCH_MATCHED = "matched the title, username or address";
 export const SEARCH_RESULTS = "Results";
 
+// The no-match state, in the routine register (#1015, S4). It names the SCOPE
+// again, because §6's exclusion is the likeliest reason a member found
+// nothing and the note above the results has scrolled away by then.
+export const SEARCH_NO_MATCH = "No match";
+export const SEARCH_NO_MATCH_BODY = `Nothing in this locker matched the ${SEARCH_SCOPE}. Note bodies are never searched.`;
+
 export const SEARCH_COPY: SearchStateCopy = {
   resting: {
     eyebrow: "Search",

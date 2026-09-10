@@ -13,7 +13,7 @@ import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
-import { borders, radii, t } from "../../kit/theme";
+import { borders, radii, spacing, t } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
 import { TILE_EMPTY_COPY } from "./springboard-policy";
 import {
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     borderRadius: radii.md,
     borderWidth: borders.hairline,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing[2],
     paddingVertical: 4,
   },
   chipLabel: { ...t("eyebrow") },

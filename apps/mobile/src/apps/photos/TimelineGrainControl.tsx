@@ -12,7 +12,7 @@ import {
   BAND_RADIUS,
 } from "../../kit/band-surface";
 import { Text } from "../../kit/components/NativeText";
-import { t, useTheme } from "../../kit/theme";
+import { pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { GRAIN_LABELS, TIMELINE_GRAINS } from "./timeline-grains";
 import type { TimelineGrain } from "./timeline-grains";
@@ -98,6 +98,10 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: BAND_RADIUS,
       borderWidth: BAND_BORDER,
       flexDirection: "row",
+      // A SEAM, not a rhythm step: this pairs with the `gap` above to hold
+      // the segments apart inside one plate. `@centraid/design`'s `subBase`
+      // names exactly this exception, but it is not re-exported through
+      // `kit/theme` — see the lane report (#1015, S10).
       gap: 2,
       overflow: "hidden",
       paddingHorizontal: 2,
@@ -107,6 +111,6 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       minHeight: SEGMENT_MIN_HEIGHT,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
   });

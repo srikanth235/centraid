@@ -6,6 +6,9 @@ import React, { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 
+import { PHOTOS_ERROR_EDIT_NOT_SAVED } from "@centraid/blueprints/apps/photos/shared-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
+
 import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
 import { buildCropGesture } from "./photo-edit-gestures";
@@ -126,9 +129,9 @@ export function PhotoEditor({
     try {
       await onSave({ crop: clampCrop(crop), flip, quarters, straighten });
     } catch (error) {
-      setFailure(
-        `The new photograph was not saved: ${error instanceof Error ? error.message : String(error)}`
-      );
+      // The noun and the retry word — never the engine's sentence (S14).
+      console.warn("[photos] edit save failed", error);
+      setFailure(`${PHOTOS_ERROR_EDIT_NOT_SAVED} ${RETRY_ACTION}`);
     } finally {
       setBusy(false);
     }

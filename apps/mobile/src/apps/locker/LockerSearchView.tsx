@@ -16,6 +16,8 @@ import type { ListRenderItemInfo } from "react-native";
 
 import {
   SEARCH_MATCHED,
+  SEARCH_NO_MATCH,
+  SEARCH_NO_MATCH_BODY,
   SEARCH_PLACEHOLDER,
   SEARCH_RESULTS,
 } from "@centraid/blueprints/apps/locker/route-copy";
@@ -23,9 +25,11 @@ import type { LockerRow as LockerRowData } from "@centraid/blueprints/apps/locke
 import { SEARCH_NOTE } from "@centraid/blueprints/apps/locker/view-copy";
 
 import Button from "../../kit/components/Button";
-import { Text, TextInput } from "../../kit/components/NativeText";
+import EmptyBlock from "../../kit/components/EmptyBlock";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import SectionBlock from "../../kit/components/SectionBlock";
-import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
+import { pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { LockerRow, lockerRowKey } from "./LockerRow";
 
@@ -53,19 +57,17 @@ export default function LockerSearchView(
 
   const head = (
     <View>
-      <View style={styles.field}>
-        <TextInput
-          accessibilityLabel={SEARCH_PLACEHOLDER}
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setTerm}
-          onSubmitEditing={() => props.onSearch(term)}
-          placeholder={SEARCH_PLACEHOLDER}
-          placeholderTextColor={colors.textFaint}
-          returnKeyType="search"
-          style={styles.input}
-          value={term}
-        />
+      <SearchField
+        onChangeText={setTerm}
+        onSubmit={props.onSearch}
+        placeholder={SEARCH_PLACEHOLDER}
+        value={term}
+      />
+      {/* Locker searches on a VERB, not as it types: the matching happens
+          server-side over fields the payload never returns, so every
+          keystroke would be a round trip. The return key and this button are
+          the same act. */}
+      <View style={styles.verbRow}>
         <Button label="Search" onPress={() => props.onSearch(term)} />
       </View>
 
@@ -88,6 +90,15 @@ export default function LockerSearchView(
       data={results ?? []}
       keyboardShouldPersistTaps="handled"
       keyExtractor={lockerRowKey}
+      ListEmptyComponent={
+        results === null ? null : (
+          <EmptyBlock
+            body={SEARCH_NO_MATCH_BODY}
+            routine
+            title={SEARCH_NO_MATCH}
+          />
+        )
+      }
       ListHeaderComponent={head}
       initialNumToRender={12}
       maxToRenderPerBatch={12}
@@ -99,28 +110,16 @@ export default function LockerSearchView(
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    field: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: spacing[2],
-      padding: spacing[4],
-    },
-    input: {
-      ...t("body"),
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      color: colors.text,
-      flex: 1,
-      minHeight: 44,
-      paddingHorizontal: spacing[3],
-    },
     note: {
       ...t("mono"),
       color: colors.textFaint,
       paddingBottom: spacing[3],
-      paddingHorizontal: spacing[4],
+      paddingHorizontal: pageMargin,
     },
     scroll: { paddingBottom: spacing[6] },
+    verbRow: {
+      alignItems: "flex-start",
+      paddingBottom: spacing[2],
+      paddingHorizontal: pageMargin,
+    },
   });

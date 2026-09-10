@@ -9,7 +9,7 @@ import { Image, Pressable, StyleSheet } from "react-native";
 import type { MapPin } from "@centraid/blueprints/apps/photos/place-map";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { pinLabel } from "./places-model";
 
@@ -79,7 +79,7 @@ const makeStyles = (colors: ThemeColors) =>
       bottom: 0,
       color: colors.onStage,
       overflow: "hidden",
-      paddingHorizontal: 4,
+      paddingHorizontal: spacing[1],
       position: "absolute",
       right: 0,
     },

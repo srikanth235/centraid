@@ -21,6 +21,7 @@ import {
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import type { PanelFact } from "../../kit/components/PanelBlock";
 import type { RowsBlockAction } from "../../kit/components/RowsBlock";
+import { formatRelative } from "../../kit/format";
 import { describeScopes } from "../../lib/decision-detail";
 import type {
   MobileNotice,
@@ -56,6 +57,7 @@ export {
   RETRY_ACTION as ERROR_RETRY,
   SKELETON_NOTE as LOADING_NOTE,
 } from "@centraid/client/surface-copy";
+
 export const ALWAYS_SUB =
   "Future writes matching this actor, verb and target send without stopping here.";
 export const RECONNECT_NOTE =
@@ -102,14 +104,11 @@ function parsed(iso: string | null | undefined): number | undefined {
 }
 
 export function agoPhrase(at: number, now: number): string {
-  const ago = now - at;
-  if (ago < MINUTE) return "just now";
-  if (ago < HOUR) return `${countWord(Math.round(ago / MINUTE), "minute")} ago`;
-  if (ago < DAY) return `${countWord(Math.round(ago / HOUR), "hour")} ago`;
-  return new Date(at).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "long",
-  });
+  // The seat's ONE relative register (`kit/format`, #1015 S8). This ladder
+  // was typed out twice, byte for byte, in `approvals-model` and
+  // `connectors-model`, and both said `10 September` where the rest of the
+  // product says `10 Sep`.
+  return formatRelative(new Date(at).toISOString(), now);
 }
 
 /** Nothing when the stamp is unreadable: an invented time on a consent surface

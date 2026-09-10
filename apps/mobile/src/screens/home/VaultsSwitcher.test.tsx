@@ -153,6 +153,8 @@ vi.mock(
     ({
       family: { sansMedium: "sans-medium" },
       radii: { lg: 12, md: 7 },
+      pageMargin: 18,
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
       t: () => ({ fontSize: 12 }),
       useTheme: () => ({
         colors: {

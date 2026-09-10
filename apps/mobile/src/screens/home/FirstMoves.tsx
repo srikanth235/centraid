@@ -21,7 +21,7 @@ import { radii } from "@centraid/design";
 
 import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
-import { borders, metrics, t, useTheme } from "../../kit/theme";
+import { borders, metrics, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { FirstMove } from "./first-moves";
 
@@ -182,7 +182,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: radii.md,
       justifyContent: "center",
       minHeight: metrics.control,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
     },
     btnPrimaryLabel: { ...t("control"), color: colors.textInv },
     btnSecondary: {
@@ -192,7 +192,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: metrics.control,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
     },
     btnSecondaryLabel: { ...t("control"), color: colors.textSoft },
     dayOneBody: { ...t("reading"), color: colors.textSoft, marginBottom: 24 },

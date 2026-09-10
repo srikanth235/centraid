@@ -18,7 +18,15 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
-import { borders, family, metrics, t, useTheme, radii } from "../../kit/theme";
+import {
+  borders,
+  family,
+  metrics,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { bandTabs } from "./band";
 import type { BandTab, BandTarget } from "./band";
@@ -180,13 +188,13 @@ const makeStyles = (colors: ThemeColors) =>
       overflow: "hidden",
       // Gutter on the tab, not the label, so the 44pt target is unchanged.
       paddingBottom: 3,
-      paddingHorizontal: 4,
+      paddingHorizontal: spacing[1],
       paddingTop: 7,
     },
     tabPressed: { backgroundColor: colors.bgPress },
     wrap: {
       flexDirection: "row",
-      paddingHorizontal: 4,
+      paddingHorizontal: spacing[1],
       // Floats (§G), never a flush bar. Ground is `bgElev`, not `bg` (page
       // colour does not float) and not `bgChrome` (sinks on dark). Edge is
       // `lineStrong`.

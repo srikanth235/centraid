@@ -33,6 +33,21 @@ export const PHOTOS_EMPTY_DUPLICATES =
 export const PHOTOS_SEARCH_PLACEHOLDER =
   "Search photographs, people, places, albums";
 
+// WHAT PHOTOS SAYS WHEN A WRITE DOES NOT LAND (#1015, S14).
+//
+// One noun per failure and the shared retry word — never the engine's own
+// sentence. A member who is told `AbortError: The operation was aborted.`
+// has been handed a fact about the runtime, not about their photograph, and
+// cannot act on it. The reason still reaches the log; only the SCREEN is
+// spared. Signage names the noun (DESIGN.md §Copy).
+export const PHOTOS_ERROR_EDIT_NOT_SAVED = "Photograph not saved.";
+export const PHOTOS_ERROR_EXPORT_FAILED = "Photograph not exported.";
+// A CAUSE the member can act on, so it is named rather than folded into the
+// generic noun: the original lives in iCloud and has to come down first.
+export const PHOTOS_ERROR_IN_CLOUD = "Original is still in iCloud.";
+export const PHOTOS_ERROR_FREE_UP_PAUSED = "Free up vault paused.";
+export const PHOTOS_ERROR_WRITE_NOT_SAVED = "Photo change not saved.";
+
 export const PHOTOS_VIDEO_STATUS =
   "Video · playing from the display copy on this device";
 

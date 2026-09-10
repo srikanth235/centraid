@@ -313,6 +313,7 @@ export default function TallyHome({
         <WaitingView
           names={names}
           notice={notice}
+          now={vault.now}
           nudges={vault.dashboard.nudges ?? []}
           onVerb={onVerb}
           sections={tallyWaiting(

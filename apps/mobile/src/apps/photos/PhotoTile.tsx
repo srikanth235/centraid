@@ -275,6 +275,9 @@ const makeStyles = (colors: ThemeColors) =>
       bottom: 4,
       insetInlineStart: 4,
       justifyContent: "center",
+      // proto:4019's chip padding. A SEAM below the 4px base, like the
+      // `state` chip below: `subBase` names this exception but is not
+      // re-exported through `kit/theme` (#1015, S10).
       paddingHorizontal: 3,
       paddingVertical: 2,
       position: "absolute",

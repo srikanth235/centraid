@@ -19,7 +19,6 @@ import {
   mosaicAwaitingBytes,
   mosaicCells,
   openTasks,
-  formatBytes,
   selectDocRows,
   selectFaces,
   selectNextEvent,
@@ -257,20 +256,6 @@ describe(selectNoteExcerpt, () => {
   });
 });
 
-describe(formatBytes, () => {
-  it("carries one decimal above the byte rung and none below it", () => {
-    expect(formatBytes(512)).toBe("512 bytes");
-    expect(formatBytes(4_299_161)).toBe("4.1 MB");
-    expect(formatBytes(2048)).toBe("2 KB");
-  });
-
-  it("says nothing rather than inventing a size it does not have", () => {
-    expect(formatBytes(undefined)).toBe("");
-    expect(formatBytes("not a number")).toBe("");
-    expect(formatBytes(-1)).toBe("");
-  });
-});
-
 describe(selectDocRows, () => {
   const doc = (id: string, title: string, updated: string, content: string) =>
     row({
@@ -293,8 +278,11 @@ describe(selectDocRows, () => {
         ]
       )
     ).toStrictEqual([
+      // The seat's ONE byte register (`kit/format`, #1015 S8). This module
+      // used to carry a second one that said `2 KB` and `512 bytes` where
+      // the other said `2.0 KB` and `512 B`.
       { id: "d2", name: "Survey", size: "4.1 MB" },
-      { id: "d1", name: "Lease", size: "2 KB" },
+      { id: "d1", name: "Lease", size: "2.0 KB" },
     ]);
   });
 
@@ -302,6 +290,23 @@ describe(selectDocRows, () => {
     expect(
       selectDocRows([doc("d1", "Lease", "2026-02-02T00:00:00.000Z", "c9")], [])
     ).toStrictEqual([{ id: "d1", name: "Lease", size: "" }]);
+  });
+
+  it("says nothing rather than the register's dash for a size it lacks", () => {
+    // A replica cell is `unknown`. `—` would read as a size the vault knows
+    // to be nothing, which is a different claim from having no size row.
+    expect(
+      selectDocRows(
+        [doc("d1", "Lease", "2026-02-02T00:00:00.000Z", "c9")],
+        [row({ content_id: "c9", byte_size: "not a number" })]
+      )
+    ).toStrictEqual([{ id: "d1", name: "Lease", size: "" }]);
+    expect(
+      selectDocRows(
+        [doc("d2", "Survey", "2026-02-02T00:00:00.000Z", "c8")],
+        [row({ content_id: "c8", byte_size: -1 })]
+      )
+    ).toStrictEqual([{ id: "d2", name: "Survey", size: "" }]);
   });
 
   it("bounds what reaches the tile", () => {

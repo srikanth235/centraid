@@ -56,6 +56,7 @@ import {
 } from "@centraid/blueprints/apps/tally/writes";
 
 import { Text } from "../../kit/components/NativeText";
+import { formatDateShort } from "../../kit/format";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -161,7 +162,7 @@ export default function TallyExpenseScreen({
             {metaSentence([
               paidBy(entry.paid_by_name, isMine),
               groupName,
-              entry.spent_on,
+              formatDateShort(entry.spent_on, vault.now),
             ])}
           </Text>
         </View>
