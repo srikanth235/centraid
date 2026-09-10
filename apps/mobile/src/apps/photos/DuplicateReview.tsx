@@ -120,6 +120,8 @@ export default function DuplicateReview({
       : null
     : "Not connected to a gateway, so nothing can be written here.";
   const selectionBar = {
+    // The room's one way out of the mode (D5); the word is always "Cancel".
+    onCancel: () => setSelection(new Set()),
     count: selection.size,
     shelf: "normal" as const,
     copyLabel: share.copyLabel,
@@ -153,7 +155,12 @@ export default function DuplicateReview({
     // Duplicates is a genuine CHILD of the More sheet's row, so it keeps a
     // back affordance — and it now also carries the band, so the way out of
     // Photos is no harder to reach than the app's own tabs (§F).
-    <PhotosScreen current="more" selection={selectionBar}>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="duplicateReview"
+      selection={selectionBar}
+      title="Duplicates review"
+    >
       <View style={styles.header}>
         <Tappable
           accessibilityLabel={selecting ? "Clear selection" : "Back to Photos"}

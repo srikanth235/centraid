@@ -305,18 +305,11 @@ export default function PhotosLibrary({
     // NO back chevron: this surface is the band's `Library` destination, and a
     // destination that also owns a back arrow gives a member two answers to
     // "where does this go".
-    <PhotosScreen current="library">
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Library</Text>
-        <Pressable
-          accessibilityLabel="Create album"
-          accessibilityRole="button"
-          onPress={() => setNewAlbum(true)}
-          style={styles.headerBtn}
-        >
-          <Icon name="plus" size={22} color={colors.text} />
-        </Pressable>
-      </View>
+    <PhotosScreen
+      action={{ label: "Create album", onPress: () => setNewAlbum(true) }}
+      route="library"
+      title="Library"
+    >
       <ReplicaStatusBar />
       {/* One windowed list for the whole page: the album grid is the data and
         everything around it is header/footer. A plain ScrollView mounted every

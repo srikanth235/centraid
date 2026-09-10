@@ -311,6 +311,8 @@ export default function AlbumDetail({
   // has no phone surface behind it yet, so it renders disabled with the
   // sentence that says so rather than doing nothing.
   const selectionBar = {
+    // The room's one way out of the mode (D5); the word is always "Cancel".
+    onCancel: () => setSelection(new Set()),
     count: selection.size,
     shelf: "normal" as const,
     copyLabel: share.copyLabel,
@@ -351,20 +353,14 @@ export default function AlbumDetail({
       : { unavailableReason: writeBlockedReason! },
   };
   return (
-    <PhotosScreen current="collections" selection={selectionBar}>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="album"
+      selection={selectionBar}
+      title={String(album?.name ?? "Album")}
+    >
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-        >
-          <Icon name="chevron-left" size={24} color={colors.text} />
-        </Pressable>
         <View style={styles.copy}>
-          <Text style={styles.title} numberOfLines={1}>
-            {String(album?.name ?? "Album")}
-          </Text>
           <Text style={styles.meta}>
             {assets.length} {assets.length === 1 ? "photograph" : "photographs"}
           </Text>

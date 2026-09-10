@@ -729,7 +729,7 @@ export default function PhotosHome({
       ) : (
         <PhotosBand
           owner={bandOwner}
-          current={destination}
+          destination={destination}
           onSelect={onDestination}
           // `popTo`, never `navigate` (RN7 PUSHES a second Home, which above a
           // `fullScreenModal` arrives as a card sheet) and never `goBack`

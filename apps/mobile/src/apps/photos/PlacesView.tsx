@@ -13,7 +13,6 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { usePhotoEntity } from "./photo-entity-reads";
-import PhotosBackControl from "./PhotosBackControl";
 import PhotosScreen from "./PhotosScreen";
 import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
@@ -41,18 +40,15 @@ export default function PlacesView({
   }, [assets, cards]);
 
   return (
-    // The band via the shell (#712): a bare SafeAreaView leaves the OS
-    // gesture as the only exit. current="more" = arrived via More.
-    <PhotosScreen current="more">
+    // The band via the room (#712, #1015): a bare SafeAreaView leaves the OS
+    // gesture as the only exit, and the back key names the Photos place this
+    // shelf actually descends from rather than the More tab it lights.
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="places"
+      title="Places"
+    >
       <View style={styles.header} testID={TEST_IDS.places.shelf}>
-        {/* The band highlights More, which Places is not reached from, so it
-            names the wrong place and cannot be the exit (#1015 S2). */}
-        <PhotosBackControl
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-          to="Photos"
-        />
-        <Text style={styles.title}>Places</Text>
         {/* Places · N — shelf size, mono (proto:3939); "N of M" belongs to
             the map. */}
         <Text style={styles.count}>Places · {cards.length}</Text>

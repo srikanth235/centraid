@@ -52,9 +52,18 @@ export function SelectionActions({
   selection: RoomSelection;
 }): React.JSX.Element {
   const { colors } = useTheme();
-  const ink = useMemo(() => ({ borderTopColor: colors.line }), [colors]);
+  const ink = useMemo(
+    () => ({
+      foot: { borderTopColor: colors.line },
+      note: { color: colors.net },
+    }),
+    [colors]
+  );
   return (
-    <View style={[styles.foot, ink]}>
+    <View style={[styles.foot, ink.foot]}>
+      {selection.note ? (
+        <Text style={[styles.selectionNote, ink.note]}>{selection.note}</Text>
+      ) : null}
       <View style={styles.actionRow}>
         {selection.actions.map((action) => (
           <Button
