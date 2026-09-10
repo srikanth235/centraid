@@ -42,16 +42,16 @@ const count = (n: number): string => n.toLocaleString();
  * It sits ABOVE the bottom band, never on it. The ROOT instance is mounted at
  * the app root, outside the navigator, so it cannot ask which screen is showing — but
  * every screen in this product anchors something to the bottom edge: an app's
- * band, the frame's band, or the floating `HomeKey` on the screens that have
+ * band, the frame's band, or a docked health line on the places that have
  * neither. An opaque bar at `bottom: 0` therefore covered a navigation control
  * on ALL of them, hiding the band's labels and swallowing taps aimed at them.
  * A note carrying an action never expires (`postStatus` sets no timer for one),
  * so that cover could stand indefinitely.
  *
- * `BAND_HEIGHT` is the reservation because it is the tallest of the three; the
- * `HomeKey` screens gain a little clearance they do not need, which costs
- * nothing and is the honest trade for not plumbing band presence through eight
- * app bands and the frame to a host that renders at the root.
+ * `BAND_HEIGHT` is the reservation because it is the tallest of the three; a
+ * place with only a docked line gains a little clearance it does not need,
+ * which costs nothing and is the honest trade for not plumbing band presence
+ * through eight app bands and the frame to a host that renders at the root.
  */
 export default function StatusLine({
   hostId = ROOT_STATUS_HOST,

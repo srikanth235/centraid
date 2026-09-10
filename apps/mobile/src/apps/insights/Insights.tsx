@@ -290,7 +290,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
     <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
       <View style={styles.page}>
         <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+          <HomeKey onPress={() => navigation.goBack()} />
           <View style={styles.headBar}>
             {/* No filled verb at all — this page writes nothing. The quiet
                 verb is withdrawn while loading (the reference's own gating)

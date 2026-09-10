@@ -77,7 +77,7 @@ export default function AutomationThread(props: {
   return (
     <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <HomeKey variant="leave" onPress={props.onLeave} />
+        <HomeKey onPress={props.onLeave} />
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Automation thread</Text>
           <Text style={styles.subtitle} numberOfLines={1}>

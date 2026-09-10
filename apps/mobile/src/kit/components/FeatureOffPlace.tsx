@@ -44,7 +44,7 @@ export default function FeatureOffPlace({
     <TopSafeArea edges={["top"]} style={[styles.safe, ink]}>
       <View style={styles.page}>
         <View style={styles.head}>
-          <HomeKey onPress={onLeave} variant="leave" />
+          <HomeKey onPress={onLeave} />
           <View style={styles.headBar}>
             {/* No verbs: nothing on this phone can open the gate. */}
             <PlaceHeader title={title} />

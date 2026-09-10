@@ -125,7 +125,7 @@ export default function ApprovalsScreen({
       <View style={styles.page}>
         <View style={styles.head}>
           {/* Not pop-to-Settings: also reached from push notifications, where Settings isn't beneath. */}
-          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+          <HomeKey onPress={() => navigation.goBack()} />
           <View style={styles.headBar}>
             <PlaceHeader
               // Filled commit hidden while loading AND errored; quiet verb only while loading.

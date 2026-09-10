@@ -197,6 +197,9 @@ vi.mock(
   () =>
     ({
       postStatus: (message: string) => posted.push(message),
+      // News is suppressed while the line carries an action (#1015, S3);
+      // nothing here posts one, so the line reads quiet.
+      readStatus: () => null,
       showUndoStatus: (message: string) => posted.push(message),
     }) as never
 );

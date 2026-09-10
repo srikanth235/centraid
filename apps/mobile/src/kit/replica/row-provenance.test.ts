@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 import {
   READ_ONLY_SOURCE_REASON,
   readOnlyRouteReason,
-  refusedLabel,
   rowCanWrite,
   rowScopeLabels,
 } from "./row-provenance";
@@ -79,10 +78,13 @@ describe("one sentence for one truth", () => {
     );
   });
 
-  it("keeps a refused verb to ONE text slot", () => {
-    expect(refusedLabel("Star", READ_ONLY_SOURCE_REASON)).toBe(
-      `Star — ${READ_ONLY_SOURCE_REASON}`
-    );
+  // `refusedLabel` is gone (#1015, S12): a refusal is the menu row's own
+  // `reason` line, not a string concatenated into a one-line label that
+  // truncated the verb out of view. Docs' menu passes the sentence through.
+  it("hands the sentence to a refused menu row as its reason", () => {
+    const menu = source("apps/docs/doc-menu.ts");
+    expect(menu).toContain("{ reason: READ_ONLY_SOURCE_REASON }");
+    expect(menu).not.toContain("refusedLabel");
   });
 });
 

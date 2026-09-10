@@ -1,6 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, StyleSheet } from "react-native";
 
 import { borders, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
@@ -11,69 +10,41 @@ import Icon from "./Icon";
 // chevron. Opaque paper plate — no blur/tint/shadow/teal: glass would float
 // over the page and glyph contrast would depend on whatever sits underneath.
 //
-// Caller owns dismissal. `floating`: bottom-centered, `box-none` wrap so taps
-// beside the plate fall through. `leave`: leading header control.
+// Caller owns dismissal. There is ONE placement: the leading control in the
+// page's own head row, beside its bar. The bottom-centred `floating` variant
+// is deleted (#1015, S6 — audit B14): it was absolutely positioned on the
+// bottom edge, which is where every screen in this product already puts
+// something — a band, a docked health line, the last list row — so it sat ON
+// the standing health line on Data and Devices and covered a row on the rest.
+// Screens paid for it with a `BOTTOM_ROOM` constant each, invented per screen,
+// and the key still landed on the line. A header control cannot collide with
+// anything, and Connectors was already doing exactly that.
 
-const FLOAT_SIZE = 54;
 const HEADER_SIZE = 40;
 const PLATE_RADIUS = 12;
 
 export interface HomeKeyProps {
   onPress: () => void;
-  variant: "floating" | "leave";
 }
 
-export default function HomeKey({
-  onPress,
-  variant,
-}: HomeKeyProps): React.JSX.Element {
+export default function HomeKey({ onPress }: HomeKeyProps): React.JSX.Element {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
-  if (variant === "leave") {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back to your apps"
-        onPress={onPress}
-        style={[styles.plate, styles.headerKey]}
-      >
-        <Icon name="Grid" size={19} color={colors.text} />
-      </Pressable>
-    );
-  }
-
   return (
-    <View
-      style={[styles.floatWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}
-      pointerEvents="box-none"
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Back to your apps"
+      onPress={onPress}
+      style={[styles.plate, styles.headerKey]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back to your apps"
-        onPress={onPress}
-        style={[styles.plate, styles.floatKey]}
-      >
-        <Icon name="Grid" size={22} color={colors.text} />
-      </Pressable>
-    </View>
+      <Icon name="Grid" size={19} color={colors.text} />
+    </Pressable>
   );
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    floatKey: {
-      height: FLOAT_SIZE,
-      width: FLOAT_SIZE,
-    },
-    floatWrap: {
-      alignItems: "center",
-      bottom: 0,
-      left: 0,
-      position: "absolute",
-      right: 0,
-    },
     headerKey: {
       height: HEADER_SIZE,
       width: HEADER_SIZE,

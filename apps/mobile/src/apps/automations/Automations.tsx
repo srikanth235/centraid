@@ -325,7 +325,7 @@ function AutomationsPlace({
     <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
       <View style={styles.page}>
         <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+          <HomeKey onPress={() => navigation.goBack()} />
           <View style={styles.headBar}>
             {/* No filled commit. Templates withheld while loading/error. */}
             <PlaceHeader

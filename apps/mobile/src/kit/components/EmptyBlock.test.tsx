@@ -8,7 +8,7 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mountBlock, nodesOf, styleOf } from "../../test/react-native-stub";
-import { resolveTheme } from "../theme";
+import { pageMargin, resolveTheme } from "../theme";
 import EmptyBlock from "./EmptyBlock";
 
 vi.mock(import("react-native"), async () => {
@@ -38,6 +38,38 @@ function render(node: React.ReactNode): HTMLElement {
 
 const noop = (): void => undefined;
 const type = resolveTheme("light").type;
+
+describe("the block's own gutter", () => {
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  // THE BUG THIS PINS (#1015, S5 — audit S5, docs/findings.md#3). The block
+  // carried vertical padding and no horizontal padding, so an empty rendered
+  // inside a full-bleed list put its title hard against the screen edge while
+  // every populated row beside it sat at `pageMargin`.
+  it("insets both registers at the page margin", () => {
+    const routine = render(
+      <EmptyBlock
+        body="Nothing is waiting on you."
+        routine
+        title="Nothing waiting"
+      />
+    );
+    expect(styleOf(nodesOf(routine, "div")[0]).paddingHorizontal).toBe(
+      pageMargin
+    );
+    dispose?.();
+    dispose = undefined;
+    const firstRun = render(
+      <EmptyBlock body="Nothing is waiting on you." title="Nothing waiting" />
+    );
+    expect(styleOf(nodesOf(firstRun, "div")[0]).paddingHorizontal).toBe(
+      pageMargin
+    );
+  });
+});
 
 describe(EmptyBlock, () => {
   afterEach(() => {
