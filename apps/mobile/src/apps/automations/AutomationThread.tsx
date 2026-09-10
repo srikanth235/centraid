@@ -14,10 +14,12 @@ import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
 
-/** Automations' error nouns (#1015, S14): a read that did not land, and a run
- *  that did not start. Nothing else this pane says is an exception. */
-const AUTOMATION_NOT_LOADED = "Automation could not be loaded";
-const AUTOMATION_NOT_RUN = "Automation not run";
+/** One noun for this page (#1015, S14). */
+const AUTOMATION_NOT_READ = "This automation could not be read";
+
+/** …and when a run does not start. The retry word is not glued on here: the
+ *  failure door adds the product's one (`surfaceWriteFailure`, R-A-15). */
+const AUTOMATION_NOT_RUN = "This automation did not run";
 
 type State =
   | { kind: "loading" }
@@ -42,10 +44,10 @@ export default function AutomationThread(props: {
         turns: await listAutomationTurns(props.automationRef),
       });
     } catch (error) {
-      // THE EXCEPTION IS NOT THE MESSAGE (#1015, S14 — R-A-15). It goes to the
-      // log; the pane gets this app's one noun.
+      // S14 (#1015): the exception is a fact about the program, so it goes to
+      // the log (docs/logs.md) and the pane gets this page's one noun.
       console.warn("[automations] thread read failed", error);
-      setState({ kind: "error", message: AUTOMATION_NOT_LOADED });
+      setState({ kind: "error", message: AUTOMATION_NOT_READ });
     }
   }, [props.automationRef]);
 

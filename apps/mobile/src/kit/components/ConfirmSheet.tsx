@@ -34,7 +34,8 @@ export interface ConfirmSheetProps {
   /** The way out, when "Cancel" is not the truest word for staying — Backup's
    *  "Keep backing up" names the state the member is choosing to keep. */
   cancelLabel?: string;
-  onConfirm: () => void;
+  /** The write. Return its promise and the landing buzz waits for it. */
+  onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -64,9 +65,14 @@ export default function ConfirmSheet({
         label: verb,
         onPress: () => {
           onClose();
-          // The write lands here, not when the sheet opened (#1015, S15).
-          hapticLanded();
-          onConfirm();
+          // THE BUZZ IS THE WRITE'S, NOT THE PRESS'S (#1015, S15).
+          // `hapticLanded` means "the thing is gone"; fired on the press it
+          // promised a landing the vault had not made yet, and it fired just
+          // as confidently when the write went on to fail. A synchronous
+          // `onConfirm` still buzzes (a microtask later); one that returns a
+          // promise buzzes when that promise resolves, and never if it
+          // rejects — the caller surfaces the failure itself, on StatusLine.
+          void Promise.resolve(onConfirm()).then(hapticLanded, () => undefined);
         },
       }}
       title={confirmTitle(verb, noun, count)}

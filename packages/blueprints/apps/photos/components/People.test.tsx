@@ -29,10 +29,10 @@ interface PeopleEmptyStateProps {
   statusLine: string;
   line: string;
   action: string;
-  prioritise: AnswerAvailability;
+  prioritize: AnswerAvailability;
   busy: boolean;
-  prioritised: boolean;
-  onPrioritise: () => void;
+  prioritized: boolean;
+  onPrioritize: () => void;
 }
 interface PeopleShelfProps {
   people: readonly Person[];
@@ -74,10 +74,10 @@ const EMPTY_PROPS: PeopleEmptyStateProps = {
   statusLine: ENRICHMENT_STATUS_LINE,
   line: PEOPLE_EMPTY_LINE,
   action: PRIORITISE_ACTION,
-  prioritise: { available: true },
+  prioritize: { available: true },
   busy: false,
-  prioritised: false,
-  onPrioritise: () => undefined,
+  prioritized: false,
+  onPrioritize: () => undefined,
 };
 
 describe("the People shelf's empty state", () => {
@@ -113,7 +113,7 @@ describe("the People shelf's empty state", () => {
     const html = markup({
       emptyState: {
         ...EMPTY_PROPS,
-        prioritise: { available: false, reason: "Not available: because." },
+        prioritize: { available: false, reason: "Not available: because." },
       },
     });
     expect(html).toContain("Not available: because.");

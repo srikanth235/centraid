@@ -30,6 +30,7 @@ import {
 import type { MobileNotifications } from "../../lib/gateway";
 import { requestNotificationPermission } from "../../lib/notifications-core";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
+import { SHELL_ERROR } from "../shell-copy";
 import { NOT_PAIRED, opsStateFor, waitingTotal } from "./approvals-model";
 import type { OutboxGrant } from "./approvals-model";
 
@@ -78,10 +79,9 @@ export interface ApprovalsController {
   revokeGrant: (grantId: string) => void;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : "The gateway did not answer.";
+// S14 (#1015): one noun for this place, whatever the exception said.
+function describe(_error: unknown): string {
+  return SHELL_ERROR.alerts;
 }
 
 /** Standing grants, or none — never an exception that takes the queue down. */

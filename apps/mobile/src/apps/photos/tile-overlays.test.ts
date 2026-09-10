@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { justify } from "./justify";
 import type { VaultFacts } from "./tile-overlays";
 import {
+  CUSTODY_LABEL,
   CUSTODY_MIN_RUNG,
   STATE_COULD_NOT_DECODE,
   formatDuration,
@@ -10,6 +11,7 @@ import {
   marksVault,
   stateOverlay,
   tileGround,
+  tileLabel,
   vaultMarkFor,
 } from "./tile-overlays";
 import type { PhotoAsset } from "./timeline-model";
@@ -246,5 +248,29 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
       tone: "net",
     });
     expect(justify(list, 390, 120)).toStrictEqual(rows);
+  });
+
+  // photos/findings #18 (#1015): a tile drawing a red `could not decode` line
+  // announced its bare name, so the one member who cannot see the red was the
+  // one never told the photograph is not there. Same for a purge countdown.
+  test("a tile announces every state it draws, not only custody", () => {
+    expect(tileLabel("IMG_0010.JPG")).toBe("IMG_0010.JPG");
+    expect(tileLabel("IMG_0010.JPG", { form: "custody" })).toBe(
+      `IMG_0010.JPG, ${CUSTODY_LABEL}`
+    );
+    expect(
+      tileLabel("IMG_0010.JPG", {
+        form: "line",
+        text: STATE_COULD_NOT_DECODE,
+        tone: "net",
+      })
+    ).toBe(`IMG_0010.JPG, ${STATE_COULD_NOT_DECODE}`);
+    expect(
+      tileLabel("IMG_0010.JPG", {
+        form: "line",
+        text: "purges in 30 days",
+        tone: "seam",
+      })
+    ).toBe("IMG_0010.JPG, purges in 30 days");
   });
 });

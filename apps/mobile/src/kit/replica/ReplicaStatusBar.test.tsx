@@ -373,7 +373,7 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     expect(container.textContent).toContain("Tally · Add expense");
     expect(container.textContent).toContain("changed somewhere else");
     expect(container.textContent).toContain("Expected version 3; found 5.");
-    expect(container.textContent).toContain("Retry");
+    expect(container.textContent).toContain("Try again");
     expect(container.textContent).toContain("Discard");
     // Never the raw state, and never a Cancel for a write already settled.
     expect(container.textContent).not.toContain("conflict");
@@ -385,7 +385,7 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     replicaMock.session = sessionMock;
     await render();
     await press("Pending changes 1");
-    await press("Retry Tally · Add expense");
+    await press("Try again Tally · Add expense");
 
     expect(outbox.calls).toStrictEqual([["retry", "intent-1"]]);
   });
@@ -400,7 +400,9 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
 
     expect(container.textContent).toContain("waiting to send");
     expect(container.textContent).toContain("Cancel");
-    expect(container.textContent).not.toContain("Retry");
+    // The retry VERB, not the words: `PENDING_CHANGE_NOT_ACCEPTED` ends with
+    // "Try again." as a sentence (R-SH-7), which is not a control.
+    expect(container.textContent).not.toContain("Try again Tally");
     expect(container.textContent).not.toContain("Discard");
   });
 });

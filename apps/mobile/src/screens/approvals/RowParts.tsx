@@ -69,9 +69,12 @@ export function NoticeVerbs(props: {
           onPress={() => page.readNotice(notice.noticeId)}
         />
       ) : null}
+      {/* Disposal is the quieter of the two verbs: three buttons at one
+          weight per row is no hierarchy at all (shell/findings 15). */}
       <ActionButton
         label="Archive"
         onPress={() => page.archiveNotice(notice.noticeId)}
+        variant="quiet"
       />
     </View>
   );

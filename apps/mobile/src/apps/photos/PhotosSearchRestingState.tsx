@@ -1,22 +1,30 @@
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { searchRestingEyebrow } from "@centraid/blueprints/apps/_shared/search-scaffold";
+import { SEARCH_COPY } from "@centraid/blueprints/apps/photos/view-copy";
+
 import { Text } from "../../kit/components/NativeText";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The honest empty-query state: no request has run yet. */
+/** The honest empty-query state: no request has run yet.
+ *
+ *  ITS THREE SENTENCES ARE THE TABLE'S (#1015 Wave 3, S11). They were typed
+ *  here AND held in `view-copy.ts`'s `SEARCH_COPY.resting`, and the two had
+ *  already drifted: the body said "Not only the photographs already loaded"
+ *  against the table's "Not only what is loaded here". */
 export default function PhotosSearchRestingState(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <ScrollView contentContainerStyle={styles.pad}>
       <View style={styles.panel}>
-        <Text style={styles.eyebrow}>Nothing typed</Text>
-        <Text style={styles.title}>Search the whole library</Text>
-        <Text style={styles.body}>
-          Not only the photographs already loaded — try one of these.
+        <Text style={styles.eyebrow}>
+          {searchRestingEyebrow(SEARCH_COPY.resting.noun)}
         </Text>
+        <Text style={styles.title}>{SEARCH_COPY.resting.title}</Text>
+        <Text style={styles.body}>{SEARCH_COPY.resting.body}</Text>
       </View>
     </ScrollView>
   );

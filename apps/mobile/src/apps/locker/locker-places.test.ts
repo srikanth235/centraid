@@ -32,9 +32,13 @@ describe(lockerDestinationFor, () => {
 });
 
 describe(lockerParentPlace, () => {
+  // The place is named `Items` since #1015 (locker/findings #6): the band tab
+  // and the bar above it used to name the same root two different things, so
+  // "Back to Locker" was the app's name standing in for a place inside it.
   it("names the parent a pushed surface actually descends from", () => {
-    expect(lockerParentPlace("item").title).toBe("Locker");
-    expect(lockerParentPlace("edit").title).toBe("Locker");
+    expect(lockerParentPlace("item").title).toBe("Items");
+    expect(lockerParentPlace("edit").title).toBe("Items");
+    expect(lockerParentPlace("editNew").title).toBe("Items");
   });
 
   it("sends a More surface back to the app, which is where it came from", () => {

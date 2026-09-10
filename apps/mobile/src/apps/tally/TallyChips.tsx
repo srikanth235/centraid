@@ -6,10 +6,12 @@
 // difference is one prop, because they are the same control with a different
 // number of marks lit.
 
-import React, { useMemo } from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import { formatDateShort } from "../../kit/format";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
@@ -90,6 +92,83 @@ export function TypedField({
       value={value}
     />
   );
+}
+
+export interface DateFieldProps {
+  /** The day key the draft holds, `YYYY-MM-DD`. */
+  value: string;
+  onChange: (next: string) => void;
+  /** The chip's word when no day has been picked off the calendar. */
+  pickLabel: string;
+  /** The spoken name of the control. */
+  label: string;
+  /** The vault's clock, so "today" is the vault's today. */
+  now: string;
+}
+
+/** A DAY IS PICKED, NEVER TYPED (#1015, tally/findings #5). The composer used
+ *  to offer a free-text field holding `2026-09-10`: an ISO string, typed on a
+ *  phone, in the one app whose siblings all humanise their dates. This is the
+ *  platform picker behind one chip, and the chip states the day it holds in the
+ *  product's own register (`10 Sep`). */
+export function DateField({
+  value,
+  onChange,
+  pickLabel,
+  label,
+  now,
+}: DateFieldProps): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [open, setOpen] = useState(false);
+  const today = now.slice(0, 10);
+  const yesterday = dayBefore(today);
+  // The chip says the day only when the day is one the two shorthand chips do
+  // not already say; otherwise it is the invitation to open the calendar.
+  const picked =
+    value !== "" && value !== today && value !== yesterday
+      ? formatDateShort(value, now)
+      : "";
+  return (
+    <View style={styles.row}>
+      <Pressable
+        accessibilityLabel={label}
+        accessibilityRole="button"
+        accessibilityState={{ selected: picked !== "" }}
+        onPress={() => setOpen(true)}
+        style={[styles.chip, picked === "" ? undefined : styles.chipOn]}
+      >
+        <Text style={styles.chipText}>
+          {picked === "" ? pickLabel : picked}
+        </Text>
+      </Pressable>
+      {open ? (
+        <DateTimePicker
+          display="default"
+          mode="date"
+          onChange={(_event, next) => {
+            setOpen(false);
+            if (next) onChange(dayKeyOf(next));
+          }}
+          value={new Date(`${value === "" ? today : value}T00:00:00`)}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** The day key of a local `Date`, read in local time: a UTC slice would move a
+ *  member west of Greenwich to the day before the one they tapped. */
+function dayKeyOf(at: Date): string {
+  const month = String(at.getMonth() + 1).padStart(2, "0");
+  const day = String(at.getDate()).padStart(2, "0");
+  return `${at.getFullYear()}-${month}-${day}`;
+}
+
+function dayBefore(dayKey: string): string {
+  const stamp = Date.parse(`${dayKey}T00:00:00.000Z`);
+  if (Number.isNaN(stamp)) return "";
+  return new Date(stamp - 86_400_000).toISOString().slice(0, 10);
 }
 
 const makeStyles = (colors: ThemeColors) =>

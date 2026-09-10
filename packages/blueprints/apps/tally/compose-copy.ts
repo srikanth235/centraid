@@ -107,15 +107,18 @@ export const FIELD_KEYS = {
   members: "Members",
 } as const;
 
+// A PLACEHOLDER IS A HINT, NOT A SPECIMEN (#1015, tally/findings #6). The
+// description used to read `Dinner at the Ship` — a complete, plausible expense
+// name — over a form that then refused to commit for want of a description.
 export const PLACEHOLDERS = {
-  description: "Dinner at the Ship",
+  description: "e.g. dinner, tickets, petrol",
   amount: "0.00",
   currency: "EUR",
   rate: "1.1636",
   rateSource: "read off the receipt",
-  friend: "Their name",
-  group: "14 Sitwell Road",
-  line: "Two flat whites",
+  friend: "e.g. Maya Alvarez",
+  group: "e.g. Tahoe trip, flat, book club",
+  line: "e.g. two flat whites",
 } as const;
 
 export const FIELD_NOTES = {
@@ -371,6 +374,16 @@ export const EXPORT_NOTE =
   "The file carries splits and revisions, not balances — balances are arithmetic, and arithmetic travels in the rows.";
 export const EXPORT_COMMIT = "Export";
 export const EXPORT_NO_GROUP = "A group · a ledger is a group's";
+/** Reached with no group, the screen has nothing to describe and nothing to
+ *  commit, so it says which door it is (#1015, tally/findings #3) rather than
+ *  drawing empty rows over a group it was never given. */
+export const EXPORT_NEEDS_GROUP = {
+  title: "Export starts in a group",
+  body: "A ledger belongs to a group, so an export does too. Open the group you want and export from there.",
+  routine: true,
+} as const;
+/** The `Format` row's value. The row used to print its own label back. */
+export const EXPORT_FORMAT_VALUE = "CSV · one row per expense and settlement";
 export function exportWindow(
   expenses: number,
   settlements: number,

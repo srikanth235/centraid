@@ -46,6 +46,18 @@ export interface AssistantController {
   selectEffort: (effort: string) => void;
 }
 
+/**
+ * WHAT ASSISTANT SAYS WHEN SOMETHING DOES NOT LAND (#1015, S14).
+ *
+ * Five sites here put `error.message` into a bubble, a load error or a
+ * selection error, so a member's conversation carried a Swift filename, a
+ * `FetchRequestCanceledException` and a sandbox lane refusal. One noun per
+ * failure; the exception stays a fact about the program.
+ */
+const ASSISTANT_NOT_REACHED = "Assistant could not be reached";
+const ASSISTANT_TURN_FAILED = "This message was not sent. Try again.";
+const ASSISTANT_NOT_CHANGED = "That could not be changed. Try again.";
+
 interface PendingTurn {
   text: string;
   assistantKey: string;
@@ -128,10 +140,10 @@ export async function persistAssistantSelection(
   try {
     await saveAssistantSelection(harnessKind, kind, value);
     return { ok: true };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: ASSISTANT_NOT_CHANGED,
     };
   }
 }
@@ -169,9 +181,9 @@ export function useAssistant(): AssistantController {
         );
         setPhase("ready");
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!mounted.current) return;
-        setLoadError(error instanceof Error ? error.message : String(error));
+        setLoadError(ASSISTANT_NOT_REACHED);
         setPhase("offline");
       });
     return () => {
@@ -263,7 +275,7 @@ export function useAssistant(): AssistantController {
           )
         );
         pendingTurn.current = undefined;
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted) return;
         setBubbles((current) =>
           current.map((bubble) =>
@@ -272,7 +284,7 @@ export function useAssistant(): AssistantController {
                   ...bubble,
                   pending: false,
                   error: true,
-                  text: error instanceof Error ? error.message : String(error),
+                  text: ASSISTANT_TURN_FAILED,
                 }
               : bubble
           )
@@ -439,11 +451,9 @@ export function useAssistant(): AssistantController {
           setContext({});
           if (!selection.config.supportsAttachments) setAttachments([]);
         })
-        .catch((error: unknown) => {
+        .catch(() => {
           if (!mounted.current) return;
-          setSelectionError(
-            error instanceof Error ? error.message : String(error)
-          );
+          setSelectionError(ASSISTANT_NOT_CHANGED);
         });
     },
     [config]
@@ -462,8 +472,8 @@ export function useAssistant(): AssistantController {
           );
         }
       })
-      .catch((error: unknown) => {
-        setLoadError(error instanceof Error ? error.message : String(error));
+      .catch(() => {
+        setLoadError(ASSISTANT_NOT_REACHED);
       })
       .finally(() => setAttaching(false));
   }, [attaching, config?.supportsAttachments]);

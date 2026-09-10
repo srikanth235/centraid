@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildSelectionActions } from "@centraid/blueprints/apps/_shared/selection-engine";
 
+import { hapticsStub } from "../../test/haptics-stub";
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
 import PhotosScreen from "./PhotosScreen";
 
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 // The vault lockup every app frame draws. Stubbed because this file's claim is
 // PhotosScreen's own composition, not the header's: mounting the real one
 // pulls the active-vault read and its native storage into a plain jsdom run.
+vi.mock(import("expo-haptics"), () => hapticsStub());
 vi.mock(
   import("../../screens/home/VaultBar"),
   () => ({ default: () => null }) as never

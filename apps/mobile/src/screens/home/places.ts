@@ -24,7 +24,16 @@ export type PlaceId =
 export interface Place {
   id: PlaceId;
   name: string;
-  /** The band is 61px wide (:3480): declare a short name, never ellipsise. */
+  /**
+   * The band is 61px wide (:3480): declare a short name, never ellipsise.
+   *
+   * ONE NOUN PER DESTINATION (#1015, shell/findings 6). `short` may only DROP
+   * words from `name` — "On this phone" → "On phone" — never substitute a
+   * different noun for the same place. The band speaks `name` to VoiceOver and
+   * paints `short`, so a substitution ships two names to two members at once,
+   * which is how the Alerts place ended up wearing four. `places.test.ts`
+   * holds this.
+   */
   short: string;
   icon: IconName;
   what: string;
@@ -49,7 +58,7 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.notifications,
     id: "notifs",
     law: false,
-    name: "Notifications",
+    name: "Alerts",
     pin: true,
     short: "Alerts",
     what: "Everything the vault wanted to tell you",
@@ -76,10 +85,10 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.automations,
     id: "autos",
     law: false,
-    name: "Automations",
+    name: "Rules",
     pin: false,
     short: "Rules",
-    what: "Rules that run on your vault's home machine",
+    what: "The standing rules that run on your vault's home machine",
   },
   {
     icon: DESTINATION_MARKS.connectors,
@@ -158,7 +167,8 @@ export function bandPlaces(pins: readonly PlaceId[]): readonly Place[] {
   return home ? [home, ...rest.slice(0, BAND_PLACE_SLOTS)] : [];
 }
 
-/* v0 gates: a gateway may not mount Automations or Connectors, and a tab onto a
+/* v0 gates: a gateway may not mount Rules (the wire's `automations`) or
+ * Connectors, and a tab onto a
  * dead route is worse than a missing one, so the derivations below FILTER the
  * fixed table. `undefined` (UNKNOWN) never hides a place. */
 const PLACE_CAPABILITY: Partial<Record<PlaceId, keyof MobileGatewayFeatures>> =

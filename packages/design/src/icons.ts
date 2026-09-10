@@ -118,6 +118,13 @@ const ICON_DATA = {
     { d: "M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z" },
     { d: "M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z" },
   ],
+  // The one door into Assistant (#1015, shell/findings 24): it was an inline
+  // <Svg> literal in the mobile vault lockup with its own strokeWidth,
+  // bypassing this registry and the stroke ramp.
+  NewChat: [
+    { d: "M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z" },
+    { d: "M9 10h6M12 7v6" },
+  ],
   MoreHoriz: [{ d: "M6 12h.01M12 12h.01M18 12h.01" }],
   MoreVert: [{ d: "M12 6h.01M12 12h.01M12 18h.01" }],
   Folder: [

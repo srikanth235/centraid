@@ -1,4 +1,5 @@
-// Automations (#765, spec §3). No `New automation` — authoring is a
+// Rules (#765, spec §3) — the place the wire and the route still call
+// `automations` (R-SH-8: one member-facing noun, "Rules"). No `New rule` — authoring is a
 // blueprint act with no mobile route. `Templates` scrolls to `Worth
 // setting up` on this page. Trailing slot is `Open`; Pause lives in the
 // row expansion.
@@ -68,7 +69,7 @@ export default function AutomationsScreen({
       <SystemPlace
         empty={featureOffEmpty("automations")}
         onHome={() => navigation.goBack()}
-        title="Automations"
+        title="Rules"
       />
     );
   return focusedRef ? (
@@ -114,7 +115,7 @@ function AutomationsBody({
             ? page.load.reason
             : errorBody(page.lastRunClock)
         }
-        eyebrow="Automations"
+        eyebrow="Rules"
         facts={
           page.load.kind === "error" && !page.load.unpaired
             ? [
@@ -225,7 +226,7 @@ function AutomationsBody({
         />
       ) : null}
       <SectionBlock
-        label="Automations"
+        label="Rules"
         meta={
           shown.length === copies.length
             ? countSentence(copies)
@@ -233,7 +234,7 @@ function AutomationsBody({
         }
       />
       {automationRows.length > 0 ? (
-        <RowsBlock accessibilityLabel="Automations" rows={automationRows} />
+        <RowsBlock accessibilityLabel="Rules" rows={automationRows} />
       ) : (
         <NoteBlock text="No automation is in that state right now." />
       )}
@@ -333,7 +334,7 @@ function AutomationsPlace({
       page.state !== "error"
         ? { secondary: { label: "Templates", onPress: browseTemplates } }
         : {})}
-      title="Automations"
+      title="Rules"
     >
       {page.actionError ? (
         <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>

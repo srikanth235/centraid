@@ -10,10 +10,9 @@
 // member is told about the field they have not filled yet, not about the one
 // three sections below it.
 //
-// NINE CATEGORIES, CLOSED. The enum below is `tally.add_expense`'s own
-// `CATEGORY_ENUM`, restated here because the interface must not offer a tenth
-// — the ruling is that nine suffice, they exist to make Spending legible, and
-// a second level is a taxonomy to maintain forever (GAPS.md Tally §11).
+// THE CATEGORY TABLE IS NOT HERE. It is `category-labels.ts`, the one table
+// every Tally surface reads (#1015, S11) — this module used to carry a second
+// copy of it.
 import { allocateByLine, lineItems } from "./line-model.ts";
 import type { LineDraft, LineItemInput } from "./line-model.ts";
 import { parseMoneyText, parseSignedMoneyText } from "./money-text.ts";
@@ -24,18 +23,6 @@ import {
   prefill,
 } from "./split-model.ts";
 import type { Allocation, Division, Share } from "./split-model.ts";
-
-export const CATEGORIES: readonly (readonly [string, string])[] = [
-  ["food", "Food"],
-  ["groceries", "Groceries"],
-  ["rent", "Rent"],
-  ["utilities", "Utilities"],
-  ["transport", "Transport"],
-  ["fun", "Fun"],
-  ["travel", "Travel"],
-  ["shopping", "Shopping"],
-  ["general", "General"],
-];
 
 /** The fixed-point scale every rate this app supplies is expressed at. Six
  *  places is the vault's own maximum-useful precision for a rate a member read

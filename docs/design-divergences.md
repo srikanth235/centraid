@@ -2,6 +2,8 @@
 
 This is the shared register of sanctioned per-app divergences from the design briefs. It exists so a reviewer does not "fix" an honest withholding or a deliberate copy/control choice. Change a row here only when the current decision changes; implementation history belongs in the linked issue and receipt.
 
+**The phone's FRAME is not a per-app choice and has no rows here.** Every mobile screen is one of the six rooms ([DESIGN.md § The six rooms](../DESIGN.md#the-six-rooms-mobile)), which own the header, the back control, search, the empty/loading/error states, the status host, selection and the gutter; `node scripts/lint-mobile-rooms.mjs --enforce` fails the push gate on a screen that hand-rolls one. What a phone-only row below may record is what an app DRAWS inside its room — never a second header, back affordance, confirm, empty state or date format.
+
 ## Docs — parity state and sanctioned withholdings
 
 Docs is aligned to the v9 design system: the flat `NavKind` is a shelf model, the app bar and compact band are frame contributions, and copy/state rules live in pure tables. This section records what the shipped app draws and what it refuses to draw because it cannot read the fact behind it.
@@ -225,7 +227,7 @@ Mobile priorities are the details sheet (custody/folder/tags/facts), tags/filing
 
 ### Binding cut-scope — do NOT build
 
-The current scope has no standalone Activity screen, duplicates shelf, or **destroy verb**. (The folder-tree rail was cut here too, and is no longer: [#835](https://github.com/srikanth235/centraid/issues/835) reversed that ruling and the tree is drawn on a pointer seat — see [the rail's own register below](#the-app-navigation-rail-835).) The platform destroys only on the schedule a purge date announces, so Trash has no "Empty trash" primary (`frame.tsx` `NO_PRIMARY`). Recent means recently _changed_; the product does not record when a document was opened.
+The current scope has no standalone Activity screen, duplicates shelf, or **destroy verb**. (The folder-tree rail was cut here too, and is no longer: [#835](https://github.com/srikanth235/centraid/issues/835) reversed that ruling and the tree is drawn on a pointer seat — see [the rail's own register below](#the-app-navigation-rail-835).) The platform destroys only on the schedule a purge date announces, so Trash still has no destroy verb and no frame primary (`frame.tsx` `NO_PRIMARY`) — but it does have **Empty trash** ([#1015](https://github.com/srikanth235/centraid/issues/1015), D1), which is `core.empty_document_trash`: it collapses every trashed document's grace window onto its own `deleted_at` and leaves the gateway's lifecycle sweep as the one thing that destroys a document. Recent means recently _changed_; the product does not record when a document was opened.
 
 ### Known duplication left in place
 
@@ -322,7 +324,6 @@ Photos is the pattern-setter for the v9 design system. The rows below are delibe
 | Divergence | Decision | Enforcement / reason |
 | --- | --- | --- |
 | Photos copy says **gateway** or **library**, not "vault". | Keep. | `packages/blueprints/src/photos-vocabulary.test.ts`; Photos can mount several scopes, so "this vault" is ambiguous (#599, S6). |
-| Photos menu and control copy in Title Case. | **Closed 2026-09-10** — sentence case, per **D2** in [decisions.md](decisions.md#mobile-ux-consistency-1015) ([#1015](https://github.com/srikanth235/centraid/issues/1015)). | Not a divergence any more: the house rule is sentence case everywhere and the pattern-setter follows it. #712's Title Case is superseded. |
 | Storage omits figures, backup controls, failing verdicts, and offload-cause splits. | Keep. | `Storage.tsx` and `STORAGE_COPY` render only values present in `blob.custody_rollup`; invented numbers are not acceptable. |
 | Search miss says `Nothing in captions, people, places, things or album names.` | Keep. | `SEARCH_COPY.miss`; the desktop projection has a tag entity that mobile does not, so copy follows available truth. |
 | Pending faces show a live count only after the count has loaded. | Keep. | `peoplePendingNote()` refuses stale or default counts. |

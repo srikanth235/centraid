@@ -1,6 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
 import { formatRelativeTime } from "@centraid/design";
 
 import { Text } from "../components/NativeText";
@@ -136,7 +137,7 @@ export default function PendingChangesSheet({
                 <View style={styles.verbs}>
                   {verbs.retry ? (
                     <SheetVerb
-                      label="Retry"
+                      label={RETRY_ACTION}
                       subject={title}
                       color={colors.accent}
                       onPress={() =>

@@ -96,7 +96,9 @@ describe("preflightedHarnessSelection", () => {
     expect(result.error).toBe("Sign in to Claude Code.");
   });
 
-  it("turns a failed model preference write into a surfaced error result", async () => {
+  it("turns a failed model preference write into one member sentence", async () => {
+    // S14 (#1015): the write's own words ("prefs unavailable") are a fact
+    // about the program, not about the member's vault.
     assistant.saveAssistantSelection.mockRejectedValueOnce(
       new Error("prefs unavailable")
     );
@@ -104,7 +106,7 @@ describe("preflightedHarnessSelection", () => {
       persistAssistantSelection("codex", "model", "gpt-5")
     ).resolves.toStrictEqual({
       ok: false,
-      error: "prefs unavailable",
+      error: "That could not be changed. Try again.",
     });
   });
 });

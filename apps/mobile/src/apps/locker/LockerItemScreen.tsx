@@ -54,7 +54,6 @@ import type { ThemeColors } from "../../kit/theme";
 import type { LockerScreenProps } from "../../navigation";
 import { copyLockerMetadata, copyLockerSecret } from "./locker-clipboard";
 import {
-  BACK_TO_ITEMS,
   OPEN_ITEM_ACT,
   OPEN_ITEM_BODY,
   OUTSIDE_WINDOW,
@@ -167,7 +166,7 @@ export default function LockerItemScreen({
           <>
             {detail.compromised ? (
               <LockerFieldRow
-                label="Compromised"
+                label={FIELD_LABEL.compromised ?? ""}
                 note={COMPROMISED_WHY}
                 value="Flagged"
               />
@@ -194,7 +193,7 @@ export default function LockerItemScreen({
 
             {detail.url ? (
               <LockerFieldRow
-                label="Address"
+                label={FIELD_LABEL.url ?? ""}
                 note={
                   detail.url_match_policy === "exact-host"
                     ? MATCH_NOTE_HOST
@@ -239,7 +238,7 @@ export default function LockerItemScreen({
 
             {detail.notes ? (
               <LockerFieldRow
-                label="Memo"
+                label={FIELD_LABEL.notes ?? ""}
                 note={FIELD_NOTE.notes}
                 value={detail.notes}
               />
@@ -247,6 +246,13 @@ export default function LockerItemScreen({
           </>
         )}
 
+        {/* TWO ACTS AND A DESTRUCTIVE ONE, ON TWO LINES (#1015,
+            locker/findings #4). Four `Button`s used to sit in one row with no
+            `flexWrap`: on 402pt that is ~84pt each for labels of up to
+            seventeen characters, so at least two clipped. The fourth was
+            `Items`, a third exit on a screen the frame already gives a back
+            affordance and a band tab — deleted. And the trash is not peer to
+            an edit, so it stands on its own line. */}
         <View style={styles.acts}>
           <Button
             label={EDIT_ITEM}
@@ -268,6 +274,8 @@ export default function LockerItemScreen({
               }}
             />
           ) : null}
+        </View>
+        <View style={styles.destructive}>
           <Button
             label={TRASH_ITEM}
             onPress={() =>
@@ -288,12 +296,6 @@ export default function LockerItemScreen({
             }
             variant="destructive"
           />
-          <Button
-            label={BACK_TO_ITEMS}
-            onPress={() =>
-              navigation.popTo("LockerHome", { destination: "items" })
-            }
-          />
         </View>
         {confirmSheet}
         {row ? null : <Text style={styles.body}>{OUTSIDE_WINDOW}</Text>}
@@ -304,10 +306,15 @@ export default function LockerItemScreen({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    destructive: {
+      paddingBottom: spacing[4],
+      paddingHorizontal: spacing[4],
+    },
     acts: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: spacing[2],
       marginTop: spacing[4],
       padding: spacing[4],
@@ -326,7 +333,7 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[4],
     },
     head: { gap: spacing[1], padding: spacing[4] },
-    lede: { ...t("mono"), color: colors.textFaint },
+    lede: { ...t("small"), color: colors.textFaint },
     scroll: { paddingBottom: spacing[6] },
     title: { ...t("title"), color: colors.text },
   });

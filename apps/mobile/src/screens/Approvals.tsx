@@ -36,6 +36,7 @@ import Queue from "./approvals/ApprovalsQueue";
 import Tail from "./approvals/ApprovalsTail";
 import { useApprovals } from "./approvals/useApprovals";
 import type { BodyProps, Focus } from "./approvals/view-types";
+import { SHELL_TITLES } from "./shell-copy";
 
 export default function ApprovalsScreen({
   navigation,
@@ -165,7 +166,7 @@ export default function ApprovalsScreen({
             },
           }
         : {})}
-      title="Notifications"
+      title={SHELL_TITLES.alerts}
     >
       {page.actionError ? (
         <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>

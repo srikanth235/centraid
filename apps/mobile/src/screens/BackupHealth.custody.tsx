@@ -6,6 +6,7 @@ import { Pressable, View } from "react-native";
 import { formatBytes } from "@centraid/design";
 
 import { Text } from "../kit/components/NativeText";
+import { formatRelative } from "../kit/format";
 import { custodyDurability } from "../kit/storage/custody-status";
 import type {
   CustodyDurability,
@@ -184,9 +185,12 @@ export function FreeUpBlock({
 const FREE_UP_WHERE =
   "Release the copies from the app that holds them — Photos re-hashes each device original before deleting it.";
 
+/**
+ * One formatter module (#1015, S8 + shell/findings 21). This was
+ * `toLocaleString()` — a locale-numeric stamp WITH SECONDS ("10/09/2026,
+ * 2:11:39 PM") on a page whose other dates were relative, which is the fourth
+ * of the four date registers the audit found inside one navigation stack.
+ */
 export function formatSyncTime(value: string): string {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp)
-    ? "Unknown"
-    : new Date(timestamp).toLocaleString();
+  return formatRelative(value) || "Unknown";
 }

@@ -13,7 +13,6 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
-import { memberFacingError } from "../../kit/member-error";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { AssistantScreenProps } from "../../navigation";
@@ -193,7 +192,7 @@ export default function AssistantCompanionSheet({
                       </Text>
                       <Text style={styles.emptyBody}>
                         {(assistant.loadError
-                          ? memberFacingError(assistant.loadError)
+                          ? assistant.loadError
                           : undefined) ??
                           "Ask a question with page context, attachments, and your chosen agent."}
                       </Text>
@@ -228,7 +227,7 @@ export default function AssistantCompanionSheet({
                           {item.pending
                             ? "Thinking…"
                             : item.error
-                              ? memberFacingError(item.text)
+                              ? item.text
                               : item.text}
                         </Text>
                       </View>
@@ -338,7 +337,7 @@ export default function AssistantCompanionSheet({
                 ) : null}
                 {assistant.selectionError ? (
                   <Text style={styles.selectionError}>
-                    {memberFacingError(assistant.selectionError)}
+                    {assistant.selectionError}
                   </Text>
                 ) : null}
                 <Text style={styles.consequence}>

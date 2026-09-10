@@ -116,6 +116,6 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   grant: { alignItems: "flex-start", gap: spacing[3] },
-  note: { ...t("mono") },
+  note: { ...t("small") },
   page: { gap: spacing[4] },
 });
