@@ -197,6 +197,37 @@ export function installGatewaySchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS share_access_receipts_audience_idx
       ON share_access_receipts(audience_vault_id, created_at);
     /*
+     * A PLACEMENT THAT STARTED AND HAS NOT FINISHED (#1014, V3).
+     *
+     * The receipt above is written LAST, so it says "this act completed" and
+     * nothing said "this act began". A placement touches three databases in
+     * three transactions — the origin's authority, the audience's projection,
+     * and for a move the origin's release — and a crash anywhere in there left
+     * the gateway with no record at all: the phone's outbox retried the same
+     * token and the route could not tell a resume from a fresh act.
+     *
+     * So the attempt is recorded BEFORE the first vault write and removed with
+     * the receipt. It carries the act's PARAMETERS, which is what makes a
+     * placement token mean one act: a retry that arrives with different items
+     * or a different pair under the same id is refused rather than performed.
+     * The vault steps are each idempotent by id (INSERT OR IGNORE on the
+     * authority, dedupe-by-content on the projection, a delete for the move),
+     * so a resume converges rather than doubling.
+     */
+    CREATE TABLE IF NOT EXISTS share_placement_attempts (
+      placement_id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('add', 'move')),
+      item_type TEXT NOT NULL,
+      origin_vault_id TEXT NOT NULL,
+      audience_vault_id TEXT NOT NULL,
+      origin_item_ids_json TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 1 CHECK (attempts >= 1)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS share_placement_attempts_started_idx
+      ON share_placement_attempts(started_at);
+    /*
      * The vault DIRECTORY (issue #750 invariant 1): ONE stable identity
      * record per known vault — local and peer alike. vault_id plus the
      * vault's own Ed25519 identity public key (P1 mints one for EVERY
