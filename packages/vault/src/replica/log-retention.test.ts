@@ -8,9 +8,12 @@ import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { bumpReplicaEpoch, pruneReplicaChanges } from "./change-log.js";
 import {
   lowestSeatCursor,
   pruneReplicaLog,
+  recordSeatCursor,
+  REPLICA_SEAT_HOLD_DAYS,
   readReplicaLog,
   replicaLogState,
   ReplicaRebootstrapRequiredError,
@@ -79,10 +82,14 @@ describe("the retention floor", () => {
       const behind = all.findLast((row) => row.commitSeq === firstCommit)!.seq;
       db.vault
         .prepare(
-          `INSERT INTO access_device_secret (device_id, public_key, sync_cursor)
-           VALUES ('d1', 'k', ?)`
+          `INSERT INTO access_device_secret (device_id, public_key)
+           VALUES ('d1', 'k')`
         )
-        .run(String(behind));
+        .run();
+      // The door records the cursor the device SENT, with the time it asked
+      // (#1014, V1): a cursor with no time on it cannot pin, because nothing
+      // can tell a live seat from an abandoned one.
+      expect(recordSeatCursor(db.vault, "d1", behind)).toBe(true);
       expect(lowestSeatCursor(db.vault)).toBe(behind);
 
       // A prune that would otherwise take everything.
@@ -211,6 +218,250 @@ describe("the producer bound", () => {
       // one verdict per commit, never a row a seat could skip alone.
       for (const [commitSeq, verdicts] of perCommit)
         expect(verdicts.size, `commit ${commitSeq}`).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// THE OTHER DIRECTION OF THE HOLD (#1014, T9). A hold with no bound is a hold
+// forever: one phone that is lost, wiped or never opened again pins every log
+// row above its cursor, which is the unbounded growth the retention window
+// exists to stop. The bound is a named constant and it is tested from both
+// sides — inside the window the seat still pins, past it the prune proceeds
+// and that device re-bootstraps once, visibly.
+describe("the seat hold's abandonment bound", () => {
+  const dayMs = 24 * 60 * 60 * 1_000;
+
+  function seatAt(db: VaultDb, deviceId: string, seq: number, at: Date): void {
+    db.vault
+      .prepare(
+        `INSERT OR IGNORE INTO core_party
+           (party_id, kind, display_name, created_at, updated_at)
+         VALUES ('p1', 'person', 'Owner', '2026-01-01T00:00:00.000Z',
+                 '2026-01-01T00:00:00.000Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO access_device (device_id, owner_party_id, name, enrolled_at)
+         VALUES (?, 'p1', ?, '2026-01-01T00:00:00.000Z')`
+      )
+      .run(deviceId, deviceId);
+    db.vault
+      .prepare(
+        `INSERT INTO access_device_secret (device_id, public_key)
+         VALUES (?, ?)`
+      )
+      .run(deviceId, `k-${deviceId}`);
+    expect(recordSeatCursor(db.vault, deviceId, seq, at)).toBe(true);
+  }
+
+  test("a device seen inside the window still pins", () => {
+    const db = openVaultDb();
+    try {
+      seeded(db);
+      const now = new Date();
+      seatAt(
+        db,
+        "recent",
+        3,
+        new Date(now.getTime() - (REPLICA_SEAT_HOLD_DAYS - 1) * dayMs)
+      );
+      expect(lowestSeatCursor(db.vault, { now })).toBe(3);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("a device not seen for the bound stops pinning, and the prune moves", () => {
+    const db = openVaultDb();
+    try {
+      seeded(db);
+      const now = new Date();
+      seatAt(
+        db,
+        "lost",
+        3,
+        new Date(now.getTime() - (REPLICA_SEAT_HOLD_DAYS + 1) * dayMs)
+      );
+      expect(lowestSeatCursor(db.vault, { now })).toBeUndefined();
+      const result = pruneReplicaLog(db.vault, {
+        maxRows: 0,
+        maxAgeMs: 0,
+        now: new Date(now.getTime() + 10 * dayMs),
+      });
+      expect(result.heldBySeat).toBeUndefined();
+      expect(result.pruned).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("the lowest LIVE cursor wins, not the lowest cursor", () => {
+    const db = openVaultDb();
+    try {
+      seeded(db);
+      const now = new Date();
+      seatAt(db, "live", 4, now);
+      seatAt(
+        db,
+        "abandoned",
+        1,
+        new Date(now.getTime() - (REPLICA_SEAT_HOLD_DAYS + 5) * dayMs)
+      );
+      expect(lowestSeatCursor(db.vault, { now })).toBe(4);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("the door's record never moves a seat's cursor backwards", () => {
+    const db = openVaultDb();
+    try {
+      const now = new Date();
+      seatAt(db, "d1", 9, now);
+      // A retry or an out-of-order page must not un-advance the hold.
+      expect(recordSeatCursor(db.vault, "d1", 4, now)).toBe(false);
+      expect(lowestSeatCursor(db.vault, { now })).toBe(9);
+      expect(recordSeatCursor(db.vault, "d1", 11, now)).toBe(true);
+      expect(lowestSeatCursor(db.vault, { now })).toBe(11);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// ONE FLOOR PER LOG (#1014, G1/G2; ruling R-1014-1).
+//
+// The two logs are counted in unrelated sequence spaces — the trigger log runs
+// roughly nineteen rows to the session log's one — and both pruners used to
+// write `replica_meta.floor_seq`. That is the loop this suite reproduces: a
+// trigger-log prune stamps a floor far above `MAX(replica_log.seq)`, every
+// seat cursor then fails `since.seq < floor` into a `retention` verdict, the
+// snapshot stamps the floor back down, and the next tail says `retention`
+// again — with nothing applied and nothing surfaced. An epoch bump did the
+// same thing from the other direction, deriving the seat log's floor from the
+// trigger log's `sqlite_sequence`.
+describe("two logs, two floors", () => {
+  function seat(db: VaultDb, deviceId: string, seq: number): void {
+    db.vault
+      .prepare(
+        `INSERT OR IGNORE INTO core_party
+           (party_id, kind, display_name, created_at, updated_at)
+         VALUES ('p1', 'person', 'Owner', '2026-01-01T00:00:00.000Z',
+                 '2026-01-01T00:00:00.000Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO access_device (device_id, owner_party_id, name, enrolled_at)
+         VALUES (?, 'p1', ?, '2026-01-01T00:00:00.000Z')`
+      )
+      .run(deviceId, deviceId);
+    db.vault
+      .prepare(
+        `INSERT INTO access_device_secret (device_id, public_key) VALUES (?, ?)`
+      )
+      .run(deviceId, `k-${deviceId}`);
+    expect(recordSeatCursor(db.vault, deviceId, seq)).toBe(true);
+  }
+
+  test("a trigger-log prune never moves the seat log's floor", () => {
+    const db = openVaultDb();
+    try {
+      seeded(db);
+      const rows = readReplicaLog(db.vault, { limit: 10_000 }).rows;
+      const before = replicaLogState(db.vault).floor.seq;
+      // The two logs count the same writes differently — that they DISAGREE
+      // is the whole hazard; which one runs ahead depends on the tables.
+      expect(
+        (
+          db.vault
+            .prepare(`SELECT COUNT(*) AS n FROM replica_change`)
+            .get() as { n: number }
+        ).n
+      ).not.toBe(rows.length);
+      pruneReplicaChanges(db.vault, { maxEntries: 0, maxAgeMs: 0 });
+      expect(replicaLogState(db.vault).floor.seq).toBe(before);
+      // And every row a seat had not applied is still readable from 0.
+      expect(
+        readReplicaLog(db.vault, {
+          since: { epoch: rows[0]!.epoch, seq: 0 },
+          limit: 10_000,
+        }).rows.map((row) => row.seq)
+      ).toStrictEqual(rows.map((row) => row.seq));
+    } finally {
+      db.close();
+    }
+  });
+
+  test("an epoch bump derives each floor from its own log", () => {
+    const db = openVaultDb();
+    try {
+      seeded(db);
+      const high = readReplicaLog(db.vault, { limit: 10_000 }).rows.at(-1)!.seq;
+      const changeHigh = (
+        db.vault
+          .prepare(`SELECT MAX(seq) AS seq FROM replica_change`)
+          .get() as { seq: number }
+      ).seq;
+      expect(changeHigh).not.toBe(high);
+      bumpReplicaEpoch(db.vault, { reason: "one-log" });
+      const meta = db.vault
+        .prepare(
+          `SELECT floor_seq, change_floor_seq FROM replica_meta WHERE singleton = 1`
+        )
+        .get() as { floor_seq: number; change_floor_seq: number };
+      // The seat log's floor is ITS OWN high-water mark, never the other
+      // log's — which is what used to skip every real row while reporting
+      // caught-up, because `watermark === floor`.
+      expect(meta.floor_seq).toBe(high);
+      expect(meta.change_floor_seq).toBe(changeHigh);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("a prune and an epoch bump under two live seats strand neither", () => {
+    const db = openVaultDb();
+    try {
+      seeded(db);
+      const rows = readReplicaLog(db.vault, { limit: 10_000 }).rows;
+      const firstCommit = rows[0]!.commitSeq;
+      const behind = rows.findLast((row) => row.commitSeq === firstCommit)!.seq;
+      seat(db, "phone", behind);
+      seat(db, "laptop", rows.at(-1)!.seq);
+
+      pruneReplicaChanges(db.vault, { maxEntries: 0, maxAgeMs: 0 });
+      const pruned = pruneReplicaLog(db.vault, {
+        maxRows: 0,
+        maxAgeMs: 0,
+        now: new Date(Date.now() + 10 * 24 * 60 * 60 * 1_000),
+      });
+      // The seat that is furthest behind is the one that sets the floor.
+      expect(pruned.heldBySeat).toBe(behind);
+      expect(pruned.floor.seq).toBeLessThanOrEqual(behind);
+
+      // NEITHER cursor is below the floor, so neither seat is told to start
+      // over: a page from each is served, not refused.
+      for (const cursor of [behind, rows.at(-1)!.seq]) {
+        expect(() =>
+          readReplicaLog(db.vault, {
+            since: { epoch: rows[0]!.epoch, seq: cursor },
+            limit: 10_000,
+          })
+        ).not.toThrow();
+      }
+      // And the phone still gets exactly the rows it had not applied.
+      expect(
+        readReplicaLog(db.vault, {
+          since: { epoch: rows[0]!.epoch, seq: behind },
+          limit: 10_000,
+        }).rows.map((row) => row.seq)
+      ).toStrictEqual(
+        rows.filter((row) => row.seq > behind).map((row) => row.seq)
+      );
     } finally {
       db.close();
     }
