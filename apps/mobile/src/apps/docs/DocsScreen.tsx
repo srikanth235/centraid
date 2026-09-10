@@ -20,12 +20,16 @@ export interface DocsScreenComponentProps {
   current: DocsBandDestinationKey;
   children: React.ReactNode;
   hideBand?: boolean;
+  /** A selection is running on this surface: the band dims and stops
+   *  answering, so the foot carries one bar at a time (#1015, D5). */
+  selecting?: boolean;
 }
 
 export default function DocsScreen({
   current,
   children,
   hideBand,
+  selecting = false,
 }: DocsScreenComponentProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -98,9 +102,10 @@ export default function DocsScreen({
         <DocsBand
           owner={bandOwner}
           current={current}
+          dimmed={selecting}
           onSelect={onDestination}
           // goBack() no-ops under a deep link; navigate re-pushes Home.
-          onHome={() => navigation.popTo("Home")}
+          onHome={selecting ? () => undefined : () => navigation.popTo("Home")}
         />
       )}
 

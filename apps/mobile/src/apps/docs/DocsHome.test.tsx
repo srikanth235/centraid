@@ -312,4 +312,33 @@ describe("Docs, on the real React Native host tree", () => {
     );
     expect(framed.length).toBeGreaterThan(0);
   });
+
+  it("makes selection a MODE: the head swaps and the band stops answering", () => {
+    // THE DEFECT (#1015, audit docs/findings#2, blocker): the bulk bar was an
+    // inline row and the five-tab band stayed mounted and LIVE beneath it, so
+    // the foot carried two bars and one tap navigated away mid-selection. The
+    // filter/sort row above stayed interactive too.
+    seedDocuments([{ id: "d1", title: "Lease agreement" }]);
+    const screen = mountDocs();
+
+    fireEvent.press(screen.getByRole("button", { name: "Select documents" }));
+
+    // The head says the mode and the count, and the way out is named.
+    expect(screen.getByText("Choose documents")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    // The primary act stands down; the bar owns the verbs.
+    expect(screen.queryByRole("button", { name: "Add a document" })).toBeNull();
+    // The set-describing controls go with it.
+    expect(screen.queryByRole("button", { name: "Grid view" })).toBeNull();
+    // Every band tab is disabled — dimmed on its leaf, not behind a container
+    // opacity, and unable to navigate away from a running selection.
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.length).toBeGreaterThan(1);
+    for (const tab of tabs) {
+      expect(
+        (tab.props as { accessibilityState?: { disabled?: boolean } })
+          .accessibilityState?.disabled
+      ).toBe(true);
+    }
+  });
 });

@@ -13,7 +13,7 @@
 // sentence).
 
 import { useNavigation } from "@react-navigation/native";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 
 import type { ShelfId } from "@centraid/blueprints/apps/docs/shelves";
@@ -82,6 +82,8 @@ export interface DriveListProps {
    *  CONTROLLED: the button that turns it on lives in the app bar, which is
    *  the shelf's chrome and not this list's. */
   selecting?: boolean;
+  /** The head owns the count now (#1015, D5): the bar carries verbs only. */
+  onChosenCount?: (count: number) => void;
   onSelectingChange?: (active: boolean) => void;
 }
 
@@ -109,6 +111,7 @@ export default function DriveList({
   header,
   embedded,
   selecting = false,
+  onChosenCount,
   onSelectingChange,
 }: DriveListProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -142,6 +145,11 @@ export default function DriveList({
     () => docs.filter((doc) => pickedSet.has(doc.document_id)),
     [docs, pickedSet]
   );
+  // The count belongs to the HEAD, which swaps in place while a set is being
+  // chosen — one statement of how many, not one per bar (#1015, D5).
+  useEffect(() => {
+    onChosenCount?.(pickedDocs.length);
+  }, [onChosenCount, pickedDocs.length]);
   const leaveSelection = (): void => {
     setPicked([]);
     setMovingOpen(false);
@@ -478,11 +486,6 @@ export default function DriveList({
           covered the last row would hide something choosable. */}
       {selecting ? (
         <View style={styles.bulkBar}>
-          <Text style={styles.bulkCount}>
-            {pickedDocs.length === 0
-              ? "Choose documents"
-              : `${pickedDocs.length} chosen`}
-          </Text>
           <BulkVerb
             label="Star"
             disabled={pickedDocs.length === 0}

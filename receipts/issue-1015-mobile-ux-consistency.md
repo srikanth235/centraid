@@ -115,3 +115,23 @@ Files:
 - `apps/mobile/src/apps/notes/NotesHome.tsx` — `dirty`, the autosave effect, `save({ closeAfter })`, `finishEditing`, the version count for the editor's line.
 - `apps/mobile/src/apps/notes/NoteEditor.tsx` — Save button removed; `dirty` and `versions` props; the close control's verb; `editorStatus` drawn in the sheet.
 - `apps/mobile/src/apps/notes/NotesHome.test.tsx` — the write seam and the two autosave claims.
+
+### Lane APPS-A — slice 5: selection becomes a mode in Docs (B8 / D5)
+
+Closes audit `docs/findings.md#2`, a blocker, and applies D5. **`docs/findings.md#7` (D1, Empty trash) is NOT closed — see the gap below.**
+
+Docs' phone seat put the bulk bar in the list as an inline row and kept the five-tab band mounted and LIVE beneath it, so a set being chosen sat under two bars at once and one tap navigated away mid-selection with no warning; the filter/sort/arrangement row above stayed interactive as well. Photos states the opposite rule on the same product and follows it, and Docs' own web seat retired this exact shape (`docs/design-divergences.md:146-174`).
+
+Selection is now a mode. The head swaps in place — "3 documents selected", sentence case and naming the noun — with **Cancel** as the one way out; the primary "New" act and the whole set-describing controls row stand down; the bar carries verbs only, because the head owns the count; and the band dims on its **leaf tokens** (`textDisabled` on the label, the icon colour, `accessibilityState.disabled` on each tab) and stops answering. Never a container opacity.
+
+**Gap reported, not stubbed — D1 for Docs.** The vault has no command that can empty a document trash. `core.trash_document` requires a `purge_at` and refuses an already-trashed document, so it cannot bring a date forward; destruction happens only in the gateway's sweep (`packages/vault/src/gateway/duties.ts:775-825`), which carries the blob-rent, authority-revocation and receipt machinery. Photos can do it because `media.purge_asset` exists; Docs has no counterpart, and the docs blueprint has no purge action. Shipping the control against any existing op would fail at the tap, so `DocsTrash` is untouched. Recommendation: a vault/server slice adds `core.purge_document` (or the cheaper `core.empty_document_trash`, which sets `purge_at` to now and lets the audited sweep destroy), plus a `purge` action and handler in `packages/blueprints/apps/docs`; the mobile control and its outlined-net confirm are then a few lines here. The root is asked to place that slice.
+
+Files:
+
+- `apps/mobile/src/apps/docs/DocsHome.tsx` — the head swaps to the selection count and Cancel; the controls row stands down; `selecting` reaches the frame.
+- `apps/mobile/src/apps/docs/DocsScreen.tsx` — `selecting` prop, dimming the band and standing down the capsule.
+- `apps/mobile/src/apps/docs/DocsBand.tsx` — `dimmed`: leaf tokens, `accessibilityState.disabled`, no pointer events.
+- `apps/mobile/src/apps/docs/DriveList.tsx` — reports the chosen count up; the bar carries verbs only.
+- `apps/mobile/src/apps/docs/DriveList.styles.ts` — `bulkCount` removed with its last renderer.
+- `apps/mobile/src/apps/docs/docs-copy.ts` — `selectionHead`.
+- `apps/mobile/src/apps/docs/DocsHome.test.tsx` — the mode claim: head, Cancel, no New, no arrangement controls, every band tab disabled.

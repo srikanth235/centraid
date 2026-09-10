@@ -41,7 +41,7 @@ import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { allStatus, SHARED_TITLE } from "./docs-copy";
+import { allStatus, selectionHead, SHARED_TITLE } from "./docs-copy";
 import { sortDocuments } from "./docs-projection";
 import { useDriveViewPrefs } from "./docs-view-prefs";
 import DocsDueView from "./DocsDueView";
@@ -83,6 +83,11 @@ export default function DocsHome({
   // Owned here, not in `DriveList`: the control that turns it on is the app
   // bar's, and the app bar belongs to the screen.
   const [selecting, setSelecting] = useState(false);
+  // SELECTION IS A MODE (#1015, D5, audit docs/findings#2): the head swaps in
+  // place to the count and the one way out, the controls row stands down, and
+  // the band below dims. Before this the drive carried the bulk bar AND a live
+  // five-tab band at the foot, and one tap navigated away mid-selection.
+  const [chosenCount, setChosenCount] = useState(0);
 
   const active = useMemo(
     () => drive.documents.filter((doc) => !doc.trashed),
@@ -114,10 +119,10 @@ export default function DocsHome({
             : shelfCopy(null).title;
 
   return (
-    <DocsScreen current={destination}>
+    <DocsScreen current={destination} selecting={selecting}>
       <View style={styles.header}>
         <Text numberOfLines={1} style={styles.title}>
-          {headTitle}
+          {selecting ? selectionHead(chosenCount) : headTitle}
         </Text>
         {/* Both acts sit on the DRIVE only. Search and Coming due have no set
             to choose from, Folders already carries its own New folder — two
@@ -174,6 +179,7 @@ export default function DocsHome({
           onPrefs={updatePrefs}
           selecting={selecting}
           onSelectingChange={setSelecting}
+          onChosenCount={setChosenCount}
         />
       ) : destination === "folders" ? (
         <DocsFoldersView drive={drive} />
@@ -207,6 +213,7 @@ function AllShelf({
   onPrefs,
   selecting,
   onSelectingChange,
+  onChosenCount,
 }: {
   drive: ReturnType<typeof useDocs>;
   docs: ReturnType<typeof useDocs>["documents"];
@@ -225,6 +232,7 @@ function AllShelf({
   }) => void;
   selecting: boolean;
   onSelectingChange: (active: boolean) => void;
+  onChosenCount: (count: number) => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -301,83 +309,88 @@ function AllShelf({
 
   return (
     <View style={styles.shelf}>
-      <View style={styles.controls}>
-        {/* `flex: 1` on the SCROLLER, not its content: without it the row's
+      {/* The filter, sort and arrangement row describes the set being READ.
+          While a set is being chosen the member is no longer reading it, and
+          leaving these live was the second half of the two-bars defect. */}
+      {selecting ? null : (
+        <View style={styles.controls}>
+          {/* `flex: 1` on the SCROLLER, not its content: without it the row's
             fixed siblings and this list negotiate width against each other and
             a chip is left sliced at the sort control's edge. */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
-          contentContainerStyle={styles.chipRow}
-        >
-          {axes.map((axis) => {
-            const chosen = filters[axis.id];
-            return (
-              <Pressable
-                key={axis.id}
-                accessibilityRole="button"
-                accessibilityLabel={axis.label}
-                accessibilityState={{ selected: chosen !== null }}
-                onPress={(event) => openFrom(axis.id, event)}
-                style={[styles.chip, chosen ? styles.chipOn : undefined]}
-              >
-                <Text
-                  style={[
-                    styles.chipLabel,
-                    chosen ? styles.chipLabelOn : undefined,
-                  ]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipRow}
+          >
+            {axes.map((axis) => {
+              const chosen = filters[axis.id];
+              return (
+                <Pressable
+                  key={axis.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={axis.label}
+                  accessibilityState={{ selected: chosen !== null }}
+                  onPress={(event) => openFrom(axis.id, event)}
+                  style={[styles.chip, chosen ? styles.chipOn : undefined]}
                 >
-                  {chosen ?? axis.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-          {anyFilter ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={CLEAR_FILTERS}
-              onPress={() => onFilters(NO_FILTERS)}
-              style={styles.clear}
-            >
-              <Text style={styles.clearLabel}>{CLEAR_FILTERS}</Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Sort: ${sortNow.name}, ${sortNow.sub}`}
-          onPress={(event) => openFrom("sort", event)}
-          style={styles.sortButton}
-        >
-          {/* The glyph alone. The order it names lives in the menu this
-              opens, and the control's `accessibilityLabel` still speaks it. */}
-          <Icon name="SwitchVert" size={18} color={colors.text} />
-        </Pressable>
-        <View style={styles.viewPair}>
-          {(["list", "grid"] as const).map((candidate) => {
-            const on = view === candidate;
-            return (
+                  <Text
+                    style={[
+                      styles.chipLabel,
+                      chosen ? styles.chipLabelOn : undefined,
+                    ]}
+                  >
+                    {chosen ?? axis.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {anyFilter ? (
               <Pressable
-                key={candidate}
                 accessibilityRole="button"
-                accessibilityLabel={
-                  candidate === "list" ? "List view" : "Grid view"
-                }
-                accessibilityState={{ selected: on }}
-                onPress={() => onPrefs({ view: candidate })}
-                style={[styles.viewItem, on ? styles.viewItemOn : undefined]}
+                accessibilityLabel={CLEAR_FILTERS}
+                onPress={() => onFilters(NO_FILTERS)}
+                style={styles.clear}
               >
-                <Icon
-                  name={candidate === "list" ? "List" : "Grid"}
-                  size={16}
-                  color={on ? colors.text : colors.textFaint}
-                />
+                <Text style={styles.clearLabel}>{CLEAR_FILTERS}</Text>
               </Pressable>
-            );
-          })}
+            ) : null}
+          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${sortNow.name}, ${sortNow.sub}`}
+            onPress={(event) => openFrom("sort", event)}
+            style={styles.sortButton}
+          >
+            {/* The glyph alone. The order it names lives in the menu this
+              opens, and the control's `accessibilityLabel` still speaks it. */}
+            <Icon name="SwitchVert" size={18} color={colors.text} />
+          </Pressable>
+          <View style={styles.viewPair}>
+            {(["list", "grid"] as const).map((candidate) => {
+              const on = view === candidate;
+              return (
+                <Pressable
+                  key={candidate}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    candidate === "list" ? "List view" : "Grid view"
+                  }
+                  accessibilityState={{ selected: on }}
+                  onPress={() => onPrefs({ view: candidate })}
+                  style={[styles.viewItem, on ? styles.viewItemOn : undefined]}
+                >
+                  <Icon
+                    name={candidate === "list" ? "List" : "Grid"}
+                    size={16}
+                    color={on ? colors.text : colors.textFaint}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
 
       <DriveList
         shelf={null}
@@ -400,6 +413,7 @@ function AllShelf({
         status={allStatus(activeCount)}
         selecting={selecting}
         onSelectingChange={onSelectingChange}
+        onChosenCount={onChosenCount}
       />
 
       <AnchoredMenu

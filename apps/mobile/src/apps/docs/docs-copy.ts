@@ -171,3 +171,10 @@ export const SCAN_HANDOFF_BODY =
   "Scan cover: one capture, reviewed here, saved into Docs as an image with its extracted text";
 export const SCAN_PDF_WITHHELD =
   "Multi-page capture that lands as one PDF is not built on this phone yet, so this screen does not promise it.";
+
+/** The head of a running selection (#1015, D5). Sentence case, and it names
+ *  the noun — "3 documents selected", never a bare number. */
+export function selectionHead(count: number): string {
+  if (count === 0) return "Choose documents";
+  return `${count} ${count === 1 ? "document" : "documents"} selected`;
+}

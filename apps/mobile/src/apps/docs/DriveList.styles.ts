@@ -20,7 +20,6 @@ export const makeStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingHorizontal: 18,
     },
-    bulkCount: { ...t("mono"), color: colors.textSoft, flex: 1 },
     bulkVerb: {
       alignItems: "center",
       justifyContent: "center",
