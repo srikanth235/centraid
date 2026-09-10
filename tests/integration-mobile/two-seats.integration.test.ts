@@ -30,6 +30,8 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+
 import { postReplicaIntent } from "../../packages/client/src/replica/native.js";
 import type { ReplicaIntent } from "../../packages/client/src/replica/native.js";
 import { bumpReplicaEpoch } from "../../packages/vault/src/replica/change-log.js";
@@ -38,6 +40,7 @@ import { intentIdOf, seedRow, statusOf } from "./lib/boot-conditions.js";
 import type { PendingEntry } from "./lib/boot-conditions.js";
 import { bootMobileGateway } from "./lib/gateway.js";
 import type { MobileGateway } from "./lib/gateway.js";
+import { readEntity } from "./lib/reads.js";
 import { openSeat } from "./lib/seat.js";
 import type { MobileSeat } from "./lib/seat.js";
 
@@ -57,6 +60,15 @@ async function pendingOf(seat: MobileSeat): Promise<PendingEntry[]> {
   return (await seat.session.pendingChanges()) as PendingEntry[];
 }
 
+/**
+ * The GATEWAY's own row, not the seat's.
+ *
+ * A seat read is replica ⊕ outbox, and an intent the gateway refused keeps
+ * overlaying the row it was refused for (#1014, R26) — so "did the clobber
+ * land" cannot be asked of the phone. It is a question about the vault.
+ */
+let canonicalTitle: (taskId: string) => string | undefined;
+
 describe("two seats on one gateway", () => {
   let gateway: MobileGateway;
   let first: MobileSeat;
@@ -66,6 +78,14 @@ describe("two seats on one gateway", () => {
     gateway = await bootMobileGateway("two-seats");
     first = await openSeat(gateway, { label: "one" });
     second = await openSeat(gateway, { label: "two" });
+    const plane = gateway.handle.vaults.get(gateway.vaultId);
+    if (!plane) throw new Error("the vault plane is not mounted");
+    canonicalTitle = (taskId) =>
+      (
+        plane.db.vault
+          .prepare(`SELECT title FROM schedule_task WHERE task_id = ?`)
+          .get(taskId) as { title: string } | undefined
+      )?.title;
   });
 
   afterAll(async () => {
@@ -164,6 +184,168 @@ describe("two seats on one gateway", () => {
       title: "Recovery probe",
     });
     expect(titles.status).toBe(200);
+  }, 120_000);
+
+  /*
+   * R24 — THE CLOBBER THAT NEEDS NO OUTAGE (#1014).
+   *
+   * A foregrounded, connected phone whose screen had gone stale overwrote two
+   * newer edits with no conflict, no reason and no alert. The seat sat at
+   * `row_version 47` while the gateway advanced to 49; the caption typed on
+   * the phone went out with `base_versions_json = []` — the R18 hole — and the
+   * gateway had nothing to refuse it against. This is that exact sequence:
+   * the seat never pulls, the gateway moves the row twice, and the seat's edit
+   * must come back a CONFLICT naming both numbers.
+   */
+  test("R24: a stale seat's edit is refused, not applied over two newer ones", async () => {
+    const row = await seedRow(gateway, first, recipe, "r24");
+
+    // THE FIRST WRITE IS WHAT ARMED THE HOLE. R1 kept every executed intent
+    // unsettled, and the seat dropped the base version of any row a still-
+    // unsettled intent had touched — so the phone's SECOND edit of a row went
+    // out naked. Here the first edit executes and is deliberately left
+    // unsettled (no pull), which is the state the field install was in
+    // permanently.
+    const opener = intentIdOf(
+      await first.session.write(recipe.appId, {
+        action: "edit",
+        input: { task_id: row.rowId, title: "A-OPENER" },
+      })
+    );
+    await first.session.flushIntents();
+    expect((await outboxRecord(first, opener))?.state).toBe("awaiting-change");
+
+    // The gateway advances the row twice while the seat is not looking. No
+    // outage anywhere: the seat is connected the whole time, it simply has not
+    // pulled — which is the state R22 leaves every foregrounded screen in.
+    // Sequentially, because the ORDER is the finding: 47 to 48 to 49.
+    await forEachSequentially(
+      ["SHARED-EDIT-1", "SHARED-EDIT-2"],
+      async (title) => {
+        const moved = await gateway.callAction(recipe.appId, "edit", {
+          task_id: row.rowId,
+          title,
+        });
+        expect(moved.body.status).toBe("executed");
+      }
+    );
+
+    const burst = intentIdOf(
+      await first.session.write(recipe.appId, {
+        action: "edit",
+        input: { task_id: row.rowId, title: "A-BURST-1" },
+      })
+    );
+    await first.session.flushIntents();
+
+    const refused = (await pendingOf(first)).find(
+      (entry) => entry.intentId === burst
+    );
+    expect(refused?.status).toBe("conflict");
+    expect(refused?.expectedVersion).toBeTypeOf("number");
+    expect(refused?.actualVersion).toBeGreaterThan(refused!.expectedVersion!);
+
+    // And the GATEWAY's own row still says what the gateway last wrote. Read
+    // canonically on purpose: the seat's own read is replica ⊕ outbox, and a
+    // refused intent keeps overlaying the row it was refused for (R26), so a
+    // seat-side read would show the member's rejected words either way.
+    expect(canonicalTitle(row.rowId)).toBe("SHARED-EDIT-2");
+  }, 120_000);
+
+  /*
+   * R18 — THE CHAINED WRITE STILL STATES A BASE.
+   *
+   * Two edits of the same row queued while cut. The second used to go out with
+   * `base_versions_json = []`, because the seat dropped the base version for
+   * every row a queued predecessor had upserted — so after the first write to a
+   * row on a phone, that row never carried a precondition again. Both must
+   * carry one, and both must land: the gateway rebases the child onto the
+   * version its parent produced.
+   */
+  test("R18: a second offline edit of one row carries a base, and both land", async () => {
+    const row = await seedRow(gateway, first, recipe, "chain");
+
+    first.cut();
+    let parent: string;
+    let child: string;
+    try {
+      parent = intentIdOf(
+        await first.session.write(recipe.appId, {
+          action: "edit",
+          input: { task_id: row.rowId, title: "Chained once" },
+        })
+      );
+      child = intentIdOf(
+        await first.session.write(recipe.appId, {
+          action: "edit",
+          input: { task_id: row.rowId, title: "Chained twice" },
+        })
+      );
+    } finally {
+      first.restore();
+    }
+    expect(child).not.toBe(parent);
+
+    // THE FINDING ITSELF, read off the durable outbox: the child states a
+    // precondition. This was `undefined` before the fix.
+    const queued = await outboxRecord(first, child);
+    expect(queued?.baseVersions?.length).toBeGreaterThan(0);
+
+    await first.session.flushIntents();
+    await first.session.pullNow();
+    await first.session.flushIntents();
+    await first.session.pullNow();
+
+    const stillPending = await pendingOf(first);
+    expect(statusOf(stillPending, parent)).toBeUndefined();
+    expect(statusOf(stillPending, child)).toBeUndefined();
+    const rows = await readEntity(first, recipe.entity);
+    expect(rows.rows.find((entry) => entry.task_id === row.rowId)?.title).toBe(
+      "Chained twice"
+    );
+  }, 120_000);
+
+  /*
+   * R18's other half — A DESTRUCTIVE WRITE HAD NO GUARD AT ALL.
+   *
+   * The phone trashed a row offline while the gateway edited it, and the
+   * delete executed with no conflict: deletes never carried base versions. The
+   * refusal is the point — a member who is shown "this changed under you" can
+   * decide, and one who is shown nothing has already lost the other edit.
+   */
+  test("R18: a delete of a row the gateway moved is refused", async () => {
+    const row = await seedRow(gateway, first, recipe, "trash");
+
+    first.cut();
+    let removal: string;
+    try {
+      removal = intentIdOf(
+        await first.session.write(recipe.appId, {
+          action: "delete",
+          input: { task_id: row.rowId },
+        })
+      );
+    } finally {
+      const moved = await gateway.callAction(recipe.appId, "edit", {
+        task_id: row.rowId,
+        title: "GW-AFTER-PHONE-TRASH",
+      });
+      expect(moved.body.status).toBe("executed");
+      first.restore();
+    }
+
+    const queued = await outboxRecord(first, removal);
+    expect(queued?.baseVersions?.length).toBeGreaterThan(0);
+
+    await first.session.flushIntents();
+    const refused = (await pendingOf(first)).find(
+      (entry) => entry.intentId === removal
+    );
+    expect(refused?.status).toBe("conflict");
+
+    // The row the gateway edited is still there, with the gateway's words —
+    // canonically, for the reason R24's case above gives.
+    expect(canonicalTitle(row.rowId)).toBe("GW-AFTER-PHONE-TRASH");
   }, 120_000);
 
   test("D7: an epoch rotation under a cut seat keeps the write it queued", async () => {
