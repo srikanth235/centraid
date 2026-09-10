@@ -52,9 +52,20 @@ export interface AppPlaceProps {
   /**
    * The quiet verb beside it — a mode the bar turns on rather than a commit
    * ("Select"). Still not a second primary: `PlaceHeader` has carried this
-   * pair since #765, and Docs' drive needs both (#1015).
+   * pair since #765; Docs' drive needs both, and People's roster reaches
+   * Trash from here and from nowhere else — a room with only one slot would
+   * have made Trash unreachable rather than made the bar quieter (#1015).
    */
   secondary?: RoomAction;
+  /**
+   * The frame's own lockup (`VaultBar`) above the app's header: which vault,
+   * which gateway, and the product's two global verbs. It belongs to the
+   * frame rather than to the room, so it arrives as a node — but it must sit
+   * INSIDE the room's safe area, or the app draws its own inset and the two
+   * disagree by the status bar's height (Tally, Locker, People, Photos all
+   * had their own `paddingTop: insets.top` before #1015 Wave 2).
+   */
+  lockup?: React.ReactNode;
   search?: SearchFieldProps;
   /**
    * The controls that pick WHICH content the body is showing — a day stepper,
@@ -87,6 +98,7 @@ export default function AppPlace({
   chrome,
   action,
   secondary,
+  lockup,
   search,
   selection,
   toolbar,
@@ -104,6 +116,7 @@ export default function AppPlace({
   return (
     <TopSafeArea style={[styles.room, ink]}>
       {chrome}
+      {lockup}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (

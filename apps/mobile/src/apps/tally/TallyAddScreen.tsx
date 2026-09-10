@@ -177,12 +177,7 @@ export default function TallyAddScreen({
   };
 
   return (
-    <TallyScreen
-      current="activity"
-      shelf={ADD}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={ADD} hideBand onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.head}>
           <Text style={styles.title}>{expenseId ? EDIT_HEAD : ADD_HEAD}</Text>

@@ -108,6 +108,9 @@ export default function SearchOverlay({
           <View style={styles.fill}>
             <SearchField
               accessibilityLabel="Search every app"
+              // The overlay IS the search: the member opened it to type
+              // (#1015, R-B-7).
+              autoFocus
               onChangeText={setQuery}
               placeholder="Search everything in this vault"
               value={query}

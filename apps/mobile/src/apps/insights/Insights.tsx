@@ -15,7 +15,6 @@
 // Custodian seat; Activity on this phone is only the member's run history.
 
 import React, { useMemo } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
 
 import {
   INSIGHTS_EMPTY_BODY,
@@ -42,17 +41,13 @@ import DistributionBlock from "../../kit/components/DistributionBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
-import NoteBlock from "../../kit/components/NoteBlock";
 import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
-import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { memberFacingError } from "../../kit/member-error";
 import { ACTIVITY_SECTION_ORDER } from "../../kit/origin-seat-layout";
+import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
 import GatewayAlerts from "./GatewayAlerts";
@@ -73,7 +68,6 @@ import type { InsightsController } from "./useInsights";
 /** The error state: what failed, what is safe, one way forward. The rollup
  *  rebuilds on its own schedule and nothing here can trigger it, so the verb
  *  is the honest one — ask again. */
-const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
 const ERROR_TITLE = INSIGHTS_ERROR_TITLE;
 const ERROR_BODY = INSIGHTS_ERROR_BODY;
 const ERROR_RETRY = RETRY_ACTION;
@@ -133,38 +127,12 @@ function AnalyticsBody({
 }: {
   page: InsightsController;
   onOpenAutomation: (automationRef: string) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { load, state, windowDays } = page;
 
-  if (state === "loading")
-    return (
-      <>
-        <SkeletonRows accessibilityLabel="Reading the run log" />
-        <NoteBlock text={LOADING_NOTE} />
-      </>
-    );
-
-  if (state === "error" || load.kind !== "ready")
-    return (
-      <PanelBlock
-        body={ERROR_BODY}
-        eyebrow={ERROR_EYEBROW}
-        facts={
-          load.kind === "error"
-            ? [
-                {
-                  key: "what happened",
-                  net: true,
-                  value: memberFacingError(load.reason),
-                },
-              ]
-            : undefined
-        }
-        action={{ label: ERROR_RETRY, onPress: page.retry }}
-        title={ERROR_TITLE}
-        tone="net"
-      />
-    );
+  // Loading and error are the ROOM's states (#1015, Wave 2). This guard is
+  // the type narrowing they leave behind, never a second error plate.
+  if (load.kind !== "ready") return null;
 
   const { summary } = load;
   const chips = (
@@ -287,49 +255,48 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
   const line = healthLineFor(page.state, originActivityHealth(summary));
 
   return (
-    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
-      <View style={styles.page}>
-        <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} />
-          <View style={styles.headBar}>
-            {/* No filled verb at all — this page writes nothing. The quiet
-                verb is withdrawn while loading (the reference's own gating)
-                and while there is nothing read to export, because a share
-                sheet over an empty file is worse than no button. */}
-            <PlaceHeader
-              title="Activity"
-              {...(summary && !page.exporting
-                ? {
-                    secondary: { label: "Export CSV", onPress: page.exportCsv },
-                  }
-                : {})}
-            />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void page.refresh()}
-              refreshing={page.refreshing}
-              tintColor={colors.textFaint}
-            />
-          }
-        >
-          {page.exportError ? (
-            <Text style={[styles.exportError, ink.error]}>
-              {memberFacingError(page.exportError)}
-            </Text>
-          ) : null}
-          <AnalyticsBody
-            onOpenAutomation={(automationRef) =>
-              navigation.navigate("Automations", { automationRef })
+    <SystemPlace
+      error={
+        page.state === "error"
+          ? {
+              body: ERROR_BODY,
+              ...(page.load.kind === "error"
+                ? { detail: memberFacingError(page.load.reason) }
+                : {}),
+              retry: { label: ERROR_RETRY, onPress: page.retry },
+              title: ERROR_TITLE,
             }
-            page={page}
-          />
-        </ScrollView>
-      </View>
-      <HealthLine text={line.text} />
-    </TopSafeArea>
+          : undefined
+      }
+      footer={<HealthLine text={line.text} />}
+      loading={
+        page.state === "loading"
+          ? { label: "Reading the run log", note: LOADING_NOTE }
+          : undefined
+      }
+      onHome={() => navigation.goBack()}
+      onRefresh={() => void page.refresh()}
+      refreshing={page.refreshing}
+      // No filled verb at all — this page writes nothing. The quiet verb is
+      // withdrawn while loading (the reference's own gating) and while there
+      // is nothing read to export, because a share sheet over an empty file
+      // is worse than no button.
+      {...(summary && !page.exporting
+        ? { secondary: { label: "Export CSV", onPress: page.exportCsv } }
+        : {})}
+      title="Activity"
+    >
+      {page.exportError ? (
+        <Text style={[styles.exportError, ink.error]}>
+          {memberFacingError(page.exportError)}
+        </Text>
+      ) : null}
+      <AnalyticsBody
+        onOpenAutomation={(automationRef) =>
+          navigation.navigate("Automations", { automationRef })
+        }
+        page={page}
+      />
+    </SystemPlace>
   );
 }

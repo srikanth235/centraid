@@ -40,6 +40,8 @@ export interface PushedPageProps {
   /** At most one filled commit, per DESIGN.md. */
   action?: RoomAction;
   secondary?: RoomAction;
+  /** The frame's lockup above the back key; see `AppPlaceProps.lockup`. */
+  lockup?: React.ReactNode;
   search?: SearchFieldProps;
   /**
    * The controls that pick WHICH content the body is showing — a day stepper,
@@ -98,6 +100,7 @@ export default function PushedPage({
   chrome,
   action,
   secondary,
+  lockup,
   search,
   selection,
   toolbar,
@@ -115,6 +118,7 @@ export default function PushedPage({
   return (
     <TopSafeArea style={[styles.room, ink]}>
       {chrome}
+      {lockup}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (

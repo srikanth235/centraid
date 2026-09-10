@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 
+import { subBase as canonicalSubBase } from "@centraid/design";
 import { toNativeTheme } from "@centraid/design/native";
 
-import { canonicalTheme, family, t, type } from "./native";
+import { canonicalTheme, family, subBase, t, type } from "./native";
 
 describe("direct native design adapter", () => {
   it("keeps both schemes equal to the canonical native lowering", () => {
     for (const scheme of ["light", "dark"] as const) {
       expect(canonicalTheme(scheme)).toStrictEqual(toNativeTheme(scheme));
     }
+  });
+
+  it("re-exports the canonical sub-base seams unchanged", () => {
+    expect(subBase).toStrictEqual(canonicalSubBase);
+    expect(subBase.gutter).toBe(2);
+    expect(subBase.hair).toBe(1);
   });
 
   it("maps every type role without changing its metrics", () => {

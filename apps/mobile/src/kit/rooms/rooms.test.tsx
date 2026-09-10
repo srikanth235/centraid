@@ -258,6 +258,18 @@ describe(PushedPage, () => {
     expect(words(container)[0]).toBe("Home vault");
   });
 
+  it("carries the frame's lockup above the back key", () => {
+    const container = render(
+      <PushedPage
+        backTo={parentPlace(stack)}
+        lockup={<Text>Home vault</Text>}
+        onBack={noop}
+        title="2024 return"
+      />
+    );
+    expect(words(container)).toContain("Home vault");
+  });
+
   it("draws no back control on a screen with no parent", () => {
     const container = render(<PushedPage onBack={noop} title="All" />);
     const labels = nodesOf(container, "button").map((node) =>
@@ -376,6 +388,20 @@ describe(AppPlace, () => {
     const said = words(container);
     expect(said[0]).toBe("Home vault");
     expect(said).toContain("Photos");
+  });
+
+  // The frame's `VaultBar` used to sit above each app's own `paddingTop:
+  // insets.top`, so the room and the app both inset the status bar. It goes
+  // INSIDE the room, above the header, and the room owns the one inset.
+  it("carries the frame's lockup inside its own safe area", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        lockup={<Text>Home vault</Text>}
+        onBack={noop}
+      />
+    );
+    expect(words(container)).toContain("Home vault");
   });
 });
 

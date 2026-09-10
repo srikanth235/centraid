@@ -26,7 +26,6 @@ import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
 import PeopleEmptyState from "./PeopleEmptyState";
 import { usePhotoEntity } from "./photo-entity-reads";
-import PhotosBackControl from "./PhotosBackControl";
 import PhotosScreen from "./PhotosScreen";
 
 /** One cluster row per face region the clusterer has grouped. */
@@ -115,17 +114,11 @@ export default function PhotosPeopleView({
   );
 
   return (
-    <PhotosScreen current="more">
-      <View style={styles.header}>
-        {/* The band highlights More, which People is not reached from, so it
-            cannot be the way out (#1015 S2). */}
-        <PhotosBackControl
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-          to="Photos"
-        />
-        <Text style={styles.title}>People</Text>
-      </View>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="people"
+      title="People"
+    >
       <FlatList
         data={shelf.people}
         keyExtractor={(item) => item.partyId}

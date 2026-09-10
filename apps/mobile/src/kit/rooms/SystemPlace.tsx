@@ -8,7 +8,7 @@
 // (audit B14).
 
 import React, { useMemo } from "react";
-import { ScrollView, View } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 
 import HomeKey from "../components/HomeKey";
 import PlaceHeader from "../components/PlaceHeader";
@@ -41,6 +41,11 @@ export interface SystemPlaceProps {
   children?: React.ReactNode;
   /** The docked line some stem places carry under the body (health, counts). */
   footer?: React.ReactNode;
+  /** Pull to re-read. A place with nothing to re-read omits it. */
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  /** For the one place that scrolls itself to a section it just named. */
+  bodyRef?: React.Ref<ScrollView>;
 }
 
 export default function SystemPlace({
@@ -55,6 +60,9 @@ export default function SystemPlace({
   empty,
   children,
   footer,
+  onRefresh,
+  refreshing = false,
+  bodyRef,
 }: SystemPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
@@ -76,7 +84,22 @@ export default function SystemPlace({
         title={title}
       />
       <RoomBody empty={empty} error={error} loading={loading}>
-        <ScrollView>{children}</ScrollView>
+        <ScrollView
+          contentContainerStyle={styles.placeBody}
+          keyboardShouldPersistTaps="handled"
+          ref={bodyRef}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                onRefresh={onRefresh}
+                refreshing={refreshing}
+                tintColor={colors.textFaint}
+              />
+            ) : undefined
+          }
+        >
+          {children}
+        </ScrollView>
       </RoomBody>
       {footer}
     </TopSafeArea>

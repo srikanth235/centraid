@@ -304,7 +304,9 @@ describe(InsightsScreen, () => {
     wire.summary.mockRejectedValue(new Error("connect ECONNREFUSED"));
     const container = await render();
     const spans = textOf(container);
-    expect(spans).toContain("THIS PAGE COULD NOT LOAD");
+    // The room's eyebrow, shared with every other seat and sentence case
+    // like every other label (#1015, D2).
+    expect(spans).toContain("This page could not load");
     expect(spans).toContain("The run log is unavailable");
     expect(spans).toContain(
       "The rollup rebuilds every ten minutes; this rebuild has not finished."

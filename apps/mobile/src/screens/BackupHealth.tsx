@@ -11,7 +11,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Linking,
   Platform,
   Pressable,
@@ -21,6 +20,7 @@ import {
   View,
 } from "react-native";
 
+import { useConfirmDestructive } from "../kit/components/ConfirmSheet";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
@@ -88,6 +88,11 @@ export default function BackupHealth({
   route,
 }: SettingsScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
+  // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
+  // title, and a status line it can host - none of which `Alert.alert` can
+  // draw.
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
   const { gatewayBase, online, session } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const [policy, setPolicy] = useState<TransferPolicy>(DEFAULT_TRANSFER_POLICY);
@@ -146,13 +151,13 @@ export default function BackupHealth({
     writeTransferPolicy(next);
   };
   const stopBackingUp = (): void => {
-    Alert.alert("Stop backing up this device?", STOP_BACKING_UP_EXPLANATION, [
-      { text: "Keep backing up" },
-      {
-        text: STOP_BACKING_UP_ACTION,
-        onPress: () => setConsent(answerBackupConsent("not-now")),
-      },
-    ]);
+    confirmDestructive({
+      body: STOP_BACKING_UP_EXPLANATION,
+      cancelLabel: "Keep backing up",
+      noun: "this device",
+      onConfirm: () => setConsent(answerBackupConsent("not-now")),
+      verb: STOP_BACKING_UP_ACTION,
+    });
   };
 
   // THE ONE COMMIT ON THIS SURFACE (§18): drains the durable queue through the
@@ -180,6 +185,7 @@ export default function BackupHealth({
 
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
+      {confirmSheet}
       <View style={styles.header}>
         <Tappable
           accessibilityLabel="Back to Settings"

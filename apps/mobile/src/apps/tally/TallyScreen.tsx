@@ -1,4 +1,4 @@
-// THE FRAME EVERY TALLY SURFACE SITS IN.
+// THE FRAME EVERY TALLY SURFACE SITS IN — now one of the six rooms (#1015).
 //
 // It owns three things no screen should own twice: the spine read, the DENIED
 // GATE, and the band with its More sheet.
@@ -14,13 +14,20 @@
 // would each refuse in turn. So it is withdrawn with the children, exactly as
 // Locker withdraws it behind a lock.
 //
-// `routeStatus` is asked for the ambient sentence, so the app bar carries the
-// same line as the desktop's status row and neither seat can invent one.
+// WHAT THE ROOMS TOOK OVER. The header, the back affordance, the safe-area
+// inset and the lockup's placement are `AppPlace`'s and `PushedPage`'s now,
+// and so is the ONE fact a screen may not write down: which place it descends
+// from. `current` is gone as a prop — the band tab and the parent are both
+// derived from the shelf the route already declares (`tally-places.ts`).
+// A pushed surface carries no ambient subtitle: `PlaceHeader` has no meta
+// line, deliberately, and Tally comes in line rather than keeping its own.
+//
+// `routeStatus` is asked for the ambient sentence on the four places, so the
+// app bar carries the same line as the desktop's status row and neither seat
+// can invent one.
 
 import { useNavigation } from "@react-navigation/native";
-import React, { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useState } from "react";
 
 import { ADD_COMMIT } from "@centraid/blueprints/apps/tally/compose-copy";
 import { routeStatus } from "@centraid/blueprints/apps/tally/route-copy";
@@ -29,13 +36,17 @@ import type { ShelfId } from "@centraid/blueprints/apps/tally/shelves";
 import { ROUTE_STATUS } from "@centraid/blueprints/apps/tally/view-copy";
 
 import { useBandOwner } from "../../kit/band/band-owner";
-import AppHeader from "../../kit/components/AppHeader";
-import { useTheme } from "../../kit/theme";
+import { AppPlace, PushedPage } from "../../kit/rooms";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { TallyShellNavigation } from "../../navigation";
 import VaultBar from "../../screens/home/VaultBar";
 import { resolveTallyMoreRoute } from "./tally-band";
 import type { TallyBandDestinationKey, TallyMoreRowKey } from "./tally-band";
+import {
+  isTallyPlace,
+  tallyDestinationFor,
+  tallyParentPlace,
+} from "./tally-places";
 import TallyBand from "./TallyBand";
 import TallyGate from "./TallyGate";
 import TallyMoreSheet from "./TallyMoreSheet";
@@ -50,11 +61,8 @@ const META = resolveAppMeta({
 });
 
 export interface TallyScreenProps {
-  /** Which band tab this surface belongs under. A More destination is `more`:
-   *  the sheet is how the member got here, and lighting one of the other four
-   *  would point at a place they are not looking at. */
-  current: TallyBandDestinationKey;
-  /** The shelf this route IS, for its name and its ambient sentence. */
+  /** The shelf this route IS: its name, its ambient sentence, the band tab it
+   *  lights and the place it descends from are all read off it. */
   shelf: ShelfId;
   /** A group shared for co-contribution says which acts stay with the steward;
    *  one the member keeps alone says what sharing it would cost. Only the
@@ -74,7 +82,6 @@ export interface TallyScreenProps {
 }
 
 export default function TallyScreen({
-  current,
   shelf,
   shared,
   onBack,
@@ -82,14 +89,13 @@ export default function TallyScreen({
   onAddExpense,
   children,
 }: TallyScreenProps): React.JSX.Element {
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<TallyShellNavigation>();
   const [moreOpen, setMoreOpen] = useState(false);
   const { bandOwner } = useBandOwner("tally");
   useTallySpine();
   const vault = useTallyVault();
   const denied = vault.denied;
+  const destination = tallyDestinationFor(shelf);
 
   const onDestination = (key: TallyBandDestinationKey): void => {
     if (key === "more") {
@@ -127,58 +133,70 @@ export default function TallyScreen({
     }
   };
 
-  const frame = useMemo(
-    () => [
-      styles.frame,
-      { backgroundColor: colors.bg, paddingTop: insets.top },
-    ],
-    [colors, insets.top]
-  );
-
-  return (
-    <View style={frame}>
-      {/* The vault lockup on every route (see `VaultBar`): which vault, which
-          gateway, and the product's two global verbs. Above the app's own
-          header, which names the ROUTE — a different question. */}
-      <VaultBar />
-      <AppHeader
-        title={denied ? shelfLabel(null) : shelfLabel(shelf)}
-        subtitle={
-          denied ? ROUTE_STATUS.denied : routeStatus(shelf, shared === true)
-        }
-        color={META.color}
-        iconKey={META.iconKey}
-        onBack={onBack ?? (() => navigation.popTo("Home"))}
-        trailing={
-          denied || !onAddExpense
-            ? undefined
-            : { label: ADD_COMMIT, onPress: onAddExpense }
-        }
-      />
-
-      <View style={styles.body}>
-        {denied ? <TallyGate denied={denied} /> : children}
-      </View>
-
-      {denied || hideBand ? null : (
-        <TallyBand
-          owner={bandOwner}
-          current={current}
-          onSelect={onDestination}
-          onHome={() => navigation.popTo("Home")}
-        />
-      )}
-
+  const body = (
+    <>
+      {denied ? <TallyGate denied={denied} /> : children}
       <TallyMoreSheet
-        visible={moreOpen && denied === null}
         onClose={() => setMoreOpen(false)}
         onSelect={onMoreRow}
+        visible={moreOpen && denied === null}
       />
-    </View>
+    </>
+  );
+
+  // The band is the app's, so the room only says what state it is in; Tally
+  // has no selection mode, so that state is always live.
+  const band =
+    denied || hideBand === true
+      ? undefined
+      : (): React.JSX.Element => (
+          <TallyBand
+            destination={destination}
+            onHome={() => navigation.popTo("Home")}
+            onSelect={onDestination}
+            owner={bandOwner}
+          />
+        );
+
+  // The vault lockup on every route (see `VaultBar`): which vault, which
+  // gateway, and the product's two global verbs. Inside the room's safe area,
+  // above the header — which names the ROUTE, a different question.
+  const lockup = <VaultBar />;
+  const leave = onBack ?? ((): void => navigation.popTo("Home"));
+  const action =
+    denied || !onAddExpense
+      ? undefined
+      : { label: ADD_COMMIT, onPress: onAddExpense };
+
+  if (isTallyPlace(shelf))
+    return (
+      <AppPlace
+        action={action}
+        app={{
+          color: META.color,
+          iconKey: META.iconKey,
+          subtitle: denied
+            ? ROUTE_STATUS.denied
+            : routeStatus(shelf, shared === true),
+          title: denied ? shelfLabel(null) : shelfLabel(shelf),
+        }}
+        band={band}
+        lockup={lockup}
+        onBack={leave}
+      >
+        {body}
+      </AppPlace>
+    );
+
+  return (
+    <PushedPage
+      backTo={tallyParentPlace(shelf)}
+      band={band}
+      lockup={lockup}
+      onBack={leave}
+      title={denied ? shelfLabel(null) : shelfLabel(shelf)}
+    >
+      {body}
+    </PushedPage>
   );
 }
-
-const styles = StyleSheet.create({
-  body: { flex: 1 },
-  frame: { flex: 1 },
-});

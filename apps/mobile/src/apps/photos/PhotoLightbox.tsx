@@ -24,13 +24,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { FlatList, Pressable, View, useWindowDimensions } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,6 +42,7 @@ import {
 import { RETRY_ACTION } from "@centraid/client/surface-copy";
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -75,8 +70,11 @@ import type { InfoChip } from "./PhotoInfoSheet";
 import { styles } from "./PhotoLightbox.styles";
 import { ViewerStatusLine, ViewerTopChrome } from "./PhotoLightboxChrome";
 import { PhotoLightboxToolbar } from "./PhotoLightboxToolbar";
+import { TRASH_KEEPS_THE_ORIGINAL } from "./photos-confirm-copy";
 import { batchAddToAlbum } from "./photos-selection-writes";
 import type { VaultAsset } from "./photos-selection-writes";
+import PhotosChoiceSheet from "./PhotosChoiceSheet";
+import type { PhotosChoice } from "./PhotosChoiceSheet";
 import { PhotoShareChoice } from "./PhotoShareChoice";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
@@ -246,6 +244,13 @@ export default function PhotoLightbox({
     (scope) => scope.vaultId === current?.sourceVaultId
   );
   const [residentAssetId, setResidentAssetId] = useState<string>();
+  /** A CHOICE IS A SHEET (D4): which album, or which album's key photo. */
+  const [coverPick, setCoverPick] = useState<{
+    choices: readonly PhotosChoice[];
+    onChoose: (id: string) => void;
+    title: string;
+  } | null>(null);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const commonsResident = Boolean(
     current?.assetId && residentAssetId === current.assetId
   );
@@ -394,28 +399,28 @@ export default function PhotoLightbox({
       navigation.navigate("PhotosLibrary");
       return;
     }
-    Alert.alert("Add to album", photographName, [
-      ...albums.map((album) => ({
-        text: String(album.name ?? "Album"),
-        onPress: () => {
-          const albumId = String(album.collection_id);
-          // Count-then-append, matching `PhotoPicker.tsx`.
-          const firstPosition = entries.rows.filter(
-            (row) => String(row.collection_id) === albumId
-          ).length;
-          void batchAddToAlbum(
-            session,
-            [asset],
-            albumId,
-            firstPosition,
-            surfaceWriteOutcome
-          ).catch((error: unknown) =>
-            surfaceWriteFailure(error, "Photo not added")
-          );
-        },
+    setCoverPick({
+      choices: albums.map((album) => ({
+        id: String(album.collection_id),
+        label: String(album.name ?? "Album"),
       })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+      onChoose: (albumId) => {
+        // Count-then-append, matching `PhotoPicker.tsx`.
+        const firstPosition = entries.rows.filter(
+          (row) => String(row.collection_id) === albumId
+        ).length;
+        void batchAddToAlbum(
+          session,
+          [asset],
+          albumId,
+          firstPosition,
+          surfaceWriteOutcome
+        ).catch((error: unknown) =>
+          surfaceWriteFailure(error, "Photo not added")
+        );
+      },
+      title: "Add to album",
+    });
   };
 
   /**
@@ -444,13 +449,11 @@ export default function PhotoLightbox({
       setCoverFor(tags[0]!.id);
       return;
     }
-    Alert.alert("Make key photo", photographName, [
-      ...tags.map((tag) => ({
-        text: tag.label,
-        onPress: () => setCoverFor(tag.id),
-      })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    setCoverPick({
+      choices: tags.map((tag) => ({ id: tag.id, label: tag.label })),
+      onChoose: setCoverFor,
+      title: "Make key photo",
+    });
   };
 
   /**
@@ -476,19 +479,12 @@ export default function PhotoLightbox({
   const trashAsset = (): void => {
     if (!current?.assetId) return;
     const assetId = current.assetId;
-    Alert.alert(
-      "Move to trash?",
-      "The device original is never deleted by this action.",
-      [
-        { text: "Cancel" },
-        {
-          text: "Trash",
-          style: "destructive",
-          onPress: () =>
-            void writeReason("delete-asset", { asset_id: assetId }),
-        },
-      ]
-    );
+    confirmDestructive({
+      body: TRASH_KEEPS_THE_ORIGINAL,
+      noun: "photograph",
+      onConfirm: () => void writeReason("delete-asset", { asset_id: assetId }),
+      verb: "Trash",
+    });
   };
 
   /**
@@ -826,6 +822,16 @@ export default function PhotoLightbox({
           }
           onClose={() => setShareOpen(false)}
         />
+
+        <PhotosChoiceSheet
+          choices={coverPick?.choices ?? []}
+          onChoose={(id: string) => coverPick?.onChoose(id)}
+          onClose={() => setCoverPick(null)}
+          subject={photographName}
+          title={coverPick?.title ?? ""}
+          visible={coverPick !== null}
+        />
+        {confirmSheet}
       </View>
     </GestureDetector>
   );

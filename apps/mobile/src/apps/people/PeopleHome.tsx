@@ -31,17 +31,14 @@ import {
   whenLabel,
 } from "@centraid/blueprints/apps/people/format";
 import {
-  APP_TITLE,
   EMPTY,
   FIELDS,
   FIRST_RUN,
   LABELS,
   LINK_TOUCH_TILES,
-  SEARCH_TITLE,
   SECTIONS,
   STATUS,
   TOUCH_TILES,
-  TOUCH_TITLE,
   VERBS,
   filterChips,
 } from "@centraid/blueprints/apps/people/people-copy";
@@ -53,11 +50,9 @@ import type {
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import SearchField from "../../kit/components/SearchField";
 import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
@@ -112,87 +107,75 @@ export default function PeopleHome({
   const openPerson = (partyId: string): void =>
     navigation.navigate("Person", { personId: partyId });
 
-  const title =
-    destination === "touch"
-      ? TOUCH_TITLE
-      : destination === "search"
-        ? SEARCH_TITLE
-        : APP_TITLE;
-
   return (
-    <PeopleScreen current={destination}>
-      <TopSafeArea edges={[]} style={styles.page}>
-        <View style={styles.head}>
-          <PlaceHeader
-            title={title}
-            {...(destination === "people"
-              ? {
-                  primary: {
-                    label: VERBS.add,
-                    onPress: () => navigation.navigate("PersonEditor"),
-                  },
-                  secondary: {
-                    label: VERBS.trash,
-                    onPress: () => navigation.navigate("PeopleTrash"),
-                  },
-                }
-              : {})}
-          />
-        </View>
-        <ReplicaStatusBar />
-        {destination === "people" ? (
-          <RosterBody
-            data={data}
-            filter={filter}
-            onFilter={setFilter}
-            onOpen={openPerson}
-            onStar={(person) => void writes.toggleStar(person)}
-            onAdd={() => navigation.navigate("PersonEditor")}
-          />
-        ) : destination === "touch" ? (
-          <TouchBody
-            data={data}
-            onOpen={openPerson}
-            onLog={(partyId) =>
-              navigation.navigate("PersonLog", { personId: partyId })
-            }
-            onTile={(tile) => {
-              // Each tile filters or navigates (handoff § Screens 2): the
-              // people-counting tiles land on the roster with the matching
-              // chip; Reconnect lands on the `Overdue` chip the copy table
-              // carries for exactly this tap; Upcoming stays here, where the
-              // Upcoming section is one screen inch below.
-              if (tile === "upcoming" || tile === "reconnect") {
-                if (tile === "reconnect") {
-                  setFilter("due");
-                  setDestination("people");
-                }
-                return;
+    <PeopleScreen
+      route={destination}
+      {...(destination === "people"
+        ? {
+            action: {
+              label: VERBS.add,
+              onPress: () => navigation.navigate("PersonEditor"),
+            },
+            secondary: {
+              label: VERBS.trash,
+              onPress: () => navigation.navigate("PeopleTrash"),
+            },
+          }
+        : {})}
+    >
+      <ReplicaStatusBar />
+      {destination === "people" ? (
+        <RosterBody
+          data={data}
+          filter={filter}
+          onFilter={setFilter}
+          onOpen={openPerson}
+          onStar={(person) => void writes.toggleStar(person)}
+          onAdd={() => navigation.navigate("PersonEditor")}
+        />
+      ) : destination === "touch" ? (
+        <TouchBody
+          data={data}
+          onOpen={openPerson}
+          onLog={(partyId) =>
+            navigation.navigate("PersonLog", { personId: partyId })
+          }
+          onTile={(tile) => {
+            // Each tile filters or navigates (handoff § Screens 2): the
+            // people-counting tiles land on the roster with the matching
+            // chip; Reconnect lands on the `Overdue` chip the copy table
+            // carries for exactly this tap; Upcoming stays here, where the
+            // Upcoming section is one screen inch below.
+            if (tile === "upcoming" || tile === "reconnect") {
+              if (tile === "reconnect") {
+                setFilter("due");
+                setDestination("people");
               }
-              setFilter(
-                tile === "linked"
-                  ? "linked"
-                  : tile === "to_link"
-                    ? "unlinked"
-                    : tile === "starred"
-                      ? "starred"
-                      : "all"
-              );
-              setDestination("people");
-            }}
-          />
-        ) : (
-          <SearchBody
-            data={data}
-            term={term}
-            onTerm={setTerm}
-            filter={filter}
-            onFilter={setFilter}
-            onOpen={openPerson}
-            onStar={(person) => void writes.toggleStar(person)}
-          />
-        )}
-      </TopSafeArea>
+              return;
+            }
+            setFilter(
+              tile === "linked"
+                ? "linked"
+                : tile === "to_link"
+                  ? "unlinked"
+                  : tile === "starred"
+                    ? "starred"
+                    : "all"
+            );
+            setDestination("people");
+          }}
+        />
+      ) : (
+        <SearchBody
+          data={data}
+          term={term}
+          onTerm={setTerm}
+          filter={filter}
+          onFilter={setFilter}
+          onOpen={openPerson}
+          onStar={(person) => void writes.toggleStar(person)}
+        />
+      )}
     </PeopleScreen>
   );
 }
@@ -489,6 +472,8 @@ function SearchBody({
       <View style={styles.searchBleed}>
         <SearchField
           accessibilityLabel={FIELDS.searchPlaceholder}
+          // The search destination opens with the keyboard up (#1015, S4).
+          autoFocus
           clearLabel={VERBS.clearSearch}
           onChangeText={onTerm}
           placeholder={FIELDS.searchPlaceholder}

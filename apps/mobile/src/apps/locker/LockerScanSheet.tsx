@@ -11,15 +11,20 @@
 // secret-bearing values a lock wipes, and the write that carries it is
 // online-only. Nothing here logs the code or keeps a frame.
 //
+// The room is `SheetRoom` (#1015): the grabber, the title and the one quiet
+// way out are the room's; the camera, the grant and the refusal are this
+// file's.
+//
 // A SQUARE THAT IS NOT AN OTPAUTH CODE IS REFUSED BY NAME, not swallowed: a
 // scanner that quietly ignored a wifi square would look broken.
 
 import { CameraView, useCameraPermissions } from "expo-camera";
 import React, { useState } from "react";
-import { Modal, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
+import { SheetRoom } from "../../kit/rooms";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import {
   SCAN_CANCEL,
@@ -41,7 +46,7 @@ export default function LockerScanSheet({
   visible,
   onSeed,
   onClose,
-}: LockerScanSheetProps): React.JSX.Element {
+}: LockerScanSheetProps): React.JSX.Element | null {
   const { colors } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [refusal, setRefusal] = useState("");
@@ -57,20 +62,13 @@ export default function LockerScanSheet({
   };
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
+    <SheetRoom
+      cancelLabel={SCAN_CANCEL}
+      onClose={onClose}
+      title={SCAN_TITLE}
       visible={visible}
-      transparent={false}
     >
-      <View style={[styles.page, { backgroundColor: colors.bg }]}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.title, { color: colors.text }]}
-        >
-          {SCAN_TITLE}
-        </Text>
-
+      <View style={styles.page}>
         {permission?.granted === true ? (
           <View style={[styles.frame, { borderColor: colors.lineStrong }]}>
             <CameraView
@@ -104,9 +102,8 @@ export default function LockerScanSheet({
             {refusal}
           </Text>
         ) : null}
-        <Button label={SCAN_CANCEL} onPress={onClose} />
       </View>
-    </Modal>
+    </SheetRoom>
   );
 }
 
@@ -120,6 +117,5 @@ const styles = StyleSheet.create({
   },
   grant: { alignItems: "flex-start", gap: spacing[3] },
   note: { ...t("mono") },
-  page: { flex: 1, gap: spacing[4], padding: spacing[4] },
-  title: { ...t("title") },
+  page: { gap: spacing[4] },
 });

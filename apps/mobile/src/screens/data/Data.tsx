@@ -22,7 +22,6 @@
 
 import * as Clipboard from "expo-clipboard";
 import React, { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
 
 import {
   ATLAS_EMPTY_BODY,
@@ -41,22 +40,16 @@ import type {
   DocRowAction,
 } from "../../kit/components/doc-table-model";
 import DocTable from "../../kit/components/DocTable";
-import EmptyBlock from "../../kit/components/EmptyBlock";
 import { healthLineFor } from "../../kit/components/health-line";
 import type { OpsState } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import NoteBlock from "../../kit/components/NoteBlock";
-import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
-import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { VAULT_SECTION_ORDER } from "../../kit/origin-seat-layout";
-import { useTheme } from "../../kit/theme";
+import { SystemPlace } from "../../kit/rooms";
 import type { DataScreenProps } from "../../navigation";
 import {
   FULL_AT,
@@ -71,7 +64,6 @@ import {
   tableCaption,
 } from "./data-model";
 import type { KindFilter, RecordView } from "./data-model";
-import { styles } from "./Data.styles";
 import RecordSheet from "./RecordSheet";
 import { useData } from "./useData";
 import type { DataState } from "./useData";
@@ -130,7 +122,6 @@ export default function DataScreen({
   navigation,
   route,
 }: DataScreenProps): React.JSX.Element {
-  const { colors } = useTheme();
   const { state, refreshing, refresh, browseKind } = useData(
     route.params?.kind
   );
@@ -206,129 +197,109 @@ export default function DataScreen({
   const browse = state.kind === "ready" ? state.browse : undefined;
 
   return (
-    <TopSafeArea
-      edges={["top"]}
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-    >
-      <View style={styles.page}>
-        <View style={styles.head}>
-          {/* The leave key is a header control, never a floating plate: the
-              bottom edge here already carries the standing health line
-              (#1015, S6 — audit B14). */}
-          <HomeKey onPress={() => navigation.goBack()} />
-          <View style={styles.headBar}>
-            {/* No verbs at all: see the file header. */}
-            <PlaceHeader title={COPY.title} />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void refresh()}
-              refreshing={refreshing}
-              tintColor={colors.textFaint}
-            />
-          }
-        >
-          <SectionBlock label={VAULT_SECTION_ORDER[0]} />
-          {opsState === "loading" ? (
-            <>
-              <SkeletonRows accessibilityLabel="Reading what the vault holds" />
-              <NoteBlock text={COPY.loadingNote} />
-            </>
-          ) : null}
-
-          {opsState === "error" ? (
-            <PanelBlock
-              body={
+    <SystemPlace
+      empty={
+        opsState === "empty"
+          ? // No action: nothing on this page creates a kind, and an empty
+            // vault is a healthy state rather than an incident.
+            { body: COPY.emptyBody, routine: true, title: COPY.emptyTitle }
+          : undefined
+      }
+      error={
+        opsState === "error"
+          ? {
+              body:
                 state.kind === "no-gateway"
                   ? COPY.noGatewayBody
-                  : COPY.errorBody
-              }
-              action={{ label: COPY.retry, onPress: () => void refresh() }}
-              title={
+                  : COPY.errorBody,
+              retry: { label: COPY.retry, onPress: () => void refresh() },
+              title:
                 state.kind === "no-gateway"
                   ? COPY.noGatewayTitle
-                  : COPY.errorTitle
-              }
-              tone="net"
+                  : COPY.errorTitle,
+            }
+          : undefined
+      }
+      footer={
+        /* No inline verb: the reference's `healthAction` is '' on this page,
+           and there is nothing on a census to act on in one tap. */
+        <HealthLine text={health.text} />
+      }
+      loading={
+        opsState === "loading"
+          ? {
+              label: "Reading what the vault holds",
+              note: COPY.loadingNote,
+            }
+          : undefined
+      }
+      onHome={() => navigation.goBack()}
+      onRefresh={() => void refresh()}
+      refreshing={refreshing}
+      // No verbs at all: see the file header.
+      title={COPY.title}
+    >
+      <SectionBlock label={VAULT_SECTION_ORDER[0]} />
+      {opsState === "ready" || opsState === "full" ? (
+        <>
+          {opsState === "full" ? (
+            <ChipsBlock
+              accessibilityLabel="Filter the kinds"
+              chips={KIND_FILTERS.map((chip) => ({
+                id: chip.id,
+                label: chip.label,
+                on: chip.id === filter,
+                onPress: () => setFilter(chip.id),
+              }))}
             />
           ) : null}
-
-          {opsState === "empty" ? (
-            // No action: nothing on this page creates a kind, and an empty
-            // vault is a healthy state rather than an incident.
-            <EmptyBlock body={COPY.emptyBody} routine title={COPY.emptyTitle} />
-          ) : null}
-
-          {opsState === "ready" || opsState === "full" ? (
+          <SectionBlock
+            label={COPY.sectionKinds}
+            meta={count(shownKinds.length)}
+          />
+          <RowsBlock rows={kindRows} />
+          <NoteBlock text={COPY.kindsNote} />
+          {relationRowDefs.length > 0 ? (
             <>
-              {opsState === "full" ? (
-                <ChipsBlock
-                  accessibilityLabel="Filter the kinds"
-                  chips={KIND_FILTERS.map((chip) => ({
-                    id: chip.id,
-                    label: chip.label,
-                    on: chip.id === filter,
-                    onPress: () => setFilter(chip.id),
-                  }))}
-                />
-              ) : null}
               <SectionBlock
-                label={COPY.sectionKinds}
-                meta={count(shownKinds.length)}
+                label={COPY.relations}
+                meta={count(relationRowDefs.length)}
               />
-              <RowsBlock rows={kindRows} />
-              <NoteBlock text={COPY.kindsNote} />
-              {relationRowDefs.length > 0 ? (
-                <>
-                  <SectionBlock
-                    label={COPY.relations}
-                    meta={count(relationRowDefs.length)}
-                  />
-                  <RowsBlock rows={relationRowDefs} />
-                </>
-              ) : null}
-              {browse && records.length > 0 ? (
-                <>
-                  <SectionBlock
-                    label={browse.table.label || browse.table.logical}
-                    meta={recordCount(browse.table.rows)}
-                  />
-                  <DocTable
-                    accessibilityLabel={`Records in ${browse.table.label || browse.table.logical}`}
-                    caption={tableCaption(
-                      records.length,
-                      browse.table.rows,
-                      browse.newestFirst
-                    )}
-                    copy={RECORD_MENU}
-                    onRowAction={onRowAction}
-                    records={records.map((entry) => entry.record)}
-                  />
-                </>
-              ) : null}
+              <RowsBlock rows={relationRowDefs} />
             </>
           ) : null}
-          <VaultCopiesSection
-            openCopies={() => navigation.navigate("Devices")}
-          />
-          <VaultSharingSection
-            openSharing={() =>
-              navigation.navigate("Settings", { screen: "Sharing" })
-            }
-          />
-        </ScrollView>
-        {/* No inline verb: the reference's `healthAction` is '' on this page,
-            and there is nothing on a census to act on in one tap. */}
-        <HealthLine text={health.text} />
-      </View>
+          {browse && records.length > 0 ? (
+            <>
+              <SectionBlock
+                label={browse.table.label || browse.table.logical}
+                meta={recordCount(browse.table.rows)}
+              />
+              <DocTable
+                accessibilityLabel={`Records in ${browse.table.label || browse.table.logical}`}
+                caption={tableCaption(
+                  records.length,
+                  browse.table.rows,
+                  browse.newestFirst
+                )}
+                copy={RECORD_MENU}
+                onRowAction={onRowAction}
+                records={records.map((entry) => entry.record)}
+              />
+            </>
+          ) : null}
+        </>
+      ) : null}
+      <VaultCopiesSection openCopies={() => navigation.navigate("Devices")} />
+      <VaultSharingSection
+        openSharing={() =>
+          navigation.navigate("Settings", { screen: "Sharing" })
+        }
+      />
       <RecordSheet
         kindLabel={browse ? browse.table.label || browse.table.logical : ""}
         onClose={() => setOpened(undefined)}
         record={opened}
       />
-    </TopSafeArea>
+    </SystemPlace>
   );
 }

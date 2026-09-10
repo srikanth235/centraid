@@ -17,7 +17,7 @@ import {
   press,
   styleOf,
 } from "../../test/react-native-stub";
-import { BackRow, PersonAvatar, PersonRow, StarButton } from "./PeopleKit";
+import { PersonAvatar, PersonRow, StarButton } from "./PeopleKit";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
@@ -212,39 +212,8 @@ describe("[law:people-row-pending] a queued People change says so on its own row
   });
 });
 
-// #1015 S2 — every pushed screen in People drew a back row and nothing else,
-// so Trash and the new-person form were indistinguishable at a glance: both
-// headed `‹ People`, with no line on screen naming the place.
-describe("[law:people-pushed-title] a pushed route names the place it is", () => {
-  afterEach(() => {
-    dispose?.();
-    dispose = undefined;
-  });
-
-  it("draws the destination on the way out and the title of where you are", () => {
-    const el = render(
-      <BackRow destination="People" title="New person" onPress={() => {}} />
-    );
-
-    const back = el.querySelector('[aria-label="Back to People"]');
-    expect(back).not.toBeNull();
-    expect(el.textContent).toContain("New person");
-  });
-
-  it("draws the title as a header, so a reader can jump to it", () => {
-    const el = render(
-      <BackRow destination="People" title="Trash" onPress={() => {}} />
-    );
-
-    expect(
-      nodesOf(el, "span").some(
-        (node) => node.dataset.role === "header" && node.textContent === "Trash"
-      )
-    ).toBe(true);
-  });
-
-  it("stays titleless where the caller has no place name to give", () => {
-    const el = render(<BackRow destination="People" onPress={() => {}} />);
-    expect(el.textContent).toBe("People");
-  });
-});
+// #1015 Wave 2 — the back row and the pushed title are `PushedPage`'s now,
+// and the law they carried ("speaks the parent it descends from, not a
+// literal") is pinned in `kit/rooms/rooms.test.tsx`. `BackRow` is deleted:
+// three People screens named the place they descended from by the app and
+// three by a person, and nothing could tell which was right (audit B7).

@@ -9,7 +9,10 @@
 import React from "react";
 import { View } from "react-native";
 
+import { ERROR_HEALTH } from "@centraid/client/surface-copy";
+
 import EmptyBlock from "../components/EmptyBlock";
+import NoteBlock from "../components/NoteBlock";
 import PanelBlock from "../components/PanelBlock";
 import SkeletonRows from "../components/SkeletonRows";
 import type { RoomEmpty, RoomError, RoomLoading } from "./room-contracts";
@@ -22,8 +25,10 @@ export interface RoomBodyProps {
   children?: React.ReactNode;
 }
 
-/** The eyebrow every room's error carries; one sentence, no exception text. */
-const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
+/** The eyebrow every room's error carries — the shell's own word, shared with
+ *  every other seat (`@centraid/client/surface-copy`), and sentence case like
+ *  every other label (D2). */
+const ERROR_EYEBROW = ERROR_HEALTH;
 
 export default function RoomBody({
   loading,
@@ -36,8 +41,21 @@ export default function RoomBody({
       <View style={styles.body}>
         <PanelBlock
           action={{ label: error.retry.label, onPress: error.retry.onPress }}
+          action2={
+            error.secondary
+              ? {
+                  label: error.secondary.label,
+                  onPress: error.secondary.onPress,
+                }
+              : undefined
+          }
           body={error.body}
           eyebrow={ERROR_EYEBROW}
+          facts={
+            error.detail
+              ? [{ key: "what happened", net: true, value: error.detail }]
+              : undefined
+          }
           title={error.title}
           tone="net"
         />
@@ -47,6 +65,7 @@ export default function RoomBody({
     return (
       <View style={styles.body}>
         <SkeletonRows accessibilityLabel={loading.label} rows={loading.rows} />
+        {loading.note ? <NoteBlock text={loading.note} /> : null}
       </View>
     );
   if (empty)

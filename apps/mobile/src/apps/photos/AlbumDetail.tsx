@@ -8,10 +8,11 @@
 // a shelf, not a different way of looking at photographs.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, Switch, View } from "react-native";
+import { Modal, Pressable, Switch, View } from "react-native";
 
 import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
@@ -36,11 +37,16 @@ import { makeStyles } from "./AlbumDetail.styles";
 import { usePhotoEntity } from "./photo-entity-reads";
 import { usePhotoGrantEntry } from "./photo-grants";
 import {
+  ALBUM_DELETE_BODY,
+  TRASH_KEEPS_THE_ORIGINAL,
+} from "./photos-confirm-copy";
+import {
   batchAddToAlbum,
   batchFavorite,
   batchTrash,
   vaultAssets,
 } from "./photos-selection-writes";
+import PhotosChoiceSheet from "./PhotosChoiceSheet";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
@@ -64,6 +70,8 @@ export default function AlbumDetail({
   const collections = usePhotoEntity("collections");
   const entries = usePhotoEntity("collectionEntries");
   const [selection, setSelection] = useState(new Set<string>());
+  const [pickingAlbum, setPickingAlbum] = useState(false);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const [renameOpen, setRenameOpen] = useState(false);
   const [residentAlbumId, setResidentAlbumId] = useState<string>();
   const [name, setName] = useState("");
@@ -206,27 +214,25 @@ export default function AlbumDetail({
   };
   const deleteAlbum = (): void => {
     if (!canChangeAlbum) return;
-    Alert.alert("Delete album?", "Photos stay in the library.", [
-      { text: "Keep" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          if (!session) return;
-          void session
-            .write("photos", {
-              action: "delete-album",
-              input: { album_id: route.params.albumId },
-            })
-            .then((result) => {
-              if (surfaceWriteOutcome(result)) navigation.goBack();
-            })
-            .catch((error: unknown) =>
-              surfaceWriteFailure(error, "Album not deleted")
-            );
-        },
+    confirmDestructive({
+      body: ALBUM_DELETE_BODY,
+      noun: "album",
+      onConfirm: () => {
+        if (!session) return;
+        void session
+          .write("photos", {
+            action: "delete-album",
+            input: { album_id: route.params.albumId },
+          })
+          .then((result) => {
+            if (surfaceWriteOutcome(result)) navigation.goBack();
+          })
+          .catch((error: unknown) =>
+            surfaceWriteFailure(error, "Album not deleted")
+          );
       },
-    ]);
+      verb: "Delete",
+    });
   };
   const rename = async (): Promise<void> => {
     if (!canChangeAlbum || !name.trim() || !album || !session) return;
@@ -262,37 +268,31 @@ export default function AlbumDetail({
   /** Add to ANOTHER album. The phone has no room for an inline popover, so
    *  the album list is the platform's own list-of-choices (§6's phone note
    *  reaches the same answer on the web with a sheet). */
+  const otherAlbums = collections.rows
+    .filter((row) => String(row.collection_id) !== route.params.albumId)
+    // The whole list: the six were an alert's row cap, not a product rule.
+    .map((row) => ({
+      id: String(row.collection_id),
+      label: String(row.name ?? "Album"),
+    }));
+
   const addToAnotherAlbum = (): void => {
-    const others = collections.rows.filter(
-      (row) => String(row.collection_id) !== route.params.albumId
-    );
-    if (!others.length) {
+    if (!otherAlbums.length) {
       postStatus("No other album to add these to yet.");
       return;
     }
-    Alert.alert("Add to album", `${selection.size} selected`, [
-      ...others.slice(0, 6).map((other) => ({
-        text: String(other.name ?? "Album"),
-        onPress: () => {
-          const albumId = String(other.collection_id);
-          const position = entries.rows.filter(
-            (row) => String(row.collection_id) === albumId
-          ).length;
-          runSelection(
-            () =>
-              batchAddToAlbum(
-                session!,
-                selectedVaultAssets,
-                albumId,
-                position,
-                emit
-              ),
-            "Photos not added"
-          )();
-        },
-      })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    setPickingAlbum(true);
+  };
+
+  const addSelectionTo = (albumId: string): void => {
+    const position = entries.rows.filter(
+      (row) => String(row.collection_id) === albumId
+    ).length;
+    runSelection(
+      () =>
+        batchAddToAlbum(session!, selectedVaultAssets, albumId, position, emit),
+      "Photos not added"
+    )();
   };
   const emit = (result: NativeWriteResult): void => {
     surfaceWriteOutcome(result);
@@ -311,6 +311,8 @@ export default function AlbumDetail({
   // has no phone surface behind it yet, so it renders disabled with the
   // sentence that says so rather than doing nothing.
   const selectionBar = {
+    // The room's one way out of the mode (D5); the word is always "Cancel".
+    onCancel: () => setSelection(new Set()),
     count: selection.size,
     shelf: "normal" as const,
     copyLabel: share.copyLabel,
@@ -332,39 +334,28 @@ export default function AlbumDetail({
     trash: canChangeAlbum
       ? {
           run: () =>
-            Alert.alert(
-              `Move ${selection.size} to trash?`,
-              "The device original is never deleted by this action.",
-              [
-                { text: "Cancel" },
-                {
-                  text: "Trash",
-                  style: "destructive" as const,
-                  onPress: runSelection(
-                    () => batchTrash(session!, selectedVaultAssets, emit),
-                    "Photos not trashed"
-                  ),
-                },
-              ]
-            ),
+            confirmDestructive({
+              body: TRASH_KEEPS_THE_ORIGINAL,
+              count: selection.size,
+              noun: "photograph",
+              onConfirm: runSelection(
+                () => batchTrash(session!, selectedVaultAssets, emit),
+                "Photos not trashed"
+              ),
+              verb: "Trash",
+            }),
         }
       : { unavailableReason: writeBlockedReason! },
   };
   return (
-    <PhotosScreen current="collections" selection={selectionBar}>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="album"
+      selection={selectionBar}
+      title={String(album?.name ?? "Album")}
+    >
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-        >
-          <Icon name="chevron-left" size={24} color={colors.text} />
-        </Pressable>
         <View style={styles.copy}>
-          <Text style={styles.title} numberOfLines={1}>
-            {String(album?.name ?? "Album")}
-          </Text>
           <Text style={styles.meta}>
             {assets.length} {assets.length === 1 ? "photograph" : "photographs"}
           </Text>
@@ -605,6 +596,16 @@ export default function AlbumDetail({
         }}
         onStatus={postStatus}
       />
+      {/* A choice is a sheet and a confirm is a sheet (D4, S7). */}
+      <PhotosChoiceSheet
+        choices={otherAlbums}
+        onChoose={addSelectionTo}
+        onClose={() => setPickingAlbum(false)}
+        subject={`${selection.size} selected`}
+        title="Add to album"
+        visible={pickingAlbum}
+      />
+      {confirmSheet}
     </PhotosScreen>
   );
 }

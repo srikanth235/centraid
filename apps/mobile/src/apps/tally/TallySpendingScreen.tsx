@@ -63,11 +63,7 @@ export default function TallySpendingScreen({
   const largest = totals[0]?.total_minor ?? 0;
 
   return (
-    <TallyScreen
-      current="more"
-      shelf={SPENDING}
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={SPENDING} onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Section
           label={SECTIONS.byCategory}

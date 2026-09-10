@@ -41,11 +41,7 @@ export default function TallySearchScreen({
   const miss = !resting && !searching && data !== null && results.length === 0;
 
   return (
-    <TallyScreen
-      current="more"
-      shelf={SEARCH}
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={SEARCH} onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <TypedField
           label={SEARCH_PLACEHOLDER}

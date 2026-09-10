@@ -12,7 +12,7 @@ import {
   BAND_RADIUS,
 } from "../../kit/band-surface";
 import { Text } from "../../kit/components/NativeText";
-import { pageMargin, t, useTheme } from "../../kit/theme";
+import { pageMargin, subBase, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { GRAIN_LABELS, TIMELINE_GRAINS } from "./timeline-grains";
 import type { TimelineGrain } from "./timeline-grains";
@@ -99,12 +99,11 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: BAND_BORDER,
       flexDirection: "row",
       // A SEAM, not a rhythm step: this pairs with the `gap` above to hold
-      // the segments apart inside one plate. `@centraid/design`'s `subBase`
-      // names exactly this exception, but it is not re-exported through
-      // `kit/theme` — see the lane report (#1015, S10).
-      gap: 2,
+      // the segments apart inside one plate. `subBase` names exactly this
+      // exception (#1015, R-B-6).
+      gap: subBase.gutter,
       overflow: "hidden",
-      paddingHorizontal: 2,
+      paddingHorizontal: subBase.gutter,
     },
     ruleHidden: { backgroundColor: "transparent" },
     segment: {
