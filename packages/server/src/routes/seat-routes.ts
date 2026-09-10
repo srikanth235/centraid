@@ -339,6 +339,17 @@ export function makeSeatRouteHandler(
       // a failure to write bookkeeping about it may never fail the answer.
       if (sinceEpoch === state.epoch) {
         recordSeatCursor(plane.db.vault, resolution.access.deviceId, seq);
+        // AND THE SCOPE RECORD BESIDE IT (#1014, V2/X9). A different cursor
+        // for a different job: `sync_cursor` above holds the vault's log
+        // floor, this one is the gateway's durable proof that this device
+        // mounts this vault — read by the multiplex gate and dropped when the
+        // vault changes hands. Both are best-effort bookkeeping about a page
+        // that is already served.
+        options.enrollments?.noteCheckpoint(
+          resolution.access.deviceId,
+          vaultId,
+          { epoch: state.epoch, seq, schemaEpoch: state.schemaEpoch }
+        );
       }
       options.logger?.info(
         `seat log page for ${vaultId}: since ${seq}, ${page.rows.length} rows, ` +
