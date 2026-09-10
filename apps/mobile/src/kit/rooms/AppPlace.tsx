@@ -49,6 +49,12 @@ export interface AppPlaceProps {
   chrome?: React.ReactNode;
   /** At most one, per DESIGN.md's one-primary rule. */
   action?: RoomAction;
+  /**
+   * The quiet verb beside it — a mode the bar turns on rather than a commit
+   * ("Select"). Still not a second primary: `PlaceHeader` has carried this
+   * pair since #765, and Docs' drive needs both (#1015).
+   */
+  secondary?: RoomAction;
   search?: SearchFieldProps;
   /**
    * The controls that pick WHICH content the body is showing — a day stepper,
@@ -80,6 +86,7 @@ export default function AppPlace({
   onBack,
   chrome,
   action,
+  secondary,
   search,
   selection,
   toolbar,
@@ -110,6 +117,15 @@ export default function AppPlace({
               title={app.title}
             />
           </View>
+          {secondary ? (
+            <Button
+              disabled={secondary.disabled}
+              label={secondary.label}
+              onPress={() => secondary.onPress()}
+              testID={secondary.testID}
+              variant="quiet"
+            />
+          ) : null}
           {action ? (
             <Button
               disabled={action.disabled}

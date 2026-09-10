@@ -80,14 +80,31 @@ export interface BandState {
   dimmed: boolean;
 }
 
-/** The band state a room in this selection is in. */
+/**
+ * The band state a room in this selection is in.
+ *
+ * THE MODE IS THE OBJECT, NOT THE COUNT (#1015, Wave 2). This read `count > 0`
+ * first, which left the moment between "Select" and the first pick with a live
+ * band, a header that still said the shelf's name, and no way out at all —
+ * Docs' drive is where that shows, because its `Select` control stands the
+ * primary act down as it turns the mode on. A screen that is not choosing
+ * passes no selection; one that is, is choosing at zero as much as at three.
+ */
 export function bandStateFor(selection?: RoomSelection): BandState {
-  const selecting = selection !== undefined && selection.count > 0;
+  const selecting = selection !== undefined;
   return { dimmed: selecting, interactive: !selecting };
 }
 
-/** "3 photos selected", or "3 selected" when the caller names no noun. */
+/**
+ * "3 photos selected", or "3 selected" when the caller names no noun. At zero
+ * the sentence is an instruction rather than a count — "Choose photos" — because
+ * "0 photos selected" states a fact nobody needed and asks for nothing.
+ */
 export function selectedSentence(selection: RoomSelection): string {
+  if (selection.count === 0)
+    return selection.noun === undefined
+      ? "Choose what to act on"
+      : `Choose ${selection.noun}s`;
   return selection.noun === undefined
     ? `${selection.count} selected`
     : `${selection.count} ${selection.noun} selected`;

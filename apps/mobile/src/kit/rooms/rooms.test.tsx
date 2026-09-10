@@ -136,7 +136,13 @@ describe("selection", () => {
       dimmed: true,
       interactive: false,
     });
-    expect(bandStateFor({ ...selection, count: 0 }).interactive).toBe(true);
+    // The MODE is the object, not the count: between "Select" and the first
+    // pick the band must already be down, or that moment has a live band, no
+    // count, and no way out (#1015, Wave 2 — Docs' drive).
+    expect(bandStateFor({ ...selection, count: 0 })).toStrictEqual({
+      dimmed: true,
+      interactive: false,
+    });
   });
 
   it("counts with the noun when the caller names one", () => {
@@ -151,6 +157,15 @@ describe("selection", () => {
     expect(selectedSentence({ actions: [], count: 3, onCancel: noop })).toBe(
       "3 selected"
     );
+    // At zero the header asks rather than counting.
+    expect(
+      selectedSentence({
+        actions: [],
+        count: 0,
+        noun: "document",
+        onCancel: noop,
+      })
+    ).toBe("Choose documents");
   });
 });
 
