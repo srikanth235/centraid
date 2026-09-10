@@ -107,6 +107,21 @@ Per lane, appended as each lane finishes; the umbrella's own run is the root's a
 | `node .governance/law/run.mjs --brief-digest 514cb2fed327` | law green apart from `receipt-per-issue` (this section and the audit below) and `registry-completeness` (the changelog line added with them) |
 | Red-first proof | The `write-outcome` suppression cases, the `EmptyBlock` gutter case and the `AnchoredMenu` reason case fail on base and pass here |
 
+The two runs the rest hang off, as they printed:
+
+```
+$ bunx vitest run src            # from apps/mobile
+ Test Files  1 failed | 282 passed (283)
+      Tests  2365 passed (2365)
+# the one failed file is src/lib/replica/expo-seat-driver.test.ts, which
+# fails identically on the base head with this lane stashed.
+
+$ bun run check:push:static
+✓ 4/4 gates passed in 45.4s — slowest: typecheck:affected 45.4s,
+  format:check 13.4s, lint 13.2s, turbo:lint 1.6s
+# exit 0
+```
+
 ## Audit
 
 Per lane. The umbrella's fresh-context attestation is the root's at close.
