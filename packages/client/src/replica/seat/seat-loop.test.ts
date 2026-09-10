@@ -9,7 +9,12 @@ import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
 import { seatArtifact } from "./seat-artifact.test-fixtures.js";
 import { SeatDriftParkedError } from "./seat-drift-parked-error.js";
-import { parseSeatLogPage, SeatLoop } from "./seat-loop.js";
+import {
+  parseSeatLogPage,
+  SEAT_SNAPSHOT_MOVE_RETRIES,
+  SeatLoop,
+} from "./seat-loop.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import { SeatWorkerCore } from "./worker-core.js";
 
 /**
@@ -330,5 +335,104 @@ describe("the seat loop with no worker in it", () => {
     expect(asked).toBeLessThanOrEqual(4);
     // And it stays parked: another pass does not start the count over.
     await expect(loop.sync()).rejects.toBeInstanceOf(SeatDriftParkedError);
+  });
+});
+
+/**
+ * A BUSY GATEWAY IS NOT A FAILED BOOTSTRAP (#1014, V4).
+ *
+ * The door builds for the current watermark, and the gateway commits while the
+ * phone downloads — the system recognition automations write their conversation
+ * ledger on every boot and those rows replicate. So the artifact really does
+ * move under a slow download, `If-Range` really does refuse the resume, and the
+ * only question is whether the seat starts over or gives up. It used to give
+ * up: `SeatSnapshotMovedError` left `sync()` with no copy and the library drew
+ * empty over a vault holding rows.
+ */
+function loopOverMovingDoor(
+  root: string,
+  fetch: typeof globalThis.fetch,
+  bytes: Uint8Array,
+  movesFor: number
+): { loop: SeatLoop; heads: () => number } {
+  let heads = 0;
+  let moved = 0;
+  const core = new SeatWorkerCore({
+    openDatabase: () => new NodeSeatDriver(path.join(root, "seat.db")),
+    staging: () =>
+      nodeSeatStaging({
+        directory: path.join(root, "staging"),
+        databasePath: path.join(root, "seat.db"),
+      }),
+    transport: () => ({
+      head: () => {
+        heads += 1;
+        return Promise.resolve({
+          // A NEW ETAG EACH TIME, because the gateway really has moved on.
+          etag: `"e1-${6 + heads}"`,
+          bytes: bytes.byteLength,
+          seq: 7,
+          epoch: "e1",
+          schemaEpoch: 2,
+        });
+      },
+      range: (start: number, etag: string) => ({
+        async *[Symbol.asyncIterator]() {
+          if (moved < movesFor) {
+            moved += 1;
+            throw new SeatSnapshotMovedError(etag, `"e1-${7 + moved}"`);
+          }
+          yield bytes.subarray(start);
+        },
+      }),
+    }),
+  });
+  return {
+    loop: new SeatLoop(inProcessSeatChannel(core), {
+      vaultId: "vault-1",
+      dbName: path.join(root, "seat.db"),
+      remember: true,
+      baseUrl: "https://gateway.test",
+      fetch,
+    }),
+    heads: () => heads,
+  };
+}
+
+describe("a snapshot that moves under the download", () => {
+  it("re-HEADs and finishes the bootstrap the busy gateway interrupted", async () => {
+    const root = tempDirSync("seat-loop-moved-");
+    const door = doorAnswering([{ rows: 1, hasMore: false, watermark: 8 }]);
+    const { loop, heads } = loopOverMovingDoor(
+      root,
+      door.fetch,
+      seatArtifact(root),
+      SEAT_SNAPSHOT_MOVE_RETRIES - 1
+    );
+    await loop.open();
+    await expect(loop.sync()).resolves.toMatchObject({ head: 8 });
+    expect(
+      heads(),
+      "the retry reused the head it already had rather than asking the door where the artifact is now"
+    ).toBe(SEAT_SNAPSHOT_MOVE_RETRIES);
+    await loop.close();
+  });
+
+  it("gives up after the bound rather than downloading forever", async () => {
+    // A gateway committing faster than this phone can download will never
+    // converge; three passes is enough to say so, and the caller's retry timer
+    // is what tries again later.
+    const root = tempDirSync("seat-loop-moving-");
+    const door = doorAnswering([{ rows: 1, hasMore: false, watermark: 8 }]);
+    const { loop, heads } = loopOverMovingDoor(
+      root,
+      door.fetch,
+      seatArtifact(root),
+      Number.POSITIVE_INFINITY
+    );
+    await loop.open();
+    await expect(loop.sync()).rejects.toThrow(SeatSnapshotMovedError);
+    expect(heads()).toBe(SEAT_SNAPSHOT_MOVE_RETRIES);
+    await loop.close();
   });
 });

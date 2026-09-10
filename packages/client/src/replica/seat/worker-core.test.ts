@@ -435,3 +435,51 @@ describe("the snapshot door over HTTP", () => {
     await expect(iterate()).rejects.toThrow(/moved/u);
   });
 });
+
+describe("the seq pin on the snapshot door (#1014, V4)", () => {
+  const head = new Headers({
+    etag: '"e1-7"',
+    "content-length": "128",
+    "x-centraid-seat-seq": "7",
+    "x-centraid-seat-epoch": "e1",
+    "x-centraid-schema-epoch": "2",
+  });
+
+  it("asks for the artifact it measured, not for whatever is current", async () => {
+    // A gateway that never stands still rebuilds the snapshot between the HEAD
+    // and the GET, and `If-Range` refuses the resume. The pin is the seat
+    // naming the file it is downloading so the door can keep serving it.
+    const asked: string[] = [];
+    const door = httpSeatSnapshotTransport({
+      url: "/vault/seat/snapshot",
+      fetch: (input) => {
+        asked.push(String(input));
+        return Promise.resolve(
+          new Response(new Uint8Array([1, 2, 3]), {
+            status: 206,
+            headers: head,
+          })
+        );
+      },
+    });
+    await door.head();
+    for await (const _chunk of door.range(64, '"e1-7"')) void _chunk;
+    expect(asked[0]).toBe("/vault/seat/snapshot");
+    expect(asked[1]).toBe("/vault/seat/snapshot?seq=7");
+  });
+
+  it("sends no pin before a head, so an unmeasured door is asked plainly", async () => {
+    const asked: string[] = [];
+    const door = httpSeatSnapshotTransport({
+      url: "/vault/seat/snapshot",
+      fetch: (input) => {
+        asked.push(String(input));
+        return Promise.resolve(
+          new Response(new Uint8Array([1]), { status: 200, headers: head })
+        );
+      },
+    });
+    for await (const _chunk of door.range(0, '"e1-7"')) void _chunk;
+    expect(asked).toStrictEqual(["/vault/seat/snapshot"]);
+  });
+});

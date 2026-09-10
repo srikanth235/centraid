@@ -19,6 +19,7 @@ import type {
 } from "./bootstrap.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import type { SeatDriftReason } from "./seat-drift-error.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import { SeatWorkerOutbox } from "./seat-worker-outbox.js";
 import type { SeatState } from "./state.js";
 import type {
@@ -217,6 +218,14 @@ export function reviveSeatError(error: SerializedSeatError): Error {
   // with the same message is one the queue would merely surface.
   if (error.code === "REPLICA_PROTOCOL_ERROR")
     return new ReplicaProtocolError(error.message);
+  // AND A MOVED ARTIFACT MUST SURVIVE AS ONE (#1014, V4). The loop retries it
+  // — a busy gateway rebuilt the snapshot mid-download, which is not a failure
+  // to show anybody — and an anonymous `Error` is one it would surface instead.
+  if (error.code === "seat_snapshot_moved")
+    return new SeatSnapshotMovedError(
+      error.expected ?? "unknown",
+      error.actual
+    );
   const revived = new Error(error.message);
   revived.name = error.name;
   return revived;

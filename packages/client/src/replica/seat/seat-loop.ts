@@ -41,6 +41,7 @@ import {
   SeatDriftParkedError,
 } from "./seat-drift-parked-error.js";
 import { SeatRebootstrapRequiredError } from "./seat-rebootstrap-required-error.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import type { SeatState } from "./state.js";
 import { seatWatermark } from "./watermark.js";
 import type { SeatWatermark } from "./watermark.js";
@@ -50,6 +51,22 @@ import type { SeatApplySummary, SeatWorkerQuery } from "./worker-protocol.js";
 const PAGE = 1_000;
 /** A catch-up is bounded; a seat that is further behind asks again. */
 const MAX_PAGES_PER_SYNC = 200;
+/**
+ * How many times a bootstrap re-HEADs after the artifact moved (#1014, V4).
+ *
+ * A MOVED ARTIFACT IS NOT A FAILURE, IT IS A BUSY GATEWAY. The door builds for
+ * the current watermark and this gateway commits while the phone downloads —
+ * the system recognition automations write their conversation ledger on every
+ * boot and those rows replicate — so `If-Range` refusing the resume is the
+ * NORMAL outcome of a slow connection, not an error to surface. Left
+ * unretried it made the seat's whole catch-up fail and drew an empty library.
+ *
+ * The pin (`?seq=`) is what usually prevents the move at all; this is what
+ * covers the first HEAD racing a commit, and a gateway too old to know the
+ * parameter. Bounded, because a gateway committing faster than the phone can
+ * download will never converge and three passes is enough to say so.
+ */
+export const SEAT_SNAPSHOT_MOVE_RETRIES = 3;
 
 export interface SeatLoopOptions {
   readonly vaultId: string;
@@ -235,7 +252,31 @@ export class SeatLoop {
     return this.channel.close();
   }
 
+  /**
+   * Download the file, re-HEADing when the artifact moved under the download.
+   *
+   * Each attempt starts from a fresh HEAD, so the retry is against the ETag
+   * the door has NOW: the staging discards a prefix whose marker no longer
+   * matches, and a resume that is still valid keeps its bytes. See
+   * {@link SEAT_SNAPSHOT_MOVE_RETRIES}.
+   */
+  /* oxlint-disable no-await-in-loop -- each attempt is a re-HEAD of the artifact the previous one lost */
   private async bootstrap(): Promise<void> {
+    for (let attempt = 1; attempt < SEAT_SNAPSHOT_MOVE_RETRIES; attempt += 1) {
+      const outcome = await this.bootstrapOnce().catch((error: unknown) => {
+        if (!(error instanceof SeatSnapshotMovedError)) throw error;
+        return "moved" as const;
+      });
+      if (outcome !== "moved") return;
+    }
+    // THE LAST ATTEMPT IS THE CALLER'S, moved or not. Written as a call rather
+    // than as a caught final iteration so there is no branch here that can
+    // swallow the outcome of the bootstrap that actually decided the answer.
+    await this.bootstrapOnce();
+  }
+  /* oxlint-enable no-await-in-loop */
+
+  private async bootstrapOnce(): Promise<void> {
     const result = await this.channel
       .bootstrap({
         vaultId: this.options.vaultId,

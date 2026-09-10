@@ -21,6 +21,7 @@ import {
   SEAT_SNAPSHOT_EPOCH_HEADER,
   SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
   SEAT_SNAPSHOT_SEQ_HEADER,
+  SEAT_SNAPSHOT_SEQ_PARAM,
   SEAT_SNAPSHOT_VAULT_HEADER,
 } from "@centraid/core/protocol";
 import type { SeatSnapshotHead } from "@centraid/core/protocol";
@@ -89,6 +90,25 @@ export function httpSeatSnapshotTransport(
 ): SeatSnapshotTransport {
   const call = options.fetch ?? globalThis.fetch.bind(globalThis);
   const headers = { ...options.headers };
+  /**
+   * THE SEQ THIS DOWNLOAD IS OF (#1014, V4).
+   *
+   * Set by the HEAD that measured the artifact and sent on every request for
+   * bytes, so a gateway committing while the phone downloads keeps serving the
+   * file the phone started rather than the one it has since moved to. A door
+   * that does not know the parameter answers for its current watermark, the
+   * ETag check below catches it, and the loop's bounded retry re-HEADs — which
+   * is what keeps this wire-compatible with a gateway older than #1014.
+   */
+  let pinnedSeq: number | undefined;
+  // Concatenated rather than parsed: this door's URL is relative on the
+  // browser seat (`/vault/seat/snapshot`) and absolute on the phone, and
+  // `new URL` of the first one throws.
+  const artifactUrl = (): string =>
+    pinnedSeq === undefined
+      ? options.url
+      : `${options.url}${options.url.includes("?") ? "&" : "?"}` +
+        `${SEAT_SNAPSHOT_SEQ_PARAM}=${String(pinnedSeq)}`;
   return {
     head: async (): Promise<SeatSnapshotHead> => {
       // A HEAD, not a ranged GET of one byte: the door builds the artifact on
@@ -108,11 +128,13 @@ export function httpSeatSnapshotTransport(
           "seat snapshot: response carries no content-length"
         );
       }
-      return headOf(response, Number(length));
+      const head = headOf(response, Number(length));
+      pinnedSeq = head.seq;
+      return head;
     },
     range: (start: number, etag: string): AsyncIterable<Uint8Array> => ({
       async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
-        const response = await call(options.url, {
+        const response = await call(artifactUrl(), {
           headers: {
             ...headers,
             ...(start > 0
