@@ -436,3 +436,22 @@ describe("a snapshot that moves under the download", () => {
     await loop.close();
   });
 });
+
+describe("staging that lost its part file (#1014, lane H)", () => {
+  it("names it a moved artifact so the loop redoes the download", async () => {
+    // The part file can be gone by the time `install` runs — a `discard` from
+    // a bootstrap that raced this one, a purge, a phone reclaiming scratch
+    // space. The raw `ENOENT` escaped the loop as an unrecognised failure,
+    // which is a seat with no copy and an empty library over a full vault.
+    const root = tempDirSync("seat-staging-lost-");
+    const staging = nodeSeatStaging({
+      directory: path.join(root, "staging"),
+      databasePath: path.join(root, "seat.db"),
+    });
+    await staging.append('"e1-7"', new Uint8Array([1, 2, 3]));
+    await staging.discard();
+    await expect(staging.install('"e1-7"')).rejects.toThrow(
+      SeatSnapshotMovedError
+    );
+  });
+});

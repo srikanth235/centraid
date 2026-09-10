@@ -32,6 +32,7 @@ import type { SeatBootstrapStaging } from "./bootstrap.js";
 import type { SeatCarryOverSidecar } from "./carry-over.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 
 async function sizeOf(file: string): Promise<number> {
   try {
@@ -76,10 +77,21 @@ export function nodeSeatStaging(
       await appendFile(part, chunk);
     },
     install: async (
-      _etag: string,
+      etag: string,
       prepare?: (driver: SeatSqliteDriver) => void
     ): Promise<void> => {
-      const staged = await readFile(part);
+      // A STAGING FILE THAT IS NOT THERE IS A DOWNLOAD TO REDO, NOT AN ENOENT
+      // TO SURFACE (#1014, lane H). The part file can be gone by the time the
+      // install runs — a `discard` from a bootstrap that raced this one, a
+      // purge, a phone reclaiming scratch space — and the raw `ENOENT` escaped
+      // the loop as an unrecognised failure, which is a seat with no copy and
+      // an empty library. Named as what it is, the loop's bounded re-HEAD
+      // starts the download over.
+      const staged = await readFile(part).catch(() => undefined);
+      if (staged === undefined) {
+        await discard();
+        throw new SeatSnapshotMovedError(etag, undefined);
+      }
       const incoming = `${options.databasePath}.incoming`;
       await mkdir(path.dirname(options.databasePath), { recursive: true });
       await writeFile(incoming, gunzipSync(staged));

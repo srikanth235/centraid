@@ -144,6 +144,23 @@ export interface SeatBootstrapOptions {
   readonly open: () => SeatSqliteDriver | Promise<SeatSqliteDriver>;
   readonly expansion?: number;
   readonly onProgress?: (progress: SeatBootstrapProgress) => void;
+  /**
+   * RELEASE THE SEAT'S CURRENT FILE — called once, after the last byte has
+   * arrived and before the install touches the destination (#1014, V4/lane H).
+   *
+   * The caller used to close its handle before the download, because a file
+   * cannot be replaced underneath an open SQLite connection. But the DOWNLOAD
+   * does not touch the destination: only `install` does. Closing early meant
+   * the seat had no open file for the whole of a multi-minute download on a
+   * phone, so every read, every `state()` and — worst — every `outbox()` call
+   * in that window threw `SeatWorkerNotOpenError`, which is a queued write the
+   * member cannot reach. A bootstrap refused before the first byte (no room,
+   * a mis-addressed artifact) never closed the file at all.
+   *
+   * So the window is now exactly the install. A caller that throws out of this
+   * hook aborts the bootstrap with its own file still open.
+   */
+  readonly beforeInstall?: () => void | Promise<void>;
   readonly now?: () => number;
 }
 
@@ -225,6 +242,10 @@ export async function bootstrapSeatFile(
     await options.staging.discard();
     throw new SeatSnapshotMovedError(head.etag, undefined);
   }
+
+  // THE HANDLE GOES DOWN HERE, NOT AT THE TOP (see `beforeInstall`). Every
+  // byte is in; what follows is the only part that touches the destination.
+  await options.beforeInstall?.();
 
   // ONE STEP, NOT TWO (#1014, C17). `name` is everything that turns the
   // gateway's file into THIS seat's file, and the host runs it on the incoming

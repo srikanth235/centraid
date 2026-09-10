@@ -27,6 +27,7 @@ import type {
   SeatCarryOverSidecar,
   SeatSqliteDriver,
 } from "@centraid/client/replica/native";
+import { SeatSnapshotMovedError } from "@centraid/client/replica/native";
 import { gunzip } from "@centraid/client/replica/seat/gunzip";
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
@@ -108,10 +109,24 @@ export function expoSeatStaging(
       return Promise.resolve();
     },
     install: (
-      _etag: string,
+      etag: string,
       prepare?: (driver: SeatSqliteDriver) => void
     ): Promise<void> => {
-      const staged = part().bytesSync();
+      // A STAGING FILE THAT IS NOT THERE IS A DOWNLOAD TO REDO, NOT AN ENOENT
+      // TO SURFACE (#1014, lane H). The part file can be gone by the time the
+      // install runs — a `discard` from a bootstrap that raced this one, a
+      // purge, iOS reclaiming scratch space — and the raw error escaped the
+      // loop as an unrecognised failure, which is a seat with no copy and an
+      // empty library. Named as what it is, the loop's bounded re-HEAD starts
+      // the download over.
+      let staged: Uint8Array;
+      try {
+        staged = part().bytesSync();
+      } catch {
+        return discard().then(() => {
+          throw new SeatSnapshotMovedError(etag, undefined);
+        });
+      }
       const incomingPath = `${options.databasePath}.incoming`;
       const incoming = fileAt(incomingPath);
       removeQuietly(incoming);
