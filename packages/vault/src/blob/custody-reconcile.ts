@@ -13,6 +13,25 @@ import type { LocalBlobStore } from "./local.js";
 import type { OrphanTombstoneIndex } from "./orphan-tombstone.js";
 import type { ReplicaStore } from "./replica-index.js";
 
+/**
+ * SANITY BEFORE A DESTRUCTIVE DIFF (#1014, B23).
+ *
+ * Reconcile deletes every listed key the live model does not claim. The
+ * listing was taken entirely on trust: a provider mid-outage returning a short
+ * page, a misconfigured endpoint answering for a DIFFERENT prefix, or a
+ * truncated pagination all produced a listing that looked authoritative, and
+ * the sweep deleted against it. `blob_replica` is this host's own durable
+ * evidence of what it pushed, so it is the floor a listing has to clear.
+ *
+ * Below this fraction of that evidence the destructive half is SKIPPED for
+ * that store class — nothing is deleted, the reason rides the result, and the
+ * healing/re-push half still runs (it only ever adds).
+ */
+export const DEFAULT_MIN_LISTING_COVERAGE = 0.5;
+
+/** A content address, and nothing else, is deletable as an orphan. */
+const SHA256_KEY = /^[0-9a-f]{64}$/u;
+
 export interface ReconcileContext {
   remote: RemoteTier | null;
   local: LocalBlobStore;
@@ -38,6 +57,7 @@ export async function reconcileCustody(
     missing: [],
     orphansSkipped: [],
     orphansGraceHeld: [],
+    listingsRefused: [],
   };
   const { remote, local, cache } = ctx;
   const now = options.now ?? Date.now;
@@ -72,9 +92,48 @@ export async function reconcileCustody(
         store: remote.derivedStore,
       });
     }
+    const coverage = options.minListingCoverage ?? DEFAULT_MIN_LISTING_COVERAGE;
     const reconcileTier = async (tierIndex: number): Promise<void> => {
       const tier = stores[tierIndex];
       if (tier === undefined) return;
+      // NOT A CONTENT ADDRESS, NOT AN ORPHAN. A key that is not a sha256 was
+      // not written by this vault's CAS, whatever the endpoint says it holds.
+      const foreign = [...tier.listed].filter((key) => !SHA256_KEY.test(key));
+      if (foreign.length > 0) {
+        // Out of BOTH sets: `surviving` feeds `replica.heal`, and a key that
+        // is not a content address must not enter this host's index either.
+        for (const key of foreign) {
+          tier.listed.delete(key);
+          tier.surviving.delete(key);
+        }
+        result.listingsRefused.push({
+          store: tier.class,
+          reason:
+            `${foreign.length} listed key(s) are not content addresses ` +
+            `(first: ${foreign[0]}); they were left alone`,
+        });
+      }
+      // The size sanity bound. `blob_replica` is what this host PROVED it
+      // pushed, so a listing far below it is a listing to distrust, not a
+      // deletion order.
+      const evidence = ctx.cache?.replica.all(tier.class).size ?? 0;
+      if (
+        coverage > 0 &&
+        evidence > 0 &&
+        tier.listed.size < evidence * coverage
+      ) {
+        result.listingsRefused.push({
+          store: tier.class,
+          reason:
+            `listing returned ${tier.listed.size} object(s) where this host has ` +
+            `evidence of ${evidence}; the orphan delete was skipped`,
+        });
+        // Every unclaimed key is SPARED, and reported as spared — the same
+        // shape `skipOrphanDelete` produces, because it is the same decision.
+        for (const sha of tier.listed)
+          if (!liveShas.has(sha)) result.orphansSkipped.push(sha);
+        return reconcileTier(tierIndex + 1);
+      }
       const listed = [...tier.listed];
       const reconcileSha = async (shaIndex: number): Promise<void> => {
         const sha = listed[shaIndex];

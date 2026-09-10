@@ -2000,6 +2000,12 @@ export class Gateway {
         orphansSkipped: result.orphansSkipped.length,
         // Held by the recovery-window grace (#439) — deferred, not skipped.
         orphansGraceHeld: result.orphansGraceHeld.length,
+        // A listing the sweep refused to delete against (#1014, B23). Empty
+        // is the ordinary case; non-empty means nothing was deleted for that
+        // store class and says why.
+        ...(result.listingsRefused.length === 0
+          ? {}
+          : { listingsRefused: result.listingsRefused }),
         replicated: result.replicated.length,
         missing: result.missing,
         // 0 when no codec is wired or no image was missing a rung.

@@ -2303,6 +2303,15 @@ export class VaultPlane {
               `orphansGraceHeld=${blobs.orphansGraceHeld.length} missing=${blobs.missing.length}`
           );
         }
+        // A REFUSED LISTING IS LOUD (#1014, B23). Skipping the destructive
+        // half is the safe answer, and one nobody would ever notice from the
+        // counts above — a sweep that deleted nothing looks like a sweep with
+        // nothing to delete.
+        for (const refusal of blobs.listingsRefused) {
+          this.logger.warn(
+            `vault plane: blob sweep did not delete against the ${refusal.store} listing — ${refusal.reason}`
+          );
+        }
         if (this.onReplicationPass) {
           let bytesReplicated = 0;
           for (const sha of blobs.replicated)
