@@ -96,3 +96,52 @@ export function formatDateShort(
     ? head
     : `${head} ${at.getFullYear()}`;
 }
+
+/**
+ * A clock time, in the one spelling the seat uses: `5:00 PM` in a 12-hour
+ * locale, `17:00` in a 24-hour one — hour and minute, and never seconds.
+ *
+ * The audit found one Agenda screen printing the same instant three ways at
+ * once (`toLocaleString()`'s `10/09/2026, 5:00:00 PM` in the field, the
+ * platform picker's `10 Sep 2026` / `17:00` under it, and `5:00 PM` on the
+ * list behind it). An event has no seconds, and a field that prints them is
+ * asserting a precision the vault does not hold.
+ */
+export function formatTime(value: Date | string | number): string {
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(at);
+}
+
+/** A day and a time together — `4 Sep, 5:00 PM`; the year appears only when
+ *  it is not the current one, which is `formatDateShort`'s rule. */
+export function formatDateTime(
+  value: Date | string | number,
+  now: string | number = Date.now()
+): string {
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime())) return "";
+  return `${formatDateShort(at.toISOString(), now)}, ${formatTime(at)}`;
+}
+
+/**
+ * The month a run of days is in — `September`, and `September 2027` once it
+ * is not this year. A 120-day list with no month heading turns September into
+ * October in silence, which is what the audit read off the Schedule surface.
+ */
+export function formatMonth(
+  value: Date | string | number,
+  now: string | number = Date.now()
+): string {
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime())) return "";
+  const nowAt = new Date(typeof now === "number" ? now : Date.parse(now));
+  const month = MONTHS[at.getMonth()] ?? "";
+  return !Number.isNaN(nowAt.getTime()) &&
+    at.getFullYear() === nowAt.getFullYear()
+    ? month
+    : `${month} ${at.getFullYear()}`;
+}

@@ -111,7 +111,7 @@ export default function LockerSearchView(
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     note: {
-      ...t("mono"),
+      ...t("small"),
       color: colors.textFaint,
       paddingBottom: spacing[3],
       paddingHorizontal: pageMargin,

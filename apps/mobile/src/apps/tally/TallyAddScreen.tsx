@@ -21,6 +21,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { CATEGORIES } from "@centraid/blueprints/apps/tally/category-labels";
 import {
   ADD_COMMIT,
   ADD_HEAD,
@@ -41,7 +42,6 @@ import {
   rateSuggestionChip,
 } from "@centraid/blueprints/apps/tally/compose-copy";
 import {
-  CATEGORIES,
   addExpenseInput,
   draftFromEntry,
   editExpenseInput,
@@ -74,7 +74,7 @@ import type { TallyScreenProps } from "../../navigation";
 import { loadTallyGroup } from "./tally-store";
 import { findEntry } from "./tally-view-model";
 import { issueTallyWrite } from "./tally-writes";
-import { Chips, TypedField } from "./TallyChips";
+import { Chips, DateField, TypedField } from "./TallyChips";
 import { FieldRow } from "./TallyParts";
 import TallyScreen from "./TallyScreen";
 import { useTallyVault } from "./useTallyVault";
@@ -119,8 +119,17 @@ export default function TallyAddScreen({
     if (draft.groupId) void loadTallyGroup(draft.groupId);
   }, [draft.groupId]);
 
-  const patch = (next: Partial<ExpenseDraft>): void =>
+  // A FORM IS NOT BORN FAILING (#1015, tally/findings #2, #6). The refusal
+  // names the field that is not filled yet, which is the right sentence at the
+  // wrong moment when nothing has been touched: it told a member they had made
+  // a mistake before they made one. The commit is disabled from the first
+  // frame either way, so nothing can be committed on the strength of a hidden
+  // refusal — only the sentence waits for the member to start.
+  const [touched, setTouched] = useState(false);
+  const patch = (next: Partial<ExpenseDraft>): void => {
+    setTouched(true);
     setDraft((prior) => ({ ...prior, ...next }));
+  };
 
   // WHO IT DIVIDES BETWEEN. A group's own members where there is a group; the
   // friend roster plus the owner where there is not, which is exactly what
@@ -165,6 +174,9 @@ export default function TallyAddScreen({
   );
 
   const commit = (): void => {
+    // A press on the disabled commit is a member asking why: reveal the
+    // sentence rather than answering with nothing at all.
+    setTouched(true);
     if (!verdict.ok) return;
     const built = expenseId
       ? editExpenseWrite(editExpenseInput(draft, verdict, currency))
@@ -249,10 +261,11 @@ export default function TallyAddScreen({
             ]}
             value={draft.spentOn}
           />
-          <TypedField
+          <DateField
             label={WHEN_CHIPS.pick}
+            now={vault.now}
             onChange={(spentOn) => patch({ spentOn })}
-            placeholder={vault.now.slice(0, 10)}
+            pickLabel={WHEN_CHIPS.pick}
             value={draft.spentOn}
           />
         </FieldRow>
@@ -441,7 +454,7 @@ export default function TallyAddScreen({
         {verdict.allocation ? (
           <Text style={styles.reconcile}>{verdict.allocation.line}</Text>
         ) : null}
-        {verdict.refusal ? (
+        {touched && verdict.refusal ? (
           <Text style={styles.refusal}>{verdict.refusal}</Text>
         ) : null}
 

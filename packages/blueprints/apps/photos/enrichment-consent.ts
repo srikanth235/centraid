@@ -107,7 +107,7 @@ export type AnswerAvailability = SharedAnswerAvailability;
  * THE TIER IS ENFORCED server-side (`automation/fire/fire.ts` via
  * `fire/enrich-gate.ts`). Withholding an unusable action is UI, not the gate.
  */
-export function prioritiseAnswerFor(
+export function prioritizeAnswerFor(
   tier: string | null | undefined,
   denied?: boolean
 ): AnswerAvailability {

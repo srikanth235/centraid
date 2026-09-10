@@ -9,6 +9,12 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
+import {
+  SHELF_A11Y,
+  SHELF_HIDE,
+  SHELF_OPEN_IN_TASKS,
+} from "@centraid/blueprints/apps/agenda/day-context-copy";
+
 import { Text } from "../../kit/components/NativeText";
 import type { ThemeColors } from "../../kit/theme";
 import { scheduleBirthdayNotifications } from "../../lib/notifications-core";
@@ -57,21 +63,26 @@ export default function AgendaDayContext({
   return (
     <View>
       <Pressable
+        accessibilityLabel={SHELF_A11Y}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen((current) => !current)}
         style={styles.shelfToggle}
       >
         <Text style={[styles.shelfText, { color: colors.textSoft }]}>
-          {open ? "Hide" : shelfLabel(due.length)}
+          {open ? SHELF_HIDE : shelfLabel(due.length)}
         </Text>
       </Pressable>
       {open
         ? due.map((row) => (
             <Pressable
               key={row.taskId}
+              // The row's own words are its name; the label used to repeat
+              // the title and then swallow it, because a labelled container
+              // is read INSTEAD of its children. What the press does belongs
+              // in the hint (#1015 Wave 3, a11y).
+              accessibilityHint={SHELF_OPEN_IN_TASKS}
               accessibilityRole="button"
-              accessibilityLabel={`${row.title}, open in Tasks`}
               onPress={onOpenTask}
               style={[styles.shelfRow, { borderStartColor: colors.line }]}
             >

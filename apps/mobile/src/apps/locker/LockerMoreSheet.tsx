@@ -69,7 +69,7 @@ export default function LockerMoreSheet({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     foot: {
-      ...t("mono"),
+      ...t("small"),
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       color: colors.textFaint,
@@ -85,5 +85,5 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: spacing[2],
     },
     rowLabel: { ...t("small"), color: colors.text, flex: 1 },
-    rowMeta: { ...t("mono"), color: colors.textFaint },
+    rowMeta: { ...t("small"), color: colors.textFaint },
   });

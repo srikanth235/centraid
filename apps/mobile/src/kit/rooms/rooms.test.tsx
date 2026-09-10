@@ -136,7 +136,13 @@ describe("selection", () => {
       dimmed: true,
       interactive: false,
     });
-    expect(bandStateFor({ ...selection, count: 0 }).interactive).toBe(true);
+    // The MODE is the object, not the count: between "Select" and the first
+    // pick the band must already be down, or that moment has a live band, no
+    // count, and no way out (#1015, Wave 2 — Docs' drive).
+    expect(bandStateFor({ ...selection, count: 0 })).toStrictEqual({
+      dimmed: true,
+      interactive: false,
+    });
   });
 
   it("counts with the noun when the caller names one, and pluralises it", () => {
@@ -162,6 +168,15 @@ describe("selection", () => {
     expect(selectedSentence({ actions: [], count: 3, onCancel: noop })).toBe(
       "3 selected"
     );
+    // At zero the header asks rather than counting.
+    expect(
+      selectedSentence({
+        actions: [],
+        count: 0,
+        noun: "document",
+        onCancel: noop,
+      })
+    ).toBe("Choose documents");
   });
 });
 
@@ -242,6 +257,35 @@ describe(PushedPage, () => {
     expect(labels).toContain("Back to Taxes");
   });
 
+  // The back key is chrome a flow selects BY HANDLE: `docs-breadcrumb` is
+  // asserted gone to prove the band pops rather than pushes, and a negative
+  // asserted on copy passes forever the day the copy is re-worded (#890 W2).
+  it("passes the back key's handle through to the control it draws", () => {
+    const container = render(
+      <PushedPage
+        backTestID="docs-breadcrumb"
+        backTo={parentPlace(stack)}
+        onBack={noop}
+        title="2024 return"
+      />
+    );
+    expect(
+      container.querySelector('[data-testid="docs-breadcrumb"]')
+    ).toBeTruthy();
+  });
+
+  it("draws frame chrome above the back row", () => {
+    const container = render(
+      <PushedPage
+        backTo={parentPlace(stack)}
+        chrome={<Text>Home vault</Text>}
+        onBack={noop}
+        title="2024 return"
+      />
+    );
+    expect(words(container)[0]).toBe("Home vault");
+  });
+
   it("carries the frame's lockup above the back key", () => {
     const container = render(
       <PushedPage
@@ -303,6 +347,43 @@ describe(AppPlace, () => {
     expect(nodesOf(container, "input")).toStrictEqual([]);
   });
 
+  // The controls that pick what the body shows have to outlive the body's own
+  // state machine: a day stepper that vanished on the empty day is a control
+  // the member cannot use to leave that day.
+  it("keeps the toolbar above an empty body", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Agenda" }}
+        empty={{ body: "Nothing here", title: "Nothing on these days" }}
+        onBack={noop}
+        toolbar={<Text>Next day</Text>}
+      >
+        <Text>rows</Text>
+      </AppPlace>
+    );
+    const said = words(container);
+    expect(said).toContain("Next day");
+    expect(said).toContain("Nothing on these days");
+    expect(said).not.toContain("rows");
+  });
+
+  // An end-to-end flow taps the app's write door by its handle; a room that
+  // swallowed it would take those flows away from every screen it absorbed.
+  it("passes the action's handle through to the control it draws", () => {
+    const container = render(
+      <AppPlace
+        action={{ label: "New note", onPress: noop, testID: "notes-capture" }}
+        app={{ color: "#345", iconKey: "Camera", title: "Notes" }}
+        onBack={noop}
+      />
+    );
+    expect(
+      nodesOf(container, "button").some(
+        (node) => node.dataset.testid === "notes-capture"
+      )
+    ).toBe(true);
+  });
+
   // A verb the ROOM draws is still the verb a Maestro flow selects. Photos'
   // Select chip and its two selection verbs carried handles into the room
   // (#890 W2), and `lint-mobile-testids` fails the PR that drops one.
@@ -337,6 +418,40 @@ describe(AppPlace, () => {
     expect(words(container)).toContain("Select");
   });
 
+  // A confirm sheet and a presented editor have to survive the body's own
+  // state machine: an empty list must not unmount the editor over it.
+  it("keeps an overlay mounted while the body shows an empty state", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        empty={{ body: "Nothing yet", title: "No photos" }}
+        onBack={noop}
+        overlay={<Text>Delete photo?</Text>}
+      >
+        <Text>rows</Text>
+      </AppPlace>
+    );
+    const said = words(container);
+    expect(said).toContain("No photos");
+    expect(said).toContain("Delete photo?");
+    expect(said).not.toContain("rows");
+  });
+
+  // The vault lockup is chrome on every route of an app, and it sits ABOVE
+  // the header rather than inside the body, so it does not scroll away.
+  it("draws frame chrome above the app header", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        chrome={<Text>Home vault</Text>}
+        onBack={noop}
+      />
+    );
+    const said = words(container);
+    expect(said[0]).toBe("Home vault");
+    expect(said).toContain("Photos");
+  });
+
   // The frame's `VaultBar` used to sit above each app's own `paddingTop:
   // insets.top`, so the room and the app both inset the status bar. It goes
   // INSIDE the room, above the header, and the room owns the one inset.
@@ -365,6 +480,22 @@ describe(EditorRoom, () => {
     dispose = undefined;
     const fresh = render(<EditorRoom cancellable onDone={noop} title="Note" />);
     expect(words(fresh)).toContain("Cancel");
+  });
+
+  // An editor that is STATE rather than a route presents itself, and hosting
+  // the line inside that presentation is the whole of audit B5.
+  it("renders nothing while a presented editor is closed", () => {
+    const container = render(
+      <EditorRoom onDone={noop} presented title="Note" visible={false} />
+    );
+    expect(words(container)).toStrictEqual([]);
+  });
+
+  it("carries the acts of the thing being edited in one foot row", () => {
+    const container = render(
+      <EditorRoom foot={<Text>Versions</Text>} onDone={noop} title="Note" />
+    );
+    expect(words(container)).toContain("Versions");
   });
 
   it("hosts the status line inside, and takes no band", () => {

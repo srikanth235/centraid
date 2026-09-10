@@ -13,6 +13,7 @@ import Svg, { Path } from "react-native-svg";
 import { LABELS } from "@centraid/blueprints/apps/people/people-copy";
 
 import Button from "../../kit/components/Button";
+import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import PersonAvatar from "../../kit/components/PersonAvatar";
 import type {
@@ -252,8 +253,17 @@ export function PeopleSection(props: PeopleSectionProps): React.JSX.Element {
           {props.count}
         </Text>
       )}
+      {/* THE CARET IS A GLYPH FROM THE ICON SET (#1015, people/findings #9).
+          It used to be the literal characters `−` and `+`, which take neither
+          the set's stroke nor its size scale and read to VoiceOver as their
+          Unicode names — and a leading `+` beside a count on a head that
+          sometimes carries an `Add` verb says ADD, not EXPAND. */}
       {props.collapsible ? (
-        <Text style={styles.sectionCaret}>{open ? "−" : "+"}</Text>
+        <Icon
+          color={colors.textSoft}
+          name={open ? "chevron-down" : "chevron-right"}
+          size={16}
+        />
       ) : null}
     </>
   );
@@ -487,7 +497,6 @@ const makeStyles = (colors: ThemeColors) =>
     rowPending: { ...t("annotLabel"), color: colors.textSoft },
     rowSub: { ...t("annotLabel"), color: colors.textFaint },
     section: { paddingTop: spacing[4] },
-    sectionCaret: { ...t("smallStrong"), color: colors.textSoft },
     sectionHead: {
       alignItems: "center",
       flexDirection: "row",

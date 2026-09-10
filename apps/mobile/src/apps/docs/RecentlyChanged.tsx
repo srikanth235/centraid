@@ -15,9 +15,8 @@ import {
   RECENT_RULE,
 } from "@centraid/blueprints/apps/docs/view-copy";
 
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { useDocsRoom } from "./docs-room";
 import DriveList from "./DriveList";
 import { useDocs } from "./useDocs";
 
@@ -26,15 +25,21 @@ import { useDocs } from "./useDocs";
 const RECENT_WINDOW = 50;
 
 export default function RecentlyChanged(): React.JSX.Element {
+  const room = useDocsRoom("more");
   const drive = useDocs();
   const docs = useMemo(
     () => drive.documents.filter((doc) => !doc.trashed).slice(0, RECENT_WINDOW),
     [drive.documents]
   );
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader />
-      <ReplicaStatusBar />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <DriveList
         shelf={RECENT}
         docs={docs}
@@ -50,6 +55,6 @@ export default function RecentlyChanged(): React.JSX.Element {
         caption={captionFor(RECENT, { offline: drive.offline })}
         status={RECENT_RULE}
       />
-    </DocsScreen>
+    </PushedPage>
   );
 }

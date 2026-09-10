@@ -144,6 +144,10 @@ function useSeatRead(
       setError(undefined);
     } catch (caughtError) {
       if (!current()) return;
+      // The raw string is for the LOG, where a debug session starts
+      // (docs/logs.md) — never for the member. Screens word the failure
+      // themselves through `kit/rooms/read-failure` (#1015, S14).
+      console.warn("[seat-pages] read failed", query?.name, caughtError);
       setError(
         caughtError instanceof Error ? caughtError.message : String(caughtError)
       );

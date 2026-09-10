@@ -15,8 +15,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EMPTY_TRASH_COPY } from "@centraid/blueprints/apps/docs/drive-copy";
 
+import { hapticsStub } from "../../test/haptics-stub";
 import { mountBlock, nodesOf } from "../../test/react-native-stub";
 import DocsTrash from "./DocsTrash";
+
+// `DocsBand` reaches the kit's moment channel, and `expo-haptics`
+// dereferences a native module at MODULE scope (see `test/haptics-stub`).
+vi.mock(import("expo-haptics"), () => hapticsStub());
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
@@ -28,6 +33,9 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
@@ -36,18 +44,32 @@ vi.mock(
   import("@react-navigation/native"),
   () =>
     ({
-      useNavigation: () => ({ navigate: vi.fn<() => void>() }),
+      useNavigation: () => ({
+        goBack: vi.fn<() => void>(),
+        navigate: vi.fn<() => void>(),
+        popTo: vi.fn<() => void>(),
+      }),
+      // The room reads the live stack to name the place it descends from.
+      useNavigationState: (
+        selector: (state: {
+          index: number;
+          routes: { name: string }[];
+        }) => unknown
+      ) =>
+        selector({
+          index: 1,
+          routes: [{ name: "DocsHome" }, { name: "DocsTrash" }],
+        }),
     }) as never
 );
-// The shell, the head, the list and the replica bar are other files' claims.
-vi.mock(import("./DocsScreen"), () => ({
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+// The room's own chrome and the list are other files' claims.
+vi.mock(import("../../screens/home/VaultBar"), () => ({
+  default: () => <></>,
 }));
-vi.mock(import("./DocsShelfHeader"), () => ({ default: () => <></> }));
-vi.mock(import("./DriveList"), () => ({ default: () => <></> }));
 vi.mock(import("../../kit/replica/ReplicaStatusBar"), () => ({
   default: () => <></>,
 }));
+vi.mock(import("./DriveList"), () => ({ default: () => <></> }));
 
 const posted: string[] = [];
 vi.mock(import("../../kit/components/status-line"), () => ({
@@ -56,16 +78,17 @@ vi.mock(import("../../kit/components/status-line"), () => ({
   },
 }));
 
-// The sheet is the kit's; what matters here is WHAT was offered and that
-// choosing it is the only thing that writes.
+// The room is the kit's; what matters here is WHAT was asked, that the verb
+// is outlined rather than filled, and that choosing it is the only write.
 interface SheetProps {
   visible: boolean;
   title: string;
-  options: { id: string; label: string; detail?: string }[];
-  onSelect: (id: string) => void;
+  cancelLabel?: string;
+  primary?: { label: string; dangerous?: boolean; onPress: () => void };
+  children?: React.ReactNode;
 }
 const sheets: SheetProps[] = [];
-vi.mock(import("../../kit/components/OptionSheet"), () => ({
+vi.mock(import("../../kit/rooms/SheetRoom"), () => ({
   default: (props: SheetProps) => {
     sheets.push(props);
     return <></>;
@@ -139,10 +162,11 @@ describe("the Docs trash shelf", () => {
     const sheet = sheets.at(-1)!;
     expect(sheet.visible).toBe(true);
     expect(sheet.title).toBe("Delete 3 documents forever?");
-    expect(sheet.options.map((option) => option.label)).toStrictEqual([
-      "Delete 3 forever",
-    ]);
-    expect(sheet.options[0]!.detail).toContain("cannot be undone");
+    expect(sheet.primary?.label).toBe("Delete 3 forever");
+    // Outlined `--net`, never filled: the one irreversible verb in Docs is not
+    // this view's primary commit (#1015, S7).
+    expect(sheet.primary?.dangerous).toBe(true);
+    expect(sheet.cancelLabel).toBe(EMPTY_TRASH_COPY.cancel);
   });
 
   it("empties the whole trash in ONE write when the confirm is chosen, and says so", async () => {
@@ -150,7 +174,7 @@ describe("the Docs trash shelf", () => {
 
     press(emptyTrashButton(container));
     act(() => {
-      sheets.at(-1)!.onSelect("empty");
+      sheets.at(-1)!.primary?.onPress();
     });
 
     // One command for the shelf — never one purge per row.

@@ -54,7 +54,7 @@ import {
   VERBS,
   daysApartText,
   balancesHeroSub,
-  expenseCount,
+  ledgerDayCount,
   memberCount,
   HERO_LEVEL,
   HERO_OWE,
@@ -299,7 +299,10 @@ export function Activity(props: ActivityProps): ReactNode {
         <Section
           key={bucket.key}
           label={bucket.label}
-          meta={expenseCount(bucket.rows.length)}
+          meta={ledgerDayCount(
+            bucket.rows.filter((row) => row.kind !== "settlement").length,
+            bucket.rows.filter((row) => row.kind === "settlement").length
+          )}
           count={bucket.rows.length}
         >
           <Rows>

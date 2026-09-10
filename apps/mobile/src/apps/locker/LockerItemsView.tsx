@@ -59,9 +59,6 @@ export interface LockerItemsViewProps {
   waiting?: string | null;
   loaded: boolean;
   truncated: boolean;
-  /** The device-credential offer, present only where this phone can hold one
-   *  and does not yet. Enrolling needs an open session, which is why the offer
-   *  cannot live on the lock wall that asks for one. */
   onShowMore: () => void;
   onOpen: (row: LockerRowData) => void;
   onNew: () => void;
@@ -187,21 +184,12 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[3],
       padding: spacing[4],
     },
-    footText: { ...t("mono"), color: colors.textFaint },
+    footText: { ...t("small"), color: colors.textFaint },
     head: { gap: spacing[3], paddingTop: spacing[2] },
     noMatch: {
       ...t("small"),
       color: colors.textFaint,
       padding: spacing[4],
     },
-    offer: {
-      borderColor: colors.line,
-      borderWidth: borders.hairline,
-      gap: spacing[2],
-      marginHorizontal: spacing[4],
-      padding: spacing[3],
-    },
-    offerBody: { ...t("mono"), color: colors.textFaint },
-    offerTitle: { ...t("smallStrong"), color: colors.text },
     page: { flex: 1, padding: spacing[4] },
   });

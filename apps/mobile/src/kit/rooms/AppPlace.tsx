@@ -39,11 +39,24 @@ export interface AppPlaceProps {
   };
   /** Leaves the app, back to the springboard. */
   onBack: () => void;
+  /**
+   * Frame chrome above the header, on every route of the app: which vault and
+   * which gateway (`VaultBar`). The room takes it as a node rather than
+   * importing it, because the vault lockup lives in the shell's tree and a
+   * room that reached for it would drag the launcher catalog into the kit —
+   * the constraint `VaultBar` states about itself. NotesHome needed this
+   * first (#1015, Wave 2).
+   */
+  chrome?: React.ReactNode;
   /** At most one, per DESIGN.md's one-primary rule. */
   action?: RoomAction;
-  /** The quiet verb beside it, as `PushedPage` already has. People's roster
-   *  reaches Trash from here and from nowhere else; a room with only one slot
-   *  would have made Trash unreachable rather than made the bar quieter. */
+  /**
+   * The quiet verb beside it — a mode the bar turns on rather than a commit
+   * ("Select"). Still not a second primary: `PlaceHeader` has carried this
+   * pair since #765; Docs' drive needs both, and People's roster reaches
+   * Trash from here and from nowhere else — a room with only one slot would
+   * have made Trash unreachable rather than made the bar quieter (#1015).
+   */
   secondary?: RoomAction;
   /**
    * The frame's own lockup (`VaultBar`) above the app's header: which vault,
@@ -62,9 +75,25 @@ export interface AppPlaceProps {
    */
   trailingRef?: React.RefObject<RNView | null>;
   search?: SearchFieldProps;
+  /**
+   * The controls that pick WHICH content the body is showing — a day stepper,
+   * a lens and sort row. They sit under the search and ABOVE the body, and
+   * outside it: the body is a state machine, and a stepper that vanished on
+   * the empty day would be a control the member cannot use to leave that day
+   * (Agenda needed this first, #1015 audit agenda/findings#3).
+   */
+  toolbar?: React.ReactNode;
   selection?: RoomSelection;
   /** The app's own band, told what state the room puts it in. */
   band?: (state: BandState) => React.ReactNode;
+  /**
+   * Presentations this screen owns: a confirm sheet, an editor that is state
+   * rather than a route. They mount OUTSIDE `RoomBody`, because the body is a
+   * state machine — an empty state replaces the children — and an editor that
+   * unmounted the moment its list went empty would be a room deciding
+   * something no screen asked it to.
+   */
+  overlay?: React.ReactNode;
   loading?: RoomLoading;
   error?: RoomError;
   empty?: RoomEmpty;
@@ -74,16 +103,19 @@ export interface AppPlaceProps {
 export default function AppPlace({
   app,
   onBack,
+  chrome,
   action,
   secondary,
   lockup,
   trailingRef,
   search,
   selection,
+  toolbar,
   band,
   loading,
   error,
   empty,
+  overlay,
   children,
 }: AppPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -92,6 +124,7 @@ export default function AppPlace({
   const selecting = !bandState.interactive;
   return (
     <TopSafeArea style={[styles.room, ink]}>
+      {chrome}
       {lockup}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
@@ -135,9 +168,11 @@ export default function AppPlace({
         </View>
       )}
       {search && !selecting ? <SearchField {...search} /> : null}
+      {selecting ? null : toolbar}
       <RoomBody empty={empty} error={error} loading={loading}>
         {children}
       </RoomBody>
+      {overlay}
       {selecting && selection ? (
         <SelectionActions selection={selection} />
       ) : null}

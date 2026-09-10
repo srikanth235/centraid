@@ -34,15 +34,41 @@ export interface PushedPageProps {
   title: string;
   /** Computed from the stack (`parentPlace`), never written down. */
   backTo?: PlaceRef;
+  /**
+   * A handle from `kit/test-ids` for the back control (#890 W2). The back key
+   * is chrome an end-to-end flow selects by handle rather than by words —
+   * `docs-breadcrumb` is asserted GONE to prove the band pops rather than
+   * pushes, and a negative asserted on copy passes forever the day the copy
+   * is re-worded. Rooms that swallowed the handle would take that proof away.
+   */
+  backTestID?: string;
   onBack: () => void;
+  /** Frame chrome above the back row — see `AppPlaceProps.chrome`. */
+  chrome?: React.ReactNode;
   /** At most one filled commit, per DESIGN.md. */
   action?: RoomAction;
   secondary?: RoomAction;
   /** The frame's lockup above the back key; see `AppPlaceProps.lockup`. */
   lockup?: React.ReactNode;
   search?: SearchFieldProps;
+  /**
+   * The controls that pick WHICH content the body is showing — a day stepper,
+   * a lens and sort row. They sit under the search and ABOVE the body, and
+   * outside it: the body is a state machine, and a stepper that vanished on
+   * the empty day would be a control the member cannot use to leave that day
+   * (Agenda needed this first, #1015 audit agenda/findings#3).
+   */
+  toolbar?: React.ReactNode;
   selection?: RoomSelection;
   band?: (state: BandState) => React.ReactNode;
+  /**
+   * Presentations this screen owns: a confirm sheet, an editor that is state
+   * rather than a route. They mount OUTSIDE `RoomBody`, because the body is a
+   * state machine — an empty state replaces the children — and an editor that
+   * unmounted the moment its list went empty would be a room deciding
+   * something no screen asked it to.
+   */
+  overlay?: React.ReactNode;
   loading?: RoomLoading;
   error?: RoomError;
   empty?: RoomEmpty;
@@ -53,8 +79,6 @@ export interface PushedPageProps {
    * the body scrolls and the room keeps owning the page's vertical order.
    */
   footer?: React.ReactNode;
-  /** The modals this page owns; siblings of the body, never inside it. */
-  overlay?: React.ReactNode;
   /** For the end-to-end flows that name a page by id, not by its title. */
   testID?: string;
 }
@@ -63,9 +87,11 @@ export interface PushedPageProps {
 export function BackKey({
   backTo,
   onBack,
+  testID,
 }: {
   backTo: PlaceRef;
   onBack: () => void;
+  testID?: string;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ color: colors.text }), [colors]);
@@ -76,6 +102,7 @@ export function BackKey({
       hitSlop={12}
       onPress={onBack}
       style={styles.backRow}
+      testID={testID}
     >
       <Icon color={colors.text} name="ArrowLeft" size={20} />
       <Text numberOfLines={1} style={[t("control"), ink]}>
@@ -88,19 +115,22 @@ export function BackKey({
 export default function PushedPage({
   title,
   backTo,
+  backTestID,
   onBack,
+  chrome,
   action,
   secondary,
   lockup,
   search,
   selection,
+  toolbar,
   band,
   loading,
   error,
   empty,
-  children,
   footer,
   overlay,
+  children,
   testID,
 }: PushedPageProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -109,21 +139,32 @@ export default function PushedPage({
   const selecting = !bandState.interactive;
   return (
     <TopSafeArea style={[styles.room, ink]} testID={testID}>
+      {chrome}
       {lockup}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (
         <>
-          {backTo ? <BackKey backTo={backTo} onBack={onBack} /> : null}
+          {backTo ? (
+            <BackKey backTo={backTo} onBack={onBack} testID={backTestID} />
+          ) : null}
           <PlaceHeader
             primary={
               action
-                ? { label: action.label, onPress: action.onPress }
+                ? {
+                    label: action.label,
+                    onPress: action.onPress,
+                    testID: action.testID,
+                  }
                 : undefined
             }
             secondary={
               secondary
-                ? { label: secondary.label, onPress: secondary.onPress }
+                ? {
+                    label: secondary.label,
+                    onPress: secondary.onPress,
+                    testID: secondary.testID,
+                  }
                 : undefined
             }
             title={title}
@@ -131,6 +172,7 @@ export default function PushedPage({
         </>
       )}
       {search && !selecting ? <SearchField {...search} /> : null}
+      {selecting ? null : toolbar}
       <RoomBody empty={empty} error={error} loading={loading}>
         {children}
       </RoomBody>

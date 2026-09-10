@@ -41,6 +41,7 @@ import {
   TOUCH_TILES,
   VERBS,
   filterChips,
+  touchKindLabel,
 } from "@centraid/blueprints/apps/people/people-copy";
 import type {
   RosterFilter,
@@ -417,7 +418,7 @@ function TouchBody({
               key={touch.interaction_id}
               avatar={touch}
               name={touch.name}
-              sub={touch.kind}
+              sub={touchKindLabel(touch.kind)}
               meta={whenLabel(touch.occurred_at)}
               onOpen={() => onOpen(touch.party_id)}
               last={index === dashboard.recent.length - 1}

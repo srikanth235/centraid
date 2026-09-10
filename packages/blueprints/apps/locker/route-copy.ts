@@ -64,6 +64,10 @@ export const FIELD_NOTE: Readonly<Record<string, string>> = {
   cvv: "Three digits, sealed like any other secret.",
   expiry: "Read by Review · 90 days out is a verdict.",
   network: "Metadata · the network name is not a secret.",
+  // Two the phone's field renderer typed inline (#1015, locker/findings #9).
+  otp_steps: "Thirty-second steps · the seed is sealed like any other secret.",
+  strength:
+    "Scored against the same rule Review uses, so the two cannot disagree.",
 };
 
 /** What a sealed field says when it is standing in for one nobody revealed. */
@@ -379,7 +383,7 @@ export const TRASH_PURGE = "Purge";
 export const PURGE_CONFIRM_TITLE = "Purge it now?";
 export const PURGE_CONFIRM_LABEL = "Purge";
 export const PURGED = "Purged · gone for good";
-export const PURGE_PARKED = "Parked · it waits for the owner’s confirmation";
+export const PURGE_PARKED = "Parked · it waits for the owner's confirmation";
 export const RESTORED_WHOLE = "Restored · whole, with its star and its tags";
 
 // ---------------------------------------------------------------------------

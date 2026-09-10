@@ -60,6 +60,7 @@ import type {
   NativeChangeFeed,
   NativeReplicaSession,
 } from "../../lib/replica/native-session";
+import { hapticsStub } from "../../test/haptics-stub";
 
 // The shared block stub, plus the one primitive it does not wire: it forwards
 // `onPress` and drops every other handler, and a journey that TYPES needs
@@ -109,6 +110,18 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The one moment channel's device seam (#1015, S15).
+vi.mock(import("expo-haptics"), () => hapticsStub());
+// The composer's date chip opens the platform picker (#1015, tally/findings
+// #5), whose source ships as Flow and cannot be parsed by this tier's bundler.
+// It is a device service and draws nothing this journey asserts.
+vi.mock(
+  import("@react-native-community/datetimepicker"),
+  () =>
+    ({
+      default: () => null,
+    }) as unknown as typeof import("@react-native-community/datetimepicker")
+);
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");

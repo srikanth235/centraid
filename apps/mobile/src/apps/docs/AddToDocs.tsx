@@ -20,12 +20,19 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { nativeWriteOutput } from "../../kit/replica/write-outcome";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
 import { ADD_STATUS } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 import { useDocsWrite } from "./useDocs";
 
 /** An empty markdown body — a blank document is blank, not a template. */
@@ -36,6 +43,7 @@ type Composer = "document" | "folder" | null;
 export default function AddToDocs({
   navigation,
 }: DocsScreenProps<"DocsAdd">): React.JSX.Element {
+  const room = useDocsRoom("more");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const shellNavigation = useNavigation<DocsShellNavigation>();
@@ -93,8 +101,14 @@ export default function AddToDocs({
   };
 
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.panel}>
           <WayIn
@@ -158,7 +172,7 @@ export default function AddToDocs({
 
         <Text style={styles.status}>{ADD_STATUS}</Text>
       </ScrollView>
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -222,14 +236,14 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       overflow: "hidden",
     },
-    scroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 8 },
+    scroll: { paddingBottom: 32, paddingHorizontal: pageMargin, paddingTop: 8 },
     status: { ...t("mono"), color: colors.textFaint, paddingTop: 8 },
     way: {
       alignItems: "center",
       flexDirection: "row",
       gap: 12,
       minHeight: 56,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 8,
     },
     wayLabel: { ...t("body"), color: colors.text },

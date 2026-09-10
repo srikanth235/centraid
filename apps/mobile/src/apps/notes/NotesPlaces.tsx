@@ -34,6 +34,7 @@ import { Text, TextInput } from "../../kit/components/NativeText";
 import SeatList from "../../kit/components/SeatList";
 import { useTheme } from "../../kit/theme";
 import type { NotesMoreRow } from "./notes-band";
+import { NOTES_LIST_NAMES } from "./notes-copy";
 import type { NativeNote } from "./notes-model";
 import { styles } from "./NotesHome.styles";
 
@@ -117,7 +118,6 @@ export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
       ) : (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="New notebook"
           onPress={() => setCreating(true)}
           style={[styles.button, { backgroundColor: colors.accentFill }]}
         >
@@ -144,7 +144,7 @@ export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
   );
   return (
     <SeatList
-      accessibilityLabel={RAIL_NOTEBOOKS}
+      accessibilityLabel={NOTES_LIST_NAMES.notebooks}
       anchoring={NEWEST_FIRST_ANCHORING}
       rows={props.notebooks}
       keyOf={(shelf) => shelf.notebook_id}
@@ -211,7 +211,7 @@ export function TagsPlace(props: TagsPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <SeatList
-      accessibilityLabel={RAIL_TAGS}
+      accessibilityLabel={NOTES_LIST_NAMES.tags}
       anchoring={NEWEST_FIRST_ANCHORING}
       rows={props.tags}
       keyOf={(tag) => tag.concept_id}
@@ -258,7 +258,7 @@ export function TrashPlace(props: TrashPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <SeatList
-      accessibilityLabel={TRASH_STATUS}
+      accessibilityLabel={NOTES_LIST_NAMES.trash}
       anchoring={NEWEST_FIRST_ANCHORING}
       rows={props.notes}
       keyOf={(note) => note.id}
@@ -323,7 +323,6 @@ export function MoreSheet(props: MoreSheetProps): React.JSX.Element {
       renderRow={(row) => (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={row.label}
           onPress={() => props.onPick(row.shelf)}
           style={[styles.row, { borderBottomColor: colors.line }]}
         >
@@ -365,7 +364,6 @@ export function CapturePlace({
       </Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Open the camera"
         onPress={onScan}
         style={[styles.button, { backgroundColor: colors.accentFill }]}
       >

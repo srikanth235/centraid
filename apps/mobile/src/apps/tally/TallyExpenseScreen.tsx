@@ -20,6 +20,7 @@ import React, { useEffect, useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import { displayText } from "@centraid/blueprints/apps/_shared/untrusted";
+import { categoryLabel } from "@centraid/blueprints/apps/tally/category-labels";
 import {
   CONFLICT_BOTH,
   CURRENCY_NOTE,
@@ -185,7 +186,10 @@ export default function TallyExpenseScreen({
           value={`${money(entry.your_amount_minor, currency)} · ${roleSubLabel(entry.your_role)}`}
           note={EXPENSE_NOTES.yourShare}
         />
-        <FieldRow label={FIELD_KEYS.category} value={entry.category ?? ""} />
+        <FieldRow
+          label={FIELD_KEYS.category}
+          value={entry.category ? categoryLabel(entry.category) : ""}
+        />
         <FieldRow
           label={FIELD_KEYS.group}
           value={groupName ?? ""}

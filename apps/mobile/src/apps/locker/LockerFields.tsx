@@ -23,6 +23,7 @@ import {
   concealsInSeconds,
   revealedForSeconds,
 } from "@centraid/blueprints/apps/locker/reveal";
+import { FIELD_NOTE } from "@centraid/blueprints/apps/locker/route-copy";
 import { strength, useTotp } from "@centraid/blueprints/apps/locker/totp";
 import {
   CONCEAL,
@@ -164,7 +165,7 @@ export function LockerTotpField(
           : [{ label: SHOW_CODE, onPress: props.onReveal }]
       }
       label={FIELD_LABEL.otp_seed ?? "One-time code"}
-      note="Thirty-second steps · the seed is sealed like any other secret."
+      note={FIELD_NOTE.otp_steps ?? ""}
       numeric
       value={shown}
     />
@@ -181,8 +182,8 @@ export function LockerStrengthField({
   const score = strength(password);
   return (
     <LockerFieldRow
-      label="Strength"
-      note="Scored against the same rule Review uses, so the two cannot disagree."
+      label={FIELD_LABEL.strength ?? ""}
+      note={FIELD_NOTE.strength ?? ""}
       value={`${score.label} · ${String(password.length)} characters`}
     />
   );
@@ -205,7 +206,7 @@ const makeStyles = (colors: ThemeColors) =>
       width: 92,
     },
     main: { flex: 1, gap: spacing[1], minWidth: 0 },
-    note: { ...t("mono"), color: colors.textFaint },
+    note: { ...t("small"), color: colors.textFaint },
     row: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,

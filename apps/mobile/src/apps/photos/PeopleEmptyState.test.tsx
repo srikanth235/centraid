@@ -19,7 +19,7 @@ import {
   ENRICHMENT_UNAVAILABLE,
   PEOPLE_EMPTY_LINE,
   PRIORITISE_ACTION,
-  prioritiseAnswerFor,
+  prioritizeAnswerFor,
 } from "@centraid/blueprints/apps/photos/enrichment-consent";
 
 // @vitest-environment jsdom
@@ -106,10 +106,10 @@ vi.mock(
 describe("the People shelf's empty state on the phone seat", () => {
   let host: HTMLDivElement;
   let root: Root;
-  const onPrioritise = vi.fn<() => void>();
+  const onPrioritize = vi.fn<() => void>();
 
   beforeEach(() => {
-    onPrioritise.mockClear();
+    onPrioritize.mockClear();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -124,8 +124,8 @@ describe("the People shelf's empty state on the phone seat", () => {
     act(() => {
       root.render(
         React.createElement(PeopleEmptyState, {
-          onPrioritise,
-          prioritise: { available: true },
+          onPrioritize,
+          prioritize: { available: true },
           ...props,
         } as React.ComponentProps<typeof PeopleEmptyState>)
       );
@@ -146,7 +146,7 @@ describe("the People shelf's empty state on the phone seat", () => {
     expect(host.textContent).toContain(PEOPLE_EMPTY_LINE);
     expect(host.textContent).toContain("Faces recipe");
     expect(host.textContent).toContain("Automations → Recognition");
-    expect(onPrioritise).not.toHaveBeenCalled();
+    expect(onPrioritize).not.toHaveBeenCalled();
   });
 
   it("asks nothing: no consent panel, no answer, no decline", () => {
@@ -164,35 +164,35 @@ describe("the People shelf's empty state on the phone seat", () => {
 
   it("fires the priority ask only from an explicit press", () => {
     render();
-    expect(onPrioritise).not.toHaveBeenCalled();
+    expect(onPrioritize).not.toHaveBeenCalled();
     act(() => action().click());
-    expect(onPrioritise).toHaveBeenCalledOnce();
+    expect(onPrioritize).toHaveBeenCalledOnce();
   });
 
   it("states WHY it is inert, beside the control, and cannot fire", () => {
-    render({ prioritise: prioritiseAnswerFor("device") });
+    render({ prioritize: prioritizeAnswerFor("device") });
     expect(host.textContent).toContain(ENRICHMENT_UNAVAILABLE.deviceTier);
     const control = action();
     expect(control.dataset.disabled).toBe("true");
     expect(control.getAttribute("aria-disabled")).toBe("true");
     // Inert means it CANNOT FIRE, not that it looks grey.
     control.click();
-    expect(onPrioritise).not.toHaveBeenCalled();
+    expect(onPrioritize).not.toHaveBeenCalled();
   });
 
   it("keeps `off` inert with the tier named as the reason", () => {
-    render({ prioritise: prioritiseAnswerFor("off") });
+    render({ prioritize: prioritizeAnswerFor("off") });
     expect(host.textContent).toContain(ENRICHMENT_UNAVAILABLE.offTier);
     action().click();
-    expect(onPrioritise).not.toHaveBeenCalled();
+    expect(onPrioritize).not.toHaveBeenCalled();
   });
 
   it("cannot be asked twice, nor while a write is in flight", () => {
-    render({ prioritised: true });
+    render({ prioritized: true });
     action().click();
-    expect(onPrioritise).not.toHaveBeenCalled();
+    expect(onPrioritize).not.toHaveBeenCalled();
     render({ busy: true });
     action().click();
-    expect(onPrioritise).not.toHaveBeenCalled();
+    expect(onPrioritize).not.toHaveBeenCalled();
   });
 });

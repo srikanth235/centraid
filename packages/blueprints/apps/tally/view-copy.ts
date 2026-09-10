@@ -16,6 +16,11 @@
 // memo* — never *transaction*, never *friend request*, never *simplify debts*
 // as a noun. A number lives in a sentence, a figure is a fact and never a
 // verdict, and nothing in here celebrates a settled balance.
+//
+// A COUNT AGREES WITH THE ROWS IT SITS OVER (#1015, tally/findings #10). Every
+// count here goes through `plural`, and a mixed list is counted as the two
+// things it holds rather than as more of the first one.
+import { plural } from "../_shared/format-kit.ts";
 
 /** The one sentence Balances stands under: what a figure on this screen IS. */
 export const BALANCES_STATUS =
@@ -44,7 +49,7 @@ export function balancesHeroSub(
   expenses: number,
   settlements: number
 ): string {
-  return `Owed to you ${owedTo} · you owe ${owe}. Derived from ${expenses} expenses and ${settlements} settlements — no balance is stored, and none is ever sent.`;
+  return `Owed to you ${owedTo} · you owe ${owe}. Derived from ${plural(expenses, "expense")} and ${plural(settlements, "settlement")} — no balance is stored, and none is ever sent.`;
 }
 
 export const HERO_OWE = "you owe, on balance";
@@ -317,6 +322,10 @@ export const SEARCH_COPY = {
 } as const;
 
 export const MATCHED_DESCRIPTION = "matched the description";
+/** The field's own result line, in the one shape the kit's field takes. */
+export function searchMatched(count: number): string {
+  return `${plural(count, "match", "matches")} in descriptions`;
+}
 
 // ----------------------------------------------------------- the outcomes
 
@@ -415,13 +424,22 @@ export const NUDGE_PARKED =
   "Prepared, awaiting your confirmation · nothing is sent from here";
 
 export function memberCount(count: number): string {
-  return `${count} ${count === 1 ? "member" : "members"}`;
+  return plural(count, "member");
 }
 export function expenseCount(count: number): string {
-  return `${count} ${count === 1 ? "expense" : "expenses"}`;
+  return plural(count, "expense");
 }
 export function sharedExpenseCount(count: number): string {
-  return `${count} shared ${count === 1 ? "expense" : "expenses"}`;
+  return `${plural(count, "expense")} shared`;
+}
+
+/** A day in the feed holds expenses AND settlements; the heading used to call
+ *  the whole day expenses, so a day with one of each read `2 expenses`. Where
+ *  a day holds only one kind the heading says only that kind. */
+export function ledgerDayCount(expenses: number, settlements: number): string {
+  if (settlements === 0) return plural(expenses, "expense");
+  if (expenses === 0) return plural(settlements, "settlement");
+  return `${plural(expenses, "expense")} · ${plural(settlements, "settlement")}`;
 }
 
 /** Every part carries its own figure now, derived by the same fold that

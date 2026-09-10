@@ -38,6 +38,14 @@ export const DEVICE_NOT_ENROLLED_BODY =
  *  (#996, R13). It is not "revoke a credential" any more: what this phone
  *  holds is `K` itself, and dropping it is what stops this device reading. */
 export const DEVICE_FORGET = "Forget this vault's key";
+/** The guard the one unrecoverable act in this app did not have (#1015,
+ *  locker/findings #3). Every soft, restorable delete in the product is
+ *  confirmed; this one dropped `K` on a single tap and said nothing at all. */
+export const DEVICE_FORGET_NOUN = "key";
+export const DEVICE_FORGET_BODY =
+  "This phone stops reading every secret in this vault. Nothing is deleted from the vault, and enrolling this phone again is the only way back.";
+/** What the status line says once the key is gone. The noun, as signage. */
+export const DEVICE_FORGET_DONE = "Key forgotten on this phone";
 
 /** What this phone actually holds, said plainly (#996, R13 / W6-D2). */
 export const DEVICE_NOTE =
@@ -65,7 +73,6 @@ export const OPEN_ITEM_ACT = "Open it";
 export const OPEN_ITEM_BODY = "This item is sealed until you ask for it.";
 export const OUTSIDE_WINDOW =
   "This item is not in the window this device read.";
-export const BACK_TO_ITEMS = "Items";
 
 /** The two metadata verbs the item screen puts beside Edit. Both queue like
  *  any other metadata write; neither can carry a secret. */

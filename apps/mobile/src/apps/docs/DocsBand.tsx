@@ -26,6 +26,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -97,7 +98,13 @@ export default function DocsBand({
               testID={`${TEST_ID_PREFIXES.band.docs}${destination.key}`}
               accessibilityState={{ selected: active, disabled: dimmed }}
               disabled={dimmed}
-              onPress={() => onSelect(destination.key)}
+              onPress={() => {
+                // The band moving to another place IS the one selection
+                // moment (#1015, S15) — the same tick the shell's own band
+                // gives, so a member feels one product, not five.
+                hapticSelect();
+                onSelect(destination.key);
+              }}
               style={styles.tab}
             >
               <View

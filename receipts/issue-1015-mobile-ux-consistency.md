@@ -405,6 +405,131 @@ Verdict: PASS / PASS / PASS / PASS.
 | **R-KIT-4** | Widening `copy-title-case` to read menu option tables in `.tsx` is Wave 3 copy-lane work, not this lane's. | The rule as briefed reads `*copy*.ts` tables and prints a true 0 over them. Photos' Title Case (**D2**) lives in `.tsx` option tables, so the 0 is a scope limit, not a clean bill — recorded above rather than papered over. Widening the reader is a change to the finding set the copy lane burns down, so it belongs with that lane, not ahead of it. |
 | **R-KIT-5** | **S13 is closed** by `PlaceRef` + `BandState`. | S13 asked that band `current` be computed and never literal. `PlaceRef` carries a `unique symbol` brand minted only by `place()`, so `backTo`/`current` cannot be written as a string at all — the rule is a type error, not a lint. `bandStateFor()` derives the band's state from the room, and `EditorRoom` takes no band prop (**R-KIT-2**, **D5**). `scripts/lint-mobile-rooms.mjs`'s `back-literal` rule (47 findings) measures the un-migrated screens for Wave 3; the kit contract itself is closed. |
 
+## Wave 2 — lane APPS-A (Agenda, Tasks, Notes, Docs), the rooms migration
+
+Branch `lane/1015-apps-a`, from umbrella `3e5299b60`. Four apps into the six
+rooms, plus the five Agenda findings this lane owns.
+
+### What landed, commit by commit
+
+| Commit | What |
+| --- | --- |
+| `28b74d3bc` | `AppPlace`/`PushedPage` take `chrome`: the vault lockup is true on every route of an app, and the rooms replace the frames that drew it. A node, not an import — a room reaching for `VaultBar` would pull the launcher catalog into `kit/`. |
+| `fb643dbb3` | `EditorRoom` gains `presented`/`visible` (an editor that is state, not a route, presents its own page sheet and hosts the status line inside it) and `foot` (the acts of the thing being edited, in one row). |
+| `d942b4d0a` | `AppPlace`/`PushedPage` take `overlay`: a confirm sheet and a presented editor cannot live in `RoomBody`, whose empty state replaces the children. |
+| `7174eb0d6` | **Notes** into the rooms; `RoomAction`/`PlaceVerb` gain `testID` and `EditorRoom` a `leaveTestID`, so `notes-capture` and `notes-editor-close` survive the move. **Closes B5.** |
+| `02626edd5` | **Tasks** into the rooms; both `Alert.alert` exits become `useConfirmDestructive`. |
+| `ec0d2ea2b` | `kit/format.ts` gains `formatTime`, `formatDateTime`, `formatMonth`. |
+| `68e49028a` | `AppPlace`/`PushedPage` take `toolbar` — the controls that pick WHICH content the body shows, above the body and outside its state machine. |
+| `140e26f10` | **Agenda** into the rooms, closing agenda findings **#3 #4 #5 #6 #7** (and **#8** with the room). |
+| `8c34fea45` | `AppPlace` gains `secondary`; `bandStateFor` treats the selection OBJECT as the mode rather than `count > 0`. |
+| `ead84b32a` | **Docs** — nineteen surfaces into the rooms, `DriveList`'s bulk bar into the room's selection (**closes B8 for Docs**), Empty trash onto `SheetRoom`. |
+
+### Files changed
+
+Added: `apps/mobile/src/apps/agenda/AgendaDayRow.tsx`,
+`apps/mobile/src/apps/agenda/agenda-day-model.ts`,
+`apps/mobile/src/apps/docs/docs-room.tsx`,
+`apps/mobile/src/apps/docs/drive-selection.ts`.
+
+Deleted: `apps/mobile/src/apps/docs/BulkVerb.tsx`,
+`apps/mobile/src/apps/docs/DocsScreen.tsx`,
+`apps/mobile/src/apps/docs/DocsShelfHeader.tsx`,
+`apps/mobile/src/apps/notes/NotesScreen.tsx`,
+`apps/mobile/src/apps/tasks/TasksPlaceHeader.tsx`,
+`apps/mobile/src/apps/tasks/TasksScreen.tsx`. Every caller is gone: `grep -rn
+"DocsScreen\b\|DocsShelfHeader\|BulkVerb\|NotesScreen\|TasksScreen\b\|TasksPlaceHeader"
+apps/mobile/src` returns only the route-props type aliases `DocsScreenProps`,
+`NotesScreenProps` and `TasksScreenProps` in `navigation.ts`, which are
+navigation types and not the frames.
+
+Modified: `apps/mobile/src/apps/agenda/AgendaBand.tsx`,
+`AgendaCreateModal.tsx`, `AgendaEvent.tsx`, `AgendaEventEditor.tsx`,
+`AgendaHome.styles.ts`, `AgendaHome.test.tsx`, `AgendaHome.tsx`;
+`apps/mobile/src/apps/docs/AddToDocs.tsx`, `BulkUpload.tsx`,
+`DocsCapabilities.test.tsx`, `DocsCapabilities.tsx`, `DocsDueView.tsx`,
+`DocsFoldersView.tsx`, `DocsHome.test.tsx`, `DocsHome.tsx`,
+`DocsMoreSheet.tsx`, `DocsScan.tsx`, `DocsSearchView.tsx`, `DocsStorage.tsx`,
+`DocsTrash.test.tsx`, `DocsTrash.tsx`, `DocumentEditor.tsx`,
+`DocumentNames.tsx`, `DocumentProperties.tsx`, `DocumentRead.tsx`,
+`DocumentVersions.tsx`, `DocumentViewer.tsx`, `DriveList.styles.ts`,
+`DriveList.tsx`, `FolderView.tsx`, `INTEGRATION-NOTES.md`,
+`ProposedFiling.tsx`, `RecentlyChanged.tsx`, `docs-places.test.ts`,
+`docs-places.ts`, `document-read-model.test.ts`, `document-read-model.ts`;
+`apps/mobile/src/apps/notes/NoteEditor.tsx`, `NotesHistory.test.tsx`,
+`NotesHistory.tsx`, `NotesHome.styles.ts`, `NotesHome.test.tsx`,
+`NotesHome.tsx`, `NotesPowerbox.tsx`, `notes-band.test.ts`;
+`apps/mobile/src/apps/tasks/TaskDetail.tsx`, `TasksHome.styles.ts`,
+`TasksHome.test.tsx`, `TasksHome.tsx`, `TasksProject.tsx`, `TasksSearch.tsx`;
+`apps/mobile/src/kit/components/PlaceHeader.tsx`, `apps/mobile/src/kit/format.test.ts`,
+`apps/mobile/src/kit/format.ts`, `apps/mobile/src/kit/rooms/AppPlace.tsx`,
+`apps/mobile/src/kit/rooms/EditorRoom.tsx`, `apps/mobile/src/kit/rooms/PushedPage.tsx`,
+`apps/mobile/src/kit/rooms/README.md`, `apps/mobile/src/kit/rooms/room-contracts.ts`,
+`apps/mobile/src/kit/rooms/rooms.test.tsx`, `apps/mobile/src/navigation.ts`;
+`tests/agent-e2e-mobile/flows/agenda-week.md`,
+`tests/agent-e2e-mobile/flows/agenda-week.mjs`.
+
+### Red-first proofs
+
+| Claim | Test | Fails on base because |
+| --- | --- | --- |
+| **B5** — a note posted from inside an editor is visible | `NotesHome.test.tsx` → "paints a note posted from inside the editor, in the editor" | On base the editor is a bare `Modal` with no `StatusLineHost`; `postStatus` paints on the root host, under the presentation. |
+| Agenda **#3** — a day other than today is reachable | `AgendaHome.test.tsx` → "reaches another day, and only then offers the way back to today" | On base there is no "Next day" control at all, and "Go to today" is drawn unconditionally over an anchor nothing can move. |
+| A failed read never reads as an empty shelf | `NotesHome.test.tsx` → "draws a failed read as the room's error, never as an empty shelf" | On base `ReplicaStateCard` and the list's empty slot render together. |
+| Selection is a mode | `DocsHome.test.tsx` → "makes selection a MODE" (updated to the room's contract) | The room now owns the header swap, the count sentence and the foot row. |
+
+### Exit list
+
+| Check | Result |
+| --- | --- |
+| `bunx vitest run src/apps/{agenda,tasks,notes,docs} src/kit/rooms src/kit/format.test.ts src/kit/components` | 56 files, **390 pass**, 0 fail |
+| `bunx vitest run src/apps` (whole app tree) | **1261 pass**, 0 fail |
+| `bun run --cwd apps/mobile typecheck` | **0** |
+| `node scripts/lint-mobile-rooms.mjs` | `screen-root 152` · `back-literal 32` · `page-margin 16` · `identity-tint 0` · `copy-title-case 0` (from `181 / 47 / 107` at the lane's start). For THIS lane's four trees: `back-literal 0`, `page-margin 0`, `screen-root 28` — see the residue note below. |
+| `grep -rn "Alert.alert" apps/mobile/src/apps/{agenda,tasks,notes,docs}` | **0** |
+| `node scripts/lint-mobile-design.mjs` · `lint-container-opacity.mjs` · `lint-aria-labels.mjs` | all ok; `apps/mobile/src` still at container-opacity budget **0** |
+| `bun run format` then `bun run check:push:static` | **4/4 gates passed** in 105.7s |
+| `node .governance/law/run.mjs --brief-digest 514cb2fed327` | 10 rules, **no findings** |
+
+### The `screen-root 28` residue, stated rather than papered over
+
+Every SCREEN in these four trees is now rooted in a room. The 28 remaining
+`screen-root` findings are all COMPONENTS, which the rule cannot tell apart
+from screens because it matches text rather than a render tree (its own header
+says so). They are: rows (`DocRow`, `TaskRow`, `TasksRows`, `AgendaDayContext`),
+bands (`AgendaBand`, `DocsBand`, `NotesBand`, `TasksBand`), panes embedded in a
+room (`TasksProject`, `TasksProjects`, `TasksCatchUp`, `TasksReminders`,
+`TasksSearch`, `TasksMoreSheet`, `TasksToolbar`, `TasksQuickAdd`,
+`TasksDenied`, `TaskDetail`, `TaskDetailFields`, `NotesHistory`,
+`DocsDueView`, `DocsFoldersView`, `DocsSearchView`, `DocsSharedView`,
+`DocsStarredView`, `DriveList`, `OfflinePinButton`) and one sheet
+(`DocsMoreSheet`). Making any of them a room would be false. **This is a
+question for the owner, not a claim that the count is fine:** the rule needs a
+screen/component distinction (a route-registration census, or a `*.screen.tsx`
+convention) before Wave 4 can enforce it at zero.
+
+### Outside `apps/mobile`, and why
+
+  - `apps/mobile/src/navigation.ts` — `AgendaHome` gains a `destination`
+    param, the same longhand `DocsHome` and `PhotosHome` already carry. The
+    band on the pushed event page (agenda finding #8) has to pop back to the
+    place it names; without the param it could only pop to whichever place the
+    list was last left on.
+  - `tests/agent-e2e-mobile/flows/agenda-week.{mjs,md}` — the flow pressed
+    "Save this event". Under **D3** the composer has no Save: the room's leave
+    key reads "Cancel" while the draft is untitled and "Done" once it has a
+    title, which is how agenda finding #6 (the dead always-armed Save) closes.
+    The flow presses "Done"; `node scripts/lint-e2e-flows.mjs` is ok.
+
+### Lane APPS-A — Wave 2 decisions
+
+| Id | Ruling | Reason |
+| --- | --- | --- |
+| **R-A-6** | Docs' Empty trash is a hand-spelled `SheetRoom`, not `useConfirmDestructive`. | The hook's title is `confirmTitle(verb, noun, count)`, which cannot produce the shared table's `Delete 3 documents forever?` — "forever" belongs in the question for the one irreversible act in Docs, and `EMPTY_TRASH_COPY` is the web seat's words too. The sheet keeps every rule the hook enforces: the noun and the count in the title, the verb outlined `--net`, the status line hosted inside. |
+| **R-A-7** | The selection MODE is the object, not the count. | `bandStateFor` read `count > 0`, so the moment between "Select" and the first pick had a live band, a header still naming the shelf, and no way out — with the primary act already stood down. A screen that is not choosing passes no selection at all. |
+| **R-A-8** | `DocumentViewer` is a `PushedPage` that passes no `band`, and its own dark bar is gone. | Deviation 2 said the stage drops the band; it now says so by omitting a prop rather than by an opt-out on a frame that no longer exists. The head and the way out are the room's, so the stage stops being the one Docs surface with a bespoke close control. **Worth the owner's eye:** the media area keeps `colors.stage`, but the header above it is now the room's ink. |
+| **R-A-9** | Agenda's event editor refuses an inverted range on the status line rather than disabling the leave key. | D3 says close is done; a leave key that refuses to close would be the dead control finding #6 is about, moved. Moving the start carries the end, the field says so inline, and the refusal paints inside the editor because the room hosts the line. |
+
 ### Lane SHELL — the sub-base seams, the search field's focus, and the test handle (R-B-6, R-B-7)
 
 Changed:
@@ -560,6 +685,36 @@ The two `page-margin` findings left are the same `paddingHorizontal: 3` chip ins
 
 `screen-root 71` is the rule reading text rather than a render tree, and it splits cleanly: **22** are routes whose root is their own app frame — `<TallyScreen>`, `<LockerScreen>`, `<PeopleScreen>`, `<PhotosScreen>` — each of which IS one of the six rooms, one level of indirection the matcher cannot follow; **49** are leaf components and body views (`PhotoTile`, `BalancesView`, `LockerRow`, the bands, the map views) that are not screens and must not be rooted in a room. Driving this number to a literal zero would mean either deleting the four frames and repeating their gate, band and lockup wiring across forty routes, or wrapping leaf components in rooms. Neither is the rule's intent, so neither was done, and the count is stated here rather than engineered away.
 
+### Lane APPS-A — the merge round: the rooms reconciled, and R-A-12
+
+`umbrella/1015-mobile-ux` and `lane/1015-apps-a` extended the same three room
+files in parallel. Merged as a union, one definition per prop, nothing
+renamed:
+
+- `apps/mobile/src/kit/rooms/AppPlace.tsx` · `apps/mobile/src/kit/rooms/PushedPage.tsx`
+  — `chrome` (APPS-A) and `lockup` (APPS-B) are both kept and both rendered,
+  in that order, above the header. They were added for the same slot by two
+  lanes that could not see each other; renaming or collapsing either would
+  have broken its callers silently, which is the one thing the wave's rule
+  about room props forbids. `secondary` keeps ONE definition carrying both
+  lanes' reasons (Docs' drive needs the pair; People's roster reaches Trash
+  from here and nowhere else), with the `testID` pass-through APPS-A added.
+- `apps/mobile/src/kit/rooms/rooms.test.tsx` — every test from both sides
+  kept. The chrome claim (`words[0]`, so the order is pinned) and the lockup
+  claim (`toContain`) now stand side by side on both rooms.
+- `packages/blueprints/apps/notes/view-copy.ts` — `HISTORY_UNREADABLE`
+  deleted (R-A-12). `grep -rn HISTORY_UNREADABLE packages apps`, with `dist`
+  and sourcemaps set aside, returns the definition and no caller on any
+  seat, web included.
+
+**R-A-9 verified read-only across Photos, and it does not hold there.** Four
+screens build their `selectionBar` object unconditionally and pass it on every
+render, so `PhotosScreen` lowers a `RoomSelection` with `count: 0` while the
+member is merely looking: `AlbumDetail.tsx:313`/`:354`,
+`DuplicateReview.tsx:120`/`:159`, `DuplicatesShelf.tsx:112`/`:167`,
+`PhotoStateView.tsx:222`/`:266`. Under R-A-9 that is a dimmed band and a
+swapped header at rest. Not edited here — another worker holds those files;
+raised to the root as an owner item.
 ## Lane APPS-B, Wave 2 round 4 — Photos' home into the room, and the testID contract
 
 Commits `d8dfe78a3`, `977de0a83`, `9f228ddcb` on `lane/1015-apps-b`.
@@ -688,3 +843,403 @@ Enforcement is **per rule**, not per tree, and this is the ruled allowlist quest
 8. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see below.
 
 Files changed by this lane's Wave 3 + Wave 4 commits, in full: `CHANGELOG.md`, `DESIGN.md`, `docs/decisions.md`, `docs/design-divergences.md`, `docs/mobile-offline.md`, `package.json`, `packages/design/src/icons.ts`, `scripts/ci/gate-classes.json`, `scripts/lint-product.mjs`, `scripts/lint-mobile-rooms.mjs`, `scripts/lint-mobile-rooms.test.mjs`, `scripts/lint-mobile-rooms.baseline.json` (new), `apps/mobile/src/kit/haptics.ts` (new), `apps/mobile/src/kit/haptics.test.ts` (new), `apps/mobile/src/test/haptics-stub.ts` (new), `apps/mobile/src/screens/shell-copy.ts` (new), `apps/mobile/src/screens/shell-copy.test.ts` (new), `apps/mobile/src/kit/components/{ConfirmSheet.tsx,ConfirmSheet.test.tsx}`, `apps/mobile/src/kit/replica/{PendingChangesSheet.tsx,ReplicaStateCard.tsx,ReplicaStateCard.test.tsx,ReplicaStatusBar.test.tsx}`, `apps/mobile/src/kit/rooms/PushedPage.tsx`, `apps/mobile/src/apps/assistant/{Assistant.tsx,AssistantCompanionSheet.tsx,useAssistant.ts,useAssistant.test.ts}`, `apps/mobile/src/apps/automations/AutomationThread.tsx`, `apps/mobile/src/screens/{Approvals,BackupHealth,BackupHealth.custody,Onboarding,PhoneStorage,Scan,Settings,SignalNotification}.tsx`, `apps/mobile/src/screens/{Onboarding.test.tsx,shell-places.ts,shell-rooms.test.ts}`, `apps/mobile/src/screens/approvals/{RowParts.tsx,useApprovals.ts}`, `apps/mobile/src/screens/connectors/{Connectors.test.tsx,useConnectors.ts}`, `apps/mobile/src/screens/data/{RecordSheet.tsx,VaultSections.tsx,data-model.ts}`, `apps/mobile/src/screens/devices/{devices-model.ts,devices-model.test.ts}`, `apps/mobile/src/screens/home/{AllAppsSheet,FirstMoves,HomeBand,LauncherGrid,VaultHeader}.tsx`, `apps/mobile/src/screens/home/{VaultsSwitcher.test.tsx,places.ts}`, `apps/mobile/src/screens/settings/{AccessSection.tsx,EnrichmentSection.tsx,EnrichmentSection.test.tsx,VaultSection.tsx}`. Deleted: `NewChatIcon` and `NEW_CHAT_PATHS` (exports, not files) from `screens/home/VaultHeader.tsx`; `tunnelStatusLabel` from `screens/Settings.tsx`.
+## Lane APPS-A, merge round 2 + Wave 3 — Agenda, Tasks, Notes, Docs
+
+Branch `lane/1015-apps-a`. Two merges of `umbrella/1015-mobile-ux`, two
+carried round-2 items, one Wave-3 kit seam, one commit per app, and the
+haptics adoption once `kit/haptics.ts` reached the umbrella.
+
+### Merge round 2 — `510d6d87d`
+
+Three conflicts, all in the rooms kit, all resolved as a union: one definition
+per prop, nothing renamed, every test from both sides kept.
+
+- `apps/mobile/src/kit/rooms/AppPlace.tsx` — APPS-B's `trailingRef` wrapper is
+  a strict superset of this lane's bare trailing verbs, so the quiet verb and
+  the action now sit inside the `collapsable={false}` node the room lends out
+  for Photos' anchored menu.
+- `apps/mobile/src/kit/rooms/room-contracts.ts` — `RoomAction.testID`'s doc is
+  the union of both rationales (Notes' write door, Photos' Select chip,
+  `lint-mobile-testids`). `selectedSentence` is the union of both BEHAVIOURS:
+  the zero case is still the instruction ("Choose photographs"), and the noun
+  now agrees with the count ("1 photograph selected").
+- `apps/mobile/src/kit/rooms/rooms.test.tsx` — all six `AppPlace` tests kept:
+  toolbar-above-empty, both testID passthroughs, the anchored-menu quiet verb,
+  the overlay, the frame chrome.
+
+`bun run --cwd packages/design build` run AFTER the merge, not before.
+
+Second merge `0e9762c9b`, for the haptics channel: one conflict in
+`apps/mobile/src/kit/rooms/PushedPage.tsx`, where both sides added a prop to
+the room's root. Union — the page keeps SHELL's `testID` and this lane's
+`chrome`. `overlay` arrived from both sides and git kept BOTH copies, prop
+and render; one definition survives, rendering where `AppPlace` renders it
+(after the body, before the selection bar and the band), so a confirm sheet
+sits in the same place in both rooms. A second `{overlay}` would have
+double-mounted every confirm on every pushed page.
+
+### R-A-13 — the back key's test handle — `bb7385bd9`
+
+`apps/mobile/src/kit/rooms/PushedPage.tsx` gains `backTestID` (and `BackKey` a
+`testID`). The back key is chrome an end-to-end flow selects BY HANDLE rather
+than by words, and the rooms migration swallowed the two handles the flows
+already used. Applied at their one screen each:
+`apps/mobile/src/apps/docs/DocumentRead.tsx` (`docs-breadcrumb`, which
+`tests/agent-e2e-mobile/flows/docs-drive.mjs` asserts GONE to prove the Docs
+band POPS rather than pushes — a negative asserted on copy passes forever the
+day the copy is re-worded) and
+`apps/mobile/src/apps/agenda/AgendaEvent.tsx` (`agenda-event-back`, from
+`flows/agenda-week.mjs`). Test: `rooms.test.tsx`.
+
+`node scripts/lint-mobile-testids.mjs` now prints `ok`, not FAIL. **For Wave
+4:** the brief said it exits 0 either way — it does NOT. It exits 1 on FAIL
+and 0 on ok, so it is already usable as a gate.
+
+### R-A-14 — Photos enters the selection mode once — `0c42ae3cd`
+
+Presence IS the mode (`bandStateFor`), so a screen that is not choosing passes
+no selection. Four Photos screens passed their selection bar unconditionally —
+an object at rest — and sat permanently in the mode: the header swapped for
+the instruction, the band was dimmed and non-interactive, and the foot row
+stood there before a single photograph had been picked.
+
+- `apps/mobile/src/apps/photos/AlbumDetail.tsx`
+- `apps/mobile/src/apps/photos/DuplicateReview.tsx`
+- `apps/mobile/src/apps/photos/DuplicatesShelf.tsx`
+- `apps/mobile/src/apps/photos/PhotoStateView.tsx`
+
+One ternary each on `selection.size > 0`, matching `PhotosHome.tsx`, which was
+always right. Nothing else in Photos touched — APPS-B is live in that tree.
+Test: `apps/mobile/src/apps/photos/selection-presence.test.ts`, which pins the
+guard at all four call sites AND why it belongs there rather than in the room
+(an empty selection is still a selection — Docs' drive is choosing at zero).
+
+### The Wave-3 kit seam — `c879a7c87`
+
+- `apps/mobile/src/kit/rooms/read-failure.ts` + `.test.ts` (S14). The member
+  never reads the exception. `useSeatPages` catches whatever the engine threw
+  and hands it on as `caughtError.message` — or `String(caughtError)` when it
+  is not even an Error — and Notes and Agenda both put that string into the
+  room's body verbatim. `readFailure` takes a BOOLEAN, not the message, so a
+  caller cannot leak one by mistake.
+- `apps/mobile/src/kit/hooks/useSeatPages.ts` — the raw string is not lost: it
+  is logged at the catch, where a debug session starts (docs/logs.md).
+- `apps/mobile/src/kit/copy-case.ts` + `.test.ts` (S11/D2). Photos wrote the
+  sentence-case sweep first; `titleCaseWords` lifts it out so each app's sweep
+  is the SAME check with its own proper nouns rather than four near-copies
+  that drift apart. Photos' own file untouched.
+
+### Notes — `4c7b101fa`
+
+Changed: `apps/mobile/src/apps/notes/notes-copy.ts` (new),
+`notes-copy-case.test.ts` (new), `notes-a11y.test.ts` (new), `NotesHome.tsx`,
+`NoteEditor.tsx`, `NotesPlaces.tsx`, `NotesHistory.tsx`;
+`packages/blueprints/apps/notes/view-copy.ts` + `view-copy.test.ts`.
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 status swallowed | Wave 2 `7174eb0d6` (`EditorRoom` hosts its line) | |
+| #2 no autosave | Wave 2 `7174eb0d6` (D3) | |
+| #3 caption printed twice | | Layout, not copy — the caption is a room `subtitle` on one route and a rail head on another. Needs a ruling on which surface owns it; Wave 3 is copy/tint/haptics/a11y. |
+| #4 `+` says New note everywhere | | Behaviour: the action must be withheld per place, and the Journal create must write the journal marker. Not a Wave-3 item. |
+| #5 notebook loses its name | Wave 2 `7174eb0d6` | |
+| #6 bare-text buttons | Wave 2 `7174eb0d6` (kit `Button`) | |
+| #7 four empty shapes | partly Wave 2 | `NotesPlaces` still hand-rolls two; empty Tags and empty Notebooks draw header-over-void. Behaviour, not copy. |
+| #8 markdown raw | | A renderer is a feature, not Wave 3. |
+| #9 `10/09/2026` | Wave 2 (`formatRelative`; `toLocaleDateString` gone from the tree) | |
+| #10 stylesheet drops type tokens | | Token debt across 12 rules; a design-machinery slice. |
+| #11 searches the phone, says nothing | | Behaviour + a scope line; needs a ruling on which library Notes searches. |
+| #12 `[[` probe placement | | Layout. |
+| #13 naked destructive icon on every row | | Layout/affordance ruling (Photos and Docs put it behind a menu). |
+| #14 cannot file while writing | | Behaviour. |
+| #15 `"1 versions"` | **this wave** — `editorStatus`/`historyStatus` agree with the count | |
+| #16 auto-capitalise everywhere | search closed in Wave 2 (kit `SearchField`) | The title and body are PROSE and should capitalise; the tag field is the one that is genuinely wrong, and it is layout-coupled. |
+| #17 title truncates | | Layout. |
+| #18 Version history dead end | partly Wave 2 (a back control exists) | Its origin is the place, not the note — a navigation ruling. |
+| #19 long-press does nothing | | Behaviour; and S15 says a long-press only buzzes where it changes a MODE, which Notes has none of. |
+
+Also this wave, beyond the findings: S14 — `NotesHome` stopped piping
+`state.error` into the room body, and its two failure titles ("Not applied",
+"Action failed") gained their noun. A11y — six sites: `SeatList` REQUIRES a
+name and Notes was handing it the rail's whole explanatory caption, the
+sentence the screen already draws underneath, so the rotor read a paragraph
+and the member heard it twice; the lists are NAMED now. Three `Pressable`s
+were labelled with the very word inside them, which makes VoiceOver read the
+label INSTEAD of the children and dropped the More rows' meta line.
+`NotesHistory` exposes the version being read as `accessibilityState.selected`
+rather than the loose word "current".
+
+### Tasks — `1813e2d26`
+
+Changed: `apps/mobile/src/apps/tasks/tasks-copy-case.test.ts` (new),
+`TaskRow.tsx`, `tasks-row-model.ts`, `TasksHome.tsx`, `TasksHome.test.tsx`;
+`packages/blueprints/apps/tasks/view-copy.ts` + `view-copy.test.ts`,
+`app-root.tsx`.
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 undo destroyed | Wave 1 `3c61b4e2c` | |
+| #2 no due date / reminder | Wave 1 `9b0a756ab` | |
+| #16 `NOW`/`HOUSE` marks | **this wave** — `VAULT_MARKER` is "House"; the sweep forbids ALL-CAPS literals | |
+| #19 effort mixes bare numbers with units | **this wave** — every chip carries its unit | |
+| #23 checkbox and body share a label | **this wave** — `checkboxLabel` names the ACT, and the opposite one once closed | |
+| #3 filtered-empty lies | | Behaviour: a lens-filtered empty state and a way back. |
+| #4 sort dressed as a filter chip | | Layout ruling. |
+| #5 two counts for one list | | Two denominators, `shownItems.total` vs `inboxMeta(unfiled.length)`; needs a ruling on which is the board's count. |
+| #6 completed task scolded for being late | | `isOverdueWhen` is date-only and `metaParts` has no `isClosed` guard — a model change. |
+| #7 bulk verbs fire unconfirmed | | Behaviour: the four bulk verbs need `useConfirmDestructive`, which is a Wave-2-shaped slice, not copy. |
+| #8 Projects bare, filing mode has no exit | | Behaviour. |
+| #9 disabled primary is white on near-white | | `primaryOff` swaps the ground but not `colors.onAccent`; a design-token slice, and DESIGN.md wants `textDisabled` on the leaf. |
+| #10 More is a full screen here | | Layout: adopt `apps/_shared/MoreSheet`. |
+| #11 quick add expands over the board | | Layout; the room's `overlay` is an in-flow sibling. |
+| #12 snooze options are inert text | | Behaviour. |
+| #13 overdue red 8° off destructive | | Token slice. |
+| #14 no haptic on any gesture | **this wave** — see the haptics commit | |
+| #15 two fields auto-capitalise | | Layout-coupled; search closed by the kit's `SearchField`. |
+| #17 bare weekday group heads | | Copy, but it needs a ruling: "Tomorrow"/"Today" vs the weekday, and the group is generated in `tasks-groups.ts`. |
+| #18 detail header says "Task" | | Behaviour: the leaf title is a constant from `shelfCopy`. |
+| #20 subtasks cannot be created | | Feature. |
+| #21 Catch up denies a premise | | Copy, but two registers for one class of reassurance; needs the owner's voice. |
+| #22 quick-add hint advertises parsing | | Copy, and the fix is to DELETE a promise — an owner call. |
+
+Also this wave: the check-off posted the bare word "Done", a fact about
+nothing. `TASK_DONE` is the status line's own string on BOTH seats (mobile and
+`app-root`); `DONE` stays the logbook group's word, because that one heads a
+list of them. `doneNext` carries the noun too.
+
+### Agenda — `dc630f916`
+
+Changed: `apps/mobile/src/apps/agenda/agenda-copy-case.test.ts` (new),
+`AgendaEvent.tsx`, `AgendaHome.tsx`, `AgendaDayContext.tsx`;
+`packages/blueprints/apps/agenda/view-copy.ts`, `day-context-copy.ts`.
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 lockup under the status bar | Wave 2 `140e26f10` | |
+| #2 agents offered as guests | Wave 1 | |
+| #3 no way to reach another day | Wave 2 `140e26f10` (verified, not trusted) | |
+| #4 no month header | Wave 2 `140e26f10` | Residue: the header subtitle is the anchor's month, not the scroll position. |
+| #5 end-before-start saved | Wave 2 `140e26f10` | |
+| #6 dead Save | Wave 2 `140e26f10` (D3 removed it) | |
+| #7 three date formats | Wave 2 `140e26f10` + `ec0d2ea2b` | |
+| #8 event route loses lockup, band, Home | Wave 2 `140e26f10` | |
+| #16 raw partstat printed | **this wave** — `PARTSTAT_SAID`/`PARTSTAT_CHOOSE`, and an unknown value reads as unanswered | |
+| #18 error card calls the app "Calendar" | **this wave** — `readFailure({ noun: "Agenda" })` | |
+| #22 band is silent | **this wave** — see the haptics commit | |
+| #9 missing event is a permanent skeleton | | Behaviour: the room needs an `empty`/`error` for a row that is not there. |
+| #11 Search and More dressed as tabs | | `accessibilityRole="tab"` on two things that are not places — a band ruling, shared with every app's band. |
+| #12 due shelf gives no sign it is a control | | Layout. Its a11y half IS closed this wave. |
+| #13 More sheet titled "Calendars" | | Three defects in one: a misplaced preference, a title, and `OptionSheet` dropping `selectedId` on iOS. The third is a kit bug — RAISED below. |
+| #14 composer and editor are two forms | | Behaviour. |
+| #15 neither form handles the keyboard | | Wave 2 moved it into the kit rather than closing it: no room handles the keyboard. RAISED below. |
+| #17 cancel not marked as cancel | Wave 2 (`ConfirmSheet`) | |
+| #19 gutters retyped | Wave 2 `140e26f10` | |
+| #20 header target under 44pt | Wave 2 `140e26f10` (kit `Button`) | |
+| #21 identity hue never appears | partly | The hue reaches the app mark chip now, which is where DESIGN.md wants it. `AgendaDayRow`'s identity rule stays `colors.text`; `identity-tint` is 0 and this lane keeps it there. |
+
+### Docs — `d7c200566`
+
+Changed: `apps/mobile/src/apps/docs/docs-copy.ts`, `docs-copy-case.test.ts`
+(new), `DocumentProperties.tsx`, `BulkUpload.tsx`, `DocsHome.tsx`,
+`DocsCapabilities.tsx`, `DocumentRead.tsx`, `DocumentViewer.tsx`,
+`DriveList.tsx`, `DocsSearchView.tsx`.
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 "Back to All" everywhere | Wave 2 `ead84b32a` (`PlaceRef`) | |
+| #2 two bars and a live band | Wave 2 `ead84b32a` | |
+| #3 empty states touch the bezel | Wave 2 (kit `EmptyBlock`) | |
+| #7 Docs cannot empty its trash | round 2 `41e3b1df1` (D1) | |
+| #10 invisible fields, silent discard | Wave 2 `ead84b32a` (`EditorRoom`) | |
+| #13 Docs and Photos disagree on case | closed from Photos' side (APPS-B) | Docs' menu was already sentence case; the sweep now holds it. |
+| #14 refusals inherit the truncation trap | Wave 2 (kit `AnchoredMenu`) | |
+| #16 one navigating row has no chevron | Wave 2 (`LinkRow`) | |
+| #17 "New" is the only filled primary | Wave 2 `ead84b32a` | |
+| #18 `BulkVerb` bypasses `NativeText` | Wave 2 (the component is gone) | |
+| S11 five inline enums | **this wave** — custody, upload, arrangement, capability, each a table with a total reader | |
+| S14 four raw exceptions | **this wave** — three hand-over paths and the search refusal; the raw string goes to the log | |
+| the `205 B` / `205 bytes` split | **already closed** — one formatter, `formatBytes` via `fmtBytes`; every Docs call site goes through it and no ` bytes` string is rendered anywhere in the tree | |
+| #4 toolbar controls under 44pt | | The header verbs go through the kit's `Button` (44 floor); the filter/sort/arrangement row does not. Layout slice. |
+| #5 grid hides the row menu | | Behaviour: `DocGridTile` draws no `···`. |
+| #6 list container fills the viewport | | Layout: `containerEmbedded` exists but only the embedded branch takes it. |
+| #8 ontology explained five times | | Copy, but a DELETION across four surfaces — an owner call on which one keeps it. |
+| #9 markdown unrendered, title thrice | | Feature + layout. |
+| #11 three names for one entry | | Copy, and a naming ruling: "New" / "Add to Docs" / "Add a document", and "Details" / "Properties". RAISED below. |
+| #12 plumbing printed as metadata | partly **this wave** — the custody enum stopped saying gateway, tier, cloud and sweep (a sabotage in the sweep holds it). The `Gateway` host:port row remains: it is a real fact a member may need, and deleting it is an owner call. |
+| #15 two statuses under every list | | Behaviour. |
+| #19 Viewer removes the Home capsule | | `DocumentViewer` passes no `band` to `PushedPage`. Behaviour; the same defect moved rather than closed. |
+
+### Haptics — `8f7c65b02`
+
+`hapticSelect()` on all four bands; `hapticMode()` on the one long-press in
+these four apps that changes a MODE (picking a task up puts the board into
+filing). Docs' long-press opens the row menu — a presentation, not a mode —
+so it stays silent. `hapticLanded()` is adopted by NO app here on purpose:
+every destructive write in these trees goes through `useConfirmDestructive`,
+and `kit/components/ConfirmSheet.tsx` already fires it when the write is
+issued. An app firing it too would double the buzz.
+`apps/mobile/src/apps/tasks/tasks-haptics.test.ts` sweeps all four trees.
+`apps/mobile/src/apps/docs/DocsTrash.test.tsx` stands the documented stub-tier
+seam in front of the native module its graph now reaches.
+
+### Verification
+
+1. `bunx vitest run src/apps/agenda src/apps/tasks src/apps/notes src/apps/docs src/kit` — 855 green.
+2. `bun run --cwd apps/mobile typecheck` — 0.
+3. `node scripts/lint-mobile-rooms.mjs` — `screen-root 124`, `back-literal 0`,
+   `page-margin 2`, `identity-tint 0`, `copy-title-case 0`. This lane's trees:
+   `back-literal 0`, `page-margin 0`, `identity-tint 0`, `copy-title-case 0`.
+   The 28 `screen-root` findings in these trees are all COMPONENTS (rows,
+   bands, panes, fields, toolbars) rather than screens — the heuristic cannot
+   tell. The two `page-margin` are Photos' `PhotoTile`, not this lane's.
+4. `grep -rn "expo-haptics" <my trees>` — 0 outside the sweep test's own
+   assertions and the documented `DocsTrash` stub seam. `Alert.alert` — 0.
+5. `lint-mobile-design`, `lint-container-opacity`, `lint-aria-labels`,
+   `lint-mobile-testids` — all ok. testids: 123 selectors across 37 flow files
+   resolve, 84 vocabulary entries applied.
+6. `bun run format` then `bun run check:push:static` — 4/4 green.
+
+### Open for the root
+
+- **`kit/components/OptionSheet.tsx` drops `selectedId` on the iOS branch.**
+  Agenda's More sheet passes it and no checkmark is drawn (agenda/findings#13,
+  third defect). A kit bug affecting every app that uses an option sheet — not
+  this lane's file to change mid-wave.
+- **No room handles the keyboard.** agenda/findings#15 was not closed by Wave
+  2; the defect MOVED into the kit. No `KeyboardAvoidingView` or
+  `keyboardShouldPersistTaps` in `EditorRoom`, `SheetRoom` or `PushedPage`.
+- **`surfaceWriteFailure` interpolates `error.message` into the status line**
+  (`apps/mobile/src/kit/replica/write-outcome.ts`), and the conflict path
+  prints `expectedVersion`/`actualVersion`. That is the same S14 break this
+  wave closed everywhere else, but it has ~40 call sites across every lane's
+  tree, and `apps/mobile/src/apps/locker/locker-writes.ts` passes a refusal
+  reason AS an Error to get it shown — so dropping the message silently
+  changes Locker. It needs one ruling and one commit, not four lanes each
+  guessing.
+- **`BIRTHDAY_LEADS` produces "your phone tells you same day ahead."**
+  `packages/blueprints/apps/agenda/day-context-copy.ts` mixes registers
+  ("same day", "2 days", "1 week") and `birthdayNotificationBody` reads them
+  all as a lead phrase. Not an audit finding; found in passing.
+- **Docs' three-names-for-one-entry (#11) and the five-times ontology (#8)**
+  are copy fixes that are DELETIONS or renames — they need the owner's word on
+  which name survives, not a lane's guess.
+- **`TasksDenied` renders the vault's refusal string verbatim**, documented as
+  "the refusal the vault gave, which IS the receipt on both seats". Left as
+  ruled; flagging it because S14 forbids raw payloads and a refusal receipt is
+  the one place the raw string may be the point. Confirm or overturn.
+## Wave 3 — lane APPS-B: Tally, Locker, People, Photos — copy, tint, a11y, haptics, residue
+
+Five commits: `aec968bcb` Tally · `94951d4ae` Locker · `0c9648d5a` People · `deade19aa` Photos · haptics (S15) last, after `kit/haptics.ts` landed on the umbrella.
+
+**S11, the shape of the answer.** Four apps, four defects of the same kind: an enum written down twice, or printed raw where a label belonged. Tally held the nine categories in `draft-model.ts` AND `spending-model.ts` and the expense record printed neither — an expense entered under `Fun` was recorded as `fun`. People used `ContactChannel["kind"]` as its own chip and field labels and printed the stored touch kinds in Recent, so one event read `Met up` where it was written and `visit` where it was listed. Locker typed five field labels and notes at the call site against its own module header's stated rule. Photos' search resting state typed three sentences the copy table also held, and the two had already drifted. Each is now one table with one reader: `category-labels.ts` + `categoryLabel()`, `channelKindLabel()` + `touchKindLabel()`, `FIELD_LABEL`/`FIELD_NOTE`, `SEARCH_COPY.resting`.
+
+**A sweep test per app.** `tally-copy-case.test.ts`, `locker-copy-case.test.ts`, `people-copy-case.test.ts` are new; `photos-copy-case.test.ts` gains the half `copy-title-case` cannot see — a source sweep of the tree's own `.tsx` for a Title Case `label:` literal, which is where Photos' Title Case lived. **R-KIT-4 is closed.** Each sweep also pins the app's own residue claims (the kind tables, the count grammar, the apostrophe, the route titles), so a fix cannot silently regress into a copy table.
+
+**S14.** No new engine vocabulary reached member copy in these four trees; round 2 closed Photos' six sites and `RoomError.detail` takes none of them. `tally-store.ts`'s `readError` still stores `error.message`, and **nothing renders it** — see the register below.
+
+**Tint.** `identity-tint 0` on the baseline and 0 after. Tally's hand-rolled chips (tally/findings #7) were already on `bgSel`/`lineSel` rather than an indigo ground before this wave. One `--net` misuse was a tint defect and is fixed: People painted the `Upcoming` birthday count in `colors.net`, the same red the app spends on overdue and on the read-only refusal.
+
+**S15 haptics.** Adopted at the three moments and nowhere else. `hapticSelect()` on band select in all four app bands (mirroring `HomeBand`); `hapticMode()` once when a long-press drag puts the Photos grid into selection, never again as the same drag sweeps on; `hapticLanded()` needs no app call — every destructive confirm in these four apps goes through the kit's `useConfirmDestructive`, which fires it. Three off-contract direct calls are deleted: a successful backup's success buzz, a favorite toggle's tick, and a tick on every tap that added a photograph to a selection already under way. `grep -rn "expo-haptics" apps/mobile/src/apps/{tally,locker,people,photos}` → two matches, both `hapticsStub()` seams in stub-tier tests.
+
+**A11y.** People's collapse caret was the literal characters `−` and `+` and its starred filter chip's whole accessible name was `★`; both are words or kit glyphs now. Photos' tiles announced a bare filename while painting a red `could not decode` line — `tileLabel()` appends every state the tile draws, so the one member who cannot see the red is told. Locker's `Forget this vault's key` had no guard at all and now takes the kit confirm with an `accessibilityState`-carrying outlined verb.
+
+### Residue register — every finding not closed by Waves 0–2
+
+**Tally** (`tally/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 no way to add an expense | `be8287400` (Wave 1, B2) | |
+| #2 settle opens invalid · bank line printed twice | `aec968bcb` | |
+| #3 Export from More is permanently empty | `aec968bcb` | |
+| #4 `Remove` beside "cannot be removed" | `aec968bcb` | |
+| #5 dates as raw ISO | output `d40637786` (Wave 2, S8); input `aec968bcb` | |
+| #6 placeholder reads as a filled value | `aec968bcb` | |
+| #7 a hue on a chip | — | already false: `TallyChips` lights on `bgSel`/`lineSel`, and `identity-tint` is 0 |
+| #8 detail screens do not name their subject | — | **left**: `PushedPage` has no subject slot and the room owns the header (R-B-9, Wave 2 slice 3). A room prop for it is a kit change; raised to the root |
+| #9 dead rows in Activity | `aec968bcb` | |
+| #10 counts disagree with the rows | `aec968bcb` | |
+| #11 category case flips | `aec968bcb` | |
+| #12 Tally's roster is a second, shorter People | — | **left**: a merge flow for Tally friends is a product feature, not a consistency fix. Out of this umbrella's scope |
+| #13 Groups tab is Balances' section plus an empty one | — | **left**: deleting a band destination is a band-shape decision; raised to the root |
+| #14 no loading state | — | **left**: `SkeletonRows` adoption across ten Tally routes is its own slice, not copy work |
+| #15 search capitalises and autocorrects | `aec968bcb` (the kit's `SearchField`) | |
+| #16 no pending-changes pill | — | **left**: mounting `ReplicaStatusBar` in a third app is a replica-surface decision; raised to the root |
+| #17 composers discard silently | — | **left**: D3 rules autosave everywhere and "close = done", which is the opposite of a discard prompt. Superseded by the ruling |
+| #18 section metas wrap and break the baseline | — | **left**: `TallyParts.Section` geometry, not copy; a layout slice |
+
+**Locker** (`locker/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 nothing stores the vault key, so Locker never unlocks | — | **left**: enrolment is a product capability with no seat on this phone. The dead `offer` styles it left behind are deleted here |
+| #2 the wall states the opposite of what it just said | earlier wave | `DEVICE_NOTE` and the forget verb are both conditional on `!notEnrolled` |
+| #3 forget key: no confirm, no feedback | `94951d4ae` | |
+| #4 four buttons in one non-wrapping row | `94951d4ae` | |
+| #5 three search behaviours | `aec968bcb` + `db5141839` | keyboard contract is one across all three apps now. Locker still SUBMITS where the others search live, which its own comment justifies: matching is server-side over fields the payload never returns |
+| #6 two names for the root · `Add / edit` | `94951d4ae` | |
+| #7 prose in the monospace register | `94951d4ae` | sixteen files; numerals, timestamps and the sealed run keep `mono` |
+| #8 a fifth confirm pattern | `eec6fe36b` (Wave 2) | |
+| #9 labels and notes typed at the call site | `94951d4ae` | |
+| #10 mixed apostrophes | `94951d4ae` | |
+| #11 `SectionBlock` as a form field label | `94951d4ae` | |
+| #12 no haptics | haptics commit | band select only: a reveal boundary is not one of the three moments the channel names |
+
+**People** (`people/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 the editor cannot represent the person it edits | — | **left**: minting a chip for a stored value the set cannot express is a control change in `PersonEditor`, not copy; raised to the root |
+| #2 two `Save` buttons, opposite validation | — | **left**: D3 rules autosave everywhere, which makes both `Save` buttons a question the ruling reopens. Raised to the root rather than fixed under a superseded shape |
+| #3 `Trash` the place and `Trash` the act | `0c9648d5a` | |
+| #4 `Shared with them` needs two taps | `0c9648d5a` | |
+| #5 search fights the query | `db5141839` (Wave 2, S4) | |
+| #6 every pushed screen untitled | `53d4f2933` (Wave 2) | |
+| #7 the channel `✕` destroys with no confirm | earlier wave | the word, through `PeopleConfirm` |
+| #8 birthdays painted `--net` and "upcoming" at 338 days | `0c9648d5a` (the hue) | the 30/60-day bound on the section is a query change, left |
+| #9 four iconography systems | `0c9648d5a` (caret, chip) | the hand-rolled star is **left**: `kit/Icon` is stroke-only and cannot express the filled/unfilled state the star carries. Raised to the root |
+| #10 header verbs vanish · one filter for two rails | — | **left**: both are `PeopleHome` state and header shape, not copy; raised to the root |
+| #11 `1 of 7 match` | `0c9648d5a` | |
+| #12 raw vault vocabulary as UI copy | `0c9648d5a` | |
+| #13 Merge's RESULT rows inverted | `0c9648d5a` | both seats |
+| #14 `Log a touch` selects the wrong band tab | Wave 2 rooms | `LogTouch` no longer writes `current` |
+| #15 filter chips announced as tabs | — | **left, and NOT this lane's**: `kit/components/ChipsBlock.tsx` is the kit lane's file; the `★` half is closed here. Raised to the root |
+| #16 no haptics | haptics commit | band select |
+
+**Photos** (`photos/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1–#7, #10–#12, #17, #19 | Waves 1–2 (`bd3c77c51`, `773ee9bc9`, `62fc18ac4`, `977de0a83`) | |
+| #8 two Englishes and three cases | labels `bd3c77c51` (D2); identifiers `deade19aa` (**R-B-5**) | |
+| #9 internal vocabulary on member surfaces | `deade19aa` — `replica`, `Photo vault`, `Asset id` | `Nothing typed` **left**: Docs, Notes and `_shared/SearchScaffold` all print it, so a one-app fix trades a copy defect for a cross-app inconsistency. Recorded in `view-copy.ts` beside the string; raised to the root |
+| #13 search auto-capitalises · two Clears | Wave 2 (`SearchField`) | |
+| #14 place tiles all read `A place with n…` | — | **left**: `places-model.ts` names a place from its own facts; a real name needs a reverse-geocode the seat does not have. Raised to the root |
+| #15 the 30-day rule three times | — | **left**: three surfaces (header subtitle, body line, per-tile plate) each state it for a different reader; choosing which two to drop is an owner call. Raised to the root |
+| #16 More's footer is untrue | `deade19aa` | the band slot itself is left: deleting a destination is a band-shape decision |
+| #18 tile labels are raw filenames · a failed tile never says so | `deade19aa` (the state half) | the NAME half is **left**: `PhotoAsset` carries no caption, so `filename` is the only name a tile has, and whether it is descriptive is a fact about the file |
+| #20 `PhotosBand` re-declares two kit tokens | `deade19aa` | |
+
+### Files
+
+- **Tally** — `apps/mobile/src/apps/tally/{ActivityView,TallyAddScreen,TallyChips,TallyExpenseScreen,TallyGroupScreen,TallyHome,TallySearchScreen,TallySettleScreen,TallySurfaceScreen,TallyBand}.tsx`, `ActivityView.test.tsx`, `PendingRestartJourney.test.tsx`, new `tally-copy-case.test.ts`; `packages/blueprints/apps/tally/{compose-copy,draft-model,spending-model,types,view-copy}.ts`, `draft-model.test.ts`, `spending-model.test.ts`, `components/{AddExpense,Screens}.tsx`, new `category-labels.ts`.
+- **Locker** — `apps/mobile/src/apps/locker/{LockerAccessView,LockerEditScreen,LockerExportView,LockerFields,LockerGenView,LockerImportView,LockerItemScreen,LockerItemsView,LockerMoreSheet,LockerNotice,LockerReviewView,LockerRow,LockerScanSheet,LockerScreen,LockerSearchView,LockerSurfaceScreen,LockerTrashScreen,LockerBand}.tsx`, `locker-places.ts`, `locker-places.test.ts`, `locker-seat-copy.ts`, new `locker-copy-case.test.ts`; `packages/blueprints/apps/locker/{route-copy,view-copy}.ts`.
+- **People** — `apps/mobile/src/apps/people/{MergeView,PeopleHome,PeopleKit,PersonView,PeopleBand}.tsx`, new `people-copy-case.test.ts`; `packages/blueprints/apps/people/people-copy.ts`, `components/MergeRoute.tsx`, `states.test.tsx`.
+- **Photos** — `apps/mobile/src/apps/photos/{PeopleEmptyState,PhotoInfoSheet,PhotoLightboxToolbar,PhotoTile,PhotoTimeline,PhotosBand,PhotosHome,PhotosPeopleView,PhotosSearch,PhotosSearchRestingState}.tsx`, `photos-band.ts`, `tile-overlays.ts`, `tile-overlays.test.ts`, `photos-copy-case.test.ts`, `PhotosMoreSheet.test.tsx`, `PhotosScreen.test.tsx`, `PhotosHome.test.tsx`, `PeopleEmptyState.test.tsx`, `PhotosPeopleView.test.tsx`; `packages/blueprints/apps/photos/{app.json,enrichment-consent.ts,enrichment-gate.ts,selection.tsx,shelves.ts,view-copy.ts}`, `enrichment-consent.test.ts`, `components/{People.tsx,People.test.tsx}`.
+
+### Judgement calls, visible in the diff
+
+- **`shelves.ts` stopped type-importing through a React component.** Reaching Photos' `view-copy` from the phone meant reading `shelves.ts`, which type-imported `SelectionShelfKind` from `components/SelectionBar.tsx` — a web component that pulls a CSS module the native program has no declaration for. The type already lived in the pure `_shared/selection-engine.ts`; both readers import it from there now. A shelf table is read by both seats and may not depend on either one's renderer.
+- **Tally's `expense_id` was in the payload and not in the type.** `queries/activity.ts` has carried it since #872; `ActivityRow` never declared it, which is the whole of why the feed's rows could not open the expense they name. The declaration is the fix, not a new read.
+- **A refusal waits for the member's first touch, and the commit stays disabled throughout.** Nothing can be committed on the strength of a hidden refusal — pressing the disabled commit reveals it.
+- **`ConfirmSheet` fires `hapticLanded()` when the member presses the verb, not when the write lands.** That is the kit's file and the kit lane's call; noted for the root rather than changed from an app lane.
+
+### Verification, from the lane worktree
+
+1. `cd apps/mobile && bunx vitest run src/apps/photos src/apps/people src/apps/locker src/apps/tally src/kit` → **168 files, 1507 passed, 0 failed**. Blueprints: `bunx vitest run packages/blueprints/apps/{tally,locker,people,photos}` → **65 files, 925 passed**.
+2. `bun run --cwd apps/mobile typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 153`, `back-literal 15`, `page-margin 93`, `identity-tint 0`, `copy-title-case 0`. Over this lane's four trees: `back-literal 0`, `identity-tint 0`, `copy-title-case 0`, `page-margin 2` — both the same ruled `paddingHorizontal: 3` chip inset in `PhotoTile.tsx` (R-B-6, sub-base, not a page gutter).
+4. `grep -rn "expo-haptics" apps/mobile/src/apps/{tally,locker,people,photos}` → **2**, both `hapticsStub()` device seams in stub-tier tests; no app source imports it.
+5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**.
+6. `bun run format` then `bun run check:push:static` → **4/4**.
+7. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see below.

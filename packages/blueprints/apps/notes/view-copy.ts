@@ -51,7 +51,11 @@ export function notebookDeleted(unfiled: number): string {
 export const TRASH_STATUS = "Restorable for 30 days, then erased";
 
 export function editorStatus(versions: number): string {
-  return `Every change is saved as you write · ${versions} versions kept`;
+  // "1 versions kept" (#1015 notes/findings#15). A count and its noun agree,
+  // in this app as in every other.
+  return `Every change is saved as you write · ${versions} ${
+    versions === 1 ? "version" : "versions"
+  } kept`;
 }
 
 export const PENDING_CHIP = "Saved on this device · queued for the vault";
@@ -72,10 +76,12 @@ export const CONFLICT_KEPT = "Both are kept.";
 export const CONFLICT_INTACT = "Nothing was overwritten.";
 
 export function historyStatus(versions: number): string {
-  return `${versions} versions · restoring appends, it never rewrites`;
+  // See `editorStatus`: the same count, said the same way.
+  return `${versions} ${
+    versions === 1 ? "version" : "versions"
+  } · restoring appends, it never rewrites`;
 }
 
-export const HISTORY_UNREADABLE = "The version chain could not be read here.";
 export const HISTORY_NEEDS_NOTE = "Open a note to see its versions.";
 export const VERSION_TEXT_ELSEWHERE =
   "This version's text is not on this device.";
