@@ -1,0 +1,84 @@
+// SYSTEM PLACE (#1015, S1): Settings, Vault, Devices, Backup — the stem's own
+// rooms. `PlaceHeader` over `SectionBlock` / `RowsBlock`, and nothing else.
+//
+// A PLACE spends no colour on itself: there is no app mark here, because
+// Notifications is not an app with a hue, it is somewhere the frame goes.
+// The Home key is a header control (`HomeKey`), never a floating plate — the
+// floating variant sat on the standing health line on exactly these screens
+// (audit B14).
+
+import React, { useMemo } from "react";
+import { ScrollView, View } from "react-native";
+
+import HomeKey from "../components/HomeKey";
+import PlaceHeader from "../components/PlaceHeader";
+import TopSafeArea from "../components/TopSafeArea";
+import { useTheme } from "../theme";
+import type { PlaceRef } from "./place";
+import { BackKey } from "./PushedPage";
+import type {
+  RoomAction,
+  RoomEmpty,
+  RoomError,
+  RoomLoading,
+} from "./room-contracts";
+import RoomBody from "./RoomBody";
+import { styles } from "./rooms.styles";
+
+export interface SystemPlaceProps {
+  title: string;
+  /** The grid plate, in the header's leading slot. */
+  onHome?: () => void;
+  /** Computed from the stack; a stem root has no parent and draws no back. */
+  backTo?: PlaceRef;
+  onBack?: () => void;
+  action?: RoomAction;
+  secondary?: RoomAction;
+  loading?: RoomLoading;
+  error?: RoomError;
+  empty?: RoomEmpty;
+  /** `SectionBlock` / `RowsBlock` only — a system place has no bespoke JSX. */
+  children?: React.ReactNode;
+  /** The docked line some stem places carry under the body (health, counts). */
+  footer?: React.ReactNode;
+}
+
+export default function SystemPlace({
+  title,
+  onHome,
+  backTo,
+  onBack,
+  action,
+  secondary,
+  loading,
+  error,
+  empty,
+  children,
+  footer,
+}: SystemPlaceProps): React.JSX.Element {
+  const { colors } = useTheme();
+  const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
+  return (
+    <TopSafeArea style={[styles.room, ink]}>
+      <View style={styles.backRow}>
+        {onHome ? <HomeKey onPress={onHome} /> : null}
+        {backTo && onBack ? <BackKey backTo={backTo} onBack={onBack} /> : null}
+      </View>
+      <PlaceHeader
+        primary={
+          action ? { label: action.label, onPress: action.onPress } : undefined
+        }
+        secondary={
+          secondary
+            ? { label: secondary.label, onPress: secondary.onPress }
+            : undefined
+        }
+        title={title}
+      />
+      <RoomBody empty={empty} error={error} loading={loading}>
+        <ScrollView>{children}</ScrollView>
+      </RoomBody>
+      {footer}
+    </TopSafeArea>
+  );
+}
