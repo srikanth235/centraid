@@ -287,6 +287,9 @@ export default function TallyHome({
           loaded={vault.activity !== null}
           notice={notice}
           now={vault.now}
+          onExpense={(expenseId) =>
+            navigation.navigate("TallyExpense", { expenseId })
+          }
           onShowMore={showMoreTallyActivity}
           window={vault.window}
         />

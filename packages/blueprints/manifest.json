@@ -1350,6 +1350,7 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
+        "category-labels.ts",
         "components/AddExpense.tsx",
         "components/AddExpenseTables.tsx",
         "components/Blocks.tsx",
