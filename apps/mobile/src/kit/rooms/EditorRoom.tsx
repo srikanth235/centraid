@@ -54,6 +54,9 @@ export interface EditorRoomProps {
   presented?: boolean;
   /** Only read when `presented`: the editor is up. */
   visible?: boolean;
+  /** The leave key's handle, from `kit/test-ids` — an end-to-end flow closes
+   *  an editor by it (`notes-editor-close`). */
+  leaveTestID?: string;
   children?: React.ReactNode;
 }
 
@@ -66,6 +69,7 @@ export default function EditorRoom({
   foot,
   presented = false,
   visible = true,
+  leaveTestID,
   children,
 }: EditorRoomProps): React.JSX.Element | null {
   const { colors } = useTheme();
@@ -95,6 +99,7 @@ export default function EditorRoom({
         <Button
           label={cancellable ? "Cancel" : "Done"}
           onPress={() => onDone()}
+          testID={leaveTestID}
           variant={cancellable ? "quiet" : "primary"}
         />
       </View>

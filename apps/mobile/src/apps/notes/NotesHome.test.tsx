@@ -19,6 +19,7 @@ import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { sentToTasks } from "@centraid/blueprints/apps/notes/view-copy";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import NotesHome from "./NotesHome";
@@ -68,17 +69,27 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
 
 // The device database seam moved with the reads (#996 wave 4b): a Notes read is
 // a page over the seat's own file now, still keyed by the entity it declares.
+/** The read's own health, so the room's error order can be falsified. */
+const readState = vi.hoisted(() => ({ unavailable: false }));
+
 vi.mock(import("../../kit/hooks/useSeatPages"), () => ({
   useSeatPages: (
     _appId: string,
     _query: unknown,
     options: { entity: string }
   ) => ({
-    connection: "current" as const,
+    connection: readState.unavailable
+      ? ("unavailable" as const)
+      : ("current" as const),
     error: undefined,
     loading: false,
     refresh: async () => undefined,
-    rows: replicaRows.byEntity.get(options.entity) ?? [],
+    rows: readState.unavailable
+      ? []
+      : (replicaRows.byEntity.get(options.entity) ?? []),
+    unavailableReason: readState.unavailable
+      ? "Pair or reconnect a gateway."
+      : undefined,
   }),
 }));
 
@@ -133,6 +144,28 @@ describe("Notes, on the real React Native host tree", () => {
   beforeEach(() => {
     replicaRows.byEntity.clear();
     vaultWrites.calls.length = 0;
+    readState.unavailable = false;
+  });
+
+  // THE ROOM IS THE ROOT (#1015, Wave 2). Notes' own frame drew the header,
+  // the back row, the search field and the empty state; all four are the
+  // room's now, and the proof a screen reader can see is that the app header's
+  // own back control is on the tree.
+  it("is rooted in the app place, whose header carries the app's own back", () => {
+    const screen = mountNotes();
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New note" })).toBeTruthy();
+  });
+
+  it("draws a failed read as the room's error, never as an empty shelf", () => {
+    // ERROR OUTRANKS EMPTY (`RoomBody`): Notes used to card the failure AND
+    // draw "Write the first one." under it, which tells a member their vault
+    // is empty when it is only unreachable.
+    readState.unavailable = true;
+    const screen = mountNotes();
+
+    expect(screen.getByText("Notes is not connected")).toBeTruthy();
+    expect(screen.queryByText("Nothing written yet")).toBeNull();
   });
 
   it("lights exactly one band place, and moves it on a real press", () => {
@@ -221,7 +254,9 @@ describe("Notes, on the real React Native host tree", () => {
       "Old body, plus a thought"
     );
     // The verb moves with the draft: nothing typed is still a cancel.
-    fireEvent.press(screen.getByLabelText("Done"));
+    // The room draws the leave key as a kit `Button`, so its handle is the
+    // word on it rather than a hand-written accessibility label.
+    fireEvent.press(screen.getByRole("button", { name: "Done" }));
     await vi.waitFor(() => expect(vaultWrites.calls).toHaveLength(1));
 
     expect(vaultWrites.calls[0]!.action).toBe("edit-note");
@@ -256,13 +291,34 @@ describe("Notes, on the real React Native host tree", () => {
     expect(vaultWrites.calls[1]!.input["note_id"]).toBe("minted-1");
   });
 
+  it("paints a note posted from inside the editor, in the editor (#1015)", async () => {
+    // AUDIT B5. Every editor on this seat is an iOS `Modal`, which renders in
+    // its own root view: a line posted from inside one painted UNDER it and
+    // was never seen. `EditorRoom` hosts the line inside the presentation, so
+    // the words land on the tree the member is actually looking at.
+    seedNotes([
+      { body: "- [ ] Call the plumber tomorrow", id: "n1", title: "Tahoe" },
+    ]);
+    const screen = mountNotes();
+
+    fireEvent.press(screen.getByRole("button", { name: "Tahoe" }));
+    fireEvent.press(
+      screen.getByLabelText("Send to Tasks: Call the plumber tomorrow")
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.getByText(sentToTasks("Call the plumber tomorrow"))
+      ).toBeTruthy()
+    );
+  });
+
   it("offers a cancel, not a done, before the first keystroke (#1015)", () => {
     seedNotes([{ body: "Old body", id: "n1", title: "Tahoe" }]);
     const screen = mountNotes();
 
     fireEvent.press(screen.getByRole("button", { name: "Tahoe" }));
-    expect(screen.getByLabelText("Cancel")).toBeTruthy();
-    fireEvent.press(screen.getByLabelText("Cancel"));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
     expect(vaultWrites.calls).toHaveLength(0);
   });
 });

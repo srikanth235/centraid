@@ -114,12 +114,20 @@ export default function PushedPage({
           <PlaceHeader
             primary={
               action
-                ? { label: action.label, onPress: action.onPress }
+                ? {
+                    label: action.label,
+                    onPress: action.onPress,
+                    testID: action.testID,
+                  }
                 : undefined
             }
             secondary={
               secondary
-                ? { label: secondary.label, onPress: secondary.onPress }
+                ? {
+                    label: secondary.label,
+                    onPress: secondary.onPress,
+                    testID: secondary.testID,
+                  }
                 : undefined
             }
             title={title}

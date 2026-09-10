@@ -292,6 +292,23 @@ describe(AppPlace, () => {
     expect(nodesOf(container, "input")).toStrictEqual([]);
   });
 
+  // An end-to-end flow taps the app's write door by its handle; a room that
+  // swallowed it would take those flows away from every screen it absorbed.
+  it("passes the action's handle through to the control it draws", () => {
+    const container = render(
+      <AppPlace
+        action={{ label: "New note", onPress: noop, testID: "notes-capture" }}
+        app={{ color: "#345", iconKey: "Camera", title: "Notes" }}
+        onBack={noop}
+      />
+    );
+    expect(
+      nodesOf(container, "button").some(
+        (node) => node.dataset.testid === "notes-capture"
+      )
+    ).toBe(true);
+  });
+
   // A confirm sheet and a presented editor have to survive the body's own
   // state machine: an empty list must not unmount the editor over it.
   it("keeps an overlay mounted while the body shows an empty state", () => {

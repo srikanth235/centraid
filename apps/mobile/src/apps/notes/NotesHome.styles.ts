@@ -1,24 +1,20 @@
 import { StyleSheet } from "react-native";
 
-import { borders, family, radii, t } from "../../kit/theme";
+import {
+  borders,
+  family,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+} from "../../kit/theme";
 
 export const styles = StyleSheet.create({
-  back: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2,
-    minHeight: 44,
-    marginStart: -8,
-  },
-  backLabel: {
-    fontFamily: family.sansMedium,
-    fontSize: t("control").fontSize,
-  },
   backlink: {
     borderRadius: radii.md,
     borderWidth: borders.hairline,
     gap: 2,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     paddingVertical: 9,
   },
   backlinkLabel: {
@@ -43,7 +39,7 @@ export const styles = StyleSheet.create({
     gap: 7,
     justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing[4],
   },
   buttonText: {
     fontFamily: family.sansMedium,
@@ -52,7 +48,7 @@ export const styles = StyleSheet.create({
   chip: {
     borderRadius: radii.pill,
     borderWidth: borders.hairline,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     paddingVertical: 7,
   },
   chipText: {
@@ -64,7 +60,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: pageMargin,
     paddingVertical: 12,
   },
   count: {
@@ -72,18 +68,11 @@ export const styles = StyleSheet.create({
     fontSize: t("mono").fontSize,
     fontVariant: ["tabular-nums"],
   },
-  editor: { paddingBottom: 24, paddingHorizontal: 20 },
-  editorActions: {
-    flexDirection: "row",
-    gap: 9,
-    paddingBottom: 18,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
+  editor: { paddingBottom: 24, paddingHorizontal: pageMargin },
   empty: {
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 36,
+    paddingHorizontal: spacing[6],
     paddingVertical: 72,
   },
   emptyBody: {
@@ -101,27 +90,13 @@ export const styles = StyleSheet.create({
     fontFamily: family.sansRegular,
     fontSize: t("body").fontSize,
     minHeight: 44,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
   },
   fieldRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
     paddingVertical: 8,
-  },
-  fill: { flex: 1 },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  headerCopy: { flex: 1 },
-  headerTitle: {
-    fontFamily: family.sansMedium,
-    fontSize: t("display").fontSize,
-    letterSpacing: -0.7,
   },
   iconButton: {
     alignItems: "center",
@@ -132,7 +107,7 @@ export const styles = StyleSheet.create({
   linkAction: {
     borderRadius: radii.md,
     borderWidth: borders.hairline,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     paddingVertical: 10,
   },
   linkMeta: {
@@ -145,19 +120,7 @@ export const styles = StyleSheet.create({
     fontSize: t("mono").fontSize,
   },
   linkWrap: { gap: 7, marginTop: 16 },
-  list: { paddingBottom: 110, paddingHorizontal: 20 },
-  modalHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  modalTitle: {
-    flex: 1,
-    fontFamily: family.sansMedium,
-    fontSize: t("title").fontSize,
-  },
+  list: { paddingBottom: 110, paddingHorizontal: pageMargin },
   note: {
     borderBottomWidth: borders.hairline,
     gap: 6,
@@ -173,11 +136,6 @@ export const styles = StyleSheet.create({
   noteTitle: {
     fontFamily: family.sansMedium,
     fontSize: t("reading").fontSize,
-  },
-  picker: { flex: 1, paddingHorizontal: 20 },
-  pickerCopy: {
-    ...t("small"),
-    marginBottom: 12,
   },
   row: {
     alignItems: "center",
@@ -196,28 +154,11 @@ export const styles = StyleSheet.create({
     fontSize: t("reading").fontSize,
   },
   rowOpen: { flex: 1, justifyContent: "center", minHeight: 44 },
-  search: {
-    alignItems: "center",
-    borderRadius: radii.lg,
-    borderWidth: borders.hairline,
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: family.sansRegular,
-    fontSize: t("body").fontSize,
-    minHeight: 42,
-  },
-  section: { gap: 4, paddingHorizontal: 20, paddingVertical: 10 },
+  section: { gap: 4, paddingHorizontal: pageMargin, paddingVertical: 10 },
   sectionTitle: {
     fontFamily: family.sansMedium,
     fontSize: t("mono").fontSize,
   },
-  sheet: { flex: 1 },
   subtitle: {
     fontFamily: family.sansRegular,
     fontSize: t("mono").fontSize,

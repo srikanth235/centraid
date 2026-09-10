@@ -4,6 +4,10 @@
 // RESTORING APPENDS. The control on an older row asks the vault to put that
 // body back at the HEAD of the chain; nothing between is rewritten or dropped,
 // and the status line above the list says so in the blueprint's own words.
+//
+// A CHAIN THAT COULD NOT BE READ IS NOT THIS FILE'S PROBLEM (#1015): the room
+// draws the error over everything else (`RoomBody`), so a list that only
+// renders when the read landed no longer carries a second unreadable state.
 
 import React from "react";
 import { Pressable, View } from "react-native";
@@ -11,7 +15,6 @@ import { Pressable, View } from "react-native";
 import type { VaultRow } from "@centraid/blueprints/apps/notes/filing";
 import { ageLabel } from "@centraid/blueprints/apps/notes/format";
 import {
-  HISTORY_UNREADABLE,
   VERSION_TEXT_ELSEWHERE,
   historyStatus,
 } from "@centraid/blueprints/apps/notes/view-copy";
@@ -29,15 +32,12 @@ export interface NotesHistoryProps {
   chainRows: {
     revisions: readonly VaultRow[];
   };
-  /** The edge read failed: the chain is UNKNOWN, not empty. */
-  unreadable: boolean;
   onRestore: (contentId: string) => void;
 }
 
 export default function NotesHistory({
   note,
   chainRows,
-  unreadable,
   onRestore,
 }: NotesHistoryProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -48,16 +48,6 @@ export default function NotesHistory({
     createdAt: note.createdAt,
     ...chainRows,
   });
-
-  if (unreadable) {
-    return (
-      <View style={styles.empty}>
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>
-          {HISTORY_UNREADABLE}
-        </Text>
-      </View>
-    );
-  }
 
   // A note's chain has no bound: every save appends, and the head is newest, so
   // the whole history mounted at once is exactly the shape #922 E6 windowed on

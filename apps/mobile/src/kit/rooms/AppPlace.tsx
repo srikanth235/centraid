@@ -106,6 +106,7 @@ export default function AppPlace({
               disabled={action.disabled}
               label={action.label}
               onPress={() => action.onPress()}
+              testID={action.testID}
               variant="secondary"
             />
           ) : null}

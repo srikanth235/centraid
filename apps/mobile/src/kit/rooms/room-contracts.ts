@@ -16,6 +16,13 @@ export interface RoomAction {
   onPress: () => void;
   /** The disabled contract is the leaf's (`Button`); this only declares it. */
   disabled?: boolean;
+  /**
+   * A handle from `kit/test-ids`, never a hand-spelled string. The verb a room
+   * draws is often the one an end-to-end flow taps — Notes' `notes-capture` is
+   * the app's whole write door — and a room that swallowed the handle would
+   * take those flows away from every screen that moved into it.
+   */
+  testID?: string;
 }
 
 /** Loading is a skeleton at the geometry of what is arriving, never a spinner. */

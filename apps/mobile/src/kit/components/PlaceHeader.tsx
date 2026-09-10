@@ -26,6 +26,8 @@ import { styles } from "./PlaceHeader.styles";
 export interface PlaceVerb {
   label: string;
   onPress: () => void;
+  /** A handle from `kit/test-ids`; an end-to-end flow taps the verb by it. */
+  testID?: string;
 }
 
 export interface PlaceHeaderProps {
@@ -57,6 +59,7 @@ export default function PlaceHeader({
           label={secondary.label}
           onPress={() => secondary.onPress()}
           style={styles.verb}
+          testID={secondary.testID}
           variant="secondary"
         />
       ) : null}
@@ -65,6 +68,7 @@ export default function PlaceHeader({
           label={primary.label}
           onPress={() => primary.onPress()}
           style={styles.verb}
+          testID={primary.testID}
           variant="primary"
         />
       ) : null}
