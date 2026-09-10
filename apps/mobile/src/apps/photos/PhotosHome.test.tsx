@@ -184,6 +184,10 @@ vi.mock(
       requireGatewayBase: vi.fn<(base?: string) => string>(
         (base) => base ?? ""
       ),
+      resolveAppMeta: vi.fn<() => object>(() => ({
+        color: "#345",
+        iconKey: "Camera",
+      })),
       resolveGatewayBase: vi.fn<() => Promise<string>>(async () => ""),
     }) as never
 );
@@ -266,6 +270,22 @@ describe("Photos native component coverage", () => {
       )
     ).toBeDefined();
     expect(screen.queryByLabelText("Opening your library")).toBeNull();
+  });
+
+  it("roots at the room, so the header and the back key are not its own", async () => {
+    // R-B-9 (#1015 Wave 2): PhotosHome was the last Photos surface drawing its
+    // own header and its own `paddingTop: insets.top`. `AppPlace` draws both
+    // now — the back key is the room's, and it is the proof the root swapped.
+    const screen = render(
+      <PhotosHome
+        navigation={{ navigate: vi.fn<() => void>() } as never}
+        route={{ params: { destination: "library" } } as never}
+      />
+    );
+    await act(async () => undefined);
+
+    expect(screen.getByRole("button", { name: "Back" })).toBeDefined();
+    expect(screen.getByText("Photos")).toBeDefined();
   });
 
   it("shares deterministic empty, temporal, video, and place fixtures", () => {
