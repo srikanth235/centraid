@@ -1,0 +1,13 @@
+# bracketed-replica-writes - a replicated-table write runs inside the commit pair.
+category: Architecture
+recommended: true
+summary: |
+  Outside the gateway's invocation pipeline, a raw INSERT/UPDATE/DELETE
+  against a table a seat replicates must run inside
+  beginReplicaCommit/endReplicaCommit - in practice, inside
+  withReplicaCommit, or on a connection bracketReplicaWrites has wrapped.
+  Session capture is the only mechanism that puts a write on a phone, and
+  the sessions are open only between those two calls: a write outside the
+  pair reaches the trigger log and the SSE feed but never a seat's file.
+surface: repo-state
+hook: pre-commit
