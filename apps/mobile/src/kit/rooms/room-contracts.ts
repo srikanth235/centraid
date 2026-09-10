@@ -25,6 +25,9 @@ export interface RoomLoading {
   label: string;
   /** How many bones; the block's own default when omitted. */
   rows?: number;
+  /** One line under the bones, for a surface whose content reflows when it
+   *  lands. Prose, not a percentage — a skeleton cannot know a fraction. */
+  note?: string;
 }
 
 /**
@@ -35,6 +38,14 @@ export interface RoomError {
   title: string;
   body: string;
   retry: RoomAction;
+  /** The one way forward when retrying is not it — an unpaired phone's
+   *  "Open Settings". Quiet, never a second filled verb. */
+  secondary?: RoomAction;
+  /** ONE more sentence of the app's own, when the general body cannot say
+   *  which of two things went wrong ("This phone is not paired with a gateway
+   *  yet."). NEVER an exception string, a status code or engine vocabulary —
+   *  that is the whole point of S14. */
+  detail?: string;
 }
 
 /** The empty state, in whichever of the two registers the screen is in. */

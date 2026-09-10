@@ -10,18 +10,13 @@
 // Data half `useApprovals.ts`; words `approvals-model.ts`.
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import type { ScrollView } from "react-native";
 
 import EmptyBlock from "../kit/components/EmptyBlock";
 import { healthLineFor } from "../kit/components/health-line";
 import HealthLine from "../kit/components/HealthLine";
-import HomeKey from "../kit/components/HomeKey";
 import { Text } from "../kit/components/NativeText";
-import NoteBlock from "../kit/components/NoteBlock";
-import PanelBlock from "../kit/components/PanelBlock";
-import PlaceHeader from "../kit/components/PlaceHeader";
-import SkeletonRows from "../kit/components/SkeletonRows";
-import TopSafeArea from "../kit/components/TopSafeArea";
+import { SystemPlace } from "../kit/rooms";
 import { useTheme } from "../kit/theme";
 import type { MobileNotice } from "../lib/gateway";
 import { mobileNotificationsDestination } from "../lib/notifications-navigation";
@@ -31,7 +26,6 @@ import {
   EMPTY_BODY,
   EMPTY_TITLE,
   ERROR_BODY,
-  ERROR_EYEBROW,
   ERROR_RETRY,
   ERROR_TITLE,
   LOADING_NOTE,
@@ -121,110 +115,84 @@ export default function ApprovalsScreen({
   const showCommit = showBar && page.state !== "error";
 
   return (
-    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
-      <View style={styles.page}>
-        <View style={styles.head}>
-          {/* Not pop-to-Settings: also reached from push notifications, where Settings isn't beneath. */}
-          <HomeKey onPress={() => navigation.goBack()} />
-          <View style={styles.headBar}>
-            <PlaceHeader
-              // Filled commit hidden while loading AND errored; quiet verb only while loading.
-              primary={
-                showCommit
-                  ? { label: "Review all", onPress: reviewAll }
-                  : undefined
-              }
-              secondary={
-                showBar
-                  ? {
-                      label: "History",
-                      onPress: () =>
-                        navigation
-                          .getParent()
-                          ?.navigate("Insights", { initialTab: "alerts" }),
-                    }
-                  : undefined
-              }
-              title="Notifications"
-            />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          ref={scroller}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void page.refresh()}
-              refreshing={page.refreshing}
-              tintColor={colors.textFaint}
-            />
+    <SystemPlace
+      bodyRef={scroller}
+      error={
+        page.state === "error"
+          ? {
+              body: ERROR_BODY,
+              ...(page.load.kind === "error" && page.load.unpaired
+                ? { detail: page.load.reason }
+                : {}),
+              retry: { label: ERROR_RETRY, onPress: page.retry },
+              // The one way forward an unpaired phone has.
+              ...(page.load.kind === "error" && page.load.unpaired
+                ? {
+                    secondary: {
+                      label: "Open Settings",
+                      onPress: () => navigation.popTo("SettingsHome"),
+                    },
+                  }
+                : {}),
+              title: ERROR_TITLE,
+            }
+          : undefined
+      }
+      footer={<HealthLine text={health.text} />}
+      loading={
+        page.state === "loading"
+          ? { label: "Reading what is waiting on you", note: LOADING_NOTE }
+          : undefined
+      }
+      // Not pop-to-Settings: also reached from push notifications, where
+      // Settings is not beneath.
+      onHome={() => navigation.goBack()}
+      onRefresh={() => void page.refresh()}
+      refreshing={page.refreshing}
+      // Filled commit hidden while loading AND errored; quiet verb only while
+      // loading.
+      {...(showCommit
+        ? { action: { label: "Review all", onPress: reviewAll } }
+        : {})}
+      {...(showBar
+        ? {
+            secondary: {
+              label: "History",
+              onPress: () =>
+                navigation
+                  .getParent()
+                  ?.navigate("Insights", { initialTab: "alerts" }),
+            },
           }
-        >
-          {page.actionError ? (
-            <Text style={[styles.actionError, ink.error]}>
-              {page.actionError}
-            </Text>
-          ) : null}
-          <ApprovalsBody
-            focus={focus}
-            onGrantsLayout={(y) => {
-              grantsY.current = y;
-            }}
-            onOpenNotice={openNotice}
-            onOpenSettings={() => navigation.popTo("SettingsHome")}
-            page={page}
-            patch={patch}
-            reviewGrants={scrollToGrants}
-          />
-        </ScrollView>
-      </View>
-      <HealthLine text={health.text} />
-    </TopSafeArea>
+        : {})}
+      title="Notifications"
+    >
+      {page.actionError ? (
+        <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>
+      ) : null}
+      <ApprovalsBody
+        focus={focus}
+        reviewGrants={scrollToGrants}
+        onGrantsLayout={(y) => {
+          grantsY.current = y;
+        }}
+        onOpenNotice={openNotice}
+        page={page}
+        patch={patch}
+      />
+    </SystemPlace>
   );
 }
 
+/** The queue and its tail. Loading and error are the ROOM's states now (#1015,
+ *  Wave 2) — a body that drew them could paint an empty state over a read that
+ *  failed, which is what `RoomBody`'s fixed order stops. The EMPTY stays here:
+ *  it is the queue that is empty, and the standing grants below it are still
+ *  the record this page exists to show. */
 function ApprovalsBody(props: BodyProps): React.JSX.Element {
-  const { page } = props;
-
-  if (page.state === "loading")
-    return (
-      <>
-        <SkeletonRows accessibilityLabel="Reading what is waiting on you" />
-        <NoteBlock text={LOADING_NOTE} />
-      </>
-    );
-
-  if (page.state === "error")
-    return (
-      <PanelBlock
-        body={ERROR_BODY}
-        eyebrow={ERROR_EYEBROW}
-        facts={
-          page.load.kind === "error"
-            ? [
-                {
-                  key: "what happened",
-                  net: true,
-                  value: page.load.reason,
-                },
-              ]
-            : undefined
-        }
-        action={{ label: ERROR_RETRY, onPress: page.retry }}
-        // The one way forward an unpaired phone has.
-        action2={
-          page.load.kind === "error" && page.load.unpaired
-            ? { label: "Open Settings", onPress: props.onOpenSettings }
-            : undefined
-        }
-        title={ERROR_TITLE}
-        tone="net"
-      />
-    );
-
   return (
     <>
-      {page.state === "empty" ? (
+      {props.page.state === "empty" ? (
         <EmptyBlock
           action={{ label: EMPTY_ACTION, onPress: props.reviewGrants }}
           body={EMPTY_BODY}

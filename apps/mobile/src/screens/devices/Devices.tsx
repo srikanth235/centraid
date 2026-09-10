@@ -4,7 +4,7 @@
 
 import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 
 import {
   DEVICES_EMPTY_BODY,
@@ -12,20 +12,16 @@ import {
 } from "@centraid/client/devices-copy";
 import { SKELETON_NOTE } from "@centraid/client/surface-copy";
 
-import EmptyBlock from "../../kit/components/EmptyBlock";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
 import NoteBlock from "../../kit/components/NoteBlock";
 import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
-import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
-import TopSafeArea from "../../kit/components/TopSafeArea";
+import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { DeviceRow } from "../../lib/devices";
 import type { DevicesScreenProps } from "../../navigation";
@@ -102,133 +98,111 @@ export default function DevicesScreen({
   const handleCloseActions = (): void => setActing(undefined);
 
   return (
-    <TopSafeArea
-      edges={["top"]}
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-    >
-      <View style={styles.page}>
-        <View style={styles.head}>
-          {/* The leave key is a header control, never a floating plate: the
-              bottom edge here already carries the docked health line
-              (#1015, S6 — audit B14). */}
-          <HomeKey onPress={() => navigation.goBack()} />
-          <View style={styles.headBar}>
-            <PlaceHeader
-              title="Copies"
-              // Pair verb hidden while loading or errored — minting needs
-              // the gateway that is not answering.
-              {...(state === "loading" || state === "error"
-                ? {}
-                : {
-                    primary: {
-                      label: PAIR_VERB,
-                      onPress: () => void devices.mint(),
-                    },
-                  })}
-            />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          style={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          {ticket ? (
-            <>
-              <PanelBlock
-                eyebrow="Waiting to be used"
-                title="Pairing ticket"
-                body="Paste this on the other device, in Settings → Desktop link. It works once, and only until it expires."
-                facts={ticketFacts(ticket)}
-                tone="seam"
-                action={{
-                  label: "Copy the ticket",
-                  onPress: () => {
-                    void Clipboard.setStringAsync(ticket.ticket).then(() =>
-                      postStatus("Pairing ticket copied.")
-                    );
-                  },
-                }}
-                action2={{ label: "Done", onPress: devices.dismissTicket }}
-              />
-              {/* The token itself, selectable — readable across machines even
-                  with a locked-down clipboard. */}
-              <Text selectable style={styles.ticket}>
-                {ticket.ticket}
-              </Text>
-            </>
-          ) : null}
-
-          {state === "loading" ? (
-            <>
-              <SkeletonRows accessibilityLabel="Reading the paired devices" />
-              <NoteBlock text={LOADING_NOTE} />
-            </>
-          ) : state === "error" ? (
-            <PanelBlock
-              tone="net"
-              title={ERROR_TITLE}
-              body={devices.noGateway ? UNPAIRED_BODY : ERROR_BODY}
-              {...(devices.message
-                ? {
-                    facts: [
-                      {
-                        key: "the connection said",
-                        net: true,
-                        value: devices.message,
-                      },
-                    ],
-                  }
-                : {})}
-              action={{
+    <SystemPlace
+      // Pair verb hidden while loading or errored — minting needs the
+      // gateway that is not answering.
+      {...(state === "loading" || state === "error"
+        ? {}
+        : { action: { label: PAIR_VERB, onPress: () => void devices.mint() } })}
+      empty={
+        state === "empty"
+          ? {
+              action: { label: PAIR_VERB, onPress: () => void devices.mint() },
+              body: EMPTY_BODY,
+              routine: true,
+              title: EMPTY_TITLE,
+            }
+          : undefined
+      }
+      error={
+        state === "error"
+          ? {
+              body: devices.noGateway ? UNPAIRED_BODY : ERROR_BODY,
+              retry: {
                 label: "Try again",
                 onPress: () => void devices.refresh(),
-              }}
-            />
-          ) : state === "empty" ? (
-            <EmptyBlock
-              title={EMPTY_TITLE}
-              body={EMPTY_BODY}
-              routine
-              action={{ label: PAIR_VERB, onPress: () => void devices.mint() }}
-            />
-          ) : (
+              },
+              title: ERROR_TITLE,
+            }
+          : undefined
+      }
+      footer={
+        /* Docked above the bottom edge. */
+        <View style={styles.dock}>
+          <HealthLine
+            text={health.text}
+            tone="seam"
+            {...(health.action
+              ? {
+                  action: health.action,
+                  onAction: () => void devices.refresh(),
+                }
+              : {})}
+          />
+        </View>
+      }
+      loading={
+        state === "loading"
+          ? { label: "Reading the paired devices", note: LOADING_NOTE }
+          : undefined
+      }
+      // The leave key is a header control, never a floating plate: the bottom
+      // edge here already carries the docked health line (#1015, S6 —
+      // audit B14).
+      onHome={() => navigation.goBack()}
+      title="Copies"
+    >
+      {ticket ? (
+        <>
+          <PanelBlock
+            action={{
+              label: "Copy the ticket",
+              onPress: () => {
+                void Clipboard.setStringAsync(ticket.ticket).then(() =>
+                  postStatus("Pairing ticket copied.")
+                );
+              },
+            }}
+            action2={{ label: "Done", onPress: devices.dismissTicket }}
+            body="Paste this on the other device, in Settings → Desktop link. It works once, and only until it expires."
+            eyebrow="Waiting to be used"
+            facts={ticketFacts(ticket)}
+            title="Pairing ticket"
+            tone="seam"
+          />
+          {/* The token itself, selectable — readable across machines even
+              with a locked-down clipboard. */}
+          <Text selectable style={styles.ticket}>
+            {ticket.ticket}
+          </Text>
+        </>
+      ) : null}
+
+      {state === "ready" ? (
+        <>
+          {groups.map((group) => (
+            <React.Fragment key={group.key}>
+              <SectionBlock label={group.label} meta={group.meta} />
+              <RowsBlock rows={rowsFor(group)} />
+            </React.Fragment>
+          ))}
+          {hasOtherPeople(groups) ? (
+            <NoteBlock text={OTHER_PEOPLE_NOTE} />
+          ) : null}
+          {boundaryPromise ? <NoteBlock text={boundaryPromise} /> : null}
+          {/* Omitted on gateways mounting no vault plane: `undefined` is
+              "no such plane", not "you own none". */}
+          {devices.vaults ? (
             <>
-              {groups.map((group) => (
-                <React.Fragment key={group.key}>
-                  <SectionBlock label={group.label} meta={group.meta} />
-                  <RowsBlock rows={rowsFor(group)} />
-                </React.Fragment>
-              ))}
-              {hasOtherPeople(groups) ? (
-                <NoteBlock text={OTHER_PEOPLE_NOTE} />
-              ) : null}
-              {boundaryPromise ? <NoteBlock text={boundaryPromise} /> : null}
-              {/* Omitted on gateways mounting no vault plane: `undefined` is
-                  "no such plane", not "you own none". */}
-              {devices.vaults ? (
-                <>
-                  <SectionBlock
-                    label="Vaults you own"
-                    meta={String(devices.vaults.length)}
-                  />
-                  <RowsBlock rows={devices.vaults.map(vaultRowCopy)} />
-                </>
-              ) : null}
+              <SectionBlock
+                label="Vaults you own"
+                meta={String(devices.vaults.length)}
+              />
+              <RowsBlock rows={devices.vaults.map(vaultRowCopy)} />
             </>
-          )}
-        </ScrollView>
-      </View>
-      {/* Docked above the bottom edge. */}
-      <View style={styles.dock}>
-        <HealthLine
-          text={health.text}
-          tone="seam"
-          {...(health.action
-            ? { action: health.action, onAction: () => void devices.refresh() }
-            : {})}
-        />
-      </View>
+          ) : null}
+        </>
+      ) : null}
       {acting ? (
         <DeviceActions
           busy={devices.busy}
@@ -240,6 +214,6 @@ export default function DevicesScreen({
           onRevoke={handleRevoke}
         />
       ) : null}
-    </TopSafeArea>
+    </SystemPlace>
   );
 }

@@ -418,3 +418,36 @@ Changed:
 - `apps/mobile/src/test/react-native-stub.tsx` — records `autoFocus` as `data-autofocus` rather than applying it; jsdom would take focus off the runner.
 
 **`TEST_IDS.photos.searchField` is NOT deleted.** The brief's condition was "if no caller remains", and one does: `tests/agent-e2e-mobile/flows/photos-search.mjs` takes the query field by that handle twice, and `flows/photos-search.md` records why it is a handle and not the word "Search". `node scripts/lint-mobile-testids.mjs` fails on this head with two `unapplied-id` breaks — `photos-search-field` and `locker-gate-field` — both because the adopting screen dropped its `testID` when it moved onto the kit field. Deleting the entry would break the flow instead of fixing it, so the pass-through is added here and the two screens (both outside this lane's trees) must apply it. Raised to the root; the lint is red on the base head with this lane stashed, not caused by it.
+
+### Lane SHELL — the kit-native places move into `SystemPlace` (Wave 2, S1)
+
+Seven screens whose whole frame was already a hand-copy of one shape — safe area, a head row with `HomeKey` beside a `PlaceHeader`, a `ScrollView` with its own gutter, a docked `HealthLine`, and each with its own order for loading/error/empty. All of that is `SystemPlace` now; the screens supply content and copy.
+
+Migrated (root is `<SystemPlace>`, gutter and states are the room's):
+
+- `apps/mobile/src/screens/SystemOnPhone.tsx` — 49 lines to 27; its whole `StyleSheet` deleted.
+- `apps/mobile/src/screens/SignalNotification.tsx` — 63 lines to 38; its whole `StyleSheet` deleted.
+- `apps/mobile/src/screens/data/Data.tsx` (+ `data/Data.styles.ts`, trimmed to the record sheet's plate).
+- `apps/mobile/src/screens/devices/Devices.tsx` (+ `devices/Devices.styles.ts`, trimmed to the dock and the rename dialog).
+- `apps/mobile/src/screens/connectors/Connectors.tsx`.
+- `apps/mobile/src/screens/Approvals.tsx` (+ `screens/approvals/view-types.ts`).
+- `apps/mobile/src/apps/automations/Automations.tsx`.
+
+Deleted, with the grep proving no caller remains (`grep -rn FeatureOffPlace apps/mobile/src` → 0):
+
+- `apps/mobile/src/kit/components/FeatureOffPlace.tsx` · `FeatureOffPlace.styles.ts` — it drew a whole place frame of its own (a second header, a second leave key, a second gutter) to say one sentence. A closed feature gate is a room STATE, so it is now `featureOffEmpty(feature)` in `apps/mobile/src/kit/rooms/feature-off.ts`, a `RoomEmpty` the screen passes to its own `SystemPlace`. Same copy, from the same compatibility core.
+
+Room props this wave added, each named by the screen that needed it (`apps/mobile/src/kit/rooms/`):
+
+- `SystemPlace` — `onRefresh`/`refreshing` (Data, Connectors, Approvals, Automations all pulled to re-read), `bodyRef` (Automations scrolls itself to the suggestions section it just named), and `placeBody` in `rooms.styles.ts`: the ROOM owns the scrolling gutter now.
+- `RoomLoading.note` — the reflow sentence four of these screens drew under their skeleton (`SKELETON_NOTE`). A skeleton cannot know a fraction, so it is prose.
+- `RoomError.secondary` — the unpaired phone's "Open Settings" on Approvals; quiet, never a second filled verb.
+- `RoomError.detail` — ONE more sentence of the app's own when the general body cannot say which of two things went wrong ("This phone is not paired with a gateway yet."). Documented as never an exception string, which is the S14 rule it must not become a hole in.
+- `RoomBody`'s error eyebrow was a hardcoded `"THIS PAGE COULD NOT LOAD"`. It is `ERROR_HEALTH` from `@centraid/client/surface-copy` now — the same word every other seat says, and sentence case like every other label (**D2**).
+
+Two judgement calls, both visible in the diff:
+
+- **Approvals keeps its EMPTY in the body, not on the room.** It is the QUEUE that is empty; the standing grants below it are still the record the page exists to show, and a room empty replaces the body wholesale. `RoomBody`'s fixed order is right for a page-level empty and wrong for a section's — `screens/approvals/view-types.ts` says so where `reviewGrants` is declared.
+- **Automations is a `SystemPlace`, not an `AppPlace`.** The brief said `AppPlace`, but the screen draws `PlaceHeader` + `HomeKey` and no app mark, and `screens/home/places.ts` lists `autos` as one of the ten PLACES. A place spends no colour on itself (`kit/rooms/README.md`); giving it an app mark and an identity hue would be a new product claim, not a migration. Raised to the root.
+
+Tests: `apps/mobile/src/screens/shell-rooms.test.ts` is new — it reads `scripts/lint-mobile-rooms.mjs`'s own rules (one definition of "a room", not a second copy) and asserts, per migrated file, that the root is a room and the gutter is the room's, plus tree-wide that no shell file writes `backTo`/`current` down as a string. `MIGRATED` only ever grows, so a screen cannot quietly fall back out of its room later. `scripts/lint-mobile-rooms.mjs` gained a real JSDoc shape for `lintTree`'s findings so the test typechecks against it.

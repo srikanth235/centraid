@@ -3,7 +3,6 @@
 // ATTACHED DATA SYNCS IS OMITTED, ON PURPOSE: the gateway serves no such plane; do not invent it from a name-matching guess.
 
 import React, { useMemo } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
 
 import {
   CONNECTORS_EMPTY_BODY,
@@ -15,19 +14,16 @@ import { RETRY_ACTION, SKELETON_NOTE } from "@centraid/client/surface-copy";
 
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
-import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
 import NoteBlock from "../../kit/components/NoteBlock";
 import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { SystemPlace, featureOffEmpty } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { ConnectorsScreenProps } from "../../navigation";
 import {
@@ -149,9 +145,9 @@ export default function ConnectorsScreen(
   const { features } = useReplica();
   if (features && !features.connectors)
     return (
-      <FeatureOffPlace
-        feature="connectors"
-        onLeave={() => props.navigation.goBack()}
+      <SystemPlace
+        empty={featureOffEmpty("connectors")}
+        onHome={() => props.navigation.goBack()}
         title="Connectors"
       />
     );
@@ -163,13 +159,7 @@ function ConnectorsPlace({
 }: ConnectorsScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const page = useConnectors();
-  const ink = useMemo(
-    () => ({
-      error: { color: colors.net },
-      safe: { backgroundColor: colors.bg },
-    }),
-    [colors]
-  );
+  const ink = useMemo(() => ({ error: { color: colors.net } }), [colors]);
   // Clock is the one the read landed at (`useConnectors`) — relative phrases agree and do not age without a re-read.
   const health = healthLineFor(
     page.state,
@@ -178,42 +168,28 @@ function ConnectorsPlace({
   const lapsed = firstNeedingAuth(page.connections);
 
   return (
-    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
-      <View style={styles.page}>
-        <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} />
-          <View style={styles.headBar}>
-            {/* No verbs — see the file header. */}
-            <PlaceHeader title="Connectors" />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void page.refresh()}
-              refreshing={page.refreshing}
-              tintColor={colors.textFaint}
-            />
+    <SystemPlace
+      footer={
+        <HealthLine
+          action={lapsed ? health.action : undefined}
+          onAction={
+            lapsed
+              ? () => page.perform(lapsed.connectionId, "reauthorize")
+              : undefined
           }
-        >
-          {page.actionError ? (
-            <Text style={[styles.actionError, ink.error]}>
-              {page.actionError}
-            </Text>
-          ) : null}
-          <ConnectorsBody page={page} />
-        </ScrollView>
-      </View>
-      <HealthLine
-        action={lapsed ? health.action : undefined}
-        onAction={
-          lapsed
-            ? () => page.perform(lapsed.connectionId, "reauthorize")
-            : undefined
-        }
-        text={health.text}
-      />
-    </TopSafeArea>
+          text={health.text}
+        />
+      }
+      onHome={() => navigation.goBack()}
+      onRefresh={() => void page.refresh()}
+      refreshing={page.refreshing}
+      // No verbs — see the file header.
+      title="Connectors"
+    >
+      {page.actionError ? (
+        <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>
+      ) : null}
+      <ConnectorsBody page={page} />
+    </SystemPlace>
   );
 }
