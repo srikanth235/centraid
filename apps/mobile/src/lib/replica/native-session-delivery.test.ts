@@ -46,6 +46,7 @@ const gatewayAuth = {
 const WATERMARK: SeatWatermark = {
   epoch: "epoch-a",
   applied: 12,
+  appliedCommitSeq: 3,
   head: 12,
   behind: 0,
   deferredPending: false,
