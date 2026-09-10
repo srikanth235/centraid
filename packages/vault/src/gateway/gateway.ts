@@ -210,6 +210,19 @@ export class Gateway {
   private readonly commands = new Map<string, RegisteredCommand>();
   private activeBatchInvocationIds: string[] | undefined;
   private activeBatchDecisionChanges: boolean[] | undefined;
+  /**
+   * PROVENANCE RINGS AFTER COMMIT (#1014, S1). The batch is ONE transaction,
+   * so a provenance doorbell rung from inside a run reaches the host while the
+   * vault transaction is still open — a listener that reads (the share tail,
+   * grant refresh) then sees the pre-commit vault, and whatever it throws is
+   * swallowed by design. Rings therefore accumulate here, exactly as decision
+   * changes do, and flush ONCE after `COMMIT` with the union of entity types.
+   * `unknown` is a ring that named no entity types (a sweep, an import): it
+   * means "wake everything" and must never be narrowed to that union.
+   */
+  private activeBatchProvenance:
+    | { types: Set<string>; unknown: boolean }
+    | undefined;
 
   constructor(
     private readonly db: VaultDb,
@@ -244,8 +257,10 @@ export class Gateway {
     }
     const invocationIds: string[] = [];
     const decisionChanges: boolean[] = [];
+    const provenance = { types: new Set<string>(), unknown: false };
     this.activeBatchInvocationIds = invocationIds;
     this.activeBatchDecisionChanges = decisionChanges;
+    this.activeBatchProvenance = provenance;
     try {
       // ONE FILE (#916): the vault and the audit band are the same handle, so
       // the batch is ONE transaction. Beginning twice is now an error, and the
@@ -310,6 +325,9 @@ export class Gateway {
       if (decisionChanges.length > 0) {
         this.emitDecisionChanged(decisionChanges.some(Boolean));
       }
+      if (provenance.unknown) this.emitProvenance(undefined);
+      else if (provenance.types.size > 0)
+        this.emitProvenance([...provenance.types]);
       return results;
     } catch (error) {
       if (this.db.vault.isTransaction) this.db.vault.exec("ROLLBACK");
@@ -317,6 +335,7 @@ export class Gateway {
     } finally {
       this.activeBatchInvocationIds = undefined;
       this.activeBatchDecisionChanges = undefined;
+      this.activeBatchProvenance = undefined;
     }
   }
 
@@ -1270,7 +1289,7 @@ export class Gateway {
         access,
         invocationId,
         undefined,
-        this.deps.onProvenanceCommitted,
+        this.provenanceSink,
         {
           deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
           deferReplicaNotify: this.activeBatchInvocationIds !== undefined,
@@ -1402,7 +1421,7 @@ export class Gateway {
       access,
       invocationId,
       { confirmedBy: owner.partyId, confirmedAt: nowIso() },
-      this.deps.onProvenanceCommitted
+      this.provenanceSink
     );
     settleDurableParkedPayload(
       this.db,
@@ -1728,7 +1747,7 @@ export class Gateway {
       owner,
       batchId,
       PUBLISHERS,
-      this.deps.onProvenanceCommitted
+      this.provenanceSink
     );
   }
 
@@ -2068,6 +2087,25 @@ export class Gateway {
   }
 
   private ringProvenance(entityTypes?: readonly string[]): void {
+    const batch = this.activeBatchProvenance;
+    if (batch) {
+      if (entityTypes === undefined) batch.unknown = true;
+      else for (const entityType of entityTypes) batch.types.add(entityType);
+      return;
+    }
+    this.emitProvenance(entityTypes);
+  }
+
+  /**
+   * The one sink handed to `runContractAndExecute` and friends, so a ring
+   * raised from inside a batch buffers instead of escaping the open
+   * transaction (#1014, S1). Bound once: it is passed as a value.
+   */
+  private readonly provenanceSink = (entityTypes: readonly string[]): void => {
+    this.ringProvenance(entityTypes);
+  };
+
+  private emitProvenance(entityTypes?: readonly string[]): void {
     try {
       this.deps.onProvenanceCommitted?.(entityTypes);
     } catch {
