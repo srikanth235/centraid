@@ -340,4 +340,16 @@ describe(SystemPlace, () => {
     );
     expect(labels).toContain("Back to your apps");
   });
+
+  it("hangs the place's own modals outside the scrolling body", () => {
+    // Settings owns a confirm sheet and a full-screen pairing camera. Nested
+    // in the scroller's content they would measure against the scroller;
+    // `overlay` is the seam that keeps them siblings of it.
+    const container = render(
+      <SystemPlace overlay={<div data-testid="scanner" />} title="Settings">
+        <div data-testid="section" />
+      </SystemPlace>
+    );
+    expect(container.querySelector('[data-testid="scanner"]')).not.toBeNull();
+  });
 });

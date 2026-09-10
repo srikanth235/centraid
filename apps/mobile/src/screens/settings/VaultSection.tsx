@@ -7,7 +7,7 @@ import type { IconName } from "@centraid/design";
 import Button from "../../kit/components/Button";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { radii, t, useTheme } from "../../kit/theme";
+import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
   GatewayError,
@@ -306,7 +306,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: radii.md,
       borderWidth: 1,
       color: colors.text,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 10,
     },
     pressed: { opacity: 0.6 },
