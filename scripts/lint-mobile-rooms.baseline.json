@@ -1,21 +1,17 @@
 {
-  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). It may only ever go DOWN: a rule above its max fails `bun run lint:product`, a rule under it prints the number to lower it to, and a rule absent here is at ZERO. Each entry names the wave that clears it. Measured on lane/1015-kit after Wave 3 SHELL; run `node scripts/lint-mobile-rooms.mjs` to re-measure.",
+  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). It may only ever go DOWN: a rule above its max fails `bun run lint:product`, a rule under it prints the number to lower it to, and a rule absent here is at ZERO. Each entry names the wave that clears it. Re-measured on lane/1015-kit after merging APPS-A and APPS-B Wave 3; run `node scripts/lint-mobile-rooms.mjs` to re-measure. `back-literal`, `identity-tint` and `copy-title-case` reached zero and are gone from this file, which makes them unconditional.",
   "rules": {
     "screen-root": {
-      "max": 56,
-      "clearedBy": "#1015 Wave 3 APPS-A/APPS-B \u2014 the shell's trees are at 0; these are Agenda, Docs, Locker, Notes, People, Photos, Tally and Tasks screens whose lanes had not merged when this was recorded."
+      "max": 33,
+      "clearedBy": "#1015 after Wave 4 — Locker (6), People (6), Photos (9) and Tally (12) screens that no lane migrated. The shell's trees, Agenda, Docs and Notes are at 0."
     },
     "page-margin": {
-      "max": 93,
-      "clearedBy": "#1015 Wave 3 APPS-A/APPS-B \u2014 a gutter typed as a number instead of taken from the room. Two sites are ruled sub-base exceptions (PhotoTile x2) and stay."
+      "max": 2,
+      "clearedBy": "NOBODY — both are `PhotoTile`'s `paddingHorizontal: 3`, the sub-base exceptions ruled at Wave 3. This entry is the allowlist; it does not go down."
     },
     "error-detail": {
-      "max": 13,
-      "clearedBy": "#1015 Wave 3 APPS-A/APPS-B \u2014 S14 across Docs, Locker, Notes, People, Photos, Tally and Tasks."
-    },
-    "back-literal": {
-      "max": 15,
-      "clearedBy": "#1015 Wave 3 APPS-A \u2014 thirteen Docs screens plus two others still say backTo as a string (audit B7)."
+      "max": 12,
+      "clearedBy": "#1015 R-A-15 — the S14 sweep over Docs (2), Locker (4), Photos (5) and Tally (1). Ruled, not yet landed when the umbrella's last lane closed."
     }
   }
 }
