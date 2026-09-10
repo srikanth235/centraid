@@ -65,3 +65,13 @@ Answers audit **S5** (`docs/findings.md#3`), **B14** and **S12** (`photos/findin
 - **`apps/mobile/src/apps/docs/doc-menu.ts`**, **`apps/mobile/src/apps/docs/doc-menu.test.ts`** — the only `refusedLabel` caller. `refuse()` now spreads `{ reason }`, so a writable row carries no key at all; the submenu parent stops carrying a refusal and each Move target carries its own, which is what the code comment there already claimed.
 - **`apps/mobile/src/kit/components/StatusLine.tsx`** — its header no longer cites the floating key as one of the three bottom-edge occupants.
 - **`apps/mobile/src/apps/people/people-writes.test.tsx`**, **`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`** — their `status-line` mocks gain `readStatus`, which slice 1 made part of the module's surface.
+
+### Lane KIT — slice 3: S4, one search field
+
+Answers audit **S4**. Eight hand-rolled fields across nine surfaces: five placements, three keyboard contracts, four ways of saying how many matched, and one with no way to clear the term.
+
+- **`apps/mobile/src/kit/components/SearchField.tsx`** — new. Controlled `value`/`onChangeText`; Locker's keyboard contract (`autoCapitalize="none"`, `autoCorrect={false}`, `returnKeyType="search"`), which is the only one that was fully right — a capitalised or auto-corrected term searches for something the member did not type. A clear control that appears only when there is something to clear, an optional `count` line in the caller's own words, `onSubmit` for search-on-return (omitted means search-as-you-type), and a spoken label that defaults to the placeholder. The props are documented in the file header, including what this is NOT: the no-match state stays an `EmptyBlock` in the routine register, rendered by the list.
+- **`apps/mobile/src/kit/components/SearchField.styles.ts`** — new. The gutter is the field's own, at `theme.pageMargin`; a 44×44 clear control.
+- **`apps/mobile/src/kit/components/SearchField.test.tsx`** — new. The keyboard contract (from source — the host stub drops unmapped props, so a DOM assertion would pass whatever the field set), the spoken label and its override, no clear control while the term is empty, clearing through `onChangeText` plus `onClear`, the count line present and absent.
+
+**Not done, deliberately**: no app call site is migrated. Adoption is each app lane's, per R-KIT-1.
