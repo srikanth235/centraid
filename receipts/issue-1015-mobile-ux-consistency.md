@@ -684,3 +684,40 @@ member is merely looking: `AlbumDetail.tsx:313`/`:354`,
 `PhotoStateView.tsx:222`/`:266`. Under R-A-9 that is a dimmed band and a
 swapped header at rest. Not edited here — another worker holds those files;
 raised to the root as an owner item.
+## Lane APPS-B, Wave 2 round 4 — Photos' home into the room, and the testID contract
+
+Commits `d8dfe78a3`, `977de0a83`, `9f228ddcb` on `lane/1015-apps-b`.
+
+**R-B-9 — `PhotosHome` is an `AppPlace`.** It was the last Photos surface drawing its own furniture: a hand-rolled header row, its own `paddingTop: insets.top` under the frame's `VaultBar`, its own band mount, and a second bar at the foot UNDER A LIVE BAND — audit B8, the case where a tap aimed at "Trash" lands on a band destination and navigates away. The room owns all four now. Selection is the room's `selection` prop (D5): the header swaps in place to "N photographs selected · Cancel", the band is handed `dimmed`/`interactive` off `bandStateFor` (leaf tokens, never a container opacity), and the verbs live in the room's ONE foot row. "Back up to the gateway" moved out of the old header into that row, where it belongs — it is a verb on the selection, not on the page. The lockup arrives as the room's `lockup`, inside the room's safe area, so the app no longer insets the status bar a second time.
+
+**Split under the ceiling, not around it.** 756 → 612 lines, by naming what came out rather than by moving lines: `apps/mobile/src/apps/photos/PhotosLibraryBody.tsx` (the library destination's state order — loading, empty library, emptied-by-filter, content — which decides nothing and is handed every state), `apps/mobile/src/apps/photos/photos-home-effects.ts` (`usePinnedThumbnailPack` with its signature gate, `useOnThisDayNotice`), `apps/mobile/src/apps/photos/photos-meta.ts` (the identity both Photos frames resolve; two `resolveAppMeta` calls is how a header and a springboard tile come to disagree). `photos-selection-copy.ts` is DELETED: `selectedSentence` writes that sentence now, and a copy table with one caller left is dead weight.
+
+**Two kit props, each named by the screen that needed them.** `RoomAction.testID` — a verb the room draws is still the verb a Maestro flow selects, and Photos carried three handles (`photos-select`, `photos-selection-album`, `photos-selection-trash`) into the room. `AppPlace.trailingRef` — Photos' view options is an ANCHORED MENU, not a sheet, because a sheet moves the grid underneath; the room lends the trailing verbs' node (`collapsable={false}`, or Android flattens it and it cannot be measured) and the screen measures it on the press. Neither renames anything.
+
+**One kit copy fix, found by adopting it.** `selectedSentence` took a plural noun, so a caller had to spell the plural itself and "1 photographs selected" was what a one-photograph selection said. It takes the SINGULAR noun now and pluralises like `confirmTitle` does; `PhotosScreen`'s `noun` and the two rooms tests came with it. That is a contract change, stated here, not a test loosened.
+
+**The testID contract, both ends.** `node scripts/lint-mobile-testids.mjs` was RED on this head with two `unapplied-id` findings, and they had different causes. `photos-search-field` is this lane's: the S4 pass in round 2 replaced Photos' hand-rolled query box with the kit's `SearchField` and left the handle behind, so `tests/agent-e2e-mobile/flows/photos-search.mjs` had been selecting nothing since — applied to the kit field. `locker-gate-field` is INHERITED and predates the umbrella (`git show af9ceac6d:…/LockerWall.tsx` has no such handle): #1002 made the Locker gate the device's own authentication, and the passphrase field it named no longer exists. It is retired rather than re-applied — applying a handle to a control no screen renders is the paper coverage this linter exists to catch — and no flow selects it. The gate is green.
+
+**R-B-10 stands, R-B-11 not touched.** `PeopleConfirm` on `SheetRoom` is unchanged from round 3; the `screen-root` predicate is Wave 4 and was left alone.
+
+**Slice 3 — the pushed routes' ambient line: left, and noted.** Both Tally and Locker pass `routeStatus`/`ROUTE_STATUS` as the room's `subtitle` on their PLACE branches (`TallyScreen.tsx:177`, `LockerScreen.tsx:212`). `PushedPage` has no `subtitle` and no status prop, so the pushed branches carry no ambient sentence — which `LockerScreen.tsx`'s header already states as deliberate ("a pushed surface carries no ambient subtitle"). Per the ruling, the room has no such prop to restore it onto, so nothing was added: inventing one would be a room prop with one caller and a fresh divergence between the two branches of the same header.
+
+Files changed or deleted, by full path:
+
+- `apps/mobile/src/kit/rooms/AppPlace.tsx`, `apps/mobile/src/kit/rooms/room-contracts.ts`, `apps/mobile/src/kit/rooms/SelectionBars.tsx`, `apps/mobile/src/kit/rooms/rooms.test.tsx`, `apps/mobile/src/kit/test-ids.ts`.
+- `apps/mobile/src/apps/photos/PhotosHome.tsx`, `apps/mobile/src/apps/photos/PhotosHome.styles.ts`, `apps/mobile/src/apps/photos/PhotosHome.test.tsx`, `apps/mobile/src/apps/photos/PhotosScreen.tsx`, `apps/mobile/src/apps/photos/PhotosSearch.tsx`, `apps/mobile/src/apps/photos/photos-copy-case.test.ts`.
+- New: `apps/mobile/src/apps/photos/PhotosLibraryBody.tsx`, `apps/mobile/src/apps/photos/photos-home-effects.ts`, `apps/mobile/src/apps/photos/photos-meta.ts`.
+- Deleted: `apps/mobile/src/apps/photos/photos-selection-copy.ts`.
+
+### Verification on this head
+
+`bun run --cwd packages/design build` first — the stale `dist` against the SHELL lane's `subBase` is still inherited and still not a code change.
+
+1. `cd apps/mobile && bunx vitest run src/apps/photos src/kit/rooms src/apps/locker` → **81 files, 834 passed, 0 failed**. `PhotosHome.test.tsx` gained the room-root assertion (the room's back key and the app's word, neither of which the screen draws any more).
+2. `bun run --cwd apps/mobile typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 163`, `back-literal 15`, `page-margin 106`, `identity-tint 0`, `copy-title-case 0`. Over this lane's four trees: `back-literal 0`, `page-margin 2`, `screen-root 74`. The two `page-margin` are the same ruled `paddingHorizontal: 3` chip inset in `PhotoTile.tsx` (R-B-6, sub-base, not a page gutter); `screen-root` is unchanged in kind from round 3 — app frames and leaf views the text matcher cannot tell from screens (R-B-11, Wave 4). It rose by one because this round adds one body view (`PhotosLibraryBody`), which is a leaf and must not be rooted in a room.
+4. `grep -rn "Alert.alert" apps/mobile/src/apps/{photos,people,locker,tally}` → **0 calls** (two matches, both prose in comments naming what was replaced).
+5. `node scripts/lint-mobile-design.mjs`, `node scripts/lint-container-opacity.mjs`, `node scripts/lint-aria-labels.mjs` → **0**.
+6. `node scripts/lint-mobile-testids.mjs` → **ok**, 123 selectors across 37 flow files resolve, 84 vocabulary entries applied.
+7. `bun run format` then `bun run check:push:static` → **4/4**.
+8. `node .governance/law/run.mjs` at each commit door → 6 rules, no findings.

@@ -35,11 +35,11 @@ import type {
   RoomAction,
   RoomSelectionAction,
 } from "../../kit/rooms";
-import { resolveAppMeta } from "../../lib/gateway";
 import type { PhotosShellNavigation } from "../../navigation";
 import VaultBar from "../../screens/home/VaultBar";
 import { resolveMoreRowRoute } from "./photos-band";
 import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
+import { PHOTOS_META } from "./photos-meta";
 import {
   isPhotosPlace,
   photosDestinationFor,
@@ -48,14 +48,6 @@ import {
 import type { PhotosRouteKey } from "./photos-places";
 import PhotosBand from "./PhotosBand";
 import PhotosMoreSheet from "./PhotosMoreSheet";
-
-const META = resolveAppMeta({
-  id: "photos",
-  name: "Photos",
-  description: "Every photograph this vault holds.",
-  iconKey: "Camera",
-  colorKey: "amber",
-});
 
 export interface PhotosSelectionProps {
   count: number;
@@ -148,7 +140,7 @@ export default function PhotosScreen({
         // Never the ONLY place the reason lives: the unavailable verb carries
         // it as its own hint too (§6).
         note: selectionBarReason(engineActions(selection)) ?? undefined,
-        noun: "photographs",
+        noun: "photograph",
         onCancel: selection.onCancel ?? ((): void => undefined),
       }
     : undefined;
@@ -184,7 +176,7 @@ export default function PhotosScreen({
     return (
       <AppPlace
         action={action}
-        app={{ color: META.color, iconKey: META.iconKey, title }}
+        app={{ color: PHOTOS_META.color, iconKey: PHOTOS_META.iconKey, title }}
         band={band}
         lockup={lockup}
         onBack={leave}

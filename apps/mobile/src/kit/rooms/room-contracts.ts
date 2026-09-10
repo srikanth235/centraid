@@ -17,10 +17,13 @@ export interface RoomAction {
   /** The disabled contract is the leaf's (`Button`); this only declares it. */
   disabled?: boolean;
   /**
-   * A handle from `kit/test-ids`, never a hand-spelled string. The verb a room
-   * draws is often the one an end-to-end flow taps — Notes' `notes-capture` is
-   * the app's whole write door — and a room that swallowed the handle would
-   * take those flows away from every screen that moved into it.
+   * A handle from `kit/test-ids`, never a hand-spelled string (#890 W2).
+   * The verb a room draws is often the one an end-to-end flow taps — Notes'
+   * `notes-capture` is the app's whole write door, and Photos' Select chip
+   * and its two selection verbs kept their handles across the migration — so
+   * a room that swallowed the handle would take those flows away from every
+   * screen that moved into it. `lint-mobile-testids` fails the PR that
+   * drops one.
    */
   testID?: string;
 }
@@ -70,7 +73,9 @@ export interface RoomSelection {
   onCancel: () => void;
   /** The one action row at the foot; at most one of them is destructive. */
   actions: readonly RoomSelectionAction[];
-  /** The noun for the spoken count, e.g. `photos` in "3 photos selected". */
+  /** The SINGULAR noun for the spoken count, pluralised with `s` like
+   *  `confirmTitle`'s — `photograph` gives "1 photograph selected" and
+   *  "3 photographs selected". */
   noun?: string;
   /**
    * One line above the row saying why some verb in it is unavailable — a
@@ -113,16 +118,15 @@ export function bandStateFor(selection?: RoomSelection): BandState {
 }
 
 /**
- * "3 photos selected", or "3 selected" when the caller names no noun. At zero
- * the sentence is an instruction rather than a count — "Choose photos" — because
+ * "3 photos selected", or "3 selected" when the caller names no noun. The
+ * noun agrees with the count, so one photo is "1 photo selected". At zero the
+ * sentence is an instruction rather than a count — "Choose photos" — because
  * "0 photos selected" states a fact nobody needed and asks for nothing.
  */
 export function selectedSentence(selection: RoomSelection): string {
-  if (selection.count === 0)
-    return selection.noun === undefined
-      ? "Choose what to act on"
-      : `Choose ${selection.noun}s`;
-  return selection.noun === undefined
-    ? `${selection.count} selected`
-    : `${selection.count} ${selection.noun} selected`;
+  const { count, noun } = selection;
+  if (count === 0)
+    return noun === undefined ? "Choose what to act on" : `Choose ${noun}s`;
+  if (noun === undefined) return `${count} selected`;
+  return `${count} ${count === 1 ? noun : `${noun}s`} selected`;
 }

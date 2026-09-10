@@ -35,6 +35,7 @@ import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
@@ -452,6 +453,9 @@ export function PhotosSearchView({
         clearLabel="Clear the query"
         onChangeText={onTerm}
         placeholder={PHOTOS_SEARCH_PLACEHOLDER}
+        // The handle `photos-search.mjs` types into (#890 W2). It survived the
+        // hand-rolled field it was born on; the kit's field takes it now.
+        testID={TEST_IDS.photos.searchField}
         value={term}
       />
     </KeyboardAvoidingView>

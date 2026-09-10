@@ -162,9 +162,11 @@ export const TEST_IDS = Object.freeze({
 
   locker: Object.freeze({
     band: "locker-band",
-    /** The unlock/first-run gate. */
+    /** The unlock/first-run gate. There is no field on it: since #1002 the
+     *  gate is the device's own authentication, so `locker-gate-field` was
+     *  retired rather than re-applied — a handle no screen renders is a
+     *  selector that can only ever match nothing. */
     gate: "locker-gate",
-    gateField: "locker-gate-field",
     gateSubmit: "locker-gate-submit",
   }),
 
