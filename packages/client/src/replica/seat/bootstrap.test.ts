@@ -13,6 +13,7 @@ import type { SeatSnapshotTransport } from "./bootstrap.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
 import { SeatBootstrapNoRoomError } from "./seat-bootstrap-no-room-error.js";
+import { SeatDriftError } from "./seat-drift-error.js";
 import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import { readSeatState, seatStatePresent } from "./state.js";
 
@@ -36,6 +37,26 @@ function artifact(root: string): { bytes: Uint8Array; etag: string } {
   `);
   db.close();
   return { bytes: gzipSync(readFileSync(source)), etag: '"e1-42"' };
+}
+
+/**
+ * The same artifact with the vault's own identity row in it — which every real
+ * snapshot has, because `core_vault` replicates (#1014, C16).
+ */
+function identifiedArtifact(
+  root: string,
+  vaultId: string
+): { bytes: Uint8Array; etag: string } {
+  const source = path.join(root, `source-${vaultId}.db`);
+  const db = new DatabaseSync(source);
+  db.exec(`
+    CREATE TABLE core_vault (vault_id TEXT PRIMARY KEY, display_name TEXT) STRICT;
+    INSERT INTO core_vault VALUES ('${vaultId}', '${vaultId}');
+    CREATE TABLE note (note_id TEXT PRIMARY KEY, title TEXT NOT NULL) STRICT;
+    INSERT INTO note VALUES ('n1', '${vaultId} row');
+  `);
+  db.close();
+  return { bytes: gzipSync(readFileSync(source)), etag: `"${vaultId}-1"` };
 }
 
 interface StubOptions {
@@ -301,5 +322,93 @@ describe("seat file bootstrap", () => {
       appliedSeq: 42,
     });
     for (const driver of drivers) driver.close();
+  });
+  // #1014, C16. R25: the gateway served vault A's snapshot into vault B's seat
+  // file, and every later check agreed with it, because the seat wrote its own
+  // vault id onto whatever arrived.
+  describe("a mis-addressed artifact", () => {
+    it("is refused by name at the door, before a byte moves", async () => {
+      const root = workspace();
+      const { bytes, etag } = identifiedArtifact(root, "vault-2");
+      const transport = stubTransport(bytes, etag);
+      const refused = await bootstrapSeatFile({
+        transport: {
+          head: () =>
+            transport
+              .head()
+              .then((head) => ({ ...head, vaultId: "vault-2" as string })),
+          range: transport.range,
+        },
+        staging: staging(root),
+        vaultId: "vault-1",
+        open: () => new NodeSeatDriver(path.join(root, "seat.db")),
+      }).catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(SeatDriftError);
+      expect((refused as SeatDriftError).reason).toBe("wrong-vault");
+      expect((refused as SeatDriftError).message).toContain(
+        "artifact is for vault vault-2, this seat is vault-1"
+      );
+      // Not a byte was asked for: the head is read first, and the refusal is
+      // what makes R25's ~6 s re-download loop stop costing the download.
+      expect(transport.requestedStarts).toStrictEqual([]);
+    });
+
+    it("is refused on the file's own row against a door that will not say, and leaves the seat where it was", async () => {
+      const root = workspace();
+      const mine = identifiedArtifact(root, "vault-1");
+      const drivers: NodeSeatDriver[] = [];
+      await bootstrapSeatFile({
+        transport: stubTransport(mine.bytes, mine.etag),
+        staging: staging(root),
+        vaultId: "vault-1",
+        open: opener(root, drivers),
+      });
+      drivers.at(-1)!.close();
+      const theirs = identifiedArtifact(root, "vault-2");
+      // No `vaultId` on the head: a gateway older than #1014, which the
+      // shipped app still has to bootstrap against.
+      const refused = await bootstrapSeatFile({
+        transport: stubTransport(theirs.bytes, theirs.etag),
+        staging: staging(root),
+        vaultId: "vault-1",
+        open: opener(root, drivers),
+      }).catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(SeatDriftError);
+      expect((refused as SeatDriftError).reason).toBe("wrong-vault");
+      expect((refused as SeatDriftError).message).toContain(
+        "file is for vault vault-2, this seat is vault-1"
+      );
+      // THE DESTINATION IS UNTOUCHED. This is the whole property: the seat
+      // that was there is still there, with its own rows and its own
+      // `seat_state` — not a well-formed file holding another vault.
+      const after = new NodeSeatDriver(path.join(root, "seat.db"));
+      drivers.push(after);
+      expect(after.all(`SELECT vault_id FROM core_vault`)).toStrictEqual([
+        { vault_id: "vault-1" },
+      ]);
+      expect(readSeatState(after)).toMatchObject({ vaultId: "vault-1" });
+      for (const driver of drivers) driver.close();
+    });
+
+    it("says which checks ran", async () => {
+      const root = workspace();
+      const { bytes, etag } = identifiedArtifact(root, "vault-1");
+      const transport = stubTransport(bytes, etag);
+      const drivers: NodeSeatDriver[] = [];
+      const result = await bootstrapSeatFile({
+        transport: {
+          head: () =>
+            transport
+              .head()
+              .then((head) => ({ ...head, vaultId: "vault-1" as string })),
+          range: transport.range,
+        },
+        staging: staging(root),
+        vaultId: "vault-1",
+        open: opener(root, drivers),
+      });
+      expect(result.vaultChecked).toBe("both");
+      for (const driver of drivers) driver.close();
+    });
   });
 });

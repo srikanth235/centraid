@@ -137,6 +137,17 @@ export class NativeSeat implements NativeSeatPort {
       // browser's choice on a shared machine (R9), and a phone that is
       // remote-only is a phone with no reason to have a seat.
       remember: true,
+      // WIRE-COMPATIBILITY, SAID OUT LOUD (#1014, C16). A gateway older than
+      // #1014 sends no vault header, and this app still bootstraps against
+      // one — refusing would brick a compatible pair. What it must not do is
+      // pretend the check happened.
+      onBootstrapped: (result) => {
+        if (result.vaultChecked !== "none") return;
+        console.warn(
+          `[centraid] replica: seat bootstrap for ${options.vaultId} named no vault — ` +
+            `the gateway sent no vault header and the artifact carries no core_vault row`
+        );
+      },
       baseUrl: options.baseUrl,
       ...(options.headers ? { headers: options.headers } : {}),
       ...(options.fetch ? { fetch: options.fetch } : {}),

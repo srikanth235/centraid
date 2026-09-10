@@ -31,6 +31,7 @@ import type { SeatLogPageWire } from "@centraid/core/protocol";
 
 import { OnlineOnlyError } from "../errors.js";
 import type { IntentRecordStore } from "../intent-record-store.js";
+import type { SeatBootstrapResult } from "./bootstrap.js";
 import type { SeatChannel } from "./seat-channel.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import { SeatRebootstrapRequiredError } from "./seat-rebootstrap-required-error.js";
@@ -55,6 +56,16 @@ export interface SeatLoopOptions {
   readonly fetch?: typeof globalThis.fetch;
   /** Metered: skip a commit that crossed the byte threshold (R7). */
   readonly deferOverThreshold?: boolean;
+  /**
+   * Every bootstrap this loop completes, handed to whoever can say it out
+   * loud (#1014, C16).
+   *
+   * `vaultChecked` on the result is the reason this exists: a bootstrap that
+   * verified neither the door's vault header nor the file's own identity row
+   * is a bootstrap nothing checked, and the only honest place for that
+   * sentence is the host's log — `packages/client` writes to no console.
+   */
+  readonly onBootstrapped?: (result: SeatBootstrapResult) => void;
 }
 
 export class SeatLoop {
@@ -190,11 +201,12 @@ export class SeatLoop {
   }
 
   private async bootstrap(): Promise<void> {
-    await this.channel.bootstrap({
+    const result = await this.channel.bootstrap({
       vaultId: this.options.vaultId,
       snapshotUrl: this.url(ROUTES.vaultSeatSnapshot),
       ...(this.options.headers ? { headers: this.options.headers } : {}),
     });
+    this.options.onBootstrapped?.(result);
     this.#state = await this.channel.state();
   }
 

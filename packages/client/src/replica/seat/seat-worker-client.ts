@@ -18,6 +18,7 @@ import type {
   SeatBootstrapResult,
 } from "./bootstrap.js";
 import { SeatDriftError } from "./seat-drift-error.js";
+import type { SeatDriftReason } from "./seat-drift-error.js";
 import { SeatWorkerOutbox } from "./seat-worker-outbox.js";
 import type { SeatState } from "./state.js";
 import type {
@@ -205,8 +206,7 @@ export class SeatWorkerClient {
 export function reviveSeatError(error: SerializedSeatError): Error {
   if (error.code === "seat_drift") {
     return new SeatDriftError(
-      (error.reason as "epoch" | "schema-epoch" | "vault" | undefined) ??
-        "schema-epoch",
+      (error.reason as SeatDriftReason | undefined) ?? "schema-epoch",
       error.message
     );
   }
