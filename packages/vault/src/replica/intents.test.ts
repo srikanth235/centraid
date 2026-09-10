@@ -89,11 +89,10 @@ describe("intents", () => {
       }))
     ).toStrictEqual([
       { entity: "replica.intent", rowId: "intent-1", op: "insert" },
-      // TWO entries for the one status change: the write itself, then the
-      // touch trigger's own UPDATE bumping `row_version` (#996, R6). A reader
-      // takes the LAST entry's row state, which is why the projector coalesces
-      // by (entity, row) rather than counting entries.
-      { entity: "replica.intent", rowId: "intent-1", op: "update" },
+      // ONE entry per (row, commit) (#1014, R-1014-1). The status write and
+      // the touch trigger's own UPDATE bumping `row_version` (#996, R6) are
+      // one transaction, so the log states the transition once instead of
+      // twice — the trigger log fired per statement and reported both.
       { entity: "replica.intent", rowId: "intent-1", op: "update" },
     ]);
   });
@@ -242,19 +241,16 @@ describe("intents", () => {
     expect(
       listReplicaIntentOutcomes(db.vault, identity.deviceId)
     ).toStrictEqual([]);
+    // Sorted: both deletes are one commit, and inside a commit the log's order
+    // is the session's (by key), not the statement order — which is exactly
+    // why a subscriber applies a commit whole rather than row by row.
     expect(
-      readReplicaChanges(db.vault, { since: beforeDelete }).changes
+      readReplicaChanges(db.vault, { since: beforeDelete })
+        .changes.map(({ entity, rowId, op }) => ({ entity, rowId, op }))
+        .sort((a, b) => (a.rowId < b.rowId ? -1 : 1))
     ).toStrictEqual([
-      expect.objectContaining({
-        entity: "replica.intent",
-        rowId: "intent-1",
-        op: "delete",
-      }),
-      expect.objectContaining({
-        entity: "replica.intent",
-        rowId: "intent-2",
-        op: "delete",
-      }),
+      { entity: "replica.intent", rowId: "intent-1", op: "delete" },
+      { entity: "replica.intent", rowId: "intent-2", op: "delete" },
     ]);
   });
 

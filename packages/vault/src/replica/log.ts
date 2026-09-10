@@ -37,6 +37,7 @@ import { gzipSync } from "node:zlib";
 import { encodeWireValue } from "@centraid/core/protocol";
 import type { SeatLogRowWire, WireValue } from "@centraid/core/protocol";
 
+import { prepared } from "../grant/prepared.js";
 import {
   isPrivateTable,
   isReplicatedTable,
@@ -196,9 +197,10 @@ function quoted(name: string): string {
  * key and a table that quietly stops replicating.
  */
 export function primaryKeyOf(vault: DatabaseSync, table: string): string[] {
-  const columns = vault
-    .prepare(`PRAGMA table_info(${quoted(table)})`)
-    .all() as { name: string; pk: number }[];
+  const columns = prepared(
+    vault,
+    `PRAGMA table_info(${quoted(table)})`
+  ).all() as { name: string; pk: number }[];
   const key = columns
     .filter((column) => column.pk > 0)
     .sort((left, right) => left.pk - right.pk)
@@ -222,7 +224,11 @@ export function primaryKeyOf(vault: DatabaseSync, table: string): string[] {
  */
 export function openReplicaCapture(
   vault: DatabaseSync,
-  producer = "gateway"
+  producer = "gateway",
+  // The row-read statements survive the close/reopen at the tail of a capture
+  // (#1014, R-1014-1): a fresh statement per table per COMMIT is most of the
+  // decode's cost, and the log is now the only change path there is.
+  reads = new Map<string, StatementSync>()
 ): void {
   const existing = CAPTURES.get(vault);
   if (existing) {
@@ -236,7 +242,7 @@ export function openReplicaCapture(
       session: vault.createSession({ table }) as OpenSession["session"],
     });
   }
-  CAPTURES.set(vault, { sessions, producer, reads: new Map() });
+  CAPTURES.set(vault, { sessions, producer, reads });
 }
 
 /**
@@ -463,7 +469,9 @@ const COLUMN_NAMES = new WeakMap<
 
 function schemaVersionOf(vault: DatabaseSync): number {
   return (
-    vault.prepare("PRAGMA schema_version").get() as { schema_version: number }
+    prepared(vault, "PRAGMA schema_version").get() as {
+      schema_version: number;
+    }
   ).schema_version;
 }
 
@@ -481,7 +489,7 @@ function tableColumnNames(
   let names = cached.names.get(table);
   if (!names) {
     names = (
-      vault.prepare(`PRAGMA table_info(${quoted(table)})`).all() as {
+      prepared(vault, `PRAGMA table_info(${quoted(table)})`).all() as {
         name: string;
       }[]
     ).map((column) => column.name);
@@ -500,12 +508,11 @@ interface MetaRow {
 }
 
 function meta(vault: DatabaseSync): MetaRow {
-  const row = vault
-    .prepare(
-      `SELECT epoch, floor_seq, schema_epoch, commit_seq, epoch_reason, epoch_started_at
+  const row = prepared(
+    vault,
+    `SELECT epoch, floor_seq, schema_epoch, commit_seq, epoch_reason, epoch_started_at
          FROM replica_meta WHERE singleton = 1`
-    )
-    .get() as MetaRow | undefined;
+  ).get() as MetaRow | undefined;
   if (!row) throw new Error("replica metadata is missing");
   return row;
 }
@@ -542,15 +549,14 @@ export function captureReplicaCommit(
   // Sessions are one-shot per commit: closing and reopening is how the next
   // transaction starts from empty rather than replaying this one.
   closeReplicaCapture(vault);
-  openReplicaCapture(vault, producer);
+  openReplicaCapture(vault, producer, state.reads);
   if (decoded.length === 0) return undefined;
   const current = meta(vault);
   const commitSeq = current.commit_seq + 1;
-  vault
-    .prepare(
-      `UPDATE replica_meta SET commit_seq = ?, updated_at = ? WHERE singleton = 1`
-    )
-    .run(commitSeq, new Date().toISOString());
+  prepared(
+    vault,
+    `UPDATE replica_meta SET commit_seq = ?, updated_at = ? WHERE singleton = 1`
+  ).run(commitSeq, new Date().toISOString());
   const committedAt = options.committedAt ?? new Date().toISOString();
   const images = decoded.map((row) =>
     row.row === null ? null : JSON.stringify(row.row)
@@ -577,7 +583,8 @@ export function captureReplicaCommit(
       ? gzipSync(Buffer.from(images.join("\n"), "utf8"), { level: 6 }).length
       : 0;
   const deferred = compressedBytes > REPLICA_DEFER_THRESHOLD_BYTES;
-  const insert = vault.prepare(
+  const insert = prepared(
+    vault,
     `INSERT INTO replica_log
        (commit_seq, epoch, schema_epoch, ddl_version, "table", op,
         pk_json, row_json, prior_json, indirect, producer, deferred, local,

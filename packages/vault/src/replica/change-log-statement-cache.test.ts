@@ -3,7 +3,6 @@ import { afterEach, describe, expect, test } from "vitest";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import {
-  appendReplicaChange,
   beginReplicaCommit,
   currentReplicaLogState,
   endReplicaCommit,
@@ -49,14 +48,18 @@ describe("change-log statement cache", () => {
     const vault = db.vault;
     initializeReplicaProtocol(vault);
 
+    // The fixture's OWN statement is compiled once, up front: what this test
+    // counts is the log's compilations, not the seeder's.
+    const seed = vault.prepare(
+      `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+       VALUES (?, ?, ?, '1')`
+    );
     const pass = (title: string): void => {
+      vault.exec("BEGIN");
       const handle = beginReplicaCommit(vault);
-      appendReplicaChange(vault, {
-        entity: "core.concept_scheme",
-        rowId: title,
-        op: "insert",
-      });
+      seed.run(title, `urn:${title}`, title);
       endReplicaCommit(vault, handle);
+      vault.exec("COMMIT");
       currentReplicaLogState(vault);
       readReplicaChanges(vault, { limit: 10 });
     };

@@ -1,3 +1,15 @@
+// THE FEED'S VIEW OF THE ONE LOG (#1014, R-1014-1).
+//
+// These assertions used to be about `replica_change`, a second table filled by
+// generated AFTER triggers. The mechanism is gone; the PROPERTIES are the same
+// ones the feed's subscribers depend on, so they are stated here against
+// `replica_log` instead of deleted with the table.
+//
+// EVERY WRITE IS BRACKETED. The log is decoded from the session the commit
+// bracket opens, so a fixture that writes outside one is not testing the
+// mechanism — it is testing what the next commit happens to sweep up. The
+// trigger log fired per statement and made that indistinguishable.
+
 import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -5,20 +17,15 @@ import type { VaultDb } from "../db.js";
 import { applyExtBand } from "../gateway/ext.js";
 import type { ExtTableSpec } from "../schema/ext.js";
 import { REPLICA_SCHEMA_EPOCH } from "../schema/replica.js";
-import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import {
-  appendReplicaChange,
-  beginReplicaCommit,
   bumpReplicaEpoch,
   currentReplicaLogState,
-  endReplicaCommit,
   initializeReplicaProtocol,
-  pruneReplicaChanges,
   readReplicaChanges,
   ReplicaRebootstrapRequiredError,
 } from "./change-log.js";
 import { formatReplicaCursor, parseReplicaCursor } from "./cursor.js";
-import { insertScheme } from "./replica-log.test-fixtures.js";
+import { capturedCommit, insertScheme } from "./replica-log.test-fixtures.js";
 
 let db: VaultDb | undefined;
 describe("change-log", () => {
@@ -32,50 +39,50 @@ describe("change-log", () => {
     return db;
   }
 
+  /** One captured commit, so each write is its own position in the log. */
+  function commit(write: (vault: VaultDb["vault"]) => void): void {
+    capturedCommit(db!, "test", write);
+  }
+
   test("canonical inserts, updates and deletes append ordered durable operations", () => {
     const { vault } = open();
-    insertScheme(vault, "scheme-1", "Before");
-    vault
-      .prepare(`UPDATE core_concept_scheme SET title = ? WHERE scheme_id = ?`)
-      .run("After", "scheme-1");
-    vault
-      .prepare(`DELETE FROM core_concept_scheme WHERE scheme_id = ?`)
-      .run("scheme-1");
+    commit(() => insertScheme(vault, "scheme-1", "Before"));
+    commit(() =>
+      vault
+        .prepare(`UPDATE core_concept_scheme SET title = ? WHERE scheme_id = ?`)
+        .run("After", "scheme-1")
+    );
+    commit(() =>
+      vault
+        .prepare(`DELETE FROM core_concept_scheme WHERE scheme_id = ?`)
+        .run("scheme-1")
+    );
 
     const page = readReplicaChanges(vault);
+    // By (entity, row, op) and by ORDER, not by literal seq: one commit's
+    // membership trigger writes rows of its own, and what a subscriber
+    // depends on is the sequence of operations, not the arithmetic between
+    // their positions.
+    const scheme = page.changes.filter(
+      (change) => change.entity === "core.concept_scheme"
+    );
     expect(
-      page.changes.map(({ seq, entity, rowId, op }) => ({
-        seq,
-        entity,
-        rowId,
-        op,
-      }))
+      scheme.map(({ entity, rowId, op }) => ({ entity, rowId, op }))
     ).toStrictEqual([
-      {
-        seq: 1,
-        entity: "core.concept_scheme",
-        rowId: "scheme-1",
-        op: "insert",
-      },
-      {
-        seq: 2,
-        entity: "core.concept_scheme",
-        rowId: "scheme-1",
-        op: "update",
-      },
-      {
-        seq: 3,
-        entity: "core.concept_scheme",
-        rowId: "scheme-1",
-        op: "delete",
-      },
+      { entity: "core.concept_scheme", rowId: "scheme-1", op: "insert" },
+      { entity: "core.concept_scheme", rowId: "scheme-1", op: "update" },
+      { entity: "core.concept_scheme", rowId: "scheme-1", op: "delete" },
     ]);
-    expect(page.changes[0]?.oldValuesJson).toBeNull();
-    expect(JSON.parse(page.changes[1]!.oldValuesJson!)).toMatchObject({
+    const positions = scheme.map((change) => change.seq);
+    expect(positions).toStrictEqual([...positions].sort((a, b) => a - b));
+    // An insert has no prior state; an update's is `row_json` overlaid with
+    // the old values of the columns it changed; a delete's IS `row_json`.
+    expect(scheme[0]?.oldValuesJson).toBeNull();
+    expect(JSON.parse(scheme[1]!.oldValuesJson!)).toMatchObject({
       scheme_id: "scheme-1",
       title: "Before",
     });
-    expect(JSON.parse(page.changes[2]!.oldValuesJson!)).toMatchObject({
+    expect(JSON.parse(scheme[2]!.oldValuesJson!)).toMatchObject({
       scheme_id: "scheme-1",
       title: "After",
     });
@@ -83,22 +90,56 @@ describe("change-log", () => {
     expect(page.hasMore).toBe(false);
   });
 
+  /*
+   * THE PRIOR IMAGE IS A DELTA PLUS THE IMAGE (#1014, R-1014-13).
+   *
+   * A session changeset carries the old value of the columns a statement
+   * TOUCHED and nothing else, so `prior_json` alone is not a row. Overlaying
+   * it on `row_json` is what makes it one, and the columns it does not mention
+   * have to come through unchanged — which is the whole reason the delta is
+   * sound in the first place.
+   */
+  test("an update's prior image carries the untouched columns too", () => {
+    const { vault } = open();
+    commit(() => insertScheme(vault, "scheme-1", "Before"));
+    const since = currentReplicaLogState(vault).watermark;
+    commit(() =>
+      vault
+        .prepare(
+          `UPDATE core_concept_scheme SET title = 'After' WHERE scheme_id = 'scheme-1'`
+        )
+        .run()
+    );
+    const change = readReplicaChanges(vault, { since }).changes.find(
+      (entry) => entry.entity === "core.concept_scheme"
+    );
+    const prior = JSON.parse(change!.oldValuesJson!) as Record<string, unknown>;
+    expect(prior["title"]).toBe("Before");
+    // Never written by this statement, and still the row's state before it.
+    expect(prior["uri"]).toBe("urn:scheme-1");
+    expect(prior["version"]).toBe("1");
+  });
+
   test("OLD snapshots structurally exclude sealed values", () => {
     const { vault } = open();
     const now = new Date().toISOString();
-    vault
-      .prepare(
-        `INSERT INTO locker_item
+    commit(() =>
+      vault
+        .prepare(
+          `INSERT INTO locker_item
          (item_id, type, title, username, password, compromised, created_at, updated_at)
        VALUES ('secret-item', 'login', 'Before', 'alex', 'never-log-me', 0, ?, ?)`
-      )
-      .run(now, now);
+        )
+        .run(now, now)
+    );
     const since = currentReplicaLogState(vault).watermark;
-    vault
-      .prepare(
-        `UPDATE locker_item SET title = 'After' WHERE item_id = 'secret-item'`
-      )
-      .run();
+    commit(() =>
+      vault
+        .prepare(
+          `UPDATE locker_item SET title = 'After' WHERE item_id = 'secret-item'`
+        )
+        .run()
+    );
     const [change] = readReplicaChanges(vault, { since }).changes;
     expect(change?.oldValuesJson).not.toContain("never-log-me");
     expect(JSON.parse(change!.oldValuesJson!)).toMatchObject({
@@ -111,62 +152,67 @@ describe("change-log", () => {
   test("OLD snapshots structurally exclude every protocol credential", () => {
     const { vault } = open();
     const now = new Date().toISOString();
-    vault
-      .prepare(
-        `INSERT INTO core_party
+    commit(() => {
+      vault
+        .prepare(
+          `INSERT INTO core_party
          (party_id, kind, display_name, created_at, updated_at)
        VALUES ('credential-party', 'agent', 'Credential agent', ?, ?)`
-      )
-      .run(now, now);
-    vault
-      .prepare(
-        `INSERT INTO access_app
+        )
+        .run(now, now);
+      vault
+        .prepare(
+          `INSERT INTO access_app
          (app_id, name, display_name, signing_key, status, origin, risk_ceiling, installed_at)
        VALUES ('credential-app', 'credential-app', 'Before app', 'signing-never-log',
                'active', 'installed', 'low', ?)`
-      )
-      .run(now);
-    vault
-      .prepare(
-        `INSERT INTO access_agent
+        )
+        .run(now);
+      vault
+        .prepare(
+          `INSERT INTO access_agent
          (agent_id, party_id, model_ref, version, enrolled_at, status)
        VALUES ('credential-agent', 'credential-party',
                'tier:fast', '1', ?, 'active')`
-      )
-      .run(now);
-    // Key material is a TABLE away since #996 R3, not a column exclusion.
-    vault.exec(`INSERT INTO access_agent_secret (agent_id, enrollment_key)
+        )
+        .run(now);
+      // Key material is a TABLE away since #996 R3, not a column exclusion.
+      vault.exec(`INSERT INTO access_agent_secret (agent_id, enrollment_key)
        VALUES ('credential-agent', 'host-never-log')`);
-    vault
-      .prepare(
-        `INSERT INTO access_device
+      vault
+        .prepare(
+          `INSERT INTO access_device
          (device_id, owner_party_id, name, enrolled_at)
        VALUES ('credential-device', 'credential-party', 'Before device', ?)`
-      )
-      .run(now);
-    vault.exec(`INSERT INTO access_device_secret (device_id, public_key)
+        )
+        .run(now);
+      vault.exec(`INSERT INTO access_device_secret (device_id, public_key)
        VALUES ('credential-device', 'public-never-log')`);
+    });
     const since = currentReplicaLogState(vault).watermark;
 
-    vault
-      .prepare(
-        `UPDATE access_app SET display_name = 'After app' WHERE app_id = 'credential-app'`
-      )
-      .run();
-    vault
-      .prepare(
-        `UPDATE access_agent SET model_ref = 'tier:smart' WHERE agent_id = 'credential-agent'`
-      )
-      .run();
-    vault
-      .prepare(
-        `UPDATE access_device SET name = 'After device' WHERE device_id = 'credential-device'`
-      )
-      .run();
+    commit(() => {
+      vault
+        .prepare(
+          `UPDATE access_app SET display_name = 'After app' WHERE app_id = 'credential-app'`
+        )
+        .run();
+      vault
+        .prepare(
+          `UPDATE access_agent SET model_ref = 'tier:smart' WHERE agent_id = 'credential-agent'`
+        )
+        .run();
+      vault
+        .prepare(
+          `UPDATE access_device SET name = 'After device' WHERE device_id = 'credential-device'`
+        )
+        .run();
+    });
 
     const changes = readReplicaChanges(vault, { since }).changes;
-    // The touch trigger's own UPDATE is a second entry for the same row
-    // (#996, R6): the FIRST entry per entity carries the pre-write state.
+    // ONE entry per row per commit (#1014, R-1014-1): the write and the touch
+    // trigger's own UPDATE bumping `row_version` (#996, R6) are one
+    // transaction, so there is exactly one prior image per row to read.
     const old = new Map<string, object>();
     for (const change of changes) {
       if (old.has(change.entity)) continue;
@@ -190,12 +236,15 @@ describe("change-log", () => {
 
   test("rolled-back base writes leave no log entry and committed sequence stays monotonic", () => {
     const { vault } = open();
-    vault.exec("BEGIN");
-    insertScheme(vault, "rolled-back");
-    vault.exec("ROLLBACK");
+    expect(() =>
+      capturedCommit(db!, "test", () => {
+        insertScheme(vault, "rolled-back");
+        throw new Error("abandon");
+      })
+    ).toThrow(/abandon/u);
     expect(readReplicaChanges(vault).changes).toStrictEqual([]);
 
-    insertScheme(vault, "committed");
+    commit(() => insertScheme(vault, "committed"));
     const page = readReplicaChanges(vault);
     expect(page.changes).toHaveLength(1);
     expect(page.changes[0]).toMatchObject({
@@ -206,22 +255,33 @@ describe("change-log", () => {
     });
   });
 
-  test("every registered canonical table receives the three transaction-level triggers", () => {
+  /*
+   * NO TRIGGER PLANE SURVIVES (#1014, R-1014-1).
+   *
+   * The suite this replaces asserted the OPPOSITE — that every registered
+   * canonical table carried three `trg_replica_*` triggers. They are what the
+   * ruling retires, `dropReplicaChangeTriggers` removes them from a file that
+   * still has them, and nothing installs them again; a re-appearing trigger
+   * means a second log has come back.
+   */
+  test("no replica_change trigger survives, and neither does the table", () => {
     const { vault } = open();
-    for (const entity of listVaultEntities(vault)) {
-      const ref = resolveEntity(entity, vault);
-      expect(ref, entity).toBeDefined();
-      for (const suffix of ["ai", "au", "ad"]) {
-        const trigger = vault
-          .prepare(
-            `SELECT 1 AS present FROM sqlite_master WHERE type = 'trigger' AND name = ?`
-          )
-          .get(`trg_replica_${ref?.physical}_${suffix}`) as
-          | { present: number }
-          | undefined;
-        expect(trigger?.present, `${entity} ${suffix}`).toBe(1);
-      }
-    }
+    expect(
+      vault
+        .prepare(
+          `SELECT name FROM sqlite_master
+            WHERE type = 'trigger' AND name LIKE 'trg\\_replica\\_%' ESCAPE '\\'`
+        )
+        .all()
+    ).toStrictEqual([]);
+    expect(
+      vault
+        .prepare(
+          `SELECT 1 AS present FROM sqlite_master
+            WHERE type = 'table' AND name = 'replica_change'`
+        )
+        .get()
+    ).toBeUndefined();
   });
 
   test("live ext rows join the log while draft rows remain scratch-only", () => {
@@ -235,11 +295,13 @@ describe("change-log", () => {
     const opened = open();
     applyExtBand(opened, "gym-log", [extSpec], "live");
     const afterDdl = currentReplicaLogState(opened.vault).watermark;
-    opened.vault
-      .prepare(
-        `INSERT INTO ext_gym_log_workout (workout_id, notes) VALUES ('w1', 'run')`
-      )
-      .run();
+    commit(() =>
+      opened.vault
+        .prepare(
+          `INSERT INTO ext_gym_log_workout (workout_id, notes) VALUES ('w1', 'run')`
+        )
+        .run()
+    );
     const live = readReplicaChanges(opened.vault, { since: afterDdl });
     expect(live.changes).toStrictEqual([
       expect.objectContaining({
@@ -251,41 +313,56 @@ describe("change-log", () => {
 
     applyExtBand(opened, "gym-log", [extSpec], "draft");
     const beforeDraftRow = currentReplicaLogState(opened.vault).watermark;
-    opened.vault
-      .prepare(
-        `INSERT INTO extdraft_gym_log_workout (workout_id, notes) VALUES ('d1', 'scratch')`
-      )
-      .run();
+    commit(() =>
+      opened.vault
+        .prepare(
+          `INSERT INTO extdraft_gym_log_workout (workout_id, notes) VALUES ('d1', 'scratch')`
+        )
+        .run()
+    );
     expect(
-      readReplicaChanges(opened.vault, { since: beforeDraftRow }).changes
+      readReplicaChanges(opened.vault, {
+        since: beforeDraftRow,
+      }).changes.filter((change) => change.entity.startsWith("ext."))
     ).toStrictEqual([]);
   });
 
   test("cursor pages resume exactly and malformed cursors are refused", () => {
     const { vault } = open();
-    insertScheme(vault, "a");
-    insertScheme(vault, "b");
-    insertScheme(vault, "c");
-    const first = readReplicaChanges(vault, { limit: 2 });
-    expect(first.changes.map((entry) => entry.rowId)).toStrictEqual(["a", "b"]);
-    expect(first.hasMore).toBe(true);
-    const wire = formatReplicaCursor(first.next);
-    expect(parseReplicaCursor(wire)).toStrictEqual(first.next);
-    const second = readReplicaChanges(vault, { since: wire, limit: 2 });
-    expect(second.changes.map((entry) => entry.rowId)).toStrictEqual(["c"]);
-    expect(second.hasMore).toBe(false);
-    expect(second.next).toStrictEqual(first.watermark);
+    commit(() => insertScheme(vault, "a"));
+    commit(() => insertScheme(vault, "b"));
+    commit(() => insertScheme(vault, "c"));
+    // Walk the pages the way a subscriber does — the cursor it sends back is
+    // the one the page gave it — and assert the WHOLE span arrives exactly
+    // once, in order, with the last page landing on the watermark.
+    const seen: string[] = [];
+    let cursor = formatReplicaCursor({
+      epoch: currentReplicaLogState(vault).epoch,
+      seq: 0,
+    });
+    let page = readReplicaChanges(vault, { since: cursor, limit: 1 });
+    let guard = 0;
+    for (;;) {
+      for (const change of page.changes) {
+        if (change.entity === "core.concept_scheme") seen.push(change.rowId);
+      }
+      if (!page.hasMore) break;
+      expect((guard += 1)).toBeLessThan(50);
+      cursor = formatReplicaCursor(page.next);
+      expect(parseReplicaCursor(cursor)).toStrictEqual(page.next);
+      page = readReplicaChanges(vault, { since: cursor, limit: 1 });
+    }
+    expect(seen).toStrictEqual(["a", "b", "c"]);
+    expect(page.next).toStrictEqual(page.watermark);
     expect(() => parseReplicaCursor("not-a-cursor")).toThrow(/form/u);
   });
 
   test("never splits one gateway commit across change pages", () => {
     const { vault } = open();
-    vault.exec("BEGIN IMMEDIATE");
-    const commit = beginReplicaCommit(vault);
-    insertScheme(vault, "commit-a");
-    insertScheme(vault, "commit-b");
-    endReplicaCommit(vault, commit);
-    vault.exec("COMMIT");
+    commit(() => {
+      insertScheme(vault, "commit-a");
+      insertScheme(vault, "commit-b");
+    });
 
     const first = readReplicaChanges(vault, { limit: 1 });
     expect(first.changes).toHaveLength(2);
@@ -296,250 +373,37 @@ describe("change-log", () => {
     expect(first.next).toStrictEqual(first.watermark);
   });
 
-  test("retention applies age then count while advancing through a deleted prefix", () => {
+  /*
+   * A PAGE OF ROWS THE FEED DOES NOT PROJECT STILL ADVANCES (#1014,
+   * R-1014-1).
+   *
+   * The one log carries rows the feed has no entity for — the audit band,
+   * which resolves but is deliberately not enumerated (#916), and the
+   * gateway-private doorbell lane. If the cursor stalled on them the
+   * subscriber would re-read the same span forever.
+   */
+  test("rows with no projected entity advance the cursor rather than stalling it", () => {
     const { vault } = open();
-    const epoch = currentReplicaLogState(vault).epoch;
-    appendReplicaChange(vault, {
-      entity: "core.party",
-      rowId: "expired",
-      op: "insert",
-      changedAt: "2026-05-01T00:00:00.000Z",
-    });
-    const cursorBeforeRetention = { epoch, seq: 1 };
-    for (const [rowId, op] of [
-      ["repeat", "insert"],
-      ["repeat", "update"],
-      ["kept-b", "insert"],
-      ["kept-c", "insert"],
-    ] as const) {
-      appendReplicaChange(vault, {
-        entity: "core.party",
-        rowId,
-        op,
-        changedAt: "2026-07-14T00:00:00.000Z",
-      });
-    }
-
-    const result = pruneReplicaChanges(vault, {
-      now: new Date("2026-07-15T00:00:00.000Z"),
-      maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
-      maxEntries: 2,
-    });
-    expect(result).toMatchObject({
-      expired: 1,
-      compacted: 1,
-      overflow: 1,
-      retained: 2,
-    });
-    expect(result.floor.seq).toBe(3);
-    expect(
-      readReplicaChanges(vault, { since: result.floor }).changes.map(
-        (entry) => entry.rowId
-      )
-    ).toStrictEqual(["kept-b", "kept-c"]);
-    expect(() =>
-      readReplicaChanges(vault, { since: cursorBeforeRetention })
-    ).toThrow(ReplicaRebootstrapRequiredError);
-  });
-
-  test("the age window expires low-volume rows before the count cap", () => {
-    const { vault } = open();
-    for (const rowId of ["old-a", "old-b"]) {
-      appendReplicaChange(vault, {
-        entity: "core.party",
-        rowId,
-        op: "insert",
-        changedAt: "2020-01-01T00:00:00.000Z",
-      });
-    }
-    const result = pruneReplicaChanges(vault, {
-      now: new Date("2026-07-15T00:00:00.000Z"),
-      maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
-      maxEntries: 10,
-    });
-    expect(result).toMatchObject({
-      expired: 2,
-      compacted: 0,
-      overflow: 0,
-      retained: 0,
-    });
-    expect(result.floor.seq).toBe(2);
-  });
-
-  test("the count cap removes overflow even while rows are inside 30 days", () => {
-    const { vault } = open();
-    for (const rowId of ["recent-a", "recent-b", "recent-c", "recent-d"]) {
-      appendReplicaChange(vault, {
-        entity: "core.party",
-        rowId,
-        op: "insert",
-        changedAt: "2026-07-14T00:00:00.000Z",
-      });
-    }
-    const result = pruneReplicaChanges(vault, {
-      now: new Date("2026-07-15T00:00:00.000Z"),
-      maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
-      maxEntries: 2,
-    });
-    expect(result).toMatchObject({
-      expired: 0,
-      compacted: 0,
-      overflow: 2,
-      retained: 2,
-    });
-    expect(result.floor.seq).toBe(2);
-  });
-
-  test("count pressure folds a hot row to its latest entry WITHOUT moving the floor", () => {
-    const { vault } = open();
-    const epoch = currentReplicaLogState(vault).epoch;
-    for (let index = 0; index < 1_001; index += 1) {
-      appendReplicaChange(vault, {
-        entity: "core.party",
-        rowId: "hot-row",
-        op: index === 0 ? "insert" : "update",
-        changedAt: "2026-07-14T00:00:00.000Z",
-      });
-    }
-    const alreadyCurrent = { epoch, seq: 1_001 };
-
-    const result = pruneReplicaChanges(vault, {
-      now: new Date("2026-07-15T00:00:00.000Z"),
-      maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
-      maxEntries: 1_000,
-    });
-
-    expect(result).toMatchObject({
-      compacted: 1_000,
-      overflow: 0,
-      retained: 1,
-    });
-    // Churn on one row must not push the floor.
-    expect(result.floor).toStrictEqual({ epoch, seq: 0 });
-    expect(
-      readReplicaChanges(vault, { since: result.floor }).changes
-    ).toStrictEqual([
-      expect.objectContaining({ seq: 1_001, rowId: "hot-row", op: "update" }),
-    ]);
-    expect(
-      readReplicaChanges(vault, { since: alreadyCurrent }).changes
-    ).toStrictEqual([]);
-    expect(
-      readReplicaChanges(vault, { since: { epoch, seq: 999 } }).changes
-    ).toStrictEqual([
-      expect.objectContaining({ seq: 1_001, rowId: "hot-row" }),
-    ]);
-    // A survivor's prior never reaches back to the INSERT.
-    expect(
-      readReplicaChanges(vault, { since: result.floor }).changes[0]
-    ).toMatchObject({ op: "update", priorOp: "update" });
-  });
-
-  test("a commit group is folded only when EVERY one of its entries is superseded", () => {
-    const { vault } = open();
-    const epoch = currentReplicaLogState(vault).epoch;
-    vault.exec("BEGIN IMMEDIATE");
-    const mixed = beginReplicaCommit(vault);
-    appendReplicaChange(vault, {
-      entity: "core.party",
-      rowId: "hot",
-      op: "insert",
-    });
-    appendReplicaChange(vault, {
-      entity: "core.party",
-      rowId: "cold",
-      op: "insert",
-    });
-    endReplicaCommit(vault, mixed);
-    vault.exec("COMMIT");
-    for (const op of ["update", "update", "update"] as const) {
-      vault.exec("BEGIN IMMEDIATE");
-      const solo = beginReplicaCommit(vault);
-      appendReplicaChange(vault, { entity: "core.party", rowId: "hot", op });
-      endReplicaCommit(vault, solo);
-      vault.exec("COMMIT");
-    }
-
-    const result = pruneReplicaChanges(vault, {
-      now: new Date("2026-07-15T00:00:00.000Z"),
-      maxEntries: 3,
-    });
-
-    // No page may ever carry half of one transaction.
-    expect(
-      readReplicaChanges(vault, { since: { epoch, seq: 0 } }).changes.map(
-        (change) => change.seq
-      )
-    ).toStrictEqual([1, 2, 5]);
-    expect(result).toMatchObject({ compacted: 2, overflow: 0 });
-    expect(result.floor.seq).toBe(0);
-  });
-
-  test("shape-control entities are never folded", () => {
-    const { vault } = open();
-    const epoch = currentReplicaLogState(vault).epoch;
-    for (const op of ["insert", "update", "update"] as const) {
-      appendReplicaChange(vault, {
-        entity: "access.app",
-        rowId: "app-1",
-        op,
-      });
-    }
-    appendReplicaChange(vault, {
-      entity: "core.party",
-      rowId: "hot",
-      op: "insert",
-    });
-    appendReplicaChange(vault, {
-      entity: "core.party",
-      rowId: "hot",
-      op: "update",
-    });
-
-    const result = pruneReplicaChanges(vault, {
-      now: new Date("2026-07-15T00:00:00.000Z"),
-      maxEntries: 4,
-    });
-
-    expect(result.compacted).toBe(1);
-    expect(
-      readReplicaChanges(vault, {
-        since: { epoch, seq: result.floor.seq },
-      }).changes.map((change) => `${change.entity}:${change.seq}`)
-    ).toStrictEqual([
-      "access.app:1",
-      "access.app:2",
-      "access.app:3",
-      "core.party:5",
-    ]);
-  });
-
-  test("compaction never rewinds the watermark or drops a row's last entry", () => {
-    const { vault } = open();
-    const before = currentReplicaLogState(vault);
-    for (let index = 0; index < 60; index += 1) {
-      appendReplicaChange(vault, {
-        entity: "core.party",
-        rowId: `row-${index % 3}`,
-        op: index < 3 ? "insert" : "update",
-      });
-    }
-    const watermark = currentReplicaLogState(vault).watermark;
-    expect(watermark.seq).toBeGreaterThan(before.watermark.seq);
-
-    pruneReplicaChanges(vault, { maxEntries: 3 });
-
-    expect(currentReplicaLogState(vault).watermark).toStrictEqual(watermark);
-    expect(
-      readReplicaChanges(vault, { since: { epoch: watermark.epoch, seq: 0 } })
-        .changes.map((change) => change.rowId)
-        .sort()
-    ).toStrictEqual(["row-0", "row-1", "row-2"]);
+    commit(() =>
+      vault
+        .prepare(
+          `INSERT INTO access_receipt
+             (receipt_id, authority_id, action, object_type, object_id,
+              decision, occurred_at, hash)
+           VALUES ('r1', NULL, 'act test', 'core.party', 'p1', 'allow', ?, 'h')`
+        )
+        .run(new Date().toISOString())
+    );
+    const page = readReplicaChanges(vault);
+    expect(page.changes).toStrictEqual([]);
+    expect(page.hasMore).toBe(false);
+    expect(page.next).toStrictEqual(page.watermark);
+    expect(page.watermark.seq).toBeGreaterThan(0);
   });
 
   test("epoch bump invalidates old cursors and new changes continue above the prior watermark", () => {
     const { vault } = open();
-    insertScheme(vault, "before");
+    commit(() => insertScheme(vault, "before"));
     const before = currentReplicaLogState(vault);
     const after = bumpReplicaEpoch(vault, {
       reason: "backup-restore",
@@ -552,7 +416,7 @@ describe("change-log", () => {
       readReplicaChanges(vault, { since: before.watermark })
     ).toThrow(ReplicaRebootstrapRequiredError);
 
-    insertScheme(vault, "after");
+    commit(() => insertScheme(vault, "after"));
     const page = readReplicaChanges(vault, { since: after.floor });
     expect(page.changes).toStrictEqual([
       expect.objectContaining({
@@ -575,40 +439,12 @@ describe("change-log", () => {
     expect(after.epochReason).toBe("schema-change");
   });
 
-  test("warm initialization skips a stable trigger catalog and repairs schema drift", () => {
+  test("warm initialization on a current file rotates nothing", () => {
     const { vault } = open();
-    const schemaVersion = () =>
-      (
-        vault.prepare("PRAGMA schema_version").get() as {
-          schema_version: number;
-        }
-      ).schema_version;
-    const recordedVersion = () =>
-      (
-        vault
-          .prepare(
-            `SELECT trigger_schema_version FROM replica_meta WHERE singleton = 1`
-          )
-          .get() as { trigger_schema_version: number }
-      ).trigger_schema_version;
-
-    const stable = schemaVersion();
-    const stableMarker = recordedVersion();
-    initializeReplicaProtocol(vault);
-    expect(schemaVersion()).toBe(stable);
-    expect(recordedVersion()).toBe(stableMarker);
-
-    vault.exec('DROP TRIGGER "trg_replica_core_concept_scheme_ai"');
-    expect(schemaVersion()).toBeGreaterThan(stable);
-    initializeReplicaProtocol(vault);
-    expect(recordedVersion()).not.toBe(stableMarker);
-    expect({
-      ...vault
-        .prepare(
-          `SELECT 1 AS present FROM sqlite_master
-          WHERE type = 'trigger' AND name = 'trg_replica_core_concept_scheme_ai'`
-        )
-        .get(),
-    }).toStrictEqual({ present: 1 });
+    const before = currentReplicaLogState(vault);
+    const after = initializeReplicaProtocol(vault);
+    expect(after.epoch).toBe(before.epoch);
+    expect(after.epochReason).toBe(before.epochReason);
+    expect(after.floor).toStrictEqual(before.floor);
   });
 });

@@ -284,7 +284,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
     ).target_id;
     const changesAfterFirst = (
       home.audience.vault
-        .prepare("SELECT count(*) AS n FROM replica_change")
+        .prepare("SELECT count(*) AS n FROM replica_log")
         .get() as { n: number }
     ).n;
 
@@ -300,9 +300,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
         .get()
     ).toMatchObject({ target_id: projectedId });
     expect(
-      home.audience.vault
-        .prepare("SELECT count(*) AS n FROM replica_change")
-        .get()
+      home.audience.vault.prepare("SELECT count(*) AS n FROM replica_log").get()
     ).toMatchObject({ n: changesAfterFirst });
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
