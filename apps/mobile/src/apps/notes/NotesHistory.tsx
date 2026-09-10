@@ -66,7 +66,13 @@ export default function NotesHistory({
         </Text>
       }
       renderRow={(version) => (
-        <View style={[styles.row, { borderBottomColor: colors.line }]}>
+        // The version being read is a STATE of this row, not a word beside
+        // it: a screen reader that met "current" as loose text had no way to
+        // know which row it belonged to (#1015 Wave 3, a11y).
+        <View
+          accessibilityState={{ selected: Boolean(version.current) }}
+          style={[styles.row, { borderBottomColor: colors.line }]}
+        >
           <View style={styles.rowOpen}>
             <Text style={[styles.rowName, { color: colors.text }]}>
               {ageLabel(version.asserted_at) || version.asserted_at}

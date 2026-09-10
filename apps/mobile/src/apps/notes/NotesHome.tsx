@@ -51,9 +51,6 @@ import {
   DELETE_NOTE_VERB,
   DELETE_NOTEBOOK_KEPT,
   DELETE_NOTEBOOK_VERB,
-  EMPTY_DAY_ONE,
-  HISTORY_NEEDS_NOTE,
-  JOURNAL_ROW,
   SEARCH_COPY,
   captionFor,
   deleteNotebookBody,
@@ -78,6 +75,7 @@ import {
 import AppPlace from "../../kit/rooms/AppPlace";
 import { parentPlace, placeStack } from "../../kit/rooms/place";
 import PushedPage from "../../kit/rooms/PushedPage";
+import { readFailure } from "../../kit/rooms/read-failure";
 import type { RoomEmpty, RoomError } from "../../kit/rooms/room-contracts";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
@@ -92,6 +90,12 @@ import {
   notesBandKeyFor,
 } from "./notes-band";
 import type { NotesBandDestinationKey, NotesPlace } from "./notes-band";
+import {
+  NOTES_EMPTY,
+  NOTES_EMPTY_REST,
+  NOTES_WRITE_FAILED,
+  NOTES_WRITE_REFUSED,
+} from "./notes-copy";
 import type { NativeNote } from "./notes-model";
 import NotesBand from "./NotesBand";
 import NotesHistory from "./NotesHistory";
@@ -337,11 +341,11 @@ export default function NotesHome({
           navigation.navigate("Settings", { screen: "Approvals" });
         },
         queuedMessage: "This Notes change will sync automatically.",
-        failureTitle: "Not applied",
+        failureTitle: NOTES_WRITE_REFUSED,
       });
       return ok ? result : undefined;
     } catch (error) {
-      surfaceWriteFailure(error, "Action failed");
+      surfaceWriteFailure(error, NOTES_WRITE_FAILED);
       return undefined;
     }
   };
@@ -640,18 +644,15 @@ export default function NotesHome({
   const unreachable = state.connection === "unavailable";
   // ERROR OUTRANKS EMPTY (`RoomBody`): a shelf that could not be read is not
   // an empty shelf, and Notes used to draw both at once.
-  const roomError: RoomError | undefined =
-    unreachable || state.error
-      ? {
-          body: unreachable
-            ? (state.unavailableReason ?? "Pair or reconnect a gateway.")
-            : (state.error ?? ""),
-          retry: { label: "Retry", onPress: () => void refresh?.() },
-          title: unreachable
-            ? "Notes is not connected"
-            : "Notes could not be loaded",
-        }
-      : undefined;
+  // S14: the exception never reaches the member. `useSeatPages` logs the raw
+  // string at the catch; `readFailure` writes the sentence.
+  const roomError: RoomError | undefined = readFailure({
+    failed: Boolean(state.error),
+    noun: "Notes",
+    onRetry: () => void refresh?.(),
+    unavailableReason: state.unavailableReason,
+    unreachable,
+  });
 
   const startNote = (): void => {
     setCreating(true);
@@ -665,11 +666,7 @@ export default function NotesHome({
    *  where it has them (`SEARCH_COPY`), which this seat never used. */
   let roomEmpty: RoomEmpty | undefined;
   if (place === HISTORY && !selected)
-    roomEmpty = {
-      body: "Open a note to walk its chain.",
-      routine: true,
-      title: HISTORY_NEEDS_NOTE,
-    };
+    roomEmpty = { ...NOTES_EMPTY.history!, routine: true };
   else if (pane === list && visible.length === 0) {
     if (place === SEARCH)
       roomEmpty = term
@@ -684,25 +681,14 @@ export default function NotesHome({
             title: SEARCH_COPY.resting.title,
           };
     else if (place === JOURNAL)
-      roomEmpty = {
-        body: JOURNAL_ROW,
-        routine: true,
-        title: "No journal entries yet",
-      };
+      roomEmpty = { ...NOTES_EMPTY.journal!, routine: true };
     else if (place === TRASH)
-      roomEmpty = {
-        body: DELETE_NOTE_BODY,
-        routine: true,
-        title: "Trash is empty",
-      };
+      roomEmpty = { ...NOTES_EMPTY.trash!, routine: true };
     else
       // No action here: the room's own header already carries "New note", and
       // two doors with the same word is the duplication the empty was built to
       // avoid, not an extra affordance.
-      roomEmpty = {
-        body: EMPTY_DAY_ONE,
-        title: "Nothing written yet",
-      };
+      roomEmpty = { ...NOTES_EMPTY_REST };
   }
 
   const content = (

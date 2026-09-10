@@ -31,6 +31,7 @@ import { Text, TextInput } from "../../kit/components/NativeText";
 import EditorRoom from "../../kit/rooms/EditorRoom";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
+import { NOTES_PIN, editorTitle } from "./notes-copy";
 import type { NativeNote } from "./notes-model";
 import { styles } from "./NotesHome.styles";
 import NotesPowerbox from "./NotesPowerbox";
@@ -81,7 +82,7 @@ function EditorActs(props: NoteEditorProps): React.JSX.Element | null {
   return (
     <>
       <Button
-        label={note.pinned ? "Unpin" : "Pin"}
+        label={note.pinned ? NOTES_PIN.on : NOTES_PIN.off}
         onPress={props.onTogglePin}
         variant="quiet"
       />
@@ -135,7 +136,7 @@ export default function NoteEditor(
       leaveTestID={TEST_IDS.notes.editorClose}
       onDone={props.onClose}
       presented
-      title={note ? (note.trashed ? "In trash" : "Note") : "New note"}
+      title={editorTitle(note)}
       visible={props.open}
     >
       <ScrollView contentContainerStyle={styles.editor}>
