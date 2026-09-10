@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { openVaultDb } from "@centraid/vault";
+import { openVaultDb, readReplicaLog } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
 import {
@@ -26,6 +26,32 @@ describe("Notifications notice delivery", () => {
   });
 
   describe(NoticeStore, () => {
+    // #1014, N1: the table replicates, so every write has to be in the log.
+    test("every notice write reaches replica_log", () => {
+      db = openVaultDb();
+      const vault = db.vault;
+      const store = new NoticeStore(vault);
+      const put = store.put({
+        kind: "automation",
+        sourceRef: "mail/digest",
+        headline: "Digest failed",
+        severity: "high",
+      });
+      const afterPut = readReplicaLog(vault).rows.filter(
+        (row) => row.table === "notifications_notice"
+      );
+      expect(afterPut).toHaveLength(1);
+      expect(afterPut[0]?.op).toBe("insert");
+      expect(afterPut[0]?.producer).toBe("notices");
+
+      store.markRead(put.noticeId);
+      store.archive(put.noticeId);
+      const ops = readReplicaLog(vault)
+        .rows.filter((row) => row.table === "notifications_notice")
+        .map((row) => row.op);
+      expect(ops).toStrictEqual(["insert", "update", "update"]);
+    });
+
     test("collapses repeats by kind/source and reopens an archived card", () => {
       db = openVaultDb();
       const changes: Array<{ wake: boolean }> = [];
