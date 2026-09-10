@@ -93,12 +93,24 @@ async function pullBlob(
         audienceVaultId: input.audienceVaultId,
         shapeId: input.shapeId,
       });
-      // oxlint-disable-next-line no-await-in-loop -- (#929) each chunk's offset is the previous chunk's end, so the pull is sequential by construction
-      const response = await input.dial.request({
-        endpointTicket,
-        method: "GET",
-        target: `${PEER_REPLICA_BLOB_PATH}?${query}&sha256=${encodeURIComponent(blob.sha256)}&offset=${offset}`,
-      });
+      // A REFUSAL IS A STATE, NEVER AN EXCEPTION on this plane (#1014, T16).
+      // The tail door already answered `unreachable` for a cut dial; the blob
+      // door let the throw out of `pullShareTail` entirely, so a peer whose
+      // connection died mid-object reached the sweep as a rejected promise
+      // rather than a pending row.
+      let response: { status: number; json: unknown };
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- (#929) each chunk's offset is the previous chunk's end, so the pull is sequential by construction
+        response = await input.dial.request({
+          endpointTicket,
+          method: "GET",
+          target: `${PEER_REPLICA_BLOB_PATH}?${query}&sha256=${encodeURIComponent(blob.sha256)}&offset=${offset}`,
+        });
+      } catch (error) {
+        return `the origin could not be reached for ${blob.sha256}: ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+      }
       const body = response.json as {
         state?: string;
         total?: number;
