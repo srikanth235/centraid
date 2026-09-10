@@ -20,6 +20,10 @@ Nothing in between proved that a real session against a real gateway _produces_ 
 - That a real gateway plus a real replica session **reaches** each state: an empty bootstrapped library, a durable queued intent with its optimistic overlay, a refused socket that still serves the replica, a cursor genuinely behind the gateway's, the gateway's own base-version conflict with both version numbers, a `confirm: true` command parked for the owner, and a revoked app's permanent refusal.
 - That each of those is caused by its arrangement. Every test carries a **negative** half through the same session and the same drain — a second row nobody touched, a second write on a live transport, the same read after a row really lands. A suite whose positive half passes on its own proves only that the session always says one thing.
 
+## The fault lanes
+
+`seat-swap-faults.integration.test.ts` is a different shape from the seven state suites and is here for the same reason they are: it needs the real seams. A re-bootstrap swap has no atomic step — the queue comes out of the old file, the handle is released, an artifact arrives, the file is REPLACED, and only then is the queue written back — and the only place all of the staging, driver and sidecar seams exist together against a real snapshot door is this tier. It kills the process at each of those boundaries with an intent queued and asks whether the member's work is still there, with its payload, and still drains exactly once ([#1014](https://github.com/srikanth235/centraid/issues/1014) C5/T6). `carry-over.test.ts` owns the same claim at the unit tier; what this adds is a real artifact, a real log door and a real drain.
+
 ## What it may not claim
 
 - **Nothing about rendering.** No component is mounted. Whether the pending sheet, the stale banner or the conflict copy draws correctly stays with the component tier.

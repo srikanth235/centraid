@@ -69,6 +69,25 @@ export interface NodeSeatOptions {
    * which is the arrangement R25 was found in (#1014).
    */
   readonly fileName?: string;
+  /**
+   * WHERE THE PROCESS DIES (#1014, C5/T6).
+   *
+   * The re-bootstrap swap has no atomic step: the queue comes out of the old
+   * file, the handle is released, an artifact arrives over minutes, the file is
+   * REPLACED, and only then is the queue written back. Every one of those
+   * boundaries is a place a phone gets killed, and the only tier that can
+   * actually inject one is this one — the seams are the host's, not the
+   * session's. Each fault throws where a kill would land; the suite then
+   * reopens and asks whether the member's work is still there.
+   */
+  readonly faults?: {
+    /** Before the queue is stashed anywhere. */
+    readonly carryOver?: () => void;
+    /** After the handle is released, before the download. */
+    readonly staging?: () => void;
+    /** Around the install: call `run()` to let the swap happen first. */
+    readonly install?: (run: () => Promise<void>) => Promise<void>;
+  };
 }
 
 /** Open the seat's FILE — the outbox exists from here, copy or no copy. */
@@ -83,16 +102,28 @@ export async function openNodeSeat(
   const databasePath = `${options.directory}/${options.fileName ?? "seat.sqlite3"}`;
   const core = new SeatWorkerCore({
     openDatabase: () => new NodeSeatDriver(databasePath),
-    staging: () =>
-      nodeSeatStaging({
+    staging: () => {
+      options.faults?.staging?.();
+      const staging = nodeSeatStaging({
         // Per FILE, not per directory: two seats sharing a staging directory
         // would resume each other's part file (#1014).
         directory: `${databasePath}-staging`,
         databasePath,
-      }),
+      });
+      const install = options.faults?.install;
+      if (!install) return staging;
+      return {
+        ...staging,
+        install: (etag, prepare) =>
+          install(() => staging.install(etag, prepare)),
+      };
+    },
     // The phone's stash, in `node:fs` terms (#1014, C5/T6): this tier is where
     // a kill mid-swap is actually injected, so it must have the same seam.
-    carryOver: () => nodeSeatCarryOverSidecar(databasePath),
+    carryOver: () => {
+      options.faults?.carryOver?.();
+      return nodeSeatCarryOverSidecar(databasePath);
+    },
     transport: (bootstrap) =>
       httpSeatSnapshotTransport({
         url: bootstrap.snapshotUrl,

@@ -243,16 +243,18 @@ describe("what survives a re-bootstrap", () => {
     await expect(
       dying.bootstrap({ vaultId: "vault-1", snapshotUrl: "/s" })
     ).rejects.toThrow(KilledError);
+    // The failure did not cost the member the DOOR to their queue either: the
+    // handle is re-adopted on the way out and the stash is replayed into the
+    // installed file, rather than every later `outbox()` call throwing.
+    expect(
+      readSeatOutbox(
+        (dying as unknown as { required: () => NodeSeatDriver }).required()
+      ).map((row) => row.intentId)
+    ).toStrictEqual(["i-train"]);
+    dying.close();
 
-    // The new file is in place and has no queue in it: the stash is the only
-    // copy at this instant, which is exactly what it is for.
-    const swapped = new NodeSeatDriver(path.join(root, "seat.db"));
-    openSeatFile(swapped);
-    createSeatOutbox(swapped);
-    expect(readSeatOutbox(swapped)).toStrictEqual([]);
-    swapped.close();
-
-    // The next open replays it — and the intent is whole, not a stub.
+    // And the intent is whole in the file, not a stub: a fresh worker over the
+    // same path — the relaunch — reads the same queue.
     const reopened = worker(root, undefined, bytes);
     await reopened.open(OPEN);
     const outbox = readSeatOutbox(
@@ -262,6 +264,61 @@ describe("what survives a re-bootstrap", () => {
     expect(outbox[0]?.input).toStrictEqual({ title: "made on a train" });
     expect(outbox[0]?.createdOrder).toBe(1);
     reopened.close();
+  });
+
+  it("replays a stash the process really died holding", async () => {
+    const root = tempDirSync("seat-carry-cold-");
+    const bytes = seatArtifact(root);
+    const first = worker(root, undefined, bytes);
+    await first.open(OPEN);
+    await first.bootstrap({ vaultId: "vault-1", snapshotUrl: "/s" });
+    first.close();
+
+    // The shape a phone killed between the install and the write-back leaves
+    // on disk, with no process left to re-adopt anything: an installed file
+    // with no queue in it, and the sidecar beside it holding one.
+    const stash = serializeSeatCarryOver(
+      {
+        outbox: [
+          {
+            intentId: "i-cold",
+            createdOrder: 1,
+            appId: "notes",
+            action: "notes.create_note",
+            input: { title: "made on a train" },
+            payloadHash: "h-cold",
+            state: "queued",
+            attempts: 0,
+            dependsOn: [],
+            baseVersions: undefined,
+            optimistic: [],
+            commitSeq: undefined,
+            waitingOn: undefined,
+            needsBlobs: [],
+            enqueuedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            record: JSON.stringify({ intentId: "i-cold" }),
+          },
+        ],
+        blobs: [],
+        contents: "full",
+      },
+      "vault-1"
+    );
+    await nodeSeatCarryOverSidecar(path.join(root, "seat.db")).write(stash);
+
+    const relaunched = worker(root, undefined, bytes);
+    await relaunched.open(OPEN);
+    const outbox = readSeatOutbox(
+      (relaunched as unknown as { required: () => NodeSeatDriver }).required()
+    );
+    expect(outbox.map((row) => row.intentId)).toStrictEqual(["i-cold"]);
+    expect(outbox[0]?.input).toStrictEqual({ title: "made on a train" });
+    // And the stash is gone, so the next open does not replay it again.
+    await expect(
+      nodeSeatCarryOverSidecar(path.join(root, "seat.db")).read()
+    ).resolves.toBeUndefined();
+    relaunched.close();
   });
 
   it("never replays a stash the file has already taken", async () => {

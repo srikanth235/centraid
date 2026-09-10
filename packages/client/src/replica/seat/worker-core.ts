@@ -211,31 +211,54 @@ export class SeatWorkerCore {
     // is worse — the seat would go on reading the file it just replaced.
     this.#driver?.close();
     this.#driver = undefined;
-    const [staging, transport] = await Promise.all([
-      this.host.staging(options),
-      this.host.transport(options),
-    ]);
-    const result = await bootstrapSeatFile({
-      transport,
-      staging,
-      vaultId: options.vaultId,
-      open: () => this.host.openDatabase(open),
-      ...(options.expansion === undefined
-        ? {}
-        : { expansion: options.expansion }),
-      onProgress: (progress) => this.sink.onBootstrapProgress?.(progress),
-    });
-    const driver = await this.host.openDatabase(open);
+    try {
+      const [staging, transport] = await Promise.all([
+        this.host.staging(options),
+        this.host.transport(options),
+      ]);
+      const result = await bootstrapSeatFile({
+        transport,
+        staging,
+        vaultId: options.vaultId,
+        open: () => this.host.openDatabase(open),
+        ...(options.expansion === undefined
+          ? {}
+          : { expansion: options.expansion }),
+        onProgress: (progress) => this.sink.onBootstrapProgress?.(progress),
+      });
+      const driver = await this.host.openDatabase(open);
+      this.#adopt(driver);
+      const token = stashed
+        ? parseSeatCarryOver(stashed, open.vaultId)?.token
+        : undefined;
+      if (carried) writeSeatCarryOver(driver, carried, token);
+      // ONLY NOW. The stash is the queue's only copy from the close above until
+      // this line; dropping it before the write-back commits is the window all
+      // of this exists to remove.
+      if (sidecar && stashed !== undefined) await sidecar.clear();
+      return result;
+    } catch (error) {
+      // A FAILED BOOTSTRAP MUST NOT COST THE MEMBER THEIR QUEUE'S DOOR
+      // (#1014, C5). The handle was released above and there is no `finally`
+      // that puts it back, so every later call on this worker — `outbox()`
+      // most of all, which is where the member's unsent writes live — threw
+      // `SeatWorkerNotOpenError` until something re-opened the file. On the
+      // phone that is a refused download turning a queued write into an
+      // unreachable one, and `NativeReplicaSession.close()` itself throwing.
+      //
+      // So the file is re-adopted on the way out, and the replay runs: if the
+      // install DID land before the failure, the stash goes back into it here
+      // rather than waiting for the next open.
+      await this.#reopen(open).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** Put the handle back after a bootstrap that did not finish. */
+  async #reopen(options: SeatWorkerOpenOptions): Promise<void> {
+    const driver = await this.host.openDatabase(options);
     this.#adopt(driver);
-    const token = stashed
-      ? parseSeatCarryOver(stashed, open.vaultId)?.token
-      : undefined;
-    if (carried) writeSeatCarryOver(driver, carried, token);
-    // ONLY NOW. The stash is the queue's only copy from the close above until
-    // this line; dropping it before the write-back commits is the window all
-    // of this exists to remove.
-    if (sidecar && stashed !== undefined) await sidecar.clear();
-    return result;
+    await this.#replayCarryOver(options, driver);
   }
 
   /**

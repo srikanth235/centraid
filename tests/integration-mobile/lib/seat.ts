@@ -25,7 +25,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { createNativeReplicaSession } from "../../../apps/mobile/src/lib/replica/native-session.js";
+import { createNativeReplicaSession } from "../../../apps/mobile/src/lib/replica/native-session-open.js";
 import type {
   NativeChangeFeed,
   NativeReplicaSession,
