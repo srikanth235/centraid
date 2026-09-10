@@ -17,6 +17,7 @@ import type {
 import { fetchWithinReplyDeadline } from "./gateway-deadline";
 import type { StreamFetch } from "./native-change-feed";
 import type { NativeChangeFeed } from "./native-session";
+import { REPLICA_FEED_SILENCE_MS } from "./offline-budgets";
 
 interface ScopeState {
   vaultId: string;
@@ -36,7 +37,7 @@ interface ScopeState {
 
 interface ScopeFrame {
   vaultId: string;
-  event: "change" | "cursor" | "rebootstrap" | "revoked";
+  event: "change" | "cursor" | "rebootstrap" | "revoked" | "error";
   data: unknown;
 }
 
@@ -45,6 +46,8 @@ export interface NativeMultiplexChangeFeedOptions {
   streamFetch?: StreamFetch;
   minReconnectMs?: number;
   maxReconnectMs?: number;
+  /** Bytes-of-silence before the open stream is treated as dead (#1014, R15). */
+  silenceMs?: number;
   onScopeRevoked?: (vaultId: string) => void;
   onScopeUpdated?: (vaultId: string) => void;
   onStreamOutcome?: (reachable: boolean) => void;
@@ -85,6 +88,14 @@ export class NativeMultiplexChangeFeed {
   readonly #onScopeUpdated: ((vaultId: string) => void) | undefined;
   readonly #onStreamOutcome: ((reachable: boolean) => void) | undefined;
   readonly #resumeFrom: SeatResumePosition | undefined;
+  readonly #silenceMs: number;
+  /**
+   * EVERY CONTROLLER THIS FEED EVER OPENED, until it settles (#1014, C21).
+   * `#abort` alone is the one the NEWEST attempt stored, and an attempt that
+   * lost a race to a `reconnect()` was left with a live socket nothing could
+   * reach. `stop()` aborts the set.
+   */
+  readonly #open = new Set<AbortController>();
 
   #abort: AbortController | undefined;
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -101,6 +112,7 @@ export class NativeMultiplexChangeFeed {
     this.#onScopeUpdated = options.onScopeUpdated;
     this.#onStreamOutcome = options.onStreamOutcome;
     this.#resumeFrom = options.resumeFrom;
+    this.#silenceMs = options.silenceMs ?? REPLICA_FEED_SILENCE_MS;
   }
 
   scope(vaultId: string): NativeChangeFeed {
@@ -162,9 +174,15 @@ export class NativeMultiplexChangeFeed {
     if (this.activeStates().length > 0) void this.run();
   }
 
+  /**
+   * A DELIBERATE STOP, and the only one. It bumps the generation, which is what
+   * tells an in-flight attempt's `finally` not to reconnect — every OTHER way a
+   * stream can end is a reconnect (#1014, R15).
+   */
   private stop(): void {
     this.#generation += 1;
-    this.#abort?.abort();
+    for (const controller of this.#open) controller.abort();
+    this.#open.clear();
     this.#abort = undefined;
     if (this.#reconnectTimer) clearTimeout(this.#reconnectTimer);
     this.#reconnectTimer = undefined;
@@ -177,6 +195,16 @@ export class NativeMultiplexChangeFeed {
     const generation = ++this.#generation;
     const abort = new AbortController();
     this.#abort = abort;
+    this.#open.add(abort);
+    let silence: ReturnType<typeof setTimeout> | undefined;
+    // A SOCKET THAT HAS STOPPED DELIVERING IS NOT A QUIET VAULT (#1014, R15).
+    // The gateway sends a keep-alive comment every heartbeat, so silence past
+    // twice one is evidence of a stream the platform is no longer feeding —
+    // which is exactly the state the live trace sat in for 43 minutes.
+    const alive = (): void => {
+      if (silence) clearTimeout(silence);
+      silence = setTimeout(() => abort.abort(), this.#silenceMs);
+    };
     try {
       const response = await fetchWithinReplyDeadline(
         (signal) =>
@@ -190,23 +218,36 @@ export class NativeMultiplexChangeFeed {
           }) as Promise<Response>,
         abort.signal
       );
-      if (!this.current(abort, generation)) return;
+      if (!this.current(abort, generation)) {
+        // THE LOSER'S BODY IS CANCELLED (#1014, C21). Returning without it
+        // left a socket streaming into a reader nothing would ever attach.
+        await response.body?.cancel().catch(() => undefined);
+        return;
+      }
       if (!response.ok || !response.body)
         throw new Error(`multiplex replica stream failed (${response.status})`);
       this.#reconnectDelay = this.#minReconnectMs;
       this.#onStreamOutcome?.(true);
+      alive();
       await consumeVaultChangeSse(
         response.body,
         (frame) => this.handleFrame(frame),
-        abort.signal
+        abort.signal,
+        alive
       );
     } catch {
       // Swallowing this hid a dead vault (docs/traps/unreachable-vault.md).
       if (!abort.signal.aborted) this.#onStreamOutcome?.(false);
     } finally {
+      if (silence) clearTimeout(silence);
+      this.#open.delete(abort);
       if (this.#abort === abort) this.#abort = undefined;
-      if (generation === this.#generation && !abort.signal.aborted)
-        this.scheduleReconnect();
+      // ALWAYS, UNLESS THE FEED WAS STOPPED (#1014, R15). This used to skip the
+      // reconnect whenever the controller had aborted — and the platform
+      // cancelling the request (`-999` on iOS) aborts it, so the one failure
+      // the reconnect exists for was the one it declined to answer. The
+      // generation is the only honest test of "someone else took over".
+      if (generation === this.#generation) this.scheduleReconnect();
     }
   }
 
@@ -224,6 +265,29 @@ export class NativeMultiplexChangeFeed {
       state.rebootstrapRequired = true;
       this.#onScopeRevoked?.(state.vaultId);
       this.reconnect();
+      return;
+    }
+    if (scopeFrame.event === "error") {
+      // A MOUNT'S TERMINAL FAULT IS A REASON TO START OVER, NOT SILENCE
+      // (#1014, V21). The gateway ends one mount's projection with this frame
+      // — a projection exception, an unacknowledged rebootstrap, or a scope
+      // this device is no longer enrolled for — and it used to fall through to
+      // the page branch and parse as nothing, so the mount went quiet for the
+      // life of the radio with no in-band trigger to bring it back.
+      const reason = (scopeFrame.data as { reason?: unknown } | undefined)
+        ?.reason;
+      if (reason === "scope-not-enrolled") {
+        state.rebootstrapRequired = true;
+        this.#onScopeRevoked?.(state.vaultId);
+        this.reconnect();
+        return;
+      }
+      state.rebootstrapRequired = true;
+      state.epochChangeExpected = true;
+      state.listener?.({
+        type: "centraid:vault-rebootstrap",
+        detail: scopeFrame.data,
+      });
       return;
     }
     if (scopeFrame.event === "rebootstrap") {

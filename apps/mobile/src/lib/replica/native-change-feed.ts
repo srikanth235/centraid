@@ -16,6 +16,9 @@ import type {
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
 
+import { fetchWithinReplyDeadline } from "./gateway-deadline";
+import { REPLICA_FEED_SILENCE_MS } from "./offline-budgets";
+
 /** The subset of `@react-native-async-storage/async-storage` the cursor uses. */
 export interface AsyncStorageLike {
   getItem: (key: string) => Promise<string | null>;
@@ -32,6 +35,8 @@ export interface NativeVaultChangeFeedOptions {
   streamFetch?: StreamFetch;
   minReconnectMs?: number;
   maxReconnectMs?: number;
+  /** Bytes-of-silence before the open stream is treated as dead (#1014, R15). */
+  silenceMs?: number;
 }
 
 const MIN_RECONNECT_MS = 1_000;
@@ -52,6 +57,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   readonly #streamFetch: StreamFetch;
   readonly #minReconnectMs: number;
   readonly #maxReconnectMs: number;
+  readonly #silenceMs: number;
   readonly #storageKey: string;
 
   #listener: ((message: VaultChangeMessage) => void) | undefined;
@@ -73,6 +79,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     this.#streamFetch = options.streamFetch ?? expoFetch;
     this.#minReconnectMs = options.minReconnectMs ?? MIN_RECONNECT_MS;
     this.#maxReconnectMs = options.maxReconnectMs ?? MAX_RECONNECT_MS;
+    this.#silenceMs = options.silenceMs ?? REPLICA_FEED_SILENCE_MS;
     this.#storageKey = `centraid:vault-change-cursor:${encodeURIComponent(
       `${this.#gatewayAuth.gatewayId ?? this.#gatewayAuth.baseUrl} ${this.#gatewayAuth.vaultId ?? "<default>"}`
     )}`;
@@ -136,20 +143,39 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     const generation = ++this.#generation;
     const abort = new AbortController();
     this.#abort = abort;
+    let silence: ReturnType<typeof setTimeout> | undefined;
+    // See the multiplex feed: a keep-alive that stops arriving is the only
+    // evidence a client has of a socket the platform quietly dropped
+    // (#1014, R15).
+    const alive = (): void => {
+      if (silence) clearTimeout(silence);
+      silence = setTimeout(() => abort.abort(), this.#silenceMs);
+    };
     try {
       if (!this.#cursorLoaded) {
         this.#cursor = await this.loadCursor();
         this.#cursorLoaded = true;
       }
-      const response = await this.#streamFetch(this.streamUrl(this.#cursor), {
-        method: "GET",
-        headers: {
-          ...authHeaders(this.#gatewayAuth.token),
-          Accept: "text/event-stream",
-        },
-        signal: abort.signal,
-      });
-      if (!this.isCurrent(abort, generation)) return;
+      // A REQUEST THAT NEVER ANSWERS IS NOT ONE IN PROGRESS
+      // (docs/traps/unreachable-vault.md): without the reply deadline this
+      // awaited a dead tunnel listener forever and no reconnect was ever
+      // scheduled, because the attempt never finished.
+      const response = await fetchWithinReplyDeadline(
+        (signal) =>
+          this.#streamFetch(this.streamUrl(this.#cursor), {
+            method: "GET",
+            headers: {
+              ...authHeaders(this.#gatewayAuth.token),
+              Accept: "text/event-stream",
+            },
+            signal,
+          }) as Promise<Response>,
+        abort.signal
+      );
+      if (!this.isCurrent(abort, generation)) {
+        await response.body?.cancel().catch(() => undefined);
+        return;
+      }
       if (
         response.status === 401 ||
         response.status === 403 ||
@@ -178,19 +204,25 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
         throw new Error(`vault change stream failed (HTTP ${response.status})`);
       }
       this.#reconnectDelay = this.#minReconnectMs;
+      alive();
       await consumeVaultChangeSse(
         response.body,
         (frame) => {
           if (this.isCurrent(abort, generation)) this.handleFrame(frame);
         },
-        abort.signal
+        abort.signal,
+        alive
       );
     } catch {
       /* Reconnect below unless the session paused or a newer generation started. */
     } finally {
+      if (silence) clearTimeout(silence);
       if (this.#abort === abort) this.#abort = undefined;
-      if (generation === this.#generation && !abort.signal.aborted)
-        this.scheduleReconnect();
+      // The GENERATION decides, not the signal (#1014, R15): `stopStream()`
+      // bumps it, and everything else that aborts this controller — the reply
+      // deadline, the silence watchdog, the platform cancelling the request —
+      // is a reason to reconnect rather than to go quiet.
+      if (generation === this.#generation) this.scheduleReconnect();
     }
   }
 
