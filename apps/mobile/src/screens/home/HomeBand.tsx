@@ -110,7 +110,9 @@ function Tab({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={tab.name + (active ? ", current place" : "")}
+      // SPEAK WHAT IS PAINTED (#1015, shell/findings 6): the band said
+      // "Notifications" and drew "Alerts", so two members got two nouns.
+      accessibilityLabel={tab.short + (active ? ", current place" : "")}
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}

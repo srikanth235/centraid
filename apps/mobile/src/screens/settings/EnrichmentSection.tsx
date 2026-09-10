@@ -16,6 +16,7 @@ import type {
   EnrichEgressClass,
   EnrichTrigger,
 } from "../../lib/enrichment";
+import { SHELL_ERROR } from "../shell-copy";
 import SettingsSection from "./SettingsSection";
 
 // Settings → Enrichment (#807): read-only statement of the effective policy —
@@ -99,15 +100,10 @@ export default function EnrichmentSection({
       .then((states) => {
         if (live) setLoad({ kind: "ready", states });
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!live) return;
-        setLoad({
-          kind: "unavailable",
-          reason:
-            error instanceof Error && error.message
-              ? error.message
-              : "The gateway did not answer.",
-        });
+        // S14 (#1015): one noun, never the worker's own words.
+        setLoad({ kind: "unavailable", reason: SHELL_ERROR.enrichment });
       });
     return () => {
       live = false;

@@ -3,6 +3,7 @@ import React, { useMemo } from "react";
 import PanelBlock from "../kit/components/PanelBlock";
 import { SystemPlace } from "../kit/rooms";
 import type { SignalNotificationScreenProps } from "../navigation";
+import { SHELL_TITLES } from "./shell-copy";
 import { signalNotificationCopy } from "./signal-notification";
 
 export default function SignalNotification({
@@ -14,7 +15,7 @@ export default function SignalNotification({
     [route.params]
   );
   return (
-    <SystemPlace onHome={() => navigation.goBack()} title="Notifications">
+    <SystemPlace onHome={() => navigation.goBack()} title={SHELL_TITLES.alerts}>
       <PanelBlock
         action={{
           label: copy.actionLabel,

@@ -13,6 +13,8 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
+
 import { Text } from "../components/NativeText";
 import type { ReplicaQueryConnection } from "../hooks/replica-query-state";
 import { borders, family, radii, spacing, useTheme, t } from "../theme";
@@ -25,6 +27,7 @@ export default function ReplicaStateCard({
   onRetry,
 }: {
   connection: ReplicaQueryConnection;
+  /** A SIGNAL that the read failed; never rendered. See `message` below. */
   error?: string;
   unavailableReason?: string;
   noun: string;
@@ -36,9 +39,13 @@ export default function ReplicaStateCard({
   const title = unavailable
     ? `${noun} is not connected`
     : `${noun} could not be loaded`;
+  // S14 (#1015): `error` is a SIGNAL that the read failed, never the words a
+  // member reads. It arrives as `error.message` from five call sites — a
+  // fetch's own sentence, a status code, a Swift filename — and printing it
+  // told a member about the program rather than about their vault.
   const message = unavailable
-    ? (unavailableReason ?? "Pair or reconnect a gateway.")
-    : (error ?? "");
+    ? (unavailableReason ?? "Pair or reconnect a vault host.")
+    : `${noun} is on this phone; the vault host could not be reached.`;
   return (
     <View
       accessibilityRole="alert"
@@ -52,7 +59,9 @@ export default function ReplicaStateCard({
           onPress={onRetry}
           style={[styles.retry, { borderColor: colors.line }]}
         >
-          <Text style={[styles.retryText, { color: colors.text }]}>Retry</Text>
+          <Text style={[styles.retryText, { color: colors.text }]}>
+            {RETRY_ACTION}
+          </Text>
         </Pressable>
       ) : null}
     </View>

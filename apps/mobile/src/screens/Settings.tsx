@@ -43,6 +43,7 @@ import EnrichmentSection from "./settings/EnrichmentSection";
 import SettingsSection from "./settings/SettingsSection";
 import VaultSection from "./settings/VaultSection";
 import YouSection from "./settings/YouSection";
+import { SHELL_ERROR, desktopLinkStatus } from "./shell-copy";
 
 // Settings is a SYSTEM PLACE (#1015, Wave 2): the room draws the safe area, the
 // Home key, the title and the gutter, so this file is sections and nothing else.
@@ -116,20 +117,6 @@ function defaultDeviceName(): string {
   return Platform.OS === "ios" ? "iPhone" : "Android phone";
 }
 
-function tunnelStatusLabel(status: TunnelStatus | undefined): string {
-  if (!status) return "Checking…";
-  switch (status.state) {
-    case "running":
-      return status.port ? `Connected (port ${status.port})` : "Connected";
-    case "starting":
-      return "Connecting…";
-    case "error":
-      return `Error: ${status.error ?? "unknown"}`;
-    case "stopped":
-      return "Not connected";
-  }
-}
-
 export default function SettingsScreen({
   navigation,
 }: SettingsScreenProps<"SettingsHome">): React.JSX.Element {
@@ -187,8 +174,10 @@ export default function SettingsScreen({
         setDesktopName(name);
         setPasteTicket("");
       })
-      .catch((error: unknown) => {
-        setPairError(error instanceof Error ? error.message : String(error));
+      .catch(() => {
+        // S14: the reason is a fact about the program. The member gets the
+        // one noun for this surface, and the log keeps the exception.
+        setPairError(SHELL_ERROR.desktopLink);
       })
       .finally(() => setPairing(false));
   }, []);
@@ -271,7 +260,7 @@ export default function SettingsScreen({
           <View style={styles.linkCard}>
             <Text style={styles.linkName}>{desktopName || "Your gateway"}</Text>
             <Text style={styles.linkStatus}>
-              {tunnelStatusLabel(tunnelStatus)}
+              {desktopLinkStatus(tunnelStatus)}
             </Text>
             <Text style={styles.help}>
               Switch vaults from the vault menu on Home — pair another desktop
@@ -351,11 +340,12 @@ export default function SettingsScreen({
         )}
       </SettingsSection>
 
-      <SettingsSection label="Notifications">
+      <SettingsSection label="Alerts">
         <Pressable
+          accessibilityRole="button"
           onPress={() => navigation.navigate("Approvals")}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-          accessibilityLabel="Notifications"
+          accessibilityLabel="Alerts"
         >
           <Icon name="CheckCircle" size={18} color={colors.textSoft} />
           <Text style={styles.rowLabel}>Decisions and updates</Text>
@@ -365,6 +355,7 @@ export default function SettingsScreen({
 
       <SettingsSection label="Sharing">
         <Pressable
+          accessibilityRole="button"
           onPress={() => navigation.navigate("Sharing")}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
           accessibilityLabel="Sharing"
@@ -380,6 +371,7 @@ export default function SettingsScreen({
 
       <SettingsSection label="Storage">
         <Pressable
+          accessibilityRole="button"
           onPress={() => navigation.navigate("PhoneStorage")}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
           accessibilityLabel="On this phone"
@@ -395,6 +387,7 @@ export default function SettingsScreen({
               — which is why it may not live inside one. */}
         <View style={styles.rowGap} />
         <Pressable
+          accessibilityRole="button"
           onPress={() => navigation.navigate("BackupHealth")}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
           accessibilityLabel="Backup health"
@@ -405,14 +398,15 @@ export default function SettingsScreen({
         </Pressable>
       </SettingsSection>
 
-      <SettingsSection label="Advanced (developer)">
+      <SettingsSection label="Advanced">
         <Pressable
+          accessibilityRole="button"
           onPress={() => setAdvancedOpen((v) => !v)}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-          accessibilityLabel="Gateway connection"
+          accessibilityLabel="Vault host connection"
         >
           <Icon name="Code" size={18} color={colors.textSoft} />
-          <Text style={styles.rowLabel}>Gateway connection</Text>
+          <Text style={styles.rowLabel}>Vault host connection</Text>
           <Icon
             name={advancedOpen ? "ChevronDown" : "ChevronRight"}
             size={16}
@@ -495,6 +489,7 @@ function PairScanner({
     <View style={[styles.scanSafe, { paddingTop: insets.top }]}>
       <View style={styles.bar}>
         <Pressable
+          accessibilityRole="button"
           onPress={onCancel}
           hitSlop={12}
           accessibilityLabel="Cancel scan"

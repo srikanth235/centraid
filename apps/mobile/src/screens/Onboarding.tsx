@@ -237,7 +237,11 @@ function ConnectionStep({
             onBarcodeScanned={({ data }) => submit(data)}
           />
         </View>
-        <Pressable onPress={() => setScanning(false)} style={styles.textBtn}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setScanning(false)}
+          style={styles.textBtn}
+        >
           <Text style={styles.textBtnLabel}>Cancel</Text>
         </Pressable>
       </View>
@@ -309,6 +313,7 @@ function ConnectionStep({
               onPress={() => (pairing ? undefined : submit(code))}
             />
             <Pressable
+              accessibilityRole="button"
               onPress={() => (pairing ? undefined : setShowPaste(false))}
               style={styles.textBtn}
             >
@@ -332,6 +337,7 @@ function ConnectionStep({
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setShowPaste(true)}
               style={styles.textBtn}
               testID={TEST_IDS.onboarding.paste}

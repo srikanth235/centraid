@@ -15,20 +15,21 @@ import { useNavigationState } from "@react-navigation/native";
 
 import { parentPlace, place } from "../kit/rooms";
 import type { PlaceRef } from "../kit/rooms";
+import { SHELL_TITLES } from "./shell-copy";
 
-/** Route name → the words on a back control. Sentence case (D2). */
-const SHELL_TITLES: Readonly<Record<string, string>> = Object.freeze({
-  Approvals: "Notifications",
-  BackupHealth: "Backup health",
+/** Route name → the words on a back control; the nouns are `shell-copy`'s. */
+const ROUTE_TITLES: Readonly<Record<string, string>> = Object.freeze({
+  Approvals: SHELL_TITLES.alerts,
+  BackupHealth: SHELL_TITLES.backupHealth,
   Home: "Home",
-  PhoneStorage: "On this phone",
-  SettingsHome: "Settings",
-  Sharing: "Sharing",
+  PhoneStorage: SHELL_TITLES.onThisPhone,
+  SettingsHome: SHELL_TITLES.settings,
+  Sharing: SHELL_TITLES.sharing,
 });
 
 /** The title this table knows for a route, or `undefined`. */
 export function shellRouteTitle(name: string | undefined): string | undefined {
-  return name === undefined ? undefined : SHELL_TITLES[name];
+  return name === undefined ? undefined : ROUTE_TITLES[name];
 }
 
 /**

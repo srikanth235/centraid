@@ -128,7 +128,7 @@ export default function AllAppsSheet({
       >
         {apps.length > 0 ? (
           <Text style={styles.sectionHead}>
-            Apps · pinned apps appear on Home
+            Apps · pinned apps come first on Home
           </Text>
         ) : null}
         {apps.map((item) => (
@@ -148,7 +148,7 @@ export default function AllAppsSheet({
         ))}
         {places.length > 0 ? (
           <Text style={styles.sectionHead}>
-            Places · pinned places appear in the launcher
+            Places · pinned places come first in the launcher
           </Text>
         ) : null}
         {places.map((place) => (

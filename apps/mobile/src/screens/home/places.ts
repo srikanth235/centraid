@@ -24,7 +24,16 @@ export type PlaceId =
 export interface Place {
   id: PlaceId;
   name: string;
-  /** The band is 61px wide (:3480): declare a short name, never ellipsise. */
+  /**
+   * The band is 61px wide (:3480): declare a short name, never ellipsise.
+   *
+   * ONE NOUN PER DESTINATION (#1015, shell/findings 6). `short` may only DROP
+   * words from `name` — "On this phone" → "On phone" — never substitute a
+   * different noun for the same place. The band speaks `name` to VoiceOver and
+   * paints `short`, so a substitution ships two names to two members at once,
+   * which is how the Alerts place ended up wearing four. `places.test.ts`
+   * holds this.
+   */
   short: string;
   icon: IconName;
   what: string;
@@ -49,7 +58,7 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.notifications,
     id: "notifs",
     law: false,
-    name: "Notifications",
+    name: "Alerts",
     pin: true,
     short: "Alerts",
     what: "Everything the vault wanted to tell you",
@@ -129,6 +138,19 @@ export const PLACES: readonly Place[] = [
 ];
 
 export const PLACE_COUNT = PLACES.length;
+
+/**
+ * The one place whose band word is not its name (#1015, shell/findings 6+19).
+ *
+ * "Automations" does not fit 61px and cannot be shortened by dropping a word,
+ * so the band paints "Rules" — a SECOND noun for one destination, which is the
+ * defect this table otherwise forbids. It is written down here, and spoken as
+ * "Rules" too (`HomeBand`), so no member hears a name they cannot see; the
+ * naming itself is open with the owner. Every other place: `short` drops words
+ * from `name` and nothing else, which `places.test.ts` holds.
+ */
+export const SHORT_NAME_DIVERGENCES: Readonly<Record<string, string>> =
+  Object.freeze({ autos: "the name has no one-word short form" });
 
 const TOGGLEABLE_PLACES: readonly Place[] = PLACES.filter((p) => !p.law);
 

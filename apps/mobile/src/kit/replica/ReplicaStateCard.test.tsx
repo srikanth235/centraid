@@ -147,14 +147,16 @@ describe("offline/unavailable explanation card (issue #711)", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("shows the error message and 'could not be loaded' when offline WITH error", async () => {
+  it("names the surface, never the exception, when offline WITH error", async () => {
+    // S14 (#1015): `error` is the SIGNAL that the read failed. It arrives as
+    // `error.message` from five call sites and is never the member's words.
     await renderCard({
       connection: "offline",
       noun: "Notes",
       error: "Read failed",
     });
     expect(container.textContent).toContain("Notes could not be loaded");
-    expect(container.textContent).toContain("Read failed");
+    expect(container.textContent).toContain("could not be reached");
   });
 
   it("shows 'is not connected' for the unavailable state", async () => {
@@ -186,7 +188,7 @@ describe("offline/unavailable explanation card (issue #711)", () => {
       onRetry,
     });
     const button = container.querySelector("button");
-    expect(button?.textContent).toBe("Retry");
+    expect(button?.textContent).toBe("Try again");
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onRetry).toHaveBeenCalledOnce();
   });

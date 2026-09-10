@@ -19,6 +19,7 @@ import {
 } from "../../lib/connections";
 import type { ConnectionEntry } from "../../lib/connections";
 import { resolveGatewayBase } from "../../lib/gateway";
+import { SHELL_ERROR } from "../shell-copy";
 import { opsStateFor } from "./connectors-model";
 import type { ConnectorAct, ConnectorFilter } from "./connectors-model";
 
@@ -47,12 +48,12 @@ export interface ConnectorsController {
   perform: (connectionId: string, act: ConnectorAct) => void;
 }
 
-const NOT_PAIRED = "This phone is not paired with a gateway yet.";
+const NOT_PAIRED = "This phone is not paired with a vault host yet.";
 
-function describe(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : "The gateway did not answer.";
+// S14 (#1015): the exception is a fact about the program, not about the
+// member's vault, so this surface says its ONE noun whatever went wrong.
+function describe(_error: unknown): string {
+  return SHELL_ERROR.connectors;
 }
 
 async function read(apply: (next: ConnectorsLoad) => void): Promise<void> {
