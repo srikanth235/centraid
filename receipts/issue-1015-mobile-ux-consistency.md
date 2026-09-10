@@ -1352,3 +1352,66 @@ A rule absent from the file is at zero and unconditional, so deleting `back-lite
 7. `bun run lint:product` → **38/43**. `lint:mobile-rooms` passes. Five red, none of them this umbrella's: `lint:no-nul-bytes` (`packages/server/src/preview/fixtures/hevc-photo.heic`), `lint:quality-knobs` (stale fingerprints for `packages/server/src/automation/manifest/manifest.ts`, `packages/server/src/serve/health-registry.ts`), `lint:e2e-wiring` (`mobile-volume-proof` claimed by the ledger and scheduled by no lane) — none of those four files is touched between `main` and this head — plus `lint:hairline` (`apps/mobile/src/apps/photos/PhotosChoiceSheet.tsx:87` uses `hairlineWidth`, arrived with APPS-B's `62fc18ac4`) and `check:ui-receipt`, which is the umbrella's own PR-window gate and needs a screenshot from a changed e2e harness — no lane has a simulator.
 8. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → **10 rules, 0 errors, 1 warning** — `estate-separation`, unchanged in kind since Wave 4 and now larger: the umbrella edits `scripts/ci/gate-classes.json` (law) and 430 territory files in one PR. It is the root's to waive or split.
 9. `bunx vitest run src/lib/replica/expo-seat-driver.test.ts` → **red on the base**: "Flow is not supported" parsing `node_modules/react-native/index.js` under the stub-tier project. The file is byte-identical to `main`, as are `vitest.config.ts` and `vitest.projects.ts`; re-running it with `main`'s copy of the one `lib/replica` file this lane touched reproduces the failure exactly. Inherited, measured, not fixed.
+
+## Lane APPS-A — Wave 3 round 2: the S14 sweep, the two room defects, and two overturned rulings (#1015)
+
+Commits: `65c3be517` (R-A-15 sweep) · `4d4a6c4c8` (R-A-16, R-A-17) · `606d69da3` (R-A-18, R-A-19) · `7d0dc915c` (merge of `umbrella/1015-mobile-ux`) · `d0588d26c` (the `error-detail` ratchet to zero).
+
+### R-A-15 — no exception ever reaches a member
+
+`surfaceWriteFailure` interpolated `error.message` into the one status line at every one of its ~40 call sites, so what a member read when a write failed was whatever the transport, the SQLite driver or the intent admitter threw. It now logs the raw (`[write] failed`, docs/logs.md) and says the surface's noun plus the product's one retry word — the twin of `readFailure`, which already worked this way. Three more doors in the same class went with it:
+
+| Door | Before | After |
+| --- | --- | --- |
+| `surfaceWriteFailure` | `${title}: ${error.message}` | `${title}. Try again.` + `console.warn` |
+| the conflict line | `… Expected version 3; found 5. Open Pending changes…` | the reason and the route; no version numbers on the phone |
+| a refusal | `new Error(reason)` handed to the failure door (locker ×3, tally ×1) | `surfaceWriteRefusal(kind, title, detail)` — a typed channel, two true routes, raw to the log |
+| `grant-seat`'s link ticket | the gateway's throw, printed by `PersonGrants` and `TallyShareGroup` | `LINK_TICKET_NOT_MADE` |
+
+Every noun-less title got its noun: "Not written" → "Locker change not written", "Not exported" → "Locker not exported", "Not recorded" → "Expense not recorded", "RSVP failed" → "Reply not sent", "Cancellation failed" → "Event not cancelled". `TRY_AGAIN` is now `@centraid/client`'s `RETRY_ACTION` rather than a second copy of the same word.
+
+`apps/mobile/src/raw-error-copy.sweep.test.ts` is the pin — a source sweep over `apps/**` and `screens/**` that reads the ARGUMENT of every `postStatus` call by counting parentheses, plus the two doors themselves, plus `new Error(` reaching the failure door, plus a noun on every literal title. **It fails 4 of its 6 cases on `0a20ae0f3` and passes here.**
+
+The `error-detail` ratchet the umbrella's rooms gate carries named this ruling in its `clearedBy`; `d0588d26c` takes it from 12 to **0** and deletes the entry, which makes the rule unconditional. Those eleven were invisible to the `postStatus` sweep because each stores the raw in state first — Docs' failed-transfer row and "Refused · …" line, Locker's `readError`/`revealError`/`accessError`/`importNote`, Photos' per-file import reason and the timeline engine's `error` signal, Tally's spine. The picker's own refusals stay verbatim: `ImportFileRefusedError` carries authored copy, so it speaks for itself, exactly as `LocationNotRemovableError` does in Photos. Four tests that asserted the engine's words reaching copy ("replica not mounted", "Could not reach the gateway", "Gateway returned HTTP 404", "stage failed: 500") now assert the member's sentence — they were pinning the defect.
+
+### R-A-16, R-A-17 — the two room defects
+
+| Ruling | Closed by | What it was |
+| --- | --- | --- |
+| R-A-16 | `4d4a6c4c8` | `OptionSheet` passed `selectedId` to its Android rows and dropped it on the iOS branch, so a member opening "Birthday reminder" on a phone could not see which lead was already theirs. `ActionSheetIOS` has no selected-row API, so the ✓ rides in the label. `OptionSheet.test.tsx` covers both branches. |
+| R-A-17 | `4d4a6c4c8` | agenda/findings#15. Neither Agenda form wrapped anything in a `KeyboardAvoidingView` and both autofocused a field. `EditorRoom` and `SheetRoom` now avoid the keyboard once, and leaving by any door — Done, Cancel, the scrim, hardware back — dismisses it, so an editor cannot leave the keyboard up over the band behind it. `rooms-keyboard.test.tsx`. |
+
+### R-A-18, R-A-19 — two rulings overturned or corrected
+
+| Ruling | Closed by | What it was |
+| --- | --- | --- |
+| R-A-18 | `606d69da3` | `TasksDenied` printed a row labelled "Receipt" whose value was `board.error` — `caughtError.message` from `useSeatPages`. The gateway seat's gate keeps the label (a desk, with room for it); the phone drops the row, and `useSeatPages` already logs the raw at the catch. `deniedFacts` loses the input with it: the phone was its only caller. |
+| R-A-19 | `606d69da3` | `BIRTHDAY_LEADS` labels were glued to " ahead", so the same-day lead read "your phone tells you same day ahead" and "Inner circle · same day ahead". `birthdayLeadPhrase` is the sentence form beside the sheet's label; `birthdayNotificationBody` takes the days. `leadLabel` had no caller left and is gone. |
+
+### R-A-20 — Docs #8 and #11, owner items
+
+Both are OUT OF SCOPE for this umbrella and are listed here with the options and a recommendation, per the ruling.
+
+- **docs/findings#8 — "a folder is a label, not a place" is printed five times, and the 30-day purge rule three.** Three of the five are on ONE screen with three rows on it. Options: (a) state each ontology fact once, at the place a member first meets it, and let the status line carry the count alone — **recommended**; (b) keep the repetition as deliberate reinforcement for an unfamiliar model and record it as a divergence. (a) is four deletions in `docs-copy.ts` and `DocsFoldersView.tsx`; it deletes explanation, which is the owner's to authorise.
+- **docs/findings#11 — three names for the create entry, three for the same detail screen.** "New" / "Add to Docs" / "Add a document"; "Details" / "Details" / "Properties"; "Shared" / "Shared with you". Options: (a) one noun per destination, the screen's title winning ("Add a document", "Properties", "Shared") — **recommended**, and the cheapest of the three; (b) the control's word winning, which means retitling two screens; (c) leave it. The vocabulary is the owner's, so nothing was edited.
+
+### Files
+
+`apps/mobile/src/raw-error-copy.sweep.test.ts` (new) · `apps/mobile/src/kit/rooms/rooms-keyboard.test.tsx` (new) · `apps/mobile/src/kit/components/OptionSheet.test.tsx` (new) · `apps/mobile/src/kit/components/OptionSheet.tsx` · `apps/mobile/src/kit/replica/write-outcome.ts`, `…/write-outcome.test.ts` · `apps/mobile/src/kit/rooms/read-failure.ts`, `…/EditorRoom.tsx`, `…/SheetRoom.tsx`, `…/rooms.test.tsx` · `apps/mobile/src/kit/replica/ReplicaStatusBar.test.tsx` · `apps/mobile/src/kit/share/grant-seat.ts`, `…/grant-seat.test.ts` · `apps/mobile/src/test/react-native-stub.tsx` · `apps/mobile/src/screens/home/VaultsSwitcher.test.tsx` · `apps/mobile/src/lib/notifications.tsx`, `…/lib/birthday-notifications.ts`, `…/lib/birthday-notifications.test.ts` · `apps/mobile/src/apps/agenda/AgendaEvent.tsx`, `…/AgendaHome.tsx` · `apps/mobile/src/apps/automations/AutomationThread.tsx` · `apps/mobile/src/apps/docs/useDocs.ts`, `…/BulkUpload.tsx`, `…/DocumentEditor.tsx`, `…/editor-outcome.ts` · `apps/mobile/src/apps/locker/locker-writes.ts`, `…/locker-export.test.ts`, `…/locker-door.ts`, `…/locker-store.ts`, `…/locker-surfaces.ts`, `…/locker-surfaces.test.ts` · `apps/mobile/src/apps/notes/notes-copy.ts` · `apps/mobile/src/apps/people/people-writes.ts` · `apps/mobile/src/apps/photos/viewer-export.ts`, `…/camera-roll-import.ts`, `…/camera-roll-import.test.ts`, `…/camera-roll-import-run.ts`, `…/camera-roll-import-rungs.test.ts`, `…/timeline-engine.ts` · `apps/mobile/src/apps/tally/tally-writes.ts`, `…/tally-store.ts`, `…/tally-store.test.ts`, `…/tally-airplane.test.ts` · `apps/mobile/src/apps/tasks/useTasks.ts`, `…/TasksDenied.tsx`, `…/TasksHome.tsx`, `…/tasks-haptics.test.ts` · `packages/blueprints/apps/tasks/board-view.ts`, `…/board-view.test.ts`, `…/view-copy.ts` · `packages/blueprints/apps/agenda/day-context-copy.ts`, `…/view-copy.ts` · `scripts/lint-mobile-rooms.baseline.json`
+
+### Verification, from the lane worktree
+
+1. `cd apps/mobile && bunx vitest run src` → **316 files, 2681 passed, 0 failed**, plus the inherited `src/lib/replica/expo-seat-driver.test.ts` load failure measured in the round above and unchanged here.
+2. `bun run --cwd apps/mobile typecheck` → **0**. `bun run --cwd packages/blueprints typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 33`, `back-literal 0`, `page-margin 2`, `identity-tint 0`, `copy-title-case 0`, **`error-detail 0`** — 35 over 595 files. `--enforce` → **pass**; `node scripts/lint-mobile-rooms.test.mjs` → pass.
+4. `grep -rn "expo-haptics" apps/mobile/src/apps/{notes,tasks,agenda,docs}` → **no product source**; the five hits are the SABOTAGE sweep's own text and one test mock.
+5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**.
+6. `bun run format` then `CENTRAID_GATE_STAMPS=0 bun run check:push:static` → **4/4**.
+7. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → **10 rules, 0 errors, 1 warning**: `waiver-docket` says the merge's `estate-separation` waiver names docket row **D-11**, whose authority is still "pending owner grant". The row records the ask; only the owner answers it. Not self-granted.
+8. `bunx vitest run packages/blueprints` → 3 inherited failures (`one-computation` on a `kit` pair, `pending-destructive-projection`, a storage-noun copy sweep), **identical on `606d69da3`** and none of them in a file this round touched.
+
+### Out of the lane's own trees, named
+
+- `kit/share/grant-seat.ts` (+ its test): the SOURCE of the raw leak into `PersonGrants` and `TallyShareGroup`, and not a file any ruling named. Fixed under the lane-wide S14 licence rather than left as a known leak with two app-tree consumers. **Flagged for the root.**
+- `apps/{locker,photos,tally,people,automations}` and `screens/**` call sites, and the four tests that pinned the old strings: the R-A-15 sweep is lane-wide by the root's design.
+- The merge of `umbrella/1015-mobile-ux` needed one `governance: allow-estate-separation` waiver: the umbrella's own law file (`scripts/ci/gate-classes.json`) and its territory arrive in the same merge, which cannot be split.

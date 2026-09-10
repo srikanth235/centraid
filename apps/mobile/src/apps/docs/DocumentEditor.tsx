@@ -32,6 +32,7 @@ import {
   NOT_TEXT_REASON,
   postureFromResult,
   WHAT_CAN_BE_EDITED,
+  WRITE_NOT_LANDED,
 } from "./editor-outcome";
 import type { EditorPosture } from "./editor-outcome";
 import { editorWrite } from "./editor-write";
@@ -127,11 +128,8 @@ export default function DocumentEditor({
       }
       setClaimed(next);
     } catch (error) {
-      setClaimed({
-        id: "refused",
-        reason:
-          error instanceof Error ? error.message : "the write did not land",
-      });
+      console.warn("[docs] editor save failed", error);
+      setClaimed({ id: "refused", reason: WRITE_NOT_LANDED });
     }
   };
 

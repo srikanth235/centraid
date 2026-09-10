@@ -381,7 +381,6 @@ export default function TasksHome({
   if (refusal)
     body = (
       <TasksDenied
-        receipt={refusal}
         scope={TASKS_SCOPE}
         when={now.slice(0, 16).replace("T", " ")}
         styles={styles}

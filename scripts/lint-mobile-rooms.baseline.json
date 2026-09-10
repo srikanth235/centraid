@@ -1,5 +1,5 @@
 {
-  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). It may only ever go DOWN: a rule above its max fails `bun run lint:product`, a rule under it prints the number to lower it to, and a rule absent here is at ZERO. Each entry names the wave that clears it. Re-measured on lane/1015-kit after merging APPS-A and APPS-B Wave 3; run `node scripts/lint-mobile-rooms.mjs` to re-measure. `back-literal`, `identity-tint` and `copy-title-case` reached zero and are gone from this file, which makes them unconditional.",
+  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). It may only ever go DOWN: a rule above its max fails `bun run lint:product`, a rule under it prints the number to lower it to, and a rule absent here is at ZERO. Each entry names the wave that clears it. Re-measured on lane/1015-kit after merging APPS-A and APPS-B Wave 3; run `node scripts/lint-mobile-rooms.mjs` to re-measure. `back-literal`, `identity-tint`, `copy-title-case` and `error-detail` reached zero and are gone from this file, which makes them unconditional (`error-detail` by the R-A-15 sweep, #1015).",
   "rules": {
     "screen-root": {
       "max": 33,
@@ -8,10 +8,6 @@
     "page-margin": {
       "max": 2,
       "clearedBy": "NOBODY — both are `PhotoTile`'s `paddingHorizontal: 3`, the sub-base exceptions ruled at Wave 3. This entry is the allowlist; it does not go down."
-    },
-    "error-detail": {
-      "max": 12,
-      "clearedBy": "#1015 R-A-15 — the S14 sweep over Docs (2), Locker (4), Photos (5) and Tally (1). Ruled, not yet landed when the umbrella's last lane closed."
     }
   }
 }

@@ -52,19 +52,28 @@ export default function OptionSheet({
   const ios = Platform.OS === "ios";
   // The iOS sheet is imperative and fire-once: read the current props through a
   // ref so a re-render mid-sheet cannot stack a second one.
-  const latest = useRef({ title, options, onSelect, onClose });
+  const latest = useRef({ title, options, selectedId, onSelect, onClose });
   // Declared BEFORE the presenting effect, so on any commit the sheet reads
   // this render's props (effects run in declaration order).
   useEffect(() => {
-    latest.current = { title, options, onSelect, onClose };
+    latest.current = { title, options, selectedId, onSelect, onClose };
   });
 
   useEffect(() => {
     if (!visible || !ios) return;
     const current = latest.current;
-    const labels = current.options.map((option) =>
-      option.detail ? `${option.label} — ${option.detail}` : option.label
-    );
+    // THE CURRENT CHOICE IS SHOWN ON BOTH PLATFORMS (#1015, R-A-16). The
+    // Android branch has always drawn a ✓ beside it; the iOS branch dropped
+    // `selectedId` on the floor, so a member opening "Birthday reminder" on a
+    // phone could not see which lead was already theirs and had to guess.
+    // `ActionSheetIOS` has no selected-row API, so the mark rides in the label
+    // — the same mark, in the same place, as the sheet's other half.
+    const labels = current.options.map((option) => {
+      const line = option.detail
+        ? `${option.label} — ${option.detail}`
+        : option.label;
+      return option.id === current.selectedId ? `${line} ✓` : line;
+    });
     ActionSheetIOS.showActionSheetWithOptions(
       {
         title: current.title,

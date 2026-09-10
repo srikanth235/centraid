@@ -9,9 +9,21 @@
 // The status line is hosted inside for the same reason the editor hosts one:
 // a sheet is a `Modal`, and a note posted from inside it would otherwise
 // paint under it (audit B5).
+//
+// The keyboard is the room's, exactly as it is the editor's
+// (agenda/findings#15): a sheet that holds a field rides above the keyboard
+// rather than under it, and leaving by either door — the scrim or the quiet
+// word — takes the keyboard with it.
 
 import React, { useMemo } from "react";
-import { Modal, Pressable, View } from "react-native";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  View,
+} from "react-native";
 
 import Button from "../components/Button";
 import Grabber from "../components/Grabber";
@@ -47,7 +59,11 @@ export default function SheetRoom({
   overlay,
   testID,
 }: SheetRoomProps): React.JSX.Element | null {
-  const leave = cancelLabel ?? "Cancel";
+  const leaveLabel = cancelLabel ?? "Cancel";
+  const leave = (): void => {
+    Keyboard.dismiss();
+    onClose();
+  };
   const { colors } = useTheme();
   const ink = useMemo(
     () => ({
@@ -59,31 +75,38 @@ export default function SheetRoom({
   );
   if (!visible) return null;
   return (
-    <Modal animationType="slide" onRequestClose={onClose} transparent visible>
+    <Modal animationType="slide" onRequestClose={leave} transparent visible>
       <Pressable
         accessibilityLabel="Dismiss"
-        onPress={onClose}
+        onPress={leave}
         style={[styles.scrim, ink.scrim]}
       />
-      <View style={[styles.sheet, ink.sheet]} testID={testID}>
-        <Grabber />
-        <Text accessibilityRole="header" style={[styles.sheetTitle, ink.title]}>
-          {title}
-        </Text>
-        <View style={styles.sheetBody}>{children}</View>
-        <View style={styles.actionRow}>
-          <Button label={leave} onPress={onClose} variant="quiet" />
-          {primary ? (
-            <Button
-              disabled={primary.disabled}
-              label={primary.label}
-              onPress={() => primary.onPress()}
-              variant={primary.dangerous === true ? "destructive" : "primary"}
-            />
-          ) : null}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <View style={[styles.sheet, ink.sheet]} testID={testID}>
+          <Grabber />
+          <Text
+            accessibilityRole="header"
+            style={[styles.sheetTitle, ink.title]}
+          >
+            {title}
+          </Text>
+          <View style={styles.sheetBody}>{children}</View>
+          <View style={styles.actionRow}>
+            <Button label={leaveLabel} onPress={leave} variant="quiet" />
+            {primary ? (
+              <Button
+                disabled={primary.disabled}
+                label={primary.label}
+                onPress={() => primary.onPress()}
+                variant={primary.dangerous === true ? "destructive" : "primary"}
+              />
+            ) : null}
+          </View>
+          <StatusLineHost name="sheet" />
         </View>
-        <StatusLineHost name="sheet" />
-      </View>
+      </KeyboardAvoidingView>
       {overlay}
     </Modal>
   );

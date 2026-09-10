@@ -245,8 +245,11 @@ describe("the camera-roll import's device rungs", () => {
     renderFailure = undefined;
     warned = [];
     logged = [];
-    vi.spyOn(console, "warn").mockImplementation((line: unknown) => {
-      warned.push(String(line));
+    // BOTH ARGUMENTS. The reason rides beside the line as the thrown value
+    // rather than interpolated into it (#1015, S14 — R-A-15), so a capture
+    // that reads only the first argument would lose the HTTP status.
+    vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+      warned.push(args.map(String).join(" "));
     });
     vi.spyOn(console, "log").mockImplementation((line: unknown) => {
       logged.push(String(line));
@@ -365,7 +368,7 @@ describe("the camera-roll import's device rungs", () => {
         "http://gw/centraid/_vault/imports/b1/publish",
       ]);
       expect(warned).toStrictEqual([
-        "[centraid] import: device rungs skipped for IMG_0004.HEIC — could not render on device: 192x256 doesn't fit in 100x100",
+        "[centraid] import: device rungs skipped for IMG_0004.HEIC — could not render on device Error: 192x256 doesn't fit in 100x100",
       ]);
       expect(logged).toStrictEqual([]);
     });
@@ -425,7 +428,7 @@ describe("the camera-roll import's device rungs", () => {
       // The HTTP status is IN the line: a rejected contribution and an
       // unreachable gateway are different bugs.
       expect(warned).toStrictEqual([
-        "[centraid] import: device rungs skipped for IMG_0003.HEIC — contribution failed: Derivative thumb failed (500)",
+        "[centraid] import: device rungs skipped for IMG_0003.HEIC — contribution failed Error: Derivative thumb failed (500)",
       ]);
     });
   });

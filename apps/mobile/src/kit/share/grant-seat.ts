@@ -53,6 +53,9 @@ export function nativeGrantWire(
 export const LINK_TICKET_UNAVAILABLE_HERE =
   "Connect this phone to your gateway to make a link ticket.";
 
+/** And what it says when the mint itself did not land. */
+export const LINK_TICKET_NOT_MADE = "Link ticket not made. Try again.";
+
 /**
  * The phone's link-ticket door (#929 S6) — the same `peer_link_tickets`
  * ceremony `SharingLinkRow` uses, reached from the share sheet so an unlinked
@@ -74,11 +77,12 @@ export function nativeLinkTicketDoor(
         ? { ok: true, ticket }
         : { ok: false, message: LINK_TICKET_UNAVAILABLE_HERE };
     } catch (error) {
-      // The gateway's own words, which the sheet prints verbatim.
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : String(error),
-      };
+      // NOT THE GATEWAY'S OWN WORDS (#1015, S14 — R-A-15). What it throws here
+      // is a fetch failure or an HTTP status, and `PersonGrants` and
+      // `TallyShareGroup` were posting it into the status line verbatim. The
+      // raw goes to the log; the sheet gets the one sentence that is true.
+      console.warn("[share] link ticket failed", error);
+      return { ok: false, message: LINK_TICKET_NOT_MADE };
     }
   };
 }

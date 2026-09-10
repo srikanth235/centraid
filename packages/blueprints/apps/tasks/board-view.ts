@@ -75,23 +75,27 @@ export function nextSort(sort: TasksSortKey): TasksSortKey {
 }
 
 export interface DeniedFact {
-  key: "receipt" | "scope" | "when";
+  key: "scope" | "when";
   label: string;
   value: string;
 }
 
 export const TASKS_SCOPE = tasksScopeDeclaration.mintedIdFamilies.join(" · ");
 
-/** No row for a fact the seat lacks: an em dash beside "Receipt" is a
- *  placeholder wearing a fact's clothes. */
+/**
+ * No row for a fact the seat lacks: an em dash beside a label is a placeholder
+ * wearing a fact's clothes.
+ *
+ * THE REFUSAL STRING IS NOT ONE OF THESE FACTS (#1015, S14 — ruling R-A-18).
+ * It used to ride here as "Receipt", which on the phone meant the vault's own
+ * words — or whatever the transport threw — printed in the middle of a pane
+ * that otherwise says exactly what happened and what to do about it.
+ */
 export function deniedFacts(input: {
-  receipt?: string | null;
   scope?: string | null;
   when?: string | null;
 }): DeniedFact[] {
   const rows: DeniedFact[] = [];
-  if (input.receipt)
-    rows.push({ key: "receipt", label: DENIED.receipt, value: input.receipt });
   if (input.scope)
     rows.push({ key: "scope", label: DENIED.scope, value: input.scope });
   if (input.when)
