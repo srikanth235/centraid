@@ -1,14 +1,15 @@
-// Version history on the phone draws through SeatList (#922 E.4). The
-// unreadable state is a closed door, not an empty list; a readable chain
-// is one list whose header is the status sentence.
+// Version history on the phone draws through SeatList (#922 E.4): a readable
+// chain is one list whose header is the status sentence.
+//
+// THE CLOSED DOOR IS NO LONGER HERE (#1015). A chain that could not be read is
+// a read that failed, and the room draws that over everything else
+// (`RoomBody`); `NotesHome.test.tsx` holds that claim now. This file kept a
+// second unreadable state whose only trigger was the same condition.
 // @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  HISTORY_UNREADABLE,
-  historyStatus,
-} from "@centraid/blueprints/apps/notes/view-copy";
+import { historyStatus } from "@centraid/blueprints/apps/notes/view-copy";
 
 import { mountBlock, nodesOf } from "../../test/react-native-stub";
 import type { NativeNote } from "./notes-model";
@@ -50,29 +51,12 @@ const NOTE = {
 const EMPTY_CHAIN = { revisions: [] };
 
 describe("Notes version history", () => {
-  it("names the closed door when the chain could not be read", () => {
-    const { container, unmount } = mountBlock(
-      <NotesHistory
-        chainRows={EMPTY_CHAIN}
-        note={NOTE}
-        onRestore={() => undefined}
-        unreadable
-      />
-    );
-    expect(container.textContent).toContain(HISTORY_UNREADABLE);
-    expect(
-      nodesOf(container, "div").some((node) => node.dataset.role === "list")
-    ).toBe(false);
-    unmount();
-  });
-
   it("draws the chain through the seat list, status as the header", () => {
     const { container, unmount } = mountBlock(
       <NotesHistory
         chainRows={EMPTY_CHAIN}
         note={NOTE}
         onRestore={() => undefined}
-        unreadable={false}
       />
     );
     const list = nodesOf(container, "div").find(

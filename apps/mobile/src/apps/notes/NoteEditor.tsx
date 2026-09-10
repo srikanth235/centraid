@@ -8,7 +8,7 @@
 // those answers and derives none of them.
 
 import React, { useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
 import type { NotebookShelf } from "@centraid/blueprints/apps/notes/filing";
 import { bodySegments } from "@centraid/blueprints/apps/notes/format";
@@ -26,11 +26,12 @@ import {
   editorStatus,
 } from "@centraid/blueprints/apps/notes/view-copy";
 
-import Icon from "../../kit/components/Icon";
+import Button from "../../kit/components/Button";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import TopSafeArea from "../../kit/components/TopSafeArea";
+import EditorRoom from "../../kit/rooms/EditorRoom";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
+import { NOTES_PIN, editorTitle } from "./notes-copy";
 import type { NativeNote } from "./notes-model";
 import { styles } from "./NotesHome.styles";
 import NotesPowerbox from "./NotesPowerbox";
@@ -64,7 +65,44 @@ export interface NoteEditorProps {
   onLink: (target: LinkTarget, anchor: PassageAnchor | null) => void;
 }
 
-export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
+/**
+ * The acts that belong to ONE note, in the room's single foot row (#1015, D5):
+ * pin, version history, and the destructive verb — or Restore, when the note
+ * is in the trash and nothing else applies to it. Kit `Button`s, so the
+ * destructive verb is outlined `--net` rather than a hand-rolled red plate,
+ * and the disabled contract is the leaf's.
+ */
+function EditorActs(props: NoteEditorProps): React.JSX.Element | null {
+  const note = props.note;
+  if (!note) return null;
+  if (note.trashed)
+    return (
+      <Button label="Restore" onPress={props.onRestore} variant="primary" />
+    );
+  return (
+    <>
+      <Button
+        label={note.pinned ? NOTES_PIN.on : NOTES_PIN.off}
+        onPress={props.onTogglePin}
+        variant="quiet"
+      />
+      <Button
+        label="Versions"
+        onPress={props.onOpenHistory}
+        variant="secondary"
+      />
+      <Button
+        label={DELETE_NOTE_VERB}
+        onPress={props.onTrash}
+        variant="destructive"
+      />
+    </>
+  );
+}
+
+export default function NoteEditor(
+  props: NoteEditorProps
+): React.JSX.Element | null {
   const { colors } = useTheme();
   const [caret, setCaret] = useState({ start: 0, end: 0 });
   const [tagDraft, setTagDraft] = useState("");
@@ -90,306 +128,226 @@ export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
   };
 
   return (
-    <Modal
+    <EditorRoom
+      // AUTOSAVE MAKES THE VERB (D3): before the first keystroke nothing has
+      // been written and "Cancel" is honest; after it, closing is finishing.
+      cancellable={!props.dirty}
+      foot={<EditorActs {...props} />}
+      leaveTestID={TEST_IDS.notes.editorClose}
+      onDone={props.onClose}
+      presented
+      title={editorTitle(note)}
       visible={props.open}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={props.onClose}
     >
-      <TopSafeArea
-        accessibilityViewIsModal
-        style={[styles.sheet, { backgroundColor: colors.bg }]}
-      >
-        <View style={styles.modalHeader}>
-          <Pressable
-            accessibilityRole="button"
-            // AUTOSAVE MAKES THE VERB (D3): nothing has been typed, so this
-            // is still a cancel; once it has, closing is finishing.
-            accessibilityLabel={props.dirty ? "Done" : "Cancel"}
-            onPress={props.onClose}
-            testID={TEST_IDS.notes.editorClose}
-            style={styles.iconButton}
-          >
-            <Icon name="x" size={23} color={colors.text} />
-          </Pressable>
-          <Text style={[styles.modalTitle, { color: colors.text }]}>
-            {note ? (note.trashed ? "In trash" : "Note") : "New note"}
-          </Text>
-          {note && !note.trashed ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={note.pinned ? "Unpin" : "Pin"}
-              accessibilityState={{ selected: note.pinned }}
-              onPress={props.onTogglePin}
-              style={styles.iconButton}
-            >
-              <Icon
-                name="star"
-                size={22}
-                color={note.pinned ? colors.accent : colors.textFaint}
-              />
-            </Pressable>
-          ) : (
-            <View style={styles.iconButton} />
-          )}
-        </View>
-
-        <ScrollView contentContainerStyle={styles.editor}>
-          {/* The promise the blueprint has always printed, now true on this
+      <ScrollView contentContainerStyle={styles.editor}>
+        {/* The promise the blueprint has always printed, now true on this
               seat: the editor saves as you write. Drawn here rather than
               posted, because a modal presents above the root's status host. */}
-          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-            {editorStatus(props.versions)}
-          </Text>
-          <TextInput
-            accessibilityLabel="Note title"
-            value={props.title}
-            onChangeText={props.onTitle}
-            placeholder="Title"
-            placeholderTextColor={colors.textFaint}
-            style={[
-              styles.title,
-              { borderBottomColor: colors.line, color: colors.text },
-            ]}
-          />
-          <TextInput
-            accessibilityLabel="Note body"
-            value={props.body}
-            onChangeText={props.onBody}
-            onSelectionChange={(event) => setCaret(event.nativeEvent.selection)}
-            multiline
-            placeholder="Write"
-            placeholderTextColor={colors.textFaint}
-            style={[styles.body, { color: colors.text }]}
-          />
+        <Text style={[styles.subtitle, { color: colors.textSoft }]}>
+          {editorStatus(props.versions)}
+        </Text>
+        <TextInput
+          accessibilityLabel="Note title"
+          value={props.title}
+          onChangeText={props.onTitle}
+          placeholder="Title"
+          placeholderTextColor={colors.textFaint}
+          style={[
+            styles.title,
+            { borderBottomColor: colors.line, color: colors.text },
+          ]}
+        />
+        <TextInput
+          accessibilityLabel="Note body"
+          value={props.body}
+          onChangeText={props.onBody}
+          onSelectionChange={(event) => setCaret(event.nativeEvent.selection)}
+          multiline
+          placeholder="Write"
+          placeholderTextColor={colors.textFaint}
+          style={[styles.body, { color: colors.text }]}
+        />
 
-          {probe ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Link to something in your vault"
-              onPress={() => {
-                setLinkTerm(probe.term);
-                setLinking(true);
-              }}
-              style={[styles.chip, { borderColor: colors.line }]}
-            >
-              <Text style={[styles.chipText, { color: colors.accent }]}>
-                {`[[${probe.term}`}
-              </Text>
-            </Pressable>
-          ) : null}
+        {probe ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Link to something in your vault"
+            onPress={() => {
+              setLinkTerm(probe.term);
+              setLinking(true);
+            }}
+            style={[styles.chip, { borderColor: colors.line }]}
+          >
+            <Text style={[styles.chipText, { color: colors.accent }]}>
+              {`[[${probe.term}`}
+            </Text>
+          </Pressable>
+        ) : null}
 
-          {checks.length > 0 ? (
-            <View style={styles.section}>
-              {checks.map((segment) =>
-                segment.kind === "check" ? (
-                  <View key={segment.line} style={styles.fieldRow}>
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.rowName, { color: colors.text }]}
-                    >
-                      {segment.checked ? "☑ " : "☐ "}
-                      {segment.text}
-                    </Text>
-                    {/* Only a line naming a day, or one on `[[…]]`, earns the
+        {checks.length > 0 ? (
+          <View style={styles.section}>
+            {checks.map((segment) =>
+              segment.kind === "check" ? (
+                <View key={segment.line} style={styles.fieldRow}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.rowName, { color: colors.text }]}
+                  >
+                    {segment.checked ? "☑ " : "☐ "}
+                    {segment.text}
+                  </Text>
+                  {/* Only a line naming a day, or one on `[[…]]`, earns the
                         control — `wantsDate` is the judge, not this file. */}
-                    {note &&
-                    wantsDate({
-                      text: segment.text,
-                      checked: segment.checked,
-                    }) ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${SEND_TO_TASKS}: ${segment.text}`}
-                        onPress={() =>
-                          props.onSendToTasks(segment.line, segment.text)
-                        }
-                        style={[styles.chip, { borderColor: colors.line }]}
+                  {note &&
+                  wantsDate({
+                    text: segment.text,
+                    checked: segment.checked,
+                  }) ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${SEND_TO_TASKS}: ${segment.text}`}
+                      onPress={() =>
+                        props.onSendToTasks(segment.line, segment.text)
+                      }
+                      style={[styles.chip, { borderColor: colors.line }]}
+                    >
+                      <Text
+                        style={[styles.chipText, { color: colors.textSoft }]}
                       >
-                        <Text
-                          style={[styles.chipText, { color: colors.textSoft }]}
-                        >
-                          {SEND_TO_TASKS}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : null
-              )}
-            </View>
-          ) : null}
+                        {SEND_TO_TASKS}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null
+            )}
+          </View>
+        ) : null}
 
-          {note ? (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textFaint }]}>
-                Notebook
-              </Text>
-              <View style={styles.controls}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`File as ${UNFILED_ROW}`}
-                  accessibilityState={{ selected: props.filedIn.length === 0 }}
-                  onPress={() => props.onMove()}
+        {note ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textFaint }]}>
+              Notebook
+            </Text>
+            <View style={styles.controls}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`File as ${UNFILED_ROW}`}
+                accessibilityState={{ selected: props.filedIn.length === 0 }}
+                onPress={() => props.onMove()}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor:
+                      props.filedIn.length === 0
+                        ? colors.accentFill
+                        : colors.bgElev,
+                    borderColor: colors.line,
+                  },
+                ]}
+              >
+                <Text
                   style={[
-                    styles.chip,
+                    styles.chipText,
                     {
-                      backgroundColor:
+                      color:
                         props.filedIn.length === 0
-                          ? colors.accentFill
-                          : colors.bgElev,
-                      borderColor: colors.line,
+                          ? colors.textInv
+                          : colors.textSoft,
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      {
-                        color:
-                          props.filedIn.length === 0
-                            ? colors.textInv
-                            : colors.textSoft,
-                      },
-                    ]}
-                  >
-                    {UNFILED_ROW}
-                  </Text>
-                </Pressable>
-                {props.notebooks.map((shelf) => {
-                  const here = props.filedIn.includes(shelf.notebook_id);
-                  return (
-                    <Pressable
-                      key={shelf.notebook_id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Move to ${shelf.name}`}
-                      accessibilityState={{ selected: here }}
-                      onPress={() => props.onMove(shelf.notebook_id)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: here
-                            ? colors.accentFill
-                            : colors.bgElev,
-                          borderColor: colors.line,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          { color: here ? colors.textInv : colors.textSoft },
-                        ]}
-                      >
-                        {shelf.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
-
-          {note ? (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textFaint }]}>
-                Tags
-              </Text>
-              <View style={styles.controls}>
-                {props.tags.map((tag) => (
+                  {UNFILED_ROW}
+                </Text>
+              </Pressable>
+              {props.notebooks.map((shelf) => {
+                const here = props.filedIn.includes(shelf.notebook_id);
+                return (
                   <Pressable
-                    key={tag.tag_id}
+                    key={shelf.notebook_id}
                     accessibilityRole="button"
-                    accessibilityLabel={`Remove tag ${tag.label}`}
-                    onPress={() => props.onRemoveTag(tag.tag_id)}
+                    accessibilityLabel={`Move to ${shelf.name}`}
+                    accessibilityState={{ selected: here }}
+                    onPress={() => props.onMove(shelf.notebook_id)}
                     style={[
                       styles.chip,
                       {
-                        backgroundColor: colors.bgElev,
+                        backgroundColor: here
+                          ? colors.accentFill
+                          : colors.bgElev,
                         borderColor: colors.line,
                       },
                     ]}
                   >
-                    <Text style={[styles.chipText, { color: colors.textSoft }]}>
-                      {tag.label} ×
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.fieldRow}>
-                <TextInput
-                  accessibilityLabel="Add a tag"
-                  value={tagDraft}
-                  onChangeText={setTagDraft}
-                  onSubmitEditing={() => {
-                    props.onAddTag(tagDraft);
-                    setTagDraft("");
-                  }}
-                  placeholder="Add a tag"
-                  placeholderTextColor={colors.textFaint}
-                  style={[
-                    styles.field,
-                    { borderColor: colors.line, color: colors.text },
-                  ]}
-                />
-              </View>
-            </View>
-          ) : null}
-        </ScrollView>
-
-        <View style={styles.editorActions}>
-          {note?.trashed ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Restore this note"
-              onPress={props.onRestore}
-              style={[styles.button, { backgroundColor: colors.accentFill }]}
-            >
-              <Text style={[styles.buttonText, { color: colors.textInv }]}>
-                Restore
-              </Text>
-            </Pressable>
-          ) : (
-            <>
-              {note ? (
-                <>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Version history"
-                    onPress={props.onOpenHistory}
-                    style={[styles.button, { borderColor: colors.line }]}
-                  >
-                    <Icon name="History" size={18} color={colors.textSoft} />
                     <Text
-                      style={[styles.buttonText, { color: colors.textSoft }]}
+                      style={[
+                        styles.chipText,
+                        { color: here ? colors.textInv : colors.textSoft },
+                      ]}
                     >
-                      Versions
+                      {shelf.name}
                     </Text>
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Move this note to trash"
-                    onPress={props.onTrash}
-                    style={[styles.button, { borderColor: colors.danger }]}
-                  >
-                    <Text style={[styles.buttonText, { color: colors.danger }]}>
-                      {DELETE_NOTE_VERB}
-                    </Text>
-                  </Pressable>
-                </>
-              ) : null}
-            </>
-          )}
-        </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
-        <NotesPowerbox
-          open={linking}
-          term={linkTerm}
-          excluded={props.journalNoteIds}
-          onTerm={setLinkTerm}
-          onPick={pick}
-          onClose={() => setLinking(false)}
-        />
-      </TopSafeArea>
-    </Modal>
+        {note ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textFaint }]}>
+              Tags
+            </Text>
+            <View style={styles.controls}>
+              {props.tags.map((tag) => (
+                <Pressable
+                  key={tag.tag_id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove tag ${tag.label}`}
+                  onPress={() => props.onRemoveTag(tag.tag_id)}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: colors.bgElev,
+                      borderColor: colors.line,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: colors.textSoft }]}>
+                    {tag.label} ×
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.fieldRow}>
+              <TextInput
+                accessibilityLabel="Add a tag"
+                value={tagDraft}
+                onChangeText={setTagDraft}
+                onSubmitEditing={() => {
+                  props.onAddTag(tagDraft);
+                  setTagDraft("");
+                }}
+                placeholder="Add a tag"
+                placeholderTextColor={colors.textFaint}
+                style={[
+                  styles.field,
+                  { borderColor: colors.line, color: colors.text },
+                ]}
+              />
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+      <NotesPowerbox
+        open={linking}
+        term={linkTerm}
+        excluded={props.journalNoteIds}
+        onTerm={setLinkTerm}
+        onPick={pick}
+        onClose={() => setLinking(false)}
+      />
+    </EditorRoom>
   );
 }

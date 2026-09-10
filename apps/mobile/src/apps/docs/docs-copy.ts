@@ -178,3 +178,54 @@ export function selectionHead(count: number): string {
   if (count === 0) return "Choose documents";
   return `${count} ${count === 1 ? "document" : "documents"} selected`;
 }
+
+/**
+ * S14 (#1015 Wave 3). Three hand-over sites and the search each rendered the
+ * exception they caught — `error.message`, and `String(error)` when it was
+ * not even an Error — so a member met a stack's own words on a status line.
+ * The raw string belongs in the log, where a debug session starts
+ * (docs/logs.md); these are what the member is told.
+ */
+export const DOCS_HANDOVER_FAILED = "This document could not be handed over.";
+export const DOCS_SEARCH_REFUSED =
+  "This device could not search the vault just now. Try again.";
+/** Copy is signage: a status line names what it happened to. */
+export const DOCS_TRASHED = "Document moved to trash.";
+
+/**
+ * S11 (#1015 Wave 3): one label table per enum, in a `.ts`, never a switch or
+ * a ternary chain inside a `.tsx`. Docs spelled five enums at the point of
+ * use — custody, the upload's own progress, the arrangement, a capability's
+ * state — so no sweep could see them and each one drifted on its own.
+ */
+export const DOCS_CUSTODY: Readonly<Record<string, string>> = {
+  "local-only": "On this device only · not yet in the vault",
+  missing: "Missing — in neither place · needs attention",
+  "remote-only": "Only in the vault · not on this device",
+  replicated: "In the vault and on this device",
+  unswept:
+    "Not read yet · where this document lives is unknown until the vault next reads it",
+};
+
+/** An unknown custody value is unswept, never printed. */
+export function custodyLine(state: string | null | undefined): string {
+  return DOCS_CUSTODY[state ?? "unswept"] ?? DOCS_CUSTODY["unswept"]!;
+}
+
+export const DOCS_UPLOAD_STATE: Readonly<Record<string, string>> = {
+  failed: "Did not land",
+  landed: "Landed",
+  uploading: "Uploading…",
+  waiting: "Waiting",
+};
+
+export function uploadStateLabel(state: string): string {
+  return DOCS_UPLOAD_STATE[state] ?? DOCS_UPLOAD_STATE["failed"]!;
+}
+
+export const DOCS_ARRANGEMENT: Readonly<Record<string, string>> = {
+  grid: "Grid view",
+  list: "List view",
+};
+
+export const DOCS_CAPABILITY_STATE = { off: "Off", on: "On" } as const;

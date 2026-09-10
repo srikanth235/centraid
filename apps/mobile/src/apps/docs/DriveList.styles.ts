@@ -5,7 +5,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, radii, t } from "../../kit/theme";
+import { borders, pageMargin, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const makeStyles = (colors: ThemeColors) =>
@@ -18,13 +18,13 @@ export const makeStyles = (colors: ThemeColors) =>
       gap: 4,
       marginTop: 8,
       minHeight: 48,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     bulkVerb: {
       alignItems: "center",
       justifyContent: "center",
       minHeight: 44,
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
     },
     bulkVerbLabel: { ...t("control"), color: colors.text },
     bulkVerbNet: { color: colors.net },
@@ -32,7 +32,7 @@ export const makeStyles = (colors: ThemeColors) =>
     caption: {
       ...t("small"),
       color: colors.textFaint,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingTop: 8,
     },
     container: {
@@ -52,21 +52,21 @@ export const makeStyles = (colors: ThemeColors) =>
       borderRadius: radii.md,
       height: 44,
       justifyContent: "center",
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     primaryLabel: { ...t("control") },
     quietButton: {
       alignItems: "center",
       height: 44,
       justifyContent: "center",
-      paddingHorizontal: 10,
+      paddingHorizontal: spacing[3],
     },
     quietLabel: { ...t("control"), color: colors.textSoft },
     readOnly: {
       ...t("small"),
       color: colors.textSoft,
       paddingBottom: 8,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     renameActions: {
       flexDirection: "row",
@@ -80,7 +80,7 @@ export const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       color: colors.text,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     renamePanel: {
       backgroundColor: colors.bgElev,
@@ -101,7 +101,7 @@ export const makeStyles = (colors: ThemeColors) =>
       ...t("mono"),
       color: colors.textFaint,
       paddingBottom: 4,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingTop: 6,
     },
   });

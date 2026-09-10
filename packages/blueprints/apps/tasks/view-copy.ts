@@ -127,16 +127,30 @@ export function sittingSince(month: string): string {
   return `sitting since ${month}`;
 }
 
-/** Marks a shared-vault row; personal rows stay silent. */
-export const VAULT_MARKER = "HOUSE";
+/**
+ * Marks a shared-vault row; personal rows stay silent. SENTENCE CASE, like
+ * every other string the product ships (D2, #1015): the shout was written
+ * into the WORD, so the mark was uppercase wherever it landed, even where the
+ * type ramp did not ask for it. The eyebrow token still renders it in caps —
+ * that is the ramp's decision to make, not the copy's.
+ */
+export const VAULT_MARKER = "House";
 
 export const DONE = "Done";
 export const WONT_DO = "Won't do";
 export const UNDO = "Undo";
 export const REOPEN = "Reopen";
 
+/**
+ * The check-off STATUS, which is not the same string as the logbook group
+ * head. Copy is signage: "Done" on a line of its own is a fact about nothing,
+ * and the member who looks up a second later has to remember what they just
+ * touched (#1015, S11). `DONE` stays the group's and the row's word.
+ */
+export const TASK_DONE = "Task done";
+
 export function doneNext(day: string): string {
-  return `Done · the next one is ${day}`;
+  return `${TASK_DONE} · the next one is ${day}`;
 }
 
 // The editor
@@ -190,7 +204,16 @@ export const PRIORITY_NOTE_A = "Optional.";
 export const PRIORITY_NOTE_B =
   "Most tasks never take one, and no layout reserves room for it.";
 
-export const EFFORT_CHIPS = ["None", "5", "15", "25 min", "1 hour"] as const;
+// Every chip carries its unit (#1015 tasks/findings#19). "5" beside "25 min"
+// left the member to guess whether the bare numbers were minutes or something
+// else, and the guess was different in a list that also shows dates.
+export const EFFORT_CHIPS = [
+  "None",
+  "5 min",
+  "15 min",
+  "25 min",
+  "1 hour",
+] as const;
 export const EFFORT_NOTE_A = "Feeds the “fits in 30 minutes” lens in Today.";
 export const EFFORT_NOTE_B = "Never prompted for.";
 

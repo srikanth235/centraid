@@ -30,17 +30,24 @@ import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import PushedPage from "../../kit/rooms/PushedPage";
 import GrantSheet from "../../kit/share/GrantSheet";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import { TEST_IDS } from "../../kit/test-ids";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { FACTS_STATUS } from "./docs-copy";
+import { DOCS_HANDOVER_FAILED, FACTS_STATUS } from "./docs-copy";
 import { openElsewhere } from "./docs-export";
 import { bytesOnDevice } from "./docs-projection";
 import type { MobileDriveDoc } from "./docs-projection";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 import { factsRows, readStatus, readSurfaceFor } from "./document-read-model";
 import OfflinePinButton from "./OfflinePinButton";
 import { useDocument } from "./useDocs";
@@ -54,6 +61,7 @@ export default function DocumentRead({
   route,
   navigation,
 }: DocsScreenProps<"DocumentRead">): React.JSX.Element {
+  const room = useDocsRoom("all");
   const { documentId } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -78,25 +86,23 @@ export default function DocumentRead({
   }, [surface, navigation, documentId, doc?.title]);
 
   return (
-    <DocsScreen current="all">
-      <DocsShelfHeader
-        {...(doc?.title ? { title: doc.title } : {})}
-        {...(doc && audiences
-          ? {
-              trailing: (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={STAGE_ACTIONS.share}
-                  onPress={() => setShareOpen(true)}
-                  style={styles.headAction}
-                >
-                  <Icon name="Share" size={20} color={colors.text} />
-                </Pressable>
-              ),
-            }
-          : {})}
-      />
-      <ReplicaStatusBar />
+    <PushedPage
+      backTo={room.backTo}
+      backTestID={TEST_IDS.docs.breadcrumb}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      {...(doc && audiences
+        ? {
+            secondary: {
+              label: STAGE_ACTIONS.share,
+              onPress: () => setShareOpen(true),
+            },
+          }
+        : {})}
+      title={doc?.title ?? room.title}
+    >
       {/* OBJECT-FIRST: this route is already about one document. */}
       {doc && audiences ? (
         <GrantSheet
@@ -150,7 +156,7 @@ export default function DocumentRead({
         // The stage hand-off is in flight; nothing to draw under it.
         <View style={styles.page} />
       )}
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -232,11 +238,9 @@ function FactsView({
     try {
       await openElsewhere(doc, gatewayBase, vaultId);
     } catch (error) {
-      postStatus(
-        error instanceof Error
-          ? error.message
-          : "This document could not be handed over."
-      );
+      // The exception is for the LOG, never for the member (#1015, S14).
+      console.warn("[docs] hand-over failed", error);
+      postStatus(DOCS_HANDOVER_FAILED);
     } finally {
       setExporting(false);
     }
@@ -389,7 +393,7 @@ const makeStyles = (colors: ThemeColors) => {
     editButton: { alignSelf: "flex-start", marginTop: 20 },
     eyebrow: { ...t("eyebrow"), color: colors.textFaint, paddingBottom: 6 },
     factKey: { ...t("eyebrow"), color: colors.textFaint },
-    factRow: { gap: 4, paddingHorizontal: 12, paddingVertical: 10 },
+    factRow: { gap: 4, paddingHorizontal: spacing[3], paddingVertical: 10 },
     linkLabel: { ...t("body"), color: colors.text },
     linkMain: { flex: 1, gap: 2, minWidth: 0 },
     linkNote: { ...t("small"), color: colors.textFaint },
@@ -400,7 +404,7 @@ const makeStyles = (colors: ThemeColors) => {
       flexDirection: "row",
       gap: 12,
       minHeight: 52,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[4],
       paddingVertical: 8,
     },
     thisDoc: {
@@ -414,7 +418,7 @@ const makeStyles = (colors: ThemeColors) => {
     thisDocEyebrow: {
       ...t("eyebrow"),
       color: colors.textFaint,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[4],
       paddingVertical: 10,
     },
     factRule: {
@@ -434,8 +438,12 @@ const makeStyles = (colors: ThemeColors) => {
       maxWidth: READING_MEASURE_EM * (readingRole.fontSize ?? 17),
       width: "100%",
     },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
-    readScroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 16 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
+    readScroll: {
+      paddingBottom: 32,
+      paddingHorizontal: pageMargin,
+      paddingTop: 16,
+    },
     reading: { ...t("reading"), color: colors.text },
     status: { ...t("mono"), color: colors.textFaint, paddingTop: 16 },
   });

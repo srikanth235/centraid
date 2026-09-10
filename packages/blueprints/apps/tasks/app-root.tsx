@@ -97,7 +97,7 @@ import type { ShelfId } from "./shelves.ts";
 import type { AppState, BoardData, Overlay, Task } from "./types.ts";
 import {
   CANCEL,
-  DONE,
+  TASK_DONE,
   GROUPS,
   MORE_ROWS,
   REENTRY_BUCKETS,
@@ -382,7 +382,7 @@ export function Root({
       const text =
         task.rrule && task.next_due
           ? doneNext(weekdayName(task.next_due))
-          : DONE;
+          : TASK_DONE;
       void (async () => {
         const rows = () => [
           ...dataRef.current.open,

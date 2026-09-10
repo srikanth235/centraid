@@ -24,22 +24,33 @@ import {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { CAPABILITY_SWITCH_WITHHELD, capabilitiesStatus } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import {
+  CAPABILITY_SWITCH_WITHHELD,
+  DOCS_CAPABILITY_STATE,
+  capabilitiesStatus,
+} from "./docs-copy";
+import { useDocsRoom } from "./docs-room";
 
 export default function DocsCapabilities({
   navigation,
 }: DocsScreenProps<"DocsCapabilities">): React.JSX.Element {
+  const room = useDocsRoom("more");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text accessibilityRole="header" style={styles.title}>
           {CAPABILITIES_TITLE}
@@ -51,7 +62,9 @@ export default function DocsCapabilities({
             <View style={styles.panelHead}>
               <Text style={styles.name}>{capability.name}</Text>
               <Text style={styles.state}>
-                {capabilityOn(capability.id) ? "On" : "Off"}
+                {capabilityOn(capability.id)
+                  ? DOCS_CAPABILITY_STATE.on
+                  : DOCS_CAPABILITY_STATE.off}
               </Text>
             </View>
             <Text style={styles.what}>{capability.what}</Text>
@@ -79,7 +92,7 @@ export default function DocsCapabilities({
           {capabilitiesStatus(capabilitiesOnCount())}
         </Text>
       </ScrollView>
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -129,7 +142,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: 6,
       minHeight: 44,
     },
-    scroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 8 },
+    scroll: { paddingBottom: 32, paddingHorizontal: pageMargin, paddingTop: 8 },
     state: { ...t("eyebrow"), color: colors.textFaint },
     status: { ...t("mono"), color: colors.textFaint, paddingTop: 6 },
     title: { ...t("title"), color: colors.text, paddingBottom: 6 },

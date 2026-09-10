@@ -20,12 +20,13 @@ import {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticMode } from "../../kit/haptics";
 import {
   READ_ONLY_SOURCE_REASON,
   rowCanWrite,
 } from "../../kit/replica/row-provenance";
 import { useTheme } from "../../kit/theme";
-import { taskRowModel } from "./tasks-row-model";
+import { checkboxLabel, taskRowModel } from "./tasks-row-model";
 import type { TasksStyles } from "./TasksHome.styles";
 
 export function isClosed(task: Task): boolean {
@@ -83,9 +84,13 @@ export default function TaskRow({
         picked ? styles.rowPicked : undefined,
       ]}
     >
+      {/* Two targets on one row, and they used to answer to the same name
+          (#1015 tasks/findings#23): VoiceOver read the title twice and told
+          the member nothing about which half did what. The box says the act
+          it performs; the body says the task it opens. */}
       <Pressable
         accessibilityRole="checkbox"
-        accessibilityLabel={task.title}
+        accessibilityLabel={checkboxLabel(task.title, done)}
         accessibilityState={{ checked: done, disabled: !writable }}
         accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
         disabled={!writable}
@@ -100,7 +105,17 @@ export default function TaskRow({
         accessibilityState={{ selected: picked === true }}
         onPress={() => onOpen(task)}
         testID={testID}
-        {...(writable && onPickUp ? { onLongPress: () => onPickUp(task) } : {})}
+        {...(writable && onPickUp
+          ? {
+              onLongPress: (): void => {
+                // Picking a task up puts the whole board into filing mode —
+                // the one long-press in Tasks that changes a MODE rather than
+                // opening something (#1015, S15).
+                hapticMode();
+                onPickUp(task);
+              },
+            }
+          : {})}
         style={styles.rowMain}
       >
         <View style={styles.titleLine}>

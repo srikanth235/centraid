@@ -16,10 +16,15 @@ export interface RoomAction {
   onPress: () => void;
   /** The disabled contract is the leaf's (`Button`); this only declares it. */
   disabled?: boolean;
-  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2).
-   *  A verb the rooms draw is still the verb a flow selects: Photos' Select
-   *  chip and its two selection verbs kept their handles across the
-   *  migration, and `lint-mobile-testids` fails the PR that drops one. */
+  /**
+   * A handle from `kit/test-ids`, never a hand-spelled string (#890 W2).
+   * The verb a room draws is often the one an end-to-end flow taps — Notes'
+   * `notes-capture` is the app's whole write door, and Photos' Select chip
+   * and its two selection verbs kept their handles across the migration — so
+   * a room that swallowed the handle would take those flows away from every
+   * screen that moved into it. `lint-mobile-testids` fails the PR that
+   * drops one.
+   */
   testID?: string;
 }
 
@@ -97,15 +102,31 @@ export interface BandState {
   dimmed: boolean;
 }
 
-/** The band state a room in this selection is in. */
+/**
+ * The band state a room in this selection is in.
+ *
+ * THE MODE IS THE OBJECT, NOT THE COUNT (#1015, Wave 2). This read `count > 0`
+ * first, which left the moment between "Select" and the first pick with a live
+ * band, a header that still said the shelf's name, and no way out at all —
+ * Docs' drive is where that shows, because its `Select` control stands the
+ * primary act down as it turns the mode on. A screen that is not choosing
+ * passes no selection; one that is, is choosing at zero as much as at three.
+ */
 export function bandStateFor(selection?: RoomSelection): BandState {
-  const selecting = selection !== undefined && selection.count > 0;
+  const selecting = selection !== undefined;
   return { dimmed: selecting, interactive: !selecting };
 }
 
-/** "3 photographs selected", or "3 selected" when the caller names no noun. */
+/**
+ * "3 photos selected", or "3 selected" when the caller names no noun. The
+ * noun agrees with the count, so one photo is "1 photo selected". At zero the
+ * sentence is an instruction rather than a count — "Choose photos" — because
+ * "0 photos selected" states a fact nobody needed and asks for nothing.
+ */
 export function selectedSentence(selection: RoomSelection): string {
   const { count, noun } = selection;
+  if (count === 0)
+    return noun === undefined ? "Choose what to act on" : `Choose ${noun}s`;
   if (noun === undefined) return `${count} selected`;
   return `${count} ${count === 1 ? noun : `${noun}s`} selected`;
 }

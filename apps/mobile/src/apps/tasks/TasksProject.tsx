@@ -15,17 +15,12 @@ import {
   projectSections,
   sectionWrite,
 } from "@centraid/blueprints/apps/tasks/projects";
-import { PROJECTS } from "@centraid/blueprints/apps/tasks/shelves";
 import type {
   Project,
   Section,
   Task,
 } from "@centraid/blueprints/apps/tasks/types";
-import {
-  GROUPS,
-  SECTIONS,
-  shelfCopy,
-} from "@centraid/blueprints/apps/tasks/view-copy";
+import { GROUPS, SECTIONS } from "@centraid/blueprints/apps/tasks/view-copy";
 import { landedTaskId } from "@centraid/blueprints/apps/tasks/writes";
 
 import { Text, TextInput } from "../../kit/components/NativeText";
@@ -35,7 +30,6 @@ import { flattenGroups } from "./tasks-groups";
 import type { TasksListItem } from "./tasks-groups";
 import { TASK_NAME_PLACEHOLDER } from "./tasks-seat-copy";
 import type { TasksStyles } from "./TasksHome.styles";
-import TasksPlaceHeader from "./TasksPlaceHeader";
 import type { TasksWrite } from "./useTasks";
 
 export interface TasksProjectProps {
@@ -45,7 +39,6 @@ export interface TasksProjectProps {
   now: string;
   styles: TasksStyles;
   write: TasksWrite;
-  onBack: () => void;
   onToggle: (task: Task) => void;
   onOpen: (task: Task) => void;
 }
@@ -57,7 +50,6 @@ export default function TasksProject({
   now,
   styles,
   write,
-  onBack,
   onToggle,
   onOpen,
 }: TasksProjectProps): React.JSX.Element {
@@ -145,59 +137,51 @@ export default function TasksProject({
     );
   };
 
+  // The head and the back control are the ROOM's (#1015, B7): this file draws
+  // the project's own list and nothing about where the member came from.
   return (
-    <>
-      <TasksPlaceHeader
-        title={project.name}
-        backTo={shelfCopy(PROJECTS).title}
-        onBack={onBack}
-        styles={styles}
-      />
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.key}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ListFooterComponent={
-          <View style={styles.pane}>
-            <TextInput
-              accessibilityLabel={SECTIONS.add}
-              placeholder={SECTIONS.name}
-              placeholderTextColor={colors.textGhost}
-              value={sectionDraft}
-              onChangeText={setSectionDraft}
-              style={styles.searchField}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={SECTIONS.add}
-              accessibilityState={{
-                disabled: sectionDraft.trim().length === 0,
-              }}
-              disabled={sectionDraft.trim().length === 0}
-              onPress={() => {
-                void write(
-                  "save-section",
-                  sectionWrite({
-                    projectId: project.project_id,
-                    name: sectionDraft,
-                    sortOrder: own.length + 1,
-                  })
-                );
-                setSectionDraft("");
-              }}
-              style={[
-                styles.primary,
-                sectionDraft.trim().length === 0
-                  ? styles.primaryOff
-                  : undefined,
-              ]}
-            >
-              <Text style={styles.primaryText}>{SECTIONS.add}</Text>
-            </Pressable>
-          </View>
-        }
-      />
-    </>
+    <FlatList
+      data={items}
+      keyExtractor={(item) => item.key}
+      renderItem={renderItem}
+      contentContainerStyle={styles.listContent}
+      ListFooterComponent={
+        <View style={styles.pane}>
+          <TextInput
+            accessibilityLabel={SECTIONS.add}
+            placeholder={SECTIONS.name}
+            placeholderTextColor={colors.textGhost}
+            value={sectionDraft}
+            onChangeText={setSectionDraft}
+            style={styles.searchField}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={SECTIONS.add}
+            accessibilityState={{
+              disabled: sectionDraft.trim().length === 0,
+            }}
+            disabled={sectionDraft.trim().length === 0}
+            onPress={() => {
+              void write(
+                "save-section",
+                sectionWrite({
+                  projectId: project.project_id,
+                  name: sectionDraft,
+                  sortOrder: own.length + 1,
+                })
+              );
+              setSectionDraft("");
+            }}
+            style={[
+              styles.primary,
+              sectionDraft.trim().length === 0 ? styles.primaryOff : undefined,
+            ]}
+          >
+            <Text style={styles.primaryText}>{SECTIONS.add}</Text>
+          </Pressable>
+        </View>
+      }
+    />
   );
 }

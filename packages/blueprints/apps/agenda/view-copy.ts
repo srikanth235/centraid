@@ -73,6 +73,34 @@ export const PARKED_CANCEL_BODY =
   "The event stays on the agenda until the owner approves the cancellation.";
 export const PARKED_CANCEL_REVIEW = "Review in Approvals";
 
+/**
+ * The one attendance enum, said once (#1015 agenda/findings#16). The event
+ * screen printed `String(attendee["partstat"])` for every value but
+ * `needs-action`, so a member read the iCalendar word — "tentative",
+ * "declined" — off the vault's own storage. The RSVP chips and the guest
+ * list are two REGISTERS of the same enum: the chips are what you would do,
+ * the list is what someone did.
+ */
+export const PARTSTAT_CHOOSE: Readonly<Record<string, string>> = {
+  accepted: "Going",
+  declined: "Not going",
+  tentative: "Maybe",
+};
+
+export const PARTSTAT_SAID: Readonly<Record<string, string>> = {
+  accepted: "Going",
+  declined: "Not going",
+  "needs-action": "No answer yet",
+  tentative: "Maybe",
+};
+
+/** Never the raw value: a partstat this seat does not know is unanswered. */
+export function partstatLabel(partstat: unknown): string {
+  return (
+    PARTSTAT_SAID[String(partstat ?? "")] ?? PARTSTAT_SAID["needs-action"]!
+  );
+}
+
 export const PENDING_MARK = "not in the vault yet";
 export const PENDING_CANCEL_CHIP = "cancel asked";
 

@@ -119,9 +119,12 @@ describe("stated once above the route, never one refusing button at a time", () 
     // The checkbox refuses, the long-press that files a task is not attached,
     // and the group's move-all is withheld where no row could take it.
     expect(TASK_ROW_SRC).toMatch(/disabled=\{!writable\}/u);
-    expect(TASK_ROW_SRC).toMatch(
-      /\{\.\.\.\(writable && onPickUp \? \{ onLongPress: \(\) => onPickUp\(task\) \} : \{\}\)\}/u
-    );
+    // The GUARD is what this pins, not the handler's shape: the prop is
+    // spread in only when the row is writable, so a read-only row has no
+    // `onLongPress` at all rather than one that refuses. (The handler itself
+    // grew a mode buzz in #1015 S15; that is inside the guard.)
+    expect(TASK_ROW_SRC).toMatch(/\{\.\.\.\(writable && onPickUp$/mu);
+    expect(TASK_ROW_SRC).toMatch(/onLongPress: \(\): void => \{/u);
     expect(TASKS_SRC).toMatch(/rowCanWrite\(row\)/u);
   });
 

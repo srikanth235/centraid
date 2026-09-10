@@ -24,6 +24,14 @@ export function shelfDue(count: number): string {
 export const SHELF_HIDE = "Hide";
 export const SHELF_OPEN_IN_TASKS = "Open in Tasks";
 
+/**
+ * What the shelf toggle IS, for a screen reader. Its visible word is a bare
+ * count — "3 due" — which names no subject at all, and "Hide" once it is
+ * open, which names no object (#1015 Wave 3, a11y). The state travels as
+ * `accessibilityState.expanded`, so the name never says "hide" or "show".
+ */
+export const SHELF_A11Y = "Tasks due on this day";
+
 export function birthdayNotificationTitle(
   name: string,
   weekday: string

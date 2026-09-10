@@ -91,6 +91,14 @@ describe("the spec's copy table, verbatim", () => {
     expect(historyStatus(9)).toBe(
       "9 versions · restoring appends, it never rewrites"
     );
+    // A count agrees with its noun (#1015 notes/findings#15): the app shipped
+    // "1 versions" in both counters.
+    expect(editorStatus(1)).toBe(
+      "Every change is saved as you write · 1 version kept"
+    );
+    expect(historyStatus(1)).toBe(
+      "1 version · restoring appends, it never rewrites"
+    );
     expect(PENDING_CHIP).toBe("Saved on this device · queued for the vault");
     expect(pendingStatus(3)).toBe(
       "3 writes queued on this device · they settle when the gateway answers"

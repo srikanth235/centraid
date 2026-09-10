@@ -164,7 +164,12 @@ export default function DuplicatesShelf({
           })}
       onBack={() => navigation.goBack()}
       route="duplicates"
-      selection={selectionBar}
+      // Presence is the mode (`bandStateFor`): a screen that is not
+      // choosing passes NO selection. Passing the bar unconditionally
+      // left this screen permanently in the selection mode — the header
+      // swapped for "Choose photographs" and the band sat dimmed and
+      // dead before a single photograph had been picked (R-A-14).
+      selection={selection.size > 0 ? selectionBar : undefined}
       title="Duplicates"
     >
       <ReplicaStatusBar />

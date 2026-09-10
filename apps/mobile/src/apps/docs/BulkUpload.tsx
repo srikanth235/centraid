@@ -19,14 +19,20 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
-import { bulkStatus } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { bulkStatus, uploadStateLabel } from "./docs-copy";
+import { useDocsRoom } from "./docs-room";
 
 interface PickedFile {
   key: string;
@@ -41,6 +47,7 @@ interface PickedFile {
 export default function BulkUpload(
   _props: DocsScreenProps<"DocsUpload">
 ): React.JSX.Element {
+  const room = useDocsRoom("more");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session, gatewayBase, vaultId } = useReplica();
@@ -122,9 +129,14 @@ export default function BulkUpload(
   const offline = !session || !gatewayBase;
 
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader />
-      <ReplicaStatusBar />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.controls}>
           <Button label="Choose files" onPress={() => void pick()} />
@@ -179,13 +191,7 @@ export default function BulkUpload(
                     file.state === "failed" ? { color: colors.net } : undefined,
                   ]}
                 >
-                  {file.state === "waiting"
-                    ? "waiting"
-                    : file.state === "uploading"
-                      ? "uploading…"
-                      : file.state === "landed"
-                        ? "landed"
-                        : "did not land"}
+                  {uploadStateLabel(file.state)}
                 </Text>
                 {file.state === "failed" && !running ? (
                   <Button
@@ -214,7 +220,7 @@ export default function BulkUpload(
           </Text>
         ) : null}
       </ScrollView>
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -235,7 +241,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 10,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 6,
     },
     rowError: { ...t("small"), color: colors.net },
@@ -246,6 +252,6 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopWidth: borders.hairline,
     },
     rowState: { ...t("small"), color: colors.textFaint },
-    scroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 8 },
+    scroll: { paddingBottom: 32, paddingHorizontal: pageMargin, paddingTop: 8 },
     status: { ...t("mono"), color: colors.textFaint, paddingTop: 8 },
   });

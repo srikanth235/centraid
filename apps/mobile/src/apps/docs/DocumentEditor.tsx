@@ -21,14 +21,11 @@ import { isTextKind } from "@centraid/blueprints/apps/docs/format";
 
 import Button from "../../kit/components/Button";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import SkeletonRows from "../../kit/components/SkeletonRows";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import EditorRoom from "../../kit/rooms/EditorRoom";
+import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
 import {
   EDITOR_ACTION_LABELS,
   editorOutcomeCopy,
@@ -151,18 +148,25 @@ export default function DocumentEditor({
   const copy = posture ? editorOutcomeCopy(posture) : null;
 
   return (
-    <DocsScreen current="all">
-      <DocsShelfHeader />
-      <ReplicaStatusBar />
-      {loading && !doc ? (
-        <SkeletonRows accessibilityLabel="Reading this document" />
-      ) : doc == null ? (
-        <View style={styles.page}>
-          <Text style={styles.note}>
-            This document is not in the drive this device can see.
-          </Text>
-        </View>
-      ) : (
+    <EditorRoom
+      // AUTOSAVE, AND CLOSE IS DONE (#1015, D3): every keystroke already goes
+      // through `edit`, so the leave key never asks and never discards.
+      onDone={() => navigation.goBack()}
+      title={doc?.title ?? "Edit"}
+      {...(loading && !doc
+        ? { loading: { label: "Reading this document", rows: 6 } }
+        : {})}
+      {...(!loading && doc == null
+        ? {
+            error: {
+              body: "This document is not in the drive this device can see.",
+              retry: { label: "Go back", onPress: () => navigation.goBack() },
+              title: "Document not here",
+            },
+          }
+        : {})}
+    >
+      {doc == null ? null : (
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.measure}>
             {textKind ? (
@@ -247,7 +251,7 @@ export default function DocumentEditor({
           </View>
         </ScrollView>
       )}
-    </DocsScreen>
+    </EditorRoom>
   );
 }
 
@@ -280,9 +284,13 @@ const makeStyles = (colors: ThemeColors) => {
       width: "100%",
     },
     note: { ...t("body"), color: colors.textSoft },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     saveButton: { alignSelf: "flex-start", marginTop: 8 },
-    scroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 16 },
+    scroll: {
+      paddingBottom: 32,
+      paddingHorizontal: pageMargin,
+      paddingTop: 16,
+    },
     stateBlock: { gap: 8, paddingVertical: 12 },
     stateLine: { ...t("small"), color: colors.textSoft, flex: 1 },
     stateRow: { alignItems: "center", flexDirection: "row", gap: 8 },
