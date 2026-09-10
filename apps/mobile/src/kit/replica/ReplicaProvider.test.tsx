@@ -280,7 +280,7 @@ vi.mock(
   import("../../lib/vault-links"),
   () =>
     ({
-      LAST_BASE: "replica.lastBase",
+      LastBase: { hydrate: async () => "http://127.0.0.1", set() {} },
       LAST_GATEWAY: "replica.lastGateway",
       LAST_VAULT: "replica.lastVault",
       getActiveVaultLink: () => registry.active,

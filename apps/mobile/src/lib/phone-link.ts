@@ -214,7 +214,15 @@ export async function unpair(): Promise<void> {
   if (active) await removeVaultLink(active.id);
 }
 
-/** Stops the tunnel only when the gateway changes. */
+/**
+ * Stops the tunnel whenever the gateway is not provably the same one.
+ *
+ * `prev &&` used to gate this (#1014, P13): with no previous link — a cold
+ * switch, a hydrate that lost the active id — a running tunnel to some OTHER
+ * gateway was kept, and the new mount's seat, feed and intent drain all opened
+ * against its port. "I cannot tell" and "it is the same gateway" are not the
+ * same answer, and only one of them is safe to reuse a tunnel on.
+ */
 export async function switchVaultLink(
   id: string
 ): Promise<VaultLink | undefined> {
@@ -223,7 +231,7 @@ export async function switchVaultLink(
   if (prev?.id === id) return prev;
   const next = await setActiveVaultLink(id);
   if (!next) return undefined;
-  if (isTunnelAvailableImpl() && prev && prev.gatewayId !== next.gatewayId) {
+  if (isTunnelAvailableImpl() && prev?.gatewayId !== next.gatewayId) {
     await stopTunnel().catch(() => {
       /* not running */
     });
