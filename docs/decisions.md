@@ -93,6 +93,7 @@ Automations remain owner-authored — the automation compiler is a live "builder
 | **[ONT-revisions](#ontology-v0-close-916)** | **Restated as reader-enforced** by [#996](https://github.com/srikanth235/centraid/issues/996) [R20(a)](#one-vault-every-seat-996). "One revision mechanism" was enforced on storage and violated by a reader: `recordRevision` keeps a second content→content history graph and restore walks it ([ONT-22](vault-ontology.md#drift-register)). A revision becomes an occurrence with its own identity, and the second graph is deleted. |
 | **[ONT-currency](#ontology-v0-close-916)** ("money states its currency") | **Restated as reader-enforced** by [#996](https://github.com/srikanth235/centraid/issues/996) [R22](#one-vault-every-seat-996). The columns carry the currency; the aggregate dropped it ([ONT-23](vault-ontology.md#drift-register)). Balances are `(party, currency)`, a base-currency overview is an explicit valuation, and a shared Money type makes a bare amount unrenderable as a balance. |
 | **[ONT-recur](#ontology-v0-close-916)** ("recurrence is honest about time") | **Restated as reader-enforced** by [#996](https://github.com/srikanth235/centraid/issues/996) [R21](#one-vault-every-seat-996). The writer stores `original_start_local` and three readers read `original_start` ([ONT-25](vault-ontology.md#drift-register)). The occurrence key becomes one typed value every reader consumes through one adapter. **A storage ruling is not enforced until a reader test holds it** — the register gains the category [_reader-side drift_](vault-ontology.md#drift-register) for the shape. |
+| **#712 Photos Title Case menu copy** | Superseded 2026-09-10 by **D2** in [Mobile UX consistency (#1015)](#mobile-ux-consistency-1015); menu and control copy is sentence case on every surface, Photos included. #712's shared search scaffold and triage-session rulings are untouched. |
 
 ## Package boundaries (#801)
 
@@ -958,6 +959,25 @@ Recorded by [#1005](https://github.com/srikanth235/centraid/issues/1005) lane D.
 
 - **The law does not re-adjudicate the ledger validator.** `gates` reports that a knob moved and which way; whether the move is allowed is [`bun run lint:ledgers`](../scripts/check-ledgers.mjs)'s answer, read from the one direction table both share. Two answers to the same question is how the quieter one goes stale.
 - **The law does not claim the host is configured.** Every doc says branch protection is owner-enabled and unconfirmed. A rule that asserted its own enforcement would be the exact failure `COSTS.md` was.
+
+## Mobile UX consistency (#1015)
+
+Ruled 2026-09-10 by [#1015](https://github.com/srikanth235/centraid/issues/1015). A nine-lane simulator audit of the Expo app found that the nine mobile surfaces share no header, back affordance, search field, confirm dialog, empty state or date format — six header shapes, seven back affordances, five date formats, five confirm patterns and, in places, no confirm at all. The re-judgement that opens this section is that none of that is a set of app-local bugs: the kit was optional and unenforced, each app was rebuilt in its own wave with its own copy tables and formatters, and `StatusLine` was unreachable from inside a `Modal`, so apps grew second feedback channels rather than fixing the one. [DESIGN.md](../DESIGN.md) already stated the target; the six rulings below are the ones the audit could not settle for itself, because each is a product choice and not a reading of the rulebook.
+
+| Id | Current decision | Why |
+| --- | --- | --- |
+| **D1 Trash** | **Empty trash everywhere.** Photos' live control is right, and Docs gets a real Empty trash behind the outlined-`--net` confirm. Docs' "cannot be emptied" copy goes. | One vault, one answer. The two surfaces were making opposite promises about the same rows, so a member reading either one was being told something false about the other. A capability that exists is not withheld from one room because that room shipped later. |
+| **D2 Casing** | **Sentence case everywhere**, including Photos' menus. [#712](https://github.com/srikanth235/centraid/issues/712)'s Title Case menu copy is superseded. | Casing is signage, and two registers in one app read as two products. The house rule is sentence case ([DESIGN.md](../DESIGN.md) §Copy) and Photos is the pattern-setter for the design system — a pattern-setter that diverges from the rule teaches the divergence. |
+| **D3 Editors** | **Autosave everywhere.** "Cancel" exists only before the first keystroke; after it, close = done. | Notes' silent discard (B6) is what the alternative costs: the shared copy already promised "Every change is saved as you write" while the editor threw the work away. Either the promise or the behaviour had to move, and the promise is the one the member believes. |
+| **D4 Push vs sheet** | **Content pushes, choices sheet.** A destination the member reads is a pushed page with a real back target; a decision the member makes is an `OptionSheet`. | The two presentations were being chosen per screen by whoever built it, which is why the audit found seven back affordances. Tying the choice to what is on the surface makes it derivable rather than remembered. |
+| **D5 Band** | The **editor hides the band**; **selection dims it** through leaf tokens and makes it non-interactive. Never live under two bars. | B8 is the failure: two bars at the foot with the band live under them, so one tap navigated away mid-selection and lost the selection. Dimming through leaf tokens rather than container opacity is the standing disabled contract — see the disabled rule in [DESIGN.md](../DESIGN.md). |
+| **D6 Settings** | Settings is reachable from the **Home cover's trailing control** _and_ from **More**. | Invariant 1 (stem foot): the shell's own places are reachable from the shell's own root. Home had no entry at all (B15), and a second entry point is not duplication when one of them is the root the member starts from. |
+
+### Deliberate non-goals (#1015)
+
+- **No retheming.** No new hues, type roles or motion vocabulary. The constitution is not up for debate in this umbrella; the work is making the phone obey the one that exists.
+- **No desktop or PWA seat.** The same grammar reaches those seats in a separate wave. Fixing one seat at a time is what makes the mobile gallery a usable gate.
+- **No new features.** Only the product paths the audit found missing — Locker's unlock key, Tally's add-expense entry, Tasks' due and reminder fields — are restored, because a room with no way into it is not a consistency problem.
 
 ## Related docs
 

@@ -322,6 +322,7 @@ Photos is the pattern-setter for the v9 design system. The rows below are delibe
 | Divergence | Decision | Enforcement / reason |
 | --- | --- | --- |
 | Photos copy says **gateway** or **library**, not "vault". | Keep. | `packages/blueprints/src/photos-vocabulary.test.ts`; Photos can mount several scopes, so "this vault" is ambiguous (#599, S6). |
+| Photos menu and control copy in Title Case. | **Closed 2026-09-10** — sentence case, per **D2** in [decisions.md](decisions.md#mobile-ux-consistency-1015) ([#1015](https://github.com/srikanth235/centraid/issues/1015)). | Not a divergence any more: the house rule is sentence case everywhere and the pattern-setter follows it. #712's Title Case is superseded. |
 | Storage omits figures, backup controls, failing verdicts, and offload-cause splits. | Keep. | `Storage.tsx` and `STORAGE_COPY` render only values present in `blob.custody_rollup`; invented numbers are not acceptable. |
 | Search miss says `Nothing in captions, people, places, things or album names.` | Keep. | `SEARCH_COPY.miss`; the desktop projection has a tag entity that mobile does not, so copy follows available truth. |
 | Pending faces show a live count only after the count has loaded. | Keep. | `peoplePendingNote()` refuses stale or default counts. |
