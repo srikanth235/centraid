@@ -9,13 +9,19 @@
 // cannot each forget to check: a Locker surface that wraps itself in this
 // frame cannot be reached behind a lock, because there is nothing behind it.
 //
+// WHAT THE ROOMS TOOK OVER (#1015). The header, the back affordance, the
+// safe-area inset and the lockup's placement are `AppPlace`'s and
+// `PushedPage`'s, and so is the one fact a screen may not write down: which
+// place it descends from. `current` is gone as a prop — the band tab and the
+// parent are both derived from the route (`locker-places.ts`). A pushed
+// surface carries no ambient subtitle: `PlaceHeader` has no meta line.
+//
 // `gatedShelf` decides WHICH wall: a vault with no passphrase is at setup,
 // full stop, whatever route the member last asked for.
 
 import { useNavigation } from "@react-navigation/native";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { suppressesNavigation } from "@centraid/blueprints/apps/locker/shelves";
 import {
@@ -24,14 +30,20 @@ import {
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import { useBandOwner } from "../../kit/band/band-owner";
-import AppHeader from "../../kit/components/AppHeader";
 import { Text } from "../../kit/components/NativeText";
+import { AppPlace, PushedPage } from "../../kit/rooms";
 import { t, useTheme } from "../../kit/theme";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { LockerShellNavigation } from "../../navigation";
 import VaultBar from "../../screens/home/VaultBar";
 import { resolveLockerMoreRoute } from "./locker-band";
 import type { LockerBandDestinationKey, LockerMoreRowKey } from "./locker-band";
+import {
+  isLockerPlace,
+  lockerDestinationFor,
+  lockerParentPlace,
+} from "./locker-places";
+import type { LockerRouteKey } from "./locker-places";
 import { MASKED_LABEL } from "./locker-seat-copy";
 import {
   noteLockerActivity,
@@ -53,13 +65,11 @@ const META = resolveAppMeta({
 
 /** Which route's word and ambient sentence the app bar carries. The keys are
  *  `ROUTE_TITLE`'s own, so a route cannot invent a name for itself. */
-export type LockerRouteKey = keyof typeof ROUTE_TITLE;
+export type { LockerRouteKey } from "./locker-places";
 
 export interface LockerScreenProps {
-  /** Which band tab this surface belongs under. A More destination is `more`:
-   *  the sheet is how the member got here, and lighting one of the other four
-   *  would point at a place they are not looking at. */
-  current: LockerBandDestinationKey;
+  /** The route this surface IS: its word, its ambient sentence, the band tab
+   *  it lights and the place it descends from are all read off it. */
   route: LockerRouteKey;
   /** Back to the list, or nothing where the surface IS the list. */
   onBack?: () => void;
@@ -70,14 +80,12 @@ export interface LockerScreenProps {
 }
 
 export default function LockerScreen({
-  current,
   route,
   onBack,
   hideBand,
   children,
 }: LockerScreenProps): React.JSX.Element {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<LockerShellNavigation>();
   const [moreOpen, setMoreOpen] = useState(false);
   const { bandOwner } = useBandOwner("locker");
@@ -134,59 +142,30 @@ export default function LockerScreen({
     }
   };
 
-  const frame = useMemo(
-    () => [
-      styles.frame,
-      { backgroundColor: colors.bg, paddingTop: insets.top },
-    ],
-    [colors, insets.top]
-  );
-
-  return (
-    <View style={frame}>
-      {/* The vault lockup on every route (see `VaultBar`): which vault, which
-          gateway, and the product's two global verbs. Above the app's own
-          header, which names the ROUTE — a different question. */}
-      <VaultBar />
-      <AppHeader
-        title={ROUTE_TITLE[headRoute]}
-        subtitle={ROUTE_STATUS[headRoute] ?? ""}
-        color={META.color}
-        iconKey={META.iconKey}
-        onBack={onBack ?? (() => navigation.popTo("Home"))}
-      />
-
+  const body = (
+    <>
       {/* FIVE MINUTES, SLIDING WITH ACTIVITY. Every touch anywhere in a
           Locker surface restarts the window from now — which is what makes it
           sliding rather than a fixed five minutes from unlock. */}
       <View onTouchStart={noteLockerActivity} style={styles.body}>
         {walled ? (
           <LockerWall
-            mode={wallMode}
             busy={vault.busy}
             error={vault.session.error}
+            mode={wallMode}
             notEnrolled={vault.notEnrolled}
-            onUnlock={() => void unlockLocker()}
             onForgetKey={() => void forgetLockerVaultKey()}
+            onUnlock={() => void unlockLocker()}
           />
         ) : (
           children
         )}
       </View>
 
-      {walled || hideBand ? null : (
-        <LockerBand
-          owner={bandOwner}
-          current={current}
-          onSelect={onDestination}
-          onHome={() => navigation.popTo("Home")}
-        />
-      )}
-
       <LockerMoreSheet
-        visible={moreOpen && !walled}
         onClose={() => setMoreOpen(false)}
         onSelect={onMoreRow}
+        visible={moreOpen && !walled}
       />
 
       {/* A hidden window ends the session at once; this is what the OS
@@ -201,13 +180,61 @@ export default function LockerScreen({
           </Text>
         </View>
       ) : null}
-    </View>
+    </>
+  );
+
+  // Locker has no selection mode, so the band the room hands back is always
+  // live; behind the wall there is no band at all.
+  const band =
+    walled || hideBand === true
+      ? undefined
+      : (): React.JSX.Element => (
+          <LockerBand
+            destination={lockerDestinationFor(headRoute)}
+            onHome={() => navigation.popTo("Home")}
+            onSelect={onDestination}
+            owner={bandOwner}
+          />
+        );
+
+  // The vault lockup on every route (see `VaultBar`): which vault, which
+  // gateway, and the product's two global verbs. Inside the room's safe area,
+  // above the header — which names the ROUTE, a different question.
+  const lockup = <VaultBar />;
+  const leave = onBack ?? ((): void => navigation.popTo("Home"));
+
+  if (isLockerPlace(headRoute))
+    return (
+      <AppPlace
+        app={{
+          color: META.color,
+          iconKey: META.iconKey,
+          subtitle: ROUTE_STATUS[headRoute] ?? "",
+          title: ROUTE_TITLE[headRoute],
+        }}
+        band={band}
+        lockup={lockup}
+        onBack={leave}
+      >
+        {body}
+      </AppPlace>
+    );
+
+  return (
+    <PushedPage
+      backTo={lockerParentPlace(headRoute)}
+      band={band}
+      lockup={lockup}
+      onBack={leave}
+      title={ROUTE_TITLE[headRoute]}
+    >
+      {body}
+    </PushedPage>
   );
 }
 
 const styles = StyleSheet.create({
   body: { flex: 1 },
-  frame: { flex: 1 },
   mask: {
     alignItems: "center",
     bottom: 0,

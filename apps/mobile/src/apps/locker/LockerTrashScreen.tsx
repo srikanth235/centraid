@@ -12,14 +12,13 @@
 //
 // WINDOWED (#883 C4): trash has no cap.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
 import { purgeCountdown } from "@centraid/blueprints/apps/locker/format";
 import {
   PURGE_CONFIRM_LABEL,
-  PURGE_CONFIRM_TITLE,
   TRASH_EMPTY,
   TRASH_HEAD,
   TRASH_META,
@@ -33,6 +32,7 @@ import {
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import Button from "../../kit/components/Button";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { Text } from "../../kit/components/NativeText";
 import SectionBlock from "../../kit/components/SectionBlock";
@@ -53,7 +53,7 @@ export default function LockerTrashScreen({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const replica = useReplica();
   const vault = useLockerVault();
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
 
   useEffect(() => {
     void loadLockerTrash();
@@ -61,9 +61,21 @@ export default function LockerTrashScreen({
 
   const rows = vault.bag.trashRows;
   const after = (): void => {
-    setConfirming(null);
     void loadLockerTrash();
   };
+
+  // ONE confirm shape (#1015, S7): the noun and the count in the title, the
+  // verb outlined --net, and the parked-off-owner sentence as its body — said
+  // BEFORE the act, not after it appears to have happened.
+  const askPurge = (itemId: string): void =>
+    confirmDestructive({
+      body: PURGE_PARKED_BODY,
+      noun: "item",
+      onConfirm: () => {
+        void purgeLockerItem(replica.session, itemId).then(after);
+      },
+      verb: PURGE_CONFIRM_LABEL,
+    });
 
   const renderItem = ({
     item,
@@ -83,36 +95,16 @@ export default function LockerTrashScreen({
       />
       <Button
         label={TRASH_PURGE}
-        onPress={() => setConfirming(item.item_id)}
+        onPress={() => askPurge(item.item_id)}
         variant="destructive"
       />
     </View>
   );
 
-  const foot = confirming ? (
-    <View style={styles.confirm}>
-      <Text accessibilityRole="header" style={styles.confirmTitle}>
-        {PURGE_CONFIRM_TITLE}
-      </Text>
-      {/* Off-owner it PARKS, and the confirm says so before the act, not
-          after it appears to have happened. */}
-      <Text style={styles.meta}>{PURGE_PARKED_BODY}</Text>
-      <View style={styles.confirmActs}>
-        <Button label="Cancel" onPress={() => setConfirming(null)} />
-        <Button
-          label={PURGE_CONFIRM_LABEL}
-          onPress={() => {
-            void purgeLockerItem(replica.session, confirming).then(after);
-          }}
-          variant="destructive"
-        />
-      </View>
-    </View>
-  ) : null;
+  const foot = confirmSheet;
 
   return (
     <LockerScreen
-      current="more"
       hideBand
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
       route="trash"
