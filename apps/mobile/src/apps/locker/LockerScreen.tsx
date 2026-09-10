@@ -165,6 +165,7 @@ export default function LockerScreen({
             mode={wallMode}
             busy={vault.busy}
             error={vault.session.error}
+            notEnrolled={vault.notEnrolled}
             onUnlock={() => void unlockLocker()}
             onForgetKey={() => void forgetLockerVaultKey()}
           />

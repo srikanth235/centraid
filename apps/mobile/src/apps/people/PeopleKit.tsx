@@ -405,32 +405,54 @@ export function VaultTag({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** Back row: chevron + the DESTINATION's name, never "Back". */
+/**
+ * Back row: chevron + the DESTINATION's name, never "Back" — and, under it,
+ * the name of the place you are standing in (#1015 S2). The back row's own
+ * line is `smallStrong` in `textSoft`, smaller and fainter than the body text
+ * below it, so a screen with only that has nothing on it that reads as a
+ * title; `title` is the header rung the three band destinations already draw.
+ */
 export function BackRow({
   destination,
+  title,
   onPress,
 }: {
   destination: string;
+  title?: string;
   onPress: () => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Back to ${destination}`}
-      onPress={onPress}
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: spacing[1],
-        minHeight: 40,
-      }}
-    >
-      <Icon name="chevron-left" size={18} color={colors.textSoft} />
-      <Text style={[t("smallStrong"), { color: colors.textSoft }]}>
-        {destination}
-      </Text>
-    </Pressable>
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Back to ${destination}`}
+        onPress={onPress}
+        style={{
+          alignItems: "center",
+          flexDirection: "row",
+          gap: spacing[1],
+          minHeight: 40,
+        }}
+      >
+        <Icon name="chevron-left" size={18} color={colors.textSoft} />
+        <Text style={[t("smallStrong"), { color: colors.textSoft }]}>
+          {destination}
+        </Text>
+      </Pressable>
+      {title ? (
+        <Text
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={[
+            t("title"),
+            { color: colors.text, paddingBottom: spacing[2] },
+          ]}
+        >
+          {title}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

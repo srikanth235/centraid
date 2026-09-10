@@ -16,7 +16,7 @@ function actionRow(
 }
 
 describe("the Collections header menu's model", () => {
-  it("carries exactly Show All and Collapse All, in one group", () => {
+  it("carries exactly Show all and Collapse all, in one group", () => {
     const groups = collectionsMenuGroups({
       onCollapseAll: vi.fn<() => void>(),
       onShowAll: vi.fn<() => void>(),
@@ -28,7 +28,7 @@ describe("the Collections header menu's model", () => {
     ]);
   });
 
-  it("wires Show All to the caller's onShowAll, and nothing else", () => {
+  it("wires Show all to the caller's onShowAll, and nothing else", () => {
     const onShowAll = vi.fn<() => void>();
     const onCollapseAll = vi.fn<() => void>();
     const groups = collectionsMenuGroups({ onCollapseAll, onShowAll });
@@ -37,7 +37,7 @@ describe("the Collections header menu's model", () => {
     expect(onCollapseAll).not.toHaveBeenCalled();
   });
 
-  it("wires Collapse All to the caller's onCollapseAll, and nothing else", () => {
+  it("wires Collapse all to the caller's onCollapseAll, and nothing else", () => {
     const onShowAll = vi.fn<() => void>();
     const onCollapseAll = vi.fn<() => void>();
     const groups = collectionsMenuGroups({ onCollapseAll, onShowAll });

@@ -13,6 +13,7 @@ import { whenLabel } from "@centraid/blueprints/apps/people/format";
 import {
   FIELDS,
   LOG_KINDS,
+  ROUTE_TITLES,
   VERBS,
 } from "@centraid/blueprints/apps/people/people-copy";
 
@@ -58,6 +59,7 @@ export default function LogTouch({
           <BackRow
             destination={person?.name ?? "Person"}
             onPress={() => navigation.goBack()}
+            title={ROUTE_TITLES.logTouch}
           />
           {data.loading && !person ? (
             <SkeletonRows rows={3} accessibilityLabel="Reading this person" />

@@ -37,7 +37,13 @@ import { Text } from "../../kit/components/NativeText";
 import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { DEVICE_FORGET, DEVICE_NOTE, DEVICE_UNLOCK } from "./locker-seat-copy";
+import {
+  DEVICE_FORGET,
+  DEVICE_NOT_ENROLLED_BODY,
+  DEVICE_NOT_ENROLLED_TITLE,
+  DEVICE_NOTE,
+  DEVICE_UNLOCK,
+} from "./locker-seat-copy";
 
 /** The gate's own heading. `Lock.tsx` draws the same word on the web. */
 const LOCK_TITLE = "Locked";
@@ -49,6 +55,10 @@ export interface LockerWallProps {
   busy: boolean;
   /** The door's refusal, in its own words. */
   error: string;
+  /** This phone holds no `K` for this vault, and nothing on this seat can hand
+   *  it one (#1015 B1, #996 W6). The wall states that and offers no verb —
+   *  a control that cannot work is worse than a stated absence. */
+  notEnrolled: boolean;
   /** Unlock: asks the OS to prove the member is present. */
   onUnlock: () => void;
   /** Forget `K` on this device — the revoke gesture's local half (R13). */
@@ -59,6 +69,7 @@ export default function LockerWall({
   mode,
   busy,
   error,
+  notEnrolled,
   onUnlock,
   onForgetKey,
 }: LockerWallProps): React.JSX.Element {
@@ -89,25 +100,31 @@ export default function LockerWall({
       testID={TEST_IDS.locker.gate}
     >
       <Text accessibilityRole="header" style={styles.title}>
-        {LOCK_TITLE}
+        {notEnrolled ? DEVICE_NOT_ENROLLED_TITLE : LOCK_TITLE}
       </Text>
-      <Text style={styles.body}>{LOCK_BODY}</Text>
+      <Text style={styles.body}>
+        {notEnrolled ? DEVICE_NOT_ENROLLED_BODY : LOCK_BODY}
+      </Text>
 
-      {error ? (
+      {/* The refusal is the HEADING once it is permanent; repeating it as an
+          alert would say the same sentence twice on one screen. */}
+      {error && !notEnrolled ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
         </Text>
       ) : null}
 
-      <View style={styles.acts}>
-        <Button
-          disabled={busy}
-          label={DEVICE_UNLOCK}
-          onPress={onUnlock}
-          testID={TEST_IDS.locker.gateSubmit}
-          variant="primary"
-        />
-      </View>
+      {notEnrolled ? null : (
+        <View style={styles.acts}>
+          <Button
+            disabled={busy}
+            label={DEVICE_UNLOCK}
+            onPress={onUnlock}
+            testID={TEST_IDS.locker.gateSubmit}
+            variant="primary"
+          />
+        </View>
+      )}
 
       <View style={styles.facts}>
         {LOCK_FACTS.map(([key, value]) => (
@@ -117,15 +134,18 @@ export default function LockerWall({
           </View>
         ))}
       </View>
-      <View style={styles.deviceRow}>
-        <Text style={styles.body}>{DEVICE_NOTE}</Text>
-        <Button
-          disabled={busy}
-          label={DEVICE_FORGET}
-          onPress={onForgetKey}
-          variant="destructive"
-        />
-      </View>
+      {/* Nothing to forget on a phone that holds no key. */}
+      {notEnrolled ? null : (
+        <View style={styles.deviceRow}>
+          <Text style={styles.body}>{DEVICE_NOTE}</Text>
+          <Button
+            disabled={busy}
+            label={DEVICE_FORGET}
+            onPress={onForgetKey}
+            variant="destructive"
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }

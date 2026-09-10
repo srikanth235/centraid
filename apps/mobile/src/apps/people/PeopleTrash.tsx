@@ -14,6 +14,7 @@ import {
   APP_TITLE,
   EMPTY,
   FRAGMENTS,
+  ROUTE_TITLES,
   SENTENCES,
   VERBS,
 } from "@centraid/blueprints/apps/people/people-copy";
@@ -42,6 +43,7 @@ export default function PeopleTrash({
           <BackRow
             destination={APP_TITLE}
             onPress={() => navigation.goBack()}
+            title={ROUTE_TITLES.trash}
           />
           {data.loading ? (
             <SkeletonRows rows={4} accessibilityLabel="Reading the trash" />

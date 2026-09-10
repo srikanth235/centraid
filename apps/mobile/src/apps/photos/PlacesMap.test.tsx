@@ -258,7 +258,7 @@ async function renderRealMap(): Promise<void> {
 }
 
 function pins(): HTMLButtonElement[] {
-  const chrome = new Set(["Back to Photos", "Map mode"]);
+  const chrome = new Set(["Back to Places", "Map mode"]);
   return Array.from(container!.querySelectorAll("button")).filter(
     (button) => !chrome.has(button.getAttribute("aria-label") ?? "")
   );
@@ -361,7 +361,7 @@ describe("the Places map, over the RN DOM stub", () => {
     renderMap();
     press(
       Array.from(container!.querySelectorAll("button")).find(
-        (button) => button.getAttribute("aria-label") === "Back to Photos"
+        (button) => button.getAttribute("aria-label") === "Back to Places"
       )
     );
     expect(goBack).toHaveBeenCalledOnce();

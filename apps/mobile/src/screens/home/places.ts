@@ -1,4 +1,6 @@
-// The eleven place ids: frame destinations that are not apps. The Assistant is
+// The ten place ids: frame destinations that are not apps. Starred was an
+// eleventh until #1015 B15 — a row that navigated nowhere and could still be
+// pinned into a band slot; v0 drops it rather than shipping a dead tab. The Assistant is
 // deliberately not one (:3482); it lives in ./catalog. Order is fixed, never
 // sorted by recency (:3470) — readers filter this array, never reorder it.
 
@@ -15,7 +17,6 @@ export type PlaceId =
   | "stats"
   | "data"
   | "devices"
-  | "starred"
   | "gateway"
   | "storage"
   | "settings";
@@ -97,15 +98,6 @@ export const PLACES: readonly Place[] = [
     pin: false,
     short: "Copies",
     what: "The machines holding a copy",
-  },
-  {
-    icon: DESTINATION_MARKS.starred,
-    id: "starred",
-    law: false,
-    name: "Starred",
-    pin: false,
-    short: "Starred",
-    what: "Anything you marked, from any app",
   },
   {
     icon: DESTINATION_MARKS.gateway,

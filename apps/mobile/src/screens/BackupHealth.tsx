@@ -193,13 +193,19 @@ export default function BackupHealth({
             Backup health
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-            Last successful sync:{" "}
+            {/* NAMES ITS SUBJECT (#1015 B13): this is the last time THIS
+                PHONE uploaded, which is a different claim from whether the
+                vault holds the bytes. "Never" alone read as a third,
+                contradicting verdict above the hero's own. */}
             {lastSuccessfulSync ? (
-              <Text style={[t("mono"), { color: colors.textSoft }]}>
-                {formatSyncTime(lastSuccessfulSync)}
-              </Text>
+              <>
+                Last upload from this phone:{" "}
+                <Text style={[t("mono"), { color: colors.textSoft }]}>
+                  {formatSyncTime(lastSuccessfulSync)}
+                </Text>
+              </>
             ) : (
-              "Never"
+              "This phone has not uploaded anything yet"
             )}
           </Text>
         </View>

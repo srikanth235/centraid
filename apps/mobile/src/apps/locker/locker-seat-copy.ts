@@ -16,6 +16,24 @@
 /** The lock wall's second way in, where one has been enrolled. */
 export const DEVICE_UNLOCK = "Unlock with this device";
 
+/**
+ * WHEN THIS PHONE HOLDS NO KEY (#1015 B1, #996 W6).
+ *
+ * `storeLockerVaultKey` has no non-test caller anywhere in the repo: nothing
+ * in pairing, onboarding or Locker itself writes `K` to this keychain, because
+ * the key plane that would hand it over is #996 wave 6 and is not built. So
+ * "Unlock with this device" refused every time it was pressed, and the refusal
+ * — "This device does not hold this vault's key yet." — read as a retryable
+ * error rather than as the truth, which is that there is no gesture on this
+ * seat that could ever make it succeed.
+ *
+ * The wall says so instead of offering the button. A control that cannot work
+ * is worse than a stated absence.
+ */
+export const DEVICE_NOT_ENROLLED_TITLE = "Not enrolled on this phone";
+export const DEVICE_NOT_ENROLLED_BODY =
+  "Locker unlocks once this phone has been enrolled for this vault · enrolling a phone is not available yet, so open Locker on the desktop.";
+
 /** Forgetting the vault key on this device — the revoke gesture's local half
  *  (#996, R13). It is not "revoke a credential" any more: what this phone
  *  holds is `K` itself, and dropping it is what stops this device reading. */

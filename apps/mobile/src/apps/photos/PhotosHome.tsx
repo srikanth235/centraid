@@ -51,6 +51,7 @@ import { collectionsMenuGroups } from "./photos-collections-menu";
 import { libraryMenuGroups } from "./photos-library-menu";
 import type { LibraryFilter } from "./photos-library-menu";
 import { usePhotosRung } from "./photos-rung-store";
+import { selectionCountLabel } from "./photos-selection-copy";
 import { batchTrash, vaultAssets } from "./photos-selection-writes";
 import PhotosBand from "./PhotosBand";
 import PhotosCollectionsView from "./PhotosCollectionsView";
@@ -83,12 +84,6 @@ function filterSections(
       assets: section.assets.filter((asset) => asset.favorite),
     }))
     .filter((section) => section.assets.length > 0);
-}
-
-/** iOS Photos wording (#712). Keep the `count === 0` branch — do not assume no caller. */
-function selectionCountLabel(count: number): string {
-  if (count === 0) return "Select Items";
-  return `${count} ${count === 1 ? "Photo" : "Photos"} Selected`;
 }
 
 function albumEntryCount<T>(
@@ -146,7 +141,7 @@ export default function PhotosHome({
   // not in a grain's view: it must outlive the view across a switch.
   const [placeDay, setPlaceDay] = useState<string | undefined>(undefined);
   // Lifted out of `PhotosCollectionsView` (#712): the header chip's Show
-  // All / Collapse All must drive the same set the chevrons toggle, or the two
+  // All / Collapse all must drive the same set the chevrons toggle, or the two
   // can disagree.
   const [collapsedSections, setCollapsedSections] = useState<
     ReadonlySet<CollectionSectionKey>
@@ -238,7 +233,7 @@ export default function PhotosHome({
       });
     }
     if (destination === "collections") {
-      // Over the full fixed key set, not the rendered rows, so Collapse All
+      // Over the full fixed key set, not the rendered rows, so Collapse all
       // folds the page before its replica queries have answered.
       return collectionsMenuGroups({
         onCollapseAll: () =>

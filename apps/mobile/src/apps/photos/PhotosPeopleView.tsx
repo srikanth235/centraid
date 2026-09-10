@@ -26,6 +26,7 @@ import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
 import PeopleEmptyState from "./PeopleEmptyState";
 import { usePhotoEntity } from "./photo-entity-reads";
+import PhotosBackControl from "./PhotosBackControl";
 import PhotosScreen from "./PhotosScreen";
 
 /** One cluster row per face region the clusterer has grouped. */
@@ -81,7 +82,7 @@ export default function PhotosPeopleView({
         postStatus(ENRICHMENT_PRIORITISED_NOTE);
       }
     } catch (error) {
-      surfaceWriteFailure(error, "Faces were not prioritised");
+      surfaceWriteFailure(error, "Faces were not prioritized");
     } finally {
       setEnrichBusy(false);
     }
@@ -116,7 +117,13 @@ export default function PhotosPeopleView({
   return (
     <PhotosScreen current="more">
       <View style={styles.header}>
-        {/* No back chevron — the band is the way out (§F). */}
+        {/* The band highlights More, which People is not reached from, so it
+            cannot be the way out (#1015 S2). */}
+        <PhotosBackControl
+          onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
+          to="Photos"
+        />
         <Text style={styles.title}>People</Text>
       </View>
       <FlatList
@@ -202,6 +209,13 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingHorizontal: spacing[4],
       paddingTop: spacing[2],
+    },
+    headerBtn: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      marginStart: -spacing[2],
+      minWidth: 44,
     },
     name: {
       ...t("control"),

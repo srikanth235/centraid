@@ -23,7 +23,7 @@ import type { TimelineGrain } from "./timeline-grains";
 export type LibraryFilter = "all" | "favorites";
 
 const FILTER_ROWS: ReadonlyArray<{ key: LibraryFilter; label: string }> = [
-  { key: "all", label: "All Photos" },
+  { key: "all", label: "All photos" },
   { key: "favorites", label: "Favorites" },
 ];
 
@@ -40,7 +40,7 @@ export interface LibraryMenuInput {
 }
 
 /**
- * View Options is grain-scoped: Years and Months draw one cover per period at an
+ * View options is grain-scoped: Years and Months draw one cover per period at an
  * aspect the grain fixes, so a rung control there cannot act on what is on
  * screen. Filter holds at every grain — it narrows the sections periods are
  * built from.
@@ -92,7 +92,7 @@ export function libraryMenuGroups({
           ? [
               {
                 key: "view-options",
-                label: "View Options",
+                label: "View options",
                 icon: "Grid",
                 rows: RUNGS.map((_target, index) => ({
                   checked: index === rung,

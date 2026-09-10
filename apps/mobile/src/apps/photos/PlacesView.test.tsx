@@ -113,6 +113,13 @@ vi.mock(import("expo-image"), async () => {
 });
 
 vi.mock(
+  import("../../kit/components/Icon"),
+  () =>
+    ({
+      default: () => null,
+    }) as never
+);
+vi.mock(
   import("../../kit/components/NativeText"),
   () =>
     ({

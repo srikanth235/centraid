@@ -351,6 +351,7 @@ export default function TallyHome({
     <TallyScreen
       current={destination}
       shelf={shelfOf(destination)}
+      onAddExpense={() => navigation.navigate("TallyAdd")}
       onBack={() => {
         // A place's back row is the way out of the app, not up the stack:
         // Balances IS the root, and the other three are its siblings.

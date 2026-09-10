@@ -40,11 +40,11 @@ describe("the Library header menu's model at the All grain", () => {
     ]);
   });
 
-  it("Filter offers All Photos and Favorites, exactly one checked to the passed filter", () => {
+  it("Filter offers All photos and Favorites, exactly one checked to the passed filter", () => {
     const groups = libraryMenuGroups(baseInput({ filter: "favorites" }));
     const filter = submenu(groups, "filter");
     expect(filter.rows.map((row) => row.label)).toStrictEqual([
-      "All Photos",
+      "All photos",
       "Favorites",
     ]);
     const checked = filter.rows.filter((row) => row.checked === true);
@@ -61,7 +61,7 @@ describe("the Library header menu's model at the All grain", () => {
     expect(onFilter).toHaveBeenCalledExactlyOnceWith("favorites");
   });
 
-  it("View Options carries one row per rung label, exactly one checked", () => {
+  it("View options carries one row per rung label, exactly one checked", () => {
     const groups = libraryMenuGroups(baseInput({ rung: 1 }));
     const viewOptions = submenu(groups, "view-options");
     expect(viewOptions.rows.map((row) => row.label)).toStrictEqual([
@@ -75,13 +75,13 @@ describe("the Library header menu's model at the All grain", () => {
     expect(checked[0]!.label).toBe("S");
   });
 
-  it("every View Options row stays open on selection — a member steps several rungs in a row", () => {
+  it("every View options row stays open on selection — a member steps several rungs in a row", () => {
     const groups = libraryMenuGroups(baseInput());
     const viewOptions = submenu(groups, "view-options");
     expect(viewOptions.rows.every((row) => row.staysOpen === true)).toBe(true);
   });
 
-  it("selecting a View Options row calls onRung with that row's index", () => {
+  it("selecting a View options row calls onRung with that row's index", () => {
     const onRung = vi.fn<(rung: 0 | 1 | 2 | 3) => void>();
     const groups = libraryMenuGroups(baseInput({ onRung }));
     const viewOptions = submenu(groups, "view-options");
@@ -91,12 +91,12 @@ describe("the Library header menu's model at the All grain", () => {
 });
 
 describe("the Library header menu's model at the Years and Months grains", () => {
-  it("drops View Options at Years — a rung control may not sit over a grid it cannot resize", () => {
+  it("drops View options at Years — a rung control may not sit over a grid it cannot resize", () => {
     const groups = libraryMenuGroups(baseInput({ grain: "years" }));
     expect(groups[0]!.rows.map((row) => row.key)).toStrictEqual(["filter"]);
   });
 
-  it("drops View Options at Months, for the same reason", () => {
+  it("drops View options at Months, for the same reason", () => {
     const groups = libraryMenuGroups(baseInput({ grain: "months" }));
     expect(groups[0]!.rows.map((row) => row.key)).toStrictEqual(["filter"]);
   });
@@ -119,7 +119,7 @@ describe("the Library header menu's model has no Sort section", () => {
   });
 });
 
-describe("the Library header menu's Prioritise faces row (issue #724 W5)", () => {
+describe("the Library header menu's Prioritize faces row (issue #724 W5)", () => {
   function row(groups: ReturnType<typeof libraryMenuGroups>) {
     const found = groups
       .flatMap((group) => group.rows)
@@ -143,7 +143,7 @@ describe("the Library header menu's Prioritise faces row (issue #724 W5)", () =>
         })
       )
     );
-    expect(found).toMatchObject({ label: "Prioritise faces", disabled: false });
+    expect(found).toMatchObject({ label: "Prioritize faces", disabled: false });
     found!.onSelect!();
     // The row OPENS the People shelf. That the handler is navigation rather
     // than the enrichment write is the consumer's contract; what this model
@@ -168,7 +168,7 @@ describe("the Library header menu's Prioritise faces row (issue #724 W5)", () =>
     );
     expect(found).toMatchObject({
       disabled: true,
-      label: "Prioritise faces — Enrichment is switched off for photographs.",
+      label: "Prioritize faces — Enrichment is switched off for photographs.",
     });
   });
 

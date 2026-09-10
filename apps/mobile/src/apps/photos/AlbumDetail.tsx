@@ -31,6 +31,7 @@ import {
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
+import { keepOriginalsMeta } from "./album-keep-originals";
 import { makeStyles } from "./AlbumDetail.styles";
 import { usePhotoEntity } from "./photo-entity-reads";
 import { usePhotoGrantEntry } from "./photo-grants";
@@ -521,7 +522,9 @@ export default function AlbumDetail({
       <View style={styles.keepRow}>
         <View style={styles.keepCopy}>
           <Text style={styles.keepTitle}>Keep originals on device</Text>
-          <Text style={styles.meta}>Excluded from Free up vault</Text>
+          <Text style={styles.meta}>
+            {keepOriginalsMeta({ keepOriginals, pinsReady })}
+          </Text>
         </View>
         <Switch
           accessibilityLabel="Keep this album's originals on device"

@@ -54,7 +54,7 @@ Run this motion:
    - [ ] OCR an image of a receipt or sign, then search for a word from it — the text hit appears once the OCR automation has run.
    - [ ] OCR a PDF with embedded text and a scanned PDF; both become searchable, with rendered-page OCR used only where a text layer is absent.
    - [ ] Missing assets or an OCR model error produces a visible failed automation turn rather than a stuck spinner.
-   - [ ] Import photographs and wait for the Faces recipe (on by default) to sweep them; verify the review queue fills with proposed regions on your own library. "Prioritise faces" on the People shelf only moves the library sooner.
+   - [ ] Import photographs and wait for the Faces recipe (on by default) to sweep them; verify the review queue fills with proposed regions on your own library. "Prioritize faces" on the People shelf only moves the library sooner.
    - [ ] Name an unnamed cluster and confirm a proposal onto a known person; verify the person's photos are browsable from their card.
    - [ ] Forget a person (`media.forget_person`) and verify their regions disappear from the review queue and no photo still shows their name.
    - [ ] Check the Memories shelves (on-this-day, trip, similar) render with real dates and groupings, and show nothing rather than a wrong grouping when your library has none for a kind.

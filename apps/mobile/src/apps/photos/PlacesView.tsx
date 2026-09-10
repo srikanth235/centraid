@@ -13,6 +13,7 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { usePhotoEntity } from "./photo-entity-reads";
+import PhotosBackControl from "./PhotosBackControl";
 import PhotosScreen from "./PhotosScreen";
 import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
@@ -44,7 +45,13 @@ export default function PlacesView({
     // gesture as the only exit. current="more" = arrived via More.
     <PhotosScreen current="more">
       <View style={styles.header} testID={TEST_IDS.places.shelf}>
-        {/* No back chevron: two exits already; a third breaks §F's rule. */}
+        {/* The band highlights More, which Places is not reached from, so it
+            names the wrong place and cannot be the exit (#1015 S2). */}
+        <PhotosBackControl
+          onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
+          to="Photos"
+        />
         <Text style={styles.title}>Places</Text>
         {/* Places · N — shelf size, mono (proto:3939); "N of M" belongs to
             the map. */}
@@ -158,6 +165,13 @@ const makeStyles = (colors: ThemeColors) =>
       paddingEnd: spacing[4],
       paddingStart: spacing[4] - 2,
       paddingTop: spacing[2],
+    },
+    headerBtn: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      marginStart: -spacing[2],
+      minWidth: 44,
     },
     mapChip: {
       borderRadius: radii.pill,
