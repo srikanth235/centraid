@@ -607,31 +607,57 @@ export class Dispatcher {
   }
 }
 
-/** Intent + call ordinal, so a crash after canonical commit cannot
- *  re-execute the command on retry. */
-function bindIntentToVaultBridge(
+/**
+ * Intent + call KEY, so a crash after canonical commit cannot re-execute the
+ * command on retry.
+ *
+ * THE ORDINAL IS A FALLBACK NOW, NOT THE IDENTITY (#1014, B4). It used to be
+ * the whole key: the id was `sha256([tag, intentId, ordinal])` over whichever
+ * invokes the handler happened to make on THIS run. A handler that branches on
+ * vault state makes a different sequence on the replay than it made on the
+ * first pass — `notes/actions/send-to-tasks.ts` already issues two, the second
+ * best-effort and swallowed — so an invoke's position is not a property of the
+ * invoke. When the positions shift, a replay either matches the wrong retained
+ * receipt or trips `assertInvocationIdentity`.
+ *
+ * A handler that KNOWS which of its calls this is says so with `invokeKey`,
+ * and that name keys the id instead. The field is a directive to this bridge
+ * and not to the command, so it never travels on: the gateway sees the same
+ * payload it always did, plus the `invocationId` it always consumed.
+ *
+ * "Never a handler-selected id" still holds and is why the key is HASHED with
+ * the intent rather than used raw: a handler cannot mint a random id that
+ * re-executes on every retry, and two handlers' identical key names cannot
+ * collide across two intents.
+ *
+ * THE ORDINAL FORM IS BYTE-IDENTICAL to what it was — a JSON number where a
+ * declared key is a JSON string, which keeps the two spaces disjoint — so an
+ * intent already in flight keeps the invocation ids its half-finished replay
+ * is looking for.
+ */
+export function bindIntentToVaultBridge(
   bridge: VaultBridge,
   intentId: string
 ): VaultBridge {
   let invocationIndex = 0;
   return (call) => {
     if (call.op !== "invoke") return bridge(call);
-    // JSON framing keeps [intent, ordinal] injective; the prefix keeps the
-    // lane disjoint.
+    const declared = call.payload["invokeKey"];
+    const key =
+      typeof declared === "string" && declared.length > 0
+        ? declared
+        : invocationIndex;
+    // JSON framing keeps [intent, key] injective; the prefix keeps the lane
+    // disjoint.
     const generatedInvocationId = `replica:v1:${createHash("sha256")
-      .update(
-        JSON.stringify([
-          "centraid.replica-invocation.v1",
-          intentId,
-          invocationIndex,
-        ])
-      )
+      .update(JSON.stringify(["centraid.replica-invocation.v1", intentId, key]))
       .digest("hex")}`;
     invocationIndex += 1;
+    const { invokeKey: _invokeKey, ...payload } = call.payload;
     return bridge({
       ...call,
       payload: {
-        ...call.payload,
+        ...payload,
         intentId,
         // Never a handler-selected id: a random one re-executes on every retry.
         invocationId: generatedInvocationId,

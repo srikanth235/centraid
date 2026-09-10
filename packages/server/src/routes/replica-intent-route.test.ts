@@ -331,19 +331,27 @@ describe("replica-intent-route suite", () => {
   });
 
   /*
-   * X20 (#1014) RE-RULES THE CONCEALED ANSWER. This id belongs to another
-   * device, so `202 in-flight` used to be the reply: an ordinary
-   * acknowledgement, no existence oracle. It is also an acknowledgement of a
-   * write that CAN NEVER RUN — the prober re-sends forever and the member's
-   * change is silently gone — and the two invariants that answer was protecting
-   * (never dispatch, never touch the owner's row) hold just as well under a
-   * refusal. An intent id is the caller's own 128-bit value, so `409` tells a
-   * caller who already holds the id that it is not theirs to use, and tells
-   * nobody anything they could have guessed.
+   * X20 (#1014) RE-RULED THE CONCEALED ANSWER, and #1014 G23/V9 re-rules WHICH
+   * ID IS FOREIGN.
+   *
+   * X20's finding was that `202 in-flight` on an id held by another admission
+   * acknowledges a write that can never run — the prober re-sends forever and
+   * the member's change is silently gone — so a refusal is the honest answer.
+   * That still stands, for a DIFFERENT payload under a known id: the retained
+   * outcome answers the payload it was recorded for.
+   *
+   * What changed is that the DEVICE is no longer the identity. The durable
+   * outbox lives in the seat file, and the seat file outlives the enrolment: a
+   * phone restored from a device backup, or an OS app clone, comes back under
+   * a new endpoint id and replays an outbox full of intents this vault already
+   * holds. Under the old rule every one of them was a `409 intent_id_reused`
+   * the seat could not retry past — the member's queue wedged permanently by a
+   * restore. The id is client-minted and random and the payload hash covers
+   * the app, the action, the input and the base versions, so a caller who can
+   * state both is holding the same intent, not guessing at someone else's.
    */
-  test("a foreign intent id is refused and never dispatches or mutates its owner row", async () => {
+  test("a foreign intent id with a different payload is refused and never dispatches", async () => {
     const vault = await plane();
-    const input = { title: "collision probe" };
     const payloadHash = crypto
       .createHash("sha256")
       .update(
@@ -366,8 +374,15 @@ describe("replica-intent-route suite", () => {
         intentId: "foreign-intent",
         appId: "planner",
         action: "add_task",
-        input,
-        payloadHash,
+        // A DIFFERENT input, so a different hash: this caller is not holding
+        // the intent it named.
+        input: { title: "something else entirely" },
+        payloadHash: crypto
+          .createHash("sha256")
+          .update(
+            '{"action":"add_task","appId":"planner","input":{"title":"something else entirely"}}'
+          )
+          .digest("hex"),
       }),
       result.res,
       {
@@ -393,6 +408,58 @@ describe("replica-intent-route suite", () => {
     ).toMatchObject({
       status: "sending",
     });
+  });
+
+  test("the same id and the same payload under a new enrolment is the same intent", async () => {
+    const vault = await plane();
+    const input = { title: "collision probe" };
+    const payloadHash = crypto
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"collision probe"}}'
+      )
+      .digest("hex");
+    // Already ANSWERED, so there is a verdict to hand back rather than a
+    // half-finished `sending` row.
+    recordReplicaIntentOutcome(vault.db.vault, {
+      intentId: "restored-intent",
+      deviceId: "device-before-restore",
+      appId: "planner",
+      action: "add_task",
+      payloadHash,
+      status: "executed",
+    });
+    const dispatch = vi.fn<ReplicaIntentDispatcher>();
+    const result = response();
+
+    await handleReplicaIntent(
+      request({
+        intentId: "restored-intent",
+        appId: "planner",
+        action: "add_task",
+        input,
+        payloadHash,
+      }),
+      result.res,
+      {
+        plane: vault,
+        access: {
+          canWrite: true,
+          rememberDevice: true,
+          deviceId: "device-after-restore",
+          appId: "planner",
+        },
+        dispatch,
+      }
+    );
+
+    // The retained outcome, not a refusal — and above all, not a second
+    // execution of a write the vault already holds.
+    expect(result.res.statusCode).toBe(200);
+    expect(result.body()).toMatchObject({
+      outcome: { intentId: "restored-intent", status: "executed" },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   test("a dispatch exception stays in-flight, then retry terminalizes without durable output", async () => {
