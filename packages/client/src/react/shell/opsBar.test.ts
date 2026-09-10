@@ -10,7 +10,7 @@ describe("the operational routes' app bar", () => {
     // land. They share one definition rather than two that happen to agree.
     expect(OPS_PAGES.map((p) => opsBarDef(p).title)).toStrictEqual([
       "Notifications",
-      "Automations",
+      "Rules",
       "Connectors",
       "Activity",
       "Vault",
@@ -31,7 +31,7 @@ describe("the operational routes' app bar", () => {
     });
     expect(verbs).toStrictEqual([
       ["Review all", "History"],
-      ["New automation", "Templates"],
+      ["New rule", "Templates"],
       ["Add a connection", "Catalog"],
       // Activity is a READ surface: it counts what already happened and it
       // copies out, and neither is a write, so it declares no filled commit.
@@ -61,10 +61,7 @@ describe("the operational routes' app bar", () => {
       ] as const;
 
     it("shows both before anything has been read, so the bar never flickers", () => {
-      expect(labels("automations")).toStrictEqual([
-        "New automation",
-        "Templates",
-      ]);
+      expect(labels("automations")).toStrictEqual(["New rule", "Templates"]);
     });
 
     it("withdraws both while reading — nothing to act on yet", () => {

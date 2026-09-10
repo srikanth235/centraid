@@ -6,7 +6,13 @@
 
 import type { IconName } from "./icons";
 
-/** A place named the way a member would name it — never by route or table row. */
+/**
+ * The ID of a place's glyph concept — NOT the member's word for it (#1015,
+ * R-SH-12). Three keys already diverge from what the surfaces print
+ * (`analytics` is "Activity", `data` is "Vault", `devices` is "Household"),
+ * and `automations` is "Rules" on both seats; the label lives in
+ * `launcherModel.ts` / `places.ts`, which is the only place it may live.
+ */
 export type DestinationConcept =
   | "analytics"
   | "assistant"

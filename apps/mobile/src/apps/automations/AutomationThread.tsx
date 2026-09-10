@@ -15,11 +15,12 @@ import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
 
 /** One noun for this page (#1015, S14). */
-const AUTOMATION_NOT_READ = "This automation could not be read";
+const AUTOMATION_NOT_READ = "This rule could not be read";
 
 /** …and when a run does not start. The retry word is not glued on here: the
- *  failure door adds the product's one (`surfaceWriteFailure`, R-A-15). */
-const AUTOMATION_NOT_RUN = "This automation did not run";
+ *  failure door adds the product's one (`surfaceWriteFailure`, R-A-15); the
+ *  noun is the place's own (R-SH-11). */
+const AUTOMATION_NOT_RUN = "This rule did not run";
 
 type State =
   | { kind: "loading" }

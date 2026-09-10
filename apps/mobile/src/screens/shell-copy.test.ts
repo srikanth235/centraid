@@ -19,6 +19,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { APPROVALS_DENY_SUB } from "@centraid/client/approvals-copy";
+import { AUTOMATIONS_EMPTY_BODY } from "@centraid/client/automations-copy";
+import { INSIGHTS_EMPTY_BODY } from "@centraid/client/insights-copy";
+
 import { isTitleCase, walk } from "../../../../scripts/lint-mobile-rooms.mjs";
 import { PLACES } from "./home/places";
 import {
@@ -29,6 +33,15 @@ import {
 } from "./shell-copy";
 
 const REPO = path.resolve(import.meta.dirname, "../../../..");
+
+/** The shared sentences both seats read — swept with the shell's own. */
+const SHARED_COPY = [
+  "packages/client/src/automations-copy.ts",
+  "packages/client/src/approvals-copy.ts",
+  "packages/client/src/insights-copy.ts",
+  "packages/client/src/react/shell/launcherModel.ts",
+  "packages/client/src/react/shell/opsBar.ts",
+];
 
 const SHELL = [
   "apps/mobile/src/screens/",
@@ -82,6 +95,52 @@ describe("the shell's copy", () => {
     // ("Automations" in the header, "Rules" on the band) is named "Rules" in
     // both. A `short` may only drop words from `name` — never swap one in.
     expect(swapped).toStrictEqual([]);
+  });
+
+  it("says rule, never automation, in any sentence a member reads", () => {
+    // R-SH-11: a place named Rules whose rows are "automations" is exactly the
+    // divergence this umbrella exists to end. `automations` survives as a WIRE
+    // flag, a route key, a deep-link path, a module name and a file name — none
+    // of which a member reads — so the sweep looks only at SENTENCES: a string
+    // literal with a space in it, outside a comment, and not an argument to
+    // `console.*`. The log is the other half of S14's contract (docs/logs.md)
+    // and it keeps the engine's own tag on purpose — a debug session greps for
+    // `[automations]`, which is the module, not the place.
+    const LITERAL = /["'`](?<text>[^"'`\n]*[ \t][^"'`\n]*)["'`]/gu;
+    const offenders: string[] = [];
+    for (const file of [...shellSources, ...SHARED_COPY]) {
+      const lines = read(file)
+        // Blank block comments to spaces, keeping newlines so a line stays a
+        // line (the convention in `scripts/lint-container-opacity.mjs`).
+        .replaceAll(/\/\*[\s\S]*?\*\//gu, (m) => m.replaceAll(/[^\n]/gu, " "))
+        .split("\n")
+        .map((line) => line.replace(/(?<before>^|[^:])\/\/.*$/u, "$<before>"));
+      for (const line of lines) {
+        if (/\bconsole\.[a-z]+\s*\(/u.test(line)) continue;
+        for (const match of line.matchAll(LITERAL)) {
+          const text = match.groups?.text ?? "";
+          if (/\bautomations?\b/iu.test(text))
+            offenders.push(`${file}: ${text}`);
+        }
+      }
+    }
+    expect(offenders).toStrictEqual([]);
+  });
+
+  it("keeps the noun out of the shared copy both seats read", () => {
+    // The shell's own tables are swept above; these are the sentences
+    // `packages/client` hands BOTH seats, where a second noun would reappear
+    // on desktop only.
+    // The launcher's and ops bar's labels are swept as SOURCE above; these
+    // three are read as VALUES, so a re-export cannot hide a rename.
+    const shared = [
+      AUTOMATIONS_EMPTY_BODY,
+      APPROVALS_DENY_SUB,
+      INSIGHTS_EMPTY_BODY,
+    ];
+    expect(shared.filter((t) => /\bautomations?\b/iu.test(t))).toStrictEqual(
+      []
+    );
   });
 
   it("ends no error noun with a full stop, and gives each one a subject", () => {

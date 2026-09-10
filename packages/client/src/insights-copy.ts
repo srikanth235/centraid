@@ -27,7 +27,7 @@ export const INSIGHTS_EMPTY_TITLE = "Nothing has run yet";
  *  empty read has nothing to offer but the reason. Already inside its budget
  *  when it moved here, so it moved unchanged. */
 export const INSIGHTS_EMPTY_BODY =
-  "Once automations and the assistant start doing work, their volume and outcomes appear here.";
+  "Once rules and the assistant start doing work, their volume and outcomes appear here.";
 
 export const INSIGHTS_ERROR_TITLE = "The run log is unavailable";
 

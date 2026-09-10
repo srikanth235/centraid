@@ -70,7 +70,7 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
 });
 
 // No Discover page (#708): the catalogue is the automation gallery
-// (Automations → Browse templates), so this section carries only 10.2.
+// (Rules → Browse templates), so this section carries only 10.2.
 
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
@@ -101,7 +101,7 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     await launchApp(env);
   try {
     await waitForHome(launched.page);
-    await gotoNav(launched.page, "Automations");
+    await gotoNav(launched.page, "Rules");
     await launched.page
       .getByRole("button", { name: "Browse templates" })
       .click();
@@ -123,7 +123,7 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
 
     // Clone must NOT consume the source template — it stays adoptable.
-    await gotoNav(launched.page, "Automations");
+    await gotoNav(launched.page, "Rules");
     // Populated list drops the empty-state verb; use the app bar secondary (#765).
     await launched.page
       .getByRole("button", { name: "Templates" })
@@ -163,7 +163,7 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
 
     launched = await launchApp(env);
     await waitForHome(launched.page);
-    await gotoNav(launched.page, "Automations");
+    await gotoNav(launched.page, "Rules");
     await expect(launched.page.getByTitle("Open Daily Digest")).toBeVisible();
     await expect(fs.access(manifestPath)).resolves.toBeUndefined();
   } finally {

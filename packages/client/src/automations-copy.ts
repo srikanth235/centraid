@@ -1,11 +1,10 @@
-// Automations' cross-surface copy (#805) — shared by the overview screen and
+// Rules' cross-surface copy (#805) — shared by the overview screen and
 // mobile's `apps/automations/*`, which carried these sentences twice over.
 
 export const AUTOMATIONS_EMPTY_TITLE = "Nothing runs on its own yet";
 
 /** One sentence; the action beside it names itself (DESIGN.md → Copy). */
-export const AUTOMATIONS_EMPTY_BODY =
-  "An automation is a trigger and a thing to do.";
+export const AUTOMATIONS_EMPTY_BODY = "A rule is a trigger and a thing to do.";
 
 export const AUTOMATIONS_EMPTY_ACTION = "Browse templates";
 

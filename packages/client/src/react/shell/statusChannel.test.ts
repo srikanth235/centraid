@@ -64,10 +64,10 @@ describe("the status channel", () => {
     });
 
     it("stands rather than decaying — a condition is not news", () => {
-      setRouteHealth({ text: "1 automation is failing · since 4 August." });
+      setRouteHealth({ text: "1 rule is failing · since 4 August." });
       clock.advanceSync(60_000);
       expect(readRouteHealth()?.text).toBe(
-        "1 automation is failing · since 4 August."
+        "1 rule is failing · since 4 August."
       );
     });
 

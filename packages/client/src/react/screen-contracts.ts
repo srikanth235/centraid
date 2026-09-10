@@ -298,7 +298,7 @@ export interface AutomationsOverviewBridgeProps {
   loadData: () => Promise<AuOverviewData>;
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
-  /** "New automation" is the app bar's filled commit, not a screen's (#765). */
+  /** "New rule" is the app bar's filled commit, not a screen's (#765). */
   onBrowseTemplates: () => void;
   loadSuggestions?: () => Promise<AuOverviewSuggestionDTO[]>;
   onUseSuggestion?: (templateId: string) => void;

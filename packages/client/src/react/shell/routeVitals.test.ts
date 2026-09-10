@@ -90,20 +90,20 @@ describe("route vitals", () => {
   describe("publishRouteSignals — one call, both channels", () => {
     it("sets the count line and the health line together", () => {
       publishRouteSignals("automations", {
-        count: "6 automations · 1 failing · 1 paused",
+        count: "6 rules · 1 failing · 1 paused",
         health: {
           action: { label: "Open the failure", run: vi.fn<() => void>() },
           detail: "Weekly digest has failed its last 3 runs, since 4 August.",
-          label: "1 automation is failing",
+          label: "1 rule is failing",
         },
         state: "ready",
         tone: "net",
       });
       expect(readVitals("automations")?.count).toBe(
-        "6 automations · 1 failing · 1 paused"
+        "6 rules · 1 failing · 1 paused"
       );
       expect(readRouteHealth()?.text).toBe(
-        "1 automation is failing · Weekly digest has failed its last 3 runs, since 4 August."
+        "1 rule is failing · Weekly digest has failed its last 3 runs, since 4 August."
       );
       expect(readRouteHealth()?.action?.label).toBe("Open the failure");
       expect(readRouteHealth()?.tone).toBe("net");

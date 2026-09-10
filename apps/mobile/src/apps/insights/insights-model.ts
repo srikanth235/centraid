@@ -99,7 +99,7 @@ export function sourceMeta(summary: InsightsSummary): string {
 function kindLabel(kind: string): string {
   if (kind === "chat") return "Chat";
   if (kind === "build") return "Build";
-  if (kind === "automation") return "Automation";
+  if (kind === "automation") return "Rule";
   return kind;
 }
 

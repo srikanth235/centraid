@@ -71,7 +71,7 @@ const lens = {
     { id: "harnesses", title: "Harnesses", locus: "local", answers: [] },
     {
       id: "automations",
-      title: "Automations",
+      title: "Rules",
       locus: "local",
       answers: [
         answer({
@@ -156,8 +156,8 @@ test("Access lists automations beside people, dates every row, and shows the ope
   );
   await page.addScriptTag({ content: js });
 
-  // An automation is a principal like any other since #928.
-  await expect(page.getByText("Automations")).toBeVisible();
+  // A rule is a principal like any other since #928.
+  await expect(page.getByText("Rules")).toBeVisible();
   await expect(
     page.getByText("digest may read", { exact: false })
   ).toBeVisible();

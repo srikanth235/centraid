@@ -48,7 +48,8 @@ export function insKindLabel(kind: string): string {
     return "Build";
   }
   if (kind === "automation") {
-    return "Automation";
+    // The wire's kind; the member's noun (#1015, R-SH-11).
+    return "Rule";
   }
   return kind;
 }

@@ -292,7 +292,7 @@ describe(InsightsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("Nothing has run yet");
     expect(spans).toContain(
-      "Once automations and the assistant start doing work, their volume and outcomes appear here."
+      "Once rules and the assistant start doing work, their volume and outcomes appear here."
     );
     // The one page whose chip row survives its own empty state.
     expect(spans).toContain("7 days");
@@ -344,7 +344,7 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("100% of spend");
     expect(spans).toContain("automations");
     expect(spans).toContain("Recent runs");
-    expect(spans).toContain("Failed · Automation · $0.42 · 1.2k tokens");
+    expect(spans).toContain("Failed · Rule · $0.42 · 1.2k tokens");
     expect(spans).not.toContain("uptime");
     expect(spans).not.toContain("21d 0h");
     expect(spans.join(" ")).not.toMatch(/gateway|daemon|replica|component/iu);

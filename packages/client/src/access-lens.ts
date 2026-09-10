@@ -92,12 +92,12 @@ const GROUPS: readonly {
     kinds: ["person", "circle"],
   },
   { id: "harnesses", title: "Harnesses", locus: "local", kinds: ["harness"] },
-  // An automation is a principal like any other since #928: its standing
+  // A rule is a principal like any other since #928: its standing
   // answer is a `share_authority` row, so it is a group here rather than a
   // separate screen with its own vocabulary.
   {
     id: "automations",
-    title: "Automations",
+    title: "Rules",
     locus: "local",
     kinds: ["automation"],
   },
