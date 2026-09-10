@@ -6,11 +6,15 @@ import {
   surfaceWriteOutcome,
 } from "./write-outcome";
 
-const { post } = vi.hoisted(() => ({
+const { post, read } = vi.hoisted(() => ({
   post: vi.fn<(...args: unknown[]) => void>(),
+  read: vi.fn<
+    () => { text: string; action?: { label: string; run: () => void } } | null
+  >(() => null),
 }));
 vi.mock(import("../components/status-line"), () => ({
   postStatus: post,
+  readStatus: read,
 }));
 vi.mock(import("react-native"), () => ({
   Alert: {
@@ -20,7 +24,11 @@ vi.mock(import("react-native"), () => ({
 }));
 
 describe("native write outcome surface", () => {
-  beforeEach(() => post.mockReset());
+  beforeEach(() => {
+    post.mockReset();
+    read.mockReset();
+    read.mockReturnValue(null);
+  });
 
   it("surfaces each non-executed admission outcome", () => {
     const onParked = vi.fn<() => void>();
@@ -142,5 +150,80 @@ describe("native write outcome surface", () => {
       nativeWriteOutput({ intentId: "q", status: "queued" })
     ).toBeUndefined();
     expect(nativeWriteOutput(undefined)).toBeUndefined();
+  });
+});
+
+describe("news never paints over a live action", () => {
+  beforeEach(() => {
+    post.mockReset();
+    read.mockReset();
+  });
+
+  // THE REGRESSION THIS PINS (#1015, S3 — audit B3, tasks/findings.md#1).
+  // Tasks' check-off posted `Task done` with an `Undo`, and the queued outcome
+  // of that very write overwrote it a beat later, so the only door back from
+  // an accidental check-off was gone before the member could reach it.
+  it("suppresses a queued outcome while an action is on the line", () => {
+    read.mockReturnValue({
+      text: "Task done",
+      action: { label: "Undo", run: () => undefined },
+    });
+    expect(surfaceWriteOutcome({ intentId: "q-1", status: "queued" })).toBe(
+      true
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("suppresses an in-flight outcome while an action is on the line", () => {
+    read.mockReturnValue({
+      text: "Task done",
+      action: { label: "Undo", run: () => undefined },
+    });
+    expect(surfaceWriteOutcome({ intentId: "f-1", status: "in-flight" })).toBe(
+      true
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("still posts news when the line is quiet or carries no action", () => {
+    read.mockReturnValue(null);
+    expect(surfaceWriteOutcome({ intentId: "q-2", status: "queued" })).toBe(
+      true
+    );
+    expect(post).toHaveBeenLastCalledWith(
+      expect.stringContaining("Saved offline")
+    );
+
+    read.mockReturnValue({ text: "Saved offline" });
+    expect(
+      surfaceWriteOutcome(
+        { intentId: "q-3", status: "queued" },
+        { queuedMessage: "This change will sync automatically." }
+      )
+    ).toBe(true);
+    expect(post).toHaveBeenLastCalledWith(
+      "This change will sync automatically."
+    );
+  });
+
+  // A refusal is not news: the member has to see it even mid-undo, because it
+  // is the ANSWER to the write, not a report about its transport.
+  it("still posts a refusal and a failure over a live action", () => {
+    read.mockReturnValue({
+      text: "Task done",
+      action: { label: "Undo", run: () => undefined },
+    });
+    expect(surfaceWriteOutcome({ intentId: "p-1", status: "parked" })).toBe(
+      false
+    );
+    expect(post).toHaveBeenCalledOnce();
+    expect(
+      surfaceWriteOutcome({
+        intentId: "x-1",
+        status: "failed",
+        reason: "nope",
+      })
+    ).toBe(false);
+    expect(post).toHaveBeenLastCalledWith("Change not applied: nope");
   });
 });

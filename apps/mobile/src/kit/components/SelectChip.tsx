@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
-import { t, useTheme } from "../theme";
+import { spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
 
@@ -39,7 +39,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       height: 44,
       justifyContent: "center",
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
     },
     text: { ...t("control"), color: colors.text },
   });

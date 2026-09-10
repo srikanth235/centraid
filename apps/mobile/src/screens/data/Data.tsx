@@ -212,8 +212,14 @@ export default function DataScreen({
     >
       <View style={styles.page}>
         <View style={styles.head}>
-          {/* No verbs at all: see the file header. */}
-          <PlaceHeader title={COPY.title} />
+          {/* The leave key is a header control, never a floating plate: the
+              bottom edge here already carries the standing health line
+              (#1015, S6 — audit B14). */}
+          <HomeKey onPress={() => navigation.goBack()} />
+          <View style={styles.headBar}>
+            {/* No verbs at all: see the file header. */}
+            <PlaceHeader title={COPY.title} />
+          </View>
         </View>
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -323,7 +329,6 @@ export default function DataScreen({
         onClose={() => setOpened(undefined)}
         record={opened}
       />
-      <HomeKey onPress={() => navigation.goBack()} variant="floating" />
     </TopSafeArea>
   );
 }

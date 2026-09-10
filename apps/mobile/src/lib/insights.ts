@@ -2,11 +2,9 @@
 // bearer, never a vault header); Insights are vault-scoped (`apiHeaders`).
 // Shapes come from screen-contracts.ts: mobile has no gateway dependency.
 
-import {
-  formatBytes as sharedFormatBytes,
-  formatRelativeTime,
-} from "@centraid/design";
+import { formatRelativeTime } from "@centraid/design";
 
+import { formatBytes as kitFormatBytes } from "../kit/format";
 import {
   apiHeaders,
   authHeader,
@@ -201,8 +199,9 @@ export function formatUsd(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+/** One byte register for the seat; the kit module owns it (#1015, S8). */
 export function formatBytes(n: number): string {
-  return sharedFormatBytes(n);
+  return kitFormatBytes(n);
 }
 
 export function formatUptime(ms: number): string {

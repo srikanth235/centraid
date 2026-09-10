@@ -19,17 +19,20 @@ import {
 } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** Clearance under the standing health line for the floating home key, which
- *  is absolutely positioned on the bottom edge (54pt plate + one rhythm step,
- *  `kit/components/HomeKey.tsx`). Without it the key would sit ON the line. */
-const HOME_KEY_CLEARANCE = 54 + 8;
-
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     backdrop: { backgroundColor: colors.scrim, flex: 1 },
-    // The column of blocks. The bottom pad clears the floating home key, which
-    // sits over the scroll rather than in it.
+    // The column of blocks.
     body: { gap: spacing[2], paddingBottom: spacing[6] },
+    // The head row carries the leave key in its leading slot beside the bar
+    // (#1015, S6); `headBar` takes the rest so the title truncates against the
+    // key rather than against the screen edge.
+    head: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing[3],
+    },
+    headBar: { flex: 1, minWidth: 0 },
     dialog: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
@@ -50,7 +53,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     dialogAsk: { ...t("body"), color: colors.textSoft },
     dialogTitle: { ...t("title"), color: colors.text },
-    dock: { paddingBottom: HOME_KEY_CLEARANCE },
+    dock: { paddingBottom: spacing[3] },
     input: {
       ...t("body"),
       borderColor: colors.lineStrong,

@@ -16,7 +16,7 @@ export default function SystemOnPhone({
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
-        <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+        <HomeKey onPress={() => navigation.goBack()} />
         <View style={styles.headerTitle}>
           <PlaceHeader title={SYSTEM_ON_PHONE.title} />
         </View>

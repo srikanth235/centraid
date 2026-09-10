@@ -21,7 +21,7 @@ export default function SignalNotification({
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
-        <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+        <HomeKey onPress={() => navigation.goBack()} />
         <View style={styles.headerTitle}>
           <PlaceHeader title="Notifications" />
         </View>

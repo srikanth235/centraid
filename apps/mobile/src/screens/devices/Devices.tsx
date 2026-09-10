@@ -107,19 +107,27 @@ export default function DevicesScreen({
       style={[styles.safe, { backgroundColor: colors.bg }]}
     >
       <View style={styles.page}>
-        <PlaceHeader
-          title="Copies"
-          // Pair verb hidden while loading or errored — minting needs the
-          // gateway that is not answering.
-          {...(state === "loading" || state === "error"
-            ? {}
-            : {
-                primary: {
-                  label: PAIR_VERB,
-                  onPress: () => void devices.mint(),
-                },
-              })}
-        />
+        <View style={styles.head}>
+          {/* The leave key is a header control, never a floating plate: the
+              bottom edge here already carries the docked health line
+              (#1015, S6 — audit B14). */}
+          <HomeKey onPress={() => navigation.goBack()} />
+          <View style={styles.headBar}>
+            <PlaceHeader
+              title="Copies"
+              // Pair verb hidden while loading or errored — minting needs
+              // the gateway that is not answering.
+              {...(state === "loading" || state === "error"
+                ? {}
+                : {
+                    primary: {
+                      label: PAIR_VERB,
+                      onPress: () => void devices.mint(),
+                    },
+                  })}
+            />
+          </View>
+        </View>
         <ScrollView
           contentContainerStyle={styles.body}
           style={styles.scroll}
@@ -211,7 +219,7 @@ export default function DevicesScreen({
           )}
         </ScrollView>
       </View>
-      {/* Docked above the bottom edge, with the floating home key's clearance. */}
+      {/* Docked above the bottom edge. */}
       <View style={styles.dock}>
         <HealthLine
           text={health.text}
@@ -232,7 +240,6 @@ export default function DevicesScreen({
           onRevoke={handleRevoke}
         />
       ) : null}
-      <HomeKey onPress={() => navigation.goBack()} variant="floating" />
     </TopSafeArea>
   );
 }

@@ -74,7 +74,7 @@ export default function GatewayAlerts(props: {
   return (
     <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <HomeKey variant="leave" onPress={props.onLeave} />
+        <HomeKey onPress={props.onLeave} />
         <View style={styles.headerCopy}>
           <Text style={styles.title}>System alerts</Text>
           <Text style={styles.subtitle}>

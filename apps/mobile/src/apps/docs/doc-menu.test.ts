@@ -141,8 +141,9 @@ describe("the Share verb", () => {
       handlers()
     );
     const share = groups[0]?.rows[0] as MenuActionRow;
-    expect(share.label).toBe(
-      "Share — This vault is read-only for you, so meaning cannot be written into it."
+    expect(share.label).toBe("Share");
+    expect(share.reason).toBe(
+      "This vault is read-only for you, so meaning cannot be written into it."
     );
     expect(share.disabled).toBe(true);
   });
@@ -190,14 +191,16 @@ describe("a read-only source's row", () => {
       folders,
       handlers()
     );
+    // The label stays the verb and the refusal is the row's own `reason`
+    // line (#1015, S12): concatenating them truncated the verb out of view.
     expect(labels(groups)[1]).toStrictEqual([
-      `Rename — ${READ_ONLY}`,
-      `Move to… — ${READ_ONLY}`,
-      `Star — ${READ_ONLY}`,
+      "Rename",
+      "Move to…",
+      "Star",
       "Version history",
       "Details",
     ]);
-    expect(labels(groups)[2]).toStrictEqual([`Move to trash — ${READ_ONLY}`]);
+    expect(labels(groups)[2]).toStrictEqual(["Move to trash"]);
     const star = groups[1]?.rows[2] as MenuActionRow;
     const rename = groups[1]?.rows[0] as MenuActionRow;
     const trash = groups[2]?.rows[0] as MenuActionRow;
@@ -205,6 +208,11 @@ describe("a read-only source's row", () => {
       true,
       true,
       true,
+    ]);
+    expect([star.reason, rename.reason, trash.reason]).toStrictEqual([
+      READ_ONLY,
+      READ_ONLY,
+      READ_ONLY,
     ]);
   });
 
@@ -222,6 +230,13 @@ describe("a read-only source's row", () => {
       true,
       true,
     ]);
+    // Every target says why, and the submenu's own row does not: a submenu
+    // row is not refusable, its rows are.
+    expect(move.rows.map((row) => row.reason)).toStrictEqual([
+      READ_ONLY,
+      READ_ONLY,
+      READ_ONLY,
+    ]);
   });
 
   it("refuses Restore on a trashed row from a source it cannot write", () => {
@@ -230,9 +245,10 @@ describe("a read-only source's row", () => {
       folders,
       handlers()
     );
-    expect(labels(groups)).toStrictEqual([[`Restore — ${READ_ONLY}`]]);
+    expect(labels(groups)).toStrictEqual([["Restore"]]);
     const restore = groups[0]?.rows[0] as MenuActionRow;
     expect(restore.disabled).toBe(true);
+    expect(restore.reason).toBe(READ_ONLY);
   });
 
   it("treats an UNSTAMPED row as the member's own — a missing stamp is not a refusal", () => {

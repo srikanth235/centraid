@@ -163,11 +163,15 @@ export default function TasksHome({
         setStatus(task, "needs-action");
         return;
       }
-      setStatus(task, "completed");
+      // The door back is posted BEFORE the write is issued (#1015, S3 — audit
+      // B3): the write's own outcome is news, and news never paints over a
+      // live action (`kit/replica/write-outcome.ts`), so the order here is
+      // what makes that rule apply rather than a race with the admission.
       // Undo IS reopening — the same door the box offers, said in words.
       postStatus(DONE, {
         action: { label: UNDO, run: () => setStatus(task, "needs-action") },
       });
+      setStatus(task, "completed");
     },
     [setStatus]
   );

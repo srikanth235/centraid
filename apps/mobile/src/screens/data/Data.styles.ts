@@ -2,8 +2,8 @@
 //
 // The blocks carry their own geometry; what is left here is the page's frame —
 // the margin the reference drops to `R.margin.m(18)` at phone width (which is
-// `pageMargin`), the scroll room the docked health line and the floating home
-// key need under the last block, and the record sheet's plate.
+// `pageMargin`), the scroll room the docked health line needs under the last
+// block, and the record sheet's plate.
 //
 // Colourless: every ink comes from `useTheme()` at the call site.
 
@@ -11,16 +11,25 @@ import { StyleSheet } from "react-native";
 
 import { borders, pageMargin, radii, spacing } from "../../kit/theme";
 
-/** Room under the last block for the docked health line and the floating home
- *  key, so neither ever covers a row. Layout dimension, not a token. */
-const BOTTOM_ROOM = 96;
+/** Room under the last block for the docked health line, so it never covers a
+ *  row. Layout dimension, not a token. */
+const BOTTOM_ROOM = 64;
 
 /** The record sheet leaves the top of the screen visible — it is an aside from
  *  a row, not a destination. */
 const SHEET_TOP_ROOM = 120;
 
 export const styles = StyleSheet.create({
-  head: { paddingHorizontal: pageMargin },
+  // The head row carries the leave key in its leading slot beside the bar
+  // (#1015, S6); `headBar` takes the rest so the title still truncates
+  // against the key rather than against the screen edge.
+  head: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing[3],
+    paddingHorizontal: pageMargin,
+  },
+  headBar: { flex: 1, minWidth: 0 },
   page: { flex: 1 },
   // The screen ROOT, which `TopSafeArea` does not fill on its own: it
   // renders a bare `View`, so a root styled only with a colour collapses

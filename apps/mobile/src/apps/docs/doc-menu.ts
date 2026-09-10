@@ -20,10 +20,7 @@ import type {
   MenuGroup,
   MenuRow,
 } from "../../kit/components/AnchoredMenu";
-import {
-  READ_ONLY_SOURCE_REASON,
-  refusedLabel,
-} from "../../kit/replica/row-provenance";
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import type { MobileDriveDoc } from "./docs-projection";
 
 export interface DocMenuHandlers {
@@ -57,8 +54,10 @@ export function buildDocMenu(
   on: DocMenuHandlers
 ): MenuGroup[] {
   const writable = doc.canWrite !== false;
-  const refuse = (label: string): string =>
-    writable ? label : refusedLabel(label, READ_ONLY_SOURCE_REASON);
+  // A refused verb keeps its own label and says why on its own line
+  // (#1015, S12); spread, so a writable row carries no `reason` key at all.
+  const refuse = (): { reason?: string } =>
+    writable ? {} : { reason: READ_ONLY_SOURCE_REASON };
 
   if (doc.trashed) {
     // Restore puts its folder and its star back exactly as they were; the
@@ -69,7 +68,8 @@ export function buildDocMenu(
         rows: [
           {
             key: "restore",
-            label: refuse("Restore"),
+            label: "Restore",
+            ...refuse(),
             icon: "restore",
             disabled: !writable,
             onSelect: on.restore,
@@ -108,6 +108,7 @@ export function buildDocMenu(
       label: "No folder",
       checked: doc.folder_id === null,
       disabled: !writable,
+      ...refuse(),
       onSelect: () => on.moveTo(null),
     },
     ...folders.map(
@@ -116,6 +117,7 @@ export function buildDocMenu(
         label: folder.name,
         checked: doc.folder_id === folder.folder_id,
         disabled: !writable,
+        ...refuse(),
         onSelect: () => on.moveTo(folder.folder_id),
       })
     ),
@@ -130,7 +132,8 @@ export function buildDocMenu(
   const actGroup: MenuRow[] = [
     {
       key: "rename",
-      label: refuse("Rename"),
+      label: "Rename",
+      ...refuse(),
       icon: MENU_ICON_NAMES.rename,
       disabled: !writable,
       onSelect: on.rename,
@@ -140,21 +143,23 @@ export function buildDocMenu(
     // submenu row carries no `disabled`, so the refusal rides on its rows.
     {
       key: "move",
-      label: refuse("Move to…"),
+      label: "Move to…",
       icon: MENU_ICON_NAMES.move,
       rows: moveRows,
     },
     doc.starred
       ? {
           key: "unstar",
-          label: refuse("Remove star"),
+          label: "Remove star",
+          ...refuse(),
           icon: MENU_ICON_NAMES.star,
           disabled: !writable,
           onSelect: on.unstar,
         }
       : {
           key: "star",
-          label: refuse("Star"),
+          label: "Star",
+          ...refuse(),
           icon: MENU_ICON_NAMES.star,
           disabled: !writable,
           onSelect: on.star,
@@ -180,7 +185,8 @@ export function buildDocMenu(
     ? [
         {
           key: "share",
-          label: refuse("Share"),
+          label: "Share",
+          ...refuse(),
           icon: MENU_ICON_NAMES.share,
           disabled: !writable,
           onSelect: on.share,
@@ -197,7 +203,8 @@ export function buildDocMenu(
       rows: [
         {
           key: "trash",
-          label: refuse("Move to trash"),
+          label: "Move to trash",
+          ...refuse(),
           icon: MENU_ICON_NAMES.trash,
           destructive: true,
           disabled: !writable,

@@ -19,6 +19,9 @@ vi.mock(import("../../kit/components/status-line"), () => ({
   postStatus: (text: string) => {
     posted.push(text);
   },
+  // News is suppressed while the line carries an action (#1015, S3); nothing
+  // in this file posts one, so the line reads quiet.
+  readStatus: () => null,
 }));
 
 vi.mock(
