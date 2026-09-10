@@ -9,6 +9,7 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
+import { Text } from "../components/NativeText";
 // Through the barrel on purpose: the barrel is what a screen imports, so a
 // room missing from it is a room no screen can reach.
 import {
@@ -230,6 +231,18 @@ describe(PushedPage, () => {
     expect(labels).toContain("Back to Taxes");
   });
 
+  it("draws frame chrome above the back row", () => {
+    const container = render(
+      <PushedPage
+        backTo={parentPlace(stack)}
+        chrome={<Text>Home vault</Text>}
+        onBack={noop}
+        title="2024 return"
+      />
+    );
+    expect(words(container)[0]).toBe("Home vault");
+  });
+
   it("draws no back control on a screen with no parent", () => {
     const container = render(<PushedPage onBack={noop} title="All" />);
     const labels = nodesOf(container, "button").map((node) =>
@@ -277,6 +290,21 @@ describe(AppPlace, () => {
       />
     );
     expect(nodesOf(container, "input")).toStrictEqual([]);
+  });
+
+  // The vault lockup is chrome on every route of an app, and it sits ABOVE
+  // the header rather than inside the body, so it does not scroll away.
+  it("draws frame chrome above the app header", () => {
+    const container = render(
+      <AppPlace
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        chrome={<Text>Home vault</Text>}
+        onBack={noop}
+      />
+    );
+    const said = words(container);
+    expect(said[0]).toBe("Home vault");
+    expect(said).toContain("Photos");
   });
 });
 

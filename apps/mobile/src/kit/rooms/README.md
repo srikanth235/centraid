@@ -17,6 +17,7 @@ Every mobile screen declares one of six surface classes, and gets header, back, 
 - **State order is fixed** (`RoomBody`): error, then loading, then empty, then content. An empty state over a failed read tells a member their vault is empty when it is only unreachable.
 - **Selection is a mode** (D5): the header swaps in place to "N selected · Cancel", the band is dimmed through leaf tokens and stops answering, and the verbs sit in one foot row. Never two live bars (audit B8).
 - **The band belongs to the app**, so a room never renders one — it hands the app's `band` render prop the state it is in (`BandState`). `EditorRoom` takes no `band` prop at all: an editor hides it and carries its own leave key (R-KIT-2).
+- **Frame chrome is a node, not an import.** The vault lockup (which vault, which gateway) is true on every route of an app, so `AppPlace` and `PushedPage` take a `chrome` node and draw it above the header. The room does not import `VaultBar`: that would pull the launcher catalog and the gateway client into the kit, which is the constraint `VaultBar` states about itself.
 - **The status line is hosted where it can be read.** `EditorRoom` and `SheetRoom` mount `StatusLineHost`; every other room uses the root host.
 
 ## Not `OptionSheet`

@@ -38,6 +38,15 @@ export interface AppPlaceProps {
   };
   /** Leaves the app, back to the springboard. */
   onBack: () => void;
+  /**
+   * Frame chrome above the header, on every route of the app: which vault and
+   * which gateway (`VaultBar`). The room takes it as a node rather than
+   * importing it, because the vault lockup lives in the shell's tree and a
+   * room that reached for it would drag the launcher catalog into the kit —
+   * the constraint `VaultBar` states about itself. NotesHome needed this
+   * first (#1015, Wave 2).
+   */
+  chrome?: React.ReactNode;
   /** At most one, per DESIGN.md's one-primary rule. */
   action?: RoomAction;
   search?: SearchFieldProps;
@@ -53,6 +62,7 @@ export interface AppPlaceProps {
 export default function AppPlace({
   app,
   onBack,
+  chrome,
   action,
   search,
   selection,
@@ -68,6 +78,7 @@ export default function AppPlace({
   const selecting = !bandState.interactive;
   return (
     <TopSafeArea style={[styles.room, ink]}>
+      {chrome}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (

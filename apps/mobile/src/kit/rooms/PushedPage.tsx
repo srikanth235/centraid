@@ -35,6 +35,8 @@ export interface PushedPageProps {
   /** Computed from the stack (`parentPlace`), never written down. */
   backTo?: PlaceRef;
   onBack: () => void;
+  /** Frame chrome above the back row — see `AppPlaceProps.chrome`. */
+  chrome?: React.ReactNode;
   /** At most one filled commit, per DESIGN.md. */
   action?: RoomAction;
   secondary?: RoomAction;
@@ -77,6 +79,7 @@ export default function PushedPage({
   title,
   backTo,
   onBack,
+  chrome,
   action,
   secondary,
   search,
@@ -93,6 +96,7 @@ export default function PushedPage({
   const selecting = !bandState.interactive;
   return (
     <TopSafeArea style={[styles.room, ink]}>
+      {chrome}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (
