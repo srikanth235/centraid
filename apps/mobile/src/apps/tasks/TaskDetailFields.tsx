@@ -249,7 +249,7 @@ function FieldControl({
           <Chip
             key={rule.label}
             label={rule.label}
-            on={false}
+            on={(task.rrule ?? null) === rule.rrule}
             writable={writable}
             onPress={() => props.onEdit(repeatWrite(task, rule.rrule))}
             styles={styles}
