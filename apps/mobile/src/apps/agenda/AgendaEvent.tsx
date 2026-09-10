@@ -15,6 +15,12 @@ import {
   pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  PARTSTAT_CHOOSE,
+  PENDING_CANCEL_CHIP,
+  PENDING_MARK,
+  partstatLabel,
+} from "@centraid/blueprints/apps/agenda/view-copy";
 
 import { useBandOwner } from "../../kit/band/band-owner";
 import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
@@ -42,11 +48,10 @@ import AgendaBand from "./AgendaBand";
 import AgendaEventEditor from "./AgendaEventEditor";
 import { useAgenda } from "./useAgenda";
 
-const RSVP: readonly { partstat: string; label: string }[] = [
-  { partstat: "accepted", label: "Going" },
-  { partstat: "declined", label: "Not going" },
-  { partstat: "tentative", label: "Maybe" },
-];
+// The blueprint owns the enum's words; this is the order the chips take.
+const RSVP: readonly { partstat: string; label: string }[] = Object.entries(
+  PARTSTAT_CHOOSE
+).map(([partstat, label]) => ({ label, partstat }));
 
 export default function AgendaEvent({
   route,
@@ -261,7 +266,7 @@ export default function AgendaEvent({
               ]}
             >
               <Text style={[styles.pendingText, { color: colors.textSoft }]}>
-                {heldCancel ? "cancel asked" : "not in the vault yet"}
+                {heldCancel ? PENDING_CANCEL_CHIP : PENDING_MARK}
               </Text>
             </View>
           ) : null}
@@ -298,9 +303,7 @@ export default function AgendaEvent({
                   {partyNames.get(String(attendee["party_id"])) ?? "Guest"}
                 </Text>
                 <Text style={[styles.guestState, { color: colors.textSoft }]}>
-                  {String(attendee["partstat"] ?? "") === "needs-action"
-                    ? "No answer yet"
-                    : String(attendee["partstat"] ?? "")}
+                  {partstatLabel(attendee["partstat"])}
                 </Text>
               </View>
             ))

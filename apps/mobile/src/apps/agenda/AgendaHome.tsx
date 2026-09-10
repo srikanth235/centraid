@@ -35,6 +35,7 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import AppPlace from "../../kit/rooms/AppPlace";
+import { readFailure } from "../../kit/rooms/read-failure";
 import type { RoomEmpty, RoomError } from "../../kit/rooms/room-contracts";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
@@ -283,18 +284,17 @@ export default function AgendaHome({
   const unreachable = agenda.connection === "unavailable";
   // ERROR OUTRANKS EMPTY (`RoomBody`): a calendar that could not be read is
   // not an empty calendar, and this surface used to draw both at once.
-  const roomError: RoomError | undefined =
-    unreachable || agenda.error
-      ? {
-          body: unreachable
-            ? (agenda.unavailableReason ?? "Pair or reconnect a gateway.")
-            : (agenda.error ?? ""),
-          retry: { label: "Retry", onPress: () => void refreshAgenda() },
-          title: unreachable
-            ? "Calendar is not connected"
-            : "Calendar could not be loaded",
-        }
-      : undefined;
+  // The app is Agenda everywhere else in the product; only its error card
+  // still called it Calendar (#1015 agenda/findings#18). And the read's own
+  // exception is not the member's to read (S14) — `readFailure` writes both
+  // sentences, `useSeatPages` logs the raw string.
+  const roomError: RoomError | undefined = readFailure({
+    failed: Boolean(agenda.error),
+    noun: "Agenda",
+    onRetry: () => void refreshAgenda(),
+    unavailableReason: agenda.unavailableReason,
+    unreachable,
+  });
 
   const roomEmpty: RoomEmpty | undefined =
     !roomError && !agenda.loading && listData.length === 0
