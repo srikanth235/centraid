@@ -113,6 +113,16 @@ Ordinary writes stay in each replica's durable intent outbox. A first-open write
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+### How an intent settles
+
+An `executed` answer is the gateway's fact, not the phone's: it says the commit happened, not that this seat holds the rows it wrote. So the answer's **commit position** goes onto the outbox record and the intent waits at `awaiting-change`, and the applier clears the overlay in the transaction that carries that commit — the pending row and the canonical row it was drawn over become visible in the same instant. Where the answer arrives AFTER the seat already applied that commit, the drain settles it against the seat's applied commit position instead, because the applier's hook has been and gone. An answer that names no position (an older gateway) waits on `answeredVersions` instead, and one that names neither is released by the next send, from the gateway's retained outcome.
+
+Until [#1014](https://github.com/srikanth235/centraid/issues/1014) the drain discarded that number, so every executed intent parked at `awaiting-change` for the life of the install and the pending badge never cleared.
+
+One gesture mints one intent id. Idempotency across RETRIES comes from the outbox row — a retry re-sends the id the gesture minted and the gateway answers from its retained outcome — never from hashing the payload, which collapsed two legitimate identical writes ("+1" twice) into one. An id supplied by the caller (the upload queue keys on the file's digest) is passed through untouched.
+
+A successful send retires the transport reason an earlier attempt wrote, so a `fetch failed` line is never shown under an intent that has since executed.
+
 ### The phone renders the display rungs the gateway cannot decode
 
 Both device ingress paths — the upload queue and the first-run camera-roll **Import** — contribute the preview ladder's `thumb` and `preview` rungs, plus `phash` and `thumbhash`, from bytes the phone decoded itself. For HEIC/HEIF that is not an optimisation but the only source: the gateway's preview codec is sharp, and the `@img/sharp-libvips-darwin-arm64` build this repo pins ships libheif **without an HEVC decoder** (HEVC patent licensing), so the HEIC an iPhone actually captures declines on the gateway and earns the durable `preview-codec@1` "unsupported" stamp that makes recognition skip it ([#1011](https://github.com/srikanth235/centraid/issues/1011)). iOS decodes it natively.
