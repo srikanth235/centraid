@@ -26,6 +26,8 @@ Together they made a dead vault indistinguishable from a healthy one, and the on
 
 > A gateway request runs under a deadline. Time to first byte only: a vault streaming a large page is plainly reachable; one that has not begun to answer has said nothing. (`apps/mobile/src/lib/replica/gateway-deadline.ts`)
 
+> And a stream that HAS begun to answer, then stops delivering, is the same fact one layer later ([#1014](https://github.com/srikanth235/centraid/issues/1014), R15). The deadline only covers the first byte, so a socket the platform quietly stopped feeding sits inside a live-looking request forever — indistinguishable from a quiet vault, because the gateway's keep-alive is an SSE comment and a comment is not a frame. Both replica feeds therefore treat silence past twice the gateway's heartbeat as a dead stream and reconnect, and every way a stream can end other than a deliberate `stop()` schedules that reconnect — the platform cancelling the request (`-999` on iOS) included, which the feeds used to read as a reason to stay quiet.
+
 > A pass that has not asked the gateway anything may lower reachability and never raise it. Only an answer may say a vault is reachable. (`attemptedReachability` in `apps/mobile/src/kit/replica/replica-status.ts`)
 
 > Whoever is actually talking to the gateway reports what they saw — the change feed for a member who only reads, the write drain for one who writes. They decide nothing; they ask `refreshReachability` to look again.
@@ -33,5 +35,7 @@ Together they made a dead vault indistinguishable from a healthy one, and the on
 ## What does not catch it
 
 No lane owns "the vault goes away under a running app". The mobile integration tier asks what the session reports rather than what the screen says, and every test transport fails fast — none of them hangs, which is the whole defect. It was found by killing a real gateway under a real phone and watching.
+
+Since [#1014](https://github.com/srikanth235/centraid/issues/1014) that tier does at least run the SHIPPED feed against a real SSE route (`tests/integration-mobile/live-feed.integration.test.ts`), so a stream cancelled mid-flight and the reconnect behind it are covered there. A stream that hangs without ending is still not: it needs a transport that accepts and then says nothing, which is the tunnel listener's behaviour and not `fetch`'s.
 
 Nothing here is specific to Docs or to Photos: the copy defects were spread across four surfaces because they all read one reachability value.

@@ -255,6 +255,27 @@ Their handlers are deleted, not gated. What a proved peer may still reach on `/c
 
 **Cross-host grant delivery is an open gap.** Fulfillment resolves an audience vault through the host gateway's own registry, so a grant to a party whose vault lives on another gateway parks at `syncing` with that vault named and stays there. It is not an error state and no route reports it as one; v1's tested reach is co-hosted vaults, and carrying a grant across the peer plane is a follow-up under [#825](https://github.com/srikanth235/centraid/issues/825).
 
+### The replica change feed: verdicts, bounds and the two cursors ([#1014](https://github.com/srikanth235/centraid/issues/1014))
+
+**A frame is a WAKE.** A seat that is told the gateway moved pulls its own pages from the seat-log door; the feed carries no rows a client depends on. Everything below is about what the feed is allowed to say and how many of them a gateway will hold.
+
+**The rebootstrap verdict vocabulary is closed** (`packages/server/src/routes/replica-routes.ts#REPLICA_REBOOTSTRAP_VERDICTS`), and `packages/client/src/replica/rebootstrap-copy.ts` is total over it — a verdict added on one side without copy on the other is a type error, not a blank screen. `device-access-changed` joined it in #1014 (V16): the stream had always sent it on a mid-stream authorization change, it was on no list, and the normaliser rewrote it to `invalid-cursor` — telling a member their device's position could not be read for something a person did. Nothing else on the wire carries a raw `Error.message`: the retry frame is a typed code and the exception belongs in the gateway's log.
+
+**A multiplex mount fails alone.** One radio carries N sovereign vaults, and a mount's trouble is a scoped frame — `rebootstrap`, `revoked` or the terminal `error` — never the radio's. Since #1014 (V18) the enrolment gate is evaluated PER MOUNT: a vault this device is not enrolled for gets `error` with reason `scope-not-enrolled` and the rest stream, where a single unknown vault used to take the whole radio down with a blanket `403 replica_scope_not_enrolled` before any per-mount check had run. A radio on which NO mount is admissible still answers that 403, which is the single-mount client's behaviour unchanged. The client turns `error` into a per-vault re-bootstrap (or a revoke for `scope-not-enrolled`); before #1014 (V21) it had no branch for the frame at all and the mount went silent for the life of the connection.
+
+**Two SSE bounds, not one.** The process cap (`SSE_MAX_SUBSCRIBERS`, 32) is the #351 Tier 4 bound. Beside it sits a per-device bound (`SSE_PER_DEVICE_MAX`, 2): one phone opening the whole allowance used to starve every other seat in the household, and before #1014's periodic pull there was no delivery path to fall back on. Both refusals are `503 sse_capacity` with `Retry-After`.
+
+**Two cursors, two jobs — do not conflate them.**
+
+|  | Where | Written by | Read by |
+| --- | --- | --- | --- |
+| `access_device_secret.sync_cursor` / `sync_cursor_at` | The VAULT (private band) | The seat-log door, with the position the device SENT | `lowestSeatCursor`, so retention holds the log floor at or below the lowest live seat within `REPLICA_SEAT_HOLD_DAYS` |
+| `device_checkpoints` | The GATEWAY database, per `(endpoint_id, vault_id)` | The seat-log door and the multiplex feed, on each served page | `hadReplicaScope` (the multiplex gate), the Household device list's `checkpoint`, and `revoke()`'s drop |
+
+The first is a RETENTION hold — how far the log may be collected. The second is a SCOPE record — durable proof that this device mounts this vault, which is what survives a device going offline and what an ownership change must destroy: `OwnerStore.setOwner` drops the ex-owner's devices' checkpoints before it repoints `vault_owners` (#1014, V18). Neither had a production writer before #1014 (V1/T9 and V2/X9 respectively), which is why the multiplex gate could only ever see `hadReplicaScope === false`.
+
+`access_device.last_seen_at` is a THIRD answer to "when was this device last seen" and it has neither a writer nor a reader (#1014, V23). It is deliberately not being written: `access_device` replicates, so a liveness stamp on it is a `replica_log` row per device per interval delivered to every seat forever, which would crowd real changes out of the retention window for a column nothing consults. The two columns above are the liveness this product actually uses — the private one for retention, the gateway one for the device list — and dropping the dead column is owed to a schema wave.
+
 ## Stream authority
 
 | Channel | Authority | Use |

@@ -360,6 +360,49 @@ export class EnrollmentStore {
     return this.resetCheckpoint(endpointId, vaultId, cursor);
   }
 
+  /**
+   * WHERE THIS DEVICE'S RADIO HAS BEEN SERVED TO (#1014, V2/X9).
+   *
+   * `device_checkpoints` had no production writer at all: nothing ever called
+   * `resetCheckpoint` or `advanceCheckpoint`, so `hadReplicaScope` was
+   * permanently false, `DeviceEnrollment.checkpoint` permanently `undefined`,
+   * the Household device list's `checkpoint` permanently absent, and
+   * `revoke()`'s checkpoint drop a no-op over an empty table. The multiplex
+   * gate read that false and refused the WHOLE radio.
+   *
+   * NOT THE SAME CURSOR as `access_device_secret.sync_cursor`, and the two must
+   * not be conflated (see docs/protocol.md): that one lives in the VAULT, is
+   * the position a seat says it HAS, and is what retention holds the log floor
+   * at. This one lives in the GATEWAY database, is per `(endpoint_id,
+   * vault_id)`, and is the SCOPE record — durable proof that this device
+   * mounted this vault, which is what survives a vault changing hands and what
+   * a revoke drops.
+   *
+   * BEST-EFFORT, LIKE A DOORBELL: the page it is about has already been served,
+   * so a failure here may never fail the answer. A new epoch RESETS rather than
+   * refusing — the device is being served that epoch's pages — and a cursor
+   * that would go backwards is ignored.
+   */
+  noteCheckpoint(
+    endpointId: string,
+    vaultId: string,
+    cursor: Omit<ReplicaCheckpoint, "updatedAt">
+  ): boolean {
+    try {
+      const previous = this.get(endpointId, vaultId)?.checkpoint;
+      const sameEpoch =
+        previous !== undefined &&
+        previous.epoch === cursor.epoch &&
+        previous.schemaEpoch === cursor.schemaEpoch;
+      if (sameEpoch && cursor.seq < previous.seq) return false;
+      if (sameEpoch) this.advanceCheckpoint(endpointId, vaultId, cursor);
+      else this.resetCheckpoint(endpointId, vaultId, cursor);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   setCompute(
     enrollmentId: string,
     input: Omit<DeviceComputeProfile, "updatedAt">

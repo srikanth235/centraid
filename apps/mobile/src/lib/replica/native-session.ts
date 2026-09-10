@@ -52,27 +52,24 @@ import { SeatSyncLoop } from "@centraid/client/replica/seat/seat-sync-loop";
 
 import { backoffSchedule } from "../backoff";
 import type { BackoffSchedule } from "../backoff";
+import { SeatDelivery, seatDeliverySink } from "./delivery-triggers";
 import { MobileIntentIds } from "./mobile-intent-id";
 import {
   nativePendingChanges,
   nativePendingProjection,
+  publishQueueContentRefs,
 } from "./native-pending-changes";
 import type { NativePendingChange } from "./native-pending-changes";
 import type { NativeSeatPort } from "./native-seat";
 import type {
-  AppStateLike,
   CreateNativeReplicaSessionOptions,
   MobileReplicaSession,
-  NativeChangeFeed,
   NativeSearchRequest,
   NativeWriteInput,
   NativeWriteResult,
 } from "./native-session-types";
 import { NativeWriteRail } from "./native-write-rail";
-import {
-  forgetPendingContentRefs,
-  publishPendingContentRefs,
-} from "./pending-content-refs";
+import { forgetPendingContentRefs } from "./pending-content-refs";
 import { isReplicaStorageFullError } from "./replica-storage-error";
 import { noteResyncVerdict } from "./resync-notice";
 import { SeatSyncErrorSink } from "./seat-sync-error";
@@ -99,13 +96,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** #1014 C7: a later read of the mutable id could unprotect another vault. */
   readonly #vaultId: string;
   readonly #fetcher: ReplicaFetcher;
-  readonly #feed: NativeChangeFeed;
+  readonly #delivery: SeatDelivery;
   readonly #seat: NativeSeatPort;
   readonly #syncLoop: SeatSyncLoop;
   readonly #queue: IntentQueue;
   readonly #bus = new InvalidationBus();
   readonly #admission: AdmissionWaiters<NativeWriteResult>;
-  readonly #appState: AppStateLike | undefined;
   readonly #isConnected: () => boolean;
   readonly #retryBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
@@ -114,6 +110,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #waitingOnLabel: string | undefined;
   readonly #scope: VaultSource | undefined;
   readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
+  /** Where this file got to, after the rows are durable (#1014, C3). */
+  readonly #onApplied: ((applied: number) => void) | undefined;
   readonly #onStorageFull: ((error: unknown) => void) | undefined;
   readonly #onAuthorizationRevoked: (() => void) | undefined;
   readonly #writes: NativeWriteRail;
@@ -131,8 +129,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
-  #appStateSub: { remove: () => void } | undefined;
-  #unsubscribeFeed: (() => void) | undefined;
   #closed = false;
 
   constructor(
@@ -146,7 +142,23 @@ export class NativeReplicaSession implements MobileReplicaSession {
       throw new ReplicaProtocolError("An addressed vault is required");
     this.#vaultId = options.gatewayAuth.vaultId;
     this.#fetcher = options.fetcher;
-    this.#feed = options.changeFeed;
+    this.#delivery = new SeatDelivery({
+      feed: options.changeFeed,
+      appState: options.appState,
+      onMessage: (message) => this.onFeedMessage(message),
+      onForeground: () => {
+        this.resetRetry();
+        void this.catchUp();
+        void this.flushIntents();
+      },
+      pull: () => {
+        if (this.#closed || !this.#isConnected()) return;
+        void this.pullNow();
+      },
+      ...(options.pullIntervalMs === undefined
+        ? {}
+        : { pullIntervalMs: options.pullIntervalMs }),
+    });
     this.#seat = options.seat;
     this.#queue = options.queue;
     // KEPT, NOT DROPPED (#1011): the loop's one failure is the only thing that
@@ -155,7 +167,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#syncLoop = new SeatSyncLoop(options.seat, {
       onError: (error) => this.#syncErrors.note(error),
     });
-    this.#appState = options.appState;
     this.#isConnected = options.isConnected ?? (() => true);
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
@@ -169,6 +180,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     });
     this.#intentIds = new MobileIntentIds(options.idFactory);
     this.#onGatewayOutcome = options.onGatewayOutcome;
+    this.#onApplied = options.onApplied;
     this.#onStorageFull = options.onStorageFull;
     this.#onAuthorizationRevoked = options.onAuthorizationRevoked;
     this.#waitingOnLabel = options.origin
@@ -204,23 +216,19 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   async start(): Promise<this> {
+    this.#seat.attachSink(
+      seatDeliverySink({
+        emit: (invalidations) => this.#bus.emit(invalidations),
+        ...(this.#onApplied ? { applied: this.#onApplied } : {}),
+      })
+    );
     await this.#queue.recoverSending();
     await this.publishProtectedContent();
     // THE COPY ARRIVES BEHIND THE MOUNT. Not awaited: the first bootstrap is
     // the whole vault file over whatever connection the phone has, and a member
     // who tapped an icon must not wait for it.
     void this.catchUp();
-    const foreground = this.#appState
-      ? this.#appState.currentState !== "background"
-      : true;
-    this.#unsubscribeFeed = this.#feed.subscribe(this.onFeedMessage);
-    this.#feed.setActive(foreground);
-    if (this.#appState) {
-      this.#appStateSub = this.#appState.addEventListener(
-        "change",
-        this.onAppStateChange
-      );
-    }
+    this.#delivery.start();
     void this.flushIntents();
     return this;
   }
@@ -324,11 +332,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     // feed alone left the snapshot and log doors pointed at a dead address and
     // the copy permanently empty.
     this.#seat.updateGatewayBase(baseUrl);
-    const foreground = this.#appState
-      ? this.#appState.currentState !== "background"
-      : true;
-    this.#feed.setActive(false);
-    if (foreground) this.#feed.setActive(true);
+    this.#delivery.rebase();
   }
 
   async flushIntents(): Promise<void> {
@@ -456,6 +460,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#bus.emit(seatPurgeInvalidation());
     void this.catchUp().finally(() => {
       this.#rebootstrapping = false;
+      this.#delivery.resumeFrom(this.#seat.watermark());
       void this.flushIntents();
     });
   }
@@ -504,37 +509,18 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#syncLoop.close();
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
-    this.#appStateSub?.remove();
-    this.#appStateSub = undefined;
-    this.#unsubscribeFeed?.();
-    this.#unsubscribeFeed = undefined;
-    this.#feed.setActive(false);
+    this.#delivery.stop();
   }
 
   /** A frame means the gateway moved; the seat's own cursor does the rest. */
-  private readonly onFeedMessage = (message: {
-    type: string;
-    detail?: unknown;
-  }): void => {
+  private onFeedMessage(message: { type: string; detail?: unknown }): void {
     if (this.#closed) return;
     if (message.type === "centraid:vault-rebootstrap") {
       this.requireBootstrap(message.detail);
       return;
     }
     void this.catchUp();
-  };
-
-  private readonly onAppStateChange = (state: string): void => {
-    if (this.#closed) return;
-    if (state === "active") {
-      this.resetRetry();
-      this.#feed.setActive(true);
-      void this.catchUp();
-      void this.flushIntents();
-    } else if (state === "background") {
-      this.#feed.setActive(false);
-    }
-  };
+  }
 
   private drainLoop(): Promise<void> {
     return drainIntents({
@@ -600,14 +586,10 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#retryTimer = undefined;
   }
 
-  /** Which content ids this queue still needs (R25), told to the byte store.
-   *  Pushed, not pulled: the eviction sweep is synchronous and this is not. */
-  private async publishProtectedContent(): Promise<void> {
-    try {
-      publishPendingContentRefs(this.#vaultId, await this.#queue.pending());
-    } catch {
-      // Unreadable store: the previous answer stands, which over-keeps.
-    }
+  private publishProtectedContent(): Promise<void> {
+    // Keyed by vault (#1014, C7): a module-global answer let one seat's queue
+    // move make another mounted vault's captured photograph evictable.
+    return publishQueueContentRefs(this.#vaultId, this.#queue);
   }
 
   private assertOpen(): void {

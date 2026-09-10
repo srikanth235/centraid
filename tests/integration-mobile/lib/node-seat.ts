@@ -27,6 +27,7 @@ import {
   seatWorkerPage,
 } from "../../../packages/client/src/replica/native.js";
 import type {
+  SeatWorkerSink,
   IntentRecordStore,
   OptimisticMutation,
   ReplicaBaseVersion,
@@ -100,37 +101,50 @@ export async function openNodeSeat(
   // will not create a missing parent, it answers "unable to open database file".
   mkdirSync(options.directory, { recursive: true });
   const databasePath = `${options.directory}/${options.fileName ?? "seat.sqlite3"}`;
-  const core = new SeatWorkerCore({
-    openDatabase: () => new NodeSeatDriver(databasePath),
-    staging: () => {
-      options.faults?.staging?.();
-      const staging = nodeSeatStaging({
-        // Per FILE, not per directory: two seats sharing a staging directory
-        // would resume each other's part file (#1014).
-        directory: `${databasePath}-staging`,
-        databasePath,
-      });
-      const install = options.faults?.install;
-      if (!install) return staging;
-      return {
-        ...staging,
-        install: (etag, prepare) =>
-          install(() => staging.install(etag, prepare)),
-      };
+  // The product's own indirection (#1014, C3): the core takes its sink at
+  // construction, and the session that reads the invalidations is built after
+  // the file is open. This tier carries it so a suite watches the SAME hook
+  // the phone does rather than a narrower stand-in.
+  const sinkHolder: { sink: SeatWorkerSink } = { sink: {} };
+  const core = new SeatWorkerCore(
+    {
+      openDatabase: () => new NodeSeatDriver(databasePath),
+      staging: () => {
+        options.faults?.staging?.();
+        const staging = nodeSeatStaging({
+          // Per FILE, not per directory: two seats sharing a staging directory
+          // would resume each other's part file (#1014).
+          directory: `${databasePath}-staging`,
+          databasePath,
+        });
+        const install = options.faults?.install;
+        if (!install) return staging;
+        return {
+          ...staging,
+          install: (etag, prepare) =>
+            install(() => staging.install(etag, prepare)),
+        };
+      },
+      // The phone's stash, in `node:fs` terms (#1014, C5/T6): this tier is
+      // where a kill mid-swap is actually injected, so it must have the same
+      // seam.
+      carryOver: () => {
+        options.faults?.carryOver?.();
+        return nodeSeatCarryOverSidecar(databasePath);
+      },
+      transport: (bootstrap) =>
+        httpSeatSnapshotTransport({
+          url: bootstrap.snapshotUrl,
+          ...(bootstrap.headers ? { headers: bootstrap.headers } : {}),
+          ...(options.fetch ? { fetch: options.fetch } : {}),
+        }),
     },
-    // The phone's stash, in `node:fs` terms (#1014, C5/T6): this tier is where
-    // a kill mid-swap is actually injected, so it must have the same seam.
-    carryOver: () => {
-      options.faults?.carryOver?.();
-      return nodeSeatCarryOverSidecar(databasePath);
-    },
-    transport: (bootstrap) =>
-      httpSeatSnapshotTransport({
-        url: bootstrap.snapshotUrl,
-        ...(bootstrap.headers ? { headers: bootstrap.headers } : {}),
-        ...(options.fetch ? { fetch: options.fetch } : {}),
-      }),
-  });
+    {
+      onChange: (notice) => sinkHolder.sink.onChange?.(notice),
+      onOverlaysCleared: (ids) => sinkHolder.sink.onOverlaysCleared?.(ids),
+      onBootstrapProgress: (p) => sinkHolder.sink.onBootstrapProgress?.(p),
+    }
+  );
   const loop = new SeatLoop(inProcessSeatChannel(core), {
     vaultId: options.vaultId,
     dbName: databasePath,
@@ -142,6 +156,9 @@ export async function openNodeSeat(
   await loop.open();
   let rowKeys: SeatRowKeys | undefined;
   return {
+    attachSink: (sink: SeatWorkerSink): void => {
+      sinkHolder.sink = sink;
+    },
     outbox: (): IntentRecordStore => loop.outbox(),
     page: <Row extends object>(
       query: PageQuery<Row>,
