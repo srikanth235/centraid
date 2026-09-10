@@ -11,10 +11,16 @@
 // sentence with the app's own noun in it, and ONE retry word for the whole
 // product.
 
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
+
 import type { RoomAction, RoomError } from "./room-contracts";
 
-/** The product's one retry word. Never "Retry", never "Reload". */
-export const TRY_AGAIN = "Try again";
+/**
+ * The product's one retry word. Never "Retry", never "Reload" — and not a
+ * second copy of it either: `@centraid/client` already holds the word every
+ * seat uses, so this is the name the rooms know it by, not a new string.
+ */
+export const TRY_AGAIN = RETRY_ACTION;
 
 export interface ReadFailureInput {
   /**

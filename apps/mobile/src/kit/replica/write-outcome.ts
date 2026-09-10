@@ -2,6 +2,7 @@ import { pendingOverlayCopy } from "@centraid/blueprints/apps/_shared/pending-ov
 
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import { postStatus, readStatus } from "../components/status-line";
+import { TRY_AGAIN } from "../rooms/read-failure";
 
 /** Where a conflicted write waits, and what can be done to it there. */
 const CONFLICT_ROUTE = "Open Pending changes to retry or discard.";
@@ -72,13 +73,12 @@ export function surfaceWriteOutcome(
           key: result.intentId,
           status: "conflict",
           action: "",
+          // NO VERSION NUMBERS ON THE PHONE (#1015, S14 — R-A-15). The
+          // sidecar carries them and Pending changes may show them; a status
+          // line that says "Expected version 7; found 8" tells a member a
+          // number they cannot act on in the one slot that has to say what
+          // happened and where the door is.
           ...(result.reason ? { reason: result.reason } : {}),
-          ...("conflict" in result && result.conflict
-            ? {
-                expectedVersion: result.conflict.expectedVersion,
-                actualVersion: result.conflict.actualVersion,
-              }
-            : {}),
         })} ${CONFLICT_ROUTE}`
       );
     return false;
@@ -92,19 +92,61 @@ export function surfaceWriteOutcome(
       postStatus("Saving — the final status remains visible in sync status.");
     return true;
   }
-  postStatus(
-    `${options.failureTitle ?? "Change not applied"}: ${result.reason ?? "The vault rejected this change."}`
+  // A REFUSAL IS NOT AN EXCEPTION AND NOT A SENTENCE THE VAULT WRITES
+  // (#1015, S14 — R-A-18). `result.reason` is the engine's own words, with a
+  // receipt id and scope in them as often as not; it goes to the log, and the
+  // member gets the surface's noun and the one thing that is true.
+  surfaceWriteRefusal(
+    "denied",
+    options.failureTitle ?? "Change not applied",
+    result.reason
   );
   return false;
 }
 
+/**
+ * WHY A WRITE DID NOT LAND WHEN NOTHING THREW (#1015, S14 — R-A-15).
+ *
+ * Before this channel existed, a caller that wanted a refusal on screen
+ * wrapped it in `new Error(reason)` and handed it to `surfaceWriteFailure`
+ * (`locker-writes.ts` did it three times), which is how engine words got a
+ * ride into member copy. A refusal has its own shape: the surface's noun, one
+ * of two true routes, and the raw in the log where a debug session starts
+ * (docs/logs.md).
+ */
+export type WriteRefusal = "unpaired" | "denied";
+
+const REFUSAL_ROUTE: Record<WriteRefusal, string> = {
+  denied: "The vault did not allow this change.",
+  unpaired: "Pair or reconnect a vault host.",
+};
+
+export function surfaceWriteRefusal(
+  kind: WriteRefusal,
+  failureTitle: string,
+  detail?: string
+): void {
+  if (detail !== undefined && detail !== "")
+    console.warn("[write] refused", failureTitle, detail);
+  postStatus(`${failureTitle}. ${REFUSAL_ROUTE[kind]}`);
+}
+
+/**
+ * THE ONE WRITE FAILURE (#1015, S14 — R-A-15), the twin of `readFailure`.
+ *
+ * The exception is NOT the message. `error.message` on this seat is whatever
+ * the transport, the SQLite driver or the intent admitter threw — a status
+ * code, a constraint name, an empty string — and forty call sites were
+ * pasting it into the one status line. What the member gets is the surface's
+ * own noun and the product's one retry word; the raw goes to the log, which
+ * is where a debug session starts (docs/logs.md).
+ */
 export function surfaceWriteFailure(
   error: unknown,
-  failureTitle = "Change failed"
+  failureTitle = "Change not saved"
 ): void {
-  postStatus(
-    `${failureTitle}: ${error instanceof Error ? error.message : "Please try again."}`
-  );
+  console.warn("[write] failed", failureTitle, error);
+  postStatus(`${failureTitle}. ${TRY_AGAIN}.`);
 }
 
 /** Extract the executed/queued command output bag when present. */

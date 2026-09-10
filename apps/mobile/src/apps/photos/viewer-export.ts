@@ -1,6 +1,9 @@
 import * as MediaLibrary from "expo-media-library";
 
-import { sharePlaceReceipt } from "@centraid/blueprints/apps/photos/share-place";
+import {
+  SHARE_PLACE_NOT_REMOVABLE,
+  sharePlaceReceipt,
+} from "@centraid/blueprints/apps/photos/share-place";
 import type {
   SharePlaceInput,
   SharePlacePrecision,
@@ -44,7 +47,7 @@ export function surfaceExportFailure(error: unknown): void {
   // refusal the member can act on — so it speaks for itself. Everything else
   // gets the noun and the retry word; the engine's sentence goes to the log.
   if (error instanceof LocationNotRemovableError) {
-    postStatus(error.message);
+    postStatus(SHARE_PLACE_NOT_REMOVABLE);
     return;
   }
   console.warn("[photos] export failed", error);

@@ -281,7 +281,7 @@ export function useDocsWrite(navigation: DocsShellNavigation): DocsWrite {
           return undefined;
         return result;
       } catch (error) {
-        surfaceWriteFailure(error, "Docs change failed");
+        surfaceWriteFailure(error, "Docs change not saved");
         return undefined;
       }
     },

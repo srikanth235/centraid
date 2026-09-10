@@ -88,7 +88,7 @@ export function usePeopleWrites(
           queuedMessage: "This People change will sync automatically.",
         });
       } catch (error) {
-        surfaceWriteFailure(error, "People change failed");
+        surfaceWriteFailure(error, "People change not saved");
         return false;
       }
     },

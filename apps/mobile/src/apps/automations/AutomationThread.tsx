@@ -7,12 +7,17 @@ import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { surfaceWriteFailure } from "../../kit/replica/write-outcome";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
+
+/** Automations' error nouns (#1015, S14): a read that did not land, and a run
+ *  that did not start. Nothing else this pane says is an exception. */
+const AUTOMATION_NOT_LOADED = "Automation could not be loaded";
+const AUTOMATION_NOT_RUN = "Automation not run";
 
 type State =
   | { kind: "loading" }
@@ -37,10 +42,10 @@ export default function AutomationThread(props: {
         turns: await listAutomationTurns(props.automationRef),
       });
     } catch (error) {
-      setState({
-        kind: "error",
-        message: error instanceof Error ? error.message : "Could not load.",
-      });
+      // THE EXCEPTION IS NOT THE MESSAGE (#1015, S14 — R-A-15). It goes to the
+      // log; the pane gets this app's one noun.
+      console.warn("[automations] thread read failed", error);
+      setState({ kind: "error", message: AUTOMATION_NOT_LOADED });
     }
   }, [props.automationRef]);
 
@@ -54,11 +59,7 @@ export default function AutomationThread(props: {
     setRunning(true);
     void runAutomation(props.automationRef)
       .then(load)
-      .catch((error: unknown) =>
-        postStatus(
-          `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
-        )
-      )
+      .catch((error: unknown) => surfaceWriteFailure(error, AUTOMATION_NOT_RUN))
       .finally(() => setRunning(false));
   };
 
