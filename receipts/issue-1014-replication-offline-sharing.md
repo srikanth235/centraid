@@ -487,3 +487,66 @@ Every command below re-run on `d0415e25`, after the umbrella merge.
 ### Docs touched
 
 [`docs/mobile-offline.md`](../docs/mobile-offline.md) (a new "How an intent settles" under "Offline changes and cross-vault placement": the commit position, the ack-after-delta case, gesture idempotency, the retired transport reason) and [`docs/protocol.md`](../docs/protocol.md) (`commitSeq` among the additive replica fields; the intent door's 200/202/409/500 contract with its three 409 codes; the member write door's dedupe table and its `in-flight`-not-`executed` rule).
+
+## Lane A — delivery: a gateway write reaches two foregrounded phones with no foreground transition
+
+### What landed
+
+| Commit | What |
+| --- | --- |
+| `3e5472ef` | `tests/integration-mobile/lib/boot-conditions.ts` — the stale arrangement asks its freshness question through a pinned log position. |
+| `8eb212f7` | `apps/mobile/src/lib/replica/native-multiplex-change-feed.ts`, `native-change-feed.ts`, `native-session.ts`, `native-session-types.ts`, `native-seat.ts`, `native-seat.test-fixtures.ts`, `offline-budgets.ts`, new `delivery-triggers.ts`, `packages/client/src/vault-change-sse.ts`, `tests/integration-mobile/lib/node-seat.ts`, `docs/mobile-offline.md` — reconnect-always, the silence watchdog, the pull clock, the feed resume, the native change sink. |
+| `0e4cec2a` | `packages/server/src/serve/enrollment-store.ts`, `owner-store.ts`, `packages/server/src/routes/multiplex-replica-routes.ts`, `replica-routes.ts`, `seat-routes.ts`, `sse-cap.ts`, `packages/client/src/replica/rebootstrap-copy.ts`, `docs/protocol.md` — the scope checkpoint, the per-mount gate, stream hygiene, the per-device cap. |
+| `da545c2d` | `tests/integration-mobile/live-feed.integration.test.ts` (new), `lib/seat.ts`, `lib/expo-fetch.ts` (new), `vitest.config.ts`, `README.md` — the shipped feed against a real SSE route. |
+| `d4164679` | `docs/traps/unreachable-vault.md` — the deadline covers the first byte, not the silence after it. |
+| `ad761dea` | `apps/mobile/src/lib/replica/native-session-delivery.test.ts` — the merged `SeatWatermark` shape. |
+
+**R15/R22/C21 — the feed.** Both feeds declined to reconnect whenever their controller had aborted, and neither could tell a socket the platform had stopped feeding from a quiet vault: the gateway's keep-alive is an SSE COMMENT, which `decodeFrame` drops for carrying no `data`. The generation now decides — `stop()` is the only deliberate end — `consumeVaultChangeSse` reports every chunk through a new `onActivity`, and silence past `REPLICA_FEED_SILENCE_MS` (2× the gateway heartbeat) drops and re-issues. `stop()` aborts every controller the feed opened rather than the one the newest attempt stored, a stream that lost a race has its body cancelled, and the single-vault feed gained the reply deadline it never had.
+
+**C4 — the latch.** `resume()` was the only reset for `rebootstrapRequired` and had zero production callers, so one rebootstrap frame muted that vault for the life of the process. `SeatDelivery.resumeFrom` is called when the session's re-bootstrap finishes, whatever it reached.
+
+**R15/R22 — the clock.** `REPLICA_PULL_INTERVAL_MS` (60 s) with one consumer: a foregrounded, connected session catches up on it regardless of the feed.
+
+**C3 — the sink.** `NativeSeat` carries a `SeatWorkerSink` through a holder (the file is opened before the session), and the session attaches on `start()`: entity invalidations from the applier's notice, plus an `onApplied` carrying the position the FILE reached rather than the one a frame predicted.
+
+**V2/X9 — the scope checkpoint.** `device_checkpoints` had no production writer anywhere. `EnrollmentStore.noteCheckpoint` is best-effort, resets on a new epoch and never moves backwards; the seat-log door and the multiplex feed call it per served page.
+
+**V18 — the gate and the ex-owner.** The multiplex enrolment gate is per mount: an unenrolled scope gets an in-band `error`/`scope-not-enrolled` and the rest stream; a radio with no admissible mount keeps the single-mount 403. `OwnerStore.setOwner` drops the ex-owner's devices' checkpoints before it repoints `vault_owners`.
+
+**V21/V15/V16/V17 — stream hygiene.** The multiplex `error` frame carries a closed reason and the feed turns it into a per-vault re-bootstrap (or a revoke). `streamChanges` checks `stream.closed` and yields between pages. `device-access-changed` is a rebootstrap verdict with its own member sentence; no frame carries a raw `Error.message`. The SSE cap gained `SSE_PER_DEVICE_MAX` beside the process cap, both refusing with `Retry-After`.
+
+**T11 — the harness.** `openSeat({ liveFeed: true })` runs the shipped `NativeMultiplexChangeFeed` over real `fetch` against the gateway's own SSE route.
+
+### The inherited red this lane was asked to diagnose
+
+`stale.integration.test.ts` failed intermittently on the umbrella tip (`AssertionError: … still reported changes waiting after a successful pull`). It is real and it is not a replication defect. Instrumented, `changesAhead` reads 0 immediately after the pull and 47–65 rows 1.5 s later, settling after ~6 s: the leftover rows are `conversations`/`turns`/`items`/`conversation_turn_locks`/`automation_state`/`automation_trigger_cursor` — the recognition automations armed on every boot (af9ceac6), writing their own conversation ledger. Lane 0b's `abdad1ea` is what made those worker-written ledger rows land in `replica_log` at all (correctly: G4/G22), so an assertion that had always assumed a quiescent gateway started failing. The fix pins the position: the fresh half asks through the watermark the stale half recorded, which is the only thing one pull can be held to. Nothing is relaxed — a pull that leaves any of that window unapplied still fails.
+
+### Exit list
+
+- `grep -rn "REPLICA_PULL_INTERVAL_MS" apps/mobile/src --include=*.ts | grep -v test` → PASS (exit 0): `offline-budgets.ts:48` (the constant) and `delivery-triggers.ts:25,119` (the consumer — `SeatDelivery`'s clock).
+- `grep -rn "\.resume()" apps/mobile/src --include=*.ts --include=*.tsx | grep -v test` → PASS: no bare call remains; the production caller passes the seat's position rather than calling it bare — `grep -rn "feed.resume(" apps/mobile/src --include=*.ts | grep -v test` → `delivery-triggers.ts:94`, inside `SeatDelivery.resumeFrom`, which `grep -rn "resumeFrom(" apps/mobile/src --include=*.ts | grep -v test` shows reached from `native-session.ts:452` (`requireBootstrap`'s completion) and defined at `delivery-triggers.ts:90`.
+- `bun run --cwd packages/server build && bun run --cwd packages/client build` → PASS (exit 0).
+- `flock /tmp/centraid-suite.lock bun run --cwd apps/mobile test -- src/lib/replica` → PASS, 127 tests green. One inherited file-level failure, `expo-seat-driver.test.ts` (`RolldownError: Flow is not supported` parsing `node_modules/react-native/index.js`), reproduced with this lane's diff removed from the working tree.
+- `flock /tmp/centraid-suite.lock bun run --cwd packages/server test -- src/routes src/serve/device-scope-checkpoint.test.ts` → PASS, 469 green.
+- `flock /tmp/centraid-suite.lock bun run --cwd packages/client test -- src/replica/rebootstrap-copy.test.ts` → PASS, 13 green.
+- `flock /tmp/centraid-suite.lock bun run test:integration:mobile` → PASS, 79 green including the three SSE cases (post-merge run).
+- Red first, as asked: with `attachSink` disabled, `live-feed.integration.test.ts` → `× a gateway write reaches two foregrounded seats with no pull … AssertionError: the applier's change sink is what tells a screen to re-read: expected false to be true`; green with it. And with the old `!abort.signal.aborted` reconnect guard restored, `native-multiplex-change-feed.test.ts` → `× a stream that goes silent is dropped and re-issued … expected 1 to be greater than 1`.
+- `bun run --cwd <packages/vault|core|client|server|apps/mobile> typecheck` → PASS (exit 0) for all five.
+- `bun run format && bun run check:push:static` → PASS: `4/4 gates passed in 108.9s`.
+- `node .governance/law/run.mjs` → PASS for this lane: `0 error(s), 7 warning(s)`, and every warning names another lane's commit (`a332d01f`, `bd7cdf85`, `d9265b8e`) or another lane's receipt section (lines 208, 442). None names a Lane A commit.
+
+### What I did not do, and why
+
+- **V23 — `access_device.last_seen_at` is deliberately still not written.** The brief asked for a per-request liveness stamp there. `access_device` is on `REPLICATED_TABLE_NAMES`, so a minute-resolution stamp is one `replica_log` row per device per minute delivered to every seat forever — it would crowd real changes out of `REPLICA_RETENTION_MAX_ENTRIES` for a column that has no reader anywhere (`grep -rn "last_seen_at\|lastSeenAt" packages apps --include=*.ts | grep -v node_modules | grep -v dist` finds only `packages/vault/src/schema/access.ts:88` (the column), `packages/vault/src/bootstrap.ts:200` (the NULL insert) and the unrelated `sync_external_entity` column). The brief's own escape hatch is taken instead: one liveness column per job, both now written and both with readers — `access_device_secret.sync_cursor_at` (private, per served log page, read by `lowestSeatCursor`) and `device_checkpoints.updatedAt` (gateway, per served page, on the Household device DTO). Which is which is stated in `docs/protocol.md`. Dropping the dead column is a schema change and is owed to a `packages/vault/src/schema/**` wave.
+- **`onOverlaysCleared` is wired on the seat but not consumed by the native session.** The forwarding hook is live (`native-seat.ts`), so Lane 1's C10 work has something to attach to; the session consumes `onChange` only, as the brief directs while Lane 1 is unmerged.
+
+### Found, not mine
+
+- **The gateway is never quiescent, and it costs more than one test.** The recognition automations write a full conversation ledger cycle per fired trigger, in bursts of ~50 `replica_log` rows over several seconds after any app action (`packages/server/src/enrich/system-recognition.ts:30` — `faces`, `photo-ocr`, `doc-text-extractor` are armed from the catalogue on every boot with no `enabled` flag consulted). Every one of those rows replicates to every seat. Besides the stale flake, a full-tier run surfaced `SeatSnapshotMovedError: the snapshot moved from "…-465" to "…-477" mid-download` and one load-sensitive failure in `tests/integration-mobile/two-vaults-one-phone.integration.test.ts` ("a poisoned seat file repairs itself once", which passed 3/3 in isolation and in two of three full runs). Whether a system automation's own conversation belongs in the replicated band at all is worth a ruling.
+- **`packages/server/src/routes/replica-routes.ts:219` and `multiplex-replica-routes.ts` re-read `currentReplicaLogState(plane.db.vault)` per advancing page** to get `schemaEpoch` for the checkpoint. Correct but cheap-to-avoid if `ReplicaProjectedPage` carried it.
+- **`GatewayDatabase.transaction` (`packages/server/src/serve/gateway-db.ts:101`) does not nest** — `BEGIN IMMEDIATE` inside an open transaction throws. `OwnerStore.setOwner` is called from inside `enrollWithinTransaction`, so it cannot open one of its own; nothing states this at the seam.
+- **`apps/mobile/src/lib/replica/expo-seat-driver.test.ts` cannot be parsed by the mobile vitest project** (`Flow is not supported` on `react-native/index.js`). It is a whole test file that has never run in this environment.
+
+### Docs touched
+
+[`docs/mobile-offline.md`](../docs/mobile-offline.md) (a delivery-trigger table under "Bootstrap and freshness", the latch, and the native change sink), [`docs/protocol.md`](../docs/protocol.md) (a new "The replica change feed" section: the verdict vocabulary, per-mount failure, the two SSE bounds, the checkpoint-vs-cursor table, and why `last_seen_at` stays unwritten), [`docs/traps/unreachable-vault.md`](../docs/traps/unreachable-vault.md) (the silence half of the deadline invariant, and what the integration tier now covers), [`tests/integration-mobile/README.md`](../tests/integration-mobile/README.md) ("Nothing about the SSE feed" retired and replaced by what the tier may now claim).

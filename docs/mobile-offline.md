@@ -58,6 +58,19 @@ A write this phone makes through a door that is not the session — the camera-r
 
 A catch-up refused because the mount believes it is offline **schedules a retry**; the connectivity oracle is never set from the pull's own verdict, which is how one transient failure used to latch a phone's copy shut for the life of the mount.
 
+**What actually delivers a gateway write to a phone** ([#1014](https://github.com/srikanth235/centraid/issues/1014) R15/R22/C3/C4/C21). Four triggers, and no one of them is load-bearing on its own:
+
+| Trigger | What it is |
+| --- | --- |
+| The wake feed | The multiplex SSE radio (`apps/mobile/src/lib/replica/native-multiplex-change-feed.ts`). A frame is a WAKE — the seat pulls its own pages — so a lost frame costs latency, never rows. |
+| The feed's own reconnect | Every way a stream ends other than a deliberate `stop()` schedules a reconnect on the existing backoff, the platform cancelling the request included. A stream that delivers no byte for twice the gateway's heartbeat is treated as dead and re-issued: the keep-alive is an SSE comment, so silence is the only symptom a dropped socket has. |
+| The foreground clock | While the app is foregrounded and believes it is connected, `NativeReplicaSession` catches up every `REPLICA_PULL_INTERVAL_MS` (a minute). Over a level seat that is one log-page request answering zero rows. |
+| A foreground transition | Unchanged, and no longer the only one. |
+
+Until #1014 the feed was the only trigger besides a foreground transition, and it could be muted permanently: one rebootstrap frame latched that scope off and `resume()` — the only reset — had no production caller, so a single verdict took the vault's feed out for the life of the process. The session now resumes the feed when its re-bootstrap finishes, whatever that re-bootstrap reached; a catch-up that did not land still unmutes, or the failure is permanent rather than the next attempt's problem. The live trace this fixes: a foregrounded phone 43 minutes behind a reachable gateway, with `lsof` showing zero connections from either simulator.
+
+**Rows landing produce the invalidation, on the phone too.** The applier's change sink names the TABLES a batch wrote; the browser has wired it since #996 W5 and the phone built its seat core with no sink at all, so another device's rows landed in the file and no screen re-read them. `NativeSeat` carries the sink through a holder — the file is opened before the session that reads it — and the session attaches on `start()`. The freshness position a screen reads is the applied cursor from that notice, never the cursor a frame predicted.
+
 Pairing can grant several vaults through one short-lived ticket. The gateway redeems that ticket atomically, while the phone records one `VaultLink` and one replica lifecycle per returned vault. The first grant is only the initial focus; all other granted vaults remain independently mountable and retain their own cursor, freshness, intent outbox, and revocation state.
 
 ## Replica correctness and durability

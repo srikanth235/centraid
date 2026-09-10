@@ -163,7 +163,16 @@ export function parseChange(
 export async function consumeVaultChangeSse(
   body: ReadableStream<Uint8Array>,
   onFrame: (frame: SseFrame) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  /**
+   * EVERY BYTE, NOT EVERY FRAME (#1014, R15). A silence watchdog cannot be
+   * built on `onFrame`: the gateway's keep-alive is an SSE COMMENT, which
+   * `decodeFrame` drops because it carries no `data` — so a healthy but quiet
+   * stream delivers no frames for as long as the vault is quiet. This fires on
+   * each chunk that arrives, comments included, which is the only evidence a
+   * client has that the socket is still alive.
+   */
+  onActivity?: () => void
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -183,6 +192,7 @@ export async function consumeVaultChangeSse(
       }
       return;
     }
+    onActivity?.();
     buffer += decoder.decode(value, { stream: true });
     for (;;) {
       const boundary = frameBoundary(buffer);

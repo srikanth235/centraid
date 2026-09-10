@@ -101,12 +101,21 @@ export interface CreateNativeReplicaSessionOptions {
   isNetworkWorkAllowed?: () => Promise<boolean>;
   isRowSyncAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
+  /** The foreground catch-up clock (#1014, R15); defaults to a minute. */
+  pullIntervalMs?: number;
   /** Hermes has no WebCrypto; these default to expo-crypto's, imported lazily. */
   digest?: ReplicaDigest;
   idFactory?: ReplicaIdFactory;
   /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
   onGatewayOutcome?: (reachable: boolean) => void;
+  /**
+   * A batch of rows became durable in this phone's file, at this position
+   * (#1014, C3). The honest freshness signal: the frame that predicted the
+   * rows is a wake, and a stamp bumped from it says "current" over rows that
+   * have not been applied yet.
+   */
+  onApplied?: (applied: number) => void;
   /**
    * Who a queued write into THIS vault may wait for. Set only where
    * `ReplicaVaultScope.personal === false`; absent means the member's own

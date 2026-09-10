@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { nodeProject } from "@centraid/test-kit/vitest";
 
 // The Node integration tier for the mobile app × state grid (#890 W3).
@@ -9,6 +11,15 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 // project's name.
 export default nodeProject({
   root: import.meta.dirname,
+  resolve: {
+    alias: {
+      // The shipped change feed imports the phone's streaming fetch at module
+      // load; `expo/fetch` resolves a React Native runtime module a Node
+      // process cannot require. `lib/expo-fetch.ts` says what this stands in
+      // for (#1014, T11).
+      "expo/fetch": path.join(import.meta.dirname, "lib/expo-fetch.ts"),
+    },
+  },
   test: {
     name: "@centraid/mobile-integration",
     include: ["**/*.integration.test.ts"],

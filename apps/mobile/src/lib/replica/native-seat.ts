@@ -28,6 +28,8 @@ import {
   httpSeatSnapshotTransport,
 } from "@centraid/client/replica/native";
 import type {
+  SeatChangeNotice,
+  SeatWorkerSink,
   IntentRecordStore,
   InlinePage,
   OptimisticMutation,
@@ -76,6 +78,14 @@ export interface NativeSeatOptions {
  */
 export interface NativeSeatPort {
   outbox: () => IntentRecordStore;
+  /**
+   * WHAT TELLS A SCREEN ROWS LANDED (#1014, C3). The applier's own sink, set
+   * by whoever holds the seat. The seat's FILE is opened before the session
+   * that reads it, so the sink cannot be a constructor argument here; it is
+   * attached when the session starts and replaced, never accumulated — one
+   * seat has one reader.
+   */
+  attachSink: (sink: SeatWorkerSink) => void;
   /** Rebase the snapshot and log doors after the tunnel moves (see below). */
   updateGatewayBase: (baseUrl: string) => void;
   search: (request: SeatSearchRequest) => Promise<ReplicaSearchWireResult>;
@@ -91,45 +101,69 @@ export interface NativeSeatPort {
 export class NativeSeat implements NativeSeatPort {
   #rowKeys: SeatRowKeys | undefined;
 
-  private constructor(private readonly loop: SeatLoop) {}
+  private constructor(
+    private readonly loop: SeatLoop,
+    private readonly sinkHolder: { sink: SeatWorkerSink }
+  ) {}
+
+  /** See {@link NativeSeatPort.attachSink}. */
+  attachSink(sink: SeatWorkerSink): void {
+    this.sinkHolder.sink = sink;
+  }
 
   static async open(options: NativeSeatOptions): Promise<NativeSeat> {
     const name = await nativeSeatDatabaseName(options);
     const location = options.storageLocation.replace(/\/+$/u, "");
     const databasePath = `${location}/${name}`;
-    const core = new SeatWorkerCore({
-      openDatabase: () =>
-        ExpoSeatDriver.open({
-          name,
-          location,
-          ...(options.key === undefined ? {} : { key: options.key }),
-        }),
-      staging: () =>
-        expoSeatStaging({
-          directory: `${location}/seat-staging`,
-          databasePath,
-          // The seat's own tables are written onto the expanded artifact
-          // BEFORE it is moved into place (#1014, C17), so staging needs the
-          // same driver — and the same key — the installed file is opened
-          // with. A new connection: expo caches by NAME, and `.incoming` is
-          // a different file that must not adopt this seat's handle.
-          openIncoming: (path: string) => {
-            const at = path.lastIndexOf("/");
-            return ExpoSeatDriver.open({
-              name: path.slice(at + 1),
-              location: path.slice(0, at),
-              ...(options.key === undefined ? {} : { key: options.key }),
-              useNewConnection: true,
-            });
-          },
-        }),
-      transport: (bootstrap) =>
-        httpSeatSnapshotTransport({
-          url: bootstrap.snapshotUrl,
-          ...(bootstrap.headers ? { headers: bootstrap.headers } : {}),
-          ...(options.fetch ? { fetch: options.fetch } : {}),
-        }),
-    });
+    // THE SINK IS INDIRECT, AND THAT IS THE POINT (#1014, C3). `SeatWorkerCore`
+    // takes its sink once, at construction, and the core is built here — before
+    // the session that wants the invalidations exists. One mutable holder,
+    // forwarded per call, so the applier's hooks are live from the first apply
+    // and the session attaches to them when it starts.
+    const sinkHolder: { sink: SeatWorkerSink } = { sink: {} };
+    const core = new SeatWorkerCore(
+      {
+        openDatabase: () =>
+          ExpoSeatDriver.open({
+            name,
+            location,
+            ...(options.key === undefined ? {} : { key: options.key }),
+          }),
+        staging: () =>
+          expoSeatStaging({
+            directory: `${location}/seat-staging`,
+            databasePath,
+            // The seat's own tables are written onto the expanded artifact
+            // BEFORE it is moved into place (#1014, C17), so staging needs the
+            // same driver — and the same key — the installed file is opened
+            // with. A new connection: expo caches by NAME, and `.incoming` is
+            // a different file that must not adopt this seat's handle.
+            openIncoming: (path: string) => {
+              const at = path.lastIndexOf("/");
+              return ExpoSeatDriver.open({
+                name: path.slice(at + 1),
+                location: path.slice(0, at),
+                ...(options.key === undefined ? {} : { key: options.key }),
+                useNewConnection: true,
+              });
+            },
+          }),
+        transport: (bootstrap) =>
+          httpSeatSnapshotTransport({
+            url: bootstrap.snapshotUrl,
+            ...(bootstrap.headers ? { headers: bootstrap.headers } : {}),
+            ...(options.fetch ? { fetch: options.fetch } : {}),
+          }),
+      },
+      {
+        onChange: (notice: SeatChangeNotice) =>
+          sinkHolder.sink.onChange?.(notice),
+        onOverlaysCleared: (intentIds: readonly string[]) =>
+          sinkHolder.sink.onOverlaysCleared?.(intentIds),
+        onBootstrapProgress: (progress) =>
+          sinkHolder.sink.onBootstrapProgress?.(progress),
+      }
+    );
     const loop = new SeatLoop(inProcessSeatChannel(core), {
       vaultId: options.vaultId,
       dbName: databasePath,
@@ -153,7 +187,7 @@ export class NativeSeat implements NativeSeatPort {
       ...(options.fetch ? { fetch: options.fetch } : {}),
     });
     await loop.open();
-    return new NativeSeat(loop);
+    return new NativeSeat(loop, sinkHolder);
   }
 
   sync(): Promise<SeatWatermark | undefined> {
