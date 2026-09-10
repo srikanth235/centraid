@@ -1,7 +1,9 @@
-// The eleven places (the Binding Layer, v4 handoff — PLACES table).
+// The ten places (the Binding Layer, v4 handoff — PLACES table). Starred was an
+// eleventh until #1015 B15: it navigated nowhere and could still be pinned into
+// a band slot.
 //
 // Four things worth asserting rather than trusting a comment for: the table
-// really has eleven rows, Home is the only one pinned by law, the default pin
+// really has ten rows, Home is the only one pinned by law, the default pin
 // set is exactly the six the handoff ships pinned, and the band derivation
 // (`bandPlaces`) never lets a member's pin count push the compact band past
 // its cap. Every one of these is a rule a well-meaning table edit — adding a
@@ -24,10 +26,10 @@ import {
   searchPlaces,
 } from "./places";
 
-describe("the eleven places", () => {
-  it("has exactly eleven rows, matching PLACE_COUNT", () => {
-    expect(PLACES).toHaveLength(11);
-    expect(PLACE_COUNT).toBe(11);
+describe("the ten places", () => {
+  it("has exactly ten rows, matching PLACE_COUNT", () => {
+    expect(PLACES).toHaveLength(10);
+    expect(PLACE_COUNT).toBe(10);
   });
 
   it("gives every place a distinct id, name and short label", () => {
@@ -66,8 +68,8 @@ describe("the eleven places", () => {
 
   it("treats Home as pinned even with an empty pin list", () => {
     expect(isPlacePinned([], "home")).toBe(true);
-    expect(isPlacePinned([], "starred")).toBe(false);
-    expect(isPlacePinned(["starred"], "starred")).toBe(true);
+    expect(isPlacePinned([], "devices")).toBe(false);
+    expect(isPlacePinned(["devices"], "devices")).toBe(true);
   });
 
   it("orders pinned places by the table, not by pin order", () => {

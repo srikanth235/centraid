@@ -240,8 +240,11 @@ export default function HomeScreen({
   }, [replica]);
 
   /**
-   * Band and All-apps share this map. `starred` is a stated no-op — no mobile
-   * screen. `default` is `never` so a new place is a typecheck failure.
+   * Band and All-apps share this map. Every id here GOES somewhere: Starred
+   * was a stated no-op that a member could still pin into a band slot, and a
+   * tab onto nothing is worse than a missing one (#1015 B15), so the place is
+   * gone rather than dimmed. `default` is `never` so a new place is a
+   * typecheck failure.
    */
   const goToPlace = useCallback(
     (id: PlaceId): void => {
@@ -274,9 +277,6 @@ export default function HomeScreen({
           break;
         case "devices":
           navigation.navigate("Devices");
-          break;
-        case "starred":
-          // No mobile screen — stated no-op.
           break;
         default: {
           const exhaustive: never = id;
@@ -331,7 +331,7 @@ export default function HomeScreen({
       <VaultBar />
 
       {/* Fixed chrome, not scroll content — scrollbar starts below the app-bar rule. */}
-      <HomeTitleRow />
+      <HomeTitleRow onSettings={openSettings} />
       <HomeStatusLine
         signal={healthSignal}
         onOpen={() => {

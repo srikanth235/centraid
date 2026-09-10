@@ -57,6 +57,8 @@ export const TEST_IDS = Object.freeze({
     allApps: "home-all-apps",
     /** The vault lockup, which IS the vault switch. */
     vaultSwitch: "home-vault-switch",
+    /** The cover's trailing control — Settings' door from Home (#1015 D6). */
+    settings: "home-settings",
   }),
 
   /** Ticket-only onboarding (#603). */
