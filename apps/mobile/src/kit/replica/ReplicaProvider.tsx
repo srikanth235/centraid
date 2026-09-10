@@ -515,7 +515,7 @@ export function ReplicaProvider({
               // The gateway answered `/info`; the rules, not the radio,
               // stopped the pull, so connectivity stands.
               online: policyBlocked ? connected : landed,
-              reachability: settledReachability(landed, policyBlocked),
+              reachability: settledReachability(landed, policyBlocked, session),
             }));
           }
         };

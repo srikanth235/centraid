@@ -9,6 +9,7 @@ import {
   replicaCoverageRow,
   replicaStatusRow,
   revokedNoticeRow,
+  isGatewayRefusal,
   settledReachability,
 } from "./replica-status";
 import type { ReplicaReachability } from "./replica-status";
@@ -237,5 +238,43 @@ describe("what a pass may claim before it has asked the gateway anything", () =>
 
   it("has no gateway to be syncing with when no base resolved", () => {
     expect(attemptedReachability(true, false, true)).toBe("gateway-asleep");
+  });
+});
+
+describe("a refusal is not an absence (#1014, P11)", () => {
+  it("reads an auth_required failure as refusing, never as asleep", () => {
+    // Every non-landed pull read as `gateway-asleep`, so a gateway that
+    // answered — and said no — put "Gateway asleep · Wake help" on screen:
+    // an action that cannot possibly be the remedy, retried forever.
+    expect(isGatewayRefusal({ code: "auth_required" })).toBe(true);
+    expect(isGatewayRefusal({ status: 403 })).toBe(true);
+    expect(isGatewayRefusal({ status: 401 })).toBe(true);
+    expect(
+      settledReachability(false, false, {
+        lastSyncError: { code: "auth_required" },
+      })
+    ).toBe("gateway-refusing");
+    expect(replicaStatusRow("gateway-refusing")).toStrictEqual({
+      action: "Check access",
+      actionable: true,
+      label: "Gateway refused this device",
+    });
+  });
+
+  it("leaves an unreachable gateway alone — that one really is asleep", () => {
+    expect(isGatewayRefusal(new Error("connection refused"))).toBe(false);
+    expect(isGatewayRefusal(undefined)).toBe(false);
+    expect(
+      settledReachability(false, false, {
+        lastSyncError: new Error("connection refused"),
+      })
+    ).toBe("gateway-asleep");
+    expect(settledReachability(false, false, undefined)).toBe("gateway-asleep");
+  });
+
+  it("the member's own transfer rules still outrank both", () => {
+    expect(
+      settledReachability(false, true, { lastSyncError: { status: 403 } })
+    ).toBe("sync-paused");
   });
 });

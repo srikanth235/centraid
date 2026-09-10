@@ -14,8 +14,28 @@ export type ReplicaReachability =
   | "current"
   | "device-offline"
   | "gateway-asleep"
+  | "gateway-refusing"
   | "sync-paused"
   | "syncing";
+
+/**
+ * A REFUSAL IS NOT AN ABSENCE (#1014, P11).
+ *
+ * Every non-landed pull read as `gateway-asleep`, so a gateway that answered —
+ * and said no — put "Gateway asleep · Wake help" on the member's screen. The
+ * gateway is awake; waking it is not the remedy and cannot become one, so the
+ * member retries forever against a machine that is refusing them by design.
+ *
+ * The seat client raises `auth_required` for exactly this (`GatewayClientError`
+ * in `@centraid/client`), and the sync-error sink keeps the last one — so the
+ * fact is already on the phone; only the reading of it was wrong.
+ */
+export function isGatewayRefusal(error: unknown): boolean {
+  if (error === null || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; status?: unknown };
+  if (candidate.code === "auth_required") return true;
+  return candidate.status === 401 || candidate.status === 403;
+}
 
 /**
  * `syncing` is optimistic, so every pass must settle or it pins forever.
@@ -28,10 +48,20 @@ export type ReplicaReachability =
  */
 export function settledReachability(
   pullLanded: boolean,
-  policyBlocked = false
+  policyBlocked = false,
+  /**
+   * The pass that just settled, if it kept why it failed (#1014, P11). Taken
+   * whole rather than as the error alone so the caller stays one line: the
+   * only field read is `lastSyncError`.
+   */
+  pass?: { readonly lastSyncError?: unknown } | undefined
 ): ReplicaReachability {
   if (policyBlocked) return "sync-paused";
-  return pullLanded ? "current" : "gateway-asleep";
+  if (pullLanded) return "current";
+  // A refusal outranks "asleep": the gateway answered.
+  return isGatewayRefusal(pass?.lastSyncError)
+    ? "gateway-refusing"
+    : "gateway-asleep";
 }
 
 /**
@@ -64,6 +94,14 @@ export function replicaStatusRow(
   switch (reachability) {
     case "gateway-asleep":
       return { action: "Wake help", actionable: true, label: "Gateway asleep" };
+    case "gateway-refusing":
+      // Actionable, and the action is NOT "wake": the gateway is awake and
+      // saying no. Access is what changed, so access is where the member goes.
+      return {
+        action: "Check access",
+        actionable: true,
+        label: "Gateway refused this device",
+      };
     case "sync-paused":
       // Neutral, not red: the member chose these rules, so a danger dot beside
       // them reads as a fault the phone hit rather than a setting they set.
