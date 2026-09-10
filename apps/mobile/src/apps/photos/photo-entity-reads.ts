@@ -102,6 +102,29 @@ export const PHOTO_ENTITY_READS = {
     entity: "core.party",
     rowIdColumn: "party_id",
   },
+  /**
+   * WHO PRODUCED A FACE REGION (#1014, R13). Face review reported "where it
+   * ran — on this device" for every proposal, including the ones the
+   * GATEWAY's faces recipe made, which is every ambient one: the seat runs no
+   * recogniser. Provenance is the only thing that actually knows, and it
+   * replicates with the audit band, so the seat can read it.
+   */
+  faceProvenance: {
+    query: {
+      name: "phone.photos.face-provenance",
+      select: "prov_id, entity_id, agent_kind, agent_id, occurred_at",
+      from: "access_provenance",
+      where: "entity_type = ?",
+      bind: ["media.face_region"],
+      order: {
+        sortColumn: "occurred_at",
+        pkColumn: "prov_id",
+        descending: false,
+      },
+    },
+    entity: "access.provenance",
+    rowIdColumn: "prov_id",
+  },
   // The enrichment tier for photos, which two screens ask about. One row per
   // domain — the table's whole point — so the walk is one page forever.
   enrichPolicies: {

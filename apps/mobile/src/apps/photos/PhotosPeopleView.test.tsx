@@ -324,6 +324,20 @@ describe("the people roster's grid and card behaviour", () => {
     );
   });
 
+  it("makes the unmatched-face sentence itself the door into Face review", () => {
+    // #1014, R6. Both doors were CLUSTER cards, and the clusterer deletes a
+    // cluster once its regions are attributed — so a library with unmatched
+    // faces and no clusters had no way into the review the sentence describes.
+    renderView();
+    const door = Array.from(container!.querySelectorAll("button")).find(
+      (button) =>
+        button.getAttribute("aria-label") === "Review 2 unmatched faces"
+    );
+    expect(door).toBeTruthy();
+    act(() => door!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(navigate).toHaveBeenCalledWith("FaceReview");
+  });
+
   it("renders clustered proposals as unnamed groups and opens Face review", () => {
     renderView();
     const group = Array.from(container!.querySelectorAll("button")).find(

@@ -154,10 +154,31 @@ export default function PhotosPeopleView({
                 ))}
               </View>
             ) : null}
-            <Text style={styles.note}>
-              {shelf.pendingTotal} faces are not matched to anyone — face review
-              proposes them one at a time.
-            </Text>
+            {/* THE DOOR DOES NOT DEPEND ON CLUSTERS (#1014, R6). Both doors
+                here were cluster cards, and the clusterer DELETES a cluster
+                once its regions are attributed — so a library with unmatched
+                faces and no clusters left had no way into Face review at all,
+                while this very sentence said the review exists. It is the
+                door now. */}
+            {shelf.reviewable ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Review ${shelf.pendingTotal} unmatched ${shelf.pendingTotal === 1 ? "face" : "faces"}`}
+                onPress={() => navigation.navigate("FaceReview")}
+                style={styles.unnamedCard}
+              >
+                <Text style={styles.name}>Review faces</Text>
+                <Text style={styles.count}>
+                  {shelf.pendingTotal}{" "}
+                  {shelf.pendingTotal === 1 ? "face is" : "faces are"} not
+                  matched to anyone — face review proposes them one at a time.
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.note}>
+                Every face this library has found is matched.
+              </Text>
+            )}
           </View>
         }
         renderItem={({ item }) => (
