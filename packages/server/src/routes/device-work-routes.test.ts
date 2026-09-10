@@ -41,6 +41,7 @@ describe("device-work-routes", () => {
     base: string;
     vaultId: string;
     deviceKey: string;
+    enrollments: EnrollmentStore;
     contribute: () => Promise<Response>;
     derivativeText: (variant: string) => string | null;
   }> {
@@ -129,6 +130,7 @@ describe("device-work-routes", () => {
       base,
       vaultId,
       deviceKey,
+      enrollments,
       contribute: () =>
         fetch(
           `${base}/centraid/_vault/blobs?variant=${variant}&variant_of=${sourceSha}&media_type=${capability === "poster" ? "image/png" : "text/plain"}`,
@@ -286,5 +288,32 @@ describe("device-work-routes", () => {
     await expect(completed.json()).resolves.toStrictEqual({ completed: true });
     // The rung the owner actually gets: the PDF's text layer, on the item.
     expect(f.derivativeText("text")).toContain("starlight");
+  });
+
+  test("a revoked device cannot lease work (#1014, X19)", async () => {
+    const f = await fixture();
+    f.enrollments.revoke(f.deviceKey);
+
+    const leased = await post(f.base, "lease", f.deviceKey, {
+      vaultId: f.vaultId,
+      capabilities: ["poster"],
+      charging: true,
+      unmetered: true,
+    });
+    // 404, not 409: a revoked device is told nothing about the vault it no
+    // longer reaches, the way an unenrolled one is.
+    expect(leased.status).toBe(404);
+    expect((await leased.json()) as unknown).toMatchObject({
+      error: "not_found",
+    });
+
+    // And the job it could not lease is still available to a device that can.
+    const status = await fetch(
+      `${f.base}/centraid/_gateway/device-work/status`,
+      { headers: { [AUTHED_DEVICE_HEADER]: f.deviceKey } }
+    );
+    // `/status` scopes through `vaultsFor`, whose SQL filters revoked rows —
+    // the revoked device sees no vault at all.
+    expect((await status.json()) as unknown).toMatchObject({ vaults: [] });
   });
 });
