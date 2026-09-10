@@ -60,6 +60,7 @@ export * from "./seat/applier.js";
 export * from "./seat/blob-presence.js";
 export * from "./seat/bootstrap.js";
 export * from "./seat/byte-policy.js";
+export * from "./outbox-mirror.js";
 export * from "./revoked-outbox.js";
 export * from "./seat/carry-over.js";
 export * from "./seat/driver.js";

@@ -23,8 +23,17 @@ export async function createNativeReplicaSession(
     digest ??= nativeReplicaDigest;
     idFactory ??= nativeReplicaIdFactory;
   }
-  const queue = new IntentQueue(options.seat.outbox(), { digest, idFactory });
-  const session = new NativeReplicaSession({ ...options, queue, idFactory });
+  // CAPTURED ONCE, NOT RE-ASKED (#1014, C11). `outbox()` mints a new store
+  // over a new driver after a re-bootstrap, and the mirror the session has to
+  // invalidate is the one the QUEUE was built over — this instance.
+  const outboxStore = options.seat.outbox();
+  const queue = new IntentQueue(outboxStore, { digest, idFactory });
+  const session = new NativeReplicaSession({
+    ...options,
+    queue,
+    idFactory,
+    outboxStore,
+  });
   await session.start();
   return session;
 }

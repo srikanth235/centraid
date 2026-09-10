@@ -30,6 +30,7 @@ import {
   drainIntents,
   InvalidationBus,
   isAuthorizationError,
+  invalidateOutboxMirror,
   isSeatAuthorizationRevoked,
   postReplicaIntent,
   replicaIntentInvalidations,
@@ -39,6 +40,7 @@ import {
 import type {
   GatewayAuth,
   IntentQueue,
+  IntentRecordStore,
   OptimisticMutation,
   ReplicaFetcher,
   ReplicaIdFactory,
@@ -102,6 +104,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #queue: IntentQueue;
   readonly #bus = new InvalidationBus();
   readonly #admission: AdmissionWaiters<NativeWriteResult>;
+  /** The raw store the queue's mirror was built over (#1014, C11). */
+  readonly #outboxStore: IntentRecordStore;
   readonly #isConnected: () => boolean;
   readonly #retryBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
@@ -135,6 +139,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     options: CreateNativeReplicaSessionOptions & {
       queue: IntentQueue;
       idFactory: ReplicaIdFactory;
+      /** The same store instance the queue's mirror wraps (#1014, C11). */
+      outboxStore: IntentRecordStore;
     }
   ) {
     this.#gatewayAuth = options.gatewayAuth;
@@ -188,6 +194,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       : undefined;
     this.#scope = options.scope;
     this.#admission = new AdmissionWaiters<NativeWriteResult>();
+    this.#outboxStore = options.outboxStore;
     this.#writes = new NativeWriteRail({
       gatewayAuth: this.#gatewayAuth,
       fetcher: this.#fetcher,
@@ -220,6 +227,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       seatDeliverySink({
         emit: (invalidations) => this.#bus.emit(invalidations),
         ...(this.#onApplied ? { applied: this.#onApplied } : {}),
+        overlaysCleared: (intentIds) => this.settleCleared(intentIds),
       })
     );
     await this.#queue.recoverSending();
@@ -553,6 +561,18 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.#onGatewayOutcome?.(reachable);
       },
     });
+  }
+
+  /**
+   * R24 ON THE PHONE (#1014, C10/C11). The applier cleared these overlays in
+   * the transaction that carried their commit; the mirror never saw that write
+   * — it went on the seat's own connection, not through the proxy — so the
+   * pending badge stayed over rows that had already landed.
+   */
+  private settleCleared(intentIds: readonly string[]): void {
+    invalidateOutboxMirror(this.#outboxStore);
+    for (const intentId of intentIds)
+      this.#admission.resolve(intentId, { intentId, status: "executed" });
   }
 
   private queueEveryoneWaiting(reason: string): void {
