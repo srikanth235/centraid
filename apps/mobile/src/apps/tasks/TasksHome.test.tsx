@@ -196,7 +196,8 @@ describe("Tasks, on the real React Native host tree", () => {
     // RNTL resolves `checkbox` through RN's accessibility tree, so this fails
     // if the box stops being one — a fact a prop echo cannot establish.
     expect(
-      screen.getByRole("checkbox", { name: "Renew the passport" }).props
+      screen.getByRole("checkbox", { name: "Mark Renew the passport done" })
+        .props
     ).toMatchObject({ accessibilityState: { checked: false } });
 
     // A closed row publishes the OPPOSITE trait from the same node. Rendered
@@ -214,7 +215,7 @@ describe("Tasks, on the real React Native host tree", () => {
       />
     );
     expect(
-      closed.getByRole("checkbox", { name: "File the receipts" }).props
+      closed.getByRole("checkbox", { name: "Reopen File the receipts" }).props
     ).toMatchObject({ accessibilityState: { checked: true } });
   });
 
@@ -223,7 +224,7 @@ describe("Tasks, on the real React Native host tree", () => {
     const screen = renderRows([task("t1", "Renew the passport")], { onToggle });
 
     fireEvent.press(
-      screen.getByRole("checkbox", { name: "Renew the passport" })
+      screen.getByRole("checkbox", { name: "Mark Renew the passport done" })
     );
     expect(onToggle.mock.calls.map(([row]) => row.task_id)).toStrictEqual([
       "t1",
@@ -239,7 +240,9 @@ describe("Tasks, on the real React Native host tree", () => {
       { onToggle }
     );
 
-    const box = screen.getByRole("checkbox", { name: "Held by another vault" });
+    const box = screen.getByRole("checkbox", {
+      name: "Mark Held by another vault done",
+    });
     expect(box.props).toMatchObject({
       accessibilityHint:
         "This vault is read-only for you, so meaning cannot be written into it.",

@@ -36,7 +36,7 @@ import {
 } from "@centraid/blueprints/apps/tasks/shelves";
 import type { Project, Task } from "@centraid/blueprints/apps/tasks/types";
 import {
-  DONE,
+  TASK_DONE,
   GROUPS,
   UNDO,
   shelfCopy,
@@ -180,7 +180,7 @@ export default function TasksHome({
       // live action (`kit/replica/write-outcome.ts`), so the order here is
       // what makes that rule apply rather than a race with the admission.
       // Undo IS reopening — the same door the box offers, said in words.
-      postStatus(DONE, {
+      postStatus(TASK_DONE, {
         action: { label: UNDO, run: () => setStatus(task, "needs-action") },
       });
       setStatus(task, "completed");
