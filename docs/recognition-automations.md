@@ -32,6 +32,20 @@ A system automation has no `enabled` question to answer. Install writes the cata
 
 For a system automation the only decision left to the member is the **cloud tier**. Egress leaves their trust domain and needs consent; on-device work over their own bytes on their own gateway needs none. So an unreadable or unwritten enrichment policy no longer refuses a system fire — it resolves to enabled-on-device, and the run proceeds with `ctx.delegate` sealed ([`automation/fire/enrich-resolve.ts`](../packages/server/src/automation/fire/enrich-resolve.ts), [`enrich-gate.ts`](../packages/server/src/automation/fire/enrich-gate.ts)). Every ceiling above that is untouched: an explicit `off` still refuses, a rule that switches the capability off still refuses, and the egress-consent ledger still decides every provider turn. A system automation gets no wider _reach_ than any other — it gets a floor, not a ceiling.
 
+### A target the recipe cannot derive
+
+A recognition recipe walks the library in `asset_id` order, so a row it can neither derive nor skip used to stop everything behind it: a detector that threw failed the whole turn, an unready preview parked the watermark with no ceiling, and both repeated on every tick forever ([#1014](https://github.com/srikanth235/centraid/issues/1014), B2/B3/B20/R10).
+
+There is a third answer beside "derived" and "skipped": **counted**. `enrich.record_target_failure` counts a failure against `(capability, target)` in `enrich_target_failure`; under the cap the walk parks on the target exactly as it parks on an unready preview, and at the cap the target is **declined**, the cursor advances past it, and [`enrichment-health`](system-signals.md) lists it. Stamping a derivation clears the record, so a transient failure leaves nothing behind.
+
+Two caps, because two different things are being waited on: `ENRICH_TARGET_MAX_FAILURES` (3) for a failure that will not become a success by being retried, and `NOT_READY_MAX_TICKS` (12) for a display rung that genuinely takes minutes to land. A failure the recipe knows is permanent — content past the extractor's byte ceiling — declines on the first count without waiting for either.
+
+`enrich_target_failure` is gateway job machinery: private, unregistered, and cascaded off `core_entity`, so a restore re-derives it by simply attempting the work again ([the vault ontology](vault-ontology.md#derived-data-is-not-automatically-local-data)).
+
+### Cron recipes declare a backfill class
+
+A recipe with a `cron` trigger says what a missed occurrence is worth — `latest` (the default, and what every bundled connector poll declares) or `each`. See [civil time and cron timezone](cron-timezone.md#backfill-classes).
+
 `enrich_request` is a **priority hint, never a gate**. The queue says which target to do first inside a bounded batch; it has never been what makes the work run, and with recognition armed from the catalogue it cannot become that by accident. A recipe with an empty queue still walks the library behind its cursor.
 
 ## One handler, one execution boundary
