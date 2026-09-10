@@ -5,6 +5,7 @@ import type {
   NativeReplicaSession,
 } from "../replica/native-session";
 import type * as TypeImport_1mtgsk8 from "./derivatives-native";
+import { contributeDeviceDerivatives } from "./derivatives-native";
 import { replaySettledUploadFollowups } from "./followup";
 import type { UploadQueue } from "./native-queue";
 import type { UploadFollowup } from "./store";
@@ -106,6 +107,35 @@ describe("settled upload follow-ups", () => {
       poisoned: 0,
       waitingForVault: { "vault-family": 1 },
     });
+  });
+
+  // ORDER IS THE CONTRACT (#1011, carried to this seam by #1014 R20): the
+  // gateway's `variant_of` needs staged-or-claimed content, and the phone's
+  // display rungs must be on the row BEFORE the canonical write makes it
+  // recognisable — otherwise the ingress contributor stamps its "unsupported"
+  // decline over them and every recipe skips the photograph.
+  it("contributes the device rungs before the canonical write", async () => {
+    const order: string[] = [];
+    vi.mocked(contributeDeviceDerivatives).mockImplementation(async () => {
+      order.push("derivatives");
+    });
+    const { queue } = fakeQueue([
+      followupOf({
+        derivatives: [
+          { variant: "thumb", uri: "file:///t.jpg", mediaType: "image/jpeg" },
+        ],
+      }),
+    ]);
+    const session = {
+      write: vi.fn<MobileReplicaSession["write"]>(async (_shape, input) => {
+        order.push("write");
+        return { intentId: input.intentId!, status: "executed" as const };
+      }),
+    } as unknown as MobileReplicaSession;
+
+    await replaySettledUploadFollowups(queue, session, "http://gateway");
+
+    expect(order).toStrictEqual(["derivatives", "write"]);
   });
 
   it("writes a follow-up whose vault IS the session's", async () => {

@@ -1,12 +1,18 @@
 // The first-run camera-roll import's OFFER (#724) — the honest,
 // reviewable alternative to the silent automatic sweep (`photos-backup.ts`).
 // A member sees a plain count and two verbs: `Import` runs
-// `runImportBatchWithNudge` (`camera-roll-import-run.ts`) over the vault's
-// existing staged-import route, nudging this seat once when the batch lands, `Not now` dismisses the
-// offer for this device without touching a single photograph. Progress is
-// PERSISTED (`Store`) after every candidate settles, so a kill mid-import
-// resumes on next launch exactly where it left off — see
+// `runImportBatchWithNudge` (`camera-roll-import-run.ts`) through the DURABLE
+// UPLOAD QUEUE, nudging this seat once when the batch lands; `Not now`
+// dismisses the offer for this device without touching a single photograph.
+// Progress is PERSISTED (`Store`) after every candidate settles, so a kill
+// mid-import resumes on next launch exactly where it left off — see
 // `camera-roll-import.ts`'s header for the resumability argument in full.
+//
+// PER VAULT, AND PRUNED (#1014, P19). The progress record was one device-wide
+// ever-growing array of candidate ids, rewritten in full after every
+// photograph and never shortened — so a second vault on the same phone
+// inherited the first vault's "already done" list and was offered nothing, and
+// a member who deleted photographs kept paying for their ids for ever.
 //
 // Deliberately a self-contained banner, not a screen of its own or a new
 // More-sheet row: `PhotosHome.tsx` renders it in one small, additive slot
@@ -25,6 +31,7 @@ import { Store } from "../../storage";
 import {
   EMPTY_IMPORT_PROGRESS,
   importSummary,
+  pruneProgress,
   remainingCandidates,
   selectImportCandidates,
 } from "./camera-roll-import";
@@ -33,7 +40,14 @@ import { runImportBatchWithNudge } from "./camera-roll-import-run";
 import type { PhotoAsset } from "./timeline-model";
 
 const DISMISSED_KEY = "photos.cameraRollImport.dismissed";
-const PROGRESS_KEY = "photos.cameraRollImport.progress";
+
+/** Keyed by vault; an unaddressed seat keeps the historical device-wide key so
+ *  an install that never named a vault resumes where it left off. */
+function progressKey(vaultId: string | undefined): string {
+  return vaultId
+    ? `photos.cameraRollImport.progress.${vaultId}`
+    : "photos.cameraRollImport.progress";
+}
 
 export interface CameraRollImportOfferProps {
   assets: readonly PhotoAsset[];
@@ -46,6 +60,8 @@ export default function CameraRollImportOffer({
 }: CameraRollImportOfferProps): React.JSX.Element | null {
   const { colors } = useTheme();
   const replica = useReplica();
+  const { session, vaultId } = replica;
+  const key = progressKey(vaultId);
   const [dismissed, setDismissed] = useState<boolean | undefined>(undefined);
   const [progress, setProgress] = useState<ImportProgress>();
   const [running, setRunning] = useState(false);
@@ -55,14 +71,16 @@ export default function CameraRollImportOffer({
   // effect-body `setState`, which is what react-compiler's own rule requires.
   useEffect(() => {
     void Store.hydrate(DISMISSED_KEY, false).then(setDismissed);
-    void Store.hydrate(PROGRESS_KEY, EMPTY_IMPORT_PROGRESS).then(setProgress);
-  }, []);
+    void Store.hydrate(key, EMPTY_IMPORT_PROGRESS).then(setProgress);
+  }, [key]);
 
   const candidates = selectImportCandidates(assets);
   const remaining =
     progress === undefined
       ? candidates
       : remainingCandidates(candidates, progress);
+  const failedCount =
+    progress === undefined ? 0 : Object.keys(progress.failed).length;
 
   // Nothing to offer: still hydrating, the member said not now, or every
   // camera-roll photograph is already somewhere other than "local-only".
@@ -70,20 +88,31 @@ export default function CameraRollImportOffer({
   if (dismissed || remaining.length === 0) return null;
 
   const start = async (): Promise<void> => {
-    if (!gatewayBase || running) return;
+    if (!gatewayBase || !session || running) return;
     setRunning(true);
     try {
+      // Forget ids the roll no longer holds before writing the record back
+      // (#1014, P19); `done` used to grow for the life of the install.
+      const pruned = pruneProgress(progress, candidates, new Set());
+      if (pruned !== progress) {
+        Store.set(key, pruned);
+        setProgress(pruned);
+      }
       // The publish commits rows on the GATEWAY, which this phone's own seat
       // knows nothing about; the batch nudges it once at the end so the owner
       // sees their own import within seconds (#1011 M2).
       const result = await runImportBatchWithNudge(
-        gatewayBase,
+        {
+          gatewayBase,
+          session,
+          ...(vaultId ? { vaultId } : {}),
+        },
         candidates,
-        progress,
+        pruned,
         {
           nudgeSeat: () => nudgeSeatCatchUp(replica),
           onProgress: (next) => {
-            Store.set(PROGRESS_KEY, next);
+            Store.set(key, next);
             setProgress(next);
           },
         }
@@ -110,14 +139,22 @@ export default function CameraRollImportOffer({
       <Text style={[styles.title, { color: colors.text }]}>
         {running
           ? `Importing ${done} of ${total}`
-          : `Bring ${remaining.length} camera-roll ${
-              remaining.length === 1 ? "photograph" : "photographs"
-            } into your vault`}
+          : failedCount > 0
+            ? `${failedCount} camera-roll ${
+                failedCount === 1 ? "photograph" : "photographs"
+              } did not reach your vault`
+            : `Bring ${remaining.length} camera-roll ${
+                remaining.length === 1 ? "photograph" : "photographs"
+              } into your vault`}
       </Text>
       <Text style={[styles.body, { color: colors.textSoft }]}>
         {running
           ? importSummary(progress)
-          : "Staged for review and published one at a time — nothing else on this device is touched."}
+          : failedCount > 0
+            ? // The reason, named, and a verb that acts on it: a failure used
+              // to be recorded as done and never offered again (#1014, R8).
+              (Object.values(progress.failed)[0] ?? "Something went wrong.")
+            : "Queued one at a time and uploaded when your transfer rules allow — nothing else on this device is touched."}
       </Text>
       {running ? (
         <View
@@ -139,14 +176,14 @@ export default function CameraRollImportOffer({
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Import"
-            accessibilityState={{ disabled: !gatewayBase }}
-            disabled={!gatewayBase}
+            accessibilityLabel={failedCount > 0 ? "Retry" : "Import"}
+            accessibilityState={{ disabled: !gatewayBase || !session }}
+            disabled={!gatewayBase || !session}
             onPress={() => void start()}
             style={[styles.button, { backgroundColor: colors.accentFill }]}
           >
             <Text style={[styles.buttonText, { color: colors.textInv }]}>
-              Import
+              {failedCount > 0 ? "Retry" : "Import"}
             </Text>
           </Pressable>
           <Pressable

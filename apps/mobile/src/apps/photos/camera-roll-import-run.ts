@@ -1,19 +1,37 @@
-// Network half of the first-run camera-roll import (#724): the `attempt` for camera-roll-import.ts's pure logic.
+// Byte half of the first-run camera-roll import (#724): the `attempt` for
+// camera-roll-import.ts's pure logic.
+//
+// THROUGH THE DURABLE UPLOAD QUEUE, NOT AROUND IT (#1014, R20/R8/P4).
+//
+// This used to POST each original's bytes straight at the gateway's staged
+// import route and then publish the batch, which cost the import every
+// guarantee the queue exists to give:
+//
+//  * NO DURABILITY. A kill, a dead radio or a backgrounded app lost the
+//    in-flight photograph outright; only whole finished candidates survived,
+//    in `ImportProgress`.
+//  * NO `upload_item`, so the device row for an imported photograph never
+//    learned its sha256 — and Photos' timeline, which joins the device roll to
+//    the vault BY SHA, listed the same picture twice for ever (R8).
+//  * NO VAULT ADDRESS and NO TRANSFER POLICY (P4): every original went to
+//    whichever vault the gateway picked by default, over any radio, including
+//    a metered one the member had told the policy table never to use.
+//
+// `backupDeviceMedia` is the one producer that has all three: it addresses the
+// bytes once, enqueues them against the target vault, drains under
+// `nativeUploadPolicy()`, and replays the canonical `photos.upload` write
+// (with the device's own preview rungs attached as derivatives) only after the
+// bytes carry a durable receipt. A Live Photo's paired video is a second
+// durable upload under the same `live:<localId>` capture group, exactly as the
+// automatic sweep does it.
 
 import { File } from "expo-file-system";
 
-import { authHeader } from "../../lib/gateway";
-import { bytesToBase64 } from "../../lib/upload/bytes";
-import {
-  cleanupDeviceDerivatives,
-  contributeDeviceDerivatives,
-  contributeDeviceHashes,
-  gatewayCanDecode,
-  generateDeviceDerivatives,
-} from "../../lib/upload/derivatives-native";
-import type { SourceSize } from "../../lib/upload/derivatives-native";
-import { createNativeDigest } from "../../lib/upload/native-digest";
-import { runCameraRollImport } from "./camera-roll-import";
+import type { MobileReplicaSession } from "../../lib/replica/native-session";
+import { gatewayCanDecode } from "../../lib/upload/gateway-decodable";
+import { backupDeviceMedia } from "../../lib/upload/media-producer";
+import { nativeUploadPolicy } from "../../lib/upload/native-policy";
+import { runImportBatch } from "./camera-roll-import";
 import type {
   ImportCandidate,
   ImportOutcome,
@@ -21,238 +39,106 @@ import type {
 } from "./camera-roll-import";
 import { liveVideoUri, openDeviceOriginal } from "./device-media";
 
-interface StageResponse {
-  batchId: string;
-  staged: { create: number; update: number; skip: number };
-  unrouted: string[];
+export interface ImportScope {
+  gatewayBase: string;
+  session: MobileReplicaSession;
+  /** The vault the member is importing INTO; the queue rows carry it. */
+  vaultId?: string;
 }
 
-interface PublishResponse {
-  batchId: string;
-  created: number;
-  updated: number;
-  skipped: number;
-  failed: number;
-}
-
-export function sha256OfBytes(bytes: Uint8Array): string {
-  const digest = createNativeDigest();
-  digest.update(bytes);
-  return digest.digestHex();
-}
+/** Shown, not swallowed: the member asked for this and it did not happen. */
+export const POLICY_BLOCKED_MESSAGE =
+  "Waiting for a connection that matches your transfer rules.";
 
 /**
- * THE PHONE'S DISPLAY RUNGS FOR AN ORIGINAL THE GATEWAY CANNOT DECODE (#1011).
+ * Stage the device original through the queue; a Live Photo also queues its
+ * paired video under `live:<localId>`.
  *
- * The gateway's preview codec ships without an HEVC decoder, so the HEIC an
- * iPhone writes declines there and earns the durable `preview-codec@1`
- * "unsupported" stamp — on a real phone that would be most of the library,
- * never recognised. iOS decodes it natively, so the phone renders the ladder's
- * own edges here and contributes them through the variant door.
- *
- * ORDER IS THE CONTRACT: `variant_of` must "identify staged or claimed
- * content", so this runs AFTER the original is staged and BEFORE the publish
- * that claims it — the rungs are then on the `core_content_derivative` row the
- * moment recognition can first see the asset, and the ingress contributor never
- * gets to stamp a decline over them.
- *
- * NEVER FATAL: a rung is an accelerator, not custody. A failure here leaves the
- * item exactly as backfillable as it was, so the import still publishes.
- *
- * BUT NEVER SILENT (logs.md). A silent accelerator is still an accelerator; a
- * silent FAILURE of the only path that can preview HEIC is a bug nobody can
- * see — the item just sits at `preview-codec@1` unsupported with no line
- * anywhere saying why. Both swallowed failures name themselves on the console.
+ * `imported` vs `skipped` is answered by the queue's own ledger, scoped to the
+ * target vault (#1014, P3): bytes it has never seen for THIS vault are new,
+ * whatever another vault on the same phone already holds.
  */
-async function contributeDeviceRungs(
-  gatewayBase: string,
-  parentSha: string,
-  filename: string,
-  localUri: string,
-  sourceSize?: SourceSize
-): Promise<void> {
-  let set;
-  try {
-    set = await generateDeviceDerivatives(localUri, "image/heic", sourceSize);
-  } catch (error) {
-    console.warn(
-      `[centraid] import: device rungs skipped for ${filename} — could not render on device: ${reasonOf(error)}`
-    );
-    return;
-  }
-  try {
-    // Binary rungs first: the tile a member sees is the thumb, and the inline
-    // hashes below only decorate it.
-    await contributeDeviceDerivatives(gatewayBase, parentSha, set.binary);
-    await contributeDeviceHashes(gatewayBase, parentSha, {
-      phash: set.phash,
-      thumbhash: set.thumbhash,
-    });
-    console.log(
-      `[centraid] import: device rungs landed for ${filename} — ${[
-        ...set.binary.map((rung) => rung.variant),
-        "phash",
-        "thumbhash",
-      ].join(", ")}`
-    );
-  } catch (error) {
-    // Left backfillable; the sweep is the backstop it always was.
-    console.warn(
-      `[centraid] import: device rungs skipped for ${filename} — contribution failed: ${reasonOf(error)}`
-    );
-  } finally {
-    cleanupDeviceDerivatives(set.binary);
-  }
-}
-
-/** The contribution helpers name the HTTP status in their message, so the
- *  reason a reader needs is already in there. */
-function reasonOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-/** One file through the SAME staged-import door as a dropped Takeout zip;
- *  true = NEW, not a dedupe skip. */
-async function stageAndPublishOne(
-  gatewayBase: string,
-  filename: string,
-  bytes: Uint8Array,
-  options: {
-    captureGroupId?: string;
-    /** Present only for a still whose type the gateway cannot decode. */
-    rungSource?: { localUri: string; sourceSize?: SourceSize };
-  } = {}
-): Promise<{ created: boolean }> {
-  const captureGroupId = options.captureGroupId;
-  const staged = await fetch(`${gatewayBase}/centraid/_vault/imports`, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...authHeader() },
-    body: JSON.stringify({
-      filename,
-      base64: bytesToBase64(bytes),
-      ...(captureGroupId ? { captureGroupId } : {}),
-    }),
-  });
-  if (!staged.ok) {
-    throw new Error(`stage ${filename} failed (${staged.status})`);
-  }
-  const stagedBody = (await staged.json()) as StageResponse;
-  if (stagedBody.unrouted.length > 0) {
-    throw new Error(`${filename} was not recognised as a photograph or video`);
-  }
-  if (options.rungSource) {
-    await contributeDeviceRungs(
-      gatewayBase,
-      sha256OfBytes(bytes),
-      filename,
-      options.rungSource.localUri,
-      options.rungSource.sourceSize
-    );
-  }
-  const published = await fetch(
-    `${gatewayBase}/centraid/_vault/imports/${stagedBody.batchId}/publish`,
-    { method: "POST", headers: authHeader() }
-  );
-  if (!published.ok) {
-    throw new Error(`publish of ${filename} failed (${published.status})`);
-  }
-  const publishedBody = (await published.json()) as PublishResponse;
-  if (publishedBody.failed > 0) {
-    throw new Error(`${filename} failed to publish`);
-  }
-  return { created: publishedBody.created > 0 };
-}
-
-/** Stage+publish the device original; a Live Photo also publishes its paired
- *  video under `live:<localId>` (`photos-backup.ts`). Never a bulk pre-scan. */
 export async function attemptImportCandidate(
-  gatewayBase: string,
+  scope: ImportScope,
   candidate: ImportCandidate
 ): Promise<ImportOutcome> {
+  // Re-asked per candidate, as the drain does: a member who walks off Wi-Fi
+  // mid-import stops shipping originals rather than finishing on cellular.
+  if (!(await nativeUploadPolicy().canTransfer())) {
+    throw new Error(POLICY_BLOCKED_MESSAGE);
+  }
   const original = await openDeviceOriginal(candidate.localId);
-  const bytes = await new File(original.uri).bytes();
+  const file = new File(original.uri);
   const companion =
     candidate.kind === "photo" ? await liveVideoUri(original.asset) : null;
   const captureGroupId = companion ? `live:${candidate.localId}` : undefined;
-  const still = await stageAndPublishOne(
-    gatewayBase,
-    candidate.filename,
-    bytes,
-    {
-      ...(captureGroupId ? { captureGroupId } : {}),
-      // Only a still, and only one the gateway would decline: a JPEG already
-      // gets its rungs from the ingress contributor, and a video's preview is a
-      // non-goal on both sides of the wire.
-      ...(candidate.kind === "photo" && !gatewayCanDecode(candidate.filename)
-        ? {
-            rungSource: {
-              localUri: original.uri,
-              ...(await shapeOf(original.asset)),
-            },
-          }
-        : {}),
-    }
-  );
+  const target: { targetVaultId?: string } = scope.vaultId
+    ? { targetVaultId: scope.vaultId }
+    : {};
+
+  let created = true;
+  await backupDeviceMedia(scope.session, scope.gatewayBase, {
+    localUri: original.uri,
+    ...target,
+    filename: candidate.filename,
+    mediaType: deviceMediaType(candidate),
+    onEnqueued: ({ isNew }) => {
+      created = isNew;
+    },
+    plaintextSize: file.size,
+    kind: candidate.kind,
+    ...(candidate.capturedAt ? { capturedAt: candidate.capturedAt } : {}),
+    ...(captureGroupId ? { captureGroupId } : {}),
+    ...(candidate.width === undefined ? {} : { width: candidate.width }),
+    ...(candidate.height === undefined ? {} : { height: candidate.height }),
+    ...(candidate.durationS === undefined
+      ? {}
+      : { durationS: candidate.durationS }),
+  });
   if (companion) {
     const companionFile = new File(companion);
-    await stageAndPublishOne(
-      gatewayBase,
-      companionFile.name,
-      await companionFile.bytes(),
-      captureGroupId ? { captureGroupId } : {}
-    );
+    await backupDeviceMedia(scope.session, scope.gatewayBase, {
+      localUri: companion,
+      ...target,
+      filename: companionFile.name,
+      mediaType: "video/quicktime",
+      plaintextSize: companionFile.size,
+      kind: "video",
+      ...(candidate.capturedAt ? { capturedAt: candidate.capturedAt } : {}),
+      captureGroupId: `live:${candidate.localId}`,
+    });
   }
-  return still.created ? "imported" : "skipped";
-}
-
-/** Dimensions let the rungs fit the LONG edge, as the ladder does; a device
- *  that will not report them still gets width-fitted rungs. */
-async function shapeOf(
-  asset: Awaited<ReturnType<typeof openDeviceOriginal>>["asset"]
-): Promise<{ sourceSize?: SourceSize }> {
-  try {
-    const shape = await asset.getShape();
-    return shape
-      ? { sourceSize: { width: shape.width, height: shape.height } }
-      : {};
-  } catch {
-    return {};
-  }
+  return created ? "imported" : "skipped";
 }
 
 /**
- * THE BATCH, WITH THE SEAT NUDGED ONCE AT THE END (#1011 M2).
+ * The original's OWN type, not a convenient "image/jpeg" (#1014).
  *
- * The import publishes through the gateway's staged-import route, so the rows
- * it commits are rows this phone's own seat knows nothing about: before this,
- * the owner's freshly imported photographs appeared in their library only when
- * the next app-state foreground happened to pull the log — two minutes of
- * nothing, on the device.
- *
- * ONE nudge per batch, not per photograph, and none at all when the batch
- * published nothing (every candidate failed, or every one was a dedupe skip):
- * there is no new row to come and fetch. Not a poll — the ordinary catch-up
- * paths are untouched.
+ * The producer decides whether to render the phone's display rungs from this,
+ * and the gateway's preview codec cannot decode HEIC (`gatewayCanDecode`) — an
+ * iPhone HEIC declared as a JPEG would earn the durable `preview-codec@1`
+ * "unsupported" stamp with no rungs beside it, which on a real roll is most of
+ * the library, never previewed and never recognised.
  */
-export async function runImportBatchWithNudge(
-  gatewayBase: string,
+export function deviceMediaType(
+  candidate: Pick<ImportCandidate, "kind" | "filename">
+): string {
+  if (candidate.kind === "video") return "video/mp4";
+  return gatewayCanDecode(candidate.filename) ? "image/jpeg" : "image/heic";
+}
+
+/** Bind the batch (`camera-roll-import.ts`) to this phone's real door. */
+export function runImportBatchWithNudge(
+  scope: ImportScope,
   candidates: readonly ImportCandidate[],
   progress: ImportProgress,
   deps: {
     nudgeSeat: () => void | Promise<unknown>;
     onProgress?: (progress: ImportProgress) => void;
-    /** Injected by the tests; the real attempt otherwise. */
-    attempt?: (candidate: ImportCandidate) => Promise<ImportOutcome>;
   }
 ): Promise<ImportProgress> {
-  const attempt =
-    deps.attempt ??
-    ((candidate: ImportCandidate) =>
-      attemptImportCandidate(gatewayBase, candidate));
-  const result = await runCameraRollImport(candidates, progress, {
-    attempt,
-    ...(deps.onProgress ? { onProgress: deps.onProgress } : {}),
+  return runImportBatch(candidates, progress, {
+    attempt: (candidate) => attemptImportCandidate(scope, candidate),
+    ...deps,
   });
-  if (result.imported > progress.imported) await deps.nudgeSeat();
-  return result;
 }

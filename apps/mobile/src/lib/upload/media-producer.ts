@@ -31,6 +31,9 @@ export interface DeviceMediaInput {
   durationS?: number;
   /** F10: delete the source after durable settle; never a camera-roll original. */
   deleteSourceAfterSettle?: boolean;
+  /** Told once, before the drain: were these bytes new to THIS vault's queue?
+   *  The camera-roll import's imported-vs-already-in count reads it (#1014). */
+  onEnqueued?: (info: { sha256: string; isNew: boolean }) => void;
   onProgress?: (progress: { completed: number; total: number }) => void;
 }
 

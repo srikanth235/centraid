@@ -11,25 +11,9 @@ import { bytesToBase64 } from "./bytes";
 
 export type DeviceDerivativeVariant = "thumb" | "preview" | "poster";
 
-/**
- * THE PHONE IS THE ONLY DECODER FOR HEIC (#1011). The gateway's preview codec
- * is sharp, and the `@img/sharp-libvips-darwin-arm64` this repo pins ships
- * libheif WITHOUT an HEVC decoder (patent licensing) — so the HEVC-coded HEIC
- * an iPhone actually writes DECLINES on the gateway and earns the durable
- * `preview-codec@1` "unsupported" stamp, after which every recognition recipe
- * skips it. iOS decodes it natively, so the phone contributes the JPEG display
- * rungs itself and the marker never stands.
- *
- * Keyed by EXTENSION because the import door is filename-routed: the phone
- * names the file before the gateway has sniffed a byte.
- */
-const GATEWAY_UNDECODABLE_EXTENSIONS = new Set(["heic", "heif", "hif"]);
-
-export function gatewayCanDecode(filename: string): boolean {
-  const dot = filename.lastIndexOf(".");
-  const extension = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
-  return !GATEWAY_UNDECODABLE_EXTENSIONS.has(extension);
-}
+/** THE PHONE IS THE ONLY DECODER FOR HEIC (#1011); the rule and its reasons
+ *  live in `gateway-decodable.ts`, which imports nothing. */
+export { gatewayCanDecode } from "./gateway-decodable";
 
 export interface SourceSize {
   width: number;
