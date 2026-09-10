@@ -6,6 +6,9 @@ import * as MediaLibrary from "expo-media-library";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 
+import { PHOTOS_ERROR_FREE_UP_PAUSED } from "@centraid/blueprints/apps/photos/shared-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
+
 import Icon from "../../kit/components/Icon";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
@@ -265,9 +268,8 @@ export default function PhotosLibrary({
             : "Vault freed."
       );
     } catch (error) {
-      postStatus(
-        `Free up vault paused: ${error instanceof Error ? error.message : String(error)}`
-      );
+      console.warn("[photos] free up vault failed", error);
+      postStatus(`${PHOTOS_ERROR_FREE_UP_PAUSED} ${RETRY_ACTION}`);
     } finally {
       setFreeing(false);
     }

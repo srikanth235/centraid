@@ -8,6 +8,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { SHARING_CHANGE_NOT_SAVED } from "@centraid/client/sharing-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
+
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import Tappable from "../kit/components/Tappable";
@@ -63,7 +66,8 @@ export default function SharingScreen({
         await action();
         refresh();
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : String(error));
+        console.warn("[sharing] change failed", error);
+        setErrorMessage(`${SHARING_CHANGE_NOT_SAVED} ${RETRY_ACTION}`);
       } finally {
         setBusyId(undefined);
       }

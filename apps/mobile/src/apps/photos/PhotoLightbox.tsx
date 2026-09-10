@@ -41,9 +41,11 @@ import { gazetteerNameFrom } from "@centraid/blueprints/apps/photos/place-phrase
 import type { NamedPlace } from "@centraid/blueprints/apps/photos/place-phrase";
 import type { SharePlaceInput } from "@centraid/blueprints/apps/photos/share-place";
 import {
+  PHOTOS_ERROR_WRITE_NOT_SAVED,
   PHOTOS_SAVED_AS_NEW,
   photosArchiveMoved,
 } from "@centraid/blueprints/apps/photos/shared-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
@@ -357,8 +359,8 @@ export default function PhotoLightbox({
           ? result.reason
           : "The vault rejected this change.";
     } catch (error) {
-      surfaceWriteFailure(error, "Photo change not saved");
-      return error instanceof Error ? error.message : "The write did not land.";
+      surfaceWriteFailure(error, PHOTOS_ERROR_WRITE_NOT_SAVED);
+      return `${PHOTOS_ERROR_WRITE_NOT_SAVED} ${RETRY_ACTION}`;
     }
   };
 
