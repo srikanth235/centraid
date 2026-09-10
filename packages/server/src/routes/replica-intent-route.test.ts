@@ -1037,6 +1037,90 @@ describe("replica-intent-route suite", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  test("still checks opaque row versions after the change log is pruned", async () => {
+    // FAILS CLOSED (#1014, G9). The candidate ids used to come from
+    // `replica_change`, and an empty candidate set SKIPPED the check — so
+    // after any retention prune or epoch bump every opaque-shape base version
+    // passed unconditionally, on the one path whose job is to refuse a write
+    // made against a row someone else has moved. The candidates come from the
+    // entity's own table now, which a prune cannot empty.
+    const vault = await plane();
+    vault.recordAppInstall("planner", {
+      scopes: [
+        {
+          schema: "schedule",
+          table: "task",
+          verbs: "read+act",
+          fieldMask: ["title"],
+        },
+      ],
+    });
+    vault.db.vault
+      .prepare(
+        `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, status, priority)
+         VALUES ('pruned-conflict', ?, 'Before', 'needs-action', 0)`
+      )
+      .run(vault.boot.ownerPartyId);
+    const access = {
+      canWrite: true,
+      rememberDevice: true,
+      deviceId: "device-pruned-conflict",
+      appId: "planner",
+    };
+    const shape = buildReplicaShapes(vault.db.vault, access).find((item) =>
+      item.entityMap.has("schedule.task")
+    )!;
+    const row = readReplicaRow(
+      vault.db.vault,
+      "schedule.task",
+      "pruned-conflict"
+    )!;
+    const before = shapeReplicaRow(shape, "schedule.task", row)!;
+    const version = row.rowVersion!;
+    vault.db.vault
+      .prepare(
+        `UPDATE schedule_task SET title = 'After' WHERE task_id = 'pruned-conflict'`
+      )
+      .run();
+    // Exactly the state retention leaves behind.
+    vault.db.vault.exec(`DELETE FROM replica_change`);
+
+    const input = { title: "offline edit" };
+    const baseVersions = [
+      {
+        shapeId: shape.shapeId,
+        entity: "schedule.task",
+        rowId: before.rowId,
+        version,
+      },
+    ];
+    const dispatch = vi.fn<ReplicaIntentDispatcher>();
+    const reply = response();
+    await handleReplicaIntent(
+      request({
+        intentId: "pruned-conflict-1",
+        appId: "planner",
+        action: "edit_task",
+        input,
+        baseVersions,
+        payloadHash: intentHash({
+          appId: "planner",
+          action: "edit_task",
+          input,
+          baseVersions,
+        }),
+      }),
+      reply.res,
+      { plane: vault, access, dispatch }
+    );
+
+    expect(reply.body()).toMatchObject({
+      outcome: { status: "conflict" },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   test("owner role may act — it is full plus admin, not a lesser tier", async () => {
     const vault = await plane();
     vault.recordAppInstall("planner", {

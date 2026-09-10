@@ -15,7 +15,7 @@ import type {
 } from "@centraid/client/replica/native";
 
 import { fetchWithinReplyDeadline } from "./gateway-deadline";
-import type { AsyncStorageLike, StreamFetch } from "./native-change-feed";
+import type { StreamFetch } from "./native-change-feed";
 import type { NativeChangeFeed } from "./native-session";
 
 interface ScopeState {
@@ -26,9 +26,12 @@ interface ScopeState {
   listener?: (message: VaultChangeMessage) => void;
   active: boolean;
   rebootstrapRequired: boolean;
-  /** Newest cursor not yet written to durable storage. */
-  pendingCursor?: VaultChangeCursor;
-  persistTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * A rebootstrap verdict is the ONE thing that may move this scope onto an
+   * epoch it did not ask for (#1014, C19). Held apart from
+   * `rebootstrapRequired`, which the feed also sets on a revoke.
+   */
+  epochChangeExpected: boolean;
 }
 
 interface ScopeFrame {
@@ -37,25 +40,35 @@ interface ScopeFrame {
   data: unknown;
 }
 
-/**
- * Quiet window before a scope's resume cursor is written, matching the
- * single-vault feed (native-change-feed.ts). The multiplex feed missed it: a
- * 1,000-change frame wrote the cursor 1,000 times AND rebuilt the replica
- * context 1,000 times, because both were driven from the per-change cursor
- * advance rather than from the frame.
- */
-const CURSOR_PERSIST_DEBOUNCE_MS = 1_000;
-
 export interface NativeMultiplexChangeFeedOptions {
   gatewayAuth: GatewayAuth;
-  storage: AsyncStorageLike;
   streamFetch?: StreamFetch;
   minReconnectMs?: number;
   maxReconnectMs?: number;
   onScopeRevoked?: (vaultId: string) => void;
   onScopeUpdated?: (vaultId: string) => void;
   onStreamOutcome?: (reachable: boolean) => void;
+  /** This mount's only resume cursor. See {@link SeatResumePosition}. */
+  resumeFrom?: SeatResumePosition;
 }
+
+/**
+ * WHERE A SCOPE RESUMES FROM: THE SEAT'S APPLIED POSITION (#1014, C18).
+ *
+ * The feed used to keep its own durable cursor, keyed by
+ * `gatewayId ?? baseUrl` — a value `updateGatewayBase` mutates mid-session,
+ * so every launch orphaned a key and the gateway was sent a position nothing
+ * reconciled with `applied_seq`. There is one cursor on this phone and it is
+ * the seat's (`native-session.ts`'s opening comment says so); this is the
+ * shape it is read in, so the feed never holds a second copy of it.
+ *
+ * `undefined` — no seat yet, or no copy — starts at the initial cursor, which
+ * costs a replay of wake FRAMES and nothing else: a frame is a wake, not a
+ * delivery, and the catch-up behind it is idempotent.
+ */
+export type SeatResumePosition = () =>
+  | { readonly epoch: string; readonly applied: number }
+  | undefined;
 
 /**
  * Radio owner for all mounted replica sessions. `scope(vaultId)` returns the
@@ -64,7 +77,6 @@ export interface NativeMultiplexChangeFeedOptions {
  */
 export class NativeMultiplexChangeFeed {
   readonly #gatewayAuth: GatewayAuth;
-  readonly #storage: AsyncStorageLike;
   readonly #streamFetch: StreamFetch;
   readonly #states = new Map<string, ScopeState>();
   readonly #minReconnectMs: number;
@@ -72,6 +84,8 @@ export class NativeMultiplexChangeFeed {
   readonly #onScopeRevoked: ((vaultId: string) => void) | undefined;
   readonly #onScopeUpdated: ((vaultId: string) => void) | undefined;
   readonly #onStreamOutcome: ((reachable: boolean) => void) | undefined;
+  readonly #resumeFrom: SeatResumePosition | undefined;
+
   #abort: AbortController | undefined;
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   #reconnectDelay: number;
@@ -79,7 +93,6 @@ export class NativeMultiplexChangeFeed {
 
   constructor(options: NativeMultiplexChangeFeedOptions) {
     this.#gatewayAuth = options.gatewayAuth;
-    this.#storage = options.storage;
     this.#streamFetch = options.streamFetch ?? expoFetch;
     this.#minReconnectMs = options.minReconnectMs ?? 1_000;
     this.#maxReconnectMs = options.maxReconnectMs ?? 30_000;
@@ -87,6 +100,7 @@ export class NativeMultiplexChangeFeed {
     this.#onScopeRevoked = options.onScopeRevoked;
     this.#onScopeUpdated = options.onScopeUpdated;
     this.#onStreamOutcome = options.onStreamOutcome;
+    this.#resumeFrom = options.resumeFrom;
   }
 
   scope(vaultId: string): NativeChangeFeed {
@@ -98,6 +112,7 @@ export class NativeMultiplexChangeFeed {
         cursorLoaded: false,
         active: false,
         rebootstrapRequired: false,
+        epochChangeExpected: false,
       } satisfies ScopeState);
     this.#states.set(vaultId, state);
     return {
@@ -113,18 +128,16 @@ export class NativeMultiplexChangeFeed {
         state.shapeIds = [...new Set(shapeIds)].sort();
         this.reconnect();
       },
-      resume: async (cursor) => {
+      resume: (cursor) => {
         state.cursor = { ...cursor };
         state.cursorLoaded = true;
         state.rebootstrapRequired = false;
-        this.clearPending(state);
-        await this.persist(state.vaultId, state.cursor);
+        state.epochChangeExpected = false;
         this.reconnect();
+        return Promise.resolve();
       },
       setActive: (active) => {
         state.active = active;
-        // Backgrounding is the last reliable moment to land the resume cursor.
-        if (!active) void this.flush(state);
         this.reconnect();
       },
     };
@@ -138,17 +151,10 @@ export class NativeMultiplexChangeFeed {
 
   close(): void {
     this.stop();
-    // Teardown flushes: a debounced cursor lost on kill costs a replay, but
-    // only if it is written at all — dropping it silently regresses the cursor.
-    void this.flushAll();
+    // NOTHING TO LAND (#1014, C18). The resume position lives in the seat's
+    // `seat_state`, written in the applier's own transaction; this feed keeps
+    // no durable state of its own that a kill could lose.
     this.#states.clear();
-  }
-
-  /** Land every debounced cursor now (teardown, or an explicit background). */
-  async flushAll(): Promise<void> {
-    await Promise.all(
-      [...this.#states.values()].map((state) => this.flush(state))
-    );
   }
 
   private reconnect(): void {
@@ -167,7 +173,7 @@ export class NativeMultiplexChangeFeed {
   private async run(): Promise<void> {
     const states = this.activeStates();
     if (states.length === 0 || this.#abort) return;
-    await Promise.all(states.map((state) => this.load(state)));
+    for (const state of states) this.load(state);
     const generation = ++this.#generation;
     const abort = new AbortController();
     this.#abort = abort;
@@ -216,16 +222,14 @@ export class NativeMultiplexChangeFeed {
     if (!state) return;
     if (scopeFrame.event === "revoked") {
       state.rebootstrapRequired = true;
-      // Drop the debounced write too, or it lands after the removal and
-      // resurrects the cursor of a scope this phone no longer holds.
-      this.clearPending(state);
-      void this.#storage.removeItem(this.storageKey(state.vaultId));
       this.#onScopeRevoked?.(state.vaultId);
       this.reconnect();
       return;
     }
     if (scopeFrame.event === "rebootstrap") {
       state.rebootstrapRequired = true;
+      // The one verdict that licenses an epoch change (#1014, C19).
+      state.epochChangeExpected = true;
       state.listener?.({
         type: "centraid:vault-rebootstrap",
         detail: scopeFrame.data,
@@ -259,35 +263,36 @@ export class NativeMultiplexChangeFeed {
     if (advanced) this.settleFrame(state);
   }
 
-  /** In-memory only: returns whether the cursor actually moved forward. */
+  /**
+   * In-memory only: returns whether the cursor actually moved forward.
+   *
+   * AN EPOCH IT DID NOT ASK FOR IS IGNORED (#1014, C19). This accepted any
+   * cursor whose epoch merely DIFFERED — so one stray frame moved the scope
+   * onto another epoch, and every later frame of the real one was then read
+   * as "different epoch" and taken too. An epoch change is legitimate exactly
+   * twice: before this scope has a position at all, and after the gateway has
+   * said `rebootstrap`. Everywhere else it is a frame for a stream this mount
+   * is not on.
+   */
   private advanceCursor(state: ScopeState, cursor: VaultChangeCursor): boolean {
-    if (cursor.epoch === state.cursor.epoch && cursor.seq < state.cursor.seq)
-      return false;
+    if (cursor.epoch !== state.cursor.epoch) {
+      if (
+        !state.epochChangeExpected &&
+        state.cursor.epoch !== INITIAL_VAULT_CURSOR.epoch
+      )
+        return false;
+      state.epochChangeExpected = false;
+      state.cursor = cursor;
+      return true;
+    }
+    if (cursor.seq < state.cursor.seq) return false;
     state.cursor = cursor;
     return true;
   }
 
-  /** The per-frame cost: one freshness signal, one debounced durable write. */
+  /** The per-frame cost: one freshness signal. The cursor is the seat's. */
   private settleFrame(state: ScopeState): void {
     this.#onScopeUpdated?.(state.vaultId);
-    state.pendingCursor = state.cursor;
-    if (state.persistTimer) return;
-    state.persistTimer = setTimeout(() => {
-      state.persistTimer = undefined;
-      void this.flush(state);
-    }, CURSOR_PERSIST_DEBOUNCE_MS);
-  }
-
-  private clearPending(state: ScopeState): void {
-    if (state.persistTimer) clearTimeout(state.persistTimer);
-    state.persistTimer = undefined;
-    state.pendingCursor = undefined;
-  }
-
-  private async flush(state: ScopeState): Promise<void> {
-    const cursor = state.pendingCursor;
-    this.clearPending(state);
-    if (cursor) await this.persist(state.vaultId, cursor);
   }
 
   private activeStates(): ScopeState[] {
@@ -327,27 +332,16 @@ export class NativeMultiplexChangeFeed {
     );
   }
 
-  private async load(state: ScopeState): Promise<void> {
-    if (state.cursorLoaded) return;
+  /**
+   * Where this scope resumes: the SEAT's applied position, asked for fresh on
+   * every connect (#1014, C18). Not cached, because the seat moves underneath
+   * — a catch-up between two reconnects is exactly the case a stale copy
+   * would send the gateway backwards for.
+   */
+  private load(state: ScopeState): void {
+    const seat = this.#resumeFrom?.();
+    if (seat) state.cursor = { epoch: seat.epoch, seq: seat.applied };
+    else if (!state.cursorLoaded) state.cursor = INITIAL_VAULT_CURSOR;
     state.cursorLoaded = true;
-    try {
-      const raw = await this.#storage.getItem(this.storageKey(state.vaultId));
-      const parsed = raw ? parseCursor(JSON.parse(raw) as unknown) : undefined;
-      if (parsed) state.cursor = parsed;
-    } catch {
-      state.cursor = INITIAL_VAULT_CURSOR;
-    }
-  }
-
-  private persist(vaultId: string, cursor: VaultChangeCursor): Promise<void> {
-    return this.#storage
-      .setItem(this.storageKey(vaultId), JSON.stringify(cursor))
-      .catch(() => undefined);
-  }
-
-  private storageKey(vaultId: string): string {
-    return `centraid:multiplex-cursor:${encodeURIComponent(
-      `${this.#gatewayAuth.gatewayId ?? this.#gatewayAuth.baseUrl} ${vaultId}`
-    )}`;
   }
 }

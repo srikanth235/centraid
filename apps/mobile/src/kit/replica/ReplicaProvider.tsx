@@ -33,7 +33,7 @@ import {
   nativeSyncAllowed,
 } from "../../lib/upload/native-policy";
 import {
-  LAST_BASE,
+  LastBase,
   LAST_GATEWAY,
   LAST_VAULT,
   getActiveVaultLink,
@@ -180,7 +180,7 @@ export function ReplicaProvider({
         // await on the network. `resolveIdentity` is for a fresh install only.
         // "unpaired" is a DISK fact, never a network verdict — keep it that way.
         const [cachedBase, lastGatewayId, lastVaultId] = await Promise.all([
-          Store.hydrate(LAST_BASE, "http://127.0.0.1"),
+          LastBase.hydrate(activeRef.current?.gatewayId ?? ""),
           Store.hydrate(LAST_GATEWAY, ""),
           Store.hydrate(LAST_VAULT, ""),
         ]);
@@ -282,7 +282,7 @@ export function ReplicaProvider({
             baseUrl: identity.auth.baseUrl,
             gatewayId: identity.gatewayId,
           },
-          storage: AsyncStorage,
+          resumeFrom: () => session?.watermark(),
           onStreamOutcome: noteGatewayOutcome,
           onScopeUpdated: updateScopeFreshness,
           onScopeRevoked: (vaultId) => {
@@ -432,7 +432,7 @@ export function ReplicaProvider({
               `[centraid] replica: no gateway base — device=${deviceOnline}`
             );
           if (liveBase) {
-            Store.set(LAST_BASE, liveBase);
+            LastBase.set(identity.gatewayId, liveBase);
             multiplex?.updateGatewayBase(liveBase);
             session?.updateGatewayBase(liveBase);
             session?.notifyReachable();

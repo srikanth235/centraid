@@ -209,3 +209,54 @@ describe("the sanitised seat snapshot", () => {
     }
   });
 });
+
+// THE ARTIFACT DESCRIBES ITSELF (#1014, T7).
+//
+// Epoch, schema epoch and watermark used to be read from the LIVE vault around
+// the `VACUUM INTO` — outside any transaction, and `VACUUM INTO` cannot be
+// inside one. An epoch bump in that window produced a file whose `replica_meta`
+// carried epoch B under an ETag and a cursor stamped A: the seat took a
+// `cursor-epoch` mismatch, re-bootstrapped, and hit the same window again.
+describe("the snapshot's own cursor", () => {
+  test("epoch, schema epoch and floor come from the COPY, and agree with it", () => {
+    const db = seeded();
+    try {
+      const destination = scratch();
+      const result = buildSeatSnapshot(db.vault, destination);
+      const copy = new DatabaseSync(destination);
+      try {
+        const meta = copy
+          .prepare(
+            `SELECT epoch, schema_epoch, floor_seq, active_commit_id
+               FROM replica_meta WHERE singleton = 1`
+          )
+          .get() as {
+          epoch: string;
+          schema_epoch: number;
+          floor_seq: number;
+          active_commit_id: string | null;
+        };
+        // What the door advertises IS what the file says — the two cannot
+        // come from different reads any more.
+        expect(result.epoch).toBe(meta.epoch);
+        expect(result.schemaEpoch).toBe(meta.schema_epoch);
+        expect(result.seq).toBe(meta.floor_seq);
+        expect(meta.active_commit_id).toBeNull();
+        // The floor stands at the end of the log the copy was taken at, and
+        // the log itself is gone: a seat tails from here, it does not replay.
+        expect(
+          (
+            copy.prepare(`SELECT COUNT(*) AS n FROM replica_log`).get() as {
+              n: number;
+            }
+          ).n
+        ).toBe(0);
+        expect(result.seq).toBeGreaterThan(0);
+      } finally {
+        copy.close();
+      }
+    } finally {
+      db.close();
+    }
+  });
+});

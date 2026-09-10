@@ -61,6 +61,41 @@ export const REPLICA_DDL_VERSION = 0;
  */
 export const SEAT_SQLITE_FLOOR = "3.49.1";
 
+/**
+ * RUNG EIGHT's DDL (#1014, G1/G2/V1). ONE FLOOR PER LOG.
+ *
+ * `replica_meta.floor_seq` was written by BOTH logs' pruners in two unrelated
+ * sequence spaces: the trigger log runs ~19 rows to the session log's 1, so a
+ * trigger-log prune could stamp a floor far above `MAX(replica_log.seq)` and
+ * every seat cursor then failed `since.seq < floor` into a `retention`
+ * re-bootstrap whose snapshot stamped the floor back down — a loop with
+ * nothing applied and nothing surfaced. `floor_seq` now belongs to
+ * `replica_log` alone and the trigger log carries its own `change_floor_seq`
+ * until it is retired.
+ *
+ * The repair of an existing file is the second statement: whatever `floor_seq`
+ * holds today is a TRIGGER-log position, so it moves across, and the seat
+ * log's floor is re-derived from the rows the file actually still has. Below
+ * the true floor is safe (a seat re-reads what it had); above it is the loss
+ * this rung exists to undo.
+ *
+ * `access_device_secret.sync_cursor_at` is the other half of the seat hold:
+ * a cursor with no time on it cannot say whether the device that wrote it is
+ * still there, and a hold with no abandonment bound lets one lost phone pin
+ * the log forever.
+ */
+export const REPLICA_FLOOR_SPLIT_DDL = `
+ALTER TABLE replica_meta ADD COLUMN change_floor_seq INTEGER NOT NULL DEFAULT 0;
+UPDATE replica_meta SET change_floor_seq = floor_seq WHERE singleton = 1;
+UPDATE replica_meta
+   SET floor_seq = (
+     SELECT COALESCE(MIN(seq), 1) - 1 FROM replica_log
+      WHERE epoch = replica_meta.epoch
+   )
+ WHERE singleton = 1;
+ALTER TABLE access_device_secret ADD COLUMN sync_cursor_at TEXT;
+`;
+
 export const REPLICA_DDL = `
 CREATE TABLE IF NOT EXISTS replica_meta (
   singleton        INTEGER PRIMARY KEY CHECK (singleton = 1),

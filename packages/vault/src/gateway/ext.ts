@@ -9,6 +9,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { refreshReplicaTriggers } from "../replica/change-log.js";
+import { watchReplicaTable } from "../replica/log.js";
 import {
   canonicalSpecJson,
   dropExtFtsDdl,
@@ -217,6 +218,10 @@ export function applyExtBand(
             now
           );
         outcome.created.push(spec.name);
+        // The session capture enumerated its tables before this one existed
+        // (#1014, G21): rows written into a brand-new physical before the
+        // next capture would have nothing watching them.
+        watchReplicaTable(db.vault, physical);
         clearColumnCache(physical);
         continue;
       }
@@ -740,6 +745,8 @@ export function recreateExtTables(db: VaultDb): string[] {
           extFtsDdl(row.physical, extPk(spec), spec.searchable ?? [])
         );
       }
+      // As in `applyExtSpecs` (#1014, G21).
+      watchReplicaTable(db.vault, row.physical);
       created.push(row.physical);
     }
   }

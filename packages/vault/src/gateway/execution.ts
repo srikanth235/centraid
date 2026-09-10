@@ -5,7 +5,11 @@ import { promoteStagedBlob } from "../blob/promote.js";
 import { stagedInfoTx } from "../blob/staging.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import {
+  abandonReplicaCommit,
+  beginReplicaCommit,
+  endReplicaCommit,
+} from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
 import { stampReplicaOutcomeCommitInTransaction } from "../replica/intent-chain.js";
 import {
@@ -105,9 +109,20 @@ function rollbackInvocationTransaction(
 ): void {
   if (!transaction.open) return;
   if (transaction.savepoint) {
+    // A SAVEPOINT rollback is NOT the capture's edge: the enclosing
+    // transaction — and everything it has already written — is still going,
+    // and the sessions are per connection, not per savepoint. Dropping them
+    // here would lose the batch's other rows from the log.
     db.exec(`ROLLBACK TO ${transaction.savepoint}`);
     db.exec(`RELEASE ${transaction.savepoint}`);
   } else {
+    // THE UNDO HAS TO REACH THE CAPTURE TOO (#1014, G3). A rolled-back
+    // transaction's changes are undone in the FILE; the sessions watching
+    // them are not. Left open, the next `captureReplicaCommit` decodes work
+    // that never happened — and a rolled-back INSERT reads back as missing
+    // and throws inside the NEXT transaction, which rolls back and leaks
+    // again. One failed postcondition could wedge every subsequent write.
+    abandonReplicaCommit(db);
     db.exec("ROLLBACK");
   }
   transaction.open = false;

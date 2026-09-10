@@ -21,6 +21,7 @@ import {
   SEAT_SNAPSHOT_EPOCH_HEADER,
   SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
   SEAT_SNAPSHOT_SEQ_HEADER,
+  SEAT_SNAPSHOT_VAULT_HEADER,
 } from "@centraid/core/protocol";
 import type { SeatSnapshotHead } from "@centraid/core/protocol";
 
@@ -67,12 +68,19 @@ function headOf(response: Response, bytes: number): SeatSnapshotHead {
       "seat snapshot: seq or schema epoch is not an integer"
     );
   }
+  // NOT `requiredHeader` (#1014, C16). A gateway older than #1014 does not
+  // send it, and the shipped app has to keep bootstrapping against one — the
+  // replica protocol is not upgraded in lockstep with the phone. An absent
+  // header is "the door did not say", which the bootstrap logs and lets
+  // through; a header that DISAGREES is refused.
+  const vaultId = response.headers.get(SEAT_SNAPSHOT_VAULT_HEADER);
   return {
     etag,
     bytes,
     seq,
     epoch: requiredHeader(response, SEAT_SNAPSHOT_EPOCH_HEADER),
     schemaEpoch,
+    ...(vaultId === null || vaultId === "" ? {} : { vaultId }),
   };
 }
 

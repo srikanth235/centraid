@@ -1,5 +1,19 @@
-/** Why a log page cannot be applied to this file, and what to do about it. */
-export type SeatDriftReason = "epoch" | "schema-epoch" | "vault";
+/**
+ * Why a log page cannot be applied to this file, and what to do about it.
+ *
+ * `wrong-vault` is the BOOTSTRAP's refusal, not the applier's (#1014, C16):
+ * the artifact behind the snapshot door is a copy of another vault. It is
+ * kept apart from `vault` — a page that arrived for another vault — because
+ * the two say different things about what to do next. A page for the wrong
+ * vault is drift a re-bootstrap closes; an ARTIFACT for the wrong vault is a
+ * mis-addressed door, and re-bootstrapping against it is the ~6 s loop R25
+ * recorded. Only the first is worth retrying.
+ */
+export type SeatDriftReason =
+  | "epoch"
+  | "schema-epoch"
+  | "vault"
+  | "wrong-vault";
 
 /**
  * The page belongs to a file this one is not.

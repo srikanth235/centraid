@@ -26,6 +26,7 @@ import type { SeatSnapshotHead } from "@centraid/core/protocol";
 import { openSeatFile } from "./driver.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { SeatBootstrapNoRoomError } from "./seat-bootstrap-no-room-error.js";
+import { SeatDriftError } from "./seat-drift-error.js";
 import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import { initSeatState } from "./state.js";
 
@@ -76,8 +77,26 @@ export interface SeatBootstrapStaging {
    * Gunzip the staged artifact into place as the seat's database file, and
    * drop the staging. Atomic from a reader's point of view: a caller that
    * arrives mid-install sees the old file or the new one.
+   *
+   * `prepare` RUNS ON THE INCOMING FILE, BEFORE THE SWAP (#1014, C17). The
+   * bootstrap's `seat_state` used to be written after the move, so a kill in
+   * that window left the gateway's file in place under this seat's name with
+   * no `seat_state` in it — `seatStatePresent()` false, "this seat has no
+   * copy", and the whole artifact downloaded again. Handing the write to the
+   * host that owns the move makes install-and-name-it one step: the file that
+   * appears is already this seat's, or no file appears at all. A host that
+   * throws out of `prepare` must leave the destination UNTOUCHED — that is
+   * what makes a mis-addressed artifact (C16) a refusal rather than a
+   * replacement.
+   *
+   * A host with no window between "expanded" and "in place" (the browser's
+   * SAH pool imports wholesale) simply does not call `prepare`; the bootstrap
+   * notices and falls back to writing on the installed file.
    */
-  install: (etag: string) => Promise<void>;
+  install: (
+    etag: string,
+    prepare?: (driver: SeatSqliteDriver) => void
+  ) => Promise<void>;
   discard: () => Promise<void>;
   /** Free bytes where these files live, or undefined when the host cannot say. */
   freeBytes: () => Promise<number | undefined>;
@@ -91,6 +110,16 @@ export interface SeatBootstrapProgress {
   readonly resumed: boolean;
 }
 
+/**
+ * How the artifact's vault identity was established (#1014, C16).
+ *
+ * `"none"` is the honest answer against a gateway older than #1014 whose
+ * snapshot carries no `core_vault` row it could be read from either — not a
+ * failure, but not a check that happened, and the caller says so rather than
+ * the bootstrap pretending.
+ */
+export type SeatVaultCheck = "door" | "file" | "both" | "none";
+
 export interface SeatBootstrapResult {
   readonly seq: number;
   readonly epoch: string;
@@ -102,6 +131,8 @@ export interface SeatBootstrapResult {
   readonly resumedFrom: number;
   /** FTS shadow tables re-derived after the copy. */
   readonly ftsRebuilt: readonly string[];
+  /** Which of the two vault-identity checks actually ran (#1014, C16). */
+  readonly vaultChecked: SeatVaultCheck;
   readonly elapsedMs: number;
 }
 
@@ -142,6 +173,19 @@ export async function bootstrapSeatFile(
   const clock = options.now ?? ((): number => Date.now());
   const started = clock();
   const head = await options.transport.head();
+  // THE FIRST OF THE TWO CHECKS, AND IT COSTS NOTHING (#1014, C16). The head
+  // is read before a byte of the artifact moves, so a door answering for
+  // another vault is refused before the download, before the staging and —
+  // above all — before the destination is touched. R25's phone downloaded
+  // 135 KB every ~6 s and installed it over another vault's seat; this is the
+  // check that was missing.
+  if (head.vaultId !== undefined && head.vaultId !== options.vaultId) {
+    throw new SeatDriftError(
+      "wrong-vault",
+      `seat snapshot: artifact is for vault ${head.vaultId}, ` +
+        `this seat is ${options.vaultId}`
+    );
+  }
   const free = await options.staging.freeBytes();
   const current = await options.staging.currentBytes();
   const required = seatBootstrapRoomRequired(
@@ -182,17 +226,45 @@ export async function bootstrapSeatFile(
     throw new SeatSnapshotMovedError(head.etag, undefined);
   }
 
-  await options.staging.install(head.etag);
+  // ONE STEP, NOT TWO (#1014, C17). `name` is everything that turns the
+  // gateway's file into THIS seat's file, and the host runs it on the incoming
+  // copy so the move is the only observable transition. `named` records
+  // whether it ran: a host with no pre-swap window falls through to the old
+  // order below, which is worse but is still correct on a clean run.
+  let ftsRebuilt: readonly string[] = [];
+  let named = false;
+  let fileVault: string | undefined;
+  const name = (driver: SeatSqliteDriver): void => {
+    openSeatFile(driver);
+    // THE SECOND CHECK, AND THE ONE THAT NEEDS NO COOPERATION (#1014, C16).
+    // The artifact carries the vault's own identity row, so the file can be
+    // asked whose it is even when the door would not say — and it is asked
+    // HERE, on the incoming copy, so a refusal leaves the seat's existing
+    // file exactly where it was (C17's `prepare` contract).
+    fileVault = snapshotVaultId(driver);
+    if (fileVault !== undefined && fileVault !== options.vaultId) {
+      throw new SeatDriftError(
+        "wrong-vault",
+        `seat snapshot: file is for vault ${fileVault}, ` +
+          `this seat is ${options.vaultId}`
+      );
+    }
+    ftsRebuilt = rebuildSeatFtsIndexes(driver);
+    initSeatState(driver, {
+      vaultId: options.vaultId,
+      epoch: head.epoch,
+      schemaEpoch: head.schemaEpoch,
+      appliedSeq: head.seq,
+      gatewayWatermark: head.seq,
+    });
+    named = true;
+  };
+  await options.staging.install(head.etag, name);
   const driver = await options.open();
   openSeatFile(driver);
-  const ftsRebuilt = rebuildSeatFtsIndexes(driver);
-  initSeatState(driver, {
-    vaultId: options.vaultId,
-    epoch: head.epoch,
-    schemaEpoch: head.schemaEpoch,
-    appliedSeq: head.seq,
-    gatewayWatermark: head.seq,
-  });
+  if (!named) name(driver);
+  const checkedAtDoor = head.vaultId !== undefined;
+  const checkedInFile = fileVault !== undefined;
   return {
     seq: head.seq,
     epoch: head.epoch,
@@ -201,8 +273,40 @@ export async function bootstrapSeatFile(
     bytes: head.bytes,
     resumedFrom,
     ftsRebuilt,
+    vaultChecked:
+      checkedAtDoor && checkedInFile
+        ? "both"
+        : checkedAtDoor
+          ? "door"
+          : checkedInFile
+            ? "file"
+            : "none",
     elapsedMs: clock() - started,
   };
+}
+
+/**
+ * Whose vault this file is, read off the file itself.
+ *
+ * `core_vault` is the vault's own identity row and it REPLICATES — it is not
+ * on the private list, so every snapshot carries it. Reading it needs nothing
+ * from the gateway, which is the point: it is the check that still works
+ * against a door that will not name the vault, and the one a mis-addressed
+ * artifact cannot talk its way past.
+ *
+ * `undefined` when the file has no such row — an empty baseline, or a schema
+ * older than the one that introduced it. That is "cannot tell", never "it
+ * matches": the caller reports it as an unverified bootstrap.
+ */
+function snapshotVaultId(driver: SeatSqliteDriver): string | undefined {
+  const present = driver.all<{ name: string }>(
+    `SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'core_vault'`
+  );
+  if (present.length === 0) return undefined;
+  const row = driver.all<{ vault_id: string }>(
+    `SELECT vault_id FROM core_vault LIMIT 1`
+  )[0];
+  return row?.vault_id;
 }
 
 /**

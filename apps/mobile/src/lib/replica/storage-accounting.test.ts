@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { nativeSeatDatabaseName } from "./native-seat-path";
 import {
   foldPendingUploadGroups,
   otherPhoneStorage,
@@ -92,15 +93,15 @@ describe("phone storage accounting", () => {
       [
         { name: "centraid-uploads.db", size: 4_096 },
         { name: "centraid-uploads.db-wal", size: 1_024 },
-        { name: "centraid-replica-mounted.sqlite3", size: 100 },
-        { name: "centraid-replica-mounted.sqlite3-wal", size: 40 },
-        { name: "centraid-replica-revoked.sqlite3", size: 900 },
-        { name: "centraid-replica-revoked.sqlite3-shm", size: 32 },
-        { name: "centraid-replica-gone.sqlite3", size: 7 },
+        { name: "centraid-seat-mounted.sqlite3", size: 100 },
+        { name: "centraid-seat-mounted.sqlite3-wal", size: 40 },
+        { name: "centraid-seat-revoked.sqlite3", size: 900 },
+        { name: "centraid-seat-revoked.sqlite3-shm", size: 32 },
+        { name: "centraid-seat-gone.sqlite3", size: 7 },
         // Not ours to attribute: the screen must not invent a Centraid cost.
         { name: "something-else.txt", size: 5_000 },
       ],
-      ["/durable/CentraidReplica/centraid-replica-mounted.sqlite3"],
+      ["/durable/CentraidReplica/centraid-seat-mounted.sqlite3"],
       "centraid-uploads.db"
     );
 
@@ -112,11 +113,32 @@ describe("phone storage accounting", () => {
     ).toBe(2);
   });
 
+  // #1014, P6. The fold matched `centraid-replica-` — the BROWSER seat's
+  // SAH-pool name — while every file this phone writes is `centraid-seat-…`.
+  // So it matched nothing, ever, and an orphaned seat file was invisible on
+  // the storage screen. The name is taken from the builder here rather than
+  // typed out, so the two cannot drift apart again silently.
+  test("counts a file named the way this phone actually names one", async () => {
+    const name = await nativeSeatDatabaseName({
+      gatewayId: "gateway-1",
+      vaultId: "vault-1",
+      digest: (value: string) =>
+        Promise.resolve(value.replaceAll("\u0000", "-")),
+    });
+    expect(
+      otherPhoneStorage([{ name, size: 5_000_000 }], [], "centraid-uploads.db")
+    ).toStrictEqual({
+      uploadLedgerBytes: 0,
+      unmountedVaultBytes: 5_000_000,
+      unmountedVaultCount: 1,
+    });
+  });
+
   test("reports nothing extra when every replica database is mounted", () => {
     expect(
       otherPhoneStorage(
-        [{ name: "centraid-replica-one.sqlite3", size: 500 }],
-        ["centraid-replica-one.sqlite3"],
+        [{ name: "centraid-seat-one.sqlite3", size: 500 }],
+        ["centraid-seat-one.sqlite3"],
         "centraid-uploads.db"
       )
     ).toStrictEqual({

@@ -98,15 +98,6 @@ export function buildSeatSnapshot(
   destination: string
 ): SeatSnapshotResult {
   const started = Date.now();
-  const state = vault
-    .prepare(`SELECT epoch, schema_epoch FROM replica_meta WHERE singleton = 1`)
-    .get() as { epoch: string; schema_epoch: number } | undefined;
-  if (!state) throw new Error("seat snapshot: replica metadata is missing");
-  const seq = (
-    vault
-      .prepare(`SELECT MAX(seq) AS seq FROM replica_log WHERE epoch = ?`)
-      .get(state.epoch) as { seq: number | null }
-  ).seq;
 
   // 1. The copy. `VACUUM INTO` refuses an existing file, which is the
   //    behaviour we want: a snapshot never overwrites one already served.
@@ -115,10 +106,36 @@ export function buildSeatSnapshot(
   const copy = new DatabaseSync(destination);
   const droppedTables: string[] = [];
   let droppedObjects = 0;
+  let epoch = "";
+  let schemaEpoch = 0;
+  let seq = 0;
   try {
     // 2. Before any drop, not after: it governs how the pages are freed.
     copy.exec("PRAGMA secure_delete = ON");
     copy.exec("PRAGMA foreign_keys = OFF");
+
+    // THE ARTIFACT DESCRIBES ITSELF (#1014, T7). Epoch, schema epoch and
+    // watermark used to be read from the LIVE vault around the `VACUUM INTO`
+    // — outside any transaction, and `VACUUM INTO` cannot be inside one. A
+    // `bumpReplicaEpoch` in that window produced a file whose `replica_meta`
+    // carried epoch B under an ETag and cursor stamped A, the seat took a
+    // `cursor-epoch` mismatch, re-bootstrapped, and hit the same window: a
+    // restore under live seats could loop. The copy IS a consistent snapshot,
+    // so the numbers are read from IT and cannot disagree with its contents.
+    const state = copy
+      .prepare(
+        `SELECT epoch, schema_epoch FROM replica_meta WHERE singleton = 1`
+      )
+      .get() as { epoch: string; schema_epoch: number } | undefined;
+    if (!state) throw new Error("seat snapshot: replica metadata is missing");
+    epoch = state.epoch;
+    schemaEpoch = state.schema_epoch;
+    seq =
+      (
+        copy
+          .prepare(`SELECT MAX(seq) AS seq FROM replica_log WHERE epoch = ?`)
+          .get(state.epoch) as { seq: number | null }
+      ).seq ?? 0;
 
     const objects = copy
       .prepare(
@@ -196,7 +213,7 @@ export function buildSeatSnapshot(
         `UPDATE replica_meta SET floor_seq = ?, active_commit_id = NULL
           WHERE singleton = 1`
       )
-      .run(seq ?? 0);
+      .run(seq);
 
     // 5. The step that actually reclaims the pages the drops freed.
     copy.exec("VACUUM");
@@ -206,9 +223,9 @@ export function buildSeatSnapshot(
 
   return {
     path: destination,
-    seq: seq ?? 0,
-    epoch: state.epoch,
-    schemaEpoch: state.schema_epoch,
+    seq,
+    epoch,
+    schemaEpoch,
     bytes: statSync(destination).size,
     droppedTables,
     droppedObjects,

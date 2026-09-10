@@ -42,6 +42,7 @@ import {
   SEAT_SNAPSHOT_EPOCH_HEADER,
   SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
   SEAT_SNAPSHOT_SEQ_HEADER,
+  SEAT_SNAPSHOT_VAULT_HEADER,
 } from "@centraid/core/protocol";
 import type {
   SeatLockerKeyWire,
@@ -51,6 +52,7 @@ import type {
 import {
   buildSeatSnapshot,
   readReplicaLog,
+  recordSeatCursor,
   replicaLogState,
   ReplicaLogRebootstrapRequiredError,
   seatLogRowWire,
@@ -327,6 +329,17 @@ export function makeSeatRouteHandler(
           message: `log row ${foreign.seq} carries epoch ${foreign.epoch}, this vault is ${state.epoch}`,
         });
       }
+      // THE HOLD THE PRUNE STANDS ON (#1014, V1/T9). `since` is the position
+      // the device HAS — the rows above it are what it still needs — so this
+      // is what `lowestSeatCursor` must not prune past. Recording the served
+      // watermark instead would pin only what is already in flight and let
+      // retention delete the rest.
+      //
+      // BEST-EFFORT, LIKE A DOORBELL: the page is already served and correct;
+      // a failure to write bookkeeping about it may never fail the answer.
+      if (sinceEpoch === state.epoch) {
+        recordSeatCursor(plane.db.vault, resolution.access.deviceId, seq);
+      }
       options.logger?.info(
         `seat log page for ${vaultId}: since ${seq}, ${page.rows.length} rows, ` +
           `next ${page.next.seq}, watermark ${page.watermark.seq}, hasMore ${String(page.hasMore)}`
@@ -364,7 +377,11 @@ export function makeSeatRouteHandler(
     res.setHeader("Content-Type", "application/gzip");
     res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
     // The two numbers a seat needs before it opens the file: where it sits in
-    // the log, and which contract it is under.
+    // the log, and which contract it is under — and, since #1014 (C16), WHOSE
+    // file it is. `vaultId` is the vault this request resolved to, which is
+    // the same value the log door stamps on every page, so a seat comparing
+    // the two is comparing one gateway's answer with itself.
+    res.setHeader(SEAT_SNAPSHOT_VAULT_HEADER, vaultId);
     res.setHeader(SEAT_SNAPSHOT_SEQ_HEADER, String(artifact.seq));
     res.setHeader(SEAT_SNAPSHOT_EPOCH_HEADER, artifact.epoch);
     res.setHeader(

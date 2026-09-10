@@ -60,6 +60,12 @@ export interface NodeSeatOptions {
   readonly baseUrl: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * The seat file's name inside `directory`, so a suite can give two vaults
+   * the SHIPPED naming (`nativeSeatDatabaseName`) in one storage directory —
+   * which is the arrangement R25 was found in (#1014).
+   */
+  readonly fileName?: string;
 }
 
 /** Open the seat's FILE — the outbox exists from here, copy or no copy. */
@@ -71,12 +77,14 @@ export async function openNodeSeat(
   // two phones in one suite do not share a file, so it has to make it — SQLite
   // will not create a missing parent, it answers "unable to open database file".
   mkdirSync(options.directory, { recursive: true });
-  const databasePath = `${options.directory}/seat.sqlite3`;
+  const databasePath = `${options.directory}/${options.fileName ?? "seat.sqlite3"}`;
   const core = new SeatWorkerCore({
     openDatabase: () => new NodeSeatDriver(databasePath),
     staging: () =>
       nodeSeatStaging({
-        directory: `${options.directory}/staging`,
+        // Per FILE, not per directory: two seats sharing a staging directory
+        // would resume each other's part file (#1014).
+        directory: `${databasePath}-staging`,
         databasePath,
       }),
     transport: (bootstrap) =>

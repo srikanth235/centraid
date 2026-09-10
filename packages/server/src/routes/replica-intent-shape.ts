@@ -14,6 +14,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   currentReplicaLogState,
   operationReadSet,
+  replicaRowIdsOf,
   resolveEntity,
 } from "@centraid/vault";
 
@@ -241,33 +242,36 @@ export function currentConflict(
       // narrowing matched the wrong row or none at all. There is nothing to
       // narrow with: the wire id is an HMAC, and the only way back to the
       // canonical id is to hash the candidates.
-      const candidates = vault
-        .prepare(
-          `SELECT DISTINCT row_id FROM replica_change
-            WHERE epoch = ? AND entity = ?`
-        )
-        .all(epoch, base.entity) as { row_id: string }[];
+      //
+      // THE CANDIDATES ARE THE ENTITY'S ROWS, NOT THE LOG'S (#1014, G9). This
+      // read `DISTINCT row_id FROM replica_change`, and then SKIPPED the check
+      // entirely when that came back empty — so after any prune or epoch bump
+      // every opaque-shape base version passed unconditionally. It failed
+      // OPEN, on the one path whose whole job is to refuse a write made
+      // against a row someone else has moved. The table cannot come back empty
+      // for a row that exists, and a row that does not exist is version zero,
+      // which is a conflict against any base version above it.
+      const candidates = replicaRowIdsOf(vault, base.entity);
       let resolved = false;
       for (const shape of opaqueShapes) {
         const match = candidates.find(
           (candidate) =>
-            replicaWireRowId(shape, base.entity, candidate.row_id) ===
-            base.rowId
+            replicaWireRowId(shape, base.entity, candidate) === base.rowId
         );
-        if (match) {
-          canonicalRowId = match.row_id;
+        if (match !== undefined) {
+          canonicalRowId = match;
           resolvedShapeId = shape.shapeId;
           resolved = true;
           break;
         }
       }
-      if (!resolved && candidates.length > 0) {
+      if (!resolved) {
         // NO CANDIDATE HASHES TO THIS WIRE ID: the row this intent names is
         // not in the shape — deleted, or never there. Zero, which is what
         // `currentRowVersion` answers for the same fact, and in the same units
-        // as `expectedVersion`. It used to answer the entity's MAX log seq: a
-        // transport position, larger than any row version, reported to the
-        // member as "the row is at version 431".
+        // as `expectedVersion`. A base version of zero agrees with that and is
+        // not a conflict; anything above it is.
+        if (base.version === 0) continue;
         return {
           ...(resolvedShapeId === undefined
             ? {}
@@ -278,9 +282,6 @@ export function currentConflict(
           actualVersion: 0,
         };
       }
-      // A version-zero row with no matching current-epoch change is a valid
-      // unchanged snapshot row. There is no canonical version to compare.
-      if (!resolved) continue;
     }
     const actualVersion = currentRowVersion(
       vault,

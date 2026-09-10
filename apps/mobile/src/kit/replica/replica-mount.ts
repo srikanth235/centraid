@@ -13,20 +13,22 @@ import type {
 import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
+import { migrateManualSeatFiles } from "../../lib/replica/manual-seat-migration";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import type { MobileGatewayFeatures } from "../../lib/replica/mobile-gateway-compatibility-core";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { nativeSeatDatabasePath } from "../../lib/replica/native-seat-path";
+import { SeatGatewayUnresolvedError } from "../../lib/replica/seat-gateway-unresolved-error";
 import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
-import { LAST_BASE, noteActiveIdentity } from "../../lib/vault-links";
+import {
+  DEFAULT_GATEWAY_BASE,
+  LastBase,
+  noteActiveIdentity,
+} from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
-import { Store } from "../../storage";
 
 export const REPLICA_UNPAIRED_MESSAGE =
   "Pair this phone with your Centraid desktop to work offline.";
-
-/** Must match `addActiveGatewayVault`'s `"manual"` id; not shared. */
-const MANUAL_GATEWAY_FALLBACK = "manual";
 
 interface ScopeWire {
   vaultId: string;
@@ -122,10 +124,15 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   gatewayId: string;
   online: boolean;
 }> {
-  const cachedBase = await Store.hydrate(LAST_BASE, "http://127.0.0.1");
+  // THIS GATEWAY'S BASE, NOT THE LAST ONE ANY GATEWAY ANSWERED AT (#1014,
+  // P13). With two gateways paired, the global key was whichever answered
+  // last, and this mount opened its seat against the other one's port.
+  const cachedBase = vault?.gatewayId
+    ? await LastBase.hydrate(vault.gatewayId)
+    : DEFAULT_GATEWAY_BASE;
   if (vault?.gatewayId && vault.vaultId) {
     const liveBase = await resolveGatewayBase().catch(() => undefined);
-    if (liveBase) Store.set(LAST_BASE, liveBase);
+    if (liveBase) LastBase.set(vault.gatewayId, liveBase);
     return {
       auth: {
         baseUrl: liveBase ?? cachedBase,
@@ -144,8 +151,20 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
     probeSeatVault(liveBase, { headers: authHeader() }),
     fetchEndpointId(liveBase),
   ]);
-  const gatewayId = endpointId ?? vault?.gatewayId ?? MANUAL_GATEWAY_FALLBACK;
-  Store.set(LAST_BASE, liveBase);
+  // RESOLVE OR REFUSE (#1014, P14, ruling R-1014-11). There is no third
+  // answer: a literal stands in for the gateway id only until a real one
+  // arrives, and then the seat file it named moves — with the member's queued
+  // writes still inside the file nothing will open again.
+  const gatewayId = endpointId ?? vault?.gatewayId;
+  if (!gatewayId) throw new SeatGatewayUnresolvedError();
+  LastBase.set(gatewayId, liveBase);
+  // One-time, and only now that the id is known: a phone that mounted under
+  // the old `"manual"` name keeps its file and its outbox.
+  await migrateManualSeatFiles({
+    gatewayId,
+    vaultId: probe.vaultId,
+    digest: nativeReplicaDigest,
+  });
   await noteActiveIdentity({ gatewayId, vaultId: probe.vaultId });
   return {
     auth: { baseUrl: liveBase, gatewayId, vaultId: probe.vaultId },
