@@ -20,22 +20,29 @@ import { StyleSheet, View } from "react-native";
 
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import { SCAN_HANDOFF_BODY, SCAN_PDF_WITHHELD } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 
 export default function DocsScan({
   navigation,
 }: DocsScreenProps<"DocsScan">): React.JSX.Element {
+  const room = useDocsRoom("more");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <View style={styles.page}>
         <View style={styles.panel}>
           <Text accessibilityRole="header" style={styles.title}>
@@ -60,7 +67,7 @@ export default function DocsScan({
           One capture · lands as an image document with its text
         </Text>
       </View>
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -69,7 +76,7 @@ const makeStyles = (colors: ThemeColors) =>
     action: { alignSelf: "flex-start", marginTop: 8 },
     body: { ...t("body"), color: colors.textSoft },
     caption: { ...t("small"), color: colors.textFaint, paddingTop: 8 },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     panel: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

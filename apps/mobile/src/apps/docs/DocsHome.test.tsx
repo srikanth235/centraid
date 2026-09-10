@@ -40,10 +40,19 @@ vi.mock(
         navigate: (...args: unknown[]) => {
           navigated.calls.push(args);
         },
+        goBack: () => undefined,
         popTo: (...args: unknown[]) => {
           navigated.calls.push(args);
         },
       }),
+      // The room reads the live stack to name the place it descends from
+      // (#1015, B7): a `PlaceRef` can only be computed, never written down.
+      useNavigationState: (
+        selector: (state: {
+          index: number;
+          routes: { name: string }[];
+        }) => unknown
+      ) => selector({ index: 0, routes: [{ name: "DocsHome" }] }),
     }) as never
 );
 
@@ -321,13 +330,15 @@ describe("Docs, on the real React Native host tree", () => {
     seedDocuments([{ id: "d1", title: "Lease agreement" }]);
     const screen = mountDocs();
 
-    fireEvent.press(screen.getByRole("button", { name: "Select documents" }));
+    fireEvent.press(screen.getByRole("button", { name: "Select" }));
 
-    // The head says the mode and the count, and the way out is named.
+    // The head says the mode and the count, and the way out is named. Both
+    // are the ROOM's now (#1015): the screen supplies the noun and the verbs.
     expect(screen.getByText("Choose documents")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
-    // The primary act stands down; the bar owns the verbs.
-    expect(screen.queryByRole("button", { name: "Add a document" })).toBeNull();
+    // The primary act stands down; the foot row owns the verbs.
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Trash" })).toBeTruthy();
     // The set-describing controls go with it.
     expect(screen.queryByRole("button", { name: "Grid view" })).toBeNull();
     // Every band tab is disabled — dimmed on its leaf, not behind a container

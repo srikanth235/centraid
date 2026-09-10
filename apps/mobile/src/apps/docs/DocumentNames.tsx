@@ -18,18 +18,19 @@ import { RAIL_NOTES } from "@centraid/blueprints/apps/docs/document-copy";
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import { namesStatus } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 import { useDocument } from "./useDocs";
 
 export default function DocumentNames({
   route,
   navigation,
 }: DocsScreenProps<"DocumentNames">): React.JSX.Element {
+  const room = useDocsRoom("all");
   const { documentId } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -37,8 +38,14 @@ export default function DocumentNames({
   const { doc, loading } = useDocument(documentId);
 
   return (
-    <DocsScreen current="all">
-      <DocsShelfHeader />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       {loading && !doc ? (
         <SkeletonRows accessibilityLabel="Reading this document" />
       ) : (
@@ -67,7 +74,7 @@ export default function DocumentNames({
           <Text style={styles.status}>{namesStatus(0)}</Text>
         </View>
       )}
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -77,7 +84,7 @@ const makeStyles = (colors: ThemeColors) =>
     body: { ...t("body"), color: colors.textSoft },
     docTitle: { ...t("title"), color: colors.text, paddingBottom: 10 },
     eyebrow: { ...t("eyebrow"), color: colors.textFaint },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     panel: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

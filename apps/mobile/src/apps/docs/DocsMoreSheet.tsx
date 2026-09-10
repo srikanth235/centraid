@@ -23,7 +23,7 @@ import {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { DOCS_MORE_SHEET_ROWS } from "./docs-band";
 import type { DocsMoreRowKey } from "./docs-band";
@@ -107,14 +107,14 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       color: colors.textFaint,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
       paddingVertical: 12,
     },
     head: {
       alignItems: "center",
       flexDirection: "row",
       paddingBottom: 12,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
     },
     headTitle: {
       ...t("smallStrong"),
@@ -128,7 +128,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 12,
       minHeight: 44,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
       paddingVertical: 8,
     },
     rowLabel: {

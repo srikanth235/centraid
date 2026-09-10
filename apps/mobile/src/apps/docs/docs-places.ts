@@ -6,9 +6,9 @@
 // said another. A name a screen types about ANOTHER screen is a copy of a fact
 // it does not own, and it drifted the moment it was written.
 //
-// So the name is derived, never passed: `DocsShelfHeader` titles itself from
-// the route it is on and names its return target from the route beneath it on
-// the stack. Params carry what only the pusher can know — a folder's name, a
+// So the name is derived, never passed: `useDocsRoom` (`docs-room.tsx`) titles
+// the room from the route it is on and mints the back target as a `PlaceRef`
+// from the route beneath it on the stack — a value no screen can write down. Params carry what only the pusher can know — a folder's name, a
 // document's title — exactly as `DocsFolder.folderName` already does, so no
 // header waits a replica round-trip to say where it is.
 

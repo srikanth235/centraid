@@ -22,13 +22,20 @@ import type { MenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import PushedPage from "../../kit/rooms/PushedPage";
 import GrantSheet from "../../kit/share/GrantSheet";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
 import { folderStatus } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
+import { useDocsRoom } from "./docs-room";
 import DriveList from "./DriveList";
 import { useDocs, useDocsWrite } from "./useDocs";
 import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
@@ -36,6 +43,7 @@ import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
 export default function FolderView({
   route,
 }: DocsScreenProps<"DocsFolder">): React.JSX.Element {
+  const room = useDocsRoom("folders");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // The shell's own navigation shape — the same one `useDocsWrite` and
@@ -86,46 +94,45 @@ export default function FolderView({
   };
 
   return (
-    <DocsScreen current="folders">
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to Folders"
-          onPress={() => shellNavigation.goBack()}
-          style={styles.back}
-        >
-          <Icon name="chevron-left" size={22} color={colors.text} />
-        </Pressable>
-        <View style={styles.crumbs}>
-          {leading.map((crumb) => (
-            <Text key={crumb.label} style={styles.crumbText}>
-              {crumb.label}
-              {"  /  "}
-            </Text>
-          ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${liveName} — place menu`}
-            onPress={(event) => {
-              setMenuAnchor({
-                x: event.nativeEvent.pageX,
-                y: event.nativeEvent.pageY,
-                width: 1,
-                height: 1,
-              });
-              setMenuOpen(true);
-            }}
-            style={styles.crumbTrailing}
-          >
-            <Text numberOfLines={1} style={styles.crumbTitle}>
-              {liveName}
-            </Text>
-            <Icon name="ChevronDown" size={14} color={colors.textSoft} />
-          </Pressable>
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={liveName}
+      toolbar={
+        // The crumbs and the folder's own place menu. The back control and
+        // the head are the room's now (#1015, B7): this row carries only what
+        // is specific to a folder — where it sits, and what can be done to it.
+        <View style={styles.header}>
+          <View style={styles.crumbs}>
+            {leading.map((crumb) => (
+              <Text key={crumb.label} style={styles.crumbText}>
+                {crumb.label}
+                {"  /  "}
+              </Text>
+            ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${liveName} — place menu`}
+              onPress={(event) => {
+                setMenuAnchor({
+                  x: event.nativeEvent.pageX,
+                  y: event.nativeEvent.pageY,
+                  width: 1,
+                  height: 1,
+                });
+                setMenuOpen(true);
+              }}
+              style={styles.crumbTrailing}
+            >
+              <Icon name="ChevronDown" size={14} color={colors.textSoft} />
+            </Pressable>
+          </View>
         </View>
-      </View>
-      <ReplicaStatusBar />
-
+      }
+    >
       <DriveList
         shelf={folderShelf(folderId)}
         docs={docs}
@@ -235,7 +242,7 @@ export default function FolderView({
           onStatus={postStatus}
         />
       ) : null}
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -268,7 +275,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       color: colors.text,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     header: {
       alignItems: "center",
@@ -301,7 +308,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       minHeight: 44,
-      paddingHorizontal: 10,
+      paddingHorizontal: spacing[3],
     },
     quietLabel: { ...t("control"), color: colors.textSoft },
     saveButton: {
@@ -310,7 +317,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: radii.md,
       justifyContent: "center",
       minHeight: 44,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     saveLabel: { ...t("control"), color: colors.onAccent },
     scrim: { ...StyleSheet.absoluteFill },

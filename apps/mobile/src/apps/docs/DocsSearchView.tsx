@@ -23,9 +23,17 @@ import { SEARCH_CLEAR } from "@centraid/blueprints/apps/docs/drive-copy";
 import { SEARCH } from "@centraid/blueprints/apps/docs/shelves";
 import { captionFor } from "@centraid/blueprints/apps/docs/view-copy";
 
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
 import {
@@ -113,27 +121,16 @@ export default function DocsSearchView({
 
   return (
     <View style={styles.page}>
-      <View style={styles.fieldRow}>
-        <TextInput
-          accessibilityLabel={MOBILE_SEARCH_LABEL}
-          autoFocus
-          placeholder={MOBILE_SEARCH_PLACEHOLDER}
-          placeholderTextColor={colors.textFaint}
-          value={query}
-          onChangeText={onChangeQuery}
-          style={styles.field}
-        />
-        {query.length > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={SEARCH_CLEAR}
-            onPress={() => onChangeQuery("")}
-            style={styles.clear}
-          >
-            <Text style={styles.clearLabel}>{SEARCH_CLEAR}</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      {/* ONE SEARCH FIELD FOR THE SEAT (#1015, S4): the keyboard contract,
+          the clear control and the placement are the kit's; only the words
+          are Docs'. */}
+      <SearchField
+        accessibilityLabel={MOBILE_SEARCH_LABEL}
+        clearLabel={SEARCH_CLEAR}
+        onChangeText={onChangeQuery}
+        placeholder={MOBILE_SEARCH_PLACEHOLDER}
+        value={query}
+      />
 
       {term.length === 0 ? (
         <View style={styles.reach}>
@@ -192,7 +189,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       minHeight: 44,
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
     },
     clearLabel: {
       ...t("control"),
@@ -207,14 +204,14 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       flex: 1,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     fieldRow: {
       alignItems: "center",
       flexDirection: "row",
       gap: 8,
       paddingBottom: 8,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     idle: {
       ...t("body"),
@@ -239,7 +236,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       marginTop: 4,
       minHeight: 44,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     reachActionLabel: { ...t("control"), color: colors.text },
     reachBody: { ...t("small"), color: colors.textSoft },

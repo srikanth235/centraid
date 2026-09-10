@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { formatRelative } from "../../kit/format";
 import {
   decodeTextDataUri,
   docBytesUrl,
@@ -128,9 +129,15 @@ describe(readStatus, () => {
     expect(readStatus(7, "2026-08-18T10:00:00Z", now)).not.toContain("opened");
   });
 
-  it("editedAgo speaks days and yesterday", () => {
-    expect(editedAgo("2026-08-17T10:00:00Z", now)).toBe("edited yesterday");
-    expect(editedAgo("2026-08-10T10:00:00Z", now)).toBe("edited 8 days ago");
+  // ONE REGISTER FOR THE SEAT (#1015, S8): the clause is `kit/format.ts`'s,
+  // with Docs' own "edited " preposition in front of it. A timed stamp keeps
+  // its time, which is the register Tasks designed and every seat now prints.
+  it("editedAgo speaks the seat's one register", () => {
+    expect(editedAgo("2026-08-17T10:00:00Z", now)).toBe(
+      `edited ${formatRelative("2026-08-17T10:00:00Z", now)}`
+    );
+    expect(editedAgo("2026-08-17T10:00:00Z", now)).toContain("yesterday");
+    expect(editedAgo("2026-08-10T10:00:00Z", now)).toContain("8 days ago");
     expect(editedAgo("not a date", now)).toBe("");
   });
 });
