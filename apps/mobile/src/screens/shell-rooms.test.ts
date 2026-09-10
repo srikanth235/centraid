@@ -41,6 +41,8 @@ const MIGRATED = [
   "apps/mobile/src/apps/insights/GatewayAlerts.tsx",
   "apps/mobile/src/apps/insights/Insights.tsx",
   "apps/mobile/src/screens/Approvals.tsx",
+  "apps/mobile/src/screens/BackupHealth.tsx",
+  "apps/mobile/src/screens/PhoneStorage.tsx",
   "apps/mobile/src/screens/Settings.tsx",
   "apps/mobile/src/screens/SignalNotification.tsx",
   "apps/mobile/src/screens/SystemOnPhone.tsx",
