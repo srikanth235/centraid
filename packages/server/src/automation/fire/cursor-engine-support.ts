@@ -105,6 +105,15 @@ export interface VaultCursorEngineOptions {
   onError?: (err: unknown, ref: string) => void;
   nudgeDelayMs?: number;
   onTick?: (at: Date) => void;
+  /**
+   * The owner's background pause (#528), applied where the WORK is rather
+   * than where the fire is. A paused ref is not processed at all: no cursor
+   * read, no element consumed, no registration dropped — the next tick or
+   * nudge after the pause lifts simply proceeds. The host decides which refs
+   * this covers; `fireAutomation` keeps its own check as the backstop for a
+   * fire that reaches it by another road.
+   */
+  shouldPauseBackground?: (ref: string) => boolean;
   onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   catchUpCap?: number;
   /**

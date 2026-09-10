@@ -8,6 +8,7 @@ import {
   ocrWeightsPresent,
 } from "../src/capabilities/ocr.js";
 import { resolveRuntimeModule } from "../src/onnx.js";
+import { previewUnsupported } from "./preview-status.js";
 
 const BATCH = 16;
 const PROMPT_REV = "ocr-v1";
@@ -247,14 +248,14 @@ async function seedAssetCursor(ctx, model, profile) {
   return stamps.rows?.[0]?.model === model ? asset.asset_id : "";
 }
 
+/** `null` means the display rung has not landed yet — not ready, not failed. */
 async function deterministicRegions(ctx, asset) {
   const content = await ctx.vault.content({
     contentId: asset.content_id,
     variant: "preview",
     maxBytes: 4 * 1024 * 1024,
   });
-  if (content?.status !== "ok" || content.kind !== "bytes")
-    throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
+  if (content?.status !== "ok" || content.kind !== "bytes") return null;
   const result = await recognizeOne({
     id: asset.content_id,
     bytes: content.base64,
@@ -318,6 +319,14 @@ export default async function handler({ ctx, log }) {
   );
   let derived = 0;
   let skipped = 0;
+  let notReady = 0;
+  // This handler walks one ordered cursor and has no second sweep that would
+  // come back for a skipped row, so the watermark parks on the last asset
+  // before the first unready one instead of advancing past it (#1011). Note
+  // the batch is read over ALL assets and then filtered to photos/scans, so
+  // the watermark tracks the raw read rows, not the filtered ones.
+  let watermark = "";
+  const unreadyAssets = new Set();
   for (const asset of assets) {
     const stamps = await ctx.vault.read({
       entity: "enrich.derivation",
@@ -346,6 +355,7 @@ export default async function handler({ ctx, log }) {
       skipped += 1;
       continue;
     }
+    let assetNotReady = false;
     let regions;
     if (delegateStep) {
       const answer = await ctx.delegate({
@@ -373,6 +383,25 @@ export default async function handler({ ctx, log }) {
       regions = canonicalRegions(answer, asset.width, asset.height);
     } else {
       regions = await deterministicRegions(ctx, asset);
+      if (regions === null) {
+        // Pending parks; DECLINED does not. An original the codec refused
+        // carries the vault's durable marker and will never have a rung, so
+        // parking behind it would freeze the watermark for good (#1011).
+        if (await previewUnsupported(ctx, asset.content_id)) {
+          skipped += 1;
+          log.info(
+            `photo ${asset.asset_id}: no preview this codec can produce`
+          );
+          continue;
+        }
+        notReady += 1;
+        assetNotReady = true;
+        log.info(`photo ${asset.asset_id}: preview has not landed yet`);
+      }
+    }
+    if (assetNotReady) {
+      unreadyAssets.add(asset.asset_id);
+      continue;
     }
     const text = readingOrder(regions);
     if (!text) {
@@ -405,13 +434,17 @@ export default async function handler({ ctx, log }) {
     });
     derived += 1;
   }
-  const last = read.rows?.at(-1)?.asset_id;
-  if (last) await ctx.state.set("cursor", last);
+  for (const row of read.rows ?? []) {
+    if (unreadyAssets.has(row.asset_id)) break;
+    watermark = row.asset_id;
+  }
+  if (watermark) await ctx.state.set("cursor", watermark);
   return {
-    summary: `OCR derived ${derived}; skipped ${skipped}; batch ${read.rows?.length ?? 0}/${BATCH}`,
+    summary: `OCR derived ${derived}; skipped ${skipped}; not ready ${notReady}; batch ${read.rows?.length ?? 0}/${BATCH}`,
     output: {
       derived,
       skipped,
+      notReady,
       model: delegateStep
         ? ((await ctx.state.get("confirmedModel")) ?? pinnedModel)
         : pinnedModel,

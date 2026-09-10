@@ -11,7 +11,11 @@ import type {
   BlobContentKeyRegistry,
   DeviceWrappedContentKey,
 } from "./content-keys.js";
+import { createRemoteBlobStream } from "./custody-remote-stream.js";
 import type { CustodyState, RemoteTier } from "./custody-types.js";
+import { sniffMediaType } from "./pipeline.js";
+import { INGRESS_PREVIEW_MAX_BYTES } from "./preview.js";
+import type { IngressPreviewInput } from "./preview.js";
 import type { MultipartPart } from "./remote-transfer.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import { recordKnownStagedBlob } from "./staging-record.js";
@@ -100,6 +104,7 @@ export interface DirectBlobTransferDeps {
     mediaType?: string;
     contentId?: string;
   }>;
+  contributePreview?: (input: IngressPreviewInput) => void;
   emit: () => void;
 }
 
@@ -458,8 +463,72 @@ export class DirectBlobTransfers {
       ...(row.original_name ? { filename: row.original_name } : {}),
       ...(row.staged_by ? { stagedBy: row.staged_by } : {}),
     });
+    await this.contributeIngressPreview(remote, row, byteSize);
     this.deps.emit();
     return { ...staged, casAck: "replicated", custody: "remote-only" };
+  }
+
+  /**
+   * The direct path's display rungs (#405). Unlike every streamed ingress
+   * door, the gateway NEVER sees plaintext here: the phone seals at the edge
+   * and PUTs straight to the provider, and `/parts/N` carries only an ETag.
+   * So there is nothing to spool per part — the one honest moment is right
+   * after custody is proven, where the sealed object is read back through the
+   * same verified stream a custody read uses and handed to the shared
+   * contributor. Bounded exactly like the streamed doors (an `image/*`
+   * declaration and `INGRESS_PREVIEW_MAX_BYTES`), best-effort throughout: a
+   * refusal leaves the item backfillable by the sweep, never unsettled.
+   */
+  private async contributeIngressPreview(
+    remote: RemoteTier,
+    row: IngressSessionRow,
+    byteSize: number
+  ): Promise<void> {
+    const contribute = this.deps.contributePreview;
+    if (!contribute || byteSize <= 0 || byteSize > INGRESS_PREVIEW_MAX_BYTES)
+      return;
+    const declared = sniffMediaType(
+      Buffer.alloc(0),
+      row.media_type ?? undefined,
+      row.original_name ?? undefined
+    );
+    if (!declared.startsWith("image/")) return;
+    const sha = row.expected_sha256!;
+    try {
+      const stream = createRemoteBlobStream(
+        remote,
+        remote.store,
+        sha,
+        byteSize
+      );
+      if (!stream) return;
+      const chunks: Buffer[] = [];
+      let received = 0;
+      for await (const chunk of stream) {
+        received += (chunk as Buffer).length;
+        if (received > INGRESS_PREVIEW_MAX_BYTES) {
+          stream.destroy();
+          return;
+        }
+        chunks.push(chunk as Buffer);
+      }
+      const bytes = Buffer.concat(chunks, received);
+      const mediaType = sniffMediaType(
+        bytes,
+        row.media_type ?? undefined,
+        row.original_name ?? undefined
+      );
+      if (!mediaType.startsWith("image/")) return;
+      contribute({
+        sha256: sha,
+        bytes,
+        mediaType,
+        ...(row.staged_by ? { stagedBy: row.staged_by } : {}),
+      });
+    } catch {
+      // Custody is already settled; a failed read only defers the rungs to the
+      // sweep backstop.
+    }
   }
 
   async download(

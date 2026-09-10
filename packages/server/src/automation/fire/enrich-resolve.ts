@@ -95,16 +95,37 @@ export type ResolveEnrichPolicy = (
   | EnrichTier
   | undefined;
 
-/** ONE capability's chain, least-specific first; `undefined` = refuse. */
+/**
+ * ONE capability's chain, least-specific first; `undefined` = refuse.
+ *
+ * SYSTEM PROVENANCE CHANGES THE FLOOR, NOT THE CEILING (`options.system`). For a
+ * first-party system automation the only decision left to the member is the
+ * CLOUD tier: egress leaves their trust domain and needs consent, while
+ * on-device work over their own bytes on their own gateway needs none. So an
+ * unwritten policy resolves to enabled-on-device instead of a refusal. Every
+ * rule the member did write still applies, and the egress ceiling is untouched
+ * — a system automation gets no wider reach than any other.
+ */
 export function resolveEnrichmentPolicy(
   rules: readonly EnrichPolicyRule[],
   legacyTier: EnrichTier | undefined,
-  capability: string
+  capability: string,
+  options?: { readonly system?: boolean }
 ): ResolvedEnrichPolicy | undefined {
+  const system = options?.system === true;
   const mine = rules.filter((rule) => rule.capability === capability);
-  if (legacyTier === undefined && mine.length === 0) return undefined;
+  if (legacyTier === undefined && mine.length === 0) {
+    if (!system) return undefined;
+    return {
+      capability,
+      enabled: true,
+      profileId: BUILT_IN_PROFILE,
+      trigger: DEFAULT_ENRICH_TRIGGER,
+      egressCeiling: "on-device",
+    };
+  }
 
-  let enabled = legacyTier === undefined ? false : legacyTier !== "off";
+  let enabled = legacyTier === undefined ? system : legacyTier !== "off";
   const egressCeiling: EnrichEgressCeiling =
     legacyTier === undefined ? "on-device" : tierEgressCeiling(legacyTier);
   let profileId = BUILT_IN_PROFILE;

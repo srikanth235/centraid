@@ -62,7 +62,13 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // `distinct-from`) between the two imported rows — so Tally declares the
       // link scopes that judgment is written through. The same manifest change
       // moved Tally's shape id in `replica-shape-parity.test.ts`.
-      declaredScopes: 292,
+      // 292 → 294 (#1011): two scopes a handler was already exercising and the
+      // manifest did not name, each caught by a live fire rather than by
+      // reading — `embed-image` reads `core.content_item`, and
+      // `doc-text-extractor` reads the `enrich.request` queue that tells it
+      // which document to do first. Both are reads the handler always made;
+      // declaring them narrows the gap between the manifest and the truth.
+      declaredScopes: 294,
     });
   });
 

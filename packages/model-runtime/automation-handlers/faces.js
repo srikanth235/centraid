@@ -4,6 +4,7 @@ import {
   faces,
   facesWeightsPresent,
 } from "../src/capabilities/faces.js";
+import { previewUnsupported } from "./preview-status.js";
 
 const BATCH = 16;
 let infer = faces;
@@ -40,14 +41,29 @@ async function deriveAsset(ctx, asset, model) {
     limit: 1,
   });
   if (stamps.rows?.[0]?.model === model)
-    return { settled: true, derived: 0, skipped: 1 };
+    return { settled: true, derived: 0, skipped: 1, notReady: 0 };
   const content = await ctx.vault.content({
     contentId: asset.content_id,
     variant: "preview",
     maxBytes: 4 * 1024 * 1024,
   });
-  if (content?.status !== "ok" || content.kind !== "bytes")
-    throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
+  // A display rung that has not landed yet is NOT a failure. Ingest
+  // contributes the rungs and the sweep backstops them, so the honest answer
+  // is "come back later": no `enrich_derivation` stamp is written, the asset
+  // stays eligible, and the rest of the batch proceeds. Throwing here failed
+  // the whole turn on the FIRST unready asset and, because the walk is
+  // ordered, stalled every later one on every subsequent tick (#1011).
+  //
+  // PENDING and UNSUPPORTED part company here. An original the codec declined
+  // outright carries the vault's durable marker, and parking behind it would
+  // stall the walk FOREVER rather than for a tick — so it is skipped and the
+  // cursor moves past it. No stamp is written: this recipe never looked at the
+  // photograph, and a `{count: 0}` faces stamp would claim it did.
+  if (content?.status !== "ok" || content.kind !== "bytes") {
+    if (await previewUnsupported(ctx, asset.content_id))
+      return { settled: true, derived: 0, skipped: 1, notReady: 0 };
+    return { settled: false, derived: 0, skipped: 0, notReady: 1 };
+  }
   const result = await infer({
     id: asset.asset_id,
     bytes: content.base64,
@@ -64,7 +80,7 @@ async function deriveAsset(ctx, asset, model) {
     command: "enrich.upsert_faces",
     input: { asset_id: asset.asset_id, model, faces: result.faces },
   });
-  return { settled: true, derived: 1, skipped: 0 };
+  return { settled: true, derived: 1, skipped: 0, notReady: 0 };
 }
 
 async function seedConsentCursor(ctx, model) {
@@ -134,10 +150,17 @@ export default async function handler({ ctx }) {
   });
   let derived = 0;
   let skipped = 0;
+  let notReady = 0;
   let remaining = BATCH;
   let rearm = (requests.rows?.length ?? 0) === BATCH;
   const drained = [];
   const processed = new Set();
+  // Assets this turn found without a preview. A cursor pass must NOT advance
+  // past one: the prior-stamp sweep only revisits assets that already carry a
+  // faces stamp, and an unready asset writes none — advancing would drop it
+  // from every future walk. So each pass parks its watermark on the last
+  // asset before the first unready one and re-reads from there next tick.
+  const unready = new Set();
 
   for (const request of requests.rows ?? []) {
     if (remaining === 0) {
@@ -154,9 +177,13 @@ export default async function handler({ ctx }) {
       }
       const result = await deriveAsset(ctx, asset, model);
       processed.add(asset.asset_id);
+      if (result.notReady) unready.add(asset.asset_id);
       derived += result.derived;
       skipped += result.skipped;
+      notReady += result.notReady;
       remaining -= 1;
+      // An unready target leaves its request undrained, so the queue itself
+      // carries the retry.
       if (result.settled) drained.push(request.request_id);
       continue;
     }
@@ -174,16 +201,24 @@ export default async function handler({ ctx }) {
       orderBy: { column: "asset_id", dir: "asc" },
       limit: capacity,
     });
+    let watermark = "";
+    let parked = false;
     for (const asset of assets.rows ?? []) {
       const result = await deriveAsset(ctx, asset, model);
       processed.add(asset.asset_id);
       derived += result.derived;
       skipped += result.skipped;
+      notReady += result.notReady;
       remaining -= 1;
+      if (result.notReady) {
+        unready.add(asset.asset_id);
+        parked = true;
+      } else if (!parked) watermark = asset.asset_id;
     }
-    const last = assets.rows?.at(-1)?.asset_id;
-    if (last) await ctx.state.set(key, last);
-    if ((assets.rows?.length ?? 0) < capacity) drained.push(request.request_id);
+    if (watermark) await ctx.state.set(key, watermark);
+    // A parked pass is not drained: this request still owes those assets.
+    if (!parked && (assets.rows?.length ?? 0) < capacity)
+      drained.push(request.request_id);
     else rearm = true;
   }
 
@@ -199,23 +234,34 @@ export default async function handler({ ctx }) {
       orderBy: { column: "target_id", dir: "asc" },
       limit: capacity,
     });
+    let watermark = "";
+    let parked = false;
     for (const stamp of stamps.rows ?? []) {
-      if (processed.has(stamp.target_id)) continue;
+      if (processed.has(stamp.target_id)) {
+        if (unready.has(stamp.target_id)) parked = true;
+        else if (!parked) watermark = stamp.target_id;
+        continue;
+      }
       const asset = await assetById(ctx, stamp.target_id);
       if (!asset) {
         skipped += 1;
+        if (!parked) watermark = stamp.target_id;
         continue;
       }
       const result = await deriveAsset(ctx, asset, model);
       processed.add(asset.asset_id);
       derived += result.derived;
       skipped += result.skipped;
+      notReady += result.notReady;
       // One batch budget across all three passes: whatever the priority lanes
       // spend is not available to the ambient walk below.
       remaining -= 1;
+      if (result.notReady) {
+        unready.add(asset.asset_id);
+        parked = true;
+      } else if (!parked) watermark = stamp.target_id;
     }
-    const last = stamps.rows?.at(-1)?.target_id;
-    if (last) await ctx.state.set("consentCursor", last);
+    if (watermark) await ctx.state.set("consentCursor", watermark);
     if ((stamps.rows?.length ?? 0) === capacity) rearm = true;
   }
 
@@ -236,16 +282,26 @@ export default async function handler({ ctx }) {
       orderBy: { column: "asset_id", dir: "asc" },
       limit: capacity,
     });
+    let watermark = "";
+    let parked = false;
     for (const asset of read.rows ?? []) {
-      if (processed.has(asset.asset_id)) continue;
+      if (processed.has(asset.asset_id)) {
+        if (unready.has(asset.asset_id)) parked = true;
+        else if (!parked) watermark = asset.asset_id;
+        continue;
+      }
       const result = await deriveAsset(ctx, asset, model);
       processed.add(asset.asset_id);
       derived += result.derived;
       skipped += result.skipped;
+      notReady += result.notReady;
       remaining -= 1;
+      if (result.notReady) {
+        unready.add(asset.asset_id);
+        parked = true;
+      } else if (!parked) watermark = asset.asset_id;
     }
-    const last = read.rows?.at(-1)?.asset_id;
-    if (last) await ctx.state.set("cursor", last);
+    if (watermark) await ctx.state.set("cursor", watermark);
     if ((read.rows?.length ?? 0) === capacity) rearm = true;
   }
 
@@ -260,7 +316,14 @@ export default async function handler({ ctx }) {
       input: {},
     });
   return {
-    summary: `faces derived ${derived}; skipped ${skipped}; request queue batch ${requests.rows?.length ?? 0}/${BATCH}`,
-    output: { derived, skipped, drained: drained.length, model, rearm },
+    summary: `faces derived ${derived}; skipped ${skipped}; not ready ${notReady}; request queue batch ${requests.rows?.length ?? 0}/${BATCH}`,
+    output: {
+      derived,
+      skipped,
+      notReady,
+      drained: drained.length,
+      model,
+      rearm,
+    },
   };
 }

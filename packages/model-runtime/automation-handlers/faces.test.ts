@@ -19,7 +19,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import handler, { setFacesRuntimeForTests } from "./faces.js";
 import { bytesContent, createHarness } from "./handler-harness.js";
 
-const MODEL = "yunet-sface@1";
+const MODEL = "yunet-arcface@1";
 const FACES = [{ box: [1, 2, 3, 4], embedding: [0.5] }];
 
 function asset(id: string): Record<string, unknown> {
@@ -44,6 +44,16 @@ function request(id: string, targetId: string | null): Record<string, unknown> {
 
 function stamp(targetId: string, model: string): Record<string, unknown> {
   return { target_id: targetId, variant: "faces", model };
+}
+
+/** The vault's durable "this codec cannot preview that original" marker. */
+function previewUnsupportedStamp(contentId: string): Record<string, unknown> {
+  return {
+    target_id: contentId,
+    variant: "preview",
+    capability: "previews",
+    model: "preview-codec@1",
+  };
 }
 
 function previews(
@@ -365,6 +375,109 @@ describe("faces handler", () => {
           (entry) => entry.command === "enrich.upsert_faces"
         )
       ).toHaveLength(1);
+    });
+  });
+
+  // #1011: an asset whose display rung has not landed yet is NOT ready, and
+  // "not ready" is neither a failure nor a stamp — the ambient walk parks its
+  // watermark behind it so the next tick comes back for it.
+  describe("an asset whose preview has not landed", () => {
+    it("skips it without stamping and parks the ambient cursor behind it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [],
+        },
+        // a2 has no preview: a1 lands, a2 parks, a3 still runs this fire.
+        content: previews(["a1", "a3"]),
+        state: { model: MODEL, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 0,
+        notReady: 1,
+      });
+      expect(result.summary).toContain("not ready 1");
+      // Parked on the last asset BEFORE the unready one, so a2 is re-read.
+      expect(harness.state.get("cursor")).toBe("a1");
+      expect(
+        harness.invokes.filter(
+          (entry) => entry.command === "enrich.upsert_faces"
+        )
+      ).toHaveLength(2);
+    });
+
+    it("leaves a targeted request undrained so the queue carries the retry", async () => {
+      const harness = createHarness({
+        entities: {
+          "enrich.request": [request("r1", "a1")],
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [],
+        },
+        content: {},
+        state: { model: MODEL, cursor: "", consentCursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({ notReady: 1, drained: 0 });
+      expect(
+        harness.invokes.filter(
+          (entry) => entry.command === "enrich.mark_requests_drained"
+        )
+      ).toStrictEqual([]);
+    });
+
+    // #1011's other half. A preview that is not late but IMPOSSIBLE — a HEIC no
+    // codec generation in service can decode — used to park the ambient cursor
+    // in front of it on every tick, so the library behind it was never walked.
+    it("skips an original the codec declined and walks past it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [previewUnsupportedStamp("c-a2")],
+        },
+        content: previews(["a1", "a3"]),
+        state: { model: MODEL, consentCursor: "zzz", cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 1,
+        notReady: 0,
+      });
+      expect(harness.state.get("cursor")).toBe("a3");
+      // No faces stamp for the declined asset: this recipe never saw it.
+      expect(
+        harness.invokes
+          .filter((entry) => entry.command === "enrich.upsert_faces")
+          .map((entry) => (entry.input as { asset_id: string }).asset_id)
+      ).toStrictEqual(["a1", "a3"]);
+    });
+
+    it("drains a targeted request for a declined original instead of retrying it", async () => {
+      const harness = createHarness({
+        entities: {
+          "enrich.request": [request("r1", "a1")],
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [previewUnsupportedStamp("c-a1")],
+        },
+        content: {},
+        state: { model: MODEL, cursor: "", consentCursor: "zzz" },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      expect(result.output).toMatchObject({
+        skipped: 1,
+        notReady: 0,
+        drained: 1,
+      });
     });
   });
 });

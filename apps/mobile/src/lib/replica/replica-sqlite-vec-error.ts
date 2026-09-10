@@ -1,21 +1,19 @@
 /**
  * Thrown when the expo-sqlite build was compiled without sqlite-vec (#721:
- * vector search over photo embeddings). Mirrors
- * `ReplicaFts5UnavailableError` — same shape, same reason a build can be
- * missing the extension (`withSQLiteVecExtension` on the expo-sqlite plugin
- * block; 57.0.2 pre-bundles `vec.so` for Android and no `vec.xcframework`, so
- * iOS gets its framework from `scripts/build-sqlite-vec-ios.sh` at build
- * time), same instinct to fail loud with the exact fix rather than crashing
- * opaquely mid-query.
+ * vector search over face embeddings). Mirrors `ReplicaFts5UnavailableError` —
+ * same shape, same reason a build can be missing the extension
+ * (`withSQLiteVecExtension` on the expo-sqlite plugin block; 57.0.2
+ * pre-bundles `vec.so` for Android and no `vec.xcframework`, so iOS gets its
+ * framework from `scripts/build-sqlite-vec-ios.sh` at build time), same
+ * instinct to fail loud with the exact fix rather than crashing opaquely
+ * mid-query.
  *
- * UNLIKE `ReplicaFts5UnavailableError`, nothing throws this today. FTS5 gates
- * the replica store's own bootstrap (`ExpoSqliteDriver#assertCapabilities`)
- * because every replica needs it from the first read; sqlite-vec has no
- * consumer yet, so nothing calls `ExpoSqliteDriver#probeSqliteVec` — see that
- * method's own comment for why a build compiled before pods/gradle picked up
- * `sqliteVec: true` must still open. This class exists so the future
- * consumer has one error to throw, rather than inventing its own the day it
- * lands.
+ * It is thrown from `ExpoSeatDriver.open`, beside the FTS5 probe: the phone's
+ * two offline search lanes are keyword (fts5) and people/similar faces
+ * (`vec_distance_cosine` over the replicated face vectors), both answered out
+ * of the seat's own file, so a seat that cannot serve one of them is a seat
+ * that opened into a half-working app. Finding that out at open, with the
+ * build flag named, is cheaper than finding it out inside a query.
  */
 export class ReplicaSqliteVecUnavailableError extends Error {
   constructor() {

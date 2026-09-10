@@ -422,9 +422,22 @@ class PhotoTimelineEngine {
       this.#recomputeTimer = undefined;
     }
     const base = this.#gatewayBase;
+    const scope = this.#session?.scope?.();
+    // AN ABSENT ANSWER IS NOT A REFUSAL (#1011). `kit/replica/row-provenance.ts`
+    // states it for every app on the phone: a row with no stamp is writable,
+    // because a session that has not said which vault it holds — a test
+    // session, or a mount whose scope has not landed yet — has not said no.
+    // Only a vault that answers `canWrite: false` locks these rows.
+    const canWrite = scope?.canWrite !== false;
     const deviceWithQueue = this.#deviceRows.map((asset) => {
-      const upload = this.#uploadByUri.get(asset.originalUri);
-      if (!upload) return asset;
+      // A CAMERA-ROLL ROW CARRIES THE SAME ANSWER. It is not in the vault yet,
+      // so the write it refuses is refused for want of a vault row (the
+      // lightbox says so); it is not the read-only-vault sentence, which would
+      // be a lie on the owner's own phone.
+      const stamped =
+        asset.canWrite === canWrite ? asset : { ...asset, canWrite };
+      const upload = this.#uploadByUri.get(stamped.originalUri);
+      if (!upload) return stamped;
       const backupState: BackupState =
         upload.state === "settled"
           ? "backed-up"
@@ -432,7 +445,7 @@ class PhotoTimelineEngine {
             ? "uploading"
             : "queued";
       return {
-        ...asset,
+        ...stamped,
         sha256: upload.sha256,
         backupState,
         verifiedCasAck:
@@ -440,7 +453,6 @@ class PhotoTimelineEngine {
       };
     });
 
-    const scope = this.#session?.scope?.();
     const remote = this.#libraryRows.map<PhotoAsset>((row) => {
       const kind = (row.kind ?? "photo") as PhotoAsset["kind"];
       const scopeId = scope?.vaultId ?? "";
@@ -489,8 +501,8 @@ class PhotoTimelineEngine {
         // one file, so the answer is the session's own scope for every row.
         scopeIds: scopeId ? [scopeId] : [],
         scopeLabels: [scope?.label ?? "Vault"],
-        writableScopeIds: scope?.canWrite && scopeId ? [scopeId] : [],
-        canWrite: scope?.canWrite ?? false,
+        writableScopeIds: canWrite && scopeId ? [scopeId] : [],
+        canWrite,
       };
     });
 

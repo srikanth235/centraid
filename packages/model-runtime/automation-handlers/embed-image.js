@@ -4,6 +4,7 @@ import {
   embedImage,
   embedWeightsPresent,
 } from "../src/capabilities/embed.js";
+import { previewUnsupported } from "./preview-status.js";
 
 const BATCH = 16;
 let infer = embedImage;
@@ -65,9 +66,17 @@ export default async function handler({ ctx, log }) {
   });
   let derived = 0;
   let skipped = 0;
+  let notReady = 0;
+  // The cursor parks on the last asset before the first one whose preview has
+  // not landed. This handler has exactly one walk and no prior-stamp sweep, so
+  // advancing past an unready asset would drop it from every future tick —
+  // there is nothing else that would come back for it (#1011).
+  let watermark = "";
+  let parked = false;
   for (const asset of read.rows ?? []) {
     if (asset.kind !== "photo" && asset.kind !== "scan") {
       skipped += 1;
+      if (!parked) watermark = asset.asset_id;
       continue;
     }
     const stamps = await ctx.vault.read({
@@ -80,6 +89,7 @@ export default async function handler({ ctx, log }) {
     });
     if (stamps.rows?.[0]?.model === model) {
       skipped += 1;
+      if (!parked) watermark = asset.asset_id;
       continue;
     }
     const content = await ctx.vault.content({
@@ -87,8 +97,23 @@ export default async function handler({ ctx, log }) {
       variant: "preview",
       maxBytes: 4 * 1024 * 1024,
     });
-    if (content?.status !== "ok" || content.kind !== "bytes")
-      throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
+    // Not ready, not failed: no embedding is stamped, the asset stays
+    // eligible, the cursor parks behind it, and the batch continues. An
+    // original the codec DECLINED is the other case — its rung is never
+    // coming, so parking behind it would stall this walk forever. It is
+    // skipped and the watermark advances past it (#1011).
+    if (content?.status !== "ok" || content.kind !== "bytes") {
+      if (await previewUnsupported(ctx, asset.content_id)) {
+        skipped += 1;
+        if (!parked) watermark = asset.asset_id;
+        log.info(`asset ${asset.asset_id}: no preview this codec can produce`);
+        continue;
+      }
+      notReady += 1;
+      parked = true;
+      log.info(`asset ${asset.asset_id}: preview has not landed yet`);
+      continue;
+    }
     const result = await infer({
       id: asset.asset_id,
       mediaType: content.mediaType,
@@ -96,6 +121,7 @@ export default async function handler({ ctx, log }) {
     });
     if (!result || result.error || !Array.isArray(result.vector)) {
       skipped += 1;
+      if (!parked) watermark = asset.asset_id;
       log.info(`asset ${asset.asset_id}: no image vector`);
       continue;
     }
@@ -110,14 +136,15 @@ export default async function handler({ ctx, log }) {
       },
     });
     derived += 1;
+    if (!parked) watermark = asset.asset_id;
   }
-  const last = read.rows?.at(-1)?.asset_id;
-  if (last) await ctx.state.set("cursor", last);
+  if (watermark) await ctx.state.set("cursor", watermark);
   return {
-    summary: `embedded ${derived} images; skipped ${skipped}; bounded batch ${read.rows?.length ?? 0}/${BATCH}`,
+    summary: `embedded ${derived} images; skipped ${skipped}; not ready ${notReady}; bounded batch ${read.rows?.length ?? 0}/${BATCH}`,
     output: {
       derived,
       skipped,
+      notReady,
       model,
       rearm: (read.rows?.length ?? 0) === BATCH,
     },

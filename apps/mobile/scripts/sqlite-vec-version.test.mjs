@@ -22,6 +22,17 @@ const repoRoot = path.resolve(mobileRoot, "..", "..");
  * package.json says nothing about it.
  */
 const TAG_LINE = /^TAG="(?<tag>v[^"]+)"$/mu;
+/**
+ * The runtime constant, read as text because this file is a plain `.mjs` and
+ * the module it lives in is TypeScript. It is the third statement of the same
+ * version: the shell script's TAG builds iOS, Expo's `.so` is Android, and
+ * `EXPECTED_SQLITE_VEC_VERSION` is what `ExpoSeatDriver.open` demands of the
+ * extension the shell actually loaded. The GATEWAY's pin is a different
+ * number on purpose — `sqlite-vec@0.1.9` in `packages/server/package.json` —
+ * and the constant's own comment says why.
+ */
+const CONSTANT_LINE =
+  /^export const EXPECTED_SQLITE_VEC_VERSION = "(?<version>v[^"]+)";$/mu;
 const VERSION = /v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?/gu;
 
 describe("sqlite-vec version agreement", () => {
@@ -32,6 +43,16 @@ describe("sqlite-vec version agreement", () => {
     );
     const tag = TAG_LINE.exec(script)?.groups?.tag;
     expect(tag, "build-sqlite-vec-ios.sh must pin a TAG").toBeTruthy();
+
+    const constantSource = await readFile(
+      path.join(mobileRoot, "src", "lib", "replica", "sqlite-vec-version.ts"),
+      "utf8"
+    );
+    const expected = CONSTANT_LINE.exec(constantSource)?.groups?.version;
+    expect(
+      expected,
+      "sqlite-vec-version.ts must export EXPECTED_SQLITE_VEC_VERSION"
+    ).toBe(tag);
 
     // latin1 so every byte of the ELF maps to a character; the version is an
     // ASCII string in .rodata either way.
@@ -53,5 +74,27 @@ describe("sqlite-vec version agreement", () => {
       versions,
       "expo-sqlite's bundled vec.so states exactly one version"
     ).toEqual([tag]);
+  });
+
+  test("the gateway's own pin is recorded where the phone's constant is", async () => {
+    // Not an agreement check — the two planes are deliberately on different
+    // versions. What must not drift is the RECORD of the gateway's pin: a
+    // constant naming a version the server no longer uses is worse than no
+    // comment at all.
+    const serverManifest = JSON.parse(
+      await readFile(
+        path.join(repoRoot, "packages", "server", "package.json"),
+        "utf8"
+      )
+    );
+    const pin = serverManifest.dependencies["sqlite-vec"];
+    expect(pin, "packages/server pins sqlite-vec").toBeTruthy();
+    const constantSource = await readFile(
+      path.join(mobileRoot, "src", "lib", "replica", "sqlite-vec-version.ts"),
+      "utf8"
+    );
+    expect(constantSource).toContain(
+      `sqlite-vec@${pin.replace(/^[\^~]/u, "")}`
+    );
   });
 });

@@ -16,6 +16,7 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
+  SYSTEM_AUTOMATION_REFS,
   SYSTEM_RECOGNITION_REFS,
   isSystemRecognitionRef,
 } from "../enrich/system-recognition.ts";
@@ -200,14 +201,23 @@ describe("serve-scheduler-reconcile scenarios", () => {
     // The publish's onAppLive reconciled the scheduler with the new row.
     await waitFor(() => reconcileCalls.length > baseline);
     const last = reconcileCalls.at(-1)!;
-    // The recognition lane is armed on every boot — every bundled recipe ships
-    // enabled — so the row this publish added is what distinguishes the call.
+    // The SYSTEM tier is armed on every boot from the catalogue (#1011), so the
+    // row this publish added is what distinguishes the call. The
+    // bundled-OPTIONAL recipes ship off and hold no registration until the
+    // member turns one on — asserted here so "armed" cannot quietly widen back
+    // to "every bundled recipe".
     expect(
       last.rows.map((r) => r.ref).filter((ref) => !isSystemRecognitionRef(ref))
     ).toStrictEqual(["brief/brief"]);
     expect(last.rows.map((r) => r.ref)).toStrictEqual(
-      expect.arrayContaining([...SYSTEM_RECOGNITION_REFS])
+      expect.arrayContaining([...SYSTEM_AUTOMATION_REFS])
     );
+    const optional = SYSTEM_RECOGNITION_REFS.filter(
+      (ref) => !SYSTEM_AUTOMATION_REFS.includes(ref)
+    );
+    expect(
+      last.rows.map((r) => r.ref).filter((ref) => optional.includes(ref))
+    ).toStrictEqual([]);
     // The gateway started its scheduler exactly once, on boot.
     expect(started).toBe(1);
   });

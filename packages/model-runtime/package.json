@@ -10,8 +10,18 @@
     "directory": "packages/model-runtime"
   },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "build:automations": "bun run build-automation-handlers.ts",
+    "clean": "rm -rf dist",
     "format": "oxfmt -c ../../oxfmt.config.ts --disable-nested-config --write .",
     "lint": "oxlint -c ../../oxlint.config.ts --disable-nested-config --deny-warnings .",
     "setup": "bun run setup.ts",

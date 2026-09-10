@@ -106,8 +106,11 @@ export function installWorkerSandbox(
   const confinedFsUrl = siblingUrl("confined-fs");
   const confinedFsPromisesUrl = siblingUrl("confined-fs-promises");
 
+  // No confined roots for `"denied"` (fs is refused outright) and none for
+  // `"unrestricted"` (the system lane resolves the REAL `node:fs`, so the
+  // mirror is never reached).
   setConfinedReadRoots(
-    policy.filesystem === "denied" ? [] : policy.filesystem.readRoots
+    typeof policy.filesystem === "string" ? [] : policy.filesystem.readRoots
   );
 
   /** `format` must be `module-typescript` for a `.ts` mirror: this hook

@@ -25,6 +25,7 @@ import { NativeMultiplexChangeFeed } from "../../lib/replica/native-multiplex-ch
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
+import { describeSyncError } from "../../lib/replica/seat-sync-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import {
@@ -41,6 +42,7 @@ import {
 } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
+import { mountFailureValue } from "./mount-failure";
 import { planMount } from "./mount-plan";
 import {
   createBootstrapTracker,
@@ -325,13 +327,21 @@ export function ReplicaProvider({
           storageLocation,
         });
         if (!openedSeat) {
-          // No durable directory on this host: there is no file to hold a copy
-          // or a queue in, so there is no session to open either.
-          publish((value) => ({
-            ...value,
-            ready: true,
-            error: "This phone has no storage for an offline copy.",
-          }));
+          // No durable directory, or a file that would not open: nothing
+          // holds a copy or a queue, so there is no session either.
+          //
+          // `setBuilt`, NOT `publish` (#1011) — `publish` patches an entry for
+          // this mount key that does not exist yet, so this branch announced
+          // nothing and the provider kept `REPLICA_LOADING` for the life of
+          // the app: a paired phone drawing skeletons, silently.
+          setBuilt({
+            mountKey,
+            value: mountFailureValue({
+              reachability: "device-offline",
+              refresh: async () => setRetryNonce((current) => current + 1),
+              error: "This phone has no storage for an offline copy.",
+            }),
+          });
           return;
         }
         looseSeats.push(openedSeat);
@@ -481,10 +491,22 @@ export function ReplicaProvider({
             // data that was never fetched.
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome?.landed === true;
-            connected = landed || policyBlocked;
+            // THE PULL'S VERDICT IS NOT THE SESSION'S CONNECTIVITY ORACLE
+            // (#1011). `connected` gates whether the session may TRY, and it
+            // was overwritten with whether the last try SUCCEEDED: one
+            // transient failure latched it false, only a radio event raises it
+            // again, and the phone stopped asking for log pages at all — an
+            // empty library over a full vault, for the life of the mount. The
+            // `/info` answer in this same pass is what earns "reachable"
+            // (docs/traps/unreachable-vault.md); the pull's verdict still
+            // settles what the member is SHOWN, below.
+            connected = liveBase !== undefined;
             if (!landed)
               console.error(
-                `[centraid] replica: pull did not land — blocked=${policyBlocked}`
+                `[centraid] replica: pull did not land — blocked=${policyBlocked}` +
+                  (session?.lastSyncError === undefined
+                    ? ""
+                    : `, reason=${describeSyncError(session.lastSyncError)}`)
               );
             if (landed) updateScopeFreshness(openScope.vaultId);
             await refreshCoverage();
@@ -560,16 +582,15 @@ export function ReplicaProvider({
           setBuilt({
             mountKey,
             value: {
-              scopes: [],
-              ready: true,
-              online: false,
-              reachability: "gateway-asleep",
-              refresh: async () => setRetryNonce((current) => current + 1),
+              ...mountFailureValue({
+                reachability: "gateway-asleep",
+                refresh: async () => setRetryNonce((current) => current + 1),
+                error: error instanceof Error ? error.message : String(error),
+              }),
               ...(compatibility ? { compatibility } : {}),
               ...(isReplicaStorageFullError(error)
                 ? { storageFull: true }
                 : {}),
-              error: error instanceof Error ? error.message : String(error),
             },
           });
         }

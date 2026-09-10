@@ -38,6 +38,16 @@ export interface NodeSeatOptions {
   readonly schema?: string;
   /** A catch-up that does not finish until this settles. */
   readonly holdSync?: Promise<void>;
+  /**
+   * What a catch-up ANSWERS (#1011).
+   *
+   * The default seat here never bootstraps and never lands — which is the
+   * right default for a suite whose seat is already the file it wants, and
+   * exactly wrong for one asking what the session does with a catch-up that
+   * FAILED versus one that landed. Both are the loop's real return: a
+   * watermark, `undefined`, or a throw.
+   */
+  readonly syncOutcome?: () => Promise<SeatWatermark | undefined>;
 }
 
 export interface NodeNativeSeat extends NativeSeatPort {
@@ -104,7 +114,7 @@ function nodeNativeSeat(options: NodeSeatOptions): NodeNativeSeat & {
     // no-op rather than a fetch nothing is listening on.
     sync: async (): Promise<SeatWatermark | undefined> => {
       await options.holdSync;
-      return undefined;
+      return options.syncOutcome ? await options.syncOutcome() : undefined;
     },
     watermark: (): SeatWatermark | undefined => undefined,
     purge: (): Promise<void> => loop.purge(),

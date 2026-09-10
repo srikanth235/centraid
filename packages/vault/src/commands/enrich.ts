@@ -913,6 +913,256 @@ const UPSERT_FACES: CommandDefinition = {
   },
 };
 
+/**
+ * REGENERATION (#1011). A derivation stamp is what makes a handler skip a
+ * target it has already done, so "do this again" is exactly two acts: drop the
+ * stamp, and put the target back in front of the handler. Nothing here touches
+ * the derived VALUE — the handler overwrites it when it re-derives, and
+ * deleting the value early would blank a working search index for the length
+ * of a backlog walk.
+ *
+ * A model swap needs neither verb: every handler treats a stamp whose model id
+ * differs from the one it ships as absent, so bumping the id in
+ * `packages/model-runtime/src/model-ids.ts` re-derives the library behind the
+ * recipe's own bounded cursor. These verbs are for the other case — the member
+ * asking for one photograph, or the whole library, to be done over at the SAME
+ * model.
+ */
+
+/**
+ * Which recipe owns a capability, and the state keys its ambient walk keeps.
+ * `automation_state.automation_id` is the `<app>/<automation>` ref
+ * (`automation/handler/ctx.ts`), and every one of these handlers reads its
+ * cursor as `(await ctx.state.get(key)) ?? ""` — so "" IS the beginning of the
+ * library, which is what a bulk regenerate resets to.
+ */
+const CAPABILITY_RECIPES: Readonly<
+  Record<string, { automationRef: string; cursorKeys: readonly string[] }>
+> = {
+  faces: {
+    automationRef: "faces/faces",
+    // `cursor` is the ambient library walk; `consentCursor` is the
+    // prior-stamp sweep. Both must go back to the start, or the sweep would
+    // walk a range whose stamps this command just deleted and find nothing.
+    cursorKeys: ["cursor", "consentCursor"],
+  },
+  ocr: { automationRef: "photo-ocr/photo-ocr", cursorKeys: ["cursor"] },
+  "embed-image": {
+    automationRef: "embed-image/embed-image",
+    cursorKeys: ["cursor"],
+  },
+  "embed-text": {
+    automationRef: "embed-text/embed-text",
+    cursorKeys: ["cursor"],
+  },
+  transcript: {
+    automationRef: "transcript/transcript",
+    cursorKeys: ["cursor"],
+  },
+};
+
+function recipeFor(capability: string): {
+  automationRef: string;
+  cursorKeys: readonly string[];
+} {
+  const recipe = CAPABILITY_RECIPES[capability];
+  if (!recipe)
+    throw new Error(
+      `enrich.regenerate_all: no bundled recipe owns capability "${capability}" — ` +
+        `known: ${Object.keys(CAPABILITY_RECIPES).join(", ")}`
+    );
+  return recipe;
+}
+
+const REGENERATE: CommandDefinition = {
+  name: "enrich.regenerate",
+  ownerSchema: "enrich",
+  inputSchema: {
+    type: "object",
+    required: ["capability"],
+    additionalProperties: false,
+    properties: {
+      capability: { type: "string", minLength: 1, maxLength: 64 },
+      // Exactly one. A photograph is both a `media.asset` and a
+      // `core.content_item`, and the two capabilities stamp DIFFERENT targets
+      // — faces the asset, OCR the content item — so the member names the
+      // thing they are looking at and this resolves the other half.
+      content_id: { type: "string", minLength: 1 },
+      asset_id: { type: "string", minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["deleted", "request_id"],
+    properties: {
+      deleted: { type: "integer" },
+      request_id: { type: "string" },
+    },
+  },
+  preconditions: [],
+  postconditions: [],
+  idempotency: "retry-safe",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as {
+      capability: string;
+      content_id?: string;
+      asset_id?: string;
+    };
+    if ((input.content_id === undefined) === (input.asset_id === undefined))
+      throw new Error(
+        "enrich.regenerate: name exactly one of `content_id` or `asset_id`"
+      );
+
+    // Resolve the pair. A stamp for this capability may sit on either half,
+    // so both are cleared — regenerating "this photograph's OCR" must not
+    // depend on the member having named the id the stamp happens to use.
+    let assetId = input.asset_id;
+    let contentId = input.content_id;
+    if (assetId === undefined) {
+      // A content item may have no asset at all (a document), which is fine —
+      // the stamp is on the content item and that is what gets requeued.
+      const row = ctx.db
+        .prepare(
+          "SELECT asset_id FROM media_asset WHERE content_id = ? AND deleted_at IS NULL"
+        )
+        .get(contentId!) as { asset_id: string } | undefined;
+      assetId = row?.asset_id;
+    } else {
+      const row = ctx.db
+        .prepare(
+          "SELECT content_id FROM media_asset WHERE asset_id = ? AND deleted_at IS NULL"
+        )
+        .get(assetId) as { content_id: string } | undefined;
+      if (!row)
+        throw new Error(`enrich.regenerate: unknown asset "${assetId}"`);
+      contentId = row.content_id;
+    }
+
+    const targets = [assetId, contentId].filter(
+      (id): id is string => id !== undefined
+    );
+    let deleted = 0;
+    const drop = ctx.db.prepare(
+      "DELETE FROM enrich_derivation WHERE capability = ? AND target_id = ?"
+    );
+    for (const targetId of targets) {
+      const changes = drop.run(input.capability, targetId).changes;
+      if (Number(changes) > 0) {
+        deleted += Number(changes);
+        ctx.wrote("enrich.derivation", targetId);
+      }
+    }
+
+    // The priority lane, not a gate: a recipe with an empty queue still walks
+    // its library, but a target BEHIND the ambient cursor would otherwise wait
+    // for a full lap. The request is what makes "do this one now" immediate.
+    const requestId = ctx.newId();
+    const targetType =
+      assetId === undefined ? "core.content_item" : "media.asset";
+    ctx.db
+      .prepare(
+        `INSERT INTO enrich_request (request_id, target_type, target_id, reason, detail, capability, requested_at, drained_at)
+         VALUES (?, ?, ?, 'manual', ?, ?, ?, NULL)`
+      )
+      .run(
+        requestId,
+        targetType,
+        assetId ?? contentId!,
+        `regenerate ${input.capability}`,
+        input.capability,
+        ctx.now
+      );
+    ctx.wrote("enrich.request", requestId);
+    ctx.cite({
+      claim: `regenerate ${input.capability}: ${deleted} derivation stamp(s) dropped and the target requeued`,
+      entityType: targetType,
+      entityId: assetId ?? contentId!,
+    });
+    return { deleted, request_id: requestId };
+  },
+};
+
+const REGENERATE_ALL: CommandDefinition = {
+  name: "enrich.regenerate_all",
+  ownerSchema: "enrich",
+  inputSchema: {
+    type: "object",
+    required: ["capability"],
+    additionalProperties: false,
+    properties: {
+      capability: { type: "string", minLength: 1, maxLength: 64 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["deleted", "automation_ref", "cursors_reset"],
+    properties: {
+      deleted: { type: "integer" },
+      automation_ref: { type: "string" },
+      cursors_reset: { type: "integer" },
+    },
+  },
+  preconditions: [],
+  postconditions: [
+    {
+      name: "no_stamps_remain",
+      sql: `SELECT count(*) AS n FROM enrich_derivation WHERE capability = :capability`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  idempotency: "retry-safe",
+  // The whole library re-derives behind a bounded cursor: cheap per fire,
+  // long in aggregate, and the member should be told which they asked for.
+  risk: "medium",
+  handler: (ctx) => {
+    const input = ctx.input as { capability: string };
+    const recipe = recipeFor(input.capability);
+    const targets = ctx.db
+      .prepare(
+        "SELECT DISTINCT target_id FROM enrich_derivation WHERE capability = ?"
+      )
+      .all(input.capability) as unknown as { target_id: string }[];
+    const deleted = Number(
+      ctx.db
+        .prepare("DELETE FROM enrich_derivation WHERE capability = ?")
+        .run(input.capability).changes
+    );
+    for (const { target_id } of targets)
+      ctx.wrote("enrich.derivation", target_id);
+
+    // Back to the beginning of the library. The handler reads a missing or
+    // empty cursor identically, so writing "" is the reset — and it does NOT
+    // disturb the recipe's model/selection key, which is what would otherwise
+    // re-seed the cursor past everything on the very next fire.
+    const setState = ctx.db.prepare(
+      `INSERT INTO automation_state (automation_id, key, value_json, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(automation_id, key) DO UPDATE SET
+         value_json = excluded.value_json, updated_at = excluded.updated_at`
+    );
+    const updatedAt = Date.parse(ctx.now);
+    for (const key of recipe.cursorKeys) {
+      setState.run(
+        recipe.automationRef,
+        key,
+        JSON.stringify(""),
+        Number.isFinite(updatedAt) ? updatedAt : Date.now()
+      );
+    }
+    // No citation: a citation names an ENTITY, and this act names a
+    // capability across the whole library. The receipt's own output carries
+    // what happened.
+    return {
+      deleted,
+      automation_ref: recipe.automationRef,
+      cursors_reset: recipe.cursorKeys.length,
+    };
+  },
+};
+
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
     .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
@@ -931,4 +1181,6 @@ export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(MARK_REQUESTS_DRAINED);
   gateway.registerCommand(UPSERT_FACES);
   gateway.registerCommand(REBUILD_FACE_CLUSTERS);
+  gateway.registerCommand(REGENERATE);
+  gateway.registerCommand(REGENERATE_ALL);
 }

@@ -26,6 +26,32 @@ A phone whose cursor falls below the change log's collected floor cannot be caug
 
 **A gap is a batch that starts AHEAD of the cursor, and only that** ([#922](https://github.com/srikanth235/centraid/issues/922) E3). Two catch-up paths legitimately hold the same cursor at once — the bootstrap's convergence replay and the change feed's own sync — so the slower one arrives with a `from` the faster one has already passed. That batch skipped nothing: it OVERLAPS, and every change in it is an idempotent upsert or delete under the same server-version guard. The transport's mismatch classifier (`packages/client/src/replica/shell-transport.ts`) therefore raises `cursor-gap` only for `batch.from.seq > cursor_seq` (or a batch whose `to` precedes its `from`); protocol, schema-epoch and cursor-epoch mismatches are unchanged. Treating an overlap as a gap wiped the store and demanded a re-bootstrap that raced the same way — a loop, not a repair.
 
+### The seat is stale: how to tell
+
+Ask the two numbers, in this order, before anything else ([#1011](https://github.com/srikanth235/centraid/issues/1011)):
+
+| Question | Where to read it |
+| --- | --- |
+| How far is the gateway? | `sqlite3 <vault dir>/vault.db 'SELECT commit_seq, floor_seq, epoch, schema_epoch, ddl_version FROM replica_meta'`, and `SELECT max(seq), count(*) FROM replica_log` |
+| How far is the phone? | `seat_state` in `<app data container>/Library/Application Support/CentraidReplica/centraid-seat-*.sqlite3` — `applied_seq`, `applied_commit_seq`, `gateway_watermark`, `epoch`, `contents` (copy the file with its `-wal`) |
+
+`applied_commit_seq` well below the gateway's `commit_seq` with `gateway_watermark 0` means **no log page has ever been applied** — the snapshot landed and nothing after it did. A `gateway_watermark` that matches while `applied_seq` lags means pages arrived and the applier refused them; a mismatched `epoch` or `schema_epoch` means a re-bootstrap is owed, not a catch-up.
+
+Then ask whether the phone ever knocked. The gateway logs one line per seat door answer into its log ring ([logs.md](logs.md)):
+
+- `seat log page for <vaultId>: since <seq>, <n> rows, next <seq>, watermark <seq>, hasMore <bool>`
+- `seat snapshot for <vaultId>: seq <seq>, <bytes> bytes, GET|HEAD`
+
+No `seat log page` lines at all means the phone is not asking, and the device console says why:
+
+- `[centraid] replica: no gateway base — device=<bool>` — nothing resolved a gateway to ask.
+- `[centraid] replica: pull did not land — blocked=<bool>[, reason=…]` — `blocked=true` is the member's own transfer rules (`never`); a `reason` is the catch-up's own failure, also kept on the session as `lastSyncError`.
+- `[centraid] replica: seat catch-up failed — <error>` — the seat loop's failure, from the door or the applier.
+
+A write this phone makes through a door that is not the session — the camera-roll Import stages and publishes on the gateway, which commits the rows — **nudges the seat once when the batch lands** (`kit/replica/seat-nudge.ts`, called by `runImportBatchWithNudge`), so the owner's own import appears in their library in seconds instead of waiting for the next foreground pull; a batch that published nothing asks for nothing, and this is a single catch-up, never a poll.
+
+A catch-up refused because the mount believes it is offline **schedules a retry**; the connectivity oracle is never set from the pull's own verdict, which is how one transient failure used to latch a phone's copy shut for the life of the mount.
+
 Pairing can grant several vaults through one short-lived ticket. The gateway redeems that ticket atomically, while the phone records one `VaultLink` and one replica lifecycle per returned vault. The first grant is only the initial focus; all other granted vaults remain independently mountable and retain their own cursor, freshness, intent outbox, and revocation state.
 
 ## Replica correctness and durability
@@ -50,6 +76,32 @@ Coverage is the open vault's own: a file with no completed bootstrap is partial,
 
 Mobile reads `/centraid/_gateway/info` before constructing either foreground or background sessions. `seatReplica` — the snapshot and log-tail doors — must be advertised; the key is optional on the wire, and its absence is what a gateway older than the doors says, which reads as off. A missing or false flag produces one update wall instead of a phone that mounts and then finds no file to fetch. The judgment is asked fresh each time and is not cached: an offline start skips the probe entirely and fails open rather than replaying a remembered verdict, so a gateway that was upgraded — or downgraded — between launches is judged on what it answers now.
 
+## Offline search
+
+Search on the phone answers out of the seat's own file, and it has three lanes.
+
+**Keyword (fts5) — exists.** The snapshot arrives with the gateway's fts5 shadow tables, and the bootstrap re-derives every one of them, found from `sqlite_schema` rather than a registry (`rebuildSeatFtsIndexes`, `packages/client/src/replica/seat/bootstrap.ts`). Coverage is therefore the gateway's `SPECS` (`packages/vault/src/schema/fts.ts`) exactly, with no phone-side index to drift from it — including the derivative-aware document body, so extracted OCR/scan text is searchable offline under `core.document` the same way it is on the gateway. `core.content_item` indexes the owned title alone on both planes.
+
+**People and similar faces (sqlite-vec) — exists.** Face vectors replicate in `enrich_embedding`, and the phone ranks them with `vec_distance_cosine` under the row's own `dim` guard, the way `packages/vault/src/enrich/similarity.ts` does. The vector WIDTH is the gateway's to decide and the phone hard-codes none of it: whatever dimension replicates is what a query carries.
+
+**Semantic (CLIP) — not in v0.** The phone does not run a text or image encoder and does not query semantic embeddings; a member's phone answers keyword and face queries offline and nothing else.
+
+Both existing lanes depend on a native extension the build has to have compiled in, so `ExpoSeatDriver.open` probes both and refuses by name (`ReplicaFts5UnavailableError`, `ReplicaSqliteVecUnavailableError`) rather than letting a shell open and fail inside a member's search.
+
+fts5 is compiled into the SQLite the app links, so it is simply there. sqlite-vec is not: `withSQLiteVecExtension: true` only puts the artifact in the bundle and publishes its path as expo-sqlite's `bundledExtensions["sqlite-vec"]`, and **every connection that wants `vec0` must load it itself** — `ExpoSeatDriver.open` does, once per handle, before it probes. A driver that skips the load gets `no such function: vec_version` from a build that is entirely correct, and the probe then condemns the shell ([#1011](https://github.com/srikanth235/centraid/issues/1011)).
+
+### The sqlite-vec pins
+
+The two planes are on different sqlite-vec versions, deliberately.
+
+| Plane | Version | Pinned in |
+| --- | --- | --- |
+| Gateway | `0.1.9` | the `sqlite-vec` npm dependency in `packages/server/package.json`, loaded by `packages/server/src/enrich/sqlite-vec.ts` |
+| Phone (Android) | `v0.1.7-alpha.2` | expo-sqlite `~57.0.2`'s bundled `android/vec/<abi>/vec.so` |
+| Phone (iOS) | `v0.1.7-alpha.2` | `TAG` in `apps/mobile/scripts/build-sqlite-vec-ios.sh`, which builds `vec.xcframework` from source |
+
+The phone's two artifacts must agree, and they are checked against one constant — `EXPECTED_SQLITE_VEC_VERSION` in `apps/mobile/src/lib/replica/sqlite-vec-version.ts` — at build time by `apps/mobile/scripts/sqlite-vec-version.test.mjs` and at open by the seat driver, which asks the extension that actually loaded for `vec_version()`. The gateway's version is not part of that agreement: the planes compare vectors, not extensions, and `vec_distance_cosine` over the same bytes at the same `dim` is the same answer on both. Raising the phone's pin moves a native artifact on both platforms and is a reported change, never a side effect.
+
 ## Offline changes and cross-vault placement
 
 Ordinary writes stay in each replica's durable intent outbox. A first-open write made before any bootstrap is also admitted there: the action input is durable immediately, the write reports itself as saved-on-this-phone pending first sync (never a bare "waiting for a connection"), and its optimistic row projection is reconstructed from that durable input — when the first copy of the vault lands, and again on every relaunch, never held only in component state ([#883](https://github.com/srikanth235/centraid/issues/883) D1, restated by [#996](https://github.com/srikanth235/centraid/issues/996) R23). Add/Move uses a separate device outbox keyed by a durable link token. Reconciliation always:
@@ -60,6 +112,16 @@ Ordinary writes stay in each replica's durable intent outbox. A first-open write
 4. records completion.
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
+
+### The phone renders the display rungs the gateway cannot decode
+
+Both device ingress paths — the upload queue and the first-run camera-roll **Import** — contribute the preview ladder's `thumb` and `preview` rungs, plus `phash` and `thumbhash`, from bytes the phone decoded itself. For HEIC/HEIF that is not an optimisation but the only source: the gateway's preview codec is sharp, and the `@img/sharp-libvips-darwin-arm64` build this repo pins ships libheif **without an HEVC decoder** (HEVC patent licensing), so the HEIC an iPhone actually captures declines on the gateway and earns the durable `preview-codec@1` "unsupported" stamp that makes recognition skip it ([#1011](https://github.com/srikanth235/centraid/issues/1011)). iOS decodes it natively.
+
+The rungs go through the ledger's variant door (`POST /centraid/_vault/blobs?variant=…&variant_of=<sha>`), at the ladder's own edges — imported from `@centraid/core/blob`, never mirrored — fitted to the long side and never upscaled. **Order is the contract**: `variant_of` must identify staged or claimed content, so Import stages the original, contributes the rungs, and only then publishes; a rung on the row before the claim means recognition never sees the asset without one. A rung that fails to render or contribute is never fatal — the item stays exactly as backfillable as it was. See [the derived ledger](photos/derived-ledger.md).
+
+### An absent writability answer is not a refusal
+
+A row on the phone says which vault it came from and whether the member may write there (`kit/replica/row-provenance.ts`). **A row with no such stamp is writable**: a locally projected pending row, a camera-roll photograph that is not in the vault yet, and a session whose scope has not landed all carry no answer, and none of them is the vault saying no. Only an explicit `canWrite: false` — the scope the gateway actually answered for a container the member may only read — draws the read-only sentence. Photos' timeline stamped its rows the other way round until [#1011](https://github.com/srikanth235/centraid/issues/1011): a camera-roll row carried no answer at all and a replica row defaulted an unknown scope to `false`, so the owner's own vault rendered every lightbox as read-only.
 
 ### A re-bootstrap keeps the queue, and holds it
 

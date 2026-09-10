@@ -27,6 +27,7 @@ export {
   mediaTranscodePolicy,
   modelRuntimePolicy,
   normalizeRoots,
+  systemAutomationPolicy,
 } from "./policy.js";
 export type {
   BuiltinDecision,

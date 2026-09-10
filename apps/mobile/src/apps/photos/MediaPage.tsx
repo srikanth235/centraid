@@ -168,6 +168,7 @@ export function MediaPage({
   networkType,
   originalRequested = false,
   onZoom,
+  onSingleTap,
   width,
   height,
 }: {
@@ -178,6 +179,8 @@ export function MediaPage({
   originalRequested?: boolean;
   /** The status line has to print the LIVE percentage. */
   onZoom?: (scale: number) => void;
+  /** One bare tap on the photograph: the stage owns the chrome, not the page. */
+  onSingleTap?: () => void;
   width: number;
   height: number;
 }): React.JSX.Element {
@@ -252,6 +255,7 @@ export function MediaPage({
     frame: box,
     offset: { x: panX, y: panY },
     onSettle: settleZoom,
+    onSingleTap,
     panEnabled: isZoomed(zoom),
     scale,
     startScale,

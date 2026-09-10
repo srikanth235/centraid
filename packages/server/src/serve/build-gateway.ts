@@ -115,6 +115,13 @@ import {
   validateEngineProfilePatch,
 } from "../enrich/engine-profiles.js";
 import {
+  SystemModelAssets,
+  SYSTEM_MODEL_HEALTH_COMPONENT,
+} from "../enrich/system-model-assets.js";
+import type { SystemModelProvision } from "../enrich/system-model-assets.js";
+import {
+  isSystemAutomationId,
+  isSystemAutomationRef,
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_TEMPLATE_IDS,
 } from "../enrich/system-recognition.js";
@@ -409,6 +416,20 @@ export interface BuildGatewayOptions {
    * into one trailing recomputation. Tests shorten it, hosts leave it alone.
    */
   notificationsDoorbellWindowMs?: number;
+  /**
+   * Whether THIS host may pull the pinned recognition weights (#1011).
+   * `"fetch"` downloads what `models.lock.json` pins on first boot;
+   * `"verify-only"` reports what is already on disk, opens no connection and
+   * arms no retry — a system automation whose weights are absent simply stays
+   * `preparing` with "model assets are not provisioned on this host".
+   *
+   * DEFAULTS TO `"verify-only"`. Network side effects are the host's to own
+   * (docs/config-ownership.md), so a gateway nobody configured — a test, an
+   * e2e harness, an embedded build someone forgot — can never start a
+   * hundreds-of-megabytes download by accident. `centraid-gateway` and the
+   * desktop's embedded gateway pass `"fetch"` explicitly.
+   */
+  modelAssets?: { provision: SystemModelProvision };
 }
 
 export type FireAutomation = (
@@ -758,6 +779,66 @@ export async function buildGateway(
   }
   const isBundledAppId = (id: string): boolean =>
     bundledAppIds.has(id) || recognitionTemplateIds.has(id);
+
+  // MODEL ASSETS FOR THE SYSTEM TIER (#1011). A system automation is on by
+  // definition, so "the weights are not here yet" is not a reason to leave it
+  // off — it is PREPARING. `ensureModelAssets` runs in the background after
+  // the first scheduler reconcile (see `start()` below), for exactly the
+  // capabilities the three system handlers' own model constants are pinned
+  // under; boot never waits on a download, a failure is a health entry and a
+  // backoff retry rather than a per-fire handler error every five minutes,
+  // and a scheduled fire of a preparing automation is skipped with a stated
+  // reason until the assets land.
+  const systemModelAssets = new SystemModelAssets({
+    // The host decides whether this box may reach the network at all; an
+    // unconfigured gateway verifies and reports, it never downloads (#1011).
+    provision: options.modelAssets?.provision ?? "verify-only",
+    // Provision the directory the HANDLER will read, resolved by the one
+    // resolver the sandbox uses.
+    runtimeDirFor: (automationId) =>
+      automation.resolveAutomationRuntimeDir(
+        path.join(
+          currentSettledHost().codeAppsDir(),
+          automationId,
+          automation.APP_AUTOMATIONS_SUBDIR
+        )
+      ),
+    report: (status, detail) => {
+      if (status === "ok")
+        health.reportOk(SYSTEM_MODEL_HEALTH_COMPONENT, detail);
+      else health.reportDegraded(SYSTEM_MODEL_HEALTH_COMPONENT, detail);
+    },
+    log: (level, msg) => {
+      if (level === "warn") logger.warn(msg);
+      else logger.info(msg);
+    },
+    // The weights landing IS the event the skipped fires were waiting for,
+    // and a data trigger whose element was consumed by a skip will not
+    // redeliver it — so a nudge alone would leave whatever was ingested during
+    // the preparing window unrecognized until the NEXT photograph arrived.
+    // Fire the recipe once instead: its own three passes (request queue, prior
+    // stamps, ambient walk behind its cursor) are exactly the catch-up, and
+    // one fire is one bounded batch. `scheduled`, not `manual`, so the owner's
+    // background pause still stops it.
+    onReady: (automationId) => {
+      const ref = `${automationId}/${automationId}`;
+      for (const [vaultId, scheduler] of schedulers) {
+        runWithVaultContext({ vaultId }, () => {
+          scheduler.nudge();
+          void fireAutomation(ref, {
+            triggerKind: "scheduled",
+            triggerOrigin: "data",
+            note: "model assets became available",
+          }).catch((error: unknown) => {
+            logger.warn(
+              `catch-up fire for ${ref} failed: ` +
+                (error instanceof Error ? error.message : String(error))
+            );
+          });
+        });
+      }
+    },
+  });
 
   health.reportOk("instance", "gateway.db exclusive process lock held");
   if (gatewayDatabase.networkFileSystem) {
@@ -1713,6 +1794,35 @@ export async function buildGateway(
       plane.notices.put(enrichRefusalNotice(refusal));
     };
     try {
+      // PAUSED, NOT DISABLED. A system automation has no `enabled` bit to
+      // consult, so this is the one thing that stops a scheduled fire: the
+      // owner's transient background pause. It is a run-state — the
+      // registration stays, and the next tick after the pause lifts runs. A
+      // manual run is never paused; the owner asking IS the answer.
+      if (
+        opts.triggerKind === "scheduled" &&
+        isSystemAutomationRef(automationRef) &&
+        health.shouldPauseBackgroundWork()
+      ) {
+        return { turnId: runId };
+      }
+      // PREPARING, NOT OFF. A system automation whose pinned weights have not
+      // landed yet has nothing to run: skip the SCHEDULED fire with a stated
+      // reason rather than let the handler fail on missing assets every tick.
+      // The registration stays and the cursors are untouched, so the tick
+      // after the assets land simply proceeds and the walk catches up. A
+      // manual run is never skipped here — the owner asking is the answer, and
+      // the handler's own "model assets unavailable" summary is the honest one.
+      if (opts.triggerKind === "scheduled") {
+        const parsedForAssets = automation.parseRef(automationRef);
+        const preparing = parsedForAssets
+          ? systemModelAssets.skipReason(parsedForAssets.appId)
+          : undefined;
+        if (preparing) {
+          logger.info(`automation ${automationRef} skipped: ${preparing}`);
+          return { turnId: runId };
+        }
+      }
       const host = currentSettledHost();
       const ws = currentWorkspace();
       const parsedAutomation = automation.parseRef(automationRef);
@@ -1948,6 +2058,11 @@ export async function buildGateway(
       });
       settledHosts.set(vaultId, host);
       await reconcileScheduler(vaultId);
+      // AFTER the reconcile, and never awaited: the registrations exist, so
+      // the recipes are armed whether or not the weights are here yet, and
+      // the fetch runs on its own clock. Idempotent — only the first mount
+      // actually starts it.
+      systemModelAssets.start();
       return host;
     }).catch((error) => {
       // A failed mount must not poison the cache — drop it so the next request
@@ -2530,9 +2645,16 @@ export async function buildGateway(
           )
         : {};
       const currentVariant = current?.manifest.enrich?.delegateStep?.selected;
+      // SYSTEM ⇒ ON. A system automation's `enabled` bit is the catalogue's,
+      // every boot: the release decides that it runs, so there is no per-vault
+      // answer to preserve and no drift to inherit. A bundled-OPTIONAL recipe
+      // keeps today's semantics — the manifest default for a row that does not
+      // exist yet, the member's own answer forever after.
       const merged = automation.validateManifest({
         ...desired,
-        enabled: current?.enabled ?? desired.enabled,
+        enabled: isSystemAutomationId(template.id)
+          ? desired.enabled
+          : (current?.enabled ?? desired.enabled),
         requires: { ...desired.requires, ...preservedRequires },
         ...(desired.enrich
           ? {
@@ -2645,6 +2767,8 @@ export async function buildGateway(
       }),
       makeLifecycleRouteHandler(lifecycleOpts),
       makeAutomationsRouteHandler({
+        modelReadiness: (automationId) =>
+          systemModelAssets.readiness(automationId),
         store,
         ledgerDbFile: workspace.ledgerDbFile,
         analytics: analyticsStore,
@@ -3067,6 +3191,13 @@ export async function buildGateway(
               health.reportError("automation-runs", message);
               logger.warn(message);
             },
+            // The owner's background pause, honoured BEFORE the cursor is
+            // read (#528). The same predicate `fireAutomation` applies to a
+            // scheduled system fire, one layer up: a paused pass does no
+            // work, consumes no data-trigger element and drops no
+            // registration, so the tick after the pause lifts simply runs.
+            shouldPauseBackground: (ref) =>
+              isSystemAutomationRef(ref) && health.shouldPauseBackgroundWork(),
             // Liveness ONLY: source position and gap truth live solely in
             // `automation_trigger_cursor`.
             onTick: (at) => schedulerLedgerFor(vaultId).recordTick(at),
@@ -3192,16 +3323,25 @@ export async function buildGateway(
             );
           }
         }
-        // A disabled recognition recipe stays a durable app row for its
-        // toggle, but must NOT hold a scheduler registration or bootstrap a
-        // data cursor. Ordinary disabled automations stay in `rows` so their
-        // cursor retention semantics are unchanged.
+        // Three tiers, three answers (`enrich/system-recognition.ts`):
+        //  - SYSTEM: armed from the catalogue on EVERY boot. No `enabled` flag
+        //    is consulted — the release decided this runs, so there is nothing
+        //    per-vault to read and nothing to drift. PAUSED IS NOT DISABLED:
+        //    the owner's background pause is a transient run-state honoured at
+        //    FIRE time (`fireAutomation`), never by dropping the registration —
+        //    a registration dropped here would not come back when the pause
+        //    lifts, and the recipe would silently stay dead.
+        //  - BUNDLED-OPTIONAL: today's `enabled` semantics, unchanged. A
+        //    disabled recipe stays a durable app row for its toggle but holds
+        //    no scheduler registration and bootstraps no data cursor.
+        //  - Everything else: the experimental-automations gate, so with it off
+        //    user automations never arm while recognition keeps flowing.
         const schedulerRows = rows.filter((row) =>
-          recognitionTemplateIds.has(row.ownerApp)
-            ? row.enabled
-            : // With the gate off, user automations never arm while
-              // recognition recipes keep the photos pipeline flowing.
-              experimental.automations
+          isSystemAutomationId(row.ownerApp)
+            ? true
+            : recognitionTemplateIds.has(row.ownerApp)
+              ? row.enabled
+              : experimental.automations
         );
         const diff = await sched.reconcile(schedulerRows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
@@ -3878,7 +4018,10 @@ export async function buildGateway(
     // `/seat/*` is never swallowed by the generic `_vault` 404 below.
     forRoutePrefixes(
       ["/centraid/_vault/seat"],
-      makeSeatRouteHandler(vaultRegistry, { enrollments: enrollmentStore })
+      makeSeatRouteHandler(vaultRegistry, {
+        enrollments: enrollmentStore,
+        logger,
+      })
     ),
     forRoutePrefixes(
       ["/centraid/_vault/replica", "/centraid/_vault/changes"],

@@ -967,11 +967,14 @@ describe("build-gateway scenarios", () => {
       expect(byName.get("connections")).toMatchObject({ status: "ok" });
       // Reconcile ran during start() and reported the scheduler healthy.
       expect(byName.get("automations")?.status).toBe("ok");
-      // Every bundled recognition recipe installs ENABLED on a fresh vault
-      // (ruled 2026-09-09), so the boot vault reports the full lane armed.
+      // Three tiers, and the count says so (#1011). Six of the probe's
+      // enricher ids are installed on a fresh vault, and the three SYSTEM ones
+      // — `faces`, `photo-ocr`, `doc-text-extractor` — are armed from the
+      // catalogue; the bundled-OPTIONAL three ship off until the member turns
+      // them on, which is not a degraded state.
       expect(byName.get("enrichment")).toMatchObject({
         status: "ok",
-        detail: "5 of 5 enrichers enabled",
+        detail: "3 of 6 enrichers enabled",
       });
       expect(byName.get("blob-sweep")?.status).toBe("ok");
       // Host-pushed failure carries its structured event.

@@ -160,7 +160,7 @@ export async function resizeDecodedImage(
   };
 }
 
-/** ImageNet normalization for PaddleOCR det+rec: uint8 RGB -> planar CHW. */
+/** ImageNet normalization for PaddleOCR detection: uint8 RGB -> planar CHW. */
 const IMAGENET_MEAN = [0.485, 0.456, 0.406] as const;
 const IMAGENET_STD = [0.229, 0.224, 0.225] as const;
 
@@ -180,6 +180,26 @@ export function normalizeImageNet(image: DecodedImage): Float32Array {
   return out;
 }
 
+/**
+ * PaddleOCR's RECOGNITION normalization — `(x/255 - 0.5) / 0.5`, i.e. the
+ * symmetric [-1, 1] range its `RecResizeImg` applies. This is NOT the
+ * ImageNet mean/std the detector uses: PaddleOCR normalizes the two stages
+ * differently, and feeding the recognizer detector-normalized pixels costs
+ * accuracy on exactly the digits and thin glyphs the live golden pins.
+ */
+export function normalizeSymmetric(image: DecodedImage): Float32Array {
+  const { width, height, data } = image;
+  const planeSize = width * height;
+  const out = new Float32Array(planeSize * 3);
+  for (let pixel = 0; pixel < planeSize; pixel++) {
+    for (let channel = 0; channel < 3; channel++) {
+      out[channel * planeSize + pixel] =
+        (data[pixel * 3 + channel] ?? 0) / 127.5 - 1;
+    }
+  }
+  return out;
+}
+
 /** OpenCV blobFromImage parity for YuNet: RGB bytes -> planar BGR float32,
  *  no scale/mean — YuNet normalizes itself; ImageNet-normalized input breaks it. */
 export function toOpenCvBgrPlanar(image: DecodedImage): Float32Array {
@@ -194,7 +214,8 @@ export function toOpenCvBgrPlanar(image: DecodedImage): Float32Array {
   return out;
 }
 
-/** Unscaled planar RGB used by OpenCV SFace's `blobFromImage(..., swapRB=true)`. */
+/** Unscaled planar RGB, the ArcFace ONNX export's own preprocessing: the
+ *  published model takes 0-255 RGB in CHW order with no mean/std applied. */
 export function toOpenCvRgbPlanar(image: DecodedImage): Float32Array {
   const { width, height, data } = image;
   const planeSize = width * height;

@@ -7,6 +7,7 @@ import { AppScaffoldError, listTemplates } from "@centraid/blueprints";
 import type { ScaffoldFile } from "@centraid/blueprints";
 import * as automation from "@centraid/server/automation";
 
+import { isSystemAutomationId } from "../enrich/system-recognition.js";
 import {
   defaultSessionId,
   deleteAppAndReconcile,
@@ -319,6 +320,21 @@ export async function handleAutomationSetEnabled(
     return sendJson(res, 400, {
       error: "bad_request",
       message: "set-enabled needs { enabled }",
+    });
+  }
+  // SYSTEM ⇒ ON, and the toggle is not merely re-asserted at boot — it is not
+  // WRITABLE (#1011). A system automation is armed from the release catalogue
+  // on every boot with no `enabled` flag consulted, so a write here would
+  // leave a manifest saying one thing while the scheduler does another until
+  // the next mount silently reverted it. `paused` is the supported control:
+  // a transient run-state honoured at fire time, which comes back on its own.
+  if (isSystemAutomationId(ref.appId)) {
+    return sendJson(res, 409, {
+      error: "system_automation",
+      message:
+        `"${ref.appId}" is a system automation: it ships with the release and is always armed, ` +
+        "so it has no enabled flag to set. Pause background work to stop it temporarily, " +
+        "or set the domain's enrichment tier to `off` to stop recognition vault-wide.",
     });
   }
 
@@ -745,10 +761,18 @@ export async function handleEnrichmentToggle(
   const { rows } = await automation.list(opts.codeAppsDir());
   const toggled: string[] = [];
   const unchanged: string[] = [];
+  // The SYSTEM tier is not part of "every installed enricher": it has no
+  // `enabled` question to answer (#1011), so it is reported as refused rather
+  // than written and silently reverted on the next mount.
+  const refused: string[] = [];
   async function toggleNext(index: number): Promise<void> {
     const row = rows[index];
     if (!row) return;
     if (!enricherIds.has(row.ownerApp)) return toggleNext(index + 1);
+    if (isSystemAutomationId(row.ownerApp)) {
+      refused.push(row.ref);
+      return toggleNext(index + 1);
+    }
     if (row.enabled === enabled) {
       unchanged.push(row.ref);
       return toggleNext(index + 1);
@@ -783,7 +807,7 @@ export async function handleEnrichmentToggle(
   }
   // Rows can share an owner app/session; mutate and publish them in order.
   await toggleNext(0);
-  return sendJson(res, 200, { ok: true, enabled, toggled, unchanged });
+  return sendJson(res, 200, { ok: true, enabled, toggled, unchanged, refused });
 }
 
 // ─── DELETE /centraid/_automations ───

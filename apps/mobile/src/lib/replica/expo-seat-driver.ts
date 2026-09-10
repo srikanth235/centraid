@@ -1,4 +1,4 @@
-import { openDatabaseSync } from "expo-sqlite";
+import { bundledExtensions, openDatabaseSync } from "expo-sqlite";
 import type { SQLiteBindValue, SQLiteDatabase } from "expo-sqlite";
 
 import type {
@@ -8,7 +8,14 @@ import type {
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
 import { keyPragma } from "./expo-sqlite-driver";
-import { asReplicaStorageError } from "./replica-storage-error";
+import { ReplicaFts5UnavailableError } from "./replica-fts5-error";
+import { ReplicaSqliteVecUnavailableError } from "./replica-sqlite-vec-error";
+import { ReplicaSqliteVecVersionError } from "./replica-sqlite-vec-version-error";
+import {
+  asReplicaStorageError,
+  isReplicaStorageFullError,
+} from "./replica-storage-error";
+import { EXPECTED_SQLITE_VEC_VERSION } from "./sqlite-vec-version";
 
 /**
  * THE PHONE'S SEAT DRIVER (#996 wave 3).
@@ -42,6 +49,7 @@ export class ExpoSeatDriver implements SeatSqliteDriver {
      */
     useNewConnection?: boolean;
   }): ExpoSeatDriver {
+    let handle: SQLiteDatabase;
     try {
       const db = openDatabaseSync(
         options.name,
@@ -68,10 +76,23 @@ export class ExpoSeatDriver implements SeatSqliteDriver {
       // The key is the first statement on the handle, before any PRAGMA the
       // seat's own open block runs — those are writes.
       if (options.key !== undefined) db.execSync(keyPragma(options.key));
-      return new ExpoSeatDriver(db);
+      handle = db;
     } catch (error) {
       throw asReplicaStorageError(error);
     }
+    // THE EXTENSION IS PER-CONNECTION, NOT PER-BUILD (#1011).
+    // `withSQLiteVecExtension: true` only puts `vec.framework` in the bundle
+    // and its path in `bundledExtensions`; expo-sqlite loads NOTHING on its
+    // own, so every handle that wants `vec0` has to ask, once, right here.
+    // Without this call `vec_version()` is `no such function` on a phone whose
+    // build is perfectly correct — which is how the capability probe below
+    // came to condemn every shell this repo ships.
+    loadBundledSqliteVec(handle);
+    // OUTSIDE the storage-error wrapper on purpose: a missing extension is a
+    // BUILD fault with a named fix, and `asReplicaStorageError` would flatten
+    // it into the taxonomy the disk-full path uses.
+    assertSeatCapabilities(handle);
+    return new ExpoSeatDriver(handle);
   }
 
   run(sql: string, bind: readonly SeatBindValue[] = []): void {
@@ -103,6 +124,78 @@ export class ExpoSeatDriver implements SeatSqliteDriver {
   close(): void {
     this.db.closeSync();
   }
+}
+
+/**
+ * Ask this handle to load the sqlite-vec the build bundled.
+ *
+ * Silent on failure BY DESIGN: whether the extension is actually usable is
+ * `assertSeatCapabilities`'s question, asked of `vec0` and `vec_version()`
+ * immediately after, and it names the fix. A loader that threw its own error
+ * here would answer that question with a different, worse sentence.
+ */
+function loadBundledSqliteVec(db: SQLiteDatabase): void {
+  const extension = bundledExtensions["sqlite-vec"];
+  if (!extension) return;
+  try {
+    db.loadExtensionSync(extension.libPath, extension.entryPoint);
+  } catch {
+    /* the probe below decides */
+  }
+}
+
+/**
+ * THE TWO EXTENSIONS A SEAT CANNOT OPEN WITHOUT, PROBED TOGETHER.
+ *
+ * Offline search on the phone is two lanes over this one file: keyword
+ * through the snapshot's fts5 shadow tables, and people / similar faces
+ * through `vec_distance_cosine` over the face vectors replicated in
+ * `enrich_embedding`. Neither extension is auto-loaded by a flag alone — the
+ * build has to have compiled it in (`enableFTS`, `withSQLiteVecExtension` in
+ * `apps/mobile/app.config.ts`, plus the iOS framework the shell script
+ * builds) — and a shell that missed one opens perfectly well and then answers
+ * `no such module` from inside a member's search.
+ *
+ * fts5 is the harder failure of the two: the sanitised snapshot's only
+ * surviving triggers are its FTS sync triggers, so a build without it cannot
+ * even open the file. Both are asked here anyway, at open, in the same shape,
+ * because "which half of search is missing" is not a question to answer from
+ * a crash report.
+ *
+ * The probes are `temp.` tables: nothing is written to the seat file, so this
+ * runs identically against a fresh copy and one that is mid-catch-up.
+ */
+function assertSeatCapabilities(db: SQLiteDatabase): void {
+  try {
+    db.execSync(
+      "CREATE VIRTUAL TABLE IF NOT EXISTS temp.__fts5_probe USING fts5(x)"
+    );
+    db.execSync("DROP TABLE IF EXISTS temp.__fts5_probe");
+  } catch (error) {
+    if (isReplicaStorageFullError(error)) throw asReplicaStorageError(error);
+    throw new ReplicaFts5UnavailableError();
+  }
+  let version: string;
+  try {
+    // The vector width is NOT pinned here. The gateway decides what dimension
+    // a face vector has (SFace was 128, ArcFace is 512) and the phone stores
+    // whatever replicates; `float[1]` is a probe table, discarded before any
+    // real vector is touched, and every real query carries the row's own
+    // `dim` the way `packages/vault/src/enrich/similarity.ts` does.
+    db.execSync(
+      "CREATE VIRTUAL TABLE IF NOT EXISTS temp.__sqlite_vec_probe USING vec0(x float[1])"
+    );
+    db.execSync("DROP TABLE IF EXISTS temp.__sqlite_vec_probe");
+    version = String(
+      db.getFirstSync<{ version: string }>("SELECT vec_version() AS version")
+        ?.version ?? ""
+    );
+  } catch (error) {
+    if (isReplicaStorageFullError(error)) throw asReplicaStorageError(error);
+    throw new ReplicaSqliteVecUnavailableError();
+  }
+  if (version !== EXPECTED_SQLITE_VEC_VERSION)
+    throw new ReplicaSqliteVecVersionError(version);
 }
 
 /**

@@ -2,7 +2,7 @@
   "name": "Transcript",
   "version": "0.1.0",
   "description": "Transcribes bounded audio/video originals with a bundled local Whisper model.",
-  "enabled": true,
+  "enabled": false,
   "prompt": "Transcribe new audio and video in bounded batches with local model assets and make the transcript searchable.",
   "triggers": [
     {

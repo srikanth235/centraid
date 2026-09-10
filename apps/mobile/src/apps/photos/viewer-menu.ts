@@ -20,25 +20,12 @@
 import { photosArchiveVerb } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
-import { READ_ONLY_VAULT_REASON } from "./viewer-model";
+import { viewerWriteRefusal } from "./viewer-model";
 
-/** A device-only photograph nothing has backed up yet. A constant, not a
- *  re-typed literal, so this menu's copy cannot drift from
- *  `PhotoLightbox.tsx`'s `writeReason`. */
-export const NOT_IN_A_VAULT_YET_REASON =
-  "This photograph is not in a vault yet.";
-
-/** The ONE refusal ladder every writing row here climbs: read-only beats
- *  no-vault-row, either beats a plain grant. Add to Album and Archive refuse
- *  for the same two reasons — spelled out once so it cannot drift. */
-function writeRefusalReason(input: {
-  writable: boolean;
-  hasVaultAsset: boolean;
-}): string | undefined {
-  if (!input.writable) return READ_ONLY_VAULT_REASON;
-  if (!input.hasVaultAsset) return NOT_IN_A_VAULT_YET_REASON;
-  return undefined;
-}
+/** The refusal ladder every writing row here climbs lives in `viewer-model.ts`
+ *  (`viewerWriteRefusal`), shared with the bottom toolbar and
+ *  `PhotoLightbox.tsx`'s `writeReason`, so this menu's copy cannot drift. */
+const writeRefusalReason = viewerWriteRefusal;
 
 export interface ViewerOverflowMenuInput {
   /** `PhotoAsset.canWrite`, the same flag the bottom toolbar reads. */

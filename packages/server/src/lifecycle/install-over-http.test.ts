@@ -141,17 +141,9 @@ describe("install-over-http scenarios", () => {
   });
 
   test("capture OCR enters the installed recipe and records service absence as a failed turn", async () => {
+    // No set-enabled here: `photo-ocr` is SYSTEM, so it is already armed from
+    // the catalogue and the toggle is refused outright (#1011).
     const ref = "photo-ocr/photo-ocr";
-    const enabled = await fetch(
-      `${handle.url}/centraid/_automations/set-enabled?ref=${encodeURIComponent(ref)}`,
-      {
-        method: "POST",
-        headers: jsonAuth(),
-        body: JSON.stringify({ enabled: true, publish: true }),
-      }
-    );
-    expect(enabled.status).toBe(200);
-
     const capture = await fetch(`${handle.url}/centraid/_gateway/capture/ocr`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "image/jpeg" },
@@ -183,17 +175,34 @@ describe("install-over-http scenarios", () => {
         systemLane?: string;
       }>;
     };
+    // Provenance decides the default (#1011). System automations are on
+    // because the release shipped them; bundled-optional ones are shipped and
+    // off until the member asks. Both are read-only and both render as
+    // owner-controlled, which is what `systemLane` says.
     for (const ref of [
       "photo-ocr/photo-ocr",
+      "faces/faces",
+      "doc-text-extractor/doc-text-extractor",
+    ]) {
+      expect(
+        rows.find((row) => row.ref === ref),
+        ref
+      ).toMatchObject({
+        enabled: true,
+        systemLane: "recognition",
+      });
+    }
+    for (const ref of [
       "transcript/transcript",
       "embed-image/embed-image",
       "embed-text/embed-text",
-      "faces/faces",
+      "place-names/place-names",
     ]) {
-      // On by default since 2026-09-09: a fresh vault recognizes on ingest,
-      // and the toggle below is the member's opt-OUT.
-      expect(rows.find((row) => row.ref === ref)).toMatchObject({
-        enabled: true,
+      expect(
+        rows.find((row) => row.ref === ref),
+        ref
+      ).toMatchObject({
+        enabled: false,
         systemLane: "recognition",
       });
     }
@@ -252,9 +261,14 @@ describe("install-over-http scenarios", () => {
       }
     );
 
-    // The owner control that matters now is turning a recipe OFF: mount-time
-    // materialization re-publishes the bundled snapshot on every boot, and it
-    // must carry that answer forward rather than re-enabling from the manifest.
+    // SYSTEM ⇒ ON (#1011), and the toggle is not merely re-asserted at boot —
+    // it is REFUSED. A write that mount would silently revert leaves a
+    // manifest saying one thing while the scheduler does another, so the
+    // gateway says no and names the control that does work. The
+    // bundled-OPTIONAL half of that ruling is pinned right below it — an
+    // optional recipe's own answer is preserved exactly as it always was.
+    // Owner state that is not the `enabled` bit (the pinned model, the
+    // delegate variant) survives for both.
     const enabled = await fetch(
       `${handle.url}/centraid/_automations/set-enabled?ref=photo-ocr%2Fphoto-ocr`,
       {
@@ -263,7 +277,10 @@ describe("install-over-http scenarios", () => {
         body: JSON.stringify({ enabled: false, publish: true }),
       }
     );
-    expect(enabled.status).toBe(200);
+    expect(enabled.status).toBe(409);
+    await expect(enabled.json()).resolves.toMatchObject({
+      error: "system_automation",
+    });
     const configured = await fetch(
       `${handle.url}/centraid/_automations/update?ref=photo-ocr%2Fphoto-ocr`,
       {
@@ -295,6 +312,10 @@ describe("install-over-http scenarios", () => {
     const restartedBody = (await afterRestart.json()) as {
       versions: unknown[];
     };
+    // NO new version: the refusal above means the stored snapshot never said
+    // `enabled: false` in the first place, so mount finds it already matching
+    // the catalogue and publishes nothing. The re-assertion at mount is the
+    // backstop, not the mechanism.
     expect(restartedBody.versions).toHaveLength(
       configuredVersions.versions.length
     );
@@ -313,12 +334,35 @@ describe("install-over-http scenarios", () => {
     expect(
       restartedRows.rows.find((row) => row.ref === "photo-ocr/photo-ocr")
     ).toMatchObject({
-      enabled: false,
+      // Back on from the catalogue — the release decides that a system
+      // automation runs, and nothing per-vault overrides it.
+      enabled: true,
       manifest: {
         requires: { model: "openai/gpt-4o-mini" },
         enrich: { delegateStep: { selected: "delegate" } },
       },
     });
+    // …and the optional tier is untouched: what the member turned on stays on.
+    const optional = await fetch(
+      `${handle.url}/centraid/_automations/set-enabled?ref=transcript%2Ftranscript`,
+      {
+        method: "POST",
+        headers: jsonAuth(),
+        body: JSON.stringify({ enabled: true, publish: true }),
+      }
+    );
+    expect(optional.status).toBe(200);
+    await handle.close();
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
+    const afterOptional = (await (
+      await fetch(`${handle.url}/centraid/_automations`, { headers: auth() })
+    ).json()) as { rows: Array<{ ref: string; enabled: boolean }> };
+    expect(
+      afterOptional.rows.find((row) => row.ref === "transcript/transcript")
+    ).toMatchObject({ enabled: true });
   });
 
   test("a mounted vault can seed its bundled apps — the demo plane reaches the shipped tree", async () => {

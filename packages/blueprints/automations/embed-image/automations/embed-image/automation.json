@@ -2,7 +2,7 @@
   "name": "Image embeddings",
   "version": "0.1.0",
   "description": "Embeds new photograph previews in bounded cursor batches.",
-  "enabled": true,
+  "enabled": false,
   "prompt": "Build my seat-local similarity index from preview derivatives in bounded batches.",
   "triggers": [
     {
@@ -13,8 +13,12 @@
   ],
   "requires": {},
   "vault": {
-    "why": "Reads image previews and writes vectors through the dedicated validated vector command.",
+    "why": "Reads content items and their image previews, and writes vectors through the dedicated validated vector command.",
     "scopes": [
+      {
+        "schema": "core",
+        "verbs": "read+act"
+      },
       {
         "schema": "media",
         "verbs": "read"

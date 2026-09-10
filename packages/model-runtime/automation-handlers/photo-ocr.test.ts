@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { bytesContent, createHarness } from "./handler-harness.js";
 import handler, { setPhotoOcrRuntimeForTests } from "./photo-ocr.js";
 
-const MODEL = "pp-ocrv4@1";
+const MODEL = "pp-ocrv5@1";
 
 interface Region {
   text?: unknown;
@@ -36,6 +36,16 @@ function asset(
     deleted_at: null,
     width,
     height,
+  };
+}
+
+/** The vault's durable "this codec cannot preview that original" marker. */
+function previewUnsupportedStamp(contentId: string): Record<string, unknown> {
+  return {
+    target_id: contentId,
+    variant: "preview",
+    capability: "previews",
+    model: "preview-codec@1",
   };
 }
 
@@ -93,7 +103,9 @@ describe("photo-ocr handler", () => {
 
       const result = await handler({ ctx: harness.ctx, log: harness.log });
 
-      expect(result.summary).toBe("OCR derived 0; skipped 0; batch 0/16");
+      expect(result.summary).toBe(
+        "OCR derived 0; skipped 0; not ready 0; batch 0/16"
+      );
     });
   });
 
@@ -224,6 +236,58 @@ describe("photo-ocr handler", () => {
             confidence: 0.8,
           },
         },
+      ]);
+    });
+
+    it("skips a content item already stamped at THIS model, reading no bytes", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [
+            {
+              target_id: "c-a1",
+              variant: "text",
+              profile: "built-in",
+              model: MODEL,
+            },
+          ],
+        },
+        content: { "c-a1:preview": bytesContent() },
+        state: { selection: `deterministic:${MODEL}:local`, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({ derived: 0, skipped: 1 });
+      expect(harness.contentRequests).toStrictEqual([]);
+      expect(harness.invokes).toStrictEqual([]);
+    });
+
+    it("treats a stamp from a SUPERSEDED model as absent, so a swap re-derives itself", async () => {
+      // The whole of the model-bump story (#1011): nothing migrates and no
+      // backfill verb is run — the stamp names `pp-ocrv4@1`, the handler ships
+      // `pp-ocrv5@1`, and the comparison alone puts the page back in the walk.
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [
+            {
+              target_id: "c-a1",
+              variant: "text",
+              profile: "built-in",
+              model: "pp-ocrv4@1",
+            },
+          ],
+        },
+        content: { "c-a1:preview": bytesContent() },
+        state: { selection: `deterministic:${MODEL}:local`, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({ derived: 1, skipped: 0 });
+      expect(harness.invokes).toMatchObject([
+        { command: "core.set_extracted_text", input: { model: MODEL } },
       ]);
     });
 
@@ -457,6 +521,67 @@ describe("photo-ocr handler", () => {
       await expect(
         handler({ ctx: harness.ctx, log: harness.log })
       ).rejects.toThrow('pins prompt revision "ocr-v9"');
+    });
+  });
+
+  // #1011: the OCR walk parks rather than fails on an asset whose preview has
+  // not landed, and the watermark tracks the RAW read rows (the batch is read
+  // over every asset and only then filtered to photos/scans).
+  describe("an asset whose preview has not landed", () => {
+    it("counts it not-ready, keeps going, and parks the cursor behind it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [],
+        },
+        content: {
+          "c-a1:preview": bytesContent(),
+          "c-a3:preview": bytesContent(),
+        },
+        state: { selection: `deterministic:${MODEL}:local`, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 0,
+        notReady: 1,
+      });
+      expect(result.summary).toContain("not ready 1");
+      expect(harness.state.get("cursor")).toBe("a1");
+      expect(
+        harness.invokes.filter(
+          (entry) => entry.command === "core.set_extracted_text"
+        )
+      ).toHaveLength(2);
+    });
+  });
+
+  // The other half of #1011: an original the codec DECLINED has no rung coming,
+  // so parking behind it froze this walk's one watermark permanently.
+  describe("an original the codec declined", () => {
+    it("skips it, keeps going, and advances the cursor past it", async () => {
+      const harness = createHarness({
+        entities: {
+          "media.asset": [asset("a1"), asset("a2"), asset("a3")],
+          "enrich.derivation": [previewUnsupportedStamp("c-a2")],
+        },
+        content: {
+          "c-a1:preview": bytesContent(),
+          "c-a3:preview": bytesContent(),
+        },
+        state: { selection: `deterministic:${MODEL}:local`, cursor: "" },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({
+        derived: 2,
+        skipped: 1,
+        notReady: 0,
+      });
+      expect(harness.state.get("cursor")).toBe("a3");
     });
   });
 });

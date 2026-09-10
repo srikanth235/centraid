@@ -170,6 +170,39 @@ describe("declared-writes.conformance", () => {
     if (!plane)
       throw new Error("the auto-founded Personal vault is not mounted");
 
+    // BACKGROUND WORK OFF, THE OWNER'S OWN WAY (#528). The subject here is
+    // what a BLUEPRINT ACTION writes; a system recognition recipe firing on
+    // the corpus's own rows lands its credential and ledger writes
+    // (`access.agent`, `share.authority_use`) inside an action's window and
+    // the verdict reads them as that action's. So the pause is held for the
+    // whole measured run through the very control an owner uses — `POST
+    // /centraid/_gateway/resource/pause` — not a test-only bypass:
+    // `fireAutomation` skips a SCHEDULED system fire while it is held. Taken
+    // BEFORE the watcher is installed so no pause write is ever attributed to
+    // an action. The skip consumes the fire's data-trigger element, which does
+    // not matter here: this vault is discarded at the end of the test.
+    const paused = await fetch(
+      `${handle.url}/centraid/_gateway/resource/pause`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({}),
+      }
+    );
+    expect(paused.status, "background pause not accepted").toBe(200);
+    expect((await paused.json()) as { paused?: boolean }).toMatchObject({
+      paused: true,
+    });
+    onTestFinished(async () => {
+      await fetch(`${handle.url}/centraid/_gateway/resource/pause`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${token}` },
+      }).catch(() => undefined);
+    });
+
     const entities = listVaultEntities(plane.db.vault);
     const always = engineCascadeEntities();
     const conditional = {

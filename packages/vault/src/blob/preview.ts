@@ -9,6 +9,16 @@ import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { contentMediaTypeSql } from "../schema/representation.js";
+import {
+  clearPreviewUnsupportedFor,
+  hasDisplayRung,
+  markPreviewUnsupportedFor,
+  previewUnsupportedMarkerFor,
+  PREVIEW_CODEC_MODEL_ID,
+  PREVIEW_STATUS_CAPABILITY,
+  PREVIEW_STATUS_VARIANT,
+} from "./preview-status.js";
+import type { PreviewUnsupportedMarker } from "./preview-status.js";
 import { stageBlobBytes } from "./staging.js";
 import { shaOfBlobUri } from "./store.js";
 
@@ -26,6 +36,100 @@ export const PREVIEW_LADDER: readonly {
   { variant: "thumb", maxEdge: TINY_EDGE },
   { variant: "preview", maxEdge: MEDIUM_EDGE },
 ];
+
+// ---------------------------------------------------------------------------
+// "This original has no preview and never will" — the durable decline (#1011).
+//
+// A codec DECLINE and a rung that has NOT LANDED YET look identical from the
+// read side: `ctx.vault.content({variant:"preview"})` answers `no-variant` for
+// both. Every recognition recipe reads that as "come back later" and PARKS its
+// cursor before the asset, so one undecodable original stopped the ambient walk
+// of the whole library, permanently. The fix belongs in the derived ledger, not
+// in three recipes: when the codec declines an original outright — no thumb, no
+// preview, no phash, no thumbhash — the vault RECORDS that, and a recipe reads
+// the record instead of guessing.
+//
+// The record is an `enrich_derivation` stamp, the ledger's existing provenance
+// row: target `core.content_item` × this content, variant `preview`, capability
+// `previews`, and a model id naming the CODEC VERSION that declined. That is
+// the whole of the version keying: `stampDerivation` upserts on
+// (target, variant, profile), the backfill skips only items already marked at
+// the CURRENT version, and bumping `PREVIEW_CODEC_VERSION` (HEIC support
+// arriving is exactly such a bump) makes every marker stale, so the backstop
+// re-evaluates the library without any migration. A rung that later succeeds
+// clears the marker in the same pass that produced it.
+//
+// Deliberately NOT a new `core_content_derivative` variant: that column's CHECK
+// is enumerated in three tables, and a stamp already carries the two things the
+// marker needs — a version-keyed model id and a delete that cascades with the
+// content row.
+
+// The marker's own storage lives in `preview-status.ts` (no module cycle with
+// `staging.ts`, which must clear it when a CLIENT rung lands); re-exported here
+// so this module stays the one place the ladder is read from.
+export {
+  PREVIEW_CODEC_VERSION,
+  PREVIEW_CODEC_NAME,
+  PREVIEW_CODEC_MODEL_ID,
+  PREVIEW_STATUS_VARIANT,
+  PREVIEW_STATUS_CAPABILITY,
+  hasDisplayRung,
+} from "./preview-status.js";
+export type { PreviewUnsupportedMarker } from "./preview-status.js";
+
+/** How long the ingress contributor waits for the claim that gives an original
+ *  its content row. The marker hangs off the CONTENT, and a blob nobody claims
+ *  is not content — so an unclaimed sha needs no marker at all. */
+const CLAIM_WAIT_ATTEMPTS = 20;
+const CLAIM_WAIT_MS = 50;
+
+function contentIdForSha(db: VaultDb, sha256: string): string | undefined {
+  const row = db.vault
+    .prepare(
+      "SELECT content_id FROM core_content_item WHERE sha256 = ? AND deleted_at IS NULL LIMIT 1"
+    )
+    .get(sha256) as { content_id: string } | undefined;
+  return row?.content_id;
+}
+
+export function previewUnsupportedMarker(
+  db: VaultDb,
+  contentId: string
+): PreviewUnsupportedMarker | null {
+  return previewUnsupportedMarkerFor(db.vault, contentId);
+}
+
+export function markPreviewUnsupported(
+  db: VaultDb,
+  contentId: string,
+  now?: string
+): void {
+  markPreviewUnsupportedFor(db.vault, contentId, now);
+}
+
+/**
+ * Settle one pass's verdict. THE CODEC IS NOT THE ONLY PRODUCER (#1011): the
+ * phone decodes the HEVC-coded HEIC sharp's libheif cannot and contributes JPEG
+ * rungs through the variant door on its own schedule. So "this codec declined"
+ * only becomes "this content has no preview" when the row carries no display
+ * rung at all — otherwise the decline is stale news and the marker is retired.
+ */
+function settlePreviewVerdict(
+  db: VaultDb,
+  contentId: string,
+  declined: boolean,
+  now?: string
+): void {
+  if (declined && !hasDisplayRung(db.vault, contentId)) {
+    markPreviewUnsupportedFor(db.vault, contentId, now);
+    return;
+  }
+  clearPreviewUnsupportedFor(db.vault, contentId);
+}
+
+export function clearPreviewUnsupported(db: VaultDb, contentId: string): void {
+  clearPreviewUnsupportedFor(db.vault, contentId);
+}
 
 export interface PreviewOutput {
   bytes: Buffer;
@@ -120,9 +224,15 @@ export async function contributeIngressPreviews(
     input.bytes.length === 0 ||
     input.bytes.length > INGRESS_PREVIEW_MAX_BYTES
   ) {
+    // NOT a codec decline: an oversized or non-raster original is out of this
+    // door's bounds, and the sweep still owns it. Marking here would tell every
+    // recipe to skip content the backstop can still serve.
     return 0;
   }
   let generated = 0;
+  // The tiny rung's decode is the medium rung's decode, so declining it is the
+  // codec declining THE ORIGINAL — the fact the marker below records.
+  let declined = false;
   async function stageNextRung(index: number): Promise<void> {
     const rung = PREVIEW_LADDER[index];
     if (!rung) return;
@@ -131,7 +241,10 @@ export async function contributeIngressPreviews(
       input.mediaType,
       rung.maxEdge
     );
-    if (!output) return;
+    if (!output) {
+      if (index === 0) declined = true;
+      return;
+    }
     stageBlobBytes(db, {
       bytes: output.bytes,
       mediaType: output.mediaType,
@@ -181,7 +294,39 @@ export async function contributeIngressPreviews(
       // A missing placeholder means a blank tile until the thumb lands.
     }
   }
+  await recordIngressPreviewStatus(db, input.sha256, declined);
   return generated;
+}
+
+/**
+ * Settle the durable decline for one ingress contribution. The marker hangs off
+ * the CONTENT row, and this contributor is fire-and-forget beside a claim it
+ * does not order against, so it WAITS, bounded, for the content row to appear —
+ * the same lateness the rungs themselves tolerate. A sha nobody ever claims is
+ * not content and needs no marker; the sweep is the backstop either way.
+ */
+async function recordIngressPreviewStatus(
+  db: VaultDb,
+  sha256: string,
+  declined: boolean,
+  attempt = 0
+): Promise<void> {
+  const contentId = contentIdForSha(db, sha256);
+  if (contentId) {
+    settlePreviewVerdict(db, contentId, declined);
+    return;
+  }
+  // Only a DECLINE is worth waiting for. A contribution that produced rungs has
+  // nothing to clear on a content row that does not exist yet.
+  if (!declined || attempt + 1 >= CLAIM_WAIT_ATTEMPTS) return;
+  await delay(CLAIM_WAIT_MS);
+  return recordIngressPreviewStatus(db, sha256, declined, attempt + 1);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function yieldTick(): Promise<void> {
@@ -247,10 +392,25 @@ export async function backfillPreviews(
                             WHERE d.content_id = i.content_id AND d.variant = 'thumbhash'
                               AND d.text_content IS NOT NULL)
           )
+          -- The durable decline (#1011): an original THIS codec generation
+          -- already declined is not retried every sweep. Keyed by the model id,
+          -- so bumping PREVIEW_CODEC_VERSION re-selects the whole marked set.
+          AND NOT EXISTS (SELECT 1 FROM enrich_derivation ed
+                           WHERE ed.target_type = 'core.content_item'
+                             AND ed.target_id = i.content_id
+                             AND ed.variant = ? AND ed.capability = ?
+                             AND ed.model = ?)
         ORDER BY i.created_at
         LIMIT ?`
     )
-    .all(now, now, limit) as {
+    .all(
+      now,
+      now,
+      PREVIEW_STATUS_VARIANT,
+      PREVIEW_STATUS_CAPABILITY,
+      PREVIEW_CODEC_MODEL_ID,
+      limit
+    ) as {
     content_id: string;
     content_uri: string;
     media_type: string;
@@ -321,7 +481,13 @@ export async function backfillPreviews(
           unsupported = true;
         }
       }
-      if (unsupported) result.skippedUnsupported += 1;
+      if (unsupported && !hasDisplayRung(db.vault, item.content_id)) {
+        result.skippedUnsupported += 1;
+      }
+      // A rung landed (or was already there, the client's included): retire any
+      // marker an older codec generation left, so the content reads as
+      // previewable again.
+      settlePreviewVerdict(db, item.content_id, unsupported, now);
     } catch {
       // One unreadable image never sinks the batch or the custody sweep.
     }

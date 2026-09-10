@@ -56,6 +56,7 @@ import {
   seatLogRowWire,
 } from "@centraid/vault";
 
+import type { RuntimeLogger } from "../engine/runtime.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import { vaultContext } from "../serve/vault-context.js";
@@ -79,6 +80,18 @@ export interface SeatRouteOptions {
   snapshotDir?: string;
   maxLogPage?: number;
   snapshotCacheSize?: number;
+  /**
+   * ONE LINE PER SEAT DOOR ANSWER (docs/logs.md).
+   *
+   * A seat that never catches up leaves no trace anywhere else: the log door
+   * reads the vault's own `replica_log` and writes nothing, and the snapshot
+   * door only touches disk the first time a watermark is asked for. So a phone
+   * with an empty copy and a gateway holding hundreds of rows was
+   * indistinguishable from a phone that never asked — which is exactly the
+   * question a stale seat raises first. These lines make "did it ask" readable
+   * from the gateway log ring instead of from a device console nobody kept.
+   */
+  logger?: RuntimeLogger;
 }
 
 interface SnapshotArtifact {
@@ -314,6 +327,10 @@ export function makeSeatRouteHandler(
           message: `log row ${foreign.seq} carries epoch ${foreign.epoch}, this vault is ${state.epoch}`,
         });
       }
+      options.logger?.info(
+        `seat log page for ${vaultId}: since ${seq}, ${page.rows.length} rows, ` +
+          `next ${page.next.seq}, watermark ${page.watermark.seq}, hasMore ${String(page.hasMore)}`
+      );
       const body: SeatLogPageWire = {
         vaultId,
         epoch: state.epoch,
@@ -338,6 +355,10 @@ export function makeSeatRouteHandler(
       });
     }
     const artifact = snapshotFor(plane.db.vault, dir, cacheSize);
+    options.logger?.info(
+      `seat snapshot for ${vaultId}: seq ${artifact.seq}, ${artifact.bytes} bytes, ` +
+        `${headOnly ? "HEAD" : "GET"}`
+    );
     res.setHeader("ETag", artifact.etag);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Content-Type", "application/gzip");

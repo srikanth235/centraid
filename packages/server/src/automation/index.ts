@@ -59,6 +59,7 @@ export { parseRef, type Ref } from "./manifest/ref.js";
 
 // The automation directory is the source of truth, not a table (#98).
 export {
+  APP_AUTOMATIONS_SUBDIR,
   manifestPath,
   readAppOwned,
   list,
@@ -141,6 +142,7 @@ export {
 } from "./handler/lint.js";
 export {
   runFire,
+  resolveAutomationRuntimeDir,
   type RunFireOptions,
   type RunRecord,
   type DispatchSurface,
