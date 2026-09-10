@@ -52,8 +52,11 @@ import type { SeatSearchRequest } from "@centraid/client/replica/seat/search-pag
 import type { Page } from "@centraid/core/page";
 
 import { ExpoSeatDriver } from "./expo-seat-driver";
-import { expoSeatStaging } from "./expo-seat-staging";
+import { expoSeatCarryOverSidecar, expoSeatStaging } from "./expo-seat-staging";
 import { nativeSeatDatabaseName } from "./native-seat-path";
+import { acquireSeatLease, seatLeaseHolder } from "./seat-lease";
+import type { SeatLease } from "./seat-lease";
+import { SeatLeaseHeldError } from "./seat-lease-held-error";
 
 export interface NativeSeatOptions {
   readonly gatewayId: string;
@@ -67,6 +70,18 @@ export interface NativeSeatOptions {
   /** Hermes has no WebCrypto; the phone passes expo-crypto's. */
   readonly digest?: ReplicaDigest;
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * WHO IS OPENING THIS FILE, AND THAT IT IS ALLOWED TO (#1014, P1/C8).
+   *
+   * expo-sqlite caches connections by database NAME, so a second opener over
+   * one seat gets the FIRST one's handle and closing it closes theirs.
+   * `useNewConnection` stops that; the lease stops the deeper problem, which
+   * is two writers on one outbox. A caller that names an owner is refused with
+   * {@link SeatLeaseHeldError} while another live owner holds the file.
+   */
+  readonly owner?: string;
+  /** A second connection rather than the cached one. The background pass. */
+  readonly useNewConnection?: boolean;
 }
 
 /**
@@ -103,6 +118,7 @@ export class NativeSeat implements NativeSeatPort {
 
   private constructor(
     private readonly loop: SeatLoop,
+    private readonly lease: SeatLease | undefined,
     private readonly sinkHolder: { sink: SeatWorkerSink }
   ) {}
 
@@ -115,6 +131,17 @@ export class NativeSeat implements NativeSeatPort {
     const name = await nativeSeatDatabaseName(options);
     const location = options.storageLocation.replace(/\/+$/u, "");
     const databasePath = `${location}/${name}`;
+    // BEFORE THE FILE IS OPENED, NOT AFTER (#1014, P1/C8). A pass that has to
+    // open the seat to learn it may not open the seat has already taken the
+    // cached handle out from under the holder.
+    let lease: SeatLease | undefined;
+    if (options.owner !== undefined) {
+      lease = acquireSeatLease(databasePath, options.owner);
+      if (!lease)
+        throw new SeatLeaseHeldError(
+          seatLeaseHolder(databasePath) ?? "another owner"
+        );
+    }
     // THE SINK IS INDIRECT, AND THAT IS THE POINT (#1014, C3). `SeatWorkerCore`
     // takes its sink once, at construction, and the core is built here — before
     // the session that wants the invalidations exists. One mutable holder,
@@ -128,6 +155,9 @@ export class NativeSeat implements NativeSeatPort {
             name,
             location,
             ...(options.key === undefined ? {} : { key: options.key }),
+            ...(options.useNewConnection === true
+              ? { useNewConnection: true }
+              : {}),
           }),
         staging: () =>
           expoSeatStaging({
@@ -148,6 +178,10 @@ export class NativeSeat implements NativeSeatPort {
               });
             },
           }),
+        // THE QUEUE'S DURABLE PLACE ACROSS THE SWAP (#1014, C5/T6). Keyed by
+        // the seat's own file path, so two vaults on one phone never share a
+        // stash.
+        carryOver: () => expoSeatCarryOverSidecar(databasePath),
         transport: (bootstrap) =>
           httpSeatSnapshotTransport({
             url: bootstrap.snapshotUrl,
@@ -186,11 +220,19 @@ export class NativeSeat implements NativeSeatPort {
       ...(options.headers ? { headers: options.headers } : {}),
       ...(options.fetch ? { fetch: options.fetch } : {}),
     });
-    await loop.open();
-    return new NativeSeat(loop, sinkHolder);
+    try {
+      await loop.open();
+    } catch (error) {
+      lease?.release();
+      throw error;
+    }
+    return new NativeSeat(loop, lease, sinkHolder);
   }
 
-  sync(): Promise<SeatWatermark | undefined> {
+  async sync(): Promise<SeatWatermark | undefined> {
+    // Renewed on the work, not on a timer: a pass that is running is the
+    // proof the holder is alive, and a lease is worth exactly that.
+    this.lease?.renew();
     return this.loop.sync();
   }
 
@@ -227,8 +269,12 @@ export class NativeSeat implements NativeSeatPort {
   }
 
   /** Delete this phone's copy of the vault, outbox and all (revocation). */
-  purge(): Promise<void> {
-    return this.loop.purge();
+  async purge(): Promise<void> {
+    try {
+      await this.loop.purge();
+    } finally {
+      this.lease?.release();
+    }
   }
 
   watermark(): SeatWatermark | undefined {
@@ -272,8 +318,14 @@ export class NativeSeat implements NativeSeatPort {
       request.overlay
     );
 
-  close(): Promise<void> {
-    return this.loop.close();
+  async close(): Promise<void> {
+    try {
+      await this.loop.close();
+    } finally {
+      // RELEASED EVEN ON A FAILED CLOSE. A lease held by a seat nobody is
+      // using is a vault the background pass will skip until it expires.
+      this.lease?.release();
+    }
   }
 }
 

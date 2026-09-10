@@ -156,6 +156,15 @@ export function createFreshnessStore(input: {
 export interface ReplicaRevokedNoticeStore {
   /** A scope is about to be purged; record the trace while the label exists. */
   note: (scope: { vaultId: string; label: string }) => void;
+  /**
+   * The purge has run and it took this much unsent work (#1014, P24). Told
+   * separately because the label has to be written BEFORE the purge and the
+   * count only exists AFTER it.
+   */
+  noteUnsent: (
+    scope: { vaultId: string; label: string },
+    taken: { unsent: number; saved: boolean }
+  ) => void;
   forget: (vaultId: string) => void;
   current: () => readonly ReplicaRevokedNotice[];
 }
@@ -183,6 +192,15 @@ export function createRevokedNoticeStore(input: {
         vaultId: scope.vaultId,
         label: scope.label,
         at: new Date().toISOString(),
+      }).then(settle, () => undefined);
+    },
+    noteUnsent: (scope, taken) => {
+      void recordRevokedNotice(input.storage, input.gatewayId, {
+        vaultId: scope.vaultId,
+        label: scope.label,
+        at: new Date().toISOString(),
+        unsent: taken.unsent,
+        unsentSaved: taken.saved,
       }).then(settle, () => undefined);
     },
     forget: (vaultId) => {

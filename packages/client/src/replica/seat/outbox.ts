@@ -53,8 +53,10 @@ CREATE TABLE IF NOT EXISTS seat_outbox (
   -- applied cursor reaches it — which is the whole of R24 in one column.
   commit_seq     INTEGER,
   waiting_on_json TEXT,
-  -- Content hashes this intent needs uploaded and verified before it may run
-  -- (R25). The LRU may not evict them.
+  -- Content this intent still needs on this device before it may run (R25):
+  -- the references its input names, written by the store at add() and kept
+  -- current through a revision (#1014, C6). The LRU may not evict them. The
+  -- column keeps its shipped name — a seat file in the field carries it.
   needs_blobs_json TEXT,
   enqueued_at    TEXT NOT NULL,
   updated_at     TEXT NOT NULL,

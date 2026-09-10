@@ -106,10 +106,13 @@ function row(
  * previous answer stands, which over-keeps rather than over-evicts.
  */
 export async function publishQueueContentRefs(
+  vaultId: string,
   queue: IntentQueue
 ): Promise<void> {
   try {
-    publishPendingContentRefs(await queue.pending());
+    // PER VAULT (#1014, C7). A phone with two vaults mounted had one global
+    // answer, so whichever seat published last spoke for both.
+    publishPendingContentRefs(vaultId, await queue.pending());
   } catch {
     /* The previous publication stands. */
   }

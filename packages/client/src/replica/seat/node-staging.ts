@@ -29,6 +29,7 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import type { SeatBootstrapStaging } from "./bootstrap.js";
+import type { SeatCarryOverSidecar } from "./carry-over.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 
@@ -123,5 +124,33 @@ export function nodeSeatStaging(
       }
     },
     currentBytes: (): Promise<number> => sizeOf(options.databasePath),
+  };
+}
+
+/**
+ * The carry-over sidecar on a real filesystem (#1014, C5/T6).
+ *
+ * Beside the seat file rather than in the staging directory, because the two
+ * have different lifetimes: staging is discarded the moment an install lands,
+ * and the stash must outlive exactly that. Written through a scratch file and
+ * renamed, so a kill mid-write leaves the previous stash or none — never half
+ * a queue that parses into a shorter one.
+ */
+export function nodeSeatCarryOverSidecar(
+  databasePath: string
+): SeatCarryOverSidecar {
+  const file = `${databasePath}.carry-over.json`;
+  return {
+    read: () => readFile(file, "utf8").catch(() => undefined),
+    write: async (payload: string): Promise<void> => {
+      const scratch = `${file}.writing`;
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(scratch, payload, "utf8");
+      await rename(scratch, file);
+    },
+    clear: async (): Promise<void> => {
+      await rm(file, { force: true });
+      await rm(`${file}.writing`, { force: true });
+    },
   };
 }

@@ -28,9 +28,10 @@ import {
   admissionDuringRebootstrap,
   AdmissionWaiters,
   drainIntents,
-  IntentQueue,
   InvalidationBus,
   isAuthorizationError,
+  invalidateOutboxMirror,
+  isSeatAuthorizationRevoked,
   postReplicaIntent,
   replicaIntentInvalidations,
   ReplicaProtocolError,
@@ -38,9 +39,12 @@ import {
 } from "@centraid/client/replica/native";
 import type {
   GatewayAuth,
+  IntentQueue,
+  IntentRecordStore,
   OptimisticMutation,
   ReplicaFetcher,
   ReplicaIdFactory,
+  ReplicaIntent,
   ReplicaInvalidation,
   ReplicaSearchWireResult,
   ReplicaValue,
@@ -91,6 +95,8 @@ const MAX_INTENT_RETRY_DELAY_MS = 5 * 60_000;
 
 export class NativeReplicaSession implements MobileReplicaSession {
   readonly #gatewayAuth: GatewayAuth;
+  /** #1014 C7: a later read of the mutable id could unprotect another vault. */
+  readonly #vaultId: string;
   readonly #fetcher: ReplicaFetcher;
   readonly #delivery: SeatDelivery;
   readonly #seat: NativeSeatPort;
@@ -98,6 +104,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #queue: IntentQueue;
   readonly #bus = new InvalidationBus();
   readonly #admission: AdmissionWaiters<NativeWriteResult>;
+  /** The raw store the queue's mirror was built over (#1014, C11). */
+  readonly #outboxStore: IntentRecordStore;
   readonly #isConnected: () => boolean;
   readonly #retryBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
@@ -109,6 +117,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** Where this file got to, after the rows are durable (#1014, C3). */
   readonly #onApplied: ((applied: number) => void) | undefined;
   readonly #onStorageFull: ((error: unknown) => void) | undefined;
+  readonly #onAuthorizationRevoked: (() => void) | undefined;
   readonly #writes: NativeWriteRail;
   /**
    * A re-bootstrap is being prepared or is running (#996 R23/R25).
@@ -130,9 +139,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
     options: CreateNativeReplicaSessionOptions & {
       queue: IntentQueue;
       idFactory: ReplicaIdFactory;
+      /** The same store instance the queue's mirror wraps (#1014, C11). */
+      outboxStore: IntentRecordStore;
     }
   ) {
     this.#gatewayAuth = options.gatewayAuth;
+    if (!options.gatewayAuth.vaultId)
+      throw new ReplicaProtocolError("An addressed vault is required");
+    this.#vaultId = options.gatewayAuth.vaultId;
     this.#fetcher = options.fetcher;
     this.#delivery = new SeatDelivery({
       feed: options.changeFeed,
@@ -174,11 +188,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#onGatewayOutcome = options.onGatewayOutcome;
     this.#onApplied = options.onApplied;
     this.#onStorageFull = options.onStorageFull;
+    this.#onAuthorizationRevoked = options.onAuthorizationRevoked;
     this.#waitingOnLabel = options.origin
       ? waitingOnLabel(options.origin.displayName)
       : undefined;
     this.#scope = options.scope;
     this.#admission = new AdmissionWaiters<NativeWriteResult>();
+    this.#outboxStore = options.outboxStore;
     this.#writes = new NativeWriteRail({
       gatewayAuth: this.#gatewayAuth,
       fetcher: this.#fetcher,
@@ -211,6 +227,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       seatDeliverySink({
         emit: (invalidations) => this.#bus.emit(invalidations),
         ...(this.#onApplied ? { applied: this.#onApplied } : {}),
+        overlaysCleared: (intentIds) => this.settleCleared(intentIds),
       })
     );
     await this.#queue.recoverSending();
@@ -429,6 +446,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.#storageFullError = error;
         this.#onStorageFull?.(error);
       }
+      // #1014 X7/X8: the phone used to answer a refusal by re-fetching the
+      // vault from the gateway that had just revoked it, forever.
+      if (isSeatAuthorizationRevoked(error)) this.#onAuthorizationRevoked?.();
       return false;
     }
   }
@@ -440,8 +460,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
    * and carries the outbox and the pins across (R23).
    */
   requireBootstrap(detail?: unknown): void {
-    if (detail !== undefined)
-      noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
+    if (detail !== undefined) noteResyncVerdict(detail, this.#vaultId);
     if (this.#closed) return;
     // Set BEFORE the refetch is scheduled: the window this closes is the one
     // between deciding to replace the copy and starting to.
@@ -461,12 +480,25 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#admission.rejectAll(
       new ReplicaProtocolError("Replica session closed")
     );
-    forgetPendingContentRefs();
+    forgetPendingContentRefs(this.#vaultId);
     this.#queue.close();
     await this.#seat.close();
   }
 
-  /** Membership revocation: close and delete this scope's file and queue. */
+  /** Stop the drain and wait for what is in flight, before the outbox is read
+   *  for the revocation export (#1014, C25). */
+  quiesce(): Promise<void> {
+    this.detach();
+    return (this.#drainPromise ?? Promise.resolve()).catch(() => undefined);
+  }
+
+  /** Everything this seat's queue still holds — the revocation export reads it. */
+  listIntents(): Promise<ReplicaIntent[]> {
+    return this.#queue.list();
+  }
+
+  /** Membership revocation: delete this scope's file and queue. `quiesce()`
+   *  and the unsent export run FIRST, in `revoke-scope.ts` (R-1014-12). */
   async purge(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -476,11 +508,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
     );
     this.#bus.emit(seatPurgeInvalidation());
     this.#bus.clear();
-    forgetPendingContentRefs();
+    forgetPendingContentRefs(this.#vaultId);
     await this.#seat.purge();
   }
 
   private detach(): void {
+    // #1014 P17: its trailing follow-up fired after the file was unlinked.
+    this.#syncLoop.close();
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
     this.#delivery.stop();
@@ -519,16 +553,26 @@ export class NativeReplicaSession implements MobileReplicaSession {
       },
       appliedCommitSeq: () => this.#seat.watermark()?.appliedCommitSeq,
       isAuthorizationError,
-      onAuthorizationRevoked: () => {
-        this.queueEveryoneWaiting("saved locally; the session is reconnecting");
-        this.requireBootstrap();
-      },
+      // #1014 X7: no requeue-and-re-bootstrap loop against a 403.
+      onAuthorizationRevoked: () => this.#onAuthorizationRevoked?.(),
       scheduleRetry: () => this.scheduleRetry(),
       onGatewayOutcome: (reachable) => {
         if (reachable) this.#retryBackoff.reset();
         this.#onGatewayOutcome?.(reachable);
       },
     });
+  }
+
+  /**
+   * R24 ON THE PHONE (#1014, C10/C11). The applier cleared these overlays in
+   * the transaction that carried their commit; the mirror never saw that write
+   * — it went on the seat's own connection, not through the proxy — so the
+   * pending badge stayed over rows that had already landed.
+   */
+  private settleCleared(intentIds: readonly string[]): void {
+    invalidateOutboxMirror(this.#outboxStore);
+    for (const intentId of intentIds)
+      this.#admission.resolve(intentId, { intentId, status: "executed" });
   }
 
   private queueEveryoneWaiting(reason: string): void {
@@ -563,34 +607,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   private publishProtectedContent(): Promise<void> {
-    return publishQueueContentRefs(this.#queue);
+    // Keyed by vault (#1014, C7): a module-global answer let one seat's queue
+    // move make another mounted vault's captured photograph evictable.
+    return publishQueueContentRefs(this.#vaultId, this.#queue);
   }
 
   private assertOpen(): void {
     if (this.#closed)
       throw new ReplicaProtocolError("Replica session is closed");
   }
-}
-
-/** The seat's file holds the queue; both are opened before the session. */
-export async function createNativeReplicaSession(
-  options: CreateNativeReplicaSessionOptions
-): Promise<NativeReplicaSession> {
-  if (!options.gatewayAuth.vaultId) {
-    throw new ReplicaProtocolError("An addressed vault is required");
-  }
-  // Loaded only when the caller supplies neither, so `node:test` runs (which
-  // inject both) never resolve expo-crypto's native module.
-  let digest = options.digest;
-  let idFactory = options.idFactory;
-  if (!digest || !idFactory) {
-    const { nativeReplicaDigest, nativeReplicaIdFactory } =
-      await import("./native-hash");
-    digest ??= nativeReplicaDigest;
-    idFactory ??= nativeReplicaIdFactory;
-  }
-  const queue = new IntentQueue(options.seat.outbox(), { digest, idFactory });
-  const session = new NativeReplicaSession({ ...options, queue, idFactory });
-  await session.start();
-  return session;
 }

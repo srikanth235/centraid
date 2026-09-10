@@ -110,6 +110,16 @@ export interface ReplicaRevokedNotice {
   label: string;
   /** ISO instant the revoked frame purged this scope. */
   at: string;
+  /**
+   * Unsent changes the purge took from the member (#1014, P24; R-1014-12).
+   *
+   * Absent means "not counted" — a notice written by a build before this, or
+   * one whose purge never reported. Zero means counted and there were none,
+   * which is a different and better thing to be able to say.
+   */
+  unsent?: number;
+  /** False when the export could not be written and the count is all there is. */
+  unsentSaved?: boolean;
 }
 
 /**
@@ -122,8 +132,18 @@ export function revokedNoticeRow(notice: ReplicaRevokedNotice): {
   label: string;
   action: string;
 } {
+  const removed = `No longer shared with you — ${notice.label} was removed from this phone`;
+  // NEVER SILENT ABOUT WHAT WENT WITH IT (#1014, P24). Revocation is about
+  // access, not about the member's past writes; a purge that took unsent edits
+  // and reported only "removed" was the loss this sentence exists to end.
+  if (notice.unsent === undefined || notice.unsent <= 0)
+    return { label: removed, action: "Dismiss" };
+  const changes = `${notice.unsent} unsent change${notice.unsent === 1 ? "" : "s"}`;
   return {
-    label: `No longer shared with you — ${notice.label} was removed from this phone`,
+    label:
+      notice.unsentSaved === false
+        ? `${removed}. ${changes} could not be saved.`
+        : `${removed}. ${changes} were saved to this phone.`,
     action: "Dismiss",
   };
 }
@@ -152,8 +172,22 @@ export async function recordRevokedNotice(
   notice: ReplicaRevokedNotice
 ): Promise<ReplicaRevokedNotice[]> {
   const existing = await loadRevokedNotices(storage, gatewayId);
-  const next = existing.some((entry) => entry.vaultId === notice.vaultId)
-    ? existing
+  const held = existing.find((entry) => entry.vaultId === notice.vaultId);
+  // Idempotent on the INSTANT, not on the whole row: the count arrives after
+  // the notice (the label is written before the purge, the number only exists
+  // once it has run), so a later record may fill it in (#1014, P24).
+  const next = held
+    ? existing.map((entry) =>
+        entry.vaultId === notice.vaultId
+          ? {
+              ...entry,
+              ...(notice.unsent === undefined ? {} : { unsent: notice.unsent }),
+              ...(notice.unsentSaved === undefined
+                ? {}
+                : { unsentSaved: notice.unsentSaved }),
+            }
+          : entry
+      )
     : [...existing, notice];
   await writeRevokedNotices(storage, gatewayId, next);
   return next;
@@ -202,6 +236,12 @@ function parseRevokedNotices(value: unknown): ReplicaRevokedNotice[] {
             vaultId: candidate["vaultId"],
             label: candidate["label"],
             at: candidate["at"],
+            ...(typeof candidate["unsent"] === "number"
+              ? { unsent: candidate["unsent"] }
+              : {}),
+            ...(typeof candidate["unsentSaved"] === "boolean"
+              ? { unsentSaved: candidate["unsentSaved"] }
+              : {}),
           },
         ]
       : [];

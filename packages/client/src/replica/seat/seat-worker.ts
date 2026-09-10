@@ -16,7 +16,7 @@ import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import type { SAHPoolUtil } from "@sqlite.org/sqlite-wasm";
 
 import { httpSeatSnapshotTransport } from "./http-snapshot-transport.js";
-import { opfsSeatStaging } from "./opfs-staging.js";
+import { opfsSeatCarryOverSidecar, opfsSeatStaging } from "./opfs-staging.js";
 import type { OpfsDirectory } from "./opfs-staging.js";
 import { WasmSeatDriver } from "./wasm-seat-driver.js";
 import { SeatWorkerCore } from "./worker-core.js";
@@ -108,6 +108,12 @@ const host: SeatWorkerHost = {
       // A pool that never held this name has nothing to unlink.
     }
   },
+  // WHERE THE QUEUE WAITS OUT THE SWAP (#1014, C5/T6). The same per-vault
+  // OPFS directory the part file uses — the SAH pool has no room beside the
+  // database for a plain file, and this one is already namespaced by the
+  // seat's own stem.
+  carryOver: async (options) =>
+    opfsSeatCarryOverSidecar(await stagingDirectory(options)),
   transport: (options) =>
     httpSeatSnapshotTransport({
       url: options.snapshotUrl,

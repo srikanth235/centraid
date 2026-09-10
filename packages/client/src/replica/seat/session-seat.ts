@@ -42,6 +42,19 @@ import type { SeatWorkerQuery } from "./worker-protocol.js";
  */
 export interface SessionSeatHandle {
   sync: () => Promise<SeatWatermark | undefined>;
+  /**
+   * WHAT THE FILE ALREADY SAYS, BEFORE ANY SYNC (#1014, R1).
+   *
+   * A seat opened from disk knows its own `applied_seq` and
+   * `applied_commit_seq` — the bootstrap or the previous session wrote them —
+   * and the ack-after-delta sweep needs the second of those to notice an
+   * intent whose commit the cursor has ALREADY passed. Reading it only from
+   * `sync()` meant the sweep was skipped for the whole window between opening
+   * a filled seat and its first successful catch-up, which is exactly the
+   * window a relaunch-then-reconnect spends. Absent on a handle a suite drives
+   * without a loop.
+   */
+  watermark?: () => SeatWatermark | undefined;
   /** The read path's one method — the same seam `SeatQueryPort` names. */
   query: <T extends object>(request: SeatWorkerQuery) => Promise<T[]>;
   /** The queue's durable store, in this seat's own file (#996, R24). */
@@ -172,7 +185,7 @@ export class SessionSeat {
 
   /** How current this seat is, or `undefined` before it has said. */
   watermark(): SeatWatermark | undefined {
-    return this.#watermark;
+    return this.#watermark ?? this.#held?.watermark?.();
   }
 
   /**
@@ -222,6 +235,9 @@ export class SessionSeat {
         return undefined;
       }
       this.#held = seat;
+      // Seeded, never `#filled`: "the file says it stands here" and "a sync
+      // landed" are different facts, and only the second one makes reads legal.
+      this.#watermark ??= seat.watermark?.();
       return seat;
     } catch {
       return undefined;

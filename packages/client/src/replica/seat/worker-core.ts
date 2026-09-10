@@ -20,8 +20,15 @@ import type {
   SeatBootstrapStaging,
   SeatSnapshotTransport,
 } from "./bootstrap.js";
-import { readSeatCarryOver, writeSeatCarryOver } from "./carry-over.js";
-import type { SeatCarryOver } from "./carry-over.js";
+import {
+  parseSeatCarryOver,
+  readSeatCarryOver,
+  seatCarryOverApplied,
+  seatCarryOverIsEmpty,
+  serializeSeatCarryOver,
+  writeSeatCarryOver,
+} from "./carry-over.js";
+import type { SeatCarryOver, SeatCarryOverSidecar } from "./carry-over.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { openSeatFile } from "./driver.js";
 import { createSeatOutbox } from "./outbox.js";
@@ -64,6 +71,17 @@ export interface SeatWorkerHost {
   readonly destroyDatabase?: (
     options: SeatWorkerOpenOptions
   ) => void | Promise<void>;
+  /**
+   * Where this seat's carry-over waits out a re-bootstrap (#1014, C5/T6).
+   *
+   * Absent in a host with nowhere durable to put it — a suite over `:memory:`
+   * has no file to lose and nothing to lose it to. Every host that HAS a file
+   * must have one: without it the queue is a heap object across the download,
+   * which is the bug this seam exists to close.
+   */
+  readonly carryOver?: (
+    options: SeatWorkerOpenOptions
+  ) => SeatCarryOverSidecar | Promise<SeatCarryOverSidecar>;
 }
 
 export interface SeatWorkerSink {
@@ -124,7 +142,42 @@ export class SeatWorkerCore {
     this.#open = options;
     const driver = await this.host.openDatabase(options);
     this.#adopt(driver);
+    await this.#replayCarryOver(options, driver);
     return seatStatePresent(driver) ? readSeatState(driver) : undefined;
+  }
+
+  /**
+   * FINISH A SWAP THAT WAS KILLED PART-WAY (#1014, C5/T6).
+   *
+   * A sidecar still sitting beside the seat means one of two things: the file
+   * under it is the old one (the kill landed before the install) and the rows
+   * are already in it, or it is the new one and they are not. Both are the
+   * same move — replay, which is `ON CONFLICT DO NOTHING` per intent id — so
+   * this does not try to tell them apart. What it DOES tell apart is a stash
+   * this file has already taken, by the token stamped in `seat_carry_over`
+   * during the write-back: replaying that would resurrect intents the seat has
+   * since drained and settled, which is the one way this repair could itself
+   * lose the member's work.
+   */
+  async #replayCarryOver(
+    options: SeatWorkerOpenOptions,
+    driver: SeatSqliteDriver
+  ): Promise<void> {
+    const sidecar = await this.host.carryOver?.(options);
+    if (!sidecar) return;
+    const payload = await sidecar.read();
+    if (payload === undefined) return;
+    const stash = parseSeatCarryOver(payload, options.vaultId);
+    // An unparseable stash, or one belonging to another vault, is DROPPED: it
+    // can never be replayed into this file, and leaving it would have every
+    // open from here on try again.
+    if (!stash) {
+      await sidecar.clear();
+      return;
+    }
+    if (!seatCarryOverApplied(driver, stash.token))
+      writeSeatCarryOver(driver, stash, stash.token);
+    await sidecar.clear();
   }
 
   async bootstrap(
@@ -139,30 +192,73 @@ export class SeatWorkerCore {
     const carried: SeatCarryOver | undefined = this.#driver
       ? readSeatCarryOver(this.#driver)
       : undefined;
+    // AND IT GOES SOMEWHERE DURABLE BEFORE THE HANDLE IS RELEASED (#1014,
+    // C5/T6). Reading it into a local was never the guarantee the member was
+    // given: the download that follows takes minutes on a phone, `install()`
+    // deletes the old file before it moves the new one in, and a process
+    // killed anywhere in there had the queue in nothing but a heap object.
+    // The stash is on disk before the file it came out of is closed, and it is
+    // removed only after the write-back has committed into the new one.
+    const sidecar = await this.host.carryOver?.(open);
+    const stashed =
+      sidecar && carried && !seatCarryOverIsEmpty(carried)
+        ? serializeSeatCarryOver(carried, open.vaultId)
+        : undefined;
+    if (sidecar && stashed !== undefined) await sidecar.write(stashed);
     // The handle is released BEFORE the install: a file cannot be replaced
     // underneath an open SQLite connection on any of the three hosts, and the
     // one that tolerates it does so by keeping the deleted inode alive, which
     // is worse — the seat would go on reading the file it just replaced.
     this.#driver?.close();
     this.#driver = undefined;
-    const [staging, transport] = await Promise.all([
-      this.host.staging(options),
-      this.host.transport(options),
-    ]);
-    const result = await bootstrapSeatFile({
-      transport,
-      staging,
-      vaultId: options.vaultId,
-      open: () => this.host.openDatabase(open),
-      ...(options.expansion === undefined
-        ? {}
-        : { expansion: options.expansion }),
-      onProgress: (progress) => this.sink.onBootstrapProgress?.(progress),
-    });
-    const driver = await this.host.openDatabase(open);
+    try {
+      const [staging, transport] = await Promise.all([
+        this.host.staging(options),
+        this.host.transport(options),
+      ]);
+      const result = await bootstrapSeatFile({
+        transport,
+        staging,
+        vaultId: options.vaultId,
+        open: () => this.host.openDatabase(open),
+        ...(options.expansion === undefined
+          ? {}
+          : { expansion: options.expansion }),
+        onProgress: (progress) => this.sink.onBootstrapProgress?.(progress),
+      });
+      const driver = await this.host.openDatabase(open);
+      this.#adopt(driver);
+      const token = stashed
+        ? parseSeatCarryOver(stashed, open.vaultId)?.token
+        : undefined;
+      if (carried) writeSeatCarryOver(driver, carried, token);
+      // ONLY NOW. The stash is the queue's only copy from the close above until
+      // this line; dropping it before the write-back commits is the window all
+      // of this exists to remove.
+      if (sidecar && stashed !== undefined) await sidecar.clear();
+      return result;
+    } catch (error) {
+      // A FAILED BOOTSTRAP MUST NOT COST THE MEMBER THEIR QUEUE'S DOOR
+      // (#1014, C5). The handle was released above and there is no `finally`
+      // that puts it back, so every later call on this worker — `outbox()`
+      // most of all, which is where the member's unsent writes live — threw
+      // `SeatWorkerNotOpenError` until something re-opened the file. On the
+      // phone that is a refused download turning a queued write into an
+      // unreachable one, and `NativeReplicaSession.close()` itself throwing.
+      //
+      // So the file is re-adopted on the way out, and the replay runs: if the
+      // install DID land before the failure, the stash goes back into it here
+      // rather than waiting for the next open.
+      await this.#reopen(open).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** Put the handle back after a bootstrap that did not finish. */
+  async #reopen(options: SeatWorkerOpenOptions): Promise<void> {
+    const driver = await this.host.openDatabase(options);
     this.#adopt(driver);
-    if (carried) writeSeatCarryOver(driver, carried);
-    return result;
+    await this.#replayCarryOver(options, driver);
   }
 
   /**
@@ -218,6 +314,9 @@ export class SeatWorkerCore {
 
   apply(options: SeatWorkerApplyOptions): SeatApplySummary {
     const driver = this.required();
+    const clearing = seatOverlayClearingHook(driver, (intentIds) =>
+      this.sink.onOverlaysCleared?.(intentIds)
+    );
     const result = applySeatLogPage(driver, options.page, {
       ...(options.deferOverThreshold === undefined
         ? {}
@@ -227,9 +326,9 @@ export class SeatWorkerCore {
       // executed intent parks on its `commit_seq`; this is what reaches it.
       // Without it the overlay is never cleared by anything — the pending row
       // stays drawn over the very rows that settle it, forever.
-      onCommitInTransaction: seatOverlayClearingHook(driver, (intentIds) =>
-        this.sink.onOverlaysCleared?.(intentIds)
-      ),
+      onCommitInTransaction: clearing.inTransaction,
+      // The news, once the rows are durable (#1014, C10).
+      afterCommit: clearing.afterCommit,
     });
     return result;
   }
@@ -266,7 +365,13 @@ export class SeatWorkerCore {
     const open = this.#open;
     this.close();
     this.#outbox = undefined;
-    if (open) await this.host.destroyDatabase?.(open);
+    if (open) {
+      await this.host.destroyDatabase?.(open);
+      // THE SIDECAR GOES WITH THE FILE (#1014, C5). It holds the same queued
+      // intents the file did; leaving it would have the next bootstrap of this
+      // seat replay a purged device's work back onto it.
+      await (await this.host.carryOver?.(open))?.clear();
+    }
     this.#open = undefined;
   }
 

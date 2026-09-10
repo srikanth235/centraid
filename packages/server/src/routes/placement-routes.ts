@@ -14,13 +14,27 @@
  * makes a replayed placement token exactly-once at this boundary. Whether a
  * pair may be crossed is decided ONLY by `serve/link-crossing.ts` (D3);
  * unauthorized pairs answer `not_found` — topology hiding.
+ *
+ * AND THE ACT IS BRACKETED BY AN ATTEMPT ROW (#1014, V3). The receipt is
+ * written last, so it can only ever say "this completed". A placement is three
+ * transactions over three databases — the origin's authority, the audience's
+ * projection, and for a move the origin's release — and a crash between any
+ * two of them used to leave the gateway with NOTHING recorded, so a retry of
+ * the same token was indistinguishable from a fresh placement. The order is
+ * now: record the attempt with its parameters, do the three steps (each
+ * idempotent by id), write the receipt, drop the attempt. A retry resumes; a
+ * retry that re-addresses the placement is refused.
  */
 
 import type { IncomingMessage } from "node:http";
 
 import { ROUTES } from "@centraid/core/protocol";
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
-import { isShareableItemType, placeItemsInVault } from "@centraid/vault";
+import {
+  isShareableItemType,
+  moveItemsOutOfVault,
+  placeItemsInVault,
+} from "@centraid/vault";
 import type { ShareVaultRef, ShareableItemType } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
@@ -33,6 +47,12 @@ import {
   recordShareAccessReceipt,
 } from "../serve/share-access-receipts.js";
 import type { ShareAccessReceiptRow } from "../serve/share-access-receipts.js";
+import {
+  beginSharePlacementAttempt,
+  finishSharePlacementAttempt,
+  readSharePlacementAttempt,
+  sameSharePlacement,
+} from "../serve/share-placement-attempts.js";
 import { validateItemIds } from "../serve/share-scope.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
@@ -59,6 +79,8 @@ export interface PlacementRouteDeps {
   /** The vault's own party — the principal a placement runs as (#916). */
   partyIdFor: (vaultId: string) => string | undefined;
   place?: typeof placeItemsInVault;
+  /** The origin's release for a move — injected so a suite can kill it. */
+  release?: typeof moveItemsOutOfVault;
 }
 
 export function makePlacementRouteHandler(
@@ -95,11 +117,20 @@ export function makePlacementRouteHandler(
     }
     // A replayed token answers the recorded placement — the phone's outbox
     // retries, and a retry must not place twice.
+    //
+    // UNLESS THE ACT IS STILL UNFINISHED (#1014, V3). A receipt with an
+    // attempt row still beside it is a move whose origin release did not land:
+    // answering "completed" here would leave the item in both vaults forever,
+    // because nothing else ever revisits a receipted placement.
     const already = readShareAccessReceipt(
       deps.gatewayDatabase,
       input.placementId
     );
-    if (already) return sendJson(res, 200, placementWire(already));
+    if (
+      already &&
+      !readSharePlacementAttempt(deps.gatewayDatabase, input.placementId)
+    )
+      return sendJson(res, 200, placementWire(already));
 
     // The ACTING owner must own the origin — a placement only leaves a vault
     // you own; whether the PAIR may cross is `judgeEdgeCrossing`'s question.
@@ -136,40 +167,104 @@ export function makePlacementRouteHandler(
       });
     const audiencePartyId = deps.partyIdFor(input.audienceVaultId) ?? "";
 
-    let targetItemIds: string[];
-    try {
-      targetItemIds = (deps.place ?? placeItemsInVault)({
-        kind: input.kind,
-        origin,
-        originVaultId: input.originVaultId,
-        audience,
-        audiencePartyId,
-        itemType: input.itemType,
-        itemIds: input.itemIds,
-        sharedBy: owner.ownerId,
-      }).targetItemIds;
-    } catch (error) {
-      return sendJson(res, 502, {
-        error: "placement_failed",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-    recordShareAccessReceipt(deps.gatewayDatabase, {
-      edgeId: input.placementId,
+    // RECORDED BEFORE THE FIRST VAULT WRITE (#1014, V3). The receipt below is
+    // written LAST and means "completed"; nothing meant "began", so a crash
+    // between the three transactions left no record at all and the phone's
+    // retry could not be told from a fresh act.
+    const act = {
+      placementId: input.placementId,
       ownerId: owner.ownerId,
-      action: "share",
-      placementKind: input.kind,
-      createdByDevice: deviceId,
+      kind: input.kind,
       itemType: input.itemType,
       originVaultId: input.originVaultId,
-      originItemIds: input.itemIds,
       audienceVaultId: input.audienceVaultId,
-      audienceItemIds: targetItemIds,
-    });
-    const recorded = readShareAccessReceipt(
+      originItemIds: input.itemIds,
+    };
+    const held = readSharePlacementAttempt(
       deps.gatewayDatabase,
       input.placementId
     );
+    // ONE TOKEN IS ONE ACT. A retry that re-addresses a placement in flight is
+    // a different placement wearing the same id, and performing it would place
+    // items nobody asked to place under a token the caller believes settled.
+    if (held && !sameSharePlacement(held, act))
+      return sendJson(res, 409, {
+        error: "placement_id_reused",
+        message:
+          "this placement id is already in flight for a different placement",
+      });
+    beginSharePlacementAttempt(deps.gatewayDatabase, act);
+
+    let recorded = readShareAccessReceipt(
+      deps.gatewayDatabase,
+      input.placementId
+    );
+    if (!recorded) {
+      let targetItemIds: string[];
+      try {
+        // GRANT AND PROJECT ONLY — `kind: "add"` however this placement is
+        // addressed (#1014, V3). The origin's release moves BELOW the receipt.
+        targetItemIds = (deps.place ?? placeItemsInVault)({
+          kind: "add",
+          origin,
+          originVaultId: input.originVaultId,
+          audience,
+          audiencePartyId,
+          itemType: input.itemType,
+          itemIds: input.itemIds,
+          sharedBy: owner.ownerId,
+        }).targetItemIds;
+      } catch (error) {
+        return sendJson(res, 502, {
+          error: "placement_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      recordShareAccessReceipt(deps.gatewayDatabase, {
+        edgeId: input.placementId,
+        ownerId: owner.ownerId,
+        action: "share",
+        placementKind: input.kind,
+        createdByDevice: deviceId,
+        itemType: input.itemType,
+        originVaultId: input.originVaultId,
+        originItemIds: input.itemIds,
+        audienceVaultId: input.audienceVaultId,
+        audienceItemIds: targetItemIds,
+      });
+      recorded = readShareAccessReceipt(
+        deps.gatewayDatabase,
+        input.placementId
+      );
+    }
+    // THE ORIGIN'S RELEASE IS LAST, AFTER THE RECEIPT (#1014, V3).
+    //
+    // It used to run inside `placeItemsInVault`, BEFORE the receipt — so a
+    // move killed between the two left the origin empty and the gateway with
+    // no record, and the retry could not even re-read the closure it needed:
+    // `readShareClosure` refused the items the first attempt had already
+    // removed, and the phone's outbox retried a `placement_failed` forever.
+    // Released after the receipt, the crash window leaves the item in BOTH
+    // vaults — recoverable, because the retry finds the receipt, skips the
+    // projection and releases. The attempt row is what keeps that retry
+    // coming: it survives until the release does.
+    if (input.kind === "move") {
+      try {
+        (deps.release ?? moveItemsOutOfVault)({
+          source: origin,
+          itemType: input.itemType,
+          itemIds: input.itemIds,
+        });
+      } catch (error) {
+        return sendJson(res, 502, {
+          error: "placement_release_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    // ONLY NOW. The attempt row is the evidence that this act is unfinished;
+    // it goes once every step it brackets is durable.
+    finishSharePlacementAttempt(deps.gatewayDatabase, input.placementId);
     return sendJson(res, 200, recorded ? placementWire(recorded) : {});
   };
 }
