@@ -43,7 +43,7 @@ import { SeatRebootstrapRequiredError } from "./seat-rebootstrap-required-error.
 import type { SeatState } from "./state.js";
 import { seatWatermark } from "./watermark.js";
 import type { SeatWatermark } from "./watermark.js";
-import type { SeatWorkerQuery } from "./worker-protocol.js";
+import type { SeatApplySummary, SeatWorkerQuery } from "./worker-protocol.js";
 
 /** How many log rows to ask for at a time. The door's ceiling is 10,000. */
 const PAGE = 1_000;
@@ -151,8 +151,9 @@ export class SeatLoop {
         }
         throw error;
       }
+      let summary: SeatApplySummary;
       try {
-        await this.channel.apply({
+        summary = await this.channel.apply({
           page: answer,
           ...(this.options.deferOverThreshold === undefined
             ? {}
@@ -180,6 +181,12 @@ export class SeatLoop {
       // A page that applied is the drift resolved: the count starts over.
       this.#driftRebootstraps = 0;
       this.#state = await this.channel.state();
+      // A DEFERRED SPAN ENDS THE PASS (#1014, C1). The applier stops at the
+      // owed commit and leaves the cursor before it, so the next page this
+      // loop asked for would be the SAME page — and `hasMore` would keep it
+      // asking. The span is owed until the seat is somewhere it will spend the
+      // bytes; nothing this pass does changes that.
+      if (summary.deferred > 0) break;
       if (!answer.hasMore) break;
     }
     return this.watermark();

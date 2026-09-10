@@ -43,6 +43,8 @@ Ask the two numbers, in this order, before anything else ([#1011](https://github
 
 `applied_commit_seq` well below the gateway's `commit_seq` with `gateway_watermark 0` means **no log page has ever been applied** — the snapshot landed and nothing after it did. A `gateway_watermark` that matches while `applied_seq` lags means pages arrived and the applier refused them; a mismatched `epoch` or `schema_epoch` means a re-bootstrap is owed, not a catch-up.
 
+A non-null `deferred_from` with `applied_seq` sitting just below it is neither: it is a metered seat **parked in front of** a commit that crossed the deferral threshold. The applier stops at that commit and leaves the cursor before it, so nothing behind the span is applied either and `gateway_watermark - applied_seq` counts real unapplied work — the watermark line says both, `"1,204 changes behind — a large update is waiting for wifi"`. The span is taken by the next pull the seat makes without the metered flag, and `deferred_from` clears in the transaction that applies it. Stepping over the span and recording only the position lost it permanently: rule 3 dropped those rows on every later delivery while the seat reported `behind: 0` ([#1014](https://github.com/srikanth235/centraid/issues/1014)). A commit that carries a `ddl` row is never deferred — the column it adds is what every later row binds against.
+
 Then ask whether the phone ever knocked. The gateway logs one line per seat door answer into its log ring ([logs.md](logs.md)):
 
 - `seat log page for <vaultId>: since <seq>, <n> rows, next <seq>, watermark <seq>, hasMore <bool>`

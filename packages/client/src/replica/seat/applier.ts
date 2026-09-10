@@ -172,7 +172,16 @@ function closeGroup(rows: SeatLogRowWire[]): CommitGroup {
     rows,
     // The flag is a property of the COMMIT; the gateway stamps every row of
     // it, so any row carrying it settles the question for all of them.
-    deferred: rows.some((row) => row.deferred === true),
+    //
+    // EXCEPT WHEN IT CARRIES SCHEMA (#1014, C2). A `ddl` row is not bytes the
+    // member can wait for — it is the shape every later row binds against.
+    // Skipping a commit that contains one left the file one column short of
+    // the rows that followed it, and the SQLite error that produced is not a
+    // `SeatDriftError`, so `seat-loop.ts` rethrew it instead of re-bootstrapping
+    // and the seat wedged. Schema is never deferred.
+    deferred:
+      rows.some((row) => row.deferred === true) &&
+      !rows.some((row) => row.op === "ddl"),
     lastSeq: rows.at(-1)!.seq,
   };
 }
@@ -243,32 +252,54 @@ export function applySeatLogPage(
     duplicate += group.rows.length - fresh.length;
     const skip = group.deferred && options.deferOverThreshold === true;
 
+    if (skip) {
+      // THE OWED SPAN, AND THE CURSOR STAYS PUT (#1014, C1).
+      //
+      // It used to move: the seat recorded `deferred_from` and then set
+      // `cursor = group.lastSeq`, so rule 3 above dropped every one of those
+      // rows on the next delivery and NOTHING ever came back for them. A
+      // 60-row photo import above the threshold was permanently absent from a
+      // seat reporting `behind: 0`, and only a full re-bootstrap recovered it.
+      //
+      // Leaving the cursor where the last applied row put it makes the back-fill
+      // the ordinary tail: the next pull asks from this position again, and a
+      // seat no longer on a metered link applies the span it declined. It also
+      // makes `behind` true — the distance to the head really is unapplied
+      // work — which is what the member is shown.
+      deferred += fresh.length;
+      deferredFrom ??= fresh[0]!.seq;
+      driver.run(
+        `UPDATE seat_state SET gateway_watermark = ?, deferred_from = ?,
+                updated_at = ?
+          WHERE singleton = 1`,
+        [Math.max(page.watermark, cursor), deferredFrom, now()]
+      );
+      // Nothing behind an owed span is applied either: taking later commits
+      // would put the cursor past the span again by another route.
+      break;
+    }
+
     driver.exec("BEGIN IMMEDIATE");
     try {
-      if (skip) {
-        // THE OWED SPAN. The rows are not applied and the cursor still moves:
-        // the seat has decided not to spend the bytes now, and it records the
-        // FIRST such position so the byte policy can come back for it. Moving
-        // the cursor is what keeps the tail draining behind a span a metered
-        // seat will not take.
-        deferred += fresh.length;
-        deferredFrom ??= fresh[0]!.seq;
-      } else {
-        for (const row of fresh) {
-          applyRow(driver, keys, row);
-          if (row.op === "ddl") {
-            ddl += 1;
-            ddlVersion = Math.max(ddlVersion, row.ddlVersion);
-            // The statement changed the shape the key cache answers for.
-            keys.forget();
-          } else if (!seen.has(row.table)) {
-            seen.add(row.table);
-            tables.push(row.table);
-          }
+      for (const row of fresh) {
+        applyRow(driver, keys, row);
+        if (row.op === "ddl") {
+          ddl += 1;
+          ddlVersion = Math.max(ddlVersion, row.ddlVersion);
+          // The statement changed the shape the key cache answers for.
+          keys.forget();
+        } else if (!seen.has(row.table)) {
+          seen.add(row.table);
+          tables.push(row.table);
         }
-        applied += fresh.length;
       }
+      applied += fresh.length;
       cursor = group.lastSeq;
+      // THE OWED SPAN, PAID. A commit that applies at or past the recorded
+      // position is the deferred rows landing — the seat is on wifi now — so
+      // the flag that told the member "waiting for wifi" goes with them.
+      if (deferredFrom !== undefined && cursor >= deferredFrom)
+        deferredFrom = undefined;
       commitSeqs.push(group.commitSeq);
       options.onCommitInTransaction?.(group.commitSeq);
       driver.run(
