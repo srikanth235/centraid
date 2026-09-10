@@ -48,26 +48,17 @@ import {
 } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { PROPERTIES_BACKUP_WITHHELD } from "./docs-copy";
+import { PROPERTIES_BACKUP_WITHHELD, custodyLine } from "./docs-copy";
 import { useDocsRoom } from "./docs-room";
 import { useDocs } from "./useDocs";
 
-/** The status sentence, from the custody fact alone — no invented clauses. */
+/**
+ * The status sentence, from the custody fact alone — no invented clauses. The
+ * WORDS live in `docs-copy` with every other Docs enum (#1015, S11); this is
+ * the seam the screen and its tests already import.
+ */
 export function custodyStatusLine(state: string | null): string {
-  switch (state) {
-    case "replicated":
-      return "On the gateway and on this device";
-    case "local-only":
-      return "On this device only · not yet on the gateway";
-    case "remote-only":
-      return "Only in the cloud · not on this device";
-    case "missing":
-      return "Missing — on neither tier · needs attention";
-    case null:
-      return "Not swept yet · custody unknown until the vault's next sweep";
-    default:
-      return "Not swept yet · custody unknown until the vault's next sweep";
-  }
+  return custodyLine(state);
 }
 
 export default function DocumentProperties({

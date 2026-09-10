@@ -43,7 +43,7 @@ import {
 } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { FACTS_STATUS } from "./docs-copy";
+import { DOCS_HANDOVER_FAILED, FACTS_STATUS } from "./docs-copy";
 import { openElsewhere } from "./docs-export";
 import { bytesOnDevice } from "./docs-projection";
 import type { MobileDriveDoc } from "./docs-projection";
@@ -238,11 +238,9 @@ function FactsView({
     try {
       await openElsewhere(doc, gatewayBase, vaultId);
     } catch (error) {
-      postStatus(
-        error instanceof Error
-          ? error.message
-          : "This document could not be handed over."
-      );
+      // The exception is for the LOG, never for the member (#1015, S14).
+      console.warn("[docs] hand-over failed", error);
+      postStatus(DOCS_HANDOVER_FAILED);
     } finally {
       setExporting(false);
     }

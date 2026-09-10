@@ -51,7 +51,7 @@ import {
 import type { ThemeColors } from "../../kit/theme";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { DocsScreenProps } from "../../navigation";
-import { allStatus, SHARED_TITLE } from "./docs-copy";
+import { allStatus, DOCS_ARRANGEMENT, SHARED_TITLE } from "./docs-copy";
 import { sortDocuments } from "./docs-projection";
 import { useDocsRoom } from "./docs-room";
 import { useDriveViewPrefs } from "./docs-view-prefs";
@@ -376,9 +376,7 @@ function AllShelf({
                 <Pressable
                   key={candidate}
                   accessibilityRole="button"
-                  accessibilityLabel={
-                    candidate === "list" ? "List view" : "Grid view"
-                  }
+                  accessibilityLabel={DOCS_ARRANGEMENT[candidate]}
                   accessibilityState={{ selected: on }}
                   onPress={() => onPrefs({ view: candidate })}
                   style={[styles.viewItem, on ? styles.viewItemOn : undefined]}

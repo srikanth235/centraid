@@ -28,7 +28,11 @@ import PushedPage from "../../kit/rooms/PushedPage";
 import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { CAPABILITY_SWITCH_WITHHELD, capabilitiesStatus } from "./docs-copy";
+import {
+  CAPABILITY_SWITCH_WITHHELD,
+  DOCS_CAPABILITY_STATE,
+  capabilitiesStatus,
+} from "./docs-copy";
 import { useDocsRoom } from "./docs-room";
 
 export default function DocsCapabilities({
@@ -58,7 +62,9 @@ export default function DocsCapabilities({
             <View style={styles.panelHead}>
               <Text style={styles.name}>{capability.name}</Text>
               <Text style={styles.state}>
-                {capabilityOn(capability.id) ? "On" : "Off"}
+                {capabilityOn(capability.id)
+                  ? DOCS_CAPABILITY_STATE.on
+                  : DOCS_CAPABILITY_STATE.off}
               </Text>
             </View>
             <Text style={styles.what}>{capability.what}</Text>

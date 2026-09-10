@@ -41,6 +41,7 @@ import {
   MOBILE_SEARCH_PLACEHOLDER,
   SEARCH_IDLE,
   SEARCH_REACH_ACTION,
+  DOCS_SEARCH_REFUSED,
   SEARCH_REACH_BODY,
   SEARCH_REACH_EYEBROW,
   searchReachTitle,
@@ -96,7 +97,9 @@ export default function DocsSearchView({
         // The replica refused the search itself — a different sentence from
         // "nothing matches", so it is never collapsed into the miss state.
         setMatchedIds(null);
-        setRefusal(error instanceof Error ? error.message : String(error));
+        // S14: the exception is logged, not shown.
+        console.warn("[docs] search refused", error);
+        setRefusal(DOCS_SEARCH_REFUSED);
       }
     })();
   }, [term, session]);

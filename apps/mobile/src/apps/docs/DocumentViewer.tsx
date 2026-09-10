@@ -41,6 +41,7 @@ import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
+import { DOCS_HANDOVER_FAILED, DOCS_TRASHED } from "./docs-copy";
 import { openElsewhere } from "./docs-export";
 import type { MobileDriveDoc } from "./docs-projection";
 import { useDocsRoom } from "./docs-room";
@@ -87,7 +88,7 @@ export default function DocumentViewer({
   const onTrash = async (target: MobileDriveDoc): Promise<void> => {
     const result = await write("trash", { document_id: target.document_id });
     if (result) {
-      postStatus("Moved to trash.");
+      postStatus(DOCS_TRASHED);
       navigation.goBack();
     }
   };
@@ -95,11 +96,9 @@ export default function DocumentViewer({
     try {
       await openElsewhere(target, gatewayBase, vaultId);
     } catch (error) {
-      postStatus(
-        error instanceof Error
-          ? error.message
-          : "This document could not be handed over."
-      );
+      // The exception is for the LOG, never for the member (#1015, S14).
+      console.warn("[docs] hand-over failed", error);
+      postStatus(DOCS_HANDOVER_FAILED);
     }
   };
 

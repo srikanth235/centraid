@@ -31,7 +31,7 @@ import {
 import type { ThemeColors } from "../../kit/theme";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
-import { bulkStatus } from "./docs-copy";
+import { bulkStatus, uploadStateLabel } from "./docs-copy";
 import { useDocsRoom } from "./docs-room";
 
 interface PickedFile {
@@ -191,13 +191,7 @@ export default function BulkUpload(
                     file.state === "failed" ? { color: colors.net } : undefined,
                   ]}
                 >
-                  {file.state === "waiting"
-                    ? "waiting"
-                    : file.state === "uploading"
-                      ? "uploading…"
-                      : file.state === "landed"
-                        ? "landed"
-                        : "did not land"}
+                  {uploadStateLabel(file.state)}
                 </Text>
                 {file.state === "failed" && !running ? (
                   <Button

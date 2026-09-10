@@ -38,6 +38,7 @@ import { useTheme } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
 import { buildDocMenu } from "./doc-menu";
 import DocRow, { DocGridTile } from "./DocRow";
+import { DOCS_HANDOVER_FAILED } from "./docs-copy";
 import { openElsewhere } from "./docs-export";
 import type { MobileDriveDoc } from "./docs-projection";
 import { useDriveSelection } from "./drive-selection";
@@ -241,11 +242,9 @@ export default function DriveList({
       // only error that matters is the one the hand-over threw.
       // oxlint-disable-next-line no-shadow -- see above
     } catch (error) {
-      postStatus(
-        error instanceof Error
-          ? error.message
-          : "This document could not be handed over."
-      );
+      // The exception is for the LOG, never for the member (#1015, S14).
+      console.warn("[docs] hand-over failed", error);
+      postStatus(DOCS_HANDOVER_FAILED);
     }
   };
 
