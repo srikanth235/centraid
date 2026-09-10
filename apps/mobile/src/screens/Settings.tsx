@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Alert,
   View,
   StyleSheet,
   ScrollView,
@@ -17,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
+import { useConfirmDestructive } from "../kit/components/ConfirmSheet";
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
 import Tappable from "../kit/components/Tappable";
@@ -140,6 +140,11 @@ export default function SettingsScreen({
   navigation,
 }: SettingsScreenProps<"SettingsHome">): React.JSX.Element {
   const { colors } = useTheme();
+  // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
+  // title, and a status line it can host - none of which `Alert.alert` can
+  // draw.
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [paired, setPaired] = useState(false);
@@ -216,15 +221,13 @@ export default function SettingsScreen({
   }, []);
 
   const onUnpair = useCallback((): void => {
-    Alert.alert(
-      "Unpair this device?",
-      "The encrypted link will be removed from this phone. The gateway and its vaults stay intact.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Unpair", style: "destructive", onPress: unpairNow },
-      ]
-    );
-  }, [unpairNow]);
+    confirmDestructive({
+      body: "The encrypted link will be removed from this phone. The gateway and its vaults stay intact.",
+      noun: "this device",
+      onConfirm: unpairNow,
+      verb: "Unpair",
+    });
+  }, [confirmDestructive, unpairNow]);
 
   const saveAdvanced = (): void => {
     setGatewayUrl(urlValue);
@@ -254,6 +257,7 @@ export default function SettingsScreen({
       style={[styles.safe, { paddingTop: insets.top }]}
       testID={TEST_IDS.settings.screen}
     >
+      {confirmSheet}
       <View style={styles.header}>
         <Tappable
           accessibilityRole="button"

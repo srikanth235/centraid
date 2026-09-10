@@ -17,7 +17,7 @@ import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
-import { t, useTheme, radii } from "../../kit/theme";
+import { t, useTheme, radii, subBase } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
 import {
@@ -276,10 +276,9 @@ const makeStyles = (colors: ThemeColors) =>
       insetInlineStart: 4,
       justifyContent: "center",
       // proto:4019's chip padding. A SEAM below the 4px base, like the
-      // `state` chip below: `subBase` names this exception but is not
-      // re-exported through `kit/theme` (#1015, S10).
+      // `state` chip below; `subBase` names this exception (#1015, R-B-6).
       paddingHorizontal: 3,
-      paddingVertical: 2,
+      paddingVertical: subBase.gutter,
       position: "absolute",
     },
     state: {

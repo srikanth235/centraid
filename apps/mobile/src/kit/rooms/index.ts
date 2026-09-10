@@ -15,6 +15,7 @@ export type { SystemPlaceProps } from "./SystemPlace";
 
 export { currentPlace, parentPlace, place, placeStack } from "./place";
 export type { PlaceEntry, PlaceRef } from "./place";
+export { featureOffEmpty } from "./feature-off";
 export { bandStateFor, selectedSentence } from "./room-contracts";
 export type {
   BandState,

@@ -4,8 +4,8 @@
 // row expansion.
 
 import React, { useCallback, useMemo, useRef } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
-import type { LayoutChangeEvent } from "react-native";
+import { View } from "react-native";
+import type { LayoutChangeEvent, ScrollView } from "react-native";
 
 import { AUTOMATIONS_SUGGESTIONS_NOTE } from "@centraid/client/automations-copy";
 import { SKELETON_NOTE } from "@centraid/client/surface-copy";
@@ -13,20 +13,17 @@ import { SKELETON_NOTE } from "@centraid/client/surface-copy";
 import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
-import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
 import NoteBlock from "../../kit/components/NoteBlock";
 import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { SystemPlace, featureOffEmpty } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { AutomationsScreenProps } from "../../navigation";
 import {
@@ -68,9 +65,9 @@ export default function AutomationsScreen({
   const { features } = useReplica();
   if (features && !features.automations)
     return (
-      <FeatureOffPlace
-        feature="automations"
-        onLeave={() => navigation.goBack()}
+      <SystemPlace
+        empty={featureOffEmpty("automations")}
+        onHome={() => navigation.goBack()}
         title="Automations"
       />
     );
@@ -279,13 +276,7 @@ function AutomationsPlace({
   const page = useAutomations();
   const scroll = useRef<ScrollView>(null);
   const suggestionsY = useRef(0);
-  const ink = useMemo(
-    () => ({
-      error: { color: colors.net },
-      safe: { backgroundColor: colors.bg },
-    }),
-    [colors]
-  );
+  const ink = useMemo(() => ({ error: { color: colors.net } }), [colors]);
 
   const open = useCallback(
     (ref: string): void => {
@@ -322,58 +313,38 @@ function AutomationsPlace({
   const worst = worstFailure(copies);
 
   return (
-    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
-      <View style={styles.page}>
-        <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} />
-          <View style={styles.headBar}>
-            {/* No filled commit. Templates withheld while loading/error. */}
-            <PlaceHeader
-              title="Automations"
-              {...(page.templates.length > 0 &&
-              page.state !== "loading" &&
-              page.state !== "error"
-                ? {
-                    secondary: { label: "Templates", onPress: browseTemplates },
-                  }
-                : {})}
-            />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          keyboardShouldPersistTaps="handled"
-          ref={scroll}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void page.refresh()}
-              refreshing={page.refreshing}
-              tintColor={colors.textFaint}
-            />
-          }
-          style={styles.scroll}
-        >
-          {page.actionError ? (
-            <Text style={[styles.actionError, ink.error]}>
-              {page.actionError}
-            </Text>
-          ) : null}
-          <AutomationsBody
-            copies={copies}
-            onBrowseTemplates={browseTemplates}
-            onOpen={open}
-            onSuggestionsLayout={onSuggestionsLayout}
-            page={page}
-          />
-        </ScrollView>
-      </View>
-      {/* Standing chrome — not inside ScrollView. */}
-      <HealthLine
-        text={health.text}
-        {...(health.action && worst
-          ? { action: health.action, onAction: () => open(worst.ref) }
-          : {})}
+    <SystemPlace
+      bodyRef={scroll}
+      footer={
+        /* Standing chrome — not inside the room's body. */
+        <HealthLine
+          text={health.text}
+          {...(health.action && worst
+            ? { action: health.action, onAction: () => open(worst.ref) }
+            : {})}
+        />
+      }
+      onHome={() => navigation.goBack()}
+      onRefresh={() => void page.refresh()}
+      refreshing={page.refreshing}
+      // No filled commit. Templates withheld while loading/error.
+      {...(page.templates.length > 0 &&
+      page.state !== "loading" &&
+      page.state !== "error"
+        ? { secondary: { label: "Templates", onPress: browseTemplates } }
+        : {})}
+      title="Automations"
+    >
+      {page.actionError ? (
+        <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>
+      ) : null}
+      <AutomationsBody
+        copies={copies}
+        onBrowseTemplates={browseTemplates}
+        onOpen={open}
+        onSuggestionsLayout={onSuggestionsLayout}
+        page={page}
       />
-    </TopSafeArea>
+    </SystemPlace>
   );
 }

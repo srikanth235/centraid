@@ -30,6 +30,9 @@ export interface ConfirmSheetProps {
   verb: string;
   /** One line on what cannot be undone, when that is true. */
   body?: string;
+  /** The way out, when "Cancel" is not the truest word for staying — Backup's
+   *  "Keep backing up" names the state the member is choosing to keep. */
+  cancelLabel?: string;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -45,6 +48,7 @@ export default function ConfirmSheet({
   count = 1,
   verb,
   body,
+  cancelLabel,
   onConfirm,
   onClose,
 }: ConfirmSheetProps): React.JSX.Element | null {
@@ -52,6 +56,7 @@ export default function ConfirmSheet({
   const ink = useMemo(() => ({ color: colors.textSoft }), [colors]);
   return (
     <SheetRoom
+      cancelLabel={cancelLabel}
       onClose={onClose}
       primary={{
         dangerous: true,

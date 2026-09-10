@@ -73,6 +73,7 @@ function domProps(props: Props): Props {
     accessibilityRole,
     accessibilityState,
     accessibilityValue,
+    autoFocus,
     children,
     numberOfLines,
     onPress,
@@ -115,6 +116,8 @@ function domProps(props: Props): Props {
       ? {}
       : { "data-lines": String(numberOfLines) }),
     ...(typeof testID === "string" ? { "data-testid": testID } : {}),
+    // Recorded, not applied: jsdom would steal focus from the test runner.
+    ...(autoFocus === undefined ? {} : { "data-autofocus": String(autoFocus) }),
     ...(typeof onPress === "function" ? { onClick: onPress } : {}),
   };
 }
