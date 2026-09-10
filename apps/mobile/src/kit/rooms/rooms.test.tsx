@@ -139,15 +139,26 @@ describe("selection", () => {
     expect(bandStateFor({ ...selection, count: 0 }).interactive).toBe(true);
   });
 
-  it("counts with the noun when the caller names one", () => {
+  it("counts with the noun when the caller names one, and pluralises it", () => {
+    // The noun is SINGULAR, like `confirmTitle`'s (#1015 Wave 2). A caller
+    // that had to spell the plural itself wrote "1 photographs selected" the
+    // moment the count came down to one.
     expect(
       selectedSentence({
         actions: [],
         count: 3,
-        noun: "photos",
+        noun: "photo",
         onCancel: noop,
       })
     ).toBe("3 photos selected");
+    expect(
+      selectedSentence({
+        actions: [],
+        count: 1,
+        noun: "photo",
+        onCancel: noop,
+      })
+    ).toBe("1 photo selected");
     expect(selectedSentence({ actions: [], count: 3, onCancel: noop })).toBe(
       "3 selected"
     );
@@ -262,7 +273,7 @@ describe(PushedPage, () => {
         selection={{
           actions: [{ dangerous: true, label: "Delete", onPress: noop }],
           count: 2,
-          noun: "documents",
+          noun: "document",
           onCancel: noop,
         }}
         title="Taxes"
@@ -290,6 +301,40 @@ describe(AppPlace, () => {
       />
     );
     expect(nodesOf(container, "input")).toStrictEqual([]);
+  });
+
+  // A verb the ROOM draws is still the verb a Maestro flow selects. Photos'
+  // Select chip and its two selection verbs carried handles into the room
+  // (#890 W2), and `lint-mobile-testids` fails the PR that drops one.
+  it("passes a verb's test handle through to the control it draws", () => {
+    const container = render(
+      <AppPlace
+        action={{ label: "Select", onPress: noop, testID: "photos-select" }}
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        onBack={noop}
+      />
+    );
+    expect(
+      container.querySelector('[data-testid="photos-select"]')
+    ).toBeTruthy();
+  });
+
+  // Photos' view options is an ANCHORED MENU, not a sheet: the card hangs off
+  // the header so the grid underneath never moves. The quiet verb and the one
+  // action share a node the room lends out through `trailingRef` — the ref
+  // itself is not observable through this file's host stub, so what is pinned
+  // here is that both verbs are drawn together.
+  it("draws the quiet verb beside the action", () => {
+    const container = render(
+      <AppPlace
+        action={{ label: "Select", onPress: noop }}
+        app={{ color: "#345", iconKey: "Camera", title: "Photos" }}
+        onBack={noop}
+        secondary={{ label: "View options", onPress: noop }}
+      />
+    );
+    expect(words(container)).toContain("View options");
+    expect(words(container)).toContain("Select");
   });
 
   // The frame's `VaultBar` used to sit above each app's own `paddingTop:
