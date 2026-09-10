@@ -17,9 +17,7 @@ import { projectPlaces } from "@centraid/blueprints/apps/photos/place-map";
 import type { TripRoutePoint } from "@centraid/blueprints/apps/photos/trips";
 import type { PageQuery } from "@centraid/core/page";
 
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import Tappable from "../../kit/components/Tappable";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
@@ -322,19 +320,11 @@ export default function MemoriesView({
   const empty = hasNoMemories(model);
 
   return (
-    <PhotosScreen current="more">
-      <View style={styles.header}>
-        <Tappable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Tappable>
-        <Text style={styles.title} numberOfLines={1}>
-          Memories
-        </Text>
-      </View>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="memories"
+      title="Memories"
+    >
       <ReplicaStatusBar />
       <ScrollView contentContainerStyle={styles.body}>
         {empty ? (

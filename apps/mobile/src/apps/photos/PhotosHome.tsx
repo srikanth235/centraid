@@ -1,23 +1,27 @@
 // Photos' home surface on the phone (v4 §3.1, §4, §14, §15). Wiring only — shaped UI lives in siblings.
+//
+// IT IS AN `AppPlace` NOW (#1015 Wave 2, R-B-9). It was the last Photos
+// surface still drawing its own furniture: a hand-rolled header, its own
+// `paddingTop: insets.top`, and — the defect that made this urgent (audit B8,
+// D5) — a SECOND bar at the foot under a live band, so a tap aimed at "Trash"
+// could land on a band destination and navigate away. The room now owns the
+// header, the safe area, the lockup's placement and the selection mode: the
+// header swaps in place to "N photographs selected · Cancel", the band is
+// dimmed through leaf tokens and stops answering, and the verbs live in the
+// room's ONE action row.
+//
+// What stays this screen's own: the destination state (Photos' band switches
+// a destination in place rather than pushing, so the band is wired here and
+// not through `PhotosScreen`), the anchored view-options menu, and the writes.
 
 import * as Haptics from "expo-haptics";
-import * as Notifications from "expo-notifications";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { Alert, Pressable, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { View } from "react-native";
 
-import { BAND_INSET } from "../../kit/band-surface";
 import { useBandOwner } from "../../kit/band/band-owner";
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
-import Icon from "../../kit/components/Icon";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
-import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -26,21 +30,20 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import { AppPlace } from "../../kit/rooms";
+import type { BandState, RoomAction, RoomSelection } from "../../kit/rooms";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import { hydrateBackupConsent } from "../../kit/transfer/transfer-consent";
 import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
-import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
 import VaultBar from "../../screens/home/VaultBar";
-import { Store } from "../../storage";
 import CameraRollImportOffer from "./CameraRollImportOffer";
 import { detectFacesFor } from "./people-model";
 import { photoAccessTakesOverTimeline } from "./photo-access";
 import { usePhotoEntity } from "./photo-entity-reads";
 import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
-import PhotoGrainView from "./PhotoGrainView";
 import { runBackup, useAutomaticPhotoBackup } from "./photos-backup";
 import { inCloudMessage, nothingToBackUpMessage } from "./photos-backup-copy";
 import { resolveMoreRowRoute } from "./photos-band";
@@ -48,30 +51,29 @@ import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
 import { COLLECTION_SECTION_KEYS } from "./photos-collections";
 import type { CollectionSectionKey } from "./photos-collections";
 import { collectionsMenuGroups } from "./photos-collections-menu";
+import { TRASH_KEEPS_THE_ORIGINAL } from "./photos-confirm-copy";
+import {
+  useOnThisDayNotice,
+  usePinnedThumbnailPack,
+} from "./photos-home-effects";
 import { libraryMenuGroups } from "./photos-library-menu";
 import type { LibraryFilter } from "./photos-library-menu";
+import { PHOTOS_META } from "./photos-meta";
 import { usePhotosRung } from "./photos-rung-store";
-import { selectionCountLabel } from "./photos-selection-copy";
 import { batchTrash, vaultAssets } from "./photos-selection-writes";
 import PhotosBand from "./PhotosBand";
+import PhotosChoiceSheet from "./PhotosChoiceSheet";
 import PhotosCollectionsView from "./PhotosCollectionsView";
-import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import { makeStyles } from "./PhotosHome.styles";
+import PhotosLibraryBody from "./PhotosLibraryBody";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 import { PhotosSearchView } from "./PhotosSearch";
-import PhotoTimeline from "./PhotoTimeline";
-import {
-  pinnedThumbnailCandidates,
-  pinnedThumbnailSignature,
-} from "./pinned-thumbnails";
 import { anchorForGrain } from "./timeline-grains";
 import type { GrainPeriod, TimelineGrain } from "./timeline-grains";
 import type { PhotoSection } from "./timeline-model";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import TimelineGrainControl, {
-  GRAIN_CONTROL_SLOT,
-} from "./TimelineGrainControl";
+import TimelineGrainControl from "./TimelineGrainControl";
 
 function filterSections(
   sections: readonly PhotoSection[],
@@ -100,7 +102,6 @@ export default function PhotosHome({
 }: PhotosScreenProps<"PhotosHome">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
   // §13 / P13: read here — the timeline goes blank when the grant is refused, so it must say why.
@@ -114,7 +115,6 @@ export default function PhotosHome({
     vaultReadableCount: timeline.assets.length - deviceReadable,
     loading: timeline.loading,
   });
-
   // Collections is the landing. Effect is load-bearing: Navigation updates params without remounting.
   const [destination, setDestination] = useState<BandDestinationKey>(
     route.params?.destination ?? "collections"
@@ -261,54 +261,8 @@ export default function PhotosHome({
     }
   };
 
-  // The pack refresh stats every pinned file, so it must not ride every timeline
-  // snapshot — the engine republishes on each replica tick with the candidate
-  // set almost always unchanged. Hence the signature gate.
-  const packSignature = useRef<string | undefined>(undefined);
-  const packRun = useRef<Promise<void> | undefined>(undefined);
-  useEffect(() => {
-    if (!gatewayBase) return;
-    const assets = timeline.assets;
-    const signature = pinnedThumbnailSignature(gatewayBase, assets);
-    if (signature === packSignature.current) return;
-    packSignature.current = signature;
-    packRun.current = (packRun.current ?? Promise.resolve())
-      .then(() =>
-        refreshPinnedThumbnailPack(
-          pinnedThumbnailCandidates(gatewayBase, assets)
-        )
-      )
-      // Forgetting the signature is the recovery: the next snapshot retries
-      // instead of being skipped as "already done".
-      .catch(() => {
-        packSignature.current = undefined;
-      });
-  }, [gatewayBase, timeline.assets]);
-
-  useEffect(() => {
-    if (memories.length === 0) return;
-    const key = `photos.onThisDay.${new Date().toISOString().slice(0, 10)}`;
-    void Store.hydrate(key, false).then(async (scheduled) => {
-      if (scheduled) return;
-      const permission = await Notifications.getPermissionsAsync();
-      if (!permission.granted) return;
-      const fireAt = new Date();
-      fireAt.setHours(18, 0, 0, 0);
-      if (fireAt <= new Date()) fireAt.setTime(Date.now() + 60_000);
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "On this day",
-          body: `${memories.length} moments from years past`,
-          data: { route: "Photos" },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: fireAt,
-        },
-      });
-      Store.set(key, true);
-    });
-  }, [memories]);
+  usePinnedThumbnailPack(gatewayBase, timeline.assets);
+  useOnThisDayNotice(memories);
 
   const backupSelection = async (): Promise<void> => {
     if (!session || !gatewayBase) {
@@ -349,75 +303,66 @@ export default function PhotosHome({
     }
   };
 
+  const [pickingAlbum, setPickingAlbum] = useState(false);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
+  // The whole list, not the six an alert would fit: this is a sheet (D4).
+  const albumChoices = collections.rows.map((album) => ({
+    id: String(album.collection_id),
+    label: String(album.name ?? "Album"),
+  }));
+
   const addToAlbum = (): void => {
-    const albums = collections.rows.slice(0, 6);
-    if (!albums.length) {
+    if (!albumChoices.length) {
       navigation.navigate("PhotosLibrary");
       return;
     }
-    Alert.alert("Add to album", `${selection.size} selected`, [
-      ...albums.map((album) => ({
-        text: String(album.name ?? "Album"),
-        onPress: () =>
-          void (async () => {
-            if (!session) return;
-            const assets = timeline.assets.filter(
-              (item) => selection.has(item.id) && item.assetId
-            );
-            try {
-              // Serial by contract: `position` derives from the rows the
-              // previous write landed. Parallel writes race it.
-              for (const [index, asset] of assets.entries()) {
-                const albumId = String(album.collection_id);
-                const position =
-                  albumEntryCount(
-                    entries.rows,
-                    albumId,
-                    (row) => row.collection_id
-                  ) + index;
-                // oxlint-disable-next-line no-await-in-loop
-                const result = await session.write("photos", {
-                  action: "add-to-album",
-                  input: {
-                    album_id: albumId,
-                    asset_id: asset.assetId!,
-                    position,
-                  },
-                });
-                surfaceWriteOutcome(result);
-              }
-              setSelection(new Set());
-            } catch (error) {
-              surfaceWriteFailure(error, "Photos not added");
-            }
-          })(),
-      })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    setPickingAlbum(true);
   };
+
+  const addSelectionToAlbum = (albumId: string): void =>
+    void (async () => {
+      if (!session) return;
+      const assets = timeline.assets.filter(
+        (item) => selection.has(item.id) && item.assetId
+      );
+      try {
+        // Serial by contract: `position` derives from the rows the previous
+        // write landed. Parallel writes race it.
+        for (const [index, asset] of assets.entries()) {
+          const position =
+            albumEntryCount(entries.rows, albumId, (row) => row.collection_id) +
+            index;
+          // oxlint-disable-next-line no-await-in-loop
+          const result = await session.write("photos", {
+            action: "add-to-album",
+            input: { album_id: albumId, asset_id: asset.assetId!, position },
+          });
+          surfaceWriteOutcome(result);
+        }
+        setSelection(new Set());
+      } catch (error) {
+        surfaceWriteFailure(error, "Photos not added");
+      }
+    })();
 
   // Shared `batchTrash`. Confirmation must say the device original survives.
   const trashSelection = (): void => {
     if (!session) return;
     const targets = vaultAssets(timeline.assets, selection);
-    Alert.alert(
-      `Move ${selection.size} to trash?`,
-      "The device original is never deleted by this action.",
-      [
-        { text: "Cancel" },
-        {
-          text: "Trash",
-          style: "destructive",
-          onPress: () => {
-            void batchTrash(session, targets, surfaceWriteOutcome)
-              .then(() => setSelection(new Set()))
-              .catch((error: unknown) =>
-                surfaceWriteFailure(error, "Photos not trashed")
-              );
-          },
-        },
-      ]
-    );
+    confirmDestructive({
+      body: TRASH_KEEPS_THE_ORIGINAL,
+      count: selection.size,
+      noun: "photograph",
+      onConfirm: () => {
+        void batchTrash(session, targets, surfaceWriteOutcome)
+          .then(() => setSelection(new Set()))
+          .catch((error: unknown) =>
+            surfaceWriteFailure(error, "Photos not trashed")
+          );
+      },
+      verb: "Trash",
+    });
   };
 
   // Destination + size (#712): residual selection must not outlive a destination change.
@@ -441,103 +386,101 @@ export default function PhotosHome({
     navigation.navigate(nextRoute.screen, nextRoute.params);
   };
 
-  return (
-    // `colors.bg` verbatim. Explicit inset — SafeAreaView-with-edges can resolve a zero top inset in this fullScreenModal.
-    <View
-      style={[
-        styles.safe,
-        { backgroundColor: colors.bg, paddingTop: insets.top },
-      ]}
-    >
-      {/* The vault lockup on every route (see `VaultBar`). This surface hosts
-          its own band rather than a shared frame, so it mounts the bar. */}
-      <VaultBar />
-      {selecting ? (
-        // iOS parity (#712): Select keeps the page title. Count/verbs live on the foot bar.
-        <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1}>
-            Photos
-          </Text>
-          <View style={styles.headerActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back up to the gateway"
-              accessibilityState={{ disabled: backingUp }}
-              disabled={backingUp}
-              onPress={() => void backupSelection()}
-              style={styles.headerBtn}
-            >
-              <Icon
-                name="upload-cloud"
-                size={22}
-                color={backingUp ? colors.textDisabled : colors.text}
-              />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Done"
-              onPress={() => setSelection(new Set())}
-              style={styles.headerBtn}
-            >
-              <Icon name="x" size={23} color={colors.text} />
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        // No ☰. The claimed band is the ONE navigation on the phone (§F/§3.1);
-        // frame destinations are reached through its Home capsule, never
-        // mirrored inside the app.
-        <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1}>
-            Photos
-          </Text>
-          <View style={styles.headerActions}>
-            {/* An ANCHORED MENU, never a bottom sheet: the card hangs off the
-                chip so the grid underneath never moves. One slot, two
-                destination-scoped menus — see `menuGroups` above. */}
-            {destination === "library" || destination === "collections" ? (
-              <Pressable
-                ref={menuAnchorRef}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  destination === "library"
-                    ? "View options"
-                    : "Collections options"
-                }
-                onPress={() => {
-                  // Measured on the press, never cached: a rotation between two
-                  // openings leaves a stale rectangle.
-                  measureAnchor();
-                  setViewOptionsOpen(true);
-                }}
-                style={styles.headerBtn}
-              >
-                <Icon
-                  name={
-                    destination === "library" ? "Sliders" : "more-horizontal"
-                  }
-                  size={22}
-                  color={colors.text}
-                />
-              </Pressable>
-            ) : null}
-            {/* Scoped to the Library grid, same as `selecting` (#712): on any
-                other destination this chip would populate `selection` with a
-                tile the member can never see checked. */}
-            {destination === "library" ? (
-              <SelectChip
-                testID={TEST_IDS.photos.select}
-                disabled={timeline.assets.length === 0}
-                onPress={() => {
-                  const first = timeline.assets[0];
-                  if (first) setSelection(new Set([first.id]));
-                }}
-              />
-            ) : null}
-          </View>
-        </View>
-      )}
+  // AN ANCHORED MENU, never a bottom sheet: the card hangs off the header's
+  // own node (`trailingRef`) so the grid underneath never moves. One slot, two
+  // destination-scoped menus — see `menuGroups` above; Search has no honest
+  // menu, so on that destination the room's quiet verb is simply absent.
+  const viewOptions: RoomAction | undefined =
+    destination === "library" || destination === "collections"
+      ? {
+          label:
+            destination === "library" ? "View options" : "Collections options",
+          onPress: () => {
+            // Measured on the press, never cached: a rotation between two
+            // openings leaves a stale rectangle.
+            measureAnchor();
+            setViewOptionsOpen(true);
+          },
+        }
+      : undefined;
 
+  // Scoped to the Library grid, same as `selecting` (#712): on any other
+  // destination this would populate `selection` with a tile the member can
+  // never see checked.
+  const select: RoomAction | undefined =
+    destination === "library"
+      ? {
+          disabled: timeline.assets.length === 0,
+          label: "Select",
+          onPress: () => {
+            const first = timeline.assets[0];
+            if (first) setSelection(new Set([first.id]));
+          },
+          testID: TEST_IDS.photos.select,
+        }
+      : undefined;
+
+  // ONE action row at the foot, and the header swapped in place above it — the
+  // room's shape, not a second bar under a live band (D5). "Back up" moves
+  // here off the old header: it is a verb on the selection, like the other two.
+  const room: RoomSelection | undefined = selecting
+    ? {
+        actions: [
+          {
+            label: "Add to album",
+            onPress: addToAlbum,
+            testID: TEST_IDS.photos.selectionAlbum,
+          },
+          {
+            disabled: backingUp,
+            label: "Back up",
+            onPress: () => void backupSelection(),
+          },
+          {
+            dangerous: true,
+            label: "Trash",
+            onPress: trashSelection,
+            testID: TEST_IDS.photos.selectionTrash,
+          },
+        ],
+        count: selection.size,
+        noun: "photograph",
+        onCancel: () => setSelection(new Set()),
+      }
+    : undefined;
+
+  const band = (state: BandState): React.JSX.Element => (
+    <PhotosBand
+      owner={bandOwner}
+      destination={destination}
+      dimmed={state.dimmed}
+      interactive={state.interactive}
+      onSelect={onDestination}
+      // `popTo`, never `navigate` (RN7 PUSHES a second Home, which above a
+      // `fullScreenModal` arrives as a card sheet) and never `goBack`
+      // (Photos can be entered by deep link with nothing beneath, and §3.1
+      // makes the way home the one thing an app may not take away).
+      onHome={() => navigation.popTo("Home")}
+    />
+  );
+
+  return (
+    <AppPlace
+      action={select}
+      app={{
+        color: PHOTOS_META.color,
+        iconKey: PHOTOS_META.iconKey,
+        title: "Photos",
+      }}
+      band={band}
+      // The vault lockup on every route (see `VaultBar`), inside the room's
+      // safe area — the app no longer draws an inset of its own.
+      lockup={<VaultBar />}
+      onBack={() => navigation.popTo("Home")}
+      secondary={viewOptions}
+      selection={room}
+      trailingRef={menuAnchorRef}
+    >
       <ReplicaStatusBar />
 
       {/* The first-run staged-import offer (#724). Self-contained: it reads
@@ -611,66 +554,26 @@ export default function PhotosHome({
             onRequest={() => grant.request()}
           />
         ) : (
-          <>
-            {/* No toolbar row: tile size lives in the header chip's menu and in
-                the grid's pinch (§4.2). The rung is still read here so the
-                skeleton lands at the geometry that was showing. */}
-            {timeline.loading ? (
-              // The grid IS the loading state (§14, proto:3993-4033): skeleton
-              // tiles at the rung's real geometry, so nothing reflows when the
-              // bytes land. Never a message, never a spinner (§18).
-              <PhotosGridSkeleton rung={rung} />
-            ) : timeline.sections.length === 0 ? (
-              <View style={styles.center}>
-                <Text style={styles.emptyTitle}>
-                  {collections.connection === "offline"
-                    ? "No cached vault photographs"
-                    : "Your library starts here"}
-                </Text>
-                <Text style={styles.bodyText}>
-                  {collections.connection === "offline"
-                    ? "Camera-roll photographs remain available — reconnect to check the vault."
-                    : "Camera-roll photographs appear instantly; hold any one to back it up."}
-                </Text>
-              </View>
-            ) : visibleSections.length === 0 ? (
-              // The filter emptied the grid, not the library — its own sentence,
-              // never the empty-library copy above.
-              <View style={styles.center}>
-                <Text style={styles.emptyTitle}>No favorites yet</Text>
-                <Text style={styles.bodyText}>
-                  Photographs you mark as a favorite appear here.
-                </Text>
-              </View>
-            ) : grain === "all" ? (
-              <PhotoTimeline
-                sections={visibleSections}
-                selection={selection}
-                refreshing={refreshing}
-                scrollToDay={placeDay}
-                onVisibleDay={setPlaceDay}
-                // Room for the floating grain control, on the same condition it
-                // mounts under below.
-                footerInset={selecting ? 0 : GRAIN_CONTROL_SLOT}
-                onRefresh={() => void refreshLibrary()}
-                onSelectionChange={setSelection}
-                onOpen={(asset) =>
-                  navigation.navigate("PhotoLightbox", { assetId: asset.id })
-                }
-              />
-            ) : (
-              // The same sections the grid above draws, grouped into periods —
-              // never a second query, or the grains could disagree.
-              <PhotoGrainView
-                sections={visibleSections}
-                grain={grain}
-                focusDay={placeDay}
-                refreshing={refreshing}
-                onRefresh={() => void refreshLibrary()}
-                onOpenPeriod={openPeriod}
-              />
-            )}
-          </>
+          <PhotosLibraryBody
+            grain={grain}
+            loading={timeline.loading}
+            offline={collections.connection === "offline"}
+            onOpen={(asset) =>
+              navigation.navigate("PhotoLightbox", { assetId: asset.id })
+            }
+            onOpenPeriod={openPeriod}
+            onPlaceDay={setPlaceDay}
+            onRefresh={() => void refreshLibrary()}
+            onSelectionChange={setSelection}
+            placeDay={placeDay}
+            refreshing={refreshing}
+            rung={rung}
+            sections={timeline.sections}
+            selecting={selecting}
+            selection={selection}
+            styles={styles}
+            visibleSections={visibleSections}
+          />
         )}
         {/* PERMANENT while Library is the destination — never scroll-armed
             (`TimelineGrainControl.tsx`). These three conditions are the only
@@ -679,65 +582,6 @@ export default function PhotosHome({
           <TimelineGrainControl grain={grain} onGrain={changeGrain} />
         ) : null}
       </View>
-
-      {/* Exactly ONE thing at the foot: the band, or the selection bar that
-          replaces it (#712). The bar borrows the band's own anatomy — opaque
-          `bgElev`/`lineStrong` plates, `BAND_RADIUS`, `BAND_INSET`, never glass
-          or blur (`PhotosBand.tsx`) — and replaces the band rather than sitting
-          in the header, because the foot is where the thumb is. */}
-      {selecting ? (
-        <View
-          style={[
-            styles.selectionBarRow,
-            { paddingBottom: BAND_INSET + insets.bottom },
-          ]}
-        >
-          {/* Add to album holds iOS' Share position because there is no OS
-              share sheet to hand a multi-select out to; drawing one anyway
-              would be a control that cannot keep its word. (This bar is three
-              slots by design and carries no Download — the shelves' five-slot
-              bar is where that verb lives, and since #883 C6 it is live.) */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add to album"
-            onPress={addToAlbum}
-            style={styles.selectionChip}
-            testID={TEST_IDS.photos.selectionAlbum}
-          >
-            <Icon name="folder-plus" size={20} color={colors.text} />
-          </Pressable>
-
-          {/* The count, and only the count. */}
-          <View style={styles.selectionCountPlate}>
-            <Text style={styles.selectionCountText} numberOfLines={1}>
-              {selectionCountLabel(selection.size)}
-            </Text>
-          </View>
-
-          {/* Trash takes iOS' right-hand position; `batchTrash` is the shared
-              write, never a second implementation. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Move to trash"
-            onPress={trashSelection}
-            style={styles.selectionChip}
-            testID={TEST_IDS.photos.selectionTrash}
-          >
-            <Icon name="trash-2" size={20} color={colors.danger} />
-          </Pressable>
-        </View>
-      ) : (
-        <PhotosBand
-          owner={bandOwner}
-          current={destination}
-          onSelect={onDestination}
-          // `popTo`, never `navigate` (RN7 PUSHES a second Home, which above a
-          // `fullScreenModal` arrives as a card sheet) and never `goBack`
-          // (Photos can be entered by deep link with nothing beneath, and §3.1
-          // makes the way home the one thing an app may not take away).
-          onHome={() => navigation.popTo("Home")}
-        />
-      )}
 
       <PhotosMoreSheet
         visible={moreOpen}
@@ -751,6 +595,18 @@ export default function PhotosHome({
         groups={menuGroups}
         onClose={() => setViewOptionsOpen(false)}
       />
-    </View>
+
+      {/* A choice is a sheet and a confirm is a sheet (D4, S7); neither is an
+          alert with rows in it. */}
+      <PhotosChoiceSheet
+        choices={albumChoices}
+        onChoose={addSelectionToAlbum}
+        onClose={() => setPickingAlbum(false)}
+        subject={`${selection.size} selected`}
+        title="Add to album"
+        visible={pickingAlbum}
+      />
+      {confirmSheet}
+    </AppPlace>
   );
 }

@@ -6,10 +6,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { selectedSentence } from "../../kit/rooms/room-contracts";
 import { PHOTOS_BAND_DESTINATIONS, PHOTOS_MORE_ROWS } from "./photos-band";
 import { collectionsMenuGroups } from "./photos-collections-menu";
 import { libraryMenuGroups } from "./photos-library-menu";
-import { selectionCountLabel } from "./photos-selection-copy";
 import { viewerOverflowMenuGroups } from "./viewer-menu";
 
 /**
@@ -114,8 +114,15 @@ describe("every Photos copy table is sentence case (D2, #1015)", () => {
     ["band destinations", PHOTOS_BAND_DESTINATIONS.map((d) => d.label)],
     ["More sheet rows", PHOTOS_MORE_ROWS.map((row) => row.label)],
     [
-      "selection bar",
-      [selectionCountLabel(0), selectionCountLabel(1), selectionCountLabel(4)],
+      "selection header",
+      [1, 4].map((count) =>
+        selectedSentence({
+          actions: [],
+          count,
+          noun: "photograph",
+          onCancel: () => undefined,
+        })
+      ),
     ],
   ])("%s", (_where, labels) => {
     expect(labels.length).toBeGreaterThan(0);
@@ -127,9 +134,17 @@ describe("every Photos copy table is sentence case (D2, #1015)", () => {
   });
 
   it("names the selection with its noun, and counts in sentence case", () => {
-    expect(selectionCountLabel(0)).toBe("Select items");
-    expect(selectionCountLabel(1)).toBe("1 photo selected");
-    expect(selectionCountLabel(4)).toBe("4 photos selected");
+    // The room writes this sentence now (#1015 Wave 2): Photos' own
+    // `selectionCountLabel` is gone, and the noun it passes is what is swept.
+    const say = (count: number): string =>
+      selectedSentence({
+        actions: [],
+        count,
+        noun: "photograph",
+        onCancel: () => undefined,
+      });
+    expect(say(1)).toBe("1 photograph selected");
+    expect(say(4)).toBe("4 photographs selected");
   });
 
   it("ships one English: the faces ask is spelled the American way, like `favorite`", () => {

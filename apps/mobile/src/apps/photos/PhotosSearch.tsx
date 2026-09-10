@@ -35,6 +35,7 @@ import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
@@ -445,9 +446,16 @@ export function PhotosSearchView({
           an auto-capitalised term silently searched for something else. */}
       <SearchField
         accessibilityLabel="Search photographs"
+        // A search PLACE opens with the keyboard up: arriving at a field the
+        // member came here to type in and having to tap it is a wasted tap
+        // (#1015, S4). Restored on the kit's own prop, not a local ref.
+        autoFocus
         clearLabel="Clear the query"
         onChangeText={onTerm}
         placeholder={PHOTOS_SEARCH_PLACEHOLDER}
+        // The handle `photos-search.mjs` types into (#890 W2). It survived the
+        // hand-rolled field it was born on; the kit's field takes it now.
+        testID={TEST_IDS.photos.searchField}
         value={term}
       />
     </KeyboardAvoidingView>

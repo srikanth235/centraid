@@ -52,9 +52,18 @@ export function SelectionActions({
   selection: RoomSelection;
 }): React.JSX.Element {
   const { colors } = useTheme();
-  const ink = useMemo(() => ({ borderTopColor: colors.line }), [colors]);
+  const ink = useMemo(
+    () => ({
+      foot: { borderTopColor: colors.line },
+      note: { color: colors.net },
+    }),
+    [colors]
+  );
   return (
-    <View style={[styles.foot, ink]}>
+    <View style={[styles.foot, ink.foot]}>
+      {selection.note ? (
+        <Text style={[styles.selectionNote, ink.note]}>{selection.note}</Text>
+      ) : null}
       <View style={styles.actionRow}>
         {selection.actions.map((action) => (
           <Button
@@ -62,6 +71,7 @@ export function SelectionActions({
             key={action.label}
             label={action.label}
             onPress={() => action.onPress()}
+            testID={action.testID}
             // Outlined `--net`, never filled: the destructive verb still has
             // a confirm behind it (S7), so it is not the view's one commit.
             variant={action.dangerous === true ? "destructive" : "secondary"}

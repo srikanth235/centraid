@@ -229,11 +229,40 @@ vi.mock(import("./PhotoTimeline"), async () => {
   } as never;
 });
 
+// The frame is a room now (#1015), so the title and the back key are ITS
+// JSX, not this screen's. The stub keeps both — with the back key's real
+// spoken name, computed from the route the same way `PushedPage` computes it
+// — so this file can still assert what the screen puts in them.
 vi.mock(import("./PhotosScreen"), async () => {
   const ReactModule = await import("react");
+  const { photosParentPlace } = await import("./photos-places");
   return {
-    default: ({ children }: { children?: React.ReactNode }) =>
-      ReactModule.createElement(ReactModule.Fragment, null, children),
+    default: ({
+      children,
+      onBack,
+      route,
+      title,
+    }: {
+      children?: React.ReactNode;
+      onBack?: () => void;
+      route: Parameters<typeof photosParentPlace>[0];
+      title: string;
+    }) =>
+      ReactModule.createElement(
+        ReactModule.Fragment,
+        null,
+        ReactModule.createElement("span", null, title),
+        ReactModule.createElement(
+          "button",
+          {
+            "aria-label": `Back to ${photosParentPlace(route).title}`,
+            onClick: onBack,
+            type: "button",
+          },
+          null
+        ),
+        children
+      ),
   } as never;
 });
 

@@ -5,13 +5,15 @@
 
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
 import { TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { ViewerChromePlate, ViewerChromeTarget } from "./PhotoLightboxChrome";
+import { TRASH_KEEPS_THE_ORIGINAL } from "./photos-confirm-copy";
 import type { PhotoAsset } from "./timeline-model";
 import {
   VIEWER_BOTTOM_GROUPS,
@@ -61,6 +63,7 @@ export function PhotoLightboxToolbar({
     canSaveToMyVault: Boolean(onSaveToMyVault),
     hasEditor: onEdit !== undefined,
   });
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const run: Record<ViewerActionId, () => void> = {
     copy: () => onSaveToMyVault?.(),
     edit: () => onEdit?.(),
@@ -73,22 +76,17 @@ export function PhotoLightboxToolbar({
     },
     info: onInfo,
     trash: () =>
-      Alert.alert(
-        "Move to trash?",
-        "The device original is never deleted by this action.",
-        [
-          { text: "Cancel" },
-          {
-            text: "Trash",
-            style: "destructive",
-            onPress: () =>
-              void onWrite("delete-asset", { asset_id: asset.assetId! }),
-          },
-        ]
-      ),
+      confirmDestructive({
+        body: TRASH_KEEPS_THE_ORIGINAL,
+        noun: "photograph",
+        onConfirm: () =>
+          void onWrite("delete-asset", { asset_id: asset.assetId! }),
+        verb: "Trash",
+      }),
   };
   return (
     <>
+      {confirmSheet}
       <View style={styles.actionRow} accessibilityRole="toolbar">
         {VIEWER_BOTTOM_GROUPS.map((group) => (
           <ViewerChromePlate colors={colors} key={group.actions.join("-")}>

@@ -158,7 +158,6 @@ export default function LockerHome({
 
   return (
     <LockerScreen
-      current={destination}
       route={ROUTE_OF[destination]}
       onBack={() => {
         // A place's back row is the way out of the app, not up the stack:

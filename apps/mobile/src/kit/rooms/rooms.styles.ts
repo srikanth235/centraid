@@ -70,4 +70,10 @@ export const styles = StyleSheet.create({
   },
   sheetTitle: { ...t("title"), paddingHorizontal: pageMargin },
   scrim: { flex: 1 },
+  selectionNote: {
+    ...t("mono"),
+    paddingHorizontal: pageMargin,
+    paddingTop: spacing[2],
+    textAlign: "center",
+  },
 });

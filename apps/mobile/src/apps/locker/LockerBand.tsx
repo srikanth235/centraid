@@ -39,7 +39,9 @@ const PLATE_GAP = 8;
 
 export interface LockerBandProps {
   owner: BandOwner;
-  current: LockerBandDestinationKey;
+  /** Which of the five is lit. Derived from the route (`locker-places.ts`),
+   *  never written down by a screen (#1015, audit B7). */
+  destination: LockerBandDestinationKey;
   onSelect: (key: LockerBandDestinationKey) => void;
   /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
@@ -47,7 +49,7 @@ export interface LockerBandProps {
 
 export default function LockerBand({
   owner,
-  current,
+  destination: lit,
   onSelect,
   onHome,
 }: LockerBandProps): React.JSX.Element {
@@ -76,7 +78,7 @@ export default function LockerBand({
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
-          const active = destination.key === current;
+          const active = destination.key === lit;
           return (
             <Pressable
               key={destination.key}

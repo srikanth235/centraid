@@ -350,7 +350,6 @@ export default function TallyHome({
 
   return (
     <TallyScreen
-      current={destination}
       shelf={shelfOf(destination)}
       onAddExpense={() => navigation.navigate("TallyAdd")}
       onBack={() => {

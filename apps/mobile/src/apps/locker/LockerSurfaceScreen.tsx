@@ -102,7 +102,6 @@ export default function LockerSurfaceScreen({
 
   return (
     <LockerScreen
-      current="more"
       hideBand
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
       route={ROUTE_OF[surface]}
