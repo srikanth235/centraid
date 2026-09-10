@@ -110,10 +110,167 @@ function isShadowTable(name: string): boolean {
     name.startsWith("sqlite_") ||
     name === "replica_log" ||
     name === "replica_meta" ||
-    // The mechanism #996 replaces. Still in the file, and a log of the log is
-    // a loop; it leaves with the last of its triggers.
+    // The trigger log #1014 retires. A log of the log is a loop; it leaves
+    // with the last of its triggers.
     name === "replica_change"
   );
+}
+
+// AN ALLOW-LIST, NOT A DENY-LIST (#1014, G13). Until now `replicatedTablesOf`
+// took every table the file carries and subtracted the private list, so a
+// table added to the schema replicated to every seat by DEFAULT and the
+// closed list above only caught the cases someone remembered to add to it.
+// The default is now the other way round: a table replicates because it is
+// named here, and a table that is named nowhere fails
+// `unclassifiedTables` — see `private-tables.test.ts`.
+//
+// Ext bands are the one dynamic member: their physical names are generated
+// (`ext_<app>_<table>` / `extdraft_<app>_<table>`, `schema/ext.ts`), so they
+// are admitted by PREFIX rather than by name. Nothing else is.
+const REPLICATED_TABLE_NAMES: ReadonlySet<string> = new Set([
+  "access_agent",
+  "access_app",
+  "access_app_ext",
+  "access_device",
+  "access_provenance",
+  "access_receipt",
+  "access_seed_row",
+  "agent_capability",
+  "agent_command",
+  "agent_command_invocation",
+  "agent_evidence",
+  "agent_explanation",
+  "agent_invocation_check",
+  "attachments",
+  "audit_archive_manifest",
+  "audit_archive_pass",
+  "automation_state",
+  "automation_trigger_cursor",
+  "blob_custody_rollup",
+  "blob_custody_state",
+  "conversation_archive",
+  "conversation_digest",
+  "conversation_provider_consent",
+  "conversation_turn_locks",
+  "conversation_workspace_selection",
+  "conversations",
+  "core_account",
+  "core_activity",
+  "core_attachment",
+  "core_collection",
+  "core_collection_entry",
+  "core_concept",
+  "core_concept_scheme",
+  "core_content_derivative",
+  "core_content_item",
+  "core_content_representation",
+  "core_content_text",
+  "core_document",
+  "core_entity",
+  "core_entity_kind",
+  "core_entity_revision",
+  "core_event",
+  "core_link",
+  "core_link_anchor",
+  "core_party",
+  "core_party_identifier",
+  "core_place",
+  "core_tag",
+  "core_transaction",
+  "core_vault",
+  "enrich_derivation",
+  "enrich_embedding",
+  "enrich_policy",
+  "enrich_policy_rule",
+  "items",
+  "knowledge_annotation",
+  "knowledge_note",
+  "locker_item",
+  "locker_item_address",
+  "locker_item_alias",
+  "locker_item_field",
+  "locker_item_passkey",
+  "media_asset",
+  "media_asset_phash",
+  "media_face_cluster",
+  "media_face_region",
+  "media_memory",
+  "media_memory_member",
+  "notifications_notice",
+  "people_important_date",
+  "people_profile",
+  "schedule_attendee",
+  "schedule_calendar",
+  "schedule_event_ext",
+  "schedule_project",
+  "schedule_recurrence_exception",
+  "schedule_recurrence_exception_attendee",
+  "schedule_section",
+  "schedule_task",
+  "share_authority",
+  "share_authority_request",
+  "share_authority_use",
+  "share_subscription",
+  "share_subscription_lineage",
+  "share_subscription_member",
+  "social_circle",
+  "social_circle_member",
+  "social_contact_channel",
+  "social_message",
+  "social_thread",
+  "social_thread_participant",
+  "sync_connection",
+  "sync_connection_cursor",
+  "sync_external_entity",
+  "sync_import_batch",
+  "sync_import_row",
+  "tally_expense",
+  "tally_expense_line_allocation",
+  "tally_expense_line_item",
+  "tally_expense_payer",
+  "tally_expense_split",
+  "tally_friend",
+  "tally_group",
+  "tally_nudge",
+  "tally_obligation",
+  "tally_recurring_expense",
+  "tally_recurring_expense_split",
+  "tally_settlement",
+  "turns",
+]);
+
+/** An app's ext band: a generated physical name, admitted by prefix. */
+function isExtBandTable(name: string): boolean {
+  return name.startsWith("ext_") || name.startsWith("extdraft_");
+}
+
+/** Is this physical table one a seat's copy holds? */
+export function isReplicatedTable(name: string): boolean {
+  return REPLICATED_TABLE_NAMES.has(name) || isExtBandTable(name);
+}
+
+/**
+ * Physical tables a fresh vault carries that are classified NOWHERE: not on
+ * the replicated allow-list, not private, not a shadow/log-plane table. The
+ * golden test asserts this is empty, so adding a table to the schema without
+ * deciding whether it travels is a red build rather than a silent leak.
+ */
+export function unclassifiedTables(vault: DatabaseSync): string[] {
+  return (
+    prepared(
+      vault,
+      `SELECT name FROM sqlite_schema
+          WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+          ORDER BY name`
+    ).all() as { name: string }[]
+  )
+    .map((row) => row.name)
+    .filter(
+      (name) =>
+        !isShadowTable(name) &&
+        !isPrivateTable(name) &&
+        !isReplicatedTable(name)
+    );
 }
 
 // The answer changes only when the SCHEMA does, and `PRAGMA schema_version`
@@ -127,9 +284,9 @@ const REPLICATED = new WeakMap<
 >();
 
 /**
- * Every physical table a seat's copy holds: the file's tables, minus the FTS
- * shadow tables (an index is not data — R1), minus the log plane's own
- * tables, minus this list.
+ * Every physical table a seat's copy holds: the file's tables intersected
+ * with the allow-list above (plus the ext bands), which is where the FTS
+ * shadow tables, the log plane and the private list all fall out.
  */
 export function replicatedTablesOf(vault: DatabaseSync): string[] {
   const schemaVersion = (
@@ -148,7 +305,7 @@ export function replicatedTablesOf(vault: DatabaseSync): string[] {
     ).all() as { name: string }[]
   )
     .map((row) => row.name)
-    .filter((name) => !isShadowTable(name) && !isPrivateTable(name));
+    .filter((name) => isReplicatedTable(name) && !isPrivateTable(name));
   REPLICATED.set(vault, { schemaVersion, tables });
   return tables;
 }

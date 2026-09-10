@@ -669,10 +669,12 @@ export {
 } from "./replica/changeset.js";
 export {
   isPrivateTable,
+  isReplicatedTable,
   PRIVATE_TABLES,
   PRIVATE_TABLE_NAMES,
   replicatedReferencesToPrivate,
   replicatedTablesOf,
+  unclassifiedTables,
   type PrivateTableDeclaration,
   type PrivateTableKind,
 } from "./schema/private-tables.js";
