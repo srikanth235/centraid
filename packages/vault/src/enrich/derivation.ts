@@ -9,6 +9,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";
+import { clearEnrichTargetFailure } from "./target-failures.js";
 
 /** What a caller naming no profile writes, and the fallback rung. */
 export const BUILT_IN_PROFILE = "built-in";
@@ -75,6 +76,15 @@ export function stampDerivation(
       input.payload === undefined ? null : JSON.stringify(input.payload),
       input.now ?? nowIso()
     );
+  // PRODUCING THE VALUE IS THE PROOF THE POISON IS GONE (#1014, B2). A target
+  // that failed twice and then succeeded must not stay on the failure register
+  // health reads, and the stamp is the one place every capability passes
+  // through on its way to success.
+  clearEnrichTargetFailure(vault, {
+    capability: input.capability,
+    targetType: input.targetType,
+    targetId: input.targetId,
+  });
 }
 
 /**

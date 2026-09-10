@@ -4,6 +4,7 @@ import {
   embedText,
   embedWeightsPresent,
 } from "../src/capabilities/embed.js";
+import { NOT_READY_MAX_TICKS, recordTargetFailure } from "./target-failures.js";
 
 const BATCH = 16;
 let infer = embedText;
@@ -83,6 +84,14 @@ export default async function handler({ ctx, log }) {
   });
   let derived = 0;
   let skipped = 0;
+  let notReady = 0;
+  // ONE UNAVAILABLE TEXT DOES NOT STOP THE WALK (#1014, B2). Throwing here
+  // skipped the cursor write at the tail of the loop, so the SAME derivative
+  // was read first on every later tick and nothing after it was ever embedded.
+  // The watermark parks on the last item before the first unavailable one and
+  // advances past it once the register declines it.
+  let watermark = "";
+  let parked = false;
   for (const item of read.rows ?? []) {
     const stamps = await ctx.vault.read({
       entity: "enrich.derivation",
@@ -94,6 +103,7 @@ export default async function handler({ ctx, log }) {
     });
     if (stampMatchesSource(stamps.rows?.[0], model, item.derivative_id)) {
       skipped += 1;
+      if (!parked) watermark = item.derivative_id;
       continue;
     }
     const content = await ctx.vault.content({
@@ -101,13 +111,34 @@ export default async function handler({ ctx, log }) {
       variant: item.variant,
       maxBytes: 1024 * 1024,
     });
-    if (content?.status !== "ok" || content.kind !== "text")
-      throw new Error(
-        `content ${item.content_id}: ${item.variant} text is unavailable`
-      );
+    if (content?.status !== "ok" || content.kind !== "text") {
+      const verdict = await recordTargetFailure(ctx, {
+        capability: "embed-text",
+        targetType: "core.content_item",
+        targetId: item.content_id,
+        reason: "no-text",
+        error: `${item.variant} text is unavailable`,
+        maxFailures: NOT_READY_MAX_TICKS,
+      });
+      if (verdict.declined) {
+        skipped += 1;
+        if (!parked) watermark = item.derivative_id;
+        log.info(
+          `content ${item.content_id}: ${item.variant} text never landed`
+        );
+      } else {
+        notReady += 1;
+        parked = true;
+        log.info(
+          `content ${item.content_id}: ${item.variant} text is unavailable`
+        );
+      }
+      continue;
+    }
     const result = await infer({ id: item.content_id, text: content.text });
     if (!result || result.error || !Array.isArray(result.vector)) {
       skipped += 1;
+      if (!parked) watermark = item.derivative_id;
       log.info(`content ${item.content_id}: no text vector`);
       continue;
     }
@@ -123,14 +154,15 @@ export default async function handler({ ctx, log }) {
       },
     });
     derived += 1;
+    if (!parked) watermark = item.derivative_id;
   }
-  const last = read.rows?.at(-1)?.derivative_id;
-  if (last) await ctx.state.set("cursor", last);
+  if (watermark) await ctx.state.set("cursor", watermark);
   return {
-    summary: `embedded ${derived} texts; skipped ${skipped}; bounded batch ${read.rows?.length ?? 0}/${BATCH}`,
+    summary: `embedded ${derived} texts; skipped ${skipped}; not ready ${notReady}; bounded batch ${read.rows?.length ?? 0}/${BATCH}`,
     output: {
       derived,
       skipped,
+      notReady,
       model,
       rearm: (read.rows?.length ?? 0) === BATCH,
     },

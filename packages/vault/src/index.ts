@@ -987,6 +987,20 @@ export {
   type DerivationStamp,
 } from "./enrich/derivation.js";
 export {
+  enrichWalkProgress,
+  type EnrichWalkProgress,
+} from "./enrich/walk-progress.js";
+export {
+  ENRICH_TARGET_MAX_FAILURES,
+  clearEnrichTargetFailure,
+  declinedEnrichTargets,
+  enrichTargetFailureSummary,
+  isEnrichTargetDeclined,
+  recordEnrichTargetFailure,
+  type EnrichTargetFailureRow,
+  type EnrichTargetFailureVerdict,
+} from "./enrich/target-failures.js";
+export {
   ENRICH_SCOPE_TYPES,
   ENRICH_TRIGGERS,
   deleteEnrichPolicyRule,

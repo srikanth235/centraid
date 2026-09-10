@@ -24,6 +24,7 @@ import type {
 } from "../enrich/content.js";
 import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import {
+  declineExhaustedEnrichmentLeases,
   drainSatisfiedEnrichmentRequests,
   queueMissingDeviceEnrichmentBacklog,
   releaseExpiredEnrichmentLeases,
@@ -1954,19 +1955,35 @@ export class Gateway {
     let previewsGenerated = 0;
     let phashesGenerated = 0;
     let thumbhashesGenerated = 0;
+    let previewFailures: { contentId: string; error: string }[] = [];
     if (this.db.previewCodec) {
       try {
         const backfill = await backfillPreviews(this.db, this.db.previewCodec);
         previewsGenerated = backfill.generated;
         phashesGenerated = backfill.phashesGenerated;
         thumbhashesGenerated = backfill.thumbhashesGenerated;
-      } catch {
-        // swallowed on purpose — see the comment above.
+        // NAMED, NOT SWALLOWED (#1014, B3). Best-effort still means the sweep
+        // never fails here — but an item whose preview backfill threw is
+        // exactly the one a recognition walk parks behind forever, so it
+        // reaches the sweep receipt with its content id instead of
+        // disappearing into a bare `catch {}`.
+        previewFailures = backfill.failures;
+      } catch (error) {
+        // The whole batch, not one item: still best-effort, still named.
+        previewFailures = [
+          {
+            contentId: "*",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        ];
       }
     }
     // Leases and backstops share the derivative row as completion truth:
     // close an expired job once its rung exists.
     drainSatisfiedEnrichmentRequests(this.db.vault);
+    // …and close the ones no device is ever going to finish (#1014, R10),
+    // recording each on the poison register so the gap is readable.
+    declineExhaustedEnrichmentLeases(this.db.vault);
     // Bounded-cache eviction (#405) runs LAST, against fresh evidence — never
     // sheds a tiny just made. Pinned tinies, staged bytes and un-replicated
     // last copies are untouchable.
@@ -1991,6 +2008,8 @@ export class Gateway {
         phashesGenerated,
         // Inline ThumbHash placeholders published beside preview rungs.
         thumbhashesGenerated,
+        // Items whose backfill threw, by content id (#1014, B3).
+        previewFailures,
         // 0 when the spool is under budget or the vault is local-only.
         evictedBlobs: evicted.evictedBlobs,
         evictedBytes: evicted.evictedBytes,

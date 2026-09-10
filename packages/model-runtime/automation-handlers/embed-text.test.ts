@@ -98,6 +98,66 @@ describe("embed-text handler", () => {
     });
   });
 
+  describe("an unavailable text", () => {
+    it("parks under the cap and leaves the later derivative for the next tick", async () => {
+      // #1014, B2. This THREW, and the cursor write is at the tail of the
+      // loop — so the same derivative was read first on every later tick and
+      // nothing after it was ever embedded.
+      const harness = createHarness({
+        entities: {
+          "core.content_derivative": [
+            derivative("d1", "c1"),
+            derivative("d2", "c2"),
+          ],
+          "enrich.derivation": [],
+        },
+        content: { "c2:text": textContent("readable") },
+        state: { model: MODEL },
+        invoke: (record) =>
+          record.command === "enrich.record_target_failure"
+            ? { status: "executed", output: { failures: 1, declined: false } }
+            : { status: "executed", output: {} },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({ derived: 1, notReady: 1 });
+      // The watermark parks BEFORE the poisoned item: nothing is skipped.
+      expect(harness.state.get("cursor")).toBeUndefined();
+      expect(harness.invokes[0]).toMatchObject({
+        command: "enrich.record_target_failure",
+        input: { capability: "embed-text", target_id: "c1", reason: "no-text" },
+      });
+    });
+
+    it("advances past the item once the register declines it", async () => {
+      const harness = createHarness({
+        entities: {
+          "core.content_derivative": [
+            derivative("d1", "c1"),
+            derivative("d2", "c2"),
+          ],
+          "enrich.derivation": [],
+        },
+        content: { "c2:text": textContent("readable") },
+        state: { model: MODEL },
+        invoke: (record) =>
+          record.command === "enrich.record_target_failure"
+            ? { status: "executed", output: { failures: 12, declined: true } }
+            : { status: "executed", output: {} },
+      });
+
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(result.output).toMatchObject({
+        derived: 1,
+        skipped: 1,
+        notReady: 0,
+      });
+      expect(harness.state.get("cursor")).toBe("d2");
+    });
+  });
+
   describe("cursor seeding", () => {
     it("seeds past a library already embedded at the current model and source version", async () => {
       const harness = createHarness({
@@ -117,6 +177,7 @@ describe("embed-text handler", () => {
       expect(result.output).toStrictEqual({
         derived: 0,
         skipped: 0,
+        notReady: 0,
         model: MODEL,
         rearm: false,
       });
@@ -230,7 +291,7 @@ describe("embed-text handler", () => {
       const result = await handler({ ctx: harness.ctx, log: harness.log });
 
       expect(result.summary).toBe(
-        "embedded 16 texts; skipped 0; bounded batch 16/16"
+        "embedded 16 texts; skipped 0; not ready 0; bounded batch 16/16"
       );
       expect(result.output).toMatchObject({ derived: 16, rearm: true });
     });

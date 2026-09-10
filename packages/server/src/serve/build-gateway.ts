@@ -95,6 +95,8 @@ import {
   readBlobStoreSettings,
   readEnrichPolicyResolutionInput,
   custodyStateCounts,
+  enrichTargetFailureSummary,
+  enrichWalkProgress,
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
 } from "@centraid/vault";
@@ -1190,6 +1192,12 @@ export async function buildGateway(
                 ok: t.ok,
                 ...(t.endedAt === undefined ? {} : { endedAt: t.endedAt }),
               })),
+          // SUCCESS IS NOT PROGRESS (#1014, B2). Every fire succeeding while
+          // the walk stands still is exactly the shape one poisoned asset
+          // produced, and recent-run health called it `ok` forever.
+          progress: (automationId) =>
+            enrichWalkProgress(p.db.vault, automationId),
+          targetFailures: () => enrichTargetFailureSummary(p.db.vault),
         })),
     })
   );

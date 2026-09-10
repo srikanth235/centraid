@@ -105,6 +105,7 @@ export function installWorkerSandbox(
   const tainted = new Set<string>();
   const confinedFsUrl = siblingUrl("confined-fs");
   const confinedFsPromisesUrl = siblingUrl("confined-fs-promises");
+  const confinedWorkerThreadsUrl = siblingUrl("confined-worker-threads");
 
   // No confined roots for `"denied"` (fs is refused outright) and none for
   // `"unrestricted"` (the system lane resolves the REAL `node:fs`, so the
@@ -115,16 +116,17 @@ export function installWorkerSandbox(
 
   /** `format` must be `module-typescript` for a `.ts` mirror: this hook
    * supplies no source, so Node still strips the types itself. */
+  const mirrorResolution = (
+    url: string
+  ): { url: string; format: string; shortCircuit: true } => ({
+    url,
+    format: url.endsWith(".ts") ? "module-typescript" : "module",
+    shortCircuit: true,
+  });
   const confinedFsResolution = (
     promises: boolean
-  ): { url: string; format: string; shortCircuit: true } => {
-    const url = promises ? confinedFsPromisesUrl : confinedFsUrl;
-    return {
-      url,
-      format: url.endsWith(".ts") ? "module-typescript" : "module",
-      shortCircuit: true,
-    };
-  };
+  ): { url: string; format: string; shortCircuit: true } =>
+    mirrorResolution(promises ? confinedFsPromisesUrl : confinedFsUrl);
 
   registerHooks({
     resolve(specifier, context, nextResolve) {
@@ -146,6 +148,9 @@ export function installWorkerSandbox(
         if (decision.kind === "confined-fs") {
           return confinedFsResolution(decision.promises);
         }
+        if (decision.kind === "confined-worker-threads") {
+          return mirrorResolution(confinedWorkerThreadsUrl);
+        }
         return nextResolve(specifier, context);
       }
       const resolved = nextResolve(specifier, context);
@@ -157,6 +162,9 @@ export function installWorkerSandbox(
           if (decision.kind === "deny") throw denied(decision.reason);
           if (decision.kind === "confined-fs") {
             return confinedFsResolution(decision.promises);
+          }
+          if (decision.kind === "confined-worker-threads") {
+            return mirrorResolution(confinedWorkerThreadsUrl);
           }
         }
       }

@@ -126,7 +126,10 @@ describe("faces handler", () => {
       });
     });
 
-    it("fails the fire when the detector returns no faces array", async () => {
+    it("records a detector failure per target instead of failing the fire", async () => {
+      // #1014, B2. Throwing here failed the whole turn, and because the walk
+      // is `asset_id`-ordered every later tick died on the same row while
+      // health read `ok`. The failure is counted against the target now.
       setFacesRuntimeForTests({
         weightsPresent: () => true,
         infer: () => Promise.resolve({ id: "a1", error: "detector crashed" }),
@@ -139,11 +142,63 @@ describe("faces handler", () => {
         },
         content: previews(["a1"]),
         state: { model: MODEL },
+        invoke: () => ({
+          status: "executed",
+          output: { failures: 1, declined: false },
+        }),
       });
 
-      await expect(handler({ ctx: harness.ctx })).rejects.toThrow(
-        "detector crashed"
-      );
+      const result = await handler({ ctx: harness.ctx });
+
+      // Under the cap it parks like an unready preview: the request is not
+      // drained, so the queue itself carries the retry.
+      expect(result.output).toMatchObject({
+        derived: 0,
+        notReady: 1,
+        drained: 0,
+      });
+      expect(harness.invokes).toStrictEqual([
+        {
+          command: "enrich.record_target_failure",
+          input: {
+            capability: "faces",
+            target_type: "media.asset",
+            target_id: "a1",
+            error: "detector crashed",
+            reason: "failed",
+          },
+        },
+      ]);
+    });
+
+    it("moves past a target the failure register has declined", async () => {
+      setFacesRuntimeForTests({
+        weightsPresent: () => true,
+        infer: () => Promise.resolve({ id: "a1", error: "detector crashed" }),
+      });
+      const harness = createHarness({
+        entities: {
+          "enrich.request": [request("r1", "a1")],
+          "media.asset": [asset("a1")],
+          "enrich.derivation": [],
+        },
+        content: previews(["a1"]),
+        state: { model: MODEL },
+        invoke: (record) =>
+          record.command === "enrich.record_target_failure"
+            ? { status: "executed", output: { failures: 3, declined: true } }
+            : { status: "executed", output: {} },
+      });
+
+      const result = await handler({ ctx: harness.ctx });
+
+      // Declined: counted as skipped, the request drains, and the walk is free.
+      expect(result.output).toMatchObject({
+        derived: 0,
+        skipped: 1,
+        notReady: 0,
+        drained: 1,
+      });
     });
   });
 

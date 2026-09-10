@@ -5,6 +5,7 @@ import {
   embedWeightsPresent,
 } from "../src/capabilities/embed.js";
 import { previewUnsupported } from "./preview-status.js";
+import { NOT_READY_MAX_TICKS, recordTargetFailure } from "./target-failures.js";
 
 const BATCH = 16;
 let infer = embedImage;
@@ -107,6 +108,23 @@ export default async function handler({ ctx, log }) {
         skipped += 1;
         if (!parked) watermark = asset.asset_id;
         log.info(`asset ${asset.asset_id}: no preview this codec can produce`);
+        continue;
+      }
+      // A PARK IS NOW BOUNDED (#1014, B3). An asset that is neither ready nor
+      // durably declined held every later photograph indefinitely; after
+      // `NOT_READY_MAX_TICKS` it is declined `no-preview` and the walk moves on.
+      const verdict = await recordTargetFailure(ctx, {
+        capability: "embed-image",
+        targetType: "media.asset",
+        targetId: asset.asset_id,
+        reason: "no-preview",
+        error: "no preview landed for this asset",
+        maxFailures: NOT_READY_MAX_TICKS,
+      });
+      if (verdict.declined) {
+        skipped += 1;
+        if (!parked) watermark = asset.asset_id;
+        log.info(`asset ${asset.asset_id}: no preview ever landed`);
         continue;
       }
       notReady += 1;

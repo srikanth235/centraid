@@ -744,7 +744,10 @@ describe("recognition automation spine", () => {
       command: "enrich.mark_requests_drained",
       input: { request_ids: ["vault-wide"] },
     });
-    expect(harness.state.get("requestCursor:vault-wide")).toBe("a1");
+    // THE KEY GOES WITH THE REQUEST (#1014, B19). A `requestCursor:<id>` that
+    // outlives its drained request is state nothing will ever read again —
+    // one row per explicit ask, forever.
+    expect(harness.state.has("requestCursor:vault-wide")).toBe(false);
   });
 });
 
@@ -785,7 +788,22 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
       notReady: 1,
     });
     expect(harness.state.get("cursor")).toBe("a0");
-    expect(harness.invokes).toHaveLength(0);
+    // The park is BOUNDED now (#1014, B3): the tick is counted against the
+    // target so an asset whose preview never lands cannot hold the walk
+    // forever. Counting is the only write.
+    expect(harness.invokes).toStrictEqual([
+      {
+        command: "enrich.record_target_failure",
+        input: {
+          capability: "ocr",
+          target_type: "core.content_item",
+          target_id: "c1",
+          reason: "no-preview",
+          error: "no preview landed for this asset",
+          max_failures: 12,
+        },
+      },
+    ]);
   });
 
   it("photo-ocr honors an honest empty OCR result as a skip — the cursor still advances", async () => {
@@ -826,10 +844,26 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
       notReady: 1,
     });
     expect(harness.state.get("cursor")).toBe("a0");
-    expect(harness.invokes).toHaveLength(0);
+    // Bounded park (#1014, B3): the tick is counted, and counting is the only
+    // write.
+    expect(harness.invokes).toStrictEqual([
+      {
+        command: "enrich.record_target_failure",
+        input: {
+          capability: "embed-image",
+          target_type: "media.asset",
+          target_id: "a1",
+          reason: "no-preview",
+          error: "no preview landed for this asset",
+          max_failures: 12,
+        },
+      },
+    ]);
   });
 
-  it("embed-text throws when the derivative-text fetch fails mid-batch — the cursor never advances", async () => {
+  it("embed-text parks on an unavailable derivative text without failing the fire (#1014, B2)", async () => {
+    // This THREW, and the cursor write is at the tail of the loop — so one
+    // unreadable derivative meant nothing after it was ever embedded.
     const handler = await loadHandler("embed-text");
     const item = { derivative_id: "d1", content_id: "c1", variant: "text" };
     const harness = stubCtx({
@@ -840,11 +874,26 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     });
     harness.state.set("model", "clip-vit-b-32@1");
     harness.state.set("cursor", "d0");
-    await expect(
-      handler({ ctx: harness.ctx, log: harness.log })
-    ).rejects.toThrow(/text is unavailable/u);
+    const result = (await handler({
+      ctx: harness.ctx,
+      log: harness.log,
+    })) as { output: { derived: number; notReady: number } };
+    expect(result.output).toMatchObject({ derived: 0, notReady: 1 });
+    // Parked, not skipped: the watermark has not passed the item.
     expect(harness.state.get("cursor")).toBe("d0");
-    expect(harness.invokes).toHaveLength(0);
+    expect(harness.invokes).toStrictEqual([
+      {
+        command: "enrich.record_target_failure",
+        input: {
+          capability: "embed-text",
+          target_type: "core.content_item",
+          target_id: "c1",
+          reason: "no-text",
+          error: "text text is unavailable",
+          max_failures: 12,
+        },
+      },
+    ]);
   });
 
   it("transcript throws when the bounded-original fetch fails mid-batch — the cursor never advances", async () => {
@@ -997,8 +1046,11 @@ describe("doc-text-extractor behavior", () => {
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
       summary: string;
     };
+    // The byte budget is EXPLICIT now (#1014, R10): the default was 1 MiB and
+    // this handler passed nothing, so an ordinary 1.5 MB device preview came
+    // back `too-large` and the same document led every later batch.
     expect(harness.delegateCalls[0]!.content).toStrictEqual([
-      { contentId: "d1", variant: "preview" },
+      { contentId: "d1", variant: "preview", maxBytes: 4 * 1024 * 1024 },
     ]);
     expect(harness.invokes.map((i) => i.command)).toStrictEqual([
       "core.set_extracted_text",
@@ -1047,7 +1099,11 @@ describe("doc-text-extractor behavior", () => {
     });
   });
 
-  it("refuses a delegate transcription with no ACP-confirmed model identity", async () => {
+  it("counts a delegate transcription with no ACP-confirmed model identity against the target", async () => {
+    // #1014, R10. Throwing here skipped the cursor write at the tail of the
+    // walk, so the same document was first in every later batch — one poisoned
+    // item blocking every later one. The refusal itself is unchanged: no text
+    // is written for an answer whose producer is unknown.
     const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({
       reads: {
@@ -1064,10 +1120,28 @@ describe("doc-text-extractor behavior", () => {
       delegate: () => ({ text: "Warranty expires 2027-03-01" }),
     });
 
-    await expect(
-      handler({ ctx: harness.ctx, log: harness.log })
-    ).rejects.toThrow("no ACP-confirmed model identity");
-    expect(harness.invokes).toHaveLength(0);
+    const result = (await handler({
+      ctx: harness.ctx,
+      log: harness.log,
+    })) as { output: { ocred: number } };
+
+    expect(result.output.ocred).toBe(0);
+    expect(harness.invokes).toStrictEqual([
+      {
+        command: "enrich.record_target_failure",
+        input: {
+          capability: "doc-text",
+          target_type: "core.content_item",
+          target_id: "d1",
+          max_failures: 3,
+          reason: "failed",
+          error:
+            "delegate document text returned no ACP-confirmed model identity",
+        },
+      },
+    ]);
+    // Parked, not skipped: the cursor has not passed the document.
+    expect(harness.state.get("cursor")).toBe("");
   });
 
   it("refuses a delegate fire that names no pinned model, spending no turn", async () => {
@@ -1172,7 +1246,7 @@ describe("doc-text-extractor behavior", () => {
     ];
     await handler({ ctx: harness.ctx, log: harness.log });
     expect(harness.delegateCalls.at(-1)?.content).toStrictEqual([
-      { contentId: "d5", variant: "preview" },
+      { contentId: "d5", variant: "preview", maxBytes: 4 * 1024 * 1024 },
     ]);
     expect(harness.invokes.at(-1)).toStrictEqual({
       command: "core.set_extracted_text",

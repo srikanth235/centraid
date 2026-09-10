@@ -11,6 +11,10 @@ import type {
 } from "../enrich/egress-consent.js";
 import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import { encodeVector } from "../enrich/similarity.js";
+import {
+  ENRICH_TARGET_MAX_FAILURES,
+  recordEnrichTargetFailure,
+} from "../enrich/target-failures.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 
@@ -1163,6 +1167,75 @@ const REGENERATE_ALL: CommandDefinition = {
   },
 };
 
+/**
+ * A TARGET THE RECIPE COULD NOT DERIVE (#1014, B2/B3/B20/R10).
+ *
+ * The one verb a recognition handler needs to stop being stuck: it counts the
+ * failure, says whether the walk should now decline the target, and — because
+ * the count is what makes the cursor safe to advance — is the reason a single
+ * poisoned asset no longer freezes an entire library.
+ *
+ * `permanent` is not a shortcut: it is for failures that CANNOT become
+ * successes by being retried — a codec that refuses the original outright,
+ * content past the extractor's byte ceiling. Everything else counts to the cap.
+ */
+const RECORD_TARGET_FAILURE: CommandDefinition = {
+  name: "enrich.record_target_failure",
+  ownerSchema: "enrich",
+  inputSchema: {
+    type: "object",
+    required: ["capability", "target_type", "target_id"],
+    additionalProperties: false,
+    properties: {
+      capability: { type: "string", minLength: 1 },
+      target_type: { type: "string", minLength: 1 },
+      target_id: { type: "string", minLength: 1 },
+      error: { type: "string", maxLength: 2000 },
+      reason: { type: "string", minLength: 1, maxLength: 64 },
+      permanent: { type: "boolean" },
+      // A capability may declare its OWN cap. "This preview has not landed
+      // yet" is worth many more ticks than "the detector threw", and one
+      // constant for both would either declare a slow rung dead or leave a
+      // crash-looping one running for an hour.
+      max_failures: { type: "integer", minimum: 1, maximum: 1000 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["failures", "declined"],
+    properties: {
+      failures: { type: "integer" },
+      declined: { type: "boolean" },
+    },
+  },
+  preconditions: [],
+  postconditions: [],
+  idempotency: "retry-safe",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as {
+      capability: string;
+      target_type: string;
+      target_id: string;
+      error?: string;
+      reason?: string;
+      permanent?: boolean;
+      max_failures?: number;
+    };
+    const verdict = recordEnrichTargetFailure(ctx.db, {
+      capability: input.capability,
+      targetType: input.target_type,
+      targetId: input.target_id,
+      maxFailures: input.max_failures ?? ENRICH_TARGET_MAX_FAILURES,
+      now: ctx.now,
+      ...(input.error === undefined ? {} : { error: input.error }),
+      ...(input.reason === undefined ? {} : { reason: input.reason }),
+      ...(input.permanent === undefined ? {} : { permanent: input.permanent }),
+    });
+    return { failures: verdict.failures, declined: verdict.declined };
+  },
+};
+
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
     .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
@@ -1179,6 +1252,7 @@ export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(RECORD_CONSENT);
   gateway.registerCommand(UPSERT_EMBEDDING);
   gateway.registerCommand(MARK_REQUESTS_DRAINED);
+  gateway.registerCommand(RECORD_TARGET_FAILURE);
   gateway.registerCommand(UPSERT_FACES);
   gateway.registerCommand(REBUILD_FACE_CLUSTERS);
   gateway.registerCommand(REGENERATE);

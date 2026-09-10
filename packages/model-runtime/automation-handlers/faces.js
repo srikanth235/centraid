@@ -5,6 +5,11 @@ import {
   facesWeightsPresent,
 } from "../src/capabilities/faces.js";
 import { previewUnsupported } from "./preview-status.js";
+import {
+  NOT_READY_MAX_TICKS,
+  failureMessage,
+  recordTargetFailure,
+} from "./target-failures.js";
 
 const BATCH = 16;
 let infer = faces;
@@ -62,24 +67,58 @@ async function deriveAsset(ctx, asset, model) {
   if (content?.status !== "ok" || content.kind !== "bytes") {
     if (await previewUnsupported(ctx, asset.content_id))
       return { settled: true, derived: 0, skipped: 1, notReady: 0 };
+    // A PARK IS NOW BOUNDED (#1014, B3). "Come back later" was unbounded, so
+    // an asset that is neither ready nor durably declined held every later
+    // photograph indefinitely. Each unready tick counts, and after
+    // `NOT_READY_MAX_TICKS` the asset is declined `no-preview` durably and the
+    // walk moves past it — the record is what health shows.
+    const verdict = await recordTargetFailure(ctx, {
+      capability: "faces",
+      targetType: "media.asset",
+      targetId: asset.asset_id,
+      reason: "no-preview",
+      error: "no preview landed for this asset",
+      maxFailures: NOT_READY_MAX_TICKS,
+    });
+    if (verdict.declined)
+      return { settled: true, derived: 0, skipped: 1, notReady: 0 };
     return { settled: false, derived: 0, skipped: 0, notReady: 1 };
   }
-  const result = await infer({
-    id: asset.asset_id,
-    bytes: content.base64,
-    mediaType: content.mediaType,
-    originalWidth: asset.width,
-    originalHeight: asset.height,
-  });
-  if (!result || result.error || !Array.isArray(result.faces))
-    throw new Error(
-      result?.error ??
-        `asset ${asset.asset_id}: face detector returned no result`
-    );
-  await ctx.vault.invoke({
-    command: "enrich.upsert_faces",
-    input: { asset_id: asset.asset_id, model, faces: result.faces },
-  });
+  // ONE POISONED PHOTOGRAPH DOES NOT STOP THE LIBRARY (#1014, B2). Throwing
+  // here failed the whole turn, and because the walk is `asset_id`-ordered
+  // every tick after it died on the same row while health read `ok`.
+  let result;
+  try {
+    result = await infer({
+      id: asset.asset_id,
+      bytes: content.base64,
+      mediaType: content.mediaType,
+      originalWidth: asset.width,
+      originalHeight: asset.height,
+    });
+    if (!result || result.error || !Array.isArray(result.faces))
+      throw new Error(
+        result?.error ??
+          `asset ${asset.asset_id}: face detector returned no result`
+      );
+    await ctx.vault.invoke({
+      command: "enrich.upsert_faces",
+      input: { asset_id: asset.asset_id, model, faces: result.faces },
+    });
+  } catch (error) {
+    const verdict = await recordTargetFailure(ctx, {
+      capability: "faces",
+      targetType: "media.asset",
+      targetId: asset.asset_id,
+      error: failureMessage(error),
+      reason: "failed",
+    });
+    // Under the cap this parks exactly as an unready preview does — one tick
+    // lost, the target retried. At the cap the walk advances past it.
+    if (verdict.declined)
+      return { settled: true, derived: 0, skipped: 1, notReady: 0, failed: 1 };
+    return { settled: false, derived: 0, skipped: 0, notReady: 1, failed: 1 };
+  }
   return { settled: true, derived: 1, skipped: 0, notReady: 0 };
 }
 
@@ -217,9 +256,13 @@ export default async function handler({ ctx }) {
     }
     if (watermark) await ctx.state.set(key, watermark);
     // A parked pass is not drained: this request still owes those assets.
-    if (!parked && (assets.rows?.length ?? 0) < capacity)
+    if (!parked && (assets.rows?.length ?? 0) < capacity) {
       drained.push(request.request_id);
-    else rearm = true;
+      // THE KEY GOES WITH THE REQUEST (#1014, B19). A `requestCursor:<id>`
+      // that outlives its request is state nothing will ever read again, one
+      // row per explicit ask, forever.
+      await ctx.state.delete(key);
+    } else rearm = true;
   }
 
   if (remaining > 0) {
