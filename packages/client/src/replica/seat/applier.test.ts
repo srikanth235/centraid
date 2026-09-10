@@ -6,7 +6,14 @@ import type { SeatLogPageWire, SeatLogRowWire } from "@centraid/core/protocol";
 import { applySeatLogPage } from "./applier.js";
 import { openSeatFile } from "./driver.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
+import { addSeatOutboxIntent, readSeatOutbox } from "./outbox.js";
 import { SeatDriftError } from "./seat-drift-error.js";
+import {
+  clearSeatOverlaysAtCommit,
+  SeatIntentStore,
+  seatOverlayClearingHook,
+  SETTLED_JOURNAL_LIMIT,
+} from "./seat-intent-store.js";
 import { initSeatState, readSeatState } from "./state.js";
 import { seatWatermark, seatWatermarkLine } from "./watermark.js";
 
@@ -442,6 +449,83 @@ describe("the seat applier", () => {
       { onChange: (notice) => notices.push([...notice.tables]) }
     );
     expect(notices).toStrictEqual([["note", "tag"]]);
+    driver.close();
+  });
+});
+
+describe("what is written inside the transaction and what is told after it", () => {
+  it("clears the overlay in the commit and announces it only once durable", () => {
+    nextSeq = 10;
+    const driver = seat();
+    SeatIntentStore.create(driver);
+    addSeatOutboxIntent(driver, {
+      intentId: "i-1",
+      appId: "notes",
+      action: "notes.create_note",
+      input: {},
+      payloadHash: "h",
+      state: "awaiting-change",
+      commitSeq: 100,
+    });
+
+    const order: string[] = [];
+    const clearing = seatOverlayClearingHook(driver, (ids) => {
+      // WHAT THE SHELL SEES. Before #1014's C10 this ran before COMMIT, so a
+      // listener that threw rolled back an applied log page and a
+      // not-yet-durable "your write landed" was published.
+      // The rows really are visible from a fresh read at this point.
+      order.push(
+        `told:${ids.join(",")}`,
+        `note:${driver.all<{ n: number }>(`SELECT count(*) AS n FROM note`)[0]!.n}`
+      );
+    });
+    applySeatLogPage(driver, page([insertNote("n1", "landed")]), {
+      onCommitInTransaction: (commitSeq) => {
+        clearing.inTransaction(commitSeq);
+        // Inside: the outbox row is already gone, and it is not yet announced.
+        order.push(`cleared-in-transaction:${readSeatOutbox(driver).length}`);
+      },
+      afterCommit: clearing.afterCommit,
+    });
+    expect(order).toStrictEqual([
+      "cleared-in-transaction:0",
+      "told:i-1",
+      "note:1",
+    ]);
+    driver.close();
+  });
+
+  it("bounds the settled journal on the path that settles almost everything", () => {
+    nextSeq = 10;
+    const driver = seat();
+    SeatIntentStore.create(driver);
+    // The journal already at its bound, from earlier commits.
+    driver.exec(
+      `WITH RECURSIVE past(n) AS (
+         SELECT 1 UNION ALL SELECT n + 1 FROM past WHERE n < ${SETTLED_JOURNAL_LIMIT})
+       INSERT INTO seat_outbox_settled (intent_id, settled_at, outcome_json)
+       SELECT 'past-' || n, '2026-01-01T00:00:0' || (n % 10) || '.000Z', '{}'
+         FROM past`
+    );
+    addSeatOutboxIntent(driver, {
+      intentId: "i-new",
+      appId: "notes",
+      action: "notes.create_note",
+      input: {},
+      payloadHash: "h",
+      state: "awaiting-change",
+      commitSeq: 100,
+    });
+    driver.exec("BEGIN IMMEDIATE");
+    // This path — R24's in-transaction clear — settles almost everything on a
+    // seat whose outbox shares the file, and it never pruned (#1014, C9).
+    expect(clearSeatOverlaysAtCommit(driver, 100)).toStrictEqual(["i-new"]);
+    driver.exec("COMMIT");
+    expect(
+      driver.all<{ n: number }>(
+        `SELECT count(*) AS n FROM seat_outbox_settled`
+      )[0]!.n
+    ).toBe(SETTLED_JOURNAL_LIMIT);
     driver.close();
   });
 });

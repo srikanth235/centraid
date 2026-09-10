@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { IntentRecordStore } from "./intent-record-store.js";
 import { IntentQueue } from "./intents.js";
 import { MemoryIntentStore } from "./memory-intent-store.js";
+import { invalidateOutboxMirror, mirrorOutbox } from "./outbox-mirror.js";
 
 /** Wrap a store so every call it receives is counted by name. */
 function counted(store: IntentRecordStore): {
@@ -81,5 +82,60 @@ describe("the outbox overlay mirror", () => {
     await queue.applyOutcomes([{ intentId: "intent-1", status: "executed" }]);
     expect((await queue.overlay()).mutations).toStrictEqual([]);
     expect(calls.get("list")).toBe(before + 1);
+  });
+});
+
+describe("what the mirror cannot see for itself (#1014, C11)", () => {
+  test("caches per states asked for, not one answer for every question", async () => {
+    const store = new MemoryIntentStore();
+    const mirror = mirrorOutbox(store);
+    await store.add({
+      intentId: "i-queued",
+      payloadHash: "h1",
+      appId: "tasks",
+      action: "edit",
+      input: {},
+      state: "queued",
+      attempts: 0,
+      optimistic: [],
+    });
+    await store.add({
+      intentId: "i-parked",
+      payloadHash: "h2",
+      appId: "tasks",
+      action: "edit",
+      input: {},
+      state: "parked",
+      attempts: 0,
+      optimistic: [],
+    });
+    // The wide question first. The narrow one used to be served its answer.
+    await expect(mirror.pending(["queued", "parked"])).resolves.toHaveLength(2);
+    const narrow = await mirror.pending(["queued"]);
+    expect(narrow.map((each) => each.intentId)).toStrictEqual(["i-queued"]);
+  });
+
+  test("a write outside the proxy is invalidated by id, not left stale", async () => {
+    const store = new MemoryIntentStore();
+    const mirror = mirrorOutbox(store);
+    await store.add({
+      intentId: "i-1",
+      payloadHash: "h",
+      appId: "tasks",
+      action: "edit",
+      input: {},
+      state: "awaiting-change",
+      attempts: 0,
+      optimistic: [],
+    });
+    await expect(mirror.pending(["awaiting-change"])).resolves.toHaveLength(1);
+    // R24's in-transaction clear: the row goes on the seat's own connection,
+    // never through the wrapped store.
+    await store.settle("i-1", ["awaiting-change"], { state: "executed" });
+    await expect(mirror.pending(["awaiting-change"])).resolves.toHaveLength(1);
+    invalidateOutboxMirror(store);
+    await expect(mirror.pending(["awaiting-change"])).resolves.toStrictEqual(
+      []
+    );
   });
 });

@@ -434,7 +434,7 @@ describe("the overlay clears in the transaction that carries its commit", () => 
       {
         onCommitInTransaction: (commitSeq) => {
           seen.push(commitSeq);
-          seatOverlayClearingHook(driver)(commitSeq);
+          seatOverlayClearingHook(driver).inTransaction(commitSeq);
         },
       }
     );

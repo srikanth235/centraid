@@ -31,7 +31,7 @@ import type { SeatSqliteDriver } from "./driver.js";
 import { createSeatOutbox } from "./outbox.js";
 
 /** Journal cap: `listSettled` cannot read past it. Same bound as its siblings. */
-const SETTLED_JOURNAL_LIMIT = 5_000;
+export const SETTLED_JOURNAL_LIMIT = 5_000;
 
 const SETTLED_DDL = `
 CREATE TABLE IF NOT EXISTS seat_outbox_settled (
@@ -325,13 +325,7 @@ export class SeatIntentStore implements IntentRecordStore {
   }
 
   #pruneJournal(): void {
-    this.driver.run(
-      `DELETE FROM seat_outbox_settled WHERE intent_id IN (
-         SELECT intent_id FROM seat_outbox_settled
-          ORDER BY settled_at DESC, intent_id DESC
-          LIMIT -1 OFFSET ?)`,
-      [SETTLED_JOURNAL_LIMIT]
-    );
+    pruneSettledJournal(this.driver);
   }
 }
 
@@ -379,19 +373,60 @@ export function clearSeatOverlaysAtCommit(
     );
     cleared.push(intent.intentId);
   }
+  // AND IT PRUNES, LIKE `settle()` DOES (#1014, C9). This is the path that
+  // settles almost everything on a seat whose outbox shares the file — the
+  // async `settle()` is the exception — so a journal trimmed only there is a
+  // journal that is not trimmed. `SETTLED_JOURNAL_LIMIT` is the same bound
+  // both paths keep, and this runs in the caller's transaction like the rest.
+  if (cleared.length > 0) pruneSettledJournal(driver);
   return cleared;
 }
 
+/** The settled journal's bound, applied by both settling paths. */
+function pruneSettledJournal(driver: SeatSqliteDriver): void {
+  driver.run(
+    `DELETE FROM seat_outbox_settled WHERE intent_id IN (
+       SELECT intent_id FROM seat_outbox_settled
+        ORDER BY settled_at DESC, intent_id DESC
+        LIMIT -1 OFFSET ?)`,
+    [SETTLED_JOURNAL_LIMIT]
+  );
+}
+
 /**
- * The hook to hand `applySeatLogPage`. A batch of commits clears whatever each
- * one has earned, in the transaction that advanced the cursor past it.
+ * The hooks to hand `applySeatLogPage`. A batch of commits clears whatever
+ * each one has earned, in the transaction that advanced the cursor past it.
+ *
+ * TWO HALVES, AND THE SPLIT IS THE POINT (#1014, C10). The clearing is a
+ * WRITE and belongs inside the transaction; the notification is an
+ * ANNOUNCEMENT and does not. Firing `onCleared` from inside meant a shell
+ * listener that threw rolled back an applied log page, and that a
+ * not-yet-durable fact — "your write landed" — was published before COMMIT.
+ * So `inTransaction` collects and `afterCommit` tells.
  */
+export interface SeatOverlayClearing {
+  /** Pass as `onCommitInTransaction`. */
+  readonly inTransaction: (commitSeq: number) => void;
+  /** Pass as `afterCommit`. */
+  readonly afterCommit: (commitSeq: number) => void;
+}
+
 export function seatOverlayClearingHook(
   driver: SeatSqliteDriver,
   onCleared?: (intentIds: readonly string[]) => void
-): (commitSeq: number) => void {
-  return (commitSeq) => {
-    const cleared = clearSeatOverlaysAtCommit(driver, commitSeq);
-    if (cleared.length > 0) onCleared?.(cleared);
+): SeatOverlayClearing {
+  let pending: string[] = [];
+  return {
+    inTransaction: (commitSeq) => {
+      pending = [...pending, ...clearSeatOverlaysAtCommit(driver, commitSeq)];
+    },
+    afterCommit: () => {
+      if (pending.length === 0) return;
+      const cleared = pending;
+      // Emptied BEFORE the call: a listener that throws must not leave the
+      // same ids queued to be announced again by the next commit.
+      pending = [];
+      onCleared?.(cleared);
+    },
   };
 }

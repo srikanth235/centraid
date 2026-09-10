@@ -38,6 +38,7 @@ import { replicaIntentInvalidations } from "./intent-invalidations.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
 import { IntentQueue } from "./intents.js";
 import { MemoryIntentStore } from "./memory-intent-store.js";
+import { invalidateOutboxMirror } from "./outbox-mirror.js";
 import {
   replicaIdentityForGatewayAuth,
   fetchReplicaForScope,
@@ -125,6 +126,8 @@ export class ReplicaShellSession {
    * remote-only browser would be local data the member asked it not to keep.
    */
   #queue: IntentQueue | undefined;
+  /** The raw store the queue's outbox mirror was built over (#1014, C11). */
+  #outboxStore: IntentRecordStore | undefined;
   #rowKeys: SeatRowKeys | undefined;
   #opening: Promise<void> | undefined;
 
@@ -262,6 +265,8 @@ export class ReplicaShellSession {
     const file = await this.#seat.file();
     const store =
       this.#injectedStore ?? file?.outbox() ?? new MemoryIntentStore();
+    // Held so `settleCleared` can reach the mirror the queue built over it.
+    this.#outboxStore = store;
     if (file) this.#rowKeys = new SeatRowKeys(file);
     this.#queue = new IntentQueue(
       store,
@@ -464,6 +469,12 @@ export class ReplicaShellSession {
    * settled and the badges they were drawn with go.
    */
   private settleCleared(intentIds: readonly string[]): void {
+    // THE MIRROR DID NOT SEE THIS WRITE (#1014, C11). The rows went from
+    // `seat_outbox` inside the applier's transaction, on the seat's own
+    // connection — not through the proxy the mirror invalidates on — so
+    // without this the overlay goes on drawing a pending badge over rows that
+    // have already landed, for as long as nothing else writes.
+    invalidateOutboxMirror(this.#outboxStore);
     for (const intentId of intentIds)
       this.#admission.resolve(intentId, { intentId, status: "executed" });
   }

@@ -97,6 +97,17 @@ export interface SeatApplyOptions {
    * COMMIT'S ROWS back, not just the bookkeeping.
    */
   readonly onCommitInTransaction?: (commitSeq: number) => void;
+  /**
+   * CALLED AFTER THE COMMIT IS DURABLE (#1014, C10).
+   *
+   * The twin of the hook above, and the reason both exist. What
+   * `onCommitInTransaction` WRITES must be atomic with the rows; what it
+   * ANNOUNCES must not be — a shell listener that throws inside the
+   * transaction rolls an applied log page back, and a listener that is told
+   * before COMMIT has been told a fact that is not yet durable. So the work
+   * goes in and the news comes out here.
+   */
+  readonly afterCommit?: (commitSeq: number) => void;
   readonly now?: () => string;
 }
 
@@ -321,6 +332,10 @@ export function applySeatLogPage(
       driver.exec("ROLLBACK");
       throw error;
     }
+    // OUTSIDE THE `try`, DELIBERATELY. A throw from here must not reach the
+    // ROLLBACK above: there is no transaction to roll back any more, and the
+    // rows are the member's whether or not the shell listened.
+    options.afterCommit?.(group.commitSeq);
   }
 
   // An empty page still tells the seat where the gateway's head is — which is

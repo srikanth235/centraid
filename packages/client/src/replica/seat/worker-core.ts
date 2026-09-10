@@ -291,6 +291,9 @@ export class SeatWorkerCore {
 
   apply(options: SeatWorkerApplyOptions): SeatApplySummary {
     const driver = this.required();
+    const clearing = seatOverlayClearingHook(driver, (intentIds) =>
+      this.sink.onOverlaysCleared?.(intentIds)
+    );
     const result = applySeatLogPage(driver, options.page, {
       ...(options.deferOverThreshold === undefined
         ? {}
@@ -300,9 +303,9 @@ export class SeatWorkerCore {
       // executed intent parks on its `commit_seq`; this is what reaches it.
       // Without it the overlay is never cleared by anything — the pending row
       // stays drawn over the very rows that settle it, forever.
-      onCommitInTransaction: seatOverlayClearingHook(driver, (intentIds) =>
-        this.sink.onOverlaysCleared?.(intentIds)
-      ),
+      onCommitInTransaction: clearing.inTransaction,
+      // The news, once the rows are durable (#1014, C10).
+      afterCommit: clearing.afterCommit,
     });
     return result;
   }
