@@ -404,3 +404,128 @@ Verdict: PASS / PASS / PASS / PASS.
 | **R-KIT-3** | `ConfirmSheet` is built on `SheetRoom`, not on `OptionSheet`. Accepted. | `OptionSheet`'s iOS path is `ActionSheetIOS`, a platform surface that can draw neither an outlined `--net` verb (DESIGN.md: a destructive verb is outlined, never filled) nor host a `StatusLine`. A confirm that cannot show its own undo afterwards is not the confirm this issue asks for. `OptionSheet` keeps the choice-list job (**D4**); the confirm is a room. |
 | **R-KIT-4** | Widening `copy-title-case` to read menu option tables in `.tsx` is Wave 3 copy-lane work, not this lane's. | The rule as briefed reads `*copy*.ts` tables and prints a true 0 over them. Photos' Title Case (**D2**) lives in `.tsx` option tables, so the 0 is a scope limit, not a clean bill — recorded above rather than papered over. Widening the reader is a change to the finding set the copy lane burns down, so it belongs with that lane, not ahead of it. |
 | **R-KIT-5** | **S13 is closed** by `PlaceRef` + `BandState`. | S13 asked that band `current` be computed and never literal. `PlaceRef` carries a `unique symbol` brand minted only by `place()`, so `backTo`/`current` cannot be written as a string at all — the rule is a type error, not a lint. `bandStateFor()` derives the band's state from the room, and `EditorRoom` takes no band prop (**R-KIT-2**, **D5**). `scripts/lint-mobile-rooms.mjs`'s `back-literal` rule (47 findings) measures the un-migrated screens for Wave 3; the kit contract itself is closed. |
+
+## Wave 2 — lane APPS-A (Agenda, Tasks, Notes, Docs), the rooms migration
+
+Branch `lane/1015-apps-a`, from umbrella `3e5299b60`. Four apps into the six
+rooms, plus the five Agenda findings this lane owns.
+
+### What landed, commit by commit
+
+| Commit | What |
+| --- | --- |
+| `28b74d3bc` | `AppPlace`/`PushedPage` take `chrome`: the vault lockup is true on every route of an app, and the rooms replace the frames that drew it. A node, not an import — a room reaching for `VaultBar` would pull the launcher catalog into `kit/`. |
+| `fb643dbb3` | `EditorRoom` gains `presented`/`visible` (an editor that is state, not a route, presents its own page sheet and hosts the status line inside it) and `foot` (the acts of the thing being edited, in one row). |
+| `d942b4d0a` | `AppPlace`/`PushedPage` take `overlay`: a confirm sheet and a presented editor cannot live in `RoomBody`, whose empty state replaces the children. |
+| `7174eb0d6` | **Notes** into the rooms; `RoomAction`/`PlaceVerb` gain `testID` and `EditorRoom` a `leaveTestID`, so `notes-capture` and `notes-editor-close` survive the move. **Closes B5.** |
+| `02626edd5` | **Tasks** into the rooms; both `Alert.alert` exits become `useConfirmDestructive`. |
+| `ec0d2ea2b` | `kit/format.ts` gains `formatTime`, `formatDateTime`, `formatMonth`. |
+| `68e49028a` | `AppPlace`/`PushedPage` take `toolbar` — the controls that pick WHICH content the body shows, above the body and outside its state machine. |
+| `140e26f10` | **Agenda** into the rooms, closing agenda findings **#3 #4 #5 #6 #7** (and **#8** with the room). |
+| `8c34fea45` | `AppPlace` gains `secondary`; `bandStateFor` treats the selection OBJECT as the mode rather than `count > 0`. |
+| `ead84b32a` | **Docs** — nineteen surfaces into the rooms, `DriveList`'s bulk bar into the room's selection (**closes B8 for Docs**), Empty trash onto `SheetRoom`. |
+
+### Files changed
+
+Added: `apps/mobile/src/apps/agenda/AgendaDayRow.tsx`,
+`apps/mobile/src/apps/agenda/agenda-day-model.ts`,
+`apps/mobile/src/apps/docs/docs-room.tsx`,
+`apps/mobile/src/apps/docs/drive-selection.ts`.
+
+Deleted: `apps/mobile/src/apps/docs/BulkVerb.tsx`,
+`apps/mobile/src/apps/docs/DocsScreen.tsx`,
+`apps/mobile/src/apps/docs/DocsShelfHeader.tsx`,
+`apps/mobile/src/apps/notes/NotesScreen.tsx`,
+`apps/mobile/src/apps/tasks/TasksPlaceHeader.tsx`,
+`apps/mobile/src/apps/tasks/TasksScreen.tsx`. Every caller is gone: `grep -rn
+"DocsScreen\b\|DocsShelfHeader\|BulkVerb\|NotesScreen\|TasksScreen\b\|TasksPlaceHeader"
+apps/mobile/src` returns only the route-props type aliases `DocsScreenProps`,
+`NotesScreenProps` and `TasksScreenProps` in `navigation.ts`, which are
+navigation types and not the frames.
+
+Modified: `apps/mobile/src/apps/agenda/AgendaBand.tsx`,
+`AgendaCreateModal.tsx`, `AgendaEvent.tsx`, `AgendaEventEditor.tsx`,
+`AgendaHome.styles.ts`, `AgendaHome.test.tsx`, `AgendaHome.tsx`;
+`apps/mobile/src/apps/docs/AddToDocs.tsx`, `BulkUpload.tsx`,
+`DocsCapabilities.test.tsx`, `DocsCapabilities.tsx`, `DocsDueView.tsx`,
+`DocsFoldersView.tsx`, `DocsHome.test.tsx`, `DocsHome.tsx`,
+`DocsMoreSheet.tsx`, `DocsScan.tsx`, `DocsSearchView.tsx`, `DocsStorage.tsx`,
+`DocsTrash.test.tsx`, `DocsTrash.tsx`, `DocumentEditor.tsx`,
+`DocumentNames.tsx`, `DocumentProperties.tsx`, `DocumentRead.tsx`,
+`DocumentVersions.tsx`, `DocumentViewer.tsx`, `DriveList.styles.ts`,
+`DriveList.tsx`, `FolderView.tsx`, `INTEGRATION-NOTES.md`,
+`ProposedFiling.tsx`, `RecentlyChanged.tsx`, `docs-places.test.ts`,
+`docs-places.ts`, `document-read-model.test.ts`, `document-read-model.ts`;
+`apps/mobile/src/apps/notes/NoteEditor.tsx`, `NotesHistory.test.tsx`,
+`NotesHistory.tsx`, `NotesHome.styles.ts`, `NotesHome.test.tsx`,
+`NotesHome.tsx`, `NotesPowerbox.tsx`, `notes-band.test.ts`;
+`apps/mobile/src/apps/tasks/TaskDetail.tsx`, `TasksHome.styles.ts`,
+`TasksHome.test.tsx`, `TasksHome.tsx`, `TasksProject.tsx`, `TasksSearch.tsx`;
+`apps/mobile/src/kit/components/PlaceHeader.tsx`, `apps/mobile/src/kit/format.test.ts`,
+`apps/mobile/src/kit/format.ts`, `apps/mobile/src/kit/rooms/AppPlace.tsx`,
+`apps/mobile/src/kit/rooms/EditorRoom.tsx`, `apps/mobile/src/kit/rooms/PushedPage.tsx`,
+`apps/mobile/src/kit/rooms/README.md`, `apps/mobile/src/kit/rooms/room-contracts.ts`,
+`apps/mobile/src/kit/rooms/rooms.test.tsx`, `apps/mobile/src/navigation.ts`;
+`tests/agent-e2e-mobile/flows/agenda-week.md`,
+`tests/agent-e2e-mobile/flows/agenda-week.mjs`.
+
+### Red-first proofs
+
+| Claim | Test | Fails on base because |
+| --- | --- | --- |
+| **B5** — a note posted from inside an editor is visible | `NotesHome.test.tsx` → "paints a note posted from inside the editor, in the editor" | On base the editor is a bare `Modal` with no `StatusLineHost`; `postStatus` paints on the root host, under the presentation. |
+| Agenda **#3** — a day other than today is reachable | `AgendaHome.test.tsx` → "reaches another day, and only then offers the way back to today" | On base there is no "Next day" control at all, and "Go to today" is drawn unconditionally over an anchor nothing can move. |
+| A failed read never reads as an empty shelf | `NotesHome.test.tsx` → "draws a failed read as the room's error, never as an empty shelf" | On base `ReplicaStateCard` and the list's empty slot render together. |
+| Selection is a mode | `DocsHome.test.tsx` → "makes selection a MODE" (updated to the room's contract) | The room now owns the header swap, the count sentence and the foot row. |
+
+### Exit list
+
+| Check | Result |
+| --- | --- |
+| `bunx vitest run src/apps/{agenda,tasks,notes,docs} src/kit/rooms src/kit/format.test.ts src/kit/components` | 56 files, **390 pass**, 0 fail |
+| `bunx vitest run src/apps` (whole app tree) | **1261 pass**, 0 fail |
+| `bun run --cwd apps/mobile typecheck` | **0** |
+| `node scripts/lint-mobile-rooms.mjs` | `screen-root 152` · `back-literal 32` · `page-margin 16` · `identity-tint 0` · `copy-title-case 0` (from `181 / 47 / 107` at the lane's start). For THIS lane's four trees: `back-literal 0`, `page-margin 0`, `screen-root 28` — see the residue note below. |
+| `grep -rn "Alert.alert" apps/mobile/src/apps/{agenda,tasks,notes,docs}` | **0** |
+| `node scripts/lint-mobile-design.mjs` · `lint-container-opacity.mjs` · `lint-aria-labels.mjs` | all ok; `apps/mobile/src` still at container-opacity budget **0** |
+| `bun run format` then `bun run check:push:static` | **4/4 gates passed** in 105.7s |
+| `node .governance/law/run.mjs --brief-digest 514cb2fed327` | 10 rules, **no findings** |
+
+### The `screen-root 28` residue, stated rather than papered over
+
+Every SCREEN in these four trees is now rooted in a room. The 28 remaining
+`screen-root` findings are all COMPONENTS, which the rule cannot tell apart
+from screens because it matches text rather than a render tree (its own header
+says so). They are: rows (`DocRow`, `TaskRow`, `TasksRows`, `AgendaDayContext`),
+bands (`AgendaBand`, `DocsBand`, `NotesBand`, `TasksBand`), panes embedded in a
+room (`TasksProject`, `TasksProjects`, `TasksCatchUp`, `TasksReminders`,
+`TasksSearch`, `TasksMoreSheet`, `TasksToolbar`, `TasksQuickAdd`,
+`TasksDenied`, `TaskDetail`, `TaskDetailFields`, `NotesHistory`,
+`DocsDueView`, `DocsFoldersView`, `DocsSearchView`, `DocsSharedView`,
+`DocsStarredView`, `DriveList`, `OfflinePinButton`) and one sheet
+(`DocsMoreSheet`). Making any of them a room would be false. **This is a
+question for the owner, not a claim that the count is fine:** the rule needs a
+screen/component distinction (a route-registration census, or a `*.screen.tsx`
+convention) before Wave 4 can enforce it at zero.
+
+### Outside `apps/mobile`, and why
+
+  - `apps/mobile/src/navigation.ts` — `AgendaHome` gains a `destination`
+    param, the same longhand `DocsHome` and `PhotosHome` already carry. The
+    band on the pushed event page (agenda finding #8) has to pop back to the
+    place it names; without the param it could only pop to whichever place the
+    list was last left on.
+  - `tests/agent-e2e-mobile/flows/agenda-week.{mjs,md}` — the flow pressed
+    "Save this event". Under **D3** the composer has no Save: the room's leave
+    key reads "Cancel" while the draft is untitled and "Done" once it has a
+    title, which is how agenda finding #6 (the dead always-armed Save) closes.
+    The flow presses "Done"; `node scripts/lint-e2e-flows.mjs` is ok.
+
+### Lane APPS-A — Wave 2 decisions
+
+| Id | Ruling | Reason |
+| --- | --- | --- |
+| **R-A-6** | Docs' Empty trash is a hand-spelled `SheetRoom`, not `useConfirmDestructive`. | The hook's title is `confirmTitle(verb, noun, count)`, which cannot produce the shared table's `Delete 3 documents forever?` — "forever" belongs in the question for the one irreversible act in Docs, and `EMPTY_TRASH_COPY` is the web seat's words too. The sheet keeps every rule the hook enforces: the noun and the count in the title, the verb outlined `--net`, the status line hosted inside. |
+| **R-A-7** | The selection MODE is the object, not the count. | `bandStateFor` read `count > 0`, so the moment between "Select" and the first pick had a live band, a header still naming the shelf, and no way out — with the primary act already stood down. A screen that is not choosing passes no selection at all. |
+| **R-A-8** | `DocumentViewer` is a `PushedPage` that passes no `band`, and its own dark bar is gone. | Deviation 2 said the stage drops the band; it now says so by omitting a prop rather than by an opt-out on a frame that no longer exists. The head and the way out are the room's, so the stage stops being the one Docs surface with a bespoke close control. **Worth the owner's eye:** the media area keeps `colors.stage`, but the header above it is now the room's ink. |
+| **R-A-9** | Agenda's event editor refuses an inverted range on the status line rather than disabling the leave key. | D3 says close is done; a leave key that refuses to close would be the dead control finding #6 is about, moved. Moving the start carries the end, the field says so inline, and the refusal paints inside the editor because the room hosts the line. |
