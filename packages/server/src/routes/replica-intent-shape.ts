@@ -348,6 +348,49 @@ export function currentConflict(
 }
 
 /**
+ * The conflict check for a base version that is ALREADY the origin's own
+ * (#1014, V7).
+ *
+ * A member's signed envelope carries `entity`/`rowId` translated out of the
+ * subscription lineage — `forwardOverPeer` states the ORIGIN's ids, because an
+ * intent naming the audience's copy would address a row the origin does not
+ * have. So there is nothing to resolve through a shape here, and resolving
+ * anyway would be worse than nothing: the owner's own shapes are what
+ * `buildReplicaShapes` returns on the origin, and one of them using a
+ * synthetic primary key for this entity would send a perfectly good canonical
+ * id down the opaque-hash path and report a conflict that is not there.
+ *
+ * The signed member intent had NO conflict check at all: `baseVersions` was
+ * parsed and never used, so two members editing one shared album was last
+ * writer wins, with the loser told nothing.
+ */
+export function originConflict(
+  vault: DatabaseSync,
+  baseVersions: readonly ReplicaIntentBaseVersion[]
+): ReplicaIntentConflict | undefined {
+  if (baseVersions.length === 0) return undefined;
+  const epoch = currentReplicaLogState(vault).epoch;
+  for (const base of baseVersions) {
+    const actualVersion = currentRowVersion(
+      vault,
+      epoch,
+      base.entity,
+      base.rowId
+    );
+    if (actualVersion !== base.version) {
+      return {
+        ...(base.shapeId === undefined ? {} : { shapeId: base.shapeId }),
+        entity: base.entity,
+        rowId: base.rowId,
+        expectedVersion: base.version,
+        actualVersion,
+      };
+    }
+  }
+  return undefined;
+}
+
+/**
  * The versions this intent's predecessors produced, ready for `currentConflict`.
  *
  * A thin, named wrapper so the two doors — the device door and the peer door —

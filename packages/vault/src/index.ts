@@ -181,7 +181,9 @@ export {
 } from "./share/subscription-store.js";
 export {
   judgeMemberIntent,
+  MEMBER_INTENT_WINDOW_MS,
   memberIntentBytes,
+  memberIntentExpired,
   verifyMemberIntent,
   type MemberIntentEnvelope,
   type MemberIntentVerdict,

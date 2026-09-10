@@ -7,13 +7,14 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { verifyMemberIntent } from "@centraid/vault";
+import { memberIntentExpired, verifyMemberIntent } from "@centraid/vault";
 import type { MemberIntentEnvelope } from "@centraid/vault";
 
 import { executeMemberIntent } from "./member-intent-exec.js";
 import type { PeerIdentity } from "./peer-plane.js";
 import { admitAtOrigin } from "./peer-replica-route.js";
 import type { PeerReplicaDeps } from "./peer-replica-route.js";
+import { parseBaseVersions } from "./replica-intent-shape.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 function notFound(res: ServerResponse): true {
@@ -44,7 +45,12 @@ export async function handlePeerReplicaIntent(
   } catch {
     return sendJson(res, 400, { state: "bad_request" });
   }
-  const envelope = readEnvelope(body);
+  let envelope: MemberIntentEnvelope | undefined;
+  try {
+    envelope = readEnvelope(body);
+  } catch {
+    return sendJson(res, 400, { state: "bad_request" });
+  }
   if (!envelope) return sendJson(res, 400, { state: "bad_request" });
   const params = new URLSearchParams({
     originVaultId: envelope.originVaultId,
@@ -62,6 +68,19 @@ export async function handlePeerReplicaIntent(
     return sendJson(res, 403, {
       state: "refused",
       reason: "the member's vault signature does not verify",
+    });
+  // AFTER THE SIGNATURE, BEFORE THE WRITE (#1014, V7). The window is part of
+  // the signed bytes, so checking it before verifying would be checking a
+  // number anyone could have written. A captured envelope presented past its
+  // own expiry is refused here and never reaches the vault; the member's
+  // remedy is the same one an aged-out outcome asks for — compose it again
+  // against a base they can still see.
+  if (memberIntentExpired(envelope))
+    return sendJson(res, 409, {
+      state: "refused",
+      error: "expired",
+      intentId: envelope.intentId,
+      reason: "this signed change waited too long to be presented",
     });
   const answer = executeMemberIntent(admission, envelope, {
     gatewayFor: (vaultId) => deps.gatewayFor?.(vaultId),
@@ -95,6 +114,7 @@ function readEnvelope(
     !("input" in body)
   )
     return undefined;
+  const baseVersions = parseBaseVersions(body.baseVersions);
   return {
     intentId,
     shapeId,
@@ -103,11 +123,13 @@ function readEnvelope(
     appId,
     action,
     input: body.input,
-    ...(Array.isArray(body.baseVersions)
-      ? {
-          baseVersions:
-            body.baseVersions as MemberIntentEnvelope["baseVersions"],
-        }
-      : {}),
+    // VALIDATED, NOT CAST (#1014, V7). This handed `body.baseVersions` straight
+    // through as whatever shape it happened to be, and nothing downstream read
+    // it — now that the origin CHECKS it, a malformed row has to be a 400 and
+    // not a comparison against `undefined`. `parseBaseVersions` is the same
+    // parser the device door uses, and it throws.
+    ...(baseVersions.length > 0 ? { baseVersions } : {}),
+    ...(read("expiresAt") ? { expiresAt: read("expiresAt") as string } : {}),
+    ...(read("nonce") ? { nonce: read("nonce") as string } : {}),
   };
 }

@@ -379,6 +379,14 @@ export async function handleReplicaIntent(
           ...(answer.commitSeq === undefined
             ? {}
             : { commitSeq: answer.commitSeq }),
+          // THE ORIGIN'S CONFLICT, NAMED (#1014, V7). The forwarded edit is
+          // checked against the origin's own row versions now, so a refusal
+          // can be a conflict — and the outbox row has to carry the two
+          // numbers or the member is told a change failed with nothing to act
+          // on. Identical to what the device door records for a local one.
+          ...(answer.conflict === undefined
+            ? {}
+            : { conflict: answer.conflict }),
           ...(answer.status === "parked"
             ? { waitingOn: { seat: "origin" as const } }
             : {}),

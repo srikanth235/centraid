@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 
 import {
   currentReplicaLogState,
+  expiredOutcomeRecovery,
   judgeMemberIntent,
   partiesBoundToVault,
   readReplicaIntentOutcome,
@@ -34,6 +35,7 @@ import type {
 } from "@centraid/vault";
 
 import type { Admission } from "./peer-replica-route.js";
+import { originConflict } from "./replica-intent-shape.js";
 
 export interface MemberIntentAnswer {
   status: number;
@@ -96,6 +98,13 @@ export function executeMemberIntent(
   // `invoke` so `execution.ts` has something to stamp `commit_seq` and the
   // produced set onto, inside the canonical transaction.
   const memberDeviceId = `peer:${envelope.memberVaultId}`;
+  // THE PRECONDITION IS PART OF THE PAYLOAD (#1014, V7). This hashed the
+  // action, the app and the input alone, so two envelopes that differed ONLY
+  // in the versions they were composed against — the same edit re-sent after
+  // the member had seen someone else's change, or a replay carrying a stale
+  // base — hashed identically and the second was answered with the first's
+  // retained outcome. The window and the nonce are in for the same reason:
+  // they are signed, so they are part of what this intent IS.
   const payloadHash = crypto
     .createHash("sha256")
     .update(
@@ -103,6 +112,14 @@ export function executeMemberIntent(
         action: envelope.action,
         appId: envelope.appId,
         input: envelope.input ?? {},
+        baseVersions: (envelope.baseVersions ?? []).map((base) => [
+          base.shapeId ?? "",
+          base.entity,
+          base.rowId,
+          base.version,
+        ]),
+        expiresAt: envelope.expiresAt ?? null,
+        nonce: envelope.nonce ?? null,
       })
     )
     .digest("hex");
@@ -121,6 +138,26 @@ export function executeMemberIntent(
           "this intent id was admitted with a different payload; mint a new id for a changed operation",
       },
     };
+  // THE FAR EDGE OF THE WINDOW, ON THIS PATH TOO (#1014, G16). The device door
+  // has always consulted it; the peer door did not, so once a member's
+  // retained outcome aged out the same envelope executed a second time.
+  if (retained) {
+    const aged = expiredOutcomeRecovery(
+      admission.origin.vault,
+      envelope.intentId
+    );
+    if (aged)
+      return {
+        status: 409,
+        body: {
+          state: "refused",
+          error: "replica_intent_outcome_expired",
+          intentId: envelope.intentId,
+          reason: aged.reason,
+          recovery: aged.recovery,
+        },
+      };
+  }
   const dedupe = retainedPeerAnswer(retained, deps.ownerLabel);
   if (dedupe)
     return {
@@ -132,6 +169,43 @@ export function executeMemberIntent(
           : {}),
       },
     };
+  // TWO MEMBERS, ONE SHARED ALBUM (#1014, V7). `baseVersions` was parsed and
+  // never used, so the second member's edit overwrote the first's and the
+  // loser was told nothing. The envelope's ids are already the ORIGIN's —
+  // `forwardOverPeer` translates them out of lineage — so the check is the
+  // row's own version against the one the member composed against, which is
+  // the same arithmetic the device door runs.
+  const conflict = originConflict(
+    admission.origin.vault,
+    envelope.baseVersions ?? []
+  );
+  if (conflict) {
+    const reason = "the edited row changed while this intent was offline";
+    try {
+      recordReplicaIntentOutcome(admission.origin.vault, {
+        intentId: envelope.intentId,
+        deviceId: memberDeviceId,
+        appId: envelope.appId,
+        action: envelope.action,
+        payloadHash,
+        status: "conflict",
+        reason,
+        conflict,
+      });
+    } catch {
+      // An id another member already holds; the conflict answer stands either
+      // way, and a retry of the same id gets the same verdict.
+    }
+    return {
+      status: 200,
+      body: {
+        state: "conflict",
+        intentId: envelope.intentId,
+        reason,
+        conflict,
+      },
+    };
+  }
   try {
     recordReplicaIntentOutcome(admission.origin.vault, {
       intentId: envelope.intentId,
