@@ -150,4 +150,8 @@ export const metrics = shared.metrics;
 export const pageMargin = shared.pageMargin;
 export const radii = shared.radii;
 export const spacing = shared.spacing;
+// The named sub-4px seams (`gutter`, `hair`). Not part of `NativeTheme` —
+// they are not a rhythm scale — but a call site that needs one must claim it
+// by name rather than eyeball a 2 (#1015, R-B-6).
+export { subBase } from "@centraid/design";
 export const targetMin = shared.targetMin;

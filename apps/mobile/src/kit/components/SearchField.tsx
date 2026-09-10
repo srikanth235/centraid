@@ -48,6 +48,11 @@ export interface SearchFieldProps {
   accessibilityLabel?: string;
   /** The word on the clear control, for VoiceOver. */
   clearLabel?: string;
+  /** A field the member arrived at ON PURPOSE opens with the keyboard up — a
+   *  search PAGE, never a search field sitting on a list of content. */
+  autoFocus?: boolean;
+  /** The test-layer handle for the input, from `kit/test-ids` (#890). */
+  testID?: string;
 }
 
 export default function SearchField({
@@ -59,6 +64,8 @@ export default function SearchField({
   count,
   accessibilityLabel,
   clearLabel = "Clear the search",
+  autoFocus = false,
+  testID,
 }: SearchFieldProps): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(
@@ -87,6 +94,7 @@ export default function SearchField({
             accessibilityLabel={accessibilityLabel ?? placeholder}
             autoCapitalize="none"
             autoCorrect={false}
+            autoFocus={autoFocus}
             onChangeText={onChangeText}
             {...(onSubmit
               ? { onSubmitEditing: () => onSubmit(value) }
@@ -95,6 +103,7 @@ export default function SearchField({
             placeholderTextColor={colors.textFaint}
             returnKeyType="search"
             style={[styles.input, ink.input]}
+            testID={testID}
             value={value}
           />
           {/* The control appears only with something to clear: an always-on
