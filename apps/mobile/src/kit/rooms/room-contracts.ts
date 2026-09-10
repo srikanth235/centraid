@@ -16,6 +16,11 @@ export interface RoomAction {
   onPress: () => void;
   /** The disabled contract is the leaf's (`Button`); this only declares it. */
   disabled?: boolean;
+  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2).
+   *  A verb the rooms draw is still the verb a flow selects: Photos' Select
+   *  chip and its two selection verbs kept their handles across the
+   *  migration, and `lint-mobile-testids` fails the PR that drops one. */
+  testID?: string;
 }
 
 /** Loading is a skeleton at the geometry of what is arriving, never a spinner. */
@@ -63,7 +68,9 @@ export interface RoomSelection {
   onCancel: () => void;
   /** The one action row at the foot; at most one of them is destructive. */
   actions: readonly RoomSelectionAction[];
-  /** The noun for the spoken count, e.g. `photos` in "3 photos selected". */
+  /** The SINGULAR noun for the spoken count, pluralised with `s` like
+   *  `confirmTitle`'s — `photograph` gives "1 photograph selected" and
+   *  "3 photographs selected". */
   noun?: string;
   /**
    * One line above the row saying why some verb in it is unavailable — a
@@ -96,9 +103,9 @@ export function bandStateFor(selection?: RoomSelection): BandState {
   return { dimmed: selecting, interactive: !selecting };
 }
 
-/** "3 photos selected", or "3 selected" when the caller names no noun. */
+/** "3 photographs selected", or "3 selected" when the caller names no noun. */
 export function selectedSentence(selection: RoomSelection): string {
-  return selection.noun === undefined
-    ? `${selection.count} selected`
-    : `${selection.count} ${selection.noun} selected`;
+  const { count, noun } = selection;
+  if (noun === undefined) return `${count} selected`;
+  return `${count} ${count === 1 ? noun : `${noun}s`} selected`;
 }

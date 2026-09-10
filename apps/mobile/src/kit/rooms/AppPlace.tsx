@@ -8,6 +8,7 @@
 
 import React, { useMemo } from "react";
 import { View } from "react-native";
+import type { View as RNView } from "react-native";
 
 import AppHeader from "../components/AppHeader";
 import Button from "../components/Button";
@@ -53,6 +54,13 @@ export interface AppPlaceProps {
    * had their own `paddingTop: insets.top` before #1015 Wave 2).
    */
   lockup?: React.ReactNode;
+  /**
+   * The trailing verbs' own node, for an app whose quiet verb opens an
+   * ANCHORED MENU rather than a sheet — Photos' view options, whose card must
+   * hang off the header so the grid underneath never moves. Measured on the
+   * press by `useMenuAnchor`; the room only lends the node.
+   */
+  trailingRef?: React.RefObject<RNView | null>;
   search?: SearchFieldProps;
   selection?: RoomSelection;
   /** The app's own band, told what state the room puts it in. */
@@ -69,6 +77,7 @@ export default function AppPlace({
   action,
   secondary,
   lockup,
+  trailingRef,
   search,
   selection,
   band,
@@ -97,22 +106,32 @@ export default function AppPlace({
               title={app.title}
             />
           </View>
-          {secondary ? (
-            <Button
-              disabled={secondary.disabled}
-              label={secondary.label}
-              onPress={() => secondary.onPress()}
-              variant="quiet"
-            />
-          ) : null}
-          {action ? (
-            <Button
-              disabled={action.disabled}
-              label={action.label}
-              onPress={() => action.onPress()}
-              variant="secondary"
-            />
-          ) : null}
+          {/* `collapsable={false}`: an Android view with no drawing of its
+              own is flattened away, and a flattened node cannot be measured. */}
+          <View
+            collapsable={false}
+            ref={trailingRef}
+            style={styles.headTrailing}
+          >
+            {secondary ? (
+              <Button
+                disabled={secondary.disabled}
+                label={secondary.label}
+                onPress={() => secondary.onPress()}
+                testID={secondary.testID}
+                variant="quiet"
+              />
+            ) : null}
+            {action ? (
+              <Button
+                disabled={action.disabled}
+                label={action.label}
+                onPress={() => action.onPress()}
+                testID={action.testID}
+                variant="secondary"
+              />
+            ) : null}
+          </View>
         </View>
       )}
       {search && !selecting ? <SearchField {...search} /> : null}
