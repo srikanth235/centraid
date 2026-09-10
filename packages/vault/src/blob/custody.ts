@@ -103,6 +103,29 @@ export class BlobCustody {
     return { sha256: sha, byteSize: bytes.length };
   }
 
+  /**
+   * ADOPT BYTES ALREADY ON DISK (#1014, V11). A caller that streamed a blob
+   * into a staging file — the share subscriber pulling a peer's manifest —
+   * must not read it back into memory only to hand it straight here. The
+   * budget is accounted exactly as `ingestSync` accounts it; the CALLER owns
+   * the content-address check, because it is the one that saw the bytes.
+   * `null` from `stagingPathSync` means this tier has no staging seam and the
+   * caller keeps the buffered path.
+   */
+  stagingPathSync(sha: string): string | null {
+    if (!this.local.adoptTempSync) return null;
+    return this.local.promotionTempPathSync?.(sha) ?? null;
+  }
+
+  adoptStagedSync(sha: string, tempPath: string, byteSize: number): boolean {
+    if (!this.local.adoptTempSync) return false;
+    const existed = this.local.hasSync(sha);
+    if (this.cache && !existed) this.cache.admit(byteSize);
+    const adopted = this.local.adoptTempSync(sha, tempPath);
+    if (this.cache && adopted && !existed) this.cache.onPut(byteSize);
+    return adopted;
+  }
+
   hasSync(sha: string): boolean {
     return this.local.hasSync(sha);
   }
