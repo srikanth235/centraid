@@ -425,7 +425,9 @@ describe("Onboarding scenarios", () => {
       expect(container!.textContent).toContain("You're all set, Ada");
 
       click(button("Enter Centraid"));
-      expect(mocks.notificationAsync).toHaveBeenCalledWith("success");
+      // No buzz for arriving at a screen (#1015, S15): the moment channel has
+      // three moments, and onboarding finishing is none of them.
+      expect(mocks.notificationAsync).not.toHaveBeenCalled();
       expect(mocks.onDone).toHaveBeenCalledOnce();
     });
 
