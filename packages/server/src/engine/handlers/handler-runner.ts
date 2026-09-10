@@ -141,6 +141,13 @@ export async function runHandler(
       if (opts.onWrite && opts.handlerKind !== "query" && outcome.ok) {
         try {
           // Declared tables name `_changes`; `[]` still says it acted (#883).
+          // THIS IS NOT THE SHARE DOORBELL (#1014, V12). It carries the app's
+          // own manifest-declared table names for per-table query
+          // invalidation. A handler's VAULT writes go through `ctx.vault`,
+          // commit on the gateway, and wake grant refresh from the gateway's
+          // own provenance ring with the entity types the commit ACTUALLY
+          // produced — so a manifest that under-declares cannot silence a
+          // share.
           opts.onWrite([...(opts.declaredWrites ?? [])]);
         } catch {
           /* must not change the outcome */

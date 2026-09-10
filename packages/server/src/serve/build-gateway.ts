@@ -3270,9 +3270,12 @@ export async function buildGateway(
     ringNotificationsDoorbell(vaultId);
     // The commit's entity types are the delivery loop's filter (ruling
     // V-delivery): a commit that cannot have moved a granted subject wakes
-    // nothing. `undefined` would mean "walk everything", so the hint is passed
-    // through even when it is empty.
-    grantRefreshDoorbell.ring(vaultId, entityTypes ?? []);
+    // nothing. A ring that NAMES NO TYPES is not an empty commit — it is a
+    // sweep, an import or a purge saying it does not know what it touched, and
+    // `undefined` is the doorbell's word for "walk everything" (#1014, V12).
+    // Collapsing it to `[]` woke nothing at all, which is the one answer that
+    // cannot be right for a write nobody described.
+    grantRefreshDoorbell.ring(vaultId, entityTypes);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
