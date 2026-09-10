@@ -24,8 +24,32 @@ import RoomBody from "./RoomBody";
 import { styles } from "./rooms.styles";
 
 export interface HomeRoomProps {
-  /** The cover head's one trailing verb — Settings (D6). */
+  /**
+   * The cover head's one trailing verb — Settings (D6). A cover that draws its
+   * own title row passes `head` instead; the two are alternatives, and the
+   * room never draws both.
+   */
   trailing?: RoomAction;
+  /**
+   * The cover's own title row, when it carries a word as well as the verb.
+   * Fixed chrome: it sits ABOVE the scroller, so the scrollbar starts under
+   * the rule rather than beside the title.
+   */
+  head?: React.ReactNode;
+  /** Which vault, which gateway — the same lockup every app draws. */
+  vault?: React.ReactNode;
+  /**
+   * THE ONE STATUS LINE on the cover. Home is not covered by anything, so this
+   * is the root host's line rendered in place rather than a second channel
+   * (audit B5): the room states where it sits, and nothing else may.
+   */
+  status?: React.ReactNode;
+  /** The app band, flush at the foot. */
+  band?: React.ReactNode;
+  /** The sheets the cover owns — all apps, the vault switcher, search. */
+  overlay?: React.ReactNode;
+  /** The arrival handle every end-to-end flow waits on. */
+  testID?: string;
   loading?: RoomLoading;
   error?: RoomError;
   empty?: RoomEmpty;
@@ -34,6 +58,12 @@ export interface HomeRoomProps {
 
 export default function HomeRoom({
   trailing,
+  head,
+  vault,
+  status,
+  band,
+  overlay,
+  testID,
   loading,
   error,
   empty,
@@ -42,8 +72,10 @@ export default function HomeRoom({
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
   return (
-    <TopSafeArea style={[styles.room, ink]}>
-      {trailing ? (
+    <TopSafeArea style={[styles.room, ink]} testID={testID}>
+      {vault}
+      {head}
+      {!head && trailing ? (
         <View style={styles.coverHead}>
           <Button
             disabled={trailing.disabled}
@@ -53,9 +85,12 @@ export default function HomeRoom({
           />
         </View>
       ) : null}
+      {status}
       <RoomBody empty={empty} error={error} loading={loading}>
         {children}
       </RoomBody>
+      {band}
+      {overlay}
     </TopSafeArea>
   );
 }

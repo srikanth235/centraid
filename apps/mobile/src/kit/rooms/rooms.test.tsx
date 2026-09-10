@@ -327,6 +327,43 @@ describe(SheetRoom, () => {
   });
 });
 
+describe(HomeRoom.name + " chrome", () => {
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  it("puts the vault lockup, the head, the status line and the band in order", () => {
+    // Home is the one cover with fixed chrome above and below the scroller:
+    // the vault lockup, its title row, ONE status line, and the band flush at
+    // the foot. The order is the room's, so no cover can reshuffle it.
+    const container = render(
+      <HomeRoom
+        band={<div data-slot="band" />}
+        head={<div data-slot="head" />}
+        status={<div data-slot="status" />}
+        vault={<div data-slot="vault" />}
+      >
+        <div data-slot="grid" />
+      </HomeRoom>
+    );
+    const order = [...container.querySelectorAll("[data-slot]")].map(
+      (node) => (node as HTMLElement).dataset.slot
+    );
+    expect(order).toStrictEqual(["vault", "head", "status", "grid", "band"]);
+  });
+
+  it("draws no bare trailing verb when the cover brings its own head", () => {
+    const container = render(
+      <HomeRoom
+        head={<div data-slot="head" />}
+        trailing={{ label: "Settings", onPress: noop }}
+      />
+    );
+    expect(words(container)).not.toContain("Settings");
+  });
+});
+
 describe(SystemPlace, () => {
   afterEach(() => {
     dispose?.();
