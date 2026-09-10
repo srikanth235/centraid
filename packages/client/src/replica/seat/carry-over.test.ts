@@ -11,13 +11,16 @@ import {
   recordSeatBlob,
 } from "./blob-presence.js";
 import {
+  parseSeatCarryOver,
   readSeatCarryOver,
+  seatCarryOverApplied,
+  serializeSeatCarryOver,
   shasPendingIntentsNeed,
   writeSeatCarryOver,
 } from "./carry-over.js";
 import { openSeatFile } from "./driver.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
-import { nodeSeatStaging } from "./node-staging.js";
+import { nodeSeatCarryOverSidecar, nodeSeatStaging } from "./node-staging.js";
 import {
   addSeatOutboxIntent,
   createSeatOutbox,
@@ -42,17 +45,51 @@ const OPEN = {
   remember: true,
 } as const;
 
-function worker(root: string): SeatWorkerCore {
-  const bytes = seatArtifact(root);
+function worker(
+  root: string,
+  install?: (run: () => Promise<void>) => Promise<void>,
+  artifact?: Uint8Array
+): SeatWorkerCore {
+  // The fixture builds a source database in `root`, so it is built ONCE per
+  // root and handed back in for every later worker over the same seat.
+  const bytes = artifact ?? seatArtifact(root);
+  const databasePath = path.join(root, "seat.db");
   return new SeatWorkerCore({
-    openDatabase: () => new NodeSeatDriver(path.join(root, "seat.db")),
-    staging: () =>
-      nodeSeatStaging({
+    openDatabase: () => new NodeSeatDriver(databasePath),
+    staging: () => {
+      const staging = nodeSeatStaging({
         directory: path.join(root, "staging"),
-        databasePath: path.join(root, "seat.db"),
-      }),
+        databasePath,
+      });
+      if (!install) return staging;
+      return {
+        ...staging,
+        install: (etag, prepare) =>
+          install(() => staging.install(etag, prepare)),
+      };
+    },
+    carryOver: () => nodeSeatCarryOverSidecar(databasePath),
     transport: () => seatArtifactTransport(bytes, 7),
   });
+}
+
+/** What a phone killed mid-swap leaves behind, without killing the runner. */
+class KilledError extends Error {
+  override readonly name = "KilledError";
+}
+
+function queueOne(root: string, intentId: string): void {
+  const driver = new NodeSeatDriver(path.join(root, "seat.db"));
+  createSeatOutbox(driver);
+  addSeatOutboxIntent(driver, {
+    intentId,
+    appId: "notes",
+    action: "notes.create_note",
+    input: { title: "made on a train" },
+    payloadHash: `h-${intentId}`,
+    createdOrder: 1,
+  });
+  driver.close();
 }
 
 describe("what survives a re-bootstrap", () => {
@@ -145,6 +182,106 @@ describe("what survives a re-bootstrap", () => {
       shasPendingIntentsNeed({ outbox: readSeatOutbox(driver) }).sort()
     ).toStrictEqual(["sha-a"]);
     driver.close();
+  });
+
+  it("keeps the queue when the process dies between install and write-back", async () => {
+    const root = tempDirSync("seat-carry-kill-");
+    const bytes = seatArtifact(root);
+    const first = worker(root, undefined, bytes);
+    await first.open(OPEN);
+    await first.bootstrap({ vaultId: "vault-1", snapshotUrl: "/s" });
+    first.close();
+    queueOne(root, "i-train");
+
+    // THE KILL (#1014, C5/T6). The install lands — on native it has already
+    // deleted the old file — and the process dies before `writeSeatCarryOver`.
+    // Before the sidecar this lost `i-train` with no way back.
+    const dying = worker(
+      root,
+      async (run) => {
+        await run();
+        throw new KilledError("killed after install");
+      },
+      bytes
+    );
+    await dying.open(OPEN);
+    await expect(
+      dying.bootstrap({ vaultId: "vault-1", snapshotUrl: "/s" })
+    ).rejects.toThrow(KilledError);
+
+    // The new file is in place and has no queue in it: the stash is the only
+    // copy at this instant, which is exactly what it is for.
+    const swapped = new NodeSeatDriver(path.join(root, "seat.db"));
+    openSeatFile(swapped);
+    createSeatOutbox(swapped);
+    expect(readSeatOutbox(swapped)).toStrictEqual([]);
+    swapped.close();
+
+    // The next open replays it — and the intent is whole, not a stub.
+    const reopened = worker(root, undefined, bytes);
+    await reopened.open(OPEN);
+    const outbox = readSeatOutbox(
+      (reopened as unknown as { required: () => NodeSeatDriver }).required()
+    );
+    expect(outbox.map((row) => row.intentId)).toStrictEqual(["i-train"]);
+    expect(outbox[0]?.input).toStrictEqual({ title: "made on a train" });
+    expect(outbox[0]?.createdOrder).toBe(1);
+    reopened.close();
+  });
+
+  it("never replays a stash the file has already taken", async () => {
+    const root = tempDirSync("seat-carry-once-");
+    const bytes = seatArtifact(root);
+    const first = worker(root, undefined, bytes);
+    await first.open(OPEN);
+    await first.bootstrap({ vaultId: "vault-1", snapshotUrl: "/s" });
+    first.close();
+    queueOne(root, "i-drained");
+
+    const core = worker(root, undefined, bytes);
+    await core.open(OPEN);
+    await core.bootstrap({ vaultId: "vault-1", snapshotUrl: "/s" });
+    core.close();
+
+    // The write-back committed, and then the clear did not happen — the one
+    // non-atomic step left. Put the stash back to stand for that crash.
+    const driver = new NodeSeatDriver(path.join(root, "seat.db"));
+    openSeatFile(driver);
+    const carried = readSeatCarryOver(driver);
+    const stash = serializeSeatCarryOver(carried, "vault-1");
+    const token = parseSeatCarryOver(stash, "vault-1")?.token;
+    expect(token).toBeDefined();
+    expect(seatCarryOverApplied(driver, token as string)).toBe(true);
+    // The seat then drains it, as it would have.
+    driver.run(`DELETE FROM seat_outbox WHERE intent_id = 'i-drained'`);
+    driver.close();
+    await nodeSeatCarryOverSidecar(path.join(root, "seat.db")).write(stash);
+
+    const reopened = worker(root, undefined, bytes);
+    await reopened.open(OPEN);
+    // A settled intent is NOT resurrected: the marker in the file says this
+    // stash already landed.
+    expect(
+      readSeatOutbox(
+        (reopened as unknown as { required: () => NodeSeatDriver }).required()
+      )
+    ).toStrictEqual([]);
+    await expect(
+      nodeSeatCarryOverSidecar(path.join(root, "seat.db")).read()
+    ).resolves.toBeUndefined();
+    reopened.close();
+  });
+
+  it("refuses to replay a stash that belongs to another vault", () => {
+    const stash = serializeSeatCarryOver(
+      { outbox: [], blobs: [], contents: "full" },
+      "vault-family"
+    );
+    expect(parseSeatCarryOver(stash, "vault-personal")).toBeUndefined();
+    expect(parseSeatCarryOver(stash, "vault-family")?.vaultId).toBe(
+      "vault-family"
+    );
+    expect(parseSeatCarryOver("{ not json", "vault-family")).toBeUndefined();
   });
 
   it("treats an absent table as nothing to save, not a failed repair", () => {

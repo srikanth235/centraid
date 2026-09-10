@@ -34,7 +34,10 @@ import type {
   SeatWatermark,
 } from "../../../packages/client/src/replica/native.js";
 import { NodeSeatDriver } from "../../../packages/client/src/replica/seat/node-seat-driver.js";
-import { nodeSeatStaging } from "../../../packages/client/src/replica/seat/node-staging.js";
+import {
+  nodeSeatCarryOverSidecar,
+  nodeSeatStaging,
+} from "../../../packages/client/src/replica/seat/node-staging.js";
 import type { SeatReadOverlay } from "../../../packages/client/src/replica/seat/read-overlay.js";
 import { seatSearchEnvelopes } from "../../../packages/client/src/replica/seat/search-page.js";
 import type { SeatSearchRequest } from "../../../packages/client/src/replica/seat/search-page.js";
@@ -87,6 +90,9 @@ export async function openNodeSeat(
         directory: `${databasePath}-staging`,
         databasePath,
       }),
+    // The phone's stash, in `node:fs` terms (#1014, C5/T6): this tier is where
+    // a kill mid-swap is actually injected, so it must have the same seam.
+    carryOver: () => nodeSeatCarryOverSidecar(databasePath),
     transport: (bootstrap) =>
       httpSeatSnapshotTransport({
         url: bootstrap.snapshotUrl,

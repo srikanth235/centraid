@@ -50,7 +50,7 @@ import type { SeatSearchRequest } from "@centraid/client/replica/seat/search-pag
 import type { Page } from "@centraid/core/page";
 
 import { ExpoSeatDriver } from "./expo-seat-driver";
-import { expoSeatStaging } from "./expo-seat-staging";
+import { expoSeatCarryOverSidecar, expoSeatStaging } from "./expo-seat-staging";
 import { nativeSeatDatabaseName } from "./native-seat-path";
 
 export interface NativeSeatOptions {
@@ -123,6 +123,10 @@ export class NativeSeat implements NativeSeatPort {
             });
           },
         }),
+      // THE QUEUE'S DURABLE PLACE ACROSS THE SWAP (#1014, C5/T6). Keyed by
+      // the seat's own file path, so two vaults on one phone never share a
+      // stash.
+      carryOver: () => expoSeatCarryOverSidecar(databasePath),
       transport: (bootstrap) =>
         httpSeatSnapshotTransport({
           url: bootstrap.snapshotUrl,

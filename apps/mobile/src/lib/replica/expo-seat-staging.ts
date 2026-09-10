@@ -24,6 +24,7 @@ import { Directory, File, FileMode, Paths } from "expo-file-system";
 
 import type {
   SeatBootstrapStaging,
+  SeatCarryOverSidecar,
   SeatSqliteDriver,
 } from "@centraid/client/replica/native";
 import { gunzip } from "@centraid/client/replica/seat/gunzip";
@@ -155,5 +156,50 @@ export function expoSeatStaging(
     },
     currentBytes: (): Promise<number> =>
       Promise.resolve(sizeOf(fileAt(options.databasePath))),
+  };
+}
+
+/**
+ * The carry-over sidecar on the phone (#1014, C5/T6).
+ *
+ * Beside the seat file in the module's durable directory, NOT in the staging
+ * directory: `install()` discards staging the moment the move lands, and the
+ * stash has to outlive exactly that. Written through a scratch file and moved
+ * in, so a process killed mid-write leaves the previous stash or none rather
+ * than a truncated queue.
+ *
+ * This is the file that makes `rebootstrap-copy.ts`'s "your unsent changes
+ * stay queued" true across a kill: on this host `install()` is
+ * `removeQuietly(destination); incoming.moveSync(destination)`, so the old
+ * file — and every intent in it — is gone before the new one is named.
+ */
+export function expoSeatCarryOverSidecar(
+  databasePath: string
+): SeatCarryOverSidecar {
+  const stash = (): File => fileAt(`${databasePath}.carry-over.json`);
+  const scratch = (): File => fileAt(`${databasePath}.carry-over.writing`);
+  return {
+    read: (): Promise<string | undefined> => {
+      try {
+        const held = stash();
+        return Promise.resolve(held.exists ? held.textSync() : undefined);
+      } catch {
+        return Promise.resolve(undefined);
+      }
+    },
+    write: (payload: string): Promise<void> => {
+      const pending = scratch();
+      removeQuietly(pending);
+      pending.create({ intermediates: true });
+      pending.write(payload);
+      removeQuietly(stash());
+      pending.moveSync(stash());
+      return Promise.resolve();
+    },
+    clear: (): Promise<void> => {
+      removeQuietly(stash());
+      removeQuietly(scratch());
+      return Promise.resolve();
+    },
   };
 }
