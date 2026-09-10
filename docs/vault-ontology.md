@@ -57,6 +57,20 @@ Domains the design carried and the implementation dropped, each for having **no 
 
 **Lifecycle, as declared:** 13 trash, 10 append-only, 39 mutable, 48 machinery. **Projections** (a part of an entity, keyed by its parent, no supertype row): 11.
 
+## Derived data is not automatically local data
+
+A tempting rule after [#1014](https://github.com/srikanth235/centraid/issues/1014) (B10) was "derived data does not replicate": enrichment writes 512-float vectors and a provenance stamp per derivation, and on a 50k library that is what a seat's change log fills up with.
+
+The rule is wrong, and the reason is [R1](decisions.md#one-vault-every-seat-996): a seat holds `vault.db` WHOLE. There are no row filters and no field masks, so a table travels or it does not — and a replicated table may never reference a private one ([R4](decisions.md#one-vault-every-seat-996)), which is a constraint on the _graph_, not on how the row was produced.
+
+So the question that decides it is not "was this derived?" but:
+
+1. **Does a seat read it?** `media_face_cluster` is derived and the People page walks it; `media_asset_phash` is derived and the library page reads it. Both travel.
+2. **Does a replicated row point at it?** `core_content_text.derivation_id` REFERENCES `enrich_derivation`, so making that stamp private would break the property the private list exists for. It travels.
+3. **Neither?** Then it is gateway machinery: private, and usually unregistered too. `enrich_request` is private (the queue is work, not data) and `enrich_target_failure` is both private and unregistered — a restore re-derives one host's failure counts by simply attempting the work again.
+
+Each derived table's answer is pinned with its reason in `packages/vault/src/schema/derived-data-classification.test.ts`, so flipping one is an edit to that file rather than a silent consequence of adding a column.
+
 ## Commitments the code enforces
 
 Each row is a design commitment, where it is enforced, and the test that goes red when it is broken. A commitment with no row here is a wish, not a rule.
@@ -67,6 +81,7 @@ Each row is a design commitment, where it is enforced, and the test that goes re
 | Every physical table is either a registered entity or a declared local one, with a written reason | `LOCAL_TABLES` compared against `sqlite_master` | `local-tables.ts`, `lifecycle.test.ts` |
 | Every entity row has an id unique across the model, and every `(type, id)` pointer resolves | the `core_entity` supertype: membership triggers per entity table, composite `REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE` on every pointer pair | `entity.ts`, `entity-refs.test.ts`, `ontology-shape.test.ts` |
 | A pointer that is deliberately not a key says why | `ENTITY_REF_EXCLUSIONS` — 13 entries, each carrying its reason in prose | `entity-refs.ts`, `entity-refs.test.ts` |
+| Every DERIVED table states whether it travels to a seat, and why | one judgement per table, each naming the seat reader or the replicated reference that decides it | `derived-data-classification.test.ts` |
 | Every row states what its life may be, and the schema matches | per-entity `lifecycle`; mutable ⇒ `updated_at NOT NULL DEFAULT` + touch trigger, trash ⇒ the `deleted_at`/`purge_at` pair with its CHECK, append-only ⇒ no UPDATE path | `entity-catalog.ts`, `lifecycle.test.ts` |
 | Evidence cannot be rewritten, and never leaves the machine | audit-band triggers refusing UPDATE/DELETE; band exclusion from export, replica and support bundle | `audit.ts`, `local-tables.ts`, `audit-band.test.ts` |
 | A receipt and the mutation it describes commit together | one file, one transaction, receipt written inside it | `audit-band.test.ts` |
