@@ -110,7 +110,32 @@ export function admitAtOrigin(
   if (verdict.state !== "ok") return undefined;
   const { originVaultId, audienceVaultId, shapeId } = verdict.credential;
   if (!peer.linkForPair(originVaultId, audienceVaultId)) return undefined;
-  const origin = deps.vaultFor(originVaultId);
+  return admitGrantAtOrigin(deps.vaultFor, {
+    originVaultId,
+    audienceVaultId,
+    shapeId,
+  });
+}
+
+/**
+ * THE GRANT HALF OF ADMISSION, without the link (#1014, R-1014-10).
+ *
+ * Two vaults on ONE gateway are linked with `remoteVaultId: null` and no
+ * `vault_routes` row — there is nothing to dial and no `linkForPair` to
+ * satisfy, and demanding one made every same-gateway pull `unreachable` and
+ * every same-gateway forwarded edit `retryable` forever. What actually
+ * authorizes a shape is what is checked here: this host mounts the origin,
+ * the shape names a LIVE grant, and that grant reaches THIS audience vault.
+ * The peer door adds the link on top because a REMOTE caller has to prove it
+ * is the couple it claims to be; a local caller is already inside the host
+ * that owns both vaults.
+ */
+export function admitGrantAtOrigin(
+  vaultFor: (vaultId: string) => VaultDb | undefined,
+  input: { originVaultId: string; audienceVaultId: string; shapeId: string }
+): Admission | undefined {
+  const { originVaultId, audienceVaultId, shapeId } = input;
+  const origin = vaultFor(originVaultId);
   if (!origin) return undefined;
   const grantId = shareShapeGrantId(shapeId);
   if (!grantId) return undefined;

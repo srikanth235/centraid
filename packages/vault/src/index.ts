@@ -369,7 +369,11 @@ export {
   type LocalOrphanSweepResult,
   type LocalOrphanSweepTarget,
 } from "./blob/local-orphan-sweep.js";
-export { type BlobPlacement, type BlobPlacementMode } from "./share/blobs.js";
+export {
+  placeBlob,
+  type BlobPlacement,
+  type BlobPlacementMode,
+} from "./share/blobs.js";
 export {
   S3BlobStore,
   MULTIPART_THRESHOLD_BYTES,

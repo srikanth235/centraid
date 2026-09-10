@@ -277,6 +277,10 @@ import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
 import { reconcileLinkBindings } from "./link-party-bindings.js";
+import {
+  forwardProjectedEditLocally,
+  pullShareTailLocally,
+} from "./local-share-path.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
   enrichRefusalNotice,
@@ -3259,6 +3263,17 @@ export async function buildGateway(
     vaultFor: (vaultId: string) => vaultRegistry.get(vaultId)?.db,
     logger: health.loggerFor("share", logger),
   };
+  // TWO VAULTS ON ONE GATEWAY (#1014, S2; ruling R-1014-10). Which vaults this
+  // host mounts is the host's fact, exactly as which link reaches which vault
+  // is; the share modules are handed the answer and never learn the topology.
+  const localShareHost = {
+    vaultFor: (vaultId: string) => vaultRegistry.get(vaultId)?.db,
+    gatewayFor: (vaultId: string) => vaultRegistry.get(vaultId)?.gateway,
+    credentialFor: (vaultId: string) =>
+      vaultRegistry.get(vaultId)?.ownerCredential,
+    labelFor: (vaultId: string) => vaultRegistry.get(vaultId)?.name,
+    now: () => new Date().toISOString(),
+  };
   // View grants sync forward (ruling G-view). The doorbell swallows its own
   // failures: an uncarried share is durable state on the fulfillment rows,
   // never a reason for the triggering write to look failed.
@@ -4047,6 +4062,12 @@ export async function buildGateway(
         // itself never learns an address. No dial or no link is a fact about
         // REACH — the intent stays retryable rather than being written here.
         forwardProjectedEdit: async (request) => {
+          // SAME GATEWAY TAKES THE LOCAL PATH FIRST (#1014, S2; R-1014-10).
+          // A local pair has no route to dial, so asking for one answered
+          // `retryable` forever and an `edit` grant between two vaults on this
+          // host could never be used.
+          const local = forwardProjectedEditLocally(localShareHost, request);
+          if (local) return local;
           const dial = options.peerPlane?.dial;
           const link = vaultLinksStore.peerForVault(
             request.route.originVaultId,
@@ -4312,6 +4333,10 @@ export async function buildGateway(
           credentialFor: (vaultId) =>
             vaultRegistry.get(vaultId)?.ownerCredential,
           pullShape: async (input) => {
+            // The same local path the forwarder takes: a co-hosted origin is
+            // served from its own handle rather than dialled (#1014, S2).
+            const local = pullShareTailLocally(localShareHost, input);
+            if (local) return local;
             const dial = options.peerPlane?.dial;
             const link = vaultLinksStore.peerForVault(
               input.originVaultId,
