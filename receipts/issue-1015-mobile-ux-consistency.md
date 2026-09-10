@@ -1352,3 +1352,105 @@ A rule absent from the file is at zero and unconditional, so deleting `back-lite
 7. `bun run lint:product` → **38/43**. `lint:mobile-rooms` passes. Five red, none of them this umbrella's: `lint:no-nul-bytes` (`packages/server/src/preview/fixtures/hevc-photo.heic`), `lint:quality-knobs` (stale fingerprints for `packages/server/src/automation/manifest/manifest.ts`, `packages/server/src/serve/health-registry.ts`), `lint:e2e-wiring` (`mobile-volume-proof` claimed by the ledger and scheduled by no lane) — none of those four files is touched between `main` and this head — plus `lint:hairline` (`apps/mobile/src/apps/photos/PhotosChoiceSheet.tsx:87` uses `hairlineWidth`, arrived with APPS-B's `62fc18ac4`) and `check:ui-receipt`, which is the umbrella's own PR-window gate and needs a screenshot from a changed e2e harness — no lane has a simulator.
 8. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → **10 rules, 0 errors, 1 warning** — `estate-separation`, unchanged in kind since Wave 4 and now larger: the umbrella edits `scripts/ci/gate-classes.json` (law) and 430 territory files in one PR. It is the root's to waive or split.
 9. `bunx vitest run src/lib/replica/expo-seat-driver.test.ts` → **red on the base**: "Flow is not supported" parsing `node_modules/react-native/index.js` under the stub-tier project. The file is byte-identical to `main`, as are `vitest.config.ts` and `vitest.projects.ts`; re-running it with `main`'s copy of the one `lib/replica` file this lane touched reproduces the failure exactly. Inherited, measured, not fixed.
+
+## Lane SHELL, closing round — one item noun, the ratchet at its floor, and the umbrella reconciled
+
+Commits `80d1e893c` (R-SH-11 + R-SH-12), `62ce3c980` (R-SH-13), and this docs pass. This is the last section of the run.
+
+### What changed
+
+**R-SH-11 — the item noun is "rule", on both seats (`80d1e893c`).** R-SH-8 named the PLACE Rules and left its rows called automations; a place named one thing whose contents are called another is the divergence this umbrella exists to end, and it was the last one standing. The noun is now "rule" everywhere a member reads it:
+
+- `apps/mobile/src/apps/automations/automations-model.ts` — the count sentence, the two failing labels, both gateway detail lines.
+- `apps/mobile/src/apps/automations/AutomationThread.tsx` — both error nouns ("This rule could not be read", "This rule did not run. Try again.").
+- `apps/mobile/src/apps/automations/Automations.tsx` — the no-runs note, the two `accessibilityLabel`s ("Reading your rules", "Filter rules"), the filtered-empty note.
+- `apps/mobile/src/screens/approvals/approvals-model.ts:131` — `callerPhrase` says "the rule <name>".
+- `apps/mobile/src/apps/insights/insights-model.ts` and `packages/client/src/react/format.ts` — the run-kind label is "Rule" on both seats.
+- `packages/client/src/automations-copy.ts` — `AUTOMATIONS_EMPTY_BODY` is "A rule is a trigger and a thing to do."; `packages/client/src/approvals-copy.ts` — `APPROVALS_DENY_SUB`; `packages/client/src/insights-copy.ts` — `INSIGHTS_EMPTY_BODY`. Fixed at the source, which is what the previous round said the fix had to be: renaming half a shared pool is worse than the divergence.
+- `packages/client/src/react/shell/launcherModel.ts` — `label: "Rules"`, and `shortLabel: "Autos"` is DELETED (a short form exists to drop words from a name; "Rules" has none to drop). `packages/client/src/react/shell/opsBar.ts` — `title: "Rules"`, `commit: "New rule"`. `packages/client/src/access-lens.ts` — the principal group. `packages/client/src/react/screens/AutomationsOverviewScreen.tsx` — the desktop overview's four count sentences.
+
+**Copy only.** `automations` is untouched as the wire capability flag, the route key, the deep-link path, the module names, the file names, the persisted pin key and the test ids. No member reads any of them.
+
+**The sweep.** `apps/mobile/src/screens/shell-copy.test.ts` gains two cases: no SENTENCE (a string literal containing a space, with comments stripped) in the four shell trees or the five shared copy modules may say "automation"; and the three shared constants are asserted as VALUES, so a re-export cannot hide a rename. Proven red before green — restoring "An automation is a trigger and a thing to do." turns both cases red, and the sentence heuristic is what lets `case "automation-thread":`, `sourceType === "automation"` and `featureOffEmpty("automations")` stay exactly as they are.
+
+**R-SH-12 — `DestinationConcept`'s keys are ids, decided from the evidence (`80d1e893c`).** The key stays `automations` and the type comment is re-worded. The comment claimed "a place named the way a member would name it", and that was the drift: three of the twelve keys already diverge from what the surfaces print (`analytics` is "Activity", `data` is "Vault", `devices` is "Household"), every use in both seats is a static property lookup, and nothing dynamic or persisted keys off the string. Renaming it would have made one key agree with one seat's word while the family's contract stayed "id". `packages/design/src/destinations.ts` now says so, and names where the label does live.
+
+**R-SH-13 — the container-opacity budgets take the measured value (`62ce3c980`).** `packages/client/src` 21 → 13, `packages/blueprints` 4 → 2, `packages/design/src/elements` 12 → 3, each read off `node scripts/lint-container-opacity.mjs`, which had been printing the "lower the budget to N" note for all three. Nothing was reclassified and no exception was added; the room wave and the kit's leaf-token disabled state removed the fades the numbers were holding room for. The gate's own header asks for exactly this when a change removes counted occurrences — a budget lowered to the measurement is the ratchet, not policy weakened to go green.
+
+### The issue's checklist, box by box
+
+**Owner decisions D1–D6** — all six ruled by the owner on 2026-09-10 and recorded in [docs/decisions.md § Mobile UX consistency (#1015)](../docs/decisions.md#mobile-ux-consistency-1015). **Ticked.**
+
+**Wave 0 (B1–B15)** — B1–B15 all landed across the lanes. **The wave's own exit is NOT met**: only one Maestro flow was added in this umbrella (`tests/agent-e2e-mobile/flows/agenda-week.{md,mjs}`), not one per blocker. No lane had a simulator, and the run ended before an e2e wave. **Unticked, and the reason is the tooling, not the fixes.**
+
+**Wave 1 (S2, S3, S4, S5, S6, S8, S9, S10, S12, S13)** — all ten landed. Its exit — "a story in the mobile gallery and a parity test" — is met on the parity half only; **no mobile screens gallery exists**. See Wave 4 below.
+
+**Wave 2 (S1, the three migration lines, S7, selection, editors)** — all landed. Its exit, "grep finds zero hand-rolled headers, back controls or search fields; every screen root is a room", is met for back controls (`back-literal 0`) and search (one `SearchField`), and **NOT for screen roots: `screen-root` stands at 33** — Locker 6, People 6, Photos 9, Tally 12. Ratcheted in `scripts/lint-mobile-rooms.baseline.json`, unclosed, owner-visible. **Partly ticked.**
+
+**Wave 3 (S11, S14, tint, S15, a11y, per-app residue)** — all six landed. Its exit — "a re-run of the audit brief over one simulator reports zero majors" — **was never run**: no lane had a simulator and the owner ended the run after Wave 4. **Unticked.**
+
+**Wave 4 (five lint boxes + the docs pass)** — the two lint boxes are one gate, `scripts/lint-mobile-rooms.mjs --enforce`, wired into `bun run lint:product`: hand-rolled screen roots, `backTo` literals, `pageMargin` literals, identity tint on a control, Title Case in copy tables, and an exception rendered as member copy. Each of the six rules was verified with a planted violation. Blueprint copy tables are swept per app (`apps/mobile/src/apps/*/*-copy-case.test.ts`, eight of them). The docs pass is this section plus `95e66952d`. **The mobile screens gallery box is NOT done** — `design:gallery` has no mobile lane and the room lint took its place as the drift detector; a gallery is a screenshot harness and needs a simulator. **Four of five ticked.**
+
+### Every finding id — where its row lives, and what is still open
+
+Each app's id-level ledger is already in this receipt; this is the roll-up over all 173. "Partly" means a named half closed and the rest is in the app's own row with its reason.
+
+| App | ids | closed (incl. partial) | still open |
+| --- | --- | --- | --- |
+| shell (24) | ledger above, "Findings ledger — `shell/findings.md`, every id" | 20 | 7, 8, 9, 19 |
+| agenda (22) | "Agenda — `dc630f916`" | 16 | 9, 11, 12, 13, 14, 15 |
+| tasks (23) | "Tasks — `1813e2d26`" | 6 | 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 20, 21, 22 |
+| notes (19) | "Notes — `4c7b101fa`" | 9 | 3, 4, 8, 10, 11, 12, 13, 14, 17, 19 |
+| docs (19) | "Docs — `d7c200566`" | 11 | 4, 5, 6, 8, 9, 11, 15, 19 |
+| photos (20) | APPS-B residue register | 18 | 14, 15 |
+| people (16) | APPS-B residue register | 12 | 1, 2, 10, 15 |
+| tally (18) | APPS-B residue register | 11 | 8, 12, 13, 14, 16, 17, 18 |
+| locker (12) | APPS-B residue register | 11 | 1 |
+| **total** | **173** | **114** | **59** |
+
+**One correction to a lane ledger.** `agenda/findings.md#10` (Agenda's search field is the only one without `autoCapitalize="none"`, `autoCorrect={false}`, `returnKeyType="search"`) appears in no lane's table — the one gap in the nine ledgers. It is **closed**: `AgendaHome.tsx` passes a `search` prop to `AppPlace`, and the room renders `kit/components/SearchField.tsx`, which sets all three (lines 95, 96, 104). Counted as closed above.
+
+Every open id above already carries its reason in its app's own row. None was silently dropped; the shapes are (a) behaviour or a feature, not a consistency fix; (b) a layout slice; (c) a kit change an app lane may not make; (d) an owner call about what the product should say or offer.
+
+### Inherited red, measured on this head and not fixed
+
+| Gate / test | What is red | Measured how |
+| --- | --- | --- |
+| `lint:no-nul-bytes` | `packages/server/src/preview/fixtures/hevc-photo.heic` | untouched between `main` and this head |
+| `lint:quality-knobs` | stale fingerprints for `packages/server/src/automation/manifest/manifest.ts`, `packages/server/src/serve/health-registry.ts` | untouched between `main` and this head |
+| `lint:e2e-wiring` | `mobile-volume-proof` claimed by the ledger, scheduled by no lane | untouched between `main` and this head |
+| `lint:hairline` | `apps/mobile/src/apps/photos/PhotosChoiceSheet.tsx:87` uses `hairlineWidth` | arrived with APPS-B's `62fc18ac4`; **this umbrella's own, and open** |
+| `check:ui-receipt` | the umbrella's PR-window gate; needs a screenshot from a changed e2e harness | no lane has a simulator |
+| `apps/mobile` `src/lib/replica/expo-seat-driver.test.ts` | "Flow is not supported" parsing `node_modules/react-native/index.js` under the stub tier | file byte-identical to `main`; reproduced on a detached base |
+| `apps/mobile` `src/apps/tasks/tasks-haptics.test.ts` | the SABOTAGE case expects `hapticLanded();` in `useConfirmDestructive.tsx` | reproduced by `git stash` on this head — red on the base, APPS-B's |
+| blueprints `src/photos-vocabulary.test.ts` | `PHOTOS_ERROR_FREE_UP_PAUSED`'s storage noun | reproduced at `6924fb797` |
+| blueprints `src/one-computation.test.ts` | `kit: subscribeStatus,subscribeVitals ↔ subscribeStatusHost` | reproduced at `6924fb797` |
+| blueprints `src/pending-projection-tripwire.test.ts` | Docs' action count 15 → 16, which is D1's Empty trash | reproduced at `6924fb797` |
+
+`lint:hairline` and `pending-projection-tripwire` are the two this umbrella caused; the other eight predate it.
+
+### Docs verified against the tree as it now is
+
+- **[docs/decisions.md](../docs/decisions.md)** — R-SH-11, R-SH-12 and R-SH-13 added to the #1015 later-rulings table, each dated with its reasoning. Every ruling this lane made is now in the table; R-SH-9 is the one row whose condition is unmet, and it says so.
+- **[DESIGN.md](../DESIGN.md)** — § Copy gains **one noun per thing, and the same noun on every seat**: a short form may drop words, never swap one in; identifiers are exempt and are not copy; a shared copy module is fixed at the source. It names the sweep that holds it and the rulings behind it. The six-room table under Components (from `95e66952d`) still describes the tree exactly.
+- **[docs/design-divergences.md](../docs/design-divergences.md)** — re-read in full; no row is made stale by this round, and no row is added. The one occurrence of "automations" in the file (§ Docs, "per-app automations" among what the deleted settings gear used to open) is the desktop's per-app automation packs, a different thing from the Rules place, and is correct as written.
+
+### Files
+
+`apps/mobile/src/apps/automations/{Automations.tsx,AutomationThread.tsx,automations-model.ts,Automations.test.tsx,automations-model.test.ts}`, `apps/mobile/src/apps/insights/{insights-model.ts,Insights.test.tsx,insights-model.test.ts}`, `apps/mobile/src/screens/approvals/{approvals-model.ts,approvals-model.test.ts,Approvals.test.tsx}`, `apps/mobile/src/screens/shell-copy.test.ts`, `apps/desktop/tests/e2e/{automations.spec.ts,appview-templates-insights.spec.ts}`, `apps/web/tests/e2e/settings-access.spec.ts`, `packages/client/src/{access-lens.ts,approvals-copy.ts,automations-copy.ts,insights-copy.ts}`, `packages/client/src/react/{format.ts,format.test.ts,screen-contracts.ts}`, `packages/client/src/react/screens/{AutomationsOverviewScreen.tsx,AutomationsOverviewScreen.test.tsx,InsightsScreen.test.tsx}`, `packages/client/src/react/shell/{launcherModel.ts,opsBar.ts,opsBar.test.ts,App.test.tsx,App.capabilities.test.tsx,StatusLine.test.tsx,routeVitals.test.ts,statusChannel.test.ts}`, `packages/design/src/destinations.ts`, `scripts/lint-container-opacity.mjs`, `docs/decisions.md`, `DESIGN.md`, `receipts/issue-1015-mobile-ux-consistency.md`.
+
+### Verification, from the lane worktree
+
+1. `cd apps/mobile && bunx vitest run src/apps src/screens src/kit` → **250 files, 2297 passed, 1 failed** — the one is `tasks-haptics.test.ts`, red on the base (table above). `bunx vitest run src/apps/automations src/apps/insights src/screens` → **37 files, 425 passed, 0 failed**.
+2. `bunx vitest run` in `packages/client` → **275 files, 2479 passed, 0 failed**. `packages/design` → **32 files, 384 passed**.
+3. `bun run --cwd apps/mobile typecheck` → **0**; `bun run --cwd packages/client typecheck` → **0**.
+4. `node scripts/lint-mobile-rooms.mjs` → `screen-root 33 · back-literal 0 · page-margin 2 · identity-tint 0 · copy-title-case 0 · error-detail 12`, 47 over 594 files — unchanged from the previous round, as a copy-only change should leave it.
+5. `grep -rn "expo-haptics"` over this lane's trees → **0**; `kit/haptics.ts` is the only importer.
+6. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**, with the three tightened budgets **at** their floors rather than under them.
+7. `bun run format` then `bun run check:push:static` → see the report.
+8. `bun run lint:product` and `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see the report.
+
+### Not done, and why
+
+- **R-SH-9 (`kit/member-error.ts` dies)** — its condition is APPS-A's R-A-15, and R-A-15 had not landed on `umbrella/1015-mobile-ux` when this run ended: `apps/mobile/src/kit/replica/write-outcome.ts:105` still reads `error instanceof Error ? error.message : "Please try again."`. Five callers of `memberFacingError` remain (`kit/transfer/backup-verdict.ts`, `kit/transfer/transfer-queue.ts`, `screens/home/origin-health.ts`, `apps/insights/Insights.tsx`, `apps/insights/GatewayAlerts.tsx`), so the module is not deletable on any reading. **Outstanding**, with the baseline `error-detail 12` un-re-measured.
+- **The desktop's automation EDITOR and VIEWER still say "automation" in 48 sentences** — `AutomationEditorRoute.tsx`, `AutomationViewRoute.tsx`, `AutomationEditorScreen.tsx`, `AutomationCompilePane.tsx`, `automationLiveMessages.ts`, `automationTurnMessages.ts`, `automationThreadData.ts`, `RunViewRoute.tsx`, `runViewData.ts`, `TemplatesRoute.tsx`, `SettingsDiagnosticsScreen.tsx`, `SettingsAppearanceScreen.tsx`, `AssistantScreen.tsx`, `Gallery.tsx`, `CapabilityWall.tsx`. R-SH-11's ruled scope was the shared pool and the launcher; those fifteen files are a desktop-only surface with no mobile counterpart, no e2e run available this round, and no simulator. Held deliberately, not missed — see the hand-off below.
