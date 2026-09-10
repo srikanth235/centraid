@@ -28,14 +28,13 @@ import { PHOTOS_SEARCH_PLACEHOLDER } from "@centraid/blueprints/apps/photos/shar
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 import type { PageQuery } from "@centraid/core/page";
 
-import Icon from "../../kit/components/Icon";
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
-import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
@@ -440,33 +439,17 @@ export function PhotosSearchView({
 
       {/* One query box (proto:4257), docked at the BOTTOM of the surface
           (#712). Nothing else is a control on this shelf. */}
-      <View style={styles.fieldRow}>
-        <View style={styles.field}>
-          <Icon name="search" size={16} color={colors.textSoft} />
-          <TextInput
-            accessibilityLabel="Search photographs"
-            testID={TEST_IDS.photos.searchField}
-            autoFocus
-            value={term}
-            onChangeText={onTerm}
-            placeholder={PHOTOS_SEARCH_PLACEHOLDER}
-            placeholderTextColor={colors.textFaint}
-            style={styles.input}
-          />
-          {term ? (
-            // Mono underlined TEXT (proto:4146-4147), never an ✕ — ambiguous
-            // between "clear this" and "close this".
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Clear the query"
-              onPress={() => setTerm("")}
-              style={styles.clearTarget}
-            >
-              <Text style={styles.clearText}>Clear</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+      {/* One query box (proto:4257), docked at the BOTTOM of the surface
+          (#712) — the route is unchanged; the field is the kit's (#1015, S4),
+          which is where its keyboard contract comes from. Photos had none:
+          an auto-capitalised term silently searched for something else. */}
+      <SearchField
+        accessibilityLabel="Search photographs"
+        clearLabel="Clear the query"
+        onChangeText={onTerm}
+        placeholder={PHOTOS_SEARCH_PLACEHOLDER}
+        value={term}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -533,12 +516,6 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       paddingHorizontal: spacing[6],
     },
-    clearText: {
-      ...t("mono"),
-      color: colors.textSoft,
-      textDecorationLine: "underline",
-    },
-    clearTarget: { justifyContent: "center", minHeight: 34 },
     example: {
       borderColor: colors.line,
       borderRadius: radii.pill,
@@ -576,19 +553,6 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[1],
       paddingTop: spacing[2],
     },
-    // §9's field: 34px tall, 7px radius (proto:4140-4152).
-    field: {
-      alignItems: "center",
-      backgroundColor: colors.bgSunken,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      flexDirection: "row",
-      gap: spacing[2],
-      height: 34,
-      paddingHorizontal: spacing[2],
-    },
-    fieldRow: { paddingHorizontal: spacing[4], paddingVertical: spacing[2] },
     fill: { flex: 1 },
     foot: {
       ...t("mono"),
@@ -623,15 +587,6 @@ const makeStyles = (colors: ThemeColors) =>
     // Exactly one line's height, no vertical padding, Android font padding off
     // (#712). A TextInput stretched to the field's 34px centres against the
     // iOS control box, not the glyph box, and drops off the magnifier's line.
-    input: {
-      ...t("body"),
-      color: colors.text,
-      flex: 1,
-      height: t("body").lineHeight,
-      includeFontPadding: false,
-      paddingVertical: 0,
-      textAlignVertical: "center",
-    },
     panel: {
       borderColor: colors.line,
       borderRadius: radii.lg,

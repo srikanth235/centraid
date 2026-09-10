@@ -53,8 +53,8 @@ import type {
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
-import { TextInput } from "../../kit/components/NativeText";
 import PlaceHeader from "../../kit/components/PlaceHeader";
+import SearchField from "../../kit/components/SearchField";
 import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
@@ -62,14 +62,7 @@ import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { TEST_IDS } from "../../kit/test-ids";
-import {
-  borders,
-  pageMargin,
-  radii,
-  spacing,
-  t,
-  useTheme,
-} from "../../kit/theme";
+import { pageMargin, spacing } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
 import type { PeopleBandKey } from "./people-band";
 import { applyRosterFilter, rosterSub, searchRoster } from "./people-model";
@@ -477,7 +470,6 @@ function SearchBody({
   onOpen: (partyId: string) => void;
   onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
-  const { colors, targetMin } = useTheme();
   const active: RosterFilter =
     filter === "linked" || filter === "unlinked" ? "all" : filter;
   const results = useMemo(
@@ -494,35 +486,14 @@ function SearchBody({
   );
   return (
     <View style={styles.body}>
-      <View style={styles.searchRow}>
-        <TextInput
+      <View style={styles.searchBleed}>
+        <SearchField
           accessibilityLabel={FIELDS.searchPlaceholder}
-          autoFocus
-          value={term}
-          placeholder={FIELDS.searchPlaceholder}
-          placeholderTextColor={colors.textFaint}
+          clearLabel={VERBS.clearSearch}
           onChangeText={onTerm}
-          style={[
-            t("body"),
-            {
-              borderColor: colors.line,
-              borderRadius: radii.md,
-              borderWidth: borders.hairline,
-              color: colors.text,
-              flex: 1,
-              minHeight: targetMin.coarse,
-              paddingHorizontal: spacing[3],
-            },
-          ]}
+          placeholder={FIELDS.searchPlaceholder}
+          value={term}
         />
-        {term ? (
-          <Verb
-            label="✕"
-            quiet
-            accessibilityLabel={VERBS.clearSearch}
-            onPress={() => onTerm("")}
-          />
-        ) : null}
       </View>
       <ChipsBlock
         accessibilityLabel="Filter"
@@ -603,10 +574,7 @@ const styles = StyleSheet.create({
   head: { paddingHorizontal: pageMargin },
   page: { flex: 1 },
   scroll: { paddingBottom: spacing[6] },
-  searchRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing[2],
-    paddingBottom: spacing[3],
-  },
+  // The field owns its own gutter (kit/components/SearchField); the shelf
+  // cancels its own so the member sees one inset, not two.
+  searchBleed: { marginHorizontal: -pageMargin, paddingBottom: spacing[3] },
 });

@@ -6,7 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { nativeButtonStyle } from "@centraid/design";
 
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -101,19 +102,17 @@ export default function SearchOverlay({
         style={[styles.content, { paddingTop: insets.top + 8 }]}
         pointerEvents="box-none"
       >
+        {/* The field is the kit's (#1015, S4) and owns its own gutter, so
+            this row cancels the overlay's — one inset, not two. */}
         <View style={styles.headerRow}>
-          <TextInput
-            accessibilityLabel="Search every app"
-            autoFocus
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search everything in this vault"
-            placeholderTextColor={colors.textFaint}
-            style={styles.input}
-            returnKeyType="search"
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
+          <View style={styles.fill}>
+            <SearchField
+              accessibilityLabel="Search every app"
+              onChangeText={setQuery}
+              placeholder="Search everything in this vault"
+              value={query}
+            />
+          </View>
           {/* Scope is a label, not a filter. */}
           <Text style={styles.scope}>all apps</Text>
           <Pressable
@@ -322,6 +321,7 @@ const makeStyles = (
       paddingTop: 8,
     },
     groupName: { ...t("eyebrow"), color: colors.textSoft, flex: 1 },
+    fill: { flex: 1 },
     headerRow: {
       alignItems: "center",
       borderBottomColor: colors.line,
@@ -329,14 +329,10 @@ const makeStyles = (
       flexDirection: "row",
       flexShrink: 0,
       gap: 12,
+      marginHorizontal: -H_PADDING,
       paddingBottom: 16,
+      paddingRight: H_PADDING,
       paddingTop: 8,
-    },
-    input: {
-      ...t("body"),
-      color: colors.text,
-      flex: 1,
-      padding: 0,
     },
     list: { flex: 1 },
     listContent: { paddingBottom: 24, paddingTop: 8 },

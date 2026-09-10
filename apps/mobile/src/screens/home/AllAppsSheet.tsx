@@ -25,7 +25,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppMark from "../../kit/components/AppMark";
 import Icon from "../../kit/components/Icon";
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { borders, family, metrics, radii, t, useTheme } from "../../kit/theme";
@@ -134,20 +135,12 @@ export default function AllAppsSheet({
             <Icon name="X" size={16} color={colors.text} />
           </Pressable>
         </View>
-        <View style={styles.field}>
-          <Icon name="Search" size={16} color={colors.textFaint} />
-          <TextInput
-            accessibilityLabel="Search all apps and places"
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search apps and places"
-            placeholderTextColor={colors.textFaint}
-            style={styles.input}
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-          />
-        </View>
+        <SearchField
+          accessibilityLabel="Search all apps and places"
+          onChangeText={setQuery}
+          placeholder="Search apps and places"
+          value={query}
+        />
         <ScrollView
           style={styles.list}
           keyboardShouldPersistTaps="handled"
@@ -329,19 +322,6 @@ const makeStyles = (colors: ThemeColors) =>
       width: 34,
     },
     empty: { ...t("small"), color: colors.textSoft, paddingVertical: 20 },
-    field: {
-      alignItems: "center",
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.lg,
-      borderWidth: borders.hairline,
-      flexDirection: "row",
-      gap: 8,
-      height: 44,
-      marginHorizontal: 20,
-      marginTop: 4,
-      paddingHorizontal: 12,
-    },
     foot: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
@@ -356,7 +336,6 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 4,
       paddingHorizontal: 20,
     },
-    input: { ...t("body"), color: colors.text, flex: 1, padding: 0 },
     // "by law" fills the switch slot, same mono numeric register (:3226, :5479).
     lawLabel: { ...t("mono"), color: colors.textFaint, textAlign: "center" },
     list: { marginTop: 8, maxHeight: 440 },

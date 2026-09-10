@@ -161,6 +161,13 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
+// The overlay's field is the kit's (#1015, S4), which draws its magnifier
+// with `react-native-svg`; the package ships untransformed sources.
+vi.mock(import("react-native-svg"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+
 vi.mock(import("react-native-safe-area-context"), () => {
   return {
     useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
@@ -174,6 +181,8 @@ vi.mock(
       borders: { hairline: 1 },
       // Shared page margin the overlay insets its content by (handoff `R.margin.m`).
       pageMargin: 18,
+      radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 12, xs: 0 },
+      spacing: [0, 4, 8, 12, 16, 20, 24, 32],
       t: () => ({}),
       useTheme: () => ({
         colors: mocks.colors,
@@ -256,11 +265,21 @@ describe("the search overlay anatomy", () => {
         container!.querySelectorAll<HTMLElement>("[data-bg]")
       ).map((el) => el.dataset.bg);
 
-      // The opaque paper layer itself, and nothing else painting a colour.
-      expect(painted).toStrictEqual([mocks.colors.bgElev]);
+      // The paper is the FIRST thing painted and it is `bg-elev`: the
+      // absolute-fill layer under everything else. (It is no longer the ONLY
+      // painted thing — the kit search field paints its own solid field
+      // surface, #1015 S4 — so the check is the layer's identity plus the
+      // alpha ban below, not a headcount of controls.)
+      expect(painted[0]).toBe(mocks.colors.bgElev);
       // Belt and braces: nothing painted may carry alpha (`expo-blur` is
-      // absent from the app entirely, so a live blur cannot sneak back).
-      for (const value of painted) expect(value).not.toMatch(/rgba\(/u);
+      // absent from the app entirely, so a live blur cannot sneak back), and
+      // every colour comes from the solid palette — a tint film would be a
+      // value the theme never handed out.
+      const solid = new Set(Object.values(mocks.colors));
+      for (const value of painted) {
+        expect(value).not.toMatch(/rgba\(/u);
+        expect(solid).toContain(value);
+      }
     });
   });
 
