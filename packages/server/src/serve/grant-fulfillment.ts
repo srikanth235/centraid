@@ -114,6 +114,13 @@ function buildIndex(origin: VaultDb): GrantSubjectIndex {
  * Rebuilt only when the plane moved: one door writes grants (ruling V-writer)
  * and commits `share.authority`, so a commit not naming it cannot have changed
  * which subjects are granted.
+ *
+ * NOT A SECOND CAUSE OF S1 (#1014). The index's only inputs are
+ * `share_authority` rows (`liveGrantSubjects`) and the wake families derived
+ * from their subject TYPES, and `share.authority` is the entity type every
+ * write to that table commits — so the invalidation hint is complete. What a
+ * grant covers is NOT an input: the closure is recomputed on every pass, so a
+ * row entering an existing grant's closure relays against the cached index.
  */
 function indexFor(
   host: GrantFulfillmentHost,

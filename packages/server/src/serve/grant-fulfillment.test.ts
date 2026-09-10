@@ -471,6 +471,64 @@ describe("serve/grant-fulfillment", () => {
     expect(audienceTitles(world.ravi)).toStrictEqual(["Trip plan (final)"]);
   });
 
+  test("a row entering an existing grant's closure relays on the cached index (#1014 S1)", () => {
+    // Rules the `indexFor` cache OUT as a second cause of S1: after a pass
+    // that cached the index, an ordinary content commit — no grant-plane
+    // write, so no rebuild — must still follow the subject.
+    const world = sharedWorld();
+    refreshGrantsAfterCommit({
+      host: world.host,
+      originVaultId: ORIGIN_VAULT,
+      now: world.now,
+      touched: ["share.authority"],
+    });
+    expect(audienceTitles(world.ravi)).toStrictEqual(["Trip plan"]);
+
+    const freshContentId = uuidv7();
+    inCommit(world.priya.vault, () => {
+      const blob = world.priya.vault.blobs.ingestSync(Buffer.from("day two"));
+      world.priya.vault.vault
+        .prepare(
+          `INSERT INTO core_content_item
+             (content_id, content_uri, sha256, byte_size, language,
+              creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?)`
+        )
+        .run(
+          freshContentId,
+          blobUriFor(blob.sha256),
+          blob.sha256,
+          blob.byteSize,
+          world.priya.boot.ownerPartyId,
+          world.priya.boot.deviceId,
+          world.now
+        );
+      world.priya.vault.vault
+        .prepare(
+          "UPDATE core_document SET current_content_id = ? WHERE document_id = ?"
+        )
+        .run(freshContentId, world.documentId);
+    });
+
+    const pass = refreshGrantsAfterCommit({
+      host: world.host,
+      originVaultId: ORIGIN_VAULT,
+      now: world.now,
+      // Exactly what the post-commit doorbell carries for this write.
+      touched: ["core.content_item", "core.document"],
+    });
+    expect(pass.origin).toBe("mounted");
+    expect(
+      (
+        world.ravi.vault.vault
+          .prepare(
+            "SELECT current_content_id AS id FROM core_document WHERE document_id = ?"
+          )
+          .get(world.documentId) as { id: string } | undefined
+      )?.id
+    ).toBe(freshContentId);
+  });
+
   test("an unchanged pass re-projects nothing, and the audience is told once", () => {
     const world = sharedWorld();
     const pass = () =>

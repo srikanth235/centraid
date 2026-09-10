@@ -44,7 +44,13 @@ import {
   divergedClaimCount,
   stampAudienceVersions,
 } from "./apply-divergence.js";
-import { APPLY_ORDER, SPECS } from "./apply-registry.js";
+import {
+  keyValues,
+  lineageKey,
+  orderOf,
+  scrubUnrenewedClaims,
+} from "./apply-lineage.js";
+import { SPECS } from "./apply-registry.js";
 import type { RowSpec } from "./apply-registry.js";
 import {
   entityIdColumn,
@@ -52,7 +58,6 @@ import {
   quoted,
   shapeOf,
 } from "./apply-shape.js";
-import type { ShareMemberRow } from "./closure-members.js";
 import type { ShareClosureOutputs, ShareRowImage } from "./closure-outputs.js";
 import { ownerPartyId } from "./project-household.js";
 
@@ -123,10 +128,12 @@ interface Applier {
    */
   readonly taken: ReadonlySet<string>;
   readonly claimed: ReadonlySet<string>;
-}
-
-function lineageKey(entity: string, originId: string): string {
-  return `${entity} ${originId}`;
+  /**
+   * `<entity> <audienceId>` for every row THIS pass claimed. A resend carries
+   * the whole member set, so what it did not claim is no longer in the closure
+   * (#1014, V10) — a `leave` list cannot say so, because a resend has none.
+   */
+  readonly placed: Set<string>;
 }
 
 /** `IN (…)` in chunks a prepared statement can hold. */
@@ -187,6 +194,7 @@ function loadLineage(
     owner: ownerPartyId(audience),
     taken,
     claimed,
+    placed: new Set<string>(),
   };
 }
 
@@ -339,6 +347,7 @@ function claim(
 ): void {
   applier.ids.set(lineageKey(spec.entity, originId), audienceId);
   if (!PHYSICAL_OF_ENTITY.has(spec.entity)) return;
+  applier.placed.add(lineageKey(spec.entity, audienceId));
   prepared(
     applier.audience,
     `INSERT INTO share_subscription_lineage
@@ -357,12 +366,6 @@ function claim(
 }
 
 /** The primary key of one member row, as bindable audience values. */
-function keyValues(member: ShareMemberRow): unknown[] {
-  return (JSON.parse(member.pk) as unknown[]).map((value) =>
-    decodeWireValue(value as never)
-  );
-}
-
 function keyPredicate(audience: DatabaseSync, table: string): string {
   return shapeOf(audience, table)
     .key.map((column) => `${quoted(column)} = ?`)
@@ -388,11 +391,12 @@ export interface ApplyShareOutputsResult {
   readonly retained: number;
   /** Rows the outputs named that the audience could not place. */
   readonly skipped: number;
-}
-
-function orderOf(table: string): number {
-  const index = APPLY_ORDER.indexOf(table);
-  return index === -1 ? APPLY_ORDER.length : index;
+  /**
+   * Claims a RESEND did not renew, so the row left the closure while the
+   * audience was in another epoch or behind the floor (#1014, V10). Counted
+   * separately from `left` because no `leave` output named them.
+   */
+  readonly scrubbed: number;
 }
 
 function writeRow(
@@ -492,6 +496,16 @@ export function applyShareOutputs(
           ).run(audienceId).changes;
     if (Number(changes) > 0) left += 1;
   }
+  const unrenewed =
+    outputs.reason === "resend"
+      ? scrubUnrenewedClaims(
+          audience,
+          outputs.authorityId,
+          outputs,
+          applier.placed
+        )
+      : { scrubbed: 0, retained: 0 };
+  retained += unrenewed.retained;
   stampAudienceVersions(audience, outputs.authorityId);
   return {
     authorityId: outputs.authorityId,
@@ -501,6 +515,7 @@ export function applyShareOutputs(
     left,
     retained,
     skipped,
+    scrubbed: unrenewed.scrubbed,
   };
 }
 
