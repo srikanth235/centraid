@@ -97,3 +97,21 @@ Files:
 - `apps/mobile/src/apps/tasks/tasks-seat-copy.ts` — the pick/clear verbs, `REMINDER_LEADS`, `REPEAT_RULES`.
 
 **Gap reported, not stubbed**: the shared `taskFields` projection only emits a `repeats` row when the task already carries a `recurrence_summary`, so a non-repeating task still has no door to a first rule. Changing that projection changes every seat, so the root is asked whether it belongs in this umbrella.
+
+### Lane APPS-A — slice 4: the note editor saves as you write (B6 / D3)
+
+Closes audit `notes/findings.md#2`, a blocker, and applies D3.
+
+The shared blueprint copy has always printed the contract — `editorStatus`: "Every change is saved as you write · N versions kept" — and this seat never called it. Saving was a manual press of a filled Save button that was enabled and identical from the moment the sheet opened, so nothing on screen distinguished a note with unsaved edits from one without; and `onClose` blanked the draft with no prompt and no write. The gesture that lost a writing session was the swipe-down iOS trains members to use on a page sheet.
+
+Now: a debounce writes an existing note as it is edited, closing writes whatever is still unsaved, and the Save button is gone. The close control is the verb (D3) — "Cancel" before the first keystroke, "Done" after it — and the blueprint's promise is drawn in the editor, where a member can read it, rather than posted to a status host a page sheet presents above.
+
+**Known limit, not a stub**: the debounce runs for a note that already exists. A second tick on a note still being created would create a second note, because `create-note` does not hand back the id this seat would need to adopt the first one — so a new note is written once, on close. Closing that gap is a `create-note` output contract question; the root is asked whether it belongs here.
+
+Proof: `NotesHome.test.tsx` now carries a write seam and two claims — typing into a note and pressing the close control writes `edit-note` with the typed body, and closing an untouched note writes nothing and offers a cancel. Both fail on base: the close control had no "Done" label to find, and close discarded the draft.
+
+Files:
+
+- `apps/mobile/src/apps/notes/NotesHome.tsx` — `dirty`, the autosave effect, `save({ closeAfter })`, `finishEditing`, the version count for the editor's line.
+- `apps/mobile/src/apps/notes/NoteEditor.tsx` — Save button removed; `dirty` and `versions` props; the close control's verb; `editorStatus` drawn in the sheet.
+- `apps/mobile/src/apps/notes/NotesHome.test.tsx` — the write seam and the two autosave claims.

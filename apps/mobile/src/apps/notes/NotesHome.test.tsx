@@ -29,6 +29,12 @@ const replicaRows = vi.hoisted(() => ({
   byEntity: new Map<string, SeededRow[]>(),
 }));
 
+/** The one write seam. The editor's autosave is a WRITE claim, so the session
+ *  has to exist for it — `write` refuses without one. */
+const vaultWrites = vi.hoisted(() => ({
+  calls: [] as { action: string; input: Record<string, unknown> }[],
+}));
+
 vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   useReplica: vi.fn<
     (typeof import("../../kit/replica/ReplicaProvider"))["useReplica"]
@@ -37,6 +43,19 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
     ready: true,
     refresh: vi.fn<() => Promise<void>>(async () => undefined),
     scopes: [],
+    session: {
+      pendingChanges: async () => [],
+      scope: () => ({ label: "Vault" }),
+      write: async (
+        _appId: string,
+        request: { action: string; input: Record<string, unknown> }
+      ) => {
+        vaultWrites.calls.push(request);
+        return { status: "executed" as const };
+      },
+      // Only the three members this surface reaches; the session's other 55
+      // are not part of any claim here.
+    } as never,
   })),
 }));
 
@@ -106,6 +125,7 @@ function selectedTabNames(
 describe("Notes, on the real React Native host tree", () => {
   beforeEach(() => {
     replicaRows.byEntity.clear();
+    vaultWrites.calls.length = 0;
   });
 
   it("lights exactly one band place, and moves it on a real press", () => {
@@ -179,5 +199,37 @@ describe("Notes, on the real React Native host tree", () => {
           String(node.props.accessibilityLabel).startsWith("Open ")
         )
     ).toHaveLength(0);
+  });
+
+  it("saves the draft when the sheet closes, and does not ask (#1015)", async () => {
+    // THE DEFECT: typing into a note and pressing X — the same gesture iOS
+    // trains members to use on a page sheet — blanked the draft with no
+    // prompt and no write (audit notes/findings#2, blocker). Close is done.
+    seedNotes([{ body: "Old body", id: "n1", title: "Tahoe" }]);
+    const screen = mountNotes();
+
+    fireEvent.press(screen.getByRole("button", { name: "Tahoe" }));
+    fireEvent.changeText(
+      screen.getByLabelText("Note body"),
+      "Old body, plus a thought"
+    );
+    // The verb moves with the draft: nothing typed is still a cancel.
+    fireEvent.press(screen.getByLabelText("Done"));
+    await vi.waitFor(() => expect(vaultWrites.calls).toHaveLength(1));
+
+    expect(vaultWrites.calls[0]!.action).toBe("edit-note");
+    expect(vaultWrites.calls[0]!.input["body_text"]).toBe(
+      "Old body, plus a thought"
+    );
+  });
+
+  it("offers a cancel, not a done, before the first keystroke (#1015)", () => {
+    seedNotes([{ body: "Old body", id: "n1", title: "Tahoe" }]);
+    const screen = mountNotes();
+
+    fireEvent.press(screen.getByRole("button", { name: "Tahoe" }));
+    expect(screen.getByLabelText("Cancel")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Cancel"));
+    expect(vaultWrites.calls).toHaveLength(0);
   });
 });

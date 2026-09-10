@@ -9,7 +9,13 @@
 // Capture, Voice, Tags, Trash and Version history are ACTS behind More. The
 // navigator has ONE Notes route, so a destination is state, not a pushed entry.
 import { FlashList } from "@shopify/flash-list";
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Alert, Pressable, RefreshControl, View } from "react-native";
 
 import {
@@ -94,6 +100,7 @@ import {
 } from "./NotesPlaces";
 import NotesScreen from "./NotesScreen";
 import { useNotes } from "./useNotes";
+import { useNoteVersions } from "./useNoteVersions";
 
 const PLACE_FOR_TAB: Readonly<Record<NotesBandDestinationKey, NotesPlace>> = {
   library: null,
@@ -159,6 +166,10 @@ function NoteRow({
     </Pressable>
   );
 }
+
+/** Long enough that a sentence is one write, short enough that a member who
+ *  puts the phone down mid-thought has already been saved. */
+const AUTOSAVE_MS = 900;
 
 export default function NotesHome({
   navigation,
@@ -242,6 +253,19 @@ export default function NotesHome({
     setBody("");
   };
 
+  // AUTOSAVE, AS THE BLUEPRINT COPY ALREADY PROMISED (#1015, D3, audit
+  // notes/findings#2). `editorStatus` says "Every change is saved as you
+  // write" and this seat never called it: saving was a manual press, the Save
+  // button looked identical whether or not there were unsaved edits, and the
+  // `X` — the same gesture iOS trains members to use on a page sheet — blanked
+  // the draft with no prompt and no write. A note editor holds a writing
+  // session; losing it in silence is not a state this app may have.
+  const dirty = editing
+    ? selected
+      ? title !== selected.title || body !== selected.body
+      : Boolean(title.trim() || body.trim())
+    : false;
+
   const openNote = (note: NativeNote): void => {
     setSelectedId(note.id);
     setCreating(false);
@@ -284,7 +308,7 @@ export default function NotesHome({
    * named by its own first line — which is exactly what `promote` reads back
    * out, so the member never sees the derivation.
    */
-  const save = async (): Promise<void> => {
+  const save = async ({ closeAfter = false } = {}): Promise<void> => {
     const typed = title.trim();
     const text = body.trim();
     if (!typed && !text) {
@@ -309,7 +333,39 @@ export default function NotesHome({
           },
           undefined
         );
-    if (changed) closeEditor();
+    if (changed && closeAfter) closeEditor();
+  };
+
+  // The debounce runs for a note that EXISTS: a second tick on a note still
+  // being created would create a second note, because `create-note` does not
+  // hand back the id this seat would need to adopt the first one. A new note
+  // is written once, on close — `close = done` (D3).
+  // `save` is rebuilt every render over the current draft, so the timer holds
+  // the latest through a ref rather than through a dependency that would reset
+  // it on every keystroke's re-render and therefore never fire.
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
+  useEffect(() => {
+    if (!editing || !dirty || !selectedId) return undefined;
+    const timer = setTimeout(() => void saveRef.current(), AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [editing, dirty, selectedId, title, body]);
+
+  const editorVersions = useNoteVersions({
+    headContentId: selected?.bodyContentId ?? "",
+    currentRevisionId: selected?.currentRevisionId ?? null,
+    noteId: selected?.rawId ?? "",
+    createdAt: selected?.createdAt ?? "",
+    ...state.chainRows,
+  });
+
+  /** Closing IS finishing (D3): the draft goes to the vault, then the sheet
+   *  goes away. Nothing is discarded and nothing is asked. */
+  const finishEditing = (): void => {
+    if (dirty) void save({ closeAfter: true });
+    else closeEditor();
   };
 
   const confirmTrash = (): void => {
@@ -666,8 +722,9 @@ export default function NotesHome({
         journalNoteIds={state.journalNoteIds}
         onTitle={setTitle}
         onBody={setBody}
-        onClose={closeEditor}
-        onSave={() => void save()}
+        onClose={finishEditing}
+        dirty={dirty}
+        versions={editorVersions.length}
         onTrash={confirmTrash}
         onRestore={() => {
           if (!selected) return;

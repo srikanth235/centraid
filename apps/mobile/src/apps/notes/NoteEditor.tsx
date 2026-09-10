@@ -23,6 +23,7 @@ import {
   DELETE_NOTE_VERB,
   SEND_TO_TASKS,
   UNFILED_ROW,
+  editorStatus,
 } from "@centraid/blueprints/apps/notes/view-copy";
 
 import Icon from "../../kit/components/Icon";
@@ -47,7 +48,11 @@ export interface NoteEditorProps {
   onTitle: (value: string) => void;
   onBody: (value: string) => void;
   onClose: () => void;
-  onSave: () => void;
+  /** Whether the draft differs from what the vault holds. Before the first
+   *  keystroke the close control is a CANCEL; after it, closing is done (D3). */
+  dirty: boolean;
+  /** How many versions the chain holds, for the editor's own status line. */
+  versions: number;
   onTrash: () => void;
   onRestore: () => void;
   onTogglePin: () => void;
@@ -98,7 +103,9 @@ export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
         <View style={styles.modalHeader}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close the note"
+            // AUTOSAVE MAKES THE VERB (D3): nothing has been typed, so this
+            // is still a cancel; once it has, closing is finishing.
+            accessibilityLabel={props.dirty ? "Done" : "Cancel"}
             onPress={props.onClose}
             testID={TEST_IDS.notes.editorClose}
             style={styles.iconButton}
@@ -128,6 +135,12 @@ export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
         </View>
 
         <ScrollView contentContainerStyle={styles.editor}>
+          {/* The promise the blueprint has always printed, now true on this
+              seat: the editor saves as you write. Drawn here rather than
+              posted, because a modal presents above the root's status host. */}
+          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
+            {editorStatus(props.versions)}
+          </Text>
           <TextInput
             accessibilityLabel="Note title"
             value={props.title}
@@ -337,16 +350,6 @@ export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
             </Pressable>
           ) : (
             <>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Save this note"
-                onPress={props.onSave}
-                style={[styles.button, { backgroundColor: colors.accentFill }]}
-              >
-                <Text style={[styles.buttonText, { color: colors.textInv }]}>
-                  Save
-                </Text>
-              </Pressable>
               {note ? (
                 <>
                   <Pressable
