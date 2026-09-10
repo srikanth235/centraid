@@ -13,16 +13,18 @@
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
-import Icon from "../../kit/components/Icon";
+import Button from "../../kit/components/Button";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import Tappable from "../../kit/components/Tappable";
+import { postStatus } from "../../kit/components/status-line";
+import { formatDateShort, formatDateTime } from "../../kit/format";
+import EditorRoom from "../../kit/rooms/EditorRoom";
 import { nativeEventBounds } from "../../kit/schedule/recurrence";
 import type { AgendaEventModel } from "../../kit/schedule/recurrence";
-import { radii, t, useTheme } from "../../kit/theme";
+import { pageMargin, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 import { guestOptions } from "./agenda-guests";
 
@@ -92,7 +94,7 @@ export default function AgendaEventEditor({
   attendees: readonly ReplicaRow[];
   onClose: () => void;
   onWrite: (request: EditorWrite) => Promise<boolean>;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { colors } = useTheme();
   const [summary, setSummary] = useState(event.summary);
   const [description, setDescription] = useState(event.description ?? "");
@@ -121,11 +123,29 @@ export default function AgendaEventEditor({
   const [saving, setSaving] = useState(false);
 
   const isRecurring = Boolean(rrule) || event.isRecurrenceInstance;
+  /** AN EVENT CANNOT END BEFORE IT STARTS (#1015, audit agenda/findings#5).
+   *  The editor used to validate the title and nothing else, so a start moved
+   *  past the end left an inverted range on screen with Save fully armed and
+   *  no warning of any kind. */
+  const inverted = end.getTime() <= start.getTime();
+  const RANGE_REFUSAL = "An event cannot end before it starts.";
   // People only — the enrichment runners are parties too (#1015).
   const partyOptions = useMemo(() => guestOptions(parties), [parties]);
 
   const submit = async (): Promise<void> => {
-    if (!summary.trim()) return;
+    // Closing an untitled draft discards it; there is nothing to write, and a
+    // Save that refuses in silence is what the audit found (findings#6).
+    if (!summary.trim()) {
+      onClose();
+      return;
+    }
+    if (inverted) {
+      // The room hosts the line, so the refusal paints INSIDE the editor
+      // rather than under it (audit B5).
+      postStatus(RANGE_REFUSAL);
+      return;
+    }
+    if (saving) return;
     setSaving(true);
     const reminders = reminder === null ? [] : [{ minutes_before: reminder }];
     const bounds = nativeEventBounds(start, end, allDay);
@@ -214,6 +234,14 @@ export default function AgendaEventEditor({
     </Pressable>
   );
 
+  /** Moving the start CARRIES THE END with it: the member moved the event,
+   *  not its duration, and the composer next door already thinks in hours. */
+  const moveStart = (next: Date): void => {
+    const held = end.getTime() - start.getTime();
+    setStart(next);
+    setEnd(new Date(next.getTime() + Math.max(held, 0)));
+  };
+
   const dateField = (
     label: string,
     value: Date,
@@ -233,9 +261,16 @@ export default function AgendaEventEditor({
         ]}
       >
         <Text style={[styles.dateText, { color: colors.text }]}>
-          {allDay ? value.toLocaleDateString() : value.toLocaleString()}
+          {allDay
+            ? formatDateShort(value.toISOString())
+            : formatDateTime(value)}
         </Text>
       </Pressable>
+      {kind === "end" && inverted ? (
+        <Text style={[styles.refusal, { color: colors.net }]}>
+          {RANGE_REFUSAL}
+        </Text>
+      ) : null}
       {picking === kind ? (
         <DateTimePicker
           value={value}
@@ -251,195 +286,165 @@ export default function AgendaEventEditor({
   );
 
   return (
-    <Modal
+    <EditorRoom
+      cancellable={!summary.trim()}
+      foot={
+        isRecurring && scope !== "series" ? (
+          // Destructive takes the OUTLINE, never the fill.
+          <Button
+            label={
+              scope === "future"
+                ? "Skip this and following"
+                : "Skip this occurrence"
+            }
+            onPress={() => void skip()}
+            variant="destructive"
+          />
+        ) : null
+      }
+      onDone={() => void submit()}
+      presented
+      title="Event"
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
     >
-      <View style={[styles.safe, { backgroundColor: colors.bg }]}>
-        <View style={styles.header}>
-          <Tappable
-            accessibilityRole="button"
-            accessibilityLabel="Close the editor"
-            onPress={onClose}
-          >
-            <Icon name="X" size={23} color={colors.text} />
-          </Tappable>
-          <Text style={[styles.title, { color: colors.text }]}>Event</Text>
-          <Tappable
-            accessibilityRole="button"
-            accessibilityLabel="Save this event"
-            disabled={saving}
-            onPress={() => void submit()}
-          >
-            <Text style={[styles.save, { color: colors.text }]}>
-              {saving ? "Saving…" : "Save"}
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* THE SCOPE PICKER, first: which occurrences this change is about
+              is decided before what the change is. */}
+        {isRecurring ? (
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.textSoft }]}>
+              This event repeats
             </Text>
-          </Tappable>
+            <View style={styles.chipRow}>
+              {SCOPES.map((option) =>
+                chip(option.value, option.label, scope === option.value, () =>
+                  setScope(option.value)
+                )
+              )}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Title</Text>
+          <TextInput
+            value={summary}
+            onChangeText={setSummary}
+            style={[
+              styles.input,
+              { borderColor: colors.lineStrong, color: colors.text },
+            ]}
+          />
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* THE SCOPE PICKER, first: which occurrences this change is about
-              is decided before what the change is. */}
-          {isRecurring ? (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.textSoft }]}>
-                This event repeats
-              </Text>
-              <View style={styles.chipRow}>
-                {SCOPES.map((option) =>
-                  chip(option.value, option.label, scope === option.value, () =>
-                    setScope(option.value)
-                  )
-                )}
-              </View>
-            </View>
-          ) : null}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Notes</Text>
+          <TextInput
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            style={[
+              styles.input,
+              styles.multiline,
+              { borderColor: colors.lineStrong, color: colors.text },
+            ]}
+          />
+        </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Title
-            </Text>
-            <TextInput
-              value={summary}
-              onChangeText={setSummary}
-              style={[
-                styles.input,
-                { borderColor: colors.lineStrong, color: colors.text },
-              ]}
-            />
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            All day
+          </Text>
+          <View style={styles.chipRow}>
+            {chip("allday-on", "All day", allDay, () => setAllDay(true))}
+            {chip("allday-off", "At a time", !allDay, () => setAllDay(false))}
           </View>
+        </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Notes
-            </Text>
-            <TextInput
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              style={[
-                styles.input,
-                styles.multiline,
-                { borderColor: colors.lineStrong, color: colors.text },
-              ]}
-            />
+        {dateField("Starts", start, "start", moveStart)}
+        {dateField("Ends", end, "end", setEnd)}
+
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Repeats
+          </Text>
+          <View style={styles.chipRow}>
+            {REPEATS.map((option) =>
+              chip(
+                option.rrule || "none",
+                option.label,
+                rrule === option.rrule,
+                () => setRrule(option.rrule)
+              )
+            )}
           </View>
+        </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              All day
-            </Text>
-            <View style={styles.chipRow}>
-              {chip("allday-on", "All day", allDay, () => setAllDay(true))}
-              {chip("allday-off", "At a time", !allDay, () => setAllDay(false))}
-            </View>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Calendar
+          </Text>
+          <View style={styles.chipRow}>
+            {calendars.map((calendar) => {
+              const id = String(calendar["calendar_id"]);
+              return chip(
+                id,
+                String(calendar["name"] ?? "Calendar"),
+                calendarId === id,
+                () => setCalendarId(id)
+              );
+            })}
           </View>
+        </View>
 
-          {dateField("Starts", start, "start", setStart)}
-          {dateField("Ends", end, "end", setEnd)}
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Repeats
-            </Text>
-            <View style={styles.chipRow}>
-              {REPEATS.map((option) =>
-                chip(
-                  option.rrule || "none",
-                  option.label,
-                  rrule === option.rrule,
-                  () => setRrule(option.rrule)
-                )
-              )}
-            </View>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Reminder
+          </Text>
+          <View style={styles.chipRow}>
+            {REMINDERS.map((option) =>
+              chip(
+                String(option.minutes ?? "none"),
+                option.label,
+                reminder === option.minutes,
+                () => setReminder(option.minutes)
+              )
+            )}
           </View>
+        </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Calendar
-            </Text>
-            <View style={styles.chipRow}>
-              {calendars.map((calendar) => {
-                const id = String(calendar["calendar_id"]);
-                return chip(
-                  id,
-                  String(calendar["name"] ?? "Calendar"),
-                  calendarId === id,
-                  () => setCalendarId(id)
-                );
-              })}
-            </View>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Joining link
+          </Text>
+          <TextInput
+            value={conference}
+            onChangeText={setConference}
+            autoCapitalize="none"
+            style={[
+              styles.input,
+              { borderColor: colors.lineStrong, color: colors.text },
+            ]}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Guests</Text>
+          <View style={styles.chipRow}>
+            {partyOptions.map((party) =>
+              chip(party.id, party.name, guestIds.has(party.id), () =>
+                setGuestIds((current) => {
+                  const next = new Set(current);
+                  if (next.has(party.id)) next.delete(party.id);
+                  else next.add(party.id);
+                  return next;
+                })
+              )
+            )}
           </View>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Reminder
-            </Text>
-            <View style={styles.chipRow}>
-              {REMINDERS.map((option) =>
-                chip(
-                  String(option.minutes ?? "none"),
-                  option.label,
-                  reminder === option.minutes,
-                  () => setReminder(option.minutes)
-                )
-              )}
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Joining link
-            </Text>
-            <TextInput
-              value={conference}
-              onChangeText={setConference}
-              autoCapitalize="none"
-              style={[
-                styles.input,
-                { borderColor: colors.lineStrong, color: colors.text },
-              ]}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>
-              Guests
-            </Text>
-            <View style={styles.chipRow}>
-              {partyOptions.map((party) =>
-                chip(party.id, party.name, guestIds.has(party.id), () =>
-                  setGuestIds((current) => {
-                    const next = new Set(current);
-                    if (next.has(party.id)) next.delete(party.id);
-                    else next.add(party.id);
-                    return next;
-                  })
-                )
-              )}
-            </View>
-          </View>
-
-          {isRecurring && scope !== "series" ? (
-            // Destructive takes the OUTLINE, never the fill.
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Skip this occurrence"
-              style={[styles.skip, { borderColor: colors.danger }]}
-              onPress={() => void skip()}
-            >
-              <Text style={[styles.skipText, { color: colors.danger }]}>
-                {scope === "future"
-                  ? "Skip this and following"
-                  : "Skip this occurrence"}
-              </Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
-      </View>
-    </Modal>
+        </View>
+      </ScrollView>
+    </EditorRoom>
   );
 }
 
@@ -448,42 +453,28 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing[4],
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chipText: { ...t("control") },
-  content: { gap: 12, padding: 20, paddingBottom: 60 },
+  content: {
+    gap: spacing[3],
+    paddingBottom: spacing[6],
+    paddingHorizontal: pageMargin,
+    paddingTop: spacing[3],
+  },
   dateButton: { justifyContent: "center" },
   dateText: { ...t("body") },
   field: { gap: 5 },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 54,
-    paddingHorizontal: 18,
-  },
   input: {
     ...t("body"),
     borderRadius: radii.md,
     borderWidth: 1,
     minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
   },
   label: { ...t("eyebrow") },
   multiline: { minHeight: 88, textAlignVertical: "top" },
-  safe: { flex: 1 },
-  save: { ...t("bodyStrong") },
-  skip: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    marginTop: 12,
-    minHeight: 44,
-    justifyContent: "center",
-    padding: 12,
-  },
-  skipText: { ...t("control") },
-  title: { ...t("bodyStrong") },
+  refusal: { ...t("small") },
 });

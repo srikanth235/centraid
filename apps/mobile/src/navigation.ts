@@ -150,7 +150,11 @@ export type PeopleStackParamList = {
 };
 
 export type AgendaStackParamList = {
-  AgendaHome: undefined;
+  // Same longhand as `DocsHome.destination` (import boundary): the band's three
+  // places live on this one route, so a band tap from the pushed event page
+  // pops back to the place it names rather than to whichever place the list was
+  // last left on (#1015).
+  AgendaHome: { destination?: "day" | "schedule" | "waiting" } | undefined;
   // `instanceKey` is the tapped occurrence; writes still target the series via `eventId`.
   AgendaEvent: { eventId: string; instanceKey?: string };
 };

@@ -9,18 +9,20 @@
 // be worse than the sentence naming who decides.
 
 import React, { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import {
   pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
+import { useBandOwner } from "../../kit/band/band-owner";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import Tappable from "../../kit/components/Tappable";
-import TopSafeArea from "../../kit/components/TopSafeArea";
+import { formatTime } from "../../kit/format";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
   READ_ONLY_SOURCE_REASON,
   rowCanWrite,
@@ -29,10 +31,13 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { TEST_IDS } from "../../kit/test-ids";
-import { radii, t, useTheme } from "../../kit/theme";
+import { placeStack, parentPlace } from "../../kit/rooms/place";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { pageMargin, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 import type { AgendaScreenProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
+import AgendaBand from "./AgendaBand";
 import AgendaEventEditor from "./AgendaEventEditor";
 import { useAgenda } from "./useAgenda";
 
@@ -48,6 +53,9 @@ export default function AgendaEvent({
 }: AgendaScreenProps<"AgendaEvent">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+  // One latch per app: a handback on the list is a handback here too.
+  const { bandOwner } = useBandOwner("agenda");
   const { eventId, instanceKey } = route.params;
   // One event is looked up across the whole replicated series, so a recurrence
   // instance years out still resolves. The expansion is bounded by the engine's
@@ -154,226 +162,246 @@ export default function AgendaEvent({
     }
   };
 
-  if (!event)
-    return <View style={[styles.safe, { backgroundColor: colors.bg }]} />;
+  // THE TWO FACTS TRUE ON EVERY ROUTE (#1015, audit agenda/findings#8). This
+  // screen mounted neither the vault lockup nor the replica line nor a band,
+  // on the one Agenda surface offering a write whose behaviour depends on
+  // exactly which vault and which gateway. The room carries all three.
+  const band = (): React.JSX.Element => (
+    <AgendaBand
+      owner={bandOwner}
+      onSelect={(key) => {
+        // `search` and `more` open a field and a sheet on the list rather
+        // than being places, so from here they are simply the list.
+        if (key === "day" || key === "schedule" || key === "waiting")
+          navigation.popTo("AgendaHome", { destination: key });
+        else navigation.popTo("AgendaHome");
+      }}
+      // HOME via popTo — `goBack()` is a no-op under a deep link and
+      // `navigate` pushes a second Home on React Navigation 7.
+      onHome={() => navigation.popTo("Home")}
+    />
+  );
+  const stack = placeStack([
+    { key: "AgendaHome", title: "Agenda" },
+    { key: "AgendaEvent", title: "Event" },
+  ]);
 
   return (
-    <TopSafeArea
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top", "bottom"]}
+    <PushedPage
+      backTo={parentPlace(stack)}
+      band={band}
+      chrome={
+        <>
+          <VaultBar />
+          <ReplicaStatusBar />
+        </>
+      }
+      onBack={() => navigation.goBack()}
+      overlay={
+        <>
+          {editOpen && event ? (
+            <AgendaEventEditor
+              visible
+              event={event}
+              canonical={editable}
+              calendars={agenda.calendars}
+              parties={agenda.parties}
+              attendees={attendees}
+              onClose={() => setEditOpen(false)}
+              onWrite={writeEdit}
+            />
+          ) : null}
+          {confirmSheet}
+        </>
+      }
+      title="Event"
+      {...(event
+        ? {}
+        : {
+            loading: { label: "Reading this event", rows: 4 },
+          })}
     >
-      <View style={styles.header}>
-        <Tappable
-          accessibilityRole="button"
-          accessibilityLabel="Back to the agenda"
-          onPress={() => navigation.goBack()}
-          testID={TEST_IDS.agenda.eventBack}
-        >
-          <Icon name="ChevronLeft" size={26} color={colors.text} />
-        </Tappable>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Event</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {writable ? null : (
-          <Text style={[styles.readOnly, { color: colors.net }]}>
-            {READ_ONLY_SOURCE_REASON}
+      {event ? (
+        <ScrollView contentContainerStyle={styles.content}>
+          {writable ? null : (
+            <Text style={[styles.readOnly, { color: colors.net }]}>
+              {READ_ONLY_SOURCE_REASON}
+            </Text>
+          )}
+          <Text style={[styles.date, { color: colors.textSoft }]}>
+            {new Intl.DateTimeFormat(undefined, {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            }).format(new Date(event.start))}
           </Text>
-        )}
-        <Text style={[styles.date, { color: colors.textSoft }]}>
-          {new Intl.DateTimeFormat(undefined, {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          }).format(new Date(event.start))}
-        </Text>
-        <Text style={[styles.title, { color: colors.text }]}>
-          {event.summary}
-        </Text>
-        <Text style={[styles.when, { color: colors.textSoft }]}>
-          {new Intl.DateTimeFormat(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(new Date(event.start))}
-          {" – "}
-          {new Intl.DateTimeFormat(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(new Date(event.end))}
-        </Text>
-        {event.description ? (
-          <Text style={[styles.description, { color: colors.text }]}>
-            {event.description}
+          <Text style={[styles.title, { color: colors.text }]}>
+            {event.summary}
           </Text>
-        ) : null}
+          <Text style={[styles.when, { color: colors.textSoft }]}>
+            {formatTime(event.start)}
+            {" – "}
+            {formatTime(event.end)}
+          </Text>
+          {event.description ? (
+            <Text style={[styles.description, { color: colors.text }]}>
+              {event.description}
+            </Text>
+          ) : null}
 
-        {/* The held-write mark, drawn inline: a 2pt rule on the reading edge
+          {/* The held-write mark, drawn inline: a 2pt rule on the reading edge
             and the words beside it. */}
-        {pending ? (
-          <View
-            style={[styles.pendingMark, { borderStartColor: colors.textFaint }]}
-          >
-            <Text style={[styles.pendingText, { color: colors.textSoft }]}>
-              {heldCancel ? "cancel asked" : "not in the vault yet"}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* PARKED CANCEL — what the vault holds, and who releases it. */}
-        {heldCancel ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Review this cancellation in Approvals"
-            style={[styles.parked, { borderStartColor: colors.seam }]}
-            onPress={() =>
-              navigation.navigate("Settings", { screen: "Approvals" })
-            }
-          >
-            <Text style={[styles.parkedTitle, { color: colors.text }]}>
-              Cancellation held for the owner
-            </Text>
-            <Text style={[styles.parkedBody, { color: colors.textSoft }]}>
-              The event stays on the agenda until the owner approves it.
-            </Text>
-          </Pressable>
-        ) : null}
-
-        <Text style={[styles.section, { color: colors.textSoft }]}>Guests</Text>
-        {attendees.length > 0 ? (
-          attendees.map((attendee) => (
+          {pending ? (
             <View
-              key={String(attendee["attendee_id"] ?? attendee["party_id"])}
-              style={[styles.guest, { borderBottomColor: colors.line }]}
+              style={[
+                styles.pendingMark,
+                { borderStartColor: colors.textFaint },
+              ]}
             >
-              <Text style={[styles.guestName, { color: colors.text }]}>
-                {partyNames.get(String(attendee["party_id"])) ?? "Guest"}
-              </Text>
-              <Text style={[styles.guestState, { color: colors.textSoft }]}>
-                {String(attendee["partstat"] ?? "") === "needs-action"
-                  ? "No answer yet"
-                  : String(attendee["partstat"] ?? "")}
+              <Text style={[styles.pendingText, { color: colors.textSoft }]}>
+                {heldCancel ? "cancel asked" : "not in the vault yet"}
               </Text>
             </View>
-          ))
-        ) : (
-          <Text style={[styles.empty, { color: colors.textSoft }]}>
-            Nobody else is on this event.
-          </Text>
-        )}
+          ) : null}
 
-        {myAttendee ? (
-          <View style={styles.rsvpRow}>
-            {RSVP.map((answer) => (
-              <Pressable
-                key={answer.partstat}
-                accessibilityRole="button"
-                accessibilityLabel={answer.label}
-                accessibilityState={{
-                  disabled: !writable,
-                  selected:
-                    String(myAttendee["partstat"] ?? "") === answer.partstat,
-                }}
-                accessibilityHint={
-                  writable ? undefined : READ_ONLY_SOURCE_REASON
-                }
-                disabled={!writable}
-                style={[
-                  styles.rsvpButton,
-                  {
-                    borderColor: writable ? colors.lineStrong : colors.line,
-                  },
-                ]}
-                onPress={() => void rsvp(answer.partstat)}
+          {/* PARKED CANCEL — what the vault holds, and who releases it. */}
+          {heldCancel ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Review this cancellation in Approvals"
+              style={[styles.parked, { borderStartColor: colors.seam }]}
+              onPress={() =>
+                navigation.navigate("Settings", { screen: "Approvals" })
+              }
+            >
+              <Text style={[styles.parkedTitle, { color: colors.text }]}>
+                Cancellation held for the owner
+              </Text>
+              <Text style={[styles.parkedBody, { color: colors.textSoft }]}>
+                The event stays on the agenda until the owner approves it.
+              </Text>
+            </Pressable>
+          ) : null}
+
+          <Text style={[styles.section, { color: colors.textSoft }]}>
+            Guests
+          </Text>
+          {attendees.length > 0 ? (
+            attendees.map((attendee) => (
+              <View
+                key={String(attendee["attendee_id"] ?? attendee["party_id"])}
+                style={[styles.guest, { borderBottomColor: colors.line }]}
               >
-                <Text
-                  style={[
-                    styles.rsvpText,
-                    { color: writable ? colors.text : colors.textDisabled },
-                  ]}
-                >
-                  {answer.label}
+                <Text style={[styles.guestName, { color: colors.text }]}>
+                  {partyNames.get(String(attendee["party_id"])) ?? "Guest"}
                 </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
+                <Text style={[styles.guestState, { color: colors.textSoft }]}>
+                  {String(attendee["partstat"] ?? "") === "needs-action"
+                    ? "No answer yet"
+                    : String(attendee["partstat"] ?? "")}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.empty, { color: colors.textSoft }]}>
+              Nobody else is on this event.
+            </Text>
+          )}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Edit this event"
-          accessibilityState={{ disabled: !writable }}
-          accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
-          disabled={!writable}
-          style={[styles.action, { borderBottomColor: colors.line }]}
-          onPress={() => setEditOpen(true)}
-        >
-          <Icon
-            name="Pencil"
-            size={18}
-            color={writable ? colors.text : colors.textDisabled}
-          />
-          <Text
-            style={[
-              styles.actionText,
-              { color: writable ? colors.text : colors.textDisabled },
-            ]}
+          {myAttendee ? (
+            <View style={styles.rsvpRow}>
+              {RSVP.map((answer) => (
+                <Pressable
+                  key={answer.partstat}
+                  accessibilityRole="button"
+                  accessibilityLabel={answer.label}
+                  accessibilityState={{
+                    disabled: !writable,
+                    selected:
+                      String(myAttendee["partstat"] ?? "") === answer.partstat,
+                  }}
+                  accessibilityHint={
+                    writable ? undefined : READ_ONLY_SOURCE_REASON
+                  }
+                  disabled={!writable}
+                  style={[
+                    styles.rsvpButton,
+                    {
+                      borderColor: writable ? colors.lineStrong : colors.line,
+                    },
+                  ]}
+                  onPress={() => void rsvp(answer.partstat)}
+                >
+                  <Text
+                    style={[
+                      styles.rsvpText,
+                      { color: writable ? colors.text : colors.textDisabled },
+                    ]}
+                  >
+                    {answer.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit this event"
+            accessibilityState={{ disabled: !writable }}
+            accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
+            disabled={!writable}
+            style={[styles.action, { borderBottomColor: colors.line }]}
+            onPress={() => setEditOpen(true)}
           >
-            Edit event
-          </Text>
-        </Pressable>
+            <Icon
+              name="Pencil"
+              size={18}
+              color={writable ? colors.text : colors.textDisabled}
+            />
+            <Text
+              style={[
+                styles.actionText,
+                { color: writable ? colors.text : colors.textDisabled },
+              ]}
+            >
+              Edit event
+            </Text>
+          </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Ask to cancel this event"
-          accessibilityState={{ disabled: !writable }}
-          accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
-          disabled={!writable}
-          style={[styles.action, { borderBottomColor: colors.line }]}
-          onPress={() =>
-            Alert.alert(
-              "Ask to cancel?",
-              "The event stays visible until the owner approves this medium-risk write.",
-              [
-                { text: "Keep" },
-                {
-                  text: "Ask to cancel",
-                  style: "destructive",
-                  onPress: () => void cancel(),
-                },
-              ]
-            )
-          }
-        >
-          <Icon
-            name="XCircle"
-            size={18}
-            color={writable ? colors.danger : colors.textDisabled}
-          />
-          <Text
-            style={[
-              styles.actionText,
-              { color: writable ? colors.danger : colors.textDisabled },
-            ]}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ask to cancel this event"
+            accessibilityState={{ disabled: !writable }}
+            accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
+            disabled={!writable}
+            style={[styles.action, { borderBottomColor: colors.line }]}
+            onPress={() =>
+              confirmDestructive({
+                body: "The event stays visible until the owner approves this medium-risk write.",
+                noun: "event",
+                onConfirm: () => void cancel(),
+                verb: "Ask to cancel",
+              })
+            }
           >
-            Ask to cancel
-          </Text>
-        </Pressable>
-      </ScrollView>
-
-      {editOpen ? (
-        <AgendaEventEditor
-          visible
-          event={event}
-          canonical={editable}
-          calendars={agenda.calendars}
-          parties={agenda.parties}
-          attendees={attendees}
-          onClose={() => setEditOpen(false)}
-          onWrite={writeEdit}
-        />
+            <Icon
+              name="XCircle"
+              size={18}
+              color={writable ? colors.danger : colors.textDisabled}
+            />
+            <Text
+              style={[
+                styles.actionText,
+                { color: writable ? colors.danger : colors.textDisabled },
+              ]}
+            >
+              Ask to cancel
+            </Text>
+          </Pressable>
+        </ScrollView>
       ) : null}
-    </TopSafeArea>
+    </PushedPage>
   );
 }
 
@@ -386,7 +414,12 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   actionText: { ...t("body"), flex: 1 },
-  content: { gap: 10, padding: 20, paddingBottom: 48 },
+  content: {
+    gap: spacing[3],
+    paddingBottom: spacing[6],
+    paddingHorizontal: pageMargin,
+    paddingTop: spacing[3],
+  },
   date: { ...t("eyebrow") },
   description: { ...t("reading") },
   empty: { ...t("body") },
@@ -399,19 +432,11 @@ const styles = StyleSheet.create({
   },
   guestName: { ...t("body"), flex: 1 },
   guestState: { ...t("annotLabel") },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 48,
-    paddingHorizontal: 18,
-  },
-  headerSpacer: { width: 26 },
-  headerTitle: { ...t("bodyStrong"), flex: 1, textAlign: "center" },
   parked: {
     borderRadius: radii.md,
     borderStartWidth: 2,
-    gap: 4,
-    padding: 12,
+    gap: spacing[1],
+    padding: spacing[3],
   },
   parkedBody: { ...t("body") },
   parkedTitle: { ...t("bodyStrong") },
@@ -428,7 +453,6 @@ const styles = StyleSheet.create({
   },
   rsvpRow: { flexDirection: "row", gap: 8 },
   rsvpText: { ...t("control") },
-  safe: { flex: 1 },
   section: { ...t("eyebrow"), marginTop: 12 },
   title: { ...t("title") },
   when: { ...t("mono") },

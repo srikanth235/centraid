@@ -35,7 +35,10 @@ const PLATE_GAP = 8;
 
 export interface AgendaBandProps {
   owner: BandOwner;
-  current: AgendaBandDestinationKey;
+  /** `undefined` on a surface the band cannot name — the pushed event page.
+   *  Lighting one of the three there would point at a place the member is not
+   *  looking at (#1015, audit agenda/findings#8). */
+  current?: AgendaBandDestinationKey;
   onSelect: (key: AgendaBandDestinationKey) => void;
   onHome: () => void;
 }
