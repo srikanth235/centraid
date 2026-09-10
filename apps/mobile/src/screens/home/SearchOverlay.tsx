@@ -2,14 +2,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { nativeButtonStyle } from "@centraid/design";
 
 import { Text } from "../../kit/components/NativeText";
-import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
+import { PushedPage } from "../../kit/rooms";
+import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { ThemeValue } from "../../kit/theme/resolve";
 import { searchBlueprints } from "./blueprint-search";
@@ -18,8 +15,6 @@ import type { LauncherItem } from "./catalog";
 import { groupSearchHits } from "./search-model";
 import type { SearchGroup } from "./search-model";
 import { useSearchRecents } from "./useSearchRecents";
-
-const H_PADDING = pageMargin;
 
 const EMPTY_HITS: readonly BlueprintSearchHit[] = [];
 
@@ -34,12 +29,8 @@ export default function SearchOverlay({
   onOpen,
   onClose,
 }: SearchOverlayProps): React.JSX.Element {
-  const { colors, radii, targetMin } = useTheme();
-  const styles = useMemo(
-    () => makeStyles(colors, radii, targetMin),
-    [colors, radii, targetMin]
-  );
-  const insets = useSafeAreaInsets();
+  const { colors, radii } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, radii), [colors, radii]);
   const { session } = useReplica();
   const [query, setQuery] = useState("");
   const [entitySearch, setEntitySearch] = useState<{
@@ -86,104 +77,72 @@ export default function SearchOverlay({
   };
 
   return (
-    <View style={StyleSheet.absoluteFill}>
-      {/* Opaque paper, not glass — no BlurView (#711). */}
-      <View
-        style={[StyleSheet.absoluteFill, { backgroundColor: colors.bgElev }]}
-        pointerEvents="none"
-      />
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={onClose}
-        accessibilityLabel="Close search"
-      />
+    <PushedPage
+      onBack={onClose}
+      search={{
+        accessibilityLabel: "Search every app",
+        // The page IS the search: the member opened it to type (#1015, R-B-7).
+        autoFocus: true,
+        count: `${hits.length} across ${groups.length} app${
+          groups.length === 1 ? "" : "s"
+        }`,
+        onChangeText: setQuery,
+        placeholder: "Search everything in this vault",
+        value: query,
+      }}
+      secondary={{ label: "Cancel", onPress: onClose }}
+      title="Search"
+    >
+      {isEmptyQuery && suggestions.length ? (
+        <View style={styles.suggestRow}>
+          <Text style={styles.suggestLabel}>try</Text>
+          {suggestions.map((label) => (
+            <Pressable
+              key={label}
+              accessibilityRole="button"
+              accessibilityLabel={`Search for ${label}`}
+              onPress={() => setQuery(label)}
+              style={styles.chip}
+            >
+              <Text style={styles.chipLabel}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
-      <View
-        style={[styles.content, { paddingTop: insets.top + 8 }]}
-        pointerEvents="box-none"
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        {/* The field is the kit's (#1015, S4) and owns its own gutter, so
-            this row cancels the overlay's — one inset, not two. */}
-        <View style={styles.headerRow}>
-          <View style={styles.fill}>
-            <SearchField
-              accessibilityLabel="Search every app"
-              // The overlay IS the search: the member opened it to type
-              // (#1015, R-B-7).
-              autoFocus
-              onChangeText={setQuery}
-              placeholder="Search everything in this vault"
-              value={query}
+        {searching ? (
+          <Text style={styles.empty}>Searching your vault…</Text>
+        ) : !isEmptyQuery && groups.length === 0 ? (
+          <Text style={styles.empty}>
+            {"Nothing across your apps matches “" + trimmed + "”."}
+          </Text>
+        ) : (
+          groups.map((group) => (
+            <SearchResultGroup
+              key={group.appId}
+              group={group}
+              onPress={openHit}
+              styles={styles}
+              colors={colors}
             />
-          </View>
-          {/* Scope is a label, not a filter. */}
-          <Text style={styles.scope}>all apps</Text>
-          <Pressable
-            onPress={onClose}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel search"
-            style={styles.cancel}
-          >
-            <Text style={styles.cancelLabel}>Cancel</Text>
-          </Pressable>
-        </View>
+          ))
+        )}
+      </ScrollView>
 
-        {isEmptyQuery && suggestions.length ? (
-          <View style={styles.suggestRow}>
-            <Text style={styles.suggestLabel}>try</Text>
-            {suggestions.map((label) => (
-              <Pressable
-                key={label}
-                accessibilityRole="button"
-                accessibilityLabel={`Search for ${label}`}
-                onPress={() => setQuery(label)}
-                style={styles.chip}
-              >
-                <Text style={styles.chipLabel}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        <ScrollView
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          {searching ? (
-            <Text style={styles.empty}>Searching your vault…</Text>
-          ) : !isEmptyQuery && groups.length === 0 ? (
-            <Text style={styles.empty}>
-              {"Nothing across your apps matches “" + trimmed + "”."}
-            </Text>
-          ) : (
-            groups.map((group) => (
-              <SearchResultGroup
-                key={group.appId}
-                group={group}
-                onPress={openHit}
-                styles={styles}
-                colors={colors}
-              />
-            ))
-          )}
-        </ScrollView>
-
-        {/* Count leading; caveat trailing. Always present, including zero. */}
-        <View style={styles.foot}>
-          <Text style={styles.footText}>
-            {hits.length} across {groups.length} app
-            {groups.length === 1 ? "" : "s"}
-          </Text>
-          <Text style={[styles.footText, styles.footNote]}>
-            tapping opens the owning app — record addressing is not built
-          </Text>
-        </View>
+      {/* The count rides on the field; this is the caveat under it. */}
+      <View style={styles.foot}>
+        <Text style={[styles.footText, styles.footNote]}>
+          tapping opens the owning app — record addressing is not built
+        </Text>
       </View>
-    </View>
+    </PushedPage>
   );
 }
 
@@ -254,33 +213,8 @@ function ObjectRow({
   );
 }
 
-const makeStyles = (
-  colors: ThemeColors,
-  radii: ThemeValue["radii"],
-  targetMin: ThemeValue["targetMin"]
-) => {
-  const secondary = nativeButtonStyle("secondary", {
-    colors,
-    radii,
-    targetMin,
-  });
+const makeStyles = (colors: ThemeColors, radii: ThemeValue["radii"]) => {
   return StyleSheet.create({
-    cancel: {
-      alignItems: "center",
-      backgroundColor: secondary.backgroundColor,
-      borderColor: secondary.borderColor,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      flexShrink: 0,
-      height: 30,
-      justifyContent: "center",
-      paddingHorizontal: spacing[3],
-    },
-    cancelLabel: {
-      ...t("small"),
-      color: secondary.color,
-      fontSize: t("mono").fontSize,
-    },
     chip: {
       backgroundColor: "transparent",
       borderColor: colors.lineStrong,
@@ -294,7 +228,6 @@ const makeStyles = (
       color: colors.textSoft,
       fontSize: t("mono").fontSize,
     },
-    content: { flex: 1, paddingHorizontal: H_PADDING },
     empty: { ...t("small"), color: colors.textSoft, paddingVertical: 8 },
     foot: {
       alignItems: "flex-start",
@@ -324,19 +257,6 @@ const makeStyles = (
       paddingTop: 8,
     },
     groupName: { ...t("eyebrow"), color: colors.textSoft, flex: 1 },
-    fill: { flex: 1 },
-    headerRow: {
-      alignItems: "center",
-      borderBottomColor: colors.line,
-      borderBottomWidth: borders.hairline,
-      flexDirection: "row",
-      flexShrink: 0,
-      gap: 12,
-      marginHorizontal: -H_PADDING,
-      paddingBottom: 16,
-      paddingRight: H_PADDING,
-      paddingTop: 8,
-    },
     list: { flex: 1 },
     listContent: { paddingBottom: 24, paddingTop: 8 },
     row: {
@@ -354,7 +274,6 @@ const makeStyles = (
       width: 64,
     },
     rowTitle: { ...t("control"), color: colors.text, flex: 1 },
-    scope: { ...t("mono"), color: colors.textFaint, flexShrink: 0 },
     suggestLabel: { ...t("mono"), color: colors.textFaint, flexShrink: 0 },
     suggestRow: {
       alignItems: "center",

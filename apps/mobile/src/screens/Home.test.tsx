@@ -73,7 +73,15 @@ vi.mock(
   import("../kit/theme"),
   () =>
     ({
+      // The room's own leaves read these; this suite asserts on none of them.
+      borders: { hairline: 1 },
+      density: { rowMin: 44 },
+      family: { sansMedium: "m", sansRegular: "r" },
+      metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
       pageMargin: 16,
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
+      spacing: Array.from({ length: 8 }, (_, index) => index * 4),
+      t: () => ({}),
       useTheme: () => ({ colors: { accent: "#accent", bg: "#bg" } }),
     }) as unknown as Partial<ThemeModule>
 );
@@ -200,6 +208,13 @@ const blank = vi.hoisted(() => async () => {
   const ReactModule = await import("react");
   return { default: () => ReactModule.createElement("div") };
 });
+// The rooms barrel draws icons (`react-native-svg`), which this suite never
+// asserts on and the DOM stub cannot parse.
+vi.mock(import("react-native-svg"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+
 vi.mock(import("./home/VaultHeader"), blank);
 vi.mock(import("./home/HomeTitleRow"), blank);
 vi.mock(import("./home/HomeStatusLine"), blank);

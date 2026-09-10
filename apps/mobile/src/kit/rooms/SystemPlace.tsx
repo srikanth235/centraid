@@ -46,6 +46,15 @@ export interface SystemPlaceProps {
   refreshing?: boolean;
   /** For the one place that scrolls itself to a section it just named. */
   bodyRef?: React.Ref<ScrollView>;
+  /**
+   * The modals this place owns — a confirm sheet, a camera it opens over
+   * itself. They hang OUTSIDE the scrolling body: a `Modal` nested in a
+   * `ScrollView`'s content is still a modal, but its measurement is the
+   * scroller's, and Settings' scanner is full-screen.
+   */
+  overlay?: React.ReactNode;
+  /** For the end-to-end flows that name a place by id, not by its title. */
+  testID?: string;
 }
 
 export default function SystemPlace({
@@ -63,11 +72,13 @@ export default function SystemPlace({
   onRefresh,
   refreshing = false,
   bodyRef,
+  overlay,
+  testID,
 }: SystemPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
   return (
-    <TopSafeArea style={[styles.room, ink]}>
+    <TopSafeArea style={[styles.room, ink]} testID={testID}>
       <View style={styles.backRow}>
         {onHome ? <HomeKey onPress={onHome} /> : null}
         {backTo && onBack ? <BackKey backTo={backTo} onBack={onBack} /> : null}
@@ -102,6 +113,7 @@ export default function SystemPlace({
         </ScrollView>
       </RoomBody>
       {footer}
+      {overlay}
     </TopSafeArea>
   );
 }

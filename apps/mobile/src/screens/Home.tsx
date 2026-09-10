@@ -4,13 +4,13 @@
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RefreshControl, ScrollView, StyleSheet } from "react-native";
 
 import { homeDayOneFoot } from "@centraid/client/home-copy";
 
 import { isAlarmBlanked } from "../kit/e2e-alarm";
 import { useReplica } from "../kit/replica/ReplicaProvider";
+import { HomeRoom } from "../kit/rooms";
 import { TEST_IDS } from "../kit/test-ids";
 import { pageMargin, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
@@ -91,7 +91,6 @@ export default function HomeScreen({
   navigation,
 }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // Write-only on purpose: the cover renders the same either way, and the
   // setter is what `loadHome` needs to drive its retries.
@@ -310,50 +309,62 @@ export default function HomeScreen({
   // suite MUST go red — a green there is the alarm not sounding, and it fails
   // the job. See apps/mobile/src/kit/e2e-alarm.ts for why the mutation belongs
   // in the artifact rather than in the harness.
-  // An empty View rather than `null`, so the production signature stays
+  // An empty ROOM rather than `null`, so the production signature stays
   // `React.JSX.Element` — widening a shipped return type to accommodate a
   // test-only branch would be the mutation leaking into the product. The claim
-  // is identical either way: the band never mounts, so HOME_READY_MARKER never
-  // appears and every flow that waits for it must fail.
-  if (isAlarmBlanked("home")) return <View style={styles.screen} />;
+  // is identical either way: the band never mounts (the room is handed none),
+  // so HOME_READY_MARKER never appears and every flow that waits for it must
+  // fail.
+  if (isAlarmBlanked("home")) return <HomeRoom />;
 
   return (
     // Explicit paddingTop — SafeAreaView edges can resolve to zero in cover stacks.
     // `home-screen` is the arrival handle: HOME_READY_MARKER keyed on the band's
     // accessibility label, and its predecessor ("Home ready") vanished with a
     // copy change (#789/#839). A root testID cannot be re-worded.
-    <View
-      style={[styles.screen, { paddingTop: insets.top }]}
+    <HomeRoom
+      band={<HomeBand active="home" onSelect={selectBandTab} />}
+      /* The same lockup every app draws (`VaultBar`) — the springboard has no
+         special version of "which vault, which gateway". */
+      head={<HomeTitleRow onSettings={openSettings} />}
+      overlay={
+        <AllAppsSheet
+          items={items}
+          onClose={() => setAllAppsOpen(false)}
+          onOpenApp={openItem}
+          onOpenPlace={openPlace}
+          onTogglePin={togglePin}
+          pinnedIds={pins}
+          tiles={tiles}
+          visible={allAppsOpen}
+        />
+      }
+      status={
+        <HomeStatusLine
+          onOpen={() => {
+            switch (healthSignal.destination) {
+              case undefined:
+                break;
+              case "phone":
+                navigation.navigate("Settings", { screen: "PhoneStorage" });
+                break;
+              case "backup":
+                navigation.navigate("Settings", { screen: "BackupHealth" });
+                break;
+              case "notifications":
+                navigation.navigate("SignalNotification", {
+                  cause: healthSignal.notificationCause ?? healthSignal.copy,
+                  detail: healthSignal.notificationDetail ?? "phone",
+                });
+                break;
+            }
+          }}
+          signal={healthSignal}
+        />
+      }
       testID={TEST_IDS.home.screen}
+      vault={<VaultBar />}
     >
-      {/* The same lockup every app draws (`VaultBar`) — the springboard has no
-          special version of "which vault, which gateway". */}
-      <VaultBar />
-
-      {/* Fixed chrome, not scroll content — scrollbar starts below the app-bar rule. */}
-      <HomeTitleRow onSettings={openSettings} />
-      <HomeStatusLine
-        signal={healthSignal}
-        onOpen={() => {
-          switch (healthSignal.destination) {
-            case undefined:
-              break;
-            case "phone":
-              navigation.navigate("Settings", { screen: "PhoneStorage" });
-              break;
-            case "backup":
-              navigation.navigate("Settings", { screen: "BackupHealth" });
-              break;
-            case "notifications":
-              navigation.navigate("SignalNotification", {
-                cause: healthSignal.notificationCause ?? healthSignal.copy,
-                detail: healthSignal.notificationDetail ?? "phone",
-              });
-              break;
-          }
-        }}
-      />
-
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -380,20 +391,7 @@ export default function HomeScreen({
           </>
         )}
       </ScrollView>
-
-      <HomeBand active="home" onSelect={selectBandTab} />
-
-      <AllAppsSheet
-        visible={allAppsOpen}
-        items={items}
-        tiles={tiles}
-        pinnedIds={pins}
-        onOpenApp={openItem}
-        onOpenPlace={openPlace}
-        onTogglePin={togglePin}
-        onClose={() => setAllAppsOpen(false)}
-      />
-    </View>
+    </HomeRoom>
   );
 }
 

@@ -10,7 +10,10 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { hapticsStub } from "../../test/haptics-stub";
 import VaultsSwitcher from "./VaultsSwitcher";
+
+vi.mock(import("expo-haptics"), () => hapticsStub());
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -106,6 +109,8 @@ vi.mock(
       borders: { hairline: 1 },
       icons: { Sparkle: () => null },
       identityInk: () => "#mock-ink",
+      // The room's own action row draws kit `Button`s.
+      nativeButtonStyle: () => ({ label: {}, view: {} }),
     }) as unknown as Partial<DesignModule>
 );
 
