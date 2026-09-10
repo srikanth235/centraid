@@ -2,6 +2,18 @@
 
 ## Open
 
+- **A refused write keeps overlaying the row, so two phones show different
+  values indefinitely.** `conflict`, `denied`, `failed` and `expired` are all
+  in `OVERLAY_STATES` (`packages/client/src/replica/intent-verdict.ts:19-29`),
+  so the phone that lost a two-device race keeps drawing its *rejected* text
+  over the canonical row with nothing on screen separating it from a value the
+  gateway took. Read canonically the copies agree; read the way the product
+  reads, they do not. Ruled deliberate under #922 G5 ("still the member's to
+  act on"), but it composes badly with the pending sheet not being surfaced and
+  with intents never leaving `awaiting-change`. Reproduced by
+  `tests/integration-mobile/two-seats.integration.test.ts`. Owner's call: mark
+  refused rows visibly, or drop the overlay once the gateway has refused.
+
 - **Switching vaults on a two-vault phone destroys the other vault's replica
   and its outbox.** Live on two simulators against a real gateway (#996). Only
   the *active* mount replicates: 25 commits landed on `Personal` while the
@@ -38,7 +50,11 @@
   not settled, so conflict detection never fires. Reproduced three ways: two
   devices editing offline (the loser is never told), and — with both sides
   online the whole time — a foregrounded phone left stale by the feed bug
-  overwriting two newer edits and losing them (#996, #922).
+  overwriting two newer edits and losing them (#996, #922). The conflict
+  machinery itself is sound: with base versions present, two seats racing the
+  same row produce a proper `conflict` with both versions
+  (`two-seats.integration.test.ts`). What fails on device is that the base
+  versions are often not sent at all.
 
 - **Cross-vault sharing delivers once and then stops following its subject.**
   Link, grant and initial projection are correct (rows and blobs both land),
