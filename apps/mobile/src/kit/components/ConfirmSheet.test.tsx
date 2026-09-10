@@ -8,11 +8,14 @@ import path from "node:path";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { hapticsStub } from "../../test/haptics-stub";
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
 import ConfirmSheet, {
   confirmTitle,
   useConfirmDestructive,
 } from "./ConfirmSheet";
+
+vi.mock(import("expo-haptics"), () => hapticsStub());
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
