@@ -15,8 +15,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EMPTY_TRASH_COPY } from "@centraid/blueprints/apps/docs/drive-copy";
 
+import { hapticsStub } from "../../test/haptics-stub";
 import { mountBlock, nodesOf } from "../../test/react-native-stub";
 import DocsTrash from "./DocsTrash";
+
+// `DocsBand` reaches the kit's moment channel, and `expo-haptics`
+// dereferences a native module at MODULE scope (see `test/haptics-stub`).
+vi.mock(import("expo-haptics"), () => hapticsStub());
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");

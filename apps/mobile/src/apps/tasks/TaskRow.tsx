@@ -20,6 +20,7 @@ import {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticMode } from "../../kit/haptics";
 import {
   READ_ONLY_SOURCE_REASON,
   rowCanWrite,
@@ -104,7 +105,17 @@ export default function TaskRow({
         accessibilityState={{ selected: picked === true }}
         onPress={() => onOpen(task)}
         testID={testID}
-        {...(writable && onPickUp ? { onLongPress: () => onPickUp(task) } : {})}
+        {...(writable && onPickUp
+          ? {
+              onLongPress: (): void => {
+                // Picking a task up puts the whole board into filing mode —
+                // the one long-press in Tasks that changes a MODE rather than
+                // opening something (#1015, S15).
+                hapticMode();
+                onPickUp(task);
+              },
+            }
+          : {})}
         style={styles.rowMain}
       >
         <View style={styles.titleLine}>
