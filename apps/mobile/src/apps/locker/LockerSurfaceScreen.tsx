@@ -159,7 +159,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     factBody: { flex: 1, gap: spacing[1], minWidth: 0 },
     factKey: { ...t("eyebrow"), color: colors.textFaint, width: 92 },
-    factNote: { ...t("mono"), color: colors.textFaint },
+    factNote: { ...t("small"), color: colors.textFaint },
     factValue: { ...t("small"), color: colors.text },
     head: { gap: spacing[2], padding: spacing[4] },
     lede: {

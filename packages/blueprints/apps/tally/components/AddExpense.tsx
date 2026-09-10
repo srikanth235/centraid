@@ -28,6 +28,7 @@
 import type { ReactNode } from "react";
 
 import { DAY_MS } from "../../_shared/format-kit.ts";
+import { CATEGORIES } from "../category-labels.ts";
 import {
   ADD_COMMIT,
   ADD_HEAD,
@@ -47,7 +48,7 @@ import {
   addFoot,
   rateSuggestionChip,
 } from "../compose-copy.ts";
-import { CATEGORIES, entryValues, settlementMinor } from "../draft-model.ts";
+import { entryValues, settlementMinor } from "../draft-model.ts";
 import type { DraftVerdict, ExpenseDraft } from "../draft-model.ts";
 import { money } from "../format.ts";
 import type { LineDraft } from "../line-model.ts";

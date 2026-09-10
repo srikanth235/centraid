@@ -1,6 +1,9 @@
+// FROM THE PURE MODULE THAT DECLARES IT, never through the React component
+// that re-exports it (#1015): a shelf table is read by the phone too, and the
+// component pulls a CSS module the native program has no declaration for.
+import type { SelectionShelfKind } from "../_shared/selection-engine.ts";
 import { createShelfRoutes, tokenFromShelf } from "../_shared/shelves.ts";
 import type { BandDestination, Shelf, ShelfId } from "../_shared/shelves.ts";
-import type { SelectionShelfKind } from "./components/SelectionBar.tsx";
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";

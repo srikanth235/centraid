@@ -80,5 +80,5 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[3],
     },
     text: { ...t("small"), color: colors.text },
-    why: { ...t("mono"), color: colors.textFaint },
+    why: { ...t("small"), color: colors.textFaint },
   });

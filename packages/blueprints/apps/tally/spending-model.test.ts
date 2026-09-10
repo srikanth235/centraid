@@ -8,8 +8,8 @@
 // a case here.
 import { describe, expect, it } from "vitest";
 
+import { CATEGORIES } from "./category-labels.ts";
 import {
-  CATEGORIES,
   CATEGORY_ROWS,
   categoryTotals,
   inMonth,

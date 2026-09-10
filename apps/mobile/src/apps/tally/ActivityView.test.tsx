@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ActivityData } from "@centraid/blueprints/apps/tally/types";
 
-import { mountBlock, nodesOf } from "../../test/react-native-stub";
+import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
 import ActivityView from "./ActivityView";
 
 vi.mock(import("react-native"), async () => {
@@ -25,6 +25,7 @@ const DATA: ActivityData = {
   activity: [
     {
       kind: "expense",
+      expense_id: "exp-1",
       date: "2026-09-04",
       description: "Coffee",
       amount_minor: 450,
@@ -52,6 +53,7 @@ describe("the activity ledger as one list", () => {
         window={20}
         loaded
         notice={{ state: "ready", pending: 0 }}
+        onExpense={() => undefined}
         onShowMore={() => undefined}
       />
     ).container;
@@ -62,5 +64,45 @@ describe("the activity ledger as one list", () => {
     expect(keys.length).toBeGreaterThanOrEqual(3);
     expect(container.textContent).toContain("Ada paid Bea");
     expect(container.textContent).toContain("Coffee");
+  });
+
+  // tally/findings #9 (#1015): the feed drew the same row the group ledger
+  // and search make tappable, and passed no `onPress` — six rows that looked
+  // like a way in and were not. A settlement stays untappable: it is not an
+  // expense and there is no expense screen for it.
+  it("opens the expense a feed row names, and only the expense rows", () => {
+    const opened: string[] = [];
+    const container = mountBlock(
+      <ActivityView
+        data={DATA}
+        now="2026-09-04T18:00:00.000Z"
+        window={20}
+        loaded
+        notice={{ state: "ready", pending: 0 }}
+        onExpense={(id) => opened.push(id)}
+        onShowMore={() => undefined}
+      />
+    ).container;
+
+    for (const node of nodesOf(container, "button")) press(node);
+    expect(opened).toStrictEqual(["exp-1"]);
+  });
+
+  // tally/findings #10: the heading counted a settlement as an expense.
+  it("counts a mixed day as the two things it holds", () => {
+    const container = mountBlock(
+      <ActivityView
+        data={DATA}
+        now="2026-09-04T18:00:00.000Z"
+        window={20}
+        loaded
+        notice={{ state: "ready", pending: 0 }}
+        onExpense={() => undefined}
+        onShowMore={() => undefined}
+      />
+    ).container;
+
+    expect(container.textContent).toContain("1 expense · 1 settlement");
+    expect(container.textContent).not.toContain("2 expenses");
   });
 });

@@ -9,7 +9,10 @@
 // A More surface descends from the APP: the sheet belongs to the frame, so
 // "Back to Locker" is the one answer that is never a guess.
 
-import { ROUTE_TITLE } from "@centraid/blueprints/apps/locker/view-copy";
+import {
+  APP_NAME,
+  ROUTE_TITLE,
+} from "@centraid/blueprints/apps/locker/view-copy";
 
 import { place } from "../../kit/rooms/place";
 import type { PlaceRef } from "../../kit/rooms/place";
@@ -33,6 +36,7 @@ const UNDER: Readonly<
   Partial<Record<LockerRouteKey, LockerBandDestinationKey>>
 > = {
   edit: "items",
+  editNew: "items",
   item: "items",
   lock: "items",
 };
@@ -49,7 +53,10 @@ export function isLockerPlace(route: LockerRouteKey): boolean {
   return BAND_ROUTE.has(route) || route === "lock";
 }
 
-const APP = place({ key: "Locker", title: ROUTE_TITLE.items });
+// The app, not its first place: a More surface descends to Locker, and the
+// root place is `Items` now that the bar agrees with the tab (#1015,
+// locker/findings #6).
+const APP = place({ key: "Locker", title: APP_NAME });
 
 const PLACE_OF: Readonly<Partial<Record<LockerBandDestinationKey, PlaceRef>>> =
   {

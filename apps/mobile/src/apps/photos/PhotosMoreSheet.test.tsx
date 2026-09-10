@@ -11,6 +11,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // @vitest-environment jsdom
+import { PHOTOS_MORE_FOOT } from "./photos-band";
 import type { PhotosMoreRowKey } from "./photos-band";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 
@@ -198,7 +199,12 @@ describe("the More sheet's rows, meta and foot", () => {
 
   it("renders the exact spec foot copy, and no invented eyebrow", () => {
     renderSheet();
-    expect(container!.textContent).toContain("Everything Photos can show.");
+    // The foot says what is behind THIS door. It read "Everything Photos can
+    // show." over a single row while People, Places, Memories, Duplicates,
+    // Trash, Archive, Favorites and Albums all live in Collections — a claim
+    // false as printed (#1015, photos/findings #16).
+    expect(container!.textContent).toContain(PHOTOS_MORE_FOOT);
+    expect(container!.textContent).not.toContain("Everything Photos can show.");
     // Also guards against a bare "More" eyebrow creeping back in.
     expect(
       Array.from(container!.querySelectorAll("span")).some(

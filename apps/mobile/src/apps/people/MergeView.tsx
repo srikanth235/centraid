@@ -40,17 +40,24 @@ import {
 import PeopleScreen from "./PeopleScreen";
 import { usePeople, usePerson } from "./usePeople";
 
-/** One `Result` row: the surviving value, and what it replaced where the
- *  duplicate held something else. */
+/** One `Result` row: the field, and under it the surviving value plus what it
+ *  replaced where the duplicate held something else.
+ *
+ *  THE ROW READS LIKE EVERY OTHER ROW IN THIS APP (#1015, people/findings
+ *  #13). It used to be inverted — `Chris Okafor` over `Name`, `every 60 days`
+ *  over `Reach out every` — so the same two typographic slots meant opposite
+ *  things two screens apart, and the leading line was lowercase where every
+ *  other primary line is sentence case. */
 function resultRow(
   field: string,
   kept: string,
   replaced: string | undefined
-): { name: string; sub: string } {
+): { name: string; sub: string; value: string } {
   const differs = Boolean(replaced) && replaced !== kept;
   return {
-    name: kept,
-    sub: differs && replaced ? FRAGMENTS.was(field, replaced) : field,
+    name: field,
+    sub: differs && replaced ? FRAGMENTS.was(kept, replaced) : kept,
+    value: kept,
   };
 }
 
@@ -106,7 +113,7 @@ export default function MergeView({
           cadenceLabel(cadenceDays),
           source ? cadenceLabel(source.cadence_days) : undefined
         ),
-      ].filter((row) => row.name)
+      ].filter((row) => row.value)
     : [];
 
   return (
@@ -160,7 +167,7 @@ export default function MergeView({
             <PeopleSection title={SECTIONS.result}>
               {rows.map((row, index) => (
                 <PersonRow
-                  key={row.sub}
+                  key={row.name}
                   name={row.name}
                   sub={row.sub}
                   last={index === rows.length - 1}

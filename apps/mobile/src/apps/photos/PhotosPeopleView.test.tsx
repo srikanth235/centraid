@@ -245,10 +245,10 @@ vi.mock(import("./PeopleEmptyState"), async () => {
   const ReactModule = await import("react");
   return {
     default: (props: {
-      prioritise: { available: boolean; reason?: string };
+      prioritize: { available: boolean; reason?: string };
       busy?: boolean;
-      prioritised?: boolean;
-      onPrioritise: () => void;
+      prioritized?: boolean;
+      onPrioritize: () => void;
     }) =>
       ReactModule.createElement(
         "div",
@@ -257,15 +257,15 @@ vi.mock(import("./PeopleEmptyState"), async () => {
           "button",
           {
             disabled:
-              !props.prioritise.available ||
+              !props.prioritize.available ||
               !!props.busy ||
-              !!props.prioritised,
-            onClick: props.onPrioritise,
+              !!props.prioritized,
+            onClick: props.onPrioritize,
             type: "button",
           },
           "Prioritize faces"
         ),
-        props.prioritise.reason
+        props.prioritize.reason
       ),
   } as unknown as Partial<PeopleEmptyStateModule>;
 });

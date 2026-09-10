@@ -13,23 +13,8 @@
 // paid-versus-share pair. No trend, no chart beyond a proportion bar, no
 // second level of category: the nine are closed, and they exist to make this
 // screen legible rather than to describe a purchase.
+import { categoryLabel } from "./category-labels.ts";
 import type { ActivityRow, Role } from "./types.ts";
-
-/** The closed nine, in the vault's own order. A tenth is a schema change, not
- *  a preference, and nothing in the interface implies otherwise. */
-export const CATEGORIES: readonly (readonly [string, string])[] = [
-  ["food", "Food"],
-  ["groceries", "Groceries"],
-  ["rent", "Rent"],
-  ["utilities", "Utilities"],
-  ["transport", "Transport"],
-  ["fun", "Fun"],
-  ["travel", "Travel"],
-  ["shopping", "Shopping"],
-  ["general", "General"],
-];
-
-const CATEGORY_LABEL = new Map(CATEGORIES);
 
 /** How many category rows the screen draws. Six, because the seventh is the
  *  row nobody reads and the tail is what the total already says. */
@@ -69,7 +54,7 @@ export function categoryTotals(
   return [...sums.entries()]
     .map(([key, total_minor]) => ({
       key,
-      label: CATEGORY_LABEL.get(key) ?? key,
+      label: categoryLabel(key),
       total_minor,
     }))
     .sort((left, right) => right.total_minor - left.total_minor)

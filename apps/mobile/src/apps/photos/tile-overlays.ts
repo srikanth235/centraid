@@ -171,6 +171,20 @@ export function stateOverlay(
   return undefined;
 }
 
+/**
+ * WHAT ONE TILE ANNOUNCES (#1015, photos/findings #18). The photograph's name,
+ * then whatever state the tile is actually drawing. It used to append the
+ * custody word only, so a tile painting a red `could not decode` line or a
+ * purge countdown announced its bare name — the member who cannot see the red
+ * was the only one never told the photograph is not there.
+ */
+export function tileLabel(name: string, state?: StateOverlay): string {
+  if (!state) return name;
+  return state.form === "custody"
+    ? `${name}, ${CUSTODY_LABEL}`
+    : `${name}, ${state.text}`;
+}
+
 // ── Slot 1: selection ──────────────────────────────────────────────────────
 
 /** 20px circle, top/trailing, 6px in (§4.4). */

@@ -1037,3 +1037,119 @@ seam in front of the native module its graph now reaches.
   "the refusal the vault gave, which IS the receipt on both seats". Left as
   ruled; flagging it because S14 forbids raw payloads and a refusal receipt is
   the one place the raw string may be the point. Confirm or overturn.
+## Wave 3 — lane APPS-B: Tally, Locker, People, Photos — copy, tint, a11y, haptics, residue
+
+Five commits: `aec968bcb` Tally · `94951d4ae` Locker · `0c9648d5a` People · `deade19aa` Photos · haptics (S15) last, after `kit/haptics.ts` landed on the umbrella.
+
+**S11, the shape of the answer.** Four apps, four defects of the same kind: an enum written down twice, or printed raw where a label belonged. Tally held the nine categories in `draft-model.ts` AND `spending-model.ts` and the expense record printed neither — an expense entered under `Fun` was recorded as `fun`. People used `ContactChannel["kind"]` as its own chip and field labels and printed the stored touch kinds in Recent, so one event read `Met up` where it was written and `visit` where it was listed. Locker typed five field labels and notes at the call site against its own module header's stated rule. Photos' search resting state typed three sentences the copy table also held, and the two had already drifted. Each is now one table with one reader: `category-labels.ts` + `categoryLabel()`, `channelKindLabel()` + `touchKindLabel()`, `FIELD_LABEL`/`FIELD_NOTE`, `SEARCH_COPY.resting`.
+
+**A sweep test per app.** `tally-copy-case.test.ts`, `locker-copy-case.test.ts`, `people-copy-case.test.ts` are new; `photos-copy-case.test.ts` gains the half `copy-title-case` cannot see — a source sweep of the tree's own `.tsx` for a Title Case `label:` literal, which is where Photos' Title Case lived. **R-KIT-4 is closed.** Each sweep also pins the app's own residue claims (the kind tables, the count grammar, the apostrophe, the route titles), so a fix cannot silently regress into a copy table.
+
+**S14.** No new engine vocabulary reached member copy in these four trees; round 2 closed Photos' six sites and `RoomError.detail` takes none of them. `tally-store.ts`'s `readError` still stores `error.message`, and **nothing renders it** — see the register below.
+
+**Tint.** `identity-tint 0` on the baseline and 0 after. Tally's hand-rolled chips (tally/findings #7) were already on `bgSel`/`lineSel` rather than an indigo ground before this wave. One `--net` misuse was a tint defect and is fixed: People painted the `Upcoming` birthday count in `colors.net`, the same red the app spends on overdue and on the read-only refusal.
+
+**S15 haptics.** Adopted at the three moments and nowhere else. `hapticSelect()` on band select in all four app bands (mirroring `HomeBand`); `hapticMode()` once when a long-press drag puts the Photos grid into selection, never again as the same drag sweeps on; `hapticLanded()` needs no app call — every destructive confirm in these four apps goes through the kit's `useConfirmDestructive`, which fires it. Three off-contract direct calls are deleted: a successful backup's success buzz, a favorite toggle's tick, and a tick on every tap that added a photograph to a selection already under way. `grep -rn "expo-haptics" apps/mobile/src/apps/{tally,locker,people,photos}` → two matches, both `hapticsStub()` seams in stub-tier tests.
+
+**A11y.** People's collapse caret was the literal characters `−` and `+` and its starred filter chip's whole accessible name was `★`; both are words or kit glyphs now. Photos' tiles announced a bare filename while painting a red `could not decode` line — `tileLabel()` appends every state the tile draws, so the one member who cannot see the red is told. Locker's `Forget this vault's key` had no guard at all and now takes the kit confirm with an `accessibilityState`-carrying outlined verb.
+
+### Residue register — every finding not closed by Waves 0–2
+
+**Tally** (`tally/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 no way to add an expense | `be8287400` (Wave 1, B2) | |
+| #2 settle opens invalid · bank line printed twice | `aec968bcb` | |
+| #3 Export from More is permanently empty | `aec968bcb` | |
+| #4 `Remove` beside "cannot be removed" | `aec968bcb` | |
+| #5 dates as raw ISO | output `d40637786` (Wave 2, S8); input `aec968bcb` | |
+| #6 placeholder reads as a filled value | `aec968bcb` | |
+| #7 a hue on a chip | — | already false: `TallyChips` lights on `bgSel`/`lineSel`, and `identity-tint` is 0 |
+| #8 detail screens do not name their subject | — | **left**: `PushedPage` has no subject slot and the room owns the header (R-B-9, Wave 2 slice 3). A room prop for it is a kit change; raised to the root |
+| #9 dead rows in Activity | `aec968bcb` | |
+| #10 counts disagree with the rows | `aec968bcb` | |
+| #11 category case flips | `aec968bcb` | |
+| #12 Tally's roster is a second, shorter People | — | **left**: a merge flow for Tally friends is a product feature, not a consistency fix. Out of this umbrella's scope |
+| #13 Groups tab is Balances' section plus an empty one | — | **left**: deleting a band destination is a band-shape decision; raised to the root |
+| #14 no loading state | — | **left**: `SkeletonRows` adoption across ten Tally routes is its own slice, not copy work |
+| #15 search capitalises and autocorrects | `aec968bcb` (the kit's `SearchField`) | |
+| #16 no pending-changes pill | — | **left**: mounting `ReplicaStatusBar` in a third app is a replica-surface decision; raised to the root |
+| #17 composers discard silently | — | **left**: D3 rules autosave everywhere and "close = done", which is the opposite of a discard prompt. Superseded by the ruling |
+| #18 section metas wrap and break the baseline | — | **left**: `TallyParts.Section` geometry, not copy; a layout slice |
+
+**Locker** (`locker/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 nothing stores the vault key, so Locker never unlocks | — | **left**: enrolment is a product capability with no seat on this phone. The dead `offer` styles it left behind are deleted here |
+| #2 the wall states the opposite of what it just said | earlier wave | `DEVICE_NOTE` and the forget verb are both conditional on `!notEnrolled` |
+| #3 forget key: no confirm, no feedback | `94951d4ae` | |
+| #4 four buttons in one non-wrapping row | `94951d4ae` | |
+| #5 three search behaviours | `aec968bcb` + `db5141839` | keyboard contract is one across all three apps now. Locker still SUBMITS where the others search live, which its own comment justifies: matching is server-side over fields the payload never returns |
+| #6 two names for the root · `Add / edit` | `94951d4ae` | |
+| #7 prose in the monospace register | `94951d4ae` | sixteen files; numerals, timestamps and the sealed run keep `mono` |
+| #8 a fifth confirm pattern | `eec6fe36b` (Wave 2) | |
+| #9 labels and notes typed at the call site | `94951d4ae` | |
+| #10 mixed apostrophes | `94951d4ae` | |
+| #11 `SectionBlock` as a form field label | `94951d4ae` | |
+| #12 no haptics | haptics commit | band select only: a reveal boundary is not one of the three moments the channel names |
+
+**People** (`people/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1 the editor cannot represent the person it edits | — | **left**: minting a chip for a stored value the set cannot express is a control change in `PersonEditor`, not copy; raised to the root |
+| #2 two `Save` buttons, opposite validation | — | **left**: D3 rules autosave everywhere, which makes both `Save` buttons a question the ruling reopens. Raised to the root rather than fixed under a superseded shape |
+| #3 `Trash` the place and `Trash` the act | `0c9648d5a` | |
+| #4 `Shared with them` needs two taps | `0c9648d5a` | |
+| #5 search fights the query | `db5141839` (Wave 2, S4) | |
+| #6 every pushed screen untitled | `53d4f2933` (Wave 2) | |
+| #7 the channel `✕` destroys with no confirm | earlier wave | the word, through `PeopleConfirm` |
+| #8 birthdays painted `--net` and "upcoming" at 338 days | `0c9648d5a` (the hue) | the 30/60-day bound on the section is a query change, left |
+| #9 four iconography systems | `0c9648d5a` (caret, chip) | the hand-rolled star is **left**: `kit/Icon` is stroke-only and cannot express the filled/unfilled state the star carries. Raised to the root |
+| #10 header verbs vanish · one filter for two rails | — | **left**: both are `PeopleHome` state and header shape, not copy; raised to the root |
+| #11 `1 of 7 match` | `0c9648d5a` | |
+| #12 raw vault vocabulary as UI copy | `0c9648d5a` | |
+| #13 Merge's RESULT rows inverted | `0c9648d5a` | both seats |
+| #14 `Log a touch` selects the wrong band tab | Wave 2 rooms | `LogTouch` no longer writes `current` |
+| #15 filter chips announced as tabs | — | **left, and NOT this lane's**: `kit/components/ChipsBlock.tsx` is the kit lane's file; the `★` half is closed here. Raised to the root |
+| #16 no haptics | haptics commit | band select |
+
+**Photos** (`photos/findings.md`)
+
+| finding | closed by | or reason left |
+| --- | --- | --- |
+| #1–#7, #10–#12, #17, #19 | Waves 1–2 (`bd3c77c51`, `773ee9bc9`, `62fc18ac4`, `977de0a83`) | |
+| #8 two Englishes and three cases | labels `bd3c77c51` (D2); identifiers `deade19aa` (**R-B-5**) | |
+| #9 internal vocabulary on member surfaces | `deade19aa` — `replica`, `Photo vault`, `Asset id` | `Nothing typed` **left**: Docs, Notes and `_shared/SearchScaffold` all print it, so a one-app fix trades a copy defect for a cross-app inconsistency. Recorded in `view-copy.ts` beside the string; raised to the root |
+| #13 search auto-capitalises · two Clears | Wave 2 (`SearchField`) | |
+| #14 place tiles all read `A place with n…` | — | **left**: `places-model.ts` names a place from its own facts; a real name needs a reverse-geocode the seat does not have. Raised to the root |
+| #15 the 30-day rule three times | — | **left**: three surfaces (header subtitle, body line, per-tile plate) each state it for a different reader; choosing which two to drop is an owner call. Raised to the root |
+| #16 More's footer is untrue | `deade19aa` | the band slot itself is left: deleting a destination is a band-shape decision |
+| #18 tile labels are raw filenames · a failed tile never says so | `deade19aa` (the state half) | the NAME half is **left**: `PhotoAsset` carries no caption, so `filename` is the only name a tile has, and whether it is descriptive is a fact about the file |
+| #20 `PhotosBand` re-declares two kit tokens | `deade19aa` | |
+
+### Files
+
+- **Tally** — `apps/mobile/src/apps/tally/{ActivityView,TallyAddScreen,TallyChips,TallyExpenseScreen,TallyGroupScreen,TallyHome,TallySearchScreen,TallySettleScreen,TallySurfaceScreen,TallyBand}.tsx`, `ActivityView.test.tsx`, `PendingRestartJourney.test.tsx`, new `tally-copy-case.test.ts`; `packages/blueprints/apps/tally/{compose-copy,draft-model,spending-model,types,view-copy}.ts`, `draft-model.test.ts`, `spending-model.test.ts`, `components/{AddExpense,Screens}.tsx`, new `category-labels.ts`.
+- **Locker** — `apps/mobile/src/apps/locker/{LockerAccessView,LockerEditScreen,LockerExportView,LockerFields,LockerGenView,LockerImportView,LockerItemScreen,LockerItemsView,LockerMoreSheet,LockerNotice,LockerReviewView,LockerRow,LockerScanSheet,LockerScreen,LockerSearchView,LockerSurfaceScreen,LockerTrashScreen,LockerBand}.tsx`, `locker-places.ts`, `locker-places.test.ts`, `locker-seat-copy.ts`, new `locker-copy-case.test.ts`; `packages/blueprints/apps/locker/{route-copy,view-copy}.ts`.
+- **People** — `apps/mobile/src/apps/people/{MergeView,PeopleHome,PeopleKit,PersonView,PeopleBand}.tsx`, new `people-copy-case.test.ts`; `packages/blueprints/apps/people/people-copy.ts`, `components/MergeRoute.tsx`, `states.test.tsx`.
+- **Photos** — `apps/mobile/src/apps/photos/{PeopleEmptyState,PhotoInfoSheet,PhotoLightboxToolbar,PhotoTile,PhotoTimeline,PhotosBand,PhotosHome,PhotosPeopleView,PhotosSearch,PhotosSearchRestingState}.tsx`, `photos-band.ts`, `tile-overlays.ts`, `tile-overlays.test.ts`, `photos-copy-case.test.ts`, `PhotosMoreSheet.test.tsx`, `PhotosScreen.test.tsx`, `PhotosHome.test.tsx`, `PeopleEmptyState.test.tsx`, `PhotosPeopleView.test.tsx`; `packages/blueprints/apps/photos/{app.json,enrichment-consent.ts,enrichment-gate.ts,selection.tsx,shelves.ts,view-copy.ts}`, `enrichment-consent.test.ts`, `components/{People.tsx,People.test.tsx}`.
+
+### Judgement calls, visible in the diff
+
+- **`shelves.ts` stopped type-importing through a React component.** Reaching Photos' `view-copy` from the phone meant reading `shelves.ts`, which type-imported `SelectionShelfKind` from `components/SelectionBar.tsx` — a web component that pulls a CSS module the native program has no declaration for. The type already lived in the pure `_shared/selection-engine.ts`; both readers import it from there now. A shelf table is read by both seats and may not depend on either one's renderer.
+- **Tally's `expense_id` was in the payload and not in the type.** `queries/activity.ts` has carried it since #872; `ActivityRow` never declared it, which is the whole of why the feed's rows could not open the expense they name. The declaration is the fix, not a new read.
+- **A refusal waits for the member's first touch, and the commit stays disabled throughout.** Nothing can be committed on the strength of a hidden refusal — pressing the disabled commit reveals it.
+- **`ConfirmSheet` fires `hapticLanded()` when the member presses the verb, not when the write lands.** That is the kit's file and the kit lane's call; noted for the root rather than changed from an app lane.
+
+### Verification, from the lane worktree
+
+1. `cd apps/mobile && bunx vitest run src/apps/photos src/apps/people src/apps/locker src/apps/tally src/kit` → **168 files, 1507 passed, 0 failed**. Blueprints: `bunx vitest run packages/blueprints/apps/{tally,locker,people,photos}` → **65 files, 925 passed**.
+2. `bun run --cwd apps/mobile typecheck` → **0**.
+3. `node scripts/lint-mobile-rooms.mjs` → `screen-root 153`, `back-literal 15`, `page-margin 93`, `identity-tint 0`, `copy-title-case 0`. Over this lane's four trees: `back-literal 0`, `identity-tint 0`, `copy-title-case 0`, `page-margin 2` — both the same ruled `paddingHorizontal: 3` chip inset in `PhotoTile.tsx` (R-B-6, sub-base, not a page gutter).
+4. `grep -rn "expo-haptics" apps/mobile/src/apps/{tally,locker,people,photos}` → **2**, both `hapticsStub()` device seams in stub-tier tests; no app source imports it.
+5. `node scripts/lint-mobile-design.mjs && node scripts/lint-container-opacity.mjs && node scripts/lint-aria-labels.mjs && node scripts/lint-mobile-testids.mjs` → **all four ok**.
+6. `bun run format` then `bun run check:push:static` → **4/4**.
+7. `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see below.

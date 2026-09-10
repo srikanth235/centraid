@@ -22,13 +22,13 @@ import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
 import {
   CUSTODY_ICON,
-  CUSTODY_LABEL,
   SELECTION_DOT,
   SELECTION_INSET,
   SELECTION_OUTLINE,
   kindOverlay,
   stateOverlay,
   tileGround,
+  tileLabel,
   vaultMarkFor,
 } from "./tile-overlays";
 import type { VaultFacts } from "./tile-overlays";
@@ -86,9 +86,13 @@ function PhotoTileImpl({
       // The custody mark is a glyph, and the icon contract makes every glyph
       // decorative (DESIGN.md:449) — so its meaning has to reach a screen
       // reader through the control that owns it, not through the mark.
-      accessibilityLabel={
-        state?.form === "custody" ? `${name}, ${CUSTODY_LABEL}` : name
-      }
+      //
+      // EVERY STATE THE TILE DRAWS, NOT ONLY CUSTODY (#1015,
+      // photos/findings #18). A tile that could not be decoded painted a red
+      // `could not decode` line and announced the bare name, so the one member
+      // who cannot see the red was the one never told the photograph is not
+      // there; the same was true of a purge countdown.
+      accessibilityLabel={tileLabel(name, state)}
       accessibilityRole="imagebutton"
       accessibilityState={{ selected }}
       onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}

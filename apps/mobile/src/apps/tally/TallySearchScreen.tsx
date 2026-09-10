@@ -18,13 +18,14 @@ import {
   SEARCH_SCOPE,
   SECTIONS,
   SECTION_META,
+  searchMatched,
 } from "@centraid/blueprints/apps/tally/view-copy";
 
 import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { TallyScreenProps } from "../../navigation";
 import { searchTally } from "./tally-store";
-import { TypedField } from "./TallyChips";
 import TallyEntryRow from "./TallyEntryRow";
 import { Section } from "./TallyParts";
 import TallyScreen from "./TallyScreen";
@@ -43,9 +44,18 @@ export default function TallySearchScreen({
   return (
     <TallyScreen shelf={SEARCH} onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
-        <TypedField
-          label={SEARCH_PLACEHOLDER}
-          onChange={(next) => void searchTally(next)}
+        {/* THE ONE SEARCH FIELD (#1015, S4; tally/findings #15). The
+            hand-rolled field capitalised and auto-corrected the term, so `ski`
+            searched for `Ski` and `qqzz` was offered as `Skiwas` — and the
+            miss state then quoted the mangled word back. It also had no clear
+            control, no result count and no focus on arrival, all of which the
+            kit's field has and Tally's search page had not. */}
+        <SearchField
+          autoFocus
+          {...(results.length > 0
+            ? { count: searchMatched(results.length) }
+            : {})}
+          onChangeText={(next) => void searchTally(next)}
           placeholder={SEARCH_PLACEHOLDER}
           value={term}
         />

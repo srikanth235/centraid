@@ -250,6 +250,12 @@ export default function TallyGroupScreen({
           }}
         >
           {data.members.map((member) => {
+            // A CONTROL WHOSE ONLY OUTCOME IS NO IS NOT A CONTROL (#1015,
+            // tally/findings #4). The row's meta already reads "on the ledger
+            // · cannot be removed", so a `Remove` beside it could do nothing
+            // but restate the sentence the member has just read. The refusal
+            // sheet stays for the race where a member joins the ledger between
+            // the draw and the tap — `askRemove` still checks `held`.
             const held = appearsOnLedger(data.ledger, member.party_id);
             return (
               <LedgerRow
@@ -268,7 +274,7 @@ export default function TallyGroupScreen({
                   text: moneyNetFigure(member.net),
                   sub: personSubLabel(member.net.amount_minor),
                 }}
-                {...(member.departed || member.is_me
+                {...(member.departed || member.is_me || held
                   ? {}
                   : {
                       act: {

@@ -4,7 +4,6 @@
 
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListRef, ListRenderItemInfo } from "@shopify/flash-list";
-import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
   useEffect,
@@ -18,6 +17,7 @@ import { runOnJS } from "react-native-reanimated";
 
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text } from "../../kit/components/NativeText";
+import { hapticMode } from "../../kit/haptics";
 import {
   PHOTO_TILE_HANDLES,
   TEST_IDS,
@@ -222,9 +222,11 @@ export default function PhotoTimeline({
     (asset: PhotoAsset): void => onOpenRef.current(asset),
     []
   );
+  // A TAP ON A TILE IS NOT A MOMENT (#1015, S15). Adding one more photograph
+  // to a selection already under way is the most ordinary press in this grid,
+  // and it used to buzz on every one.
   const toggle = useCallback(
     (asset: PhotoAsset): void => {
-      void Haptics.selectionAsync();
       onSelectionChange(toggleSelection(selectionRef.current, asset.id));
     },
     [onSelectionChange]
@@ -233,7 +235,10 @@ export default function PhotoTimeline({
   const dragSelect = (x: number, y: number): void => {
     const asset = assetAt(rows, tops, scrollOffset.current, x, y);
     if (!asset || selectionRef.current.has(asset.id)) return;
-    void Haptics.selectionAsync();
+    // THE MODE CHANGED, ONCE (#1015, S15). The long-press that starts the drag
+    // is what puts this grid into selection; every tile the same drag then
+    // sweeps over is the mode continuing, not changing again.
+    if (selectionRef.current.size === 0) hapticMode();
     const next = addDragSelection(selectionRef.current, asset.id);
     // Written straight through so the next onUpdate of the same drag sees it.
     selectionRef.current = next;

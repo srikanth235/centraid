@@ -10,8 +10,8 @@
 // numbers that produced the shares, rather than collapsing to exact amounts.
 import { describe, expect, it } from "vitest";
 
+import { CATEGORIES } from "./category-labels.ts";
 import {
-  CATEGORIES,
   addExpenseInput,
   draftFromEntry,
   editExpenseInput,

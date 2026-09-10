@@ -158,7 +158,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[4],
     },
     note: {
-      ...t("mono"),
+      ...t("small"),
       color: colors.textFaint,
       paddingHorizontal: spacing[4],
       paddingTop: spacing[2],

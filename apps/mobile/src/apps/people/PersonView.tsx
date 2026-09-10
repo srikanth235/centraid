@@ -38,6 +38,7 @@ import {
   FIELDS,
   FRAGMENTS,
   LABELS,
+  channelKindLabel,
   LINK,
   SECTIONS,
   VERBS,
@@ -76,7 +77,7 @@ const CHANNEL_KINDS: readonly ContactChannel["kind"][] = [
 
 /** `phone · work · preferred` — the channel row's second line. */
 function channelSub(channel: ContactChannel): string {
-  const parts: string[] = [channel.kind];
+  const parts: string[] = [channelKindLabel(channel.kind)];
   if (channel.label) parts.push(channel.label);
   if (channel.preferred) parts.push(FRAGMENTS.preferred);
   return parts.join(" · ");
@@ -108,8 +109,15 @@ export default function PersonView({
     null
   );
 
-  const toggle = (key: string): void =>
-    setCollapsed((state) => ({ ...state, [key]: !state[key] }));
+  // A TOGGLE NEGATES THE STATE THE MEMBER CAN SEE (#1015, people/findings #4).
+  // `Shared with them` opens by default only while the person is linked, so on
+  // an unlinked person the first tap wrote `collapsed.shared = !undefined =
+  // true`, which is the state it was already drawing — every unlinked person
+  // needed two taps to open the one section that explains why nothing is
+  // shared. The negation is of the DERIVED open state, so one tap always flips
+  // what is on screen whatever the section's default.
+  const toggle = (key: string, openNow: boolean): void =>
+    setCollapsed((state) => ({ ...state, [key]: openNow }));
   const open = (key: ComposerKey): boolean => !collapsed[key];
   const composing = (key: ComposerKey): boolean => composer?.key === key;
   const openComposer = (key: ComposerKey): void =>
@@ -158,6 +166,7 @@ export default function PersonView({
     const vaults = person.vaults;
     const linksAvailable = vaults !== null;
     const linked = (vaults?.length ?? 0) > 0;
+    const sharedOpen = "shared" in collapsed ? !collapsed.shared : linked;
     const overdue = isOverdue(person);
     const writable = person.canWrite;
     const sources = person.scopeLabels.join(" · ");
@@ -305,8 +314,8 @@ export default function PersonView({
           partyId={partyId}
           personName={person.name}
           roster={roster}
-          open={"shared" in collapsed ? !collapsed.shared : linked}
-          onToggle={() => toggle("shared")}
+          open={sharedOpen}
+          onToggle={() => toggle("shared", sharedOpen)}
         />
 
         <PeopleSection
@@ -314,7 +323,7 @@ export default function PersonView({
           count={person.contact.length}
           collapsible
           open={open("channels")}
-          onToggle={() => toggle("channels")}
+          onToggle={() => toggle("channels", open("channels"))}
           add={addVerb("channels")}
         >
           {composing("channels") && composer ? (
@@ -323,13 +332,13 @@ export default function PersonView({
                 accessibilityLabel={SECTIONS.channels}
                 chips={CHANNEL_KINDS.map((kind) => ({
                   id: kind,
-                  label: kind,
+                  label: channelKindLabel(kind),
                   on: composer.kind === kind,
                   onPress: () => setComposer({ ...composer, kind }),
                 }))}
               />
               <FieldRow
-                label={composer.kind}
+                label={channelKindLabel(composer.kind)}
                 value={composer.value}
                 autoFocus
                 onChange={(value) => setComposer({ ...composer, value })}
@@ -359,7 +368,9 @@ export default function PersonView({
                       label={VERBS.remove}
                       quiet
                       disabled={!writable}
-                      accessibilityLabel={LABELS.removeChannel(channel.kind)}
+                      accessibilityLabel={LABELS.removeChannel(
+                        channelKindLabel(channel.kind).toLowerCase()
+                      )}
                       onPress={() => setConfirmChannel(channel)}
                     />
                   ) : undefined
@@ -375,7 +386,7 @@ export default function PersonView({
           count={person.dates.length}
           collapsible
           open={open("dates")}
-          onToggle={() => toggle("dates")}
+          onToggle={() => toggle("dates", open("dates"))}
           add={addVerb("dates")}
         >
           {composing("dates") && composer ? (
@@ -431,7 +442,7 @@ export default function PersonView({
           count={person.notes.length}
           collapsible
           open={open("notes")}
-          onToggle={() => toggle("notes")}
+          onToggle={() => toggle("notes", open("notes"))}
           add={addVerb("notes")}
         >
           {composing("notes") && composer ? (
@@ -471,7 +482,7 @@ export default function PersonView({
             }
           />
           <Button
-            label={VERBS.trash}
+            label={VERBS.moveToTrash}
             variant="destructive"
             disabled={!writable}
             onPress={() => setConfirmTrash(true)}

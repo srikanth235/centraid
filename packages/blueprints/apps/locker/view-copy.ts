@@ -69,7 +69,7 @@ export const LOCK_UNAVAILABLE_BODY =
 
 /** A reveal asked for on a host that offers no Locker door. */
 export const REVEAL_NO_DOOR =
-  "This device cannot open secrets — it does not hold this vault’s key.";
+  "This device cannot open secrets — it does not hold this vault's key.";
 
 /** What Search does not search, and why it is a design rather than an omission. */
 export const SEARCH_NOTE =
@@ -85,7 +85,7 @@ export const TRASH_CONFIRM_BODY =
 
 /** A purge asked for on a device that is not the owner's. */
 export const PURGE_PARKED_BODY =
-  "Irreversible, and asked for on a device that is not the owner’s, so it parks until the owner confirms it.";
+  "Irreversible, and asked for on a device that is not the owner's, so it parks until the owner confirms it.";
 
 /**
  * THE THREE VERDICTS AN IMPORT ROW WEARS. Lower case because each is the
@@ -138,7 +138,7 @@ export const VIEWER_REFUSED =
  *  item matters, and two ways in (README-Locker §4, STATES.md Locker/Items). */
 export const DAY_ONE_TITLE = "Nothing is kept here yet.";
 export const DAY_ONE_BODY =
-  "Bring a password manager’s file in, or put one login in by hand.";
+  "Bring a password manager's file in, or put one login in by hand.";
 export const DAY_ONE_IMPORT = "Import a file";
 export const DAY_ONE_ADD = "Add a login";
 
@@ -169,8 +169,8 @@ export const LOCK_FACTS: readonly (readonly [string, string])[] = [
   ["Session", "5 minutes, sliding · memory only"],
   ["On hiding", "locks at once · revealed values wiped, clipboard cleared"],
   ["Per item", "one receipt per value revealed · about 30 seconds on screen"],
-  ["Where", "on this device, with this vault’s key · never on the gateway"],
-  ["Recovery", "the vault’s, not Locker’s · it lives in Settings"],
+  ["Where", "on this device, with this vault's key · never on the gateway"],
+  ["Recovery", "the vault's, not Locker's · it lives in Settings"],
 ];
 
 /** The denied gate — a revoked grant is a receipt, a scope, and the fact that
@@ -201,7 +201,7 @@ export const COMPARE = "Compare";
 export const CONFLICT_COMPARE_BODY =
   "Two versions · keep one; the secret values are compared without being shown";
 export const PARKED_NOTICE =
-  "A purge was asked for on a device that is not the owner’s · it waits for you.";
+  "A purge was asked for on a device that is not the owner's · it waits for you.";
 export const REVIEW_IN_TRASH = "Review";
 export const REAUTH_NOTICE =
   "The permit for this item expired · nothing is revealed.";
@@ -316,11 +316,22 @@ export const RAIL_REVIEW = "Review";
  *  a purge date and the other exists so nothing ever gets one. */
 export const RAIL_ARCHIVED = "Archived";
 
-/** The one word each route's app bar carries. */
+/** The app's own name, which is what a surface reached through More descends
+ *  TO — the app, not one of its four places. */
+export const APP_NAME = "Locker";
+
+/** The one word each route's app bar carries.
+ *
+ *  TWO OF THESE USED TO BE WRONG (#1015, locker/findings #6). The root said
+ *  `Locker` over a band tab labelled `Items`, so the tab a member pressed and
+ *  the bar above it named different things; and the composer said `Add / edit`,
+ *  the union of the two things it might be doing, when the route already knows
+ *  which — `itemId` is either there or it is not. */
 export const ROUTE_TITLE = {
-  items: "Locker",
+  items: "Items",
   item: "Item",
-  edit: "Add / edit",
+  edit: "Edit item",
+  editNew: "New item",
   gen: "Generator",
   watch: "Review",
   search: "Search",
@@ -349,7 +360,7 @@ export const ROUTE_STATUS: Readonly<Record<string, string>> = {
   trash: "Restores are lossless · purge is irreversible and confirmed",
   export: "Plaintext · the warning is the design",
   fill: "Origin-matched, https only, secret-free until the fill",
-  lock: "The app boots locked and locks when hidden · unlock Locker in Centraid, where this vault’s key lives",
+  lock: "The app boots locked and locks when hidden · unlock Locker in Centraid, where this vault's key lives",
 };
 
 /**
@@ -365,4 +376,11 @@ export const FIELD_LABEL: Readonly<Record<string, string>> = {
   cvv: "Security code",
   content: "Note",
   otp_seed: "One-time code",
+  // Three the phone's item screen used to type at its call site (#1015,
+  // locker/findings #9). They are exactly the sentences that would drift
+  // between the desktop and the phone, which is what this table exists for.
+  compromised: "Compromised",
+  url: "Address",
+  notes: "Memo",
+  strength: "Strength",
 };

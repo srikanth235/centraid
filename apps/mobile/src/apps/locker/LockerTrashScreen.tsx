@@ -144,7 +144,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     confirmActs: { flexDirection: "row", gap: spacing[2] },
     confirmTitle: { ...t("smallStrong"), color: colors.text },
-    meta: { ...t("mono"), color: colors.textFaint },
+    meta: { ...t("small"), color: colors.textFaint },
     row: {
       alignItems: "center",
       borderTopColor: colors.line,
