@@ -16,6 +16,7 @@
 
 import React, { useMemo, useState } from "react";
 
+import { hapticLanded } from "../haptics";
 import SheetRoom from "../rooms/SheetRoom";
 import { t, useTheme } from "../theme";
 import { Text } from "./NativeText";
@@ -63,6 +64,8 @@ export default function ConfirmSheet({
         label: verb,
         onPress: () => {
           onClose();
+          // The write lands here, not when the sheet opened (#1015, S15).
+          hapticLanded();
           onConfirm();
         },
       }}

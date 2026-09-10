@@ -99,6 +99,17 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
+// The rooms the sheet is built on reach the safe area and the icon set; this
+// suite asserts on neither.
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+
+vi.mock(import("react-native-svg"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+
 vi.mock(
   import("../components/NativeText"),
   () =>
@@ -129,7 +140,12 @@ vi.mock(
   import("@centraid/design"),
   () =>
     ({
+      // What the rooms' own leaves read; no assertion here touches them.
+      borders: { hairline: 1 },
       formatRelativeTime: () => "just now",
+      icons: {},
+      nativeButtonStyle: () => ({ label: {}, view: {} }),
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
     }) as unknown as Partial<DesignModule>
 );
 
@@ -156,9 +172,15 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
+      density: { rowMin: 44 },
       family: { sansMedium: "sans-medium", sansRegular: "sans-regular" },
-      radii: { lg: 12, md: 7 },
+      // The pending sheet is a `SheetRoom` now (#1015, Wave 2), and the rooms'
+      // own leaves read these. No assertion here touches them.
+      metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
+      pageMargin: 18,
+      radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 16, xs: 0 },
       spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
+      subBase: { gutter: 2, hair: 1 },
       t: () => ({}),
       useTheme: () => ({
         colors: {

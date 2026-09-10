@@ -31,6 +31,10 @@ export interface SheetRoomProps {
   /** The quiet way out; "Cancel" unless the caller has a truer word. */
   cancelLabel?: string;
   children?: React.ReactNode;
+  /** A confirm this sheet raises over itself; a sibling, never a child. */
+  overlay?: React.ReactNode;
+  /** For the end-to-end flows that name a sheet by id, not by its title. */
+  testID?: string;
 }
 
 export default function SheetRoom({
@@ -40,6 +44,8 @@ export default function SheetRoom({
   primary,
   cancelLabel,
   children,
+  overlay,
+  testID,
 }: SheetRoomProps): React.JSX.Element | null {
   const leave = cancelLabel ?? "Cancel";
   const { colors } = useTheme();
@@ -59,7 +65,7 @@ export default function SheetRoom({
         onPress={onClose}
         style={[styles.scrim, ink.scrim]}
       />
-      <View style={[styles.sheet, ink.sheet]}>
+      <View style={[styles.sheet, ink.sheet]} testID={testID}>
         <Grabber />
         <Text accessibilityRole="header" style={[styles.sheetTitle, ink.title]}>
           {title}
@@ -78,6 +84,7 @@ export default function SheetRoom({
         </View>
         <StatusLineHost name="sheet" />
       </View>
+      {overlay}
     </Modal>
   );
 }

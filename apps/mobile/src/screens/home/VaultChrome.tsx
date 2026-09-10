@@ -13,6 +13,7 @@
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useMemo, useState } from "react";
+import { Modal } from "react-native";
 
 import type { RootStackParamList } from "../../navigation";
 import {
@@ -89,13 +90,20 @@ export default function VaultChromeProvider({
   return (
     <VaultChromeContext.Provider value={chrome}>
       {children}
-      {searchOpen ? (
+      {/* Search is a PAGE now (#1015, Wave 2), so it is presented like one:
+          the room is full-screen and opaque, and the `Modal` is only how a
+          chrome provider raises it over whatever it wraps. */}
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setSearchOpen(false)}
+        visible={searchOpen}
+      >
         <SearchOverlay
           items={items}
-          onOpen={openItem}
           onClose={() => setSearchOpen(false)}
+          onOpen={openItem}
         />
-      ) : null}
+      </Modal>
       <VaultsSwitcher
         open={vaultsOpen}
         onClose={() => setVaultsOpen(false)}

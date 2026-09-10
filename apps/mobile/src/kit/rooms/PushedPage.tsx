@@ -73,6 +73,8 @@ export interface PushedPageProps {
   error?: RoomError;
   empty?: RoomEmpty;
   children?: React.ReactNode;
+  /** For the end-to-end flows that name a page by id, not by its title. */
+  testID?: string;
 }
 
 /** The back control: a chevron and the parent's real name, spoken together. */
@@ -122,13 +124,14 @@ export default function PushedPage({
   empty,
   overlay,
   children,
+  testID,
 }: PushedPageProps): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
   const bandState = bandStateFor(selection);
   const selecting = !bandState.interactive;
   return (
-    <TopSafeArea style={[styles.room, ink]}>
+    <TopSafeArea style={[styles.room, ink]} testID={testID}>
       {chrome}
       {lockup}
       {selecting && selection ? (

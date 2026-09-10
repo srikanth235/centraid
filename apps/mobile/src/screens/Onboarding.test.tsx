@@ -214,6 +214,8 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
+      // The two field insets are `spacing[4]` now, not 16 and 15 (#1015).
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
       family: {
         monoMedium: "mono-medium",
         monoRegular: "mono",

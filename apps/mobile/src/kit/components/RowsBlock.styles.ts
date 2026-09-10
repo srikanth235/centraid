@@ -6,12 +6,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, metrics, radii, spacing, t } from "../theme";
-
-/** The reference's `gap: 1px` between a row's title and its sub line — a
- *  seam inside one text stack, not a rhythm step, which is why it is not on
- *  the 4px scale. */
-const TITLE_SEAM = 1;
+import { borders, metrics, radii, spacing, subBase, t } from "../theme";
 
 export const styles = StyleSheet.create({
   action: { flexGrow: 0, flexShrink: 0 },
@@ -40,6 +35,10 @@ export const styles = StyleSheet.create({
   // call site, on the leaf, never as a container opacity.
   struck: { textDecorationLine: "line-through" as const },
   sub: t("mono"),
-  text: { flex: 1, gap: TITLE_SEAM, minWidth: 0 },
+  // `subBase.hair`, not a bare 1: the seam between a row's title and its sub
+  // line is a rule inside one text stack, and the exception to the 4px scale
+  // is claimed by name in the system rather than eyeballed here (#1015, R-B-6;
+  // docs/decisions.md#typography-and-design-contracts).
+  text: { flex: 1, gap: subBase.hair, minWidth: 0 },
   title: t("body"),
 });

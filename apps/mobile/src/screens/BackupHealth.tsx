@@ -10,25 +10,16 @@
 // (kit/storage/custody-status.ts — "not yet computed" until the sweep runs).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Linking,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Switch,
-  View,
-} from "react-native";
+import { Linking, Platform, Pressable, Switch, View } from "react-native";
 
 import { useConfirmDestructive } from "../kit/components/ConfirmSheet";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
-import Tappable from "../kit/components/Tappable";
-import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../kit/replica/useReplicaRefresh";
+import { SystemPlace } from "../kit/rooms";
 import { readCustodyStatus } from "../kit/storage/custody-status";
 import type { CustodyStatus } from "../kit/storage/custody-status";
 import { freeUpOffer } from "../kit/storage/free-up-space";
@@ -65,6 +56,7 @@ import {
   formatSyncTime,
 } from "./BackupHealth.custody";
 import { styles } from "./BackupHealth.styles";
+import { useShellParent } from "./shell-places";
 
 const EMPTY_QUEUE: TransferQueueCounts = {
   pending: 0,
@@ -88,6 +80,7 @@ export default function BackupHealth({
   route,
 }: SettingsScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
+  const backTo = useShellParent();
   // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
   // title, and a status line it can host - none of which `Alert.alert` can
   // draw.
@@ -184,341 +177,324 @@ export default function BackupHealth({
   };
 
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      {confirmSheet}
-      <View style={styles.header}>
-        <Tappable
-          accessibilityLabel="Back to Settings"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Tappable>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Backup health
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-            {/* NAMES ITS SUBJECT (#1015 B13): this is the last time THIS
-                PHONE uploaded, which is a different claim from whether the
-                vault holds the bytes. "Never" alone read as a third,
-                contradicting verdict above the hero's own. */}
-            {lastSuccessfulSync ? (
-              <>
-                Last upload from this phone:{" "}
-                <Text style={[t("mono"), { color: colors.textSoft }]}>
-                  {formatSyncTime(lastSuccessfulSync)}
-                </Text>
-              </>
-            ) : (
-              "This phone has not uploaded anything yet"
-            )}
-          </Text>
-        </View>
-      </View>
-      <ReplicaStatusBar />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
-        }
-      >
-        {route.params?.signalCause ? (
-          <View
-            accessibilityLabel="Arrived from Notifications"
-            accessibilityLiveRegion="polite"
-            accessibilityRole="alert"
-            style={[
-              styles.panel,
-              {
-                backgroundColor: colors.bg,
-                borderColor: colors.line,
-                borderLeftColor: colors.attention,
-                borderLeftWidth: 2,
-              },
-            ]}
-          >
-            <Text style={[styles.eyebrow, { color: colors.textFaint }]}>
-              FROM NOTIFICATIONS
+    <SystemPlace
+      backTo={backTo}
+      footer={<ReplicaStatusBar />}
+      onBack={() => navigation.goBack()}
+      onRefresh={refreshNow}
+      overlay={confirmSheet}
+      refreshing={refreshing}
+      title="Backup health"
+    >
+      {/* NAMES ITS SUBJECT (#1015 B13): this is the last time THIS PHONE
+            uploaded, which is a different claim from whether the vault holds
+            the bytes. "Never" alone read as a third, contradicting verdict
+            above the hero's own. */}
+      <Text style={[styles.subtitle, { color: colors.textSoft }]}>
+        {lastSuccessfulSync ? (
+          <>
+            Last upload from this phone:{" "}
+            <Text style={[t("mono"), { color: colors.textSoft }]}>
+              {formatSyncTime(lastSuccessfulSync)}
             </Text>
-            <Text style={[styles.body, { color: colors.text }]}>
-              {route.params.signalCause}
-            </Text>
-          </View>
-        ) : null}
-        {/* THE VERDICT (#712): complete · pending · failing · unreadable.
-            Only `failing` takes the `net` rule — as an EDGE, never a fill
-            or a red plate (§18). */}
+          </>
+        ) : (
+          "This phone has not uploaded anything yet"
+        )}
+      </Text>
+      {route.params?.signalCause ? (
         <View
+          accessibilityLabel="Arrived from Notifications"
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
           style={[
-            styles.hero,
-            verdict.net ? styles.heroFlagged : null,
+            styles.panel,
             {
-              backgroundColor:
-                verdict.verdict === "complete"
-                  ? colors.bgElev
-                  : colors.bgSunken,
+              backgroundColor: colors.bg,
               borderColor: colors.line,
-              borderLeftColor: verdict.net ? colors.net : "transparent",
+              borderLeftColor: colors.attention,
+              borderLeftWidth: 2,
             },
           ]}
         >
-          <Icon
-            name={verdict.icon}
-            size={30}
-            color={
-              verdict.net
-                ? colors.net
-                : verdict.verdict === "complete"
-                  ? colors.success
-                  : colors.accent
-            }
-          />
-          <Text
-            style={[
-              styles.heroValue,
-              { color: verdict.net ? colors.net : colors.text },
-            ]}
-          >
-            {verdict.title}
+          <Text style={[styles.eyebrow, { color: colors.textFaint }]}>
+            FROM NOTIFICATIONS
           </Text>
-          <Text style={[styles.meta, { color: colors.textSoft }]}>
-            {verdict.detail}
+          <Text style={[styles.body, { color: colors.text }]}>
+            {route.params.signalCause}
           </Text>
-          {/* EXACTLY ONE FILLED CONTROL ON THE SURFACE (§18); while the
+        </View>
+      ) : null}
+      {/* THE VERDICT (#712): complete · pending · failing · unreadable.
+            Only `failing` takes the `net` rule — as an EDGE, never a fill
+            or a red plate (§18). */}
+      <View
+        style={[
+          styles.hero,
+          verdict.net ? styles.heroFlagged : null,
+          {
+            backgroundColor:
+              verdict.verdict === "complete" ? colors.bgElev : colors.bgSunken,
+            borderColor: colors.line,
+            borderLeftColor: verdict.net ? colors.net : "transparent",
+          },
+        ]}
+      >
+        <Icon
+          name={verdict.icon}
+          size={30}
+          color={
+            verdict.net
+              ? colors.net
+              : verdict.verdict === "complete"
+                ? colors.success
+                : colors.accent
+          }
+        />
+        <Text
+          style={[
+            styles.heroValue,
+            { color: verdict.net ? colors.net : colors.text },
+          ]}
+        >
+          {verdict.title}
+        </Text>
+        <Text style={[styles.meta, { color: colors.textSoft }]}>
+          {verdict.detail}
+        </Text>
+        {/* EXACTLY ONE FILLED CONTROL ON THE SURFACE (§18); while the
               consent question is open THAT is the commit, and once answered
               this is the only thing that moves bytes. */}
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityLabel="Back up now"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: backingUp }}
-              disabled={backingUp}
-              onPress={backUpNow}
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityLabel="Back up now"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: backingUp }}
+            disabled={backingUp}
+            onPress={backUpNow}
+            style={[
+              styles.action,
+              consented && !backingUp ? styles.filled : null,
+              consented && !backingUp
+                ? { backgroundColor: colors.accentFill }
+                : { borderColor: colors.line },
+            ]}
+          >
+            <Text
               style={[
-                styles.action,
-                consented && !backingUp ? styles.filled : null,
-                consented && !backingUp
-                  ? { backgroundColor: colors.accentFill }
-                  : { borderColor: colors.line },
+                styles.actionText,
+                {
+                  color: backingUp
+                    ? colors.textSoft
+                    : consented
+                      ? colors.textInv
+                      : colors.text,
+                },
               ]}
             >
+              {backingUp ? "Backing up…" : "Back up now"}
+            </Text>
+          </Pressable>
+        </View>
+        {policy.never ? (
+          <Text style={[styles.unavailable, { color: colors.net }]}>
+            Nothing will move: the transfer rules below say never.
+          </Text>
+        ) : null}
+      </View>
+
+      {/* THE CONSENT MOMENT, or the state it left behind. Never both. */}
+      {consented ? (
+        <View
+          style={[
+            styles.panel,
+            { backgroundColor: colors.bgElev, borderColor: colors.line },
+          ]}
+        >
+          <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
+            Backup
+          </Text>
+          <Text style={[styles.panelTitle, { color: colors.text }]}>
+            {AUTOMATIC_BACKUP_ON}
+          </Text>
+          <Text style={[styles.body, { color: colors.textSoft }]}>
+            New photographs and scans are enqueued as each app finds them, and
+            this device drains that queue under the rules below.
+          </Text>
+          <View style={styles.actions}>
+            {/* Outlined, never filled: stopping is not this surface's
+                  commit, and not destructive either (§18). */}
+            <Pressable
+              accessibilityLabel={STOP_BACKING_UP_ACTION}
+              accessibilityRole="button"
+              onPress={stopBackingUp}
+              style={[styles.action, { borderColor: colors.line }]}
+            >
+              <Text style={[styles.actionText, { color: colors.text }]}>
+                {STOP_BACKING_UP_ACTION}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.panel,
+            { backgroundColor: colors.bgElev, borderColor: colors.line },
+          ]}
+        >
+          <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
+            {panel.eyebrow}
+          </Text>
+          <Text style={[styles.panelTitle, { color: colors.text }]}>
+            {panel.title}
+          </Text>
+          <Text style={[styles.body, { color: colors.textSoft }]}>
+            {panel.body}
+          </Text>
+          {panel.facts.map((fact) => (
+            <View
+              key={fact.label}
+              style={[
+                styles.fact,
+                { borderBottomColor: colors.line },
+                // The egress fact takes a 2px `net` rule on its leading edge
+                // and nothing else — never a fill.
+                fact.net
+                  ? { borderLeftColor: colors.net, ...styles.factFlagged }
+                  : null,
+              ]}
+            >
+              <Text style={[styles.factLabel, { color: colors.textSoft }]}>
+                {fact.label}
+              </Text>
+              <Text style={[styles.factValue, { color: colors.text }]}>
+                {fact.value}
+              </Text>
+            </View>
+          ))}
+          {consent ? (
+            <Text style={[styles.unavailable, { color: colors.textSoft }]}>
+              {AUTOMATIC_BACKUP_OFF}
+            </Text>
+          ) : null}
+          <View style={styles.actions}>
+            {/* THE one filled element while the question is open (§18). */}
+            <Pressable
+              accessibilityLabel={panel.action}
+              accessibilityRole="button"
+              onPress={() => setConsent(answerBackupConsent("automatic"))}
+              style={[
+                styles.action,
+                styles.filled,
+                { backgroundColor: colors.accentFill },
+              ]}
+            >
+              <Text style={[styles.actionText, { color: colors.textInv }]}>
+                {panel.action}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel={panel.action2}
+              accessibilityRole="button"
+              onPress={() => setConsent(answerBackupConsent("not-now"))}
+              style={[styles.action, { borderColor: colors.line }]}
+            >
+              <Text style={[styles.actionText, { color: colors.text }]}>
+                {panel.action2}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      <Text style={[styles.section, { color: colors.textSoft }]}>
+        TRANSFER RULES
+      </Text>
+      <Text style={[styles.note, { color: colors.textFaint }]}>
+        These rules govern every transfer this device makes — photographs, scans
+        and attachments alike.
+      </Text>
+      {TRANSFER_POLICY_SWITCHES.map((rule) => {
+        const inert = rule.inert(policy);
+        // THE REFUSAL GRAMMAR, RENDERED (#712): four of the five switches go
+        // inert depending on the other four; transfer-policy.ts owns the
+        // inertReason words, this only places them.
+        const inertReason = inert ? rule.inertReason(policy) : undefined;
+        return (
+          <View
+            key={rule.key}
+            style={[
+              styles.rule,
+              { borderBottomColor: colors.line },
+              rule.net
+                ? { borderLeftColor: colors.net, ...styles.ruleFlagged }
+                : null,
+            ]}
+          >
+            <View style={styles.ruleText}>
               <Text
                 style={[
-                  styles.actionText,
+                  styles.ruleLabel,
                   {
-                    color: backingUp
-                      ? colors.textSoft
-                      : consented
-                        ? colors.textInv
+                    color: inert
+                      ? colors.textFaint
+                      : rule.net
+                        ? colors.net
                         : colors.text,
                   },
                 ]}
               >
-                {backingUp ? "Backing up…" : "Back up now"}
+                {rule.label}
               </Text>
-            </Pressable>
-          </View>
-          {policy.never ? (
-            <Text style={[styles.unavailable, { color: colors.net }]}>
-              Nothing will move: the transfer rules below say never.
-            </Text>
-          ) : null}
-        </View>
-
-        {/* THE CONSENT MOMENT, or the state it left behind. Never both. */}
-        {consented ? (
-          <View
-            style={[
-              styles.panel,
-              { backgroundColor: colors.bgElev, borderColor: colors.line },
-            ]}
-          >
-            <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
-              Backup
-            </Text>
-            <Text style={[styles.panelTitle, { color: colors.text }]}>
-              {AUTOMATIC_BACKUP_ON}
-            </Text>
-            <Text style={[styles.body, { color: colors.textSoft }]}>
-              New photographs and scans are enqueued as each app finds them, and
-              this device drains that queue under the rules below.
-            </Text>
-            <View style={styles.actions}>
-              {/* Outlined, never filled: stopping is not this surface's
-                  commit, and not destructive either (§18). */}
-              <Pressable
-                accessibilityLabel={STOP_BACKING_UP_ACTION}
-                accessibilityRole="button"
-                onPress={stopBackingUp}
-                style={[styles.action, { borderColor: colors.line }]}
-              >
-                <Text style={[styles.actionText, { color: colors.text }]}>
-                  {STOP_BACKING_UP_ACTION}
+              {inertReason ? (
+                <Text style={[styles.ruleReason, { color: colors.textSoft }]}>
+                  {inertReason}
                 </Text>
-              </Pressable>
+              ) : null}
             </View>
+            <Switch
+              accessibilityLabel={rule.label}
+              {...(inertReason ? { accessibilityHint: inertReason } : {})}
+              disabled={inert}
+              value={policy[rule.key]}
+              onValueChange={(value) =>
+                update({ ...policy, [rule.key]: value })
+              }
+              trackColor={{ true: rule.net ? colors.net : colors.accent }}
+            />
           </View>
-        ) : (
-          <View
-            style={[
-              styles.panel,
-              { backgroundColor: colors.bgElev, borderColor: colors.line },
-            ]}
-          >
-            <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
-              {panel.eyebrow}
-            </Text>
-            <Text style={[styles.panelTitle, { color: colors.text }]}>
-              {panel.title}
-            </Text>
-            <Text style={[styles.body, { color: colors.textSoft }]}>
-              {panel.body}
-            </Text>
-            {panel.facts.map((fact) => (
-              <View
-                key={fact.label}
-                style={[
-                  styles.fact,
-                  { borderBottomColor: colors.line },
-                  // The egress fact takes a 2px `net` rule on its leading edge
-                  // and nothing else — never a fill.
-                  fact.net
-                    ? { borderLeftColor: colors.net, ...styles.factFlagged }
-                    : null,
-                ]}
-              >
-                <Text style={[styles.factLabel, { color: colors.textSoft }]}>
-                  {fact.label}
-                </Text>
-                <Text style={[styles.factValue, { color: colors.text }]}>
-                  {fact.value}
-                </Text>
-              </View>
-            ))}
-            {consent ? (
-              <Text style={[styles.unavailable, { color: colors.textSoft }]}>
-                {AUTOMATIC_BACKUP_OFF}
-              </Text>
-            ) : null}
-            <View style={styles.actions}>
-              {/* THE one filled element while the question is open (§18). */}
-              <Pressable
-                accessibilityLabel={panel.action}
-                accessibilityRole="button"
-                onPress={() => setConsent(answerBackupConsent("automatic"))}
-                style={[
-                  styles.action,
-                  styles.filled,
-                  { backgroundColor: colors.accentFill },
-                ]}
-              >
-                <Text style={[styles.actionText, { color: colors.textInv }]}>
-                  {panel.action}
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel={panel.action2}
-                accessibilityRole="button"
-                onPress={() => setConsent(answerBackupConsent("not-now"))}
-                style={[styles.action, { borderColor: colors.line }]}
-              >
-                <Text style={[styles.actionText, { color: colors.text }]}>
-                  {panel.action2}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
+        );
+      })}
 
-        <Text style={[styles.section, { color: colors.textSoft }]}>
-          TRANSFER RULES
-        </Text>
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          These rules govern every transfer this device makes — photographs,
-          scans and attachments alike.
-        </Text>
-        {TRANSFER_POLICY_SWITCHES.map((rule) => {
-          const inert = rule.inert(policy);
-          // THE REFUSAL GRAMMAR, RENDERED (#712): four of the five switches go
-          // inert depending on the other four; transfer-policy.ts owns the
-          // inertReason words, this only places them.
-          const inertReason = inert ? rule.inertReason(policy) : undefined;
-          return (
-            <View
-              key={rule.key}
-              style={[
-                styles.rule,
-                { borderBottomColor: colors.line },
-                rule.net
-                  ? { borderLeftColor: colors.net, ...styles.ruleFlagged }
-                  : null,
-              ]}
-            >
-              <View style={styles.ruleText}>
-                <Text
-                  style={[
-                    styles.ruleLabel,
-                    {
-                      color: inert
-                        ? colors.textFaint
-                        : rule.net
-                          ? colors.net
-                          : colors.text,
-                    },
-                  ]}
-                >
-                  {rule.label}
-                </Text>
-                {inertReason ? (
-                  <Text style={[styles.ruleReason, { color: colors.textSoft }]}>
-                    {inertReason}
-                  </Text>
-                ) : null}
-              </View>
-              <Switch
-                accessibilityLabel={rule.label}
-                {...(inertReason ? { accessibilityHint: inertReason } : {})}
-                disabled={inert}
-                value={policy[rule.key]}
-                onValueChange={(value) =>
-                  update({ ...policy, [rule.key]: value })
-                }
-                trackColor={{ true: rule.net ? colors.net : colors.accent }}
-              />
-            </View>
-          );
-        })}
+      <Text style={[styles.section, { color: colors.textSoft }]}>
+        WHERE YOUR ORIGINALS ARE
+      </Text>
+      <CustodyBlock custody={custody} online={online} />
 
-        <Text style={[styles.section, { color: colors.textSoft }]}>
-          WHERE YOUR ORIGINALS ARE
-        </Text>
-        <CustodyBlock custody={custody} online={online} />
+      <Text style={[styles.section, { color: colors.textSoft }]}>
+        FREE UP SPACE
+      </Text>
+      <FreeUpBlock offer={offer} />
 
-        <Text style={[styles.section, { color: colors.textSoft }]}>
-          FREE UP SPACE
+      {queue.failures.map((failure, index) => (
+        <Text key={index} style={[styles.error, { color: colors.net }]}>
+          {failure.filename ?? "Asset"}: {failure.lastError}
         </Text>
-        <FreeUpBlock offer={offer} />
-
-        {queue.failures.map((failure, index) => (
-          <Text key={index} style={[styles.error, { color: colors.net }]}>
-            {failure.filename ?? "Asset"}: {failure.lastError}
+      ))}
+      {Platform.OS === "android" ? (
+        <Pressable
+          accessibilityLabel="Open battery optimization settings"
+          accessibilityRole="button"
+          style={[styles.settings, { borderColor: colors.line }]}
+          onPress={() => void Linking.openSettings()}
+        >
+          <Icon name="battery-charging" size={18} color={colors.accent} />
+          <Text style={[styles.settingsText, { color: colors.text }]}>
+            Review battery optimization
           </Text>
-        ))}
-        {Platform.OS === "android" ? (
-          <Pressable
-            accessibilityLabel="Open battery optimization settings"
-            accessibilityRole="button"
-            style={[styles.settings, { borderColor: colors.line }]}
-            onPress={() => void Linking.openSettings()}
-          >
-            <Icon name="battery-charging" size={18} color={colors.accent} />
-            <Text style={[styles.settingsText, { color: colors.text }]}>
-              Review battery optimization
-            </Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
-    </TopSafeArea>
+        </Pressable>
+      ) : null}
+    </SystemPlace>
   );
 }
