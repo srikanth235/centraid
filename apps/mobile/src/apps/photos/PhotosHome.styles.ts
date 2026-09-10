@@ -10,7 +10,7 @@ import {
   BAND_RADIUS,
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
-import { family, pageMargin, t, radii } from "../../kit/theme";
+import { family, pageMargin, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { BAND_CAPSULE } from "./photos-band";
 
@@ -31,7 +31,7 @@ export const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flex: 1,
       justifyContent: "center",
-      paddingHorizontal: 28,
+      paddingHorizontal: spacing[5],
     },
     emptyTitle: { ...t("display"), color: colors.text },
     header: {
@@ -88,7 +88,11 @@ export const makeStyles = (colors: ThemeColors) =>
     // another token on the title.
     title: { ...t("title"), color: colors.text },
     uploadFill: { borderRadius: radii.pill, height: "100%" },
-    uploadProgress: { gap: 5, paddingHorizontal: 16, paddingVertical: 8 },
+    uploadProgress: {
+      gap: 5,
+      paddingHorizontal: spacing[4],
+      paddingVertical: 8,
+    },
     uploadProgressText: { ...t("mono"), color: colors.textSoft },
     uploadTrack: {
       backgroundColor: colors.line,

@@ -5,7 +5,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, t, useTheme, radii } from "../../kit/theme";
+import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const RAIL_WIDTH = 44;
@@ -75,7 +75,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       // `insetInlineEnd` mirrors under RTL; legacy `end` types but won't lay out.
       insetInlineEnd: 8,
-      paddingHorizontal: 10,
+      paddingHorizontal: spacing[3],
       paddingVertical: 4,
       position: "absolute",
     },

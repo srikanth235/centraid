@@ -29,7 +29,15 @@ import { Text } from "../../kit/components/NativeText";
 import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
-import { borders, family, metrics, radii, t, useTheme } from "../../kit/theme";
+import {
+  borders,
+  family,
+  metrics,
+  pageMargin,
+  radii,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
 import { togglePlacePin, usePlacePins } from "./home-pins";
@@ -325,7 +333,7 @@ const makeStyles = (colors: ThemeColors) =>
     foot: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
       paddingVertical: 12,
     },
     footText: { ...t("mono"), color: colors.textFaint },
@@ -334,7 +342,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 12,
       marginBottom: 4,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
     },
     // "by law" fills the switch slot, same mono numeric register (:3226, :5479).
     lawLabel: { ...t("mono"), color: colors.textFaint, textAlign: "center" },
@@ -344,7 +352,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 12,
       minHeight: metrics.row,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
       paddingVertical: 4,
     },
     rowLabel: { ...t("small"), color: colors.text },
@@ -363,7 +371,7 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.7,
       marginTop: 8,
       paddingBottom: 4,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
       paddingTop: 12,
       textTransform: "uppercase",
     },

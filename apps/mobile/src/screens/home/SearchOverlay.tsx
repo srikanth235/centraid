@@ -9,7 +9,7 @@ import { nativeButtonStyle } from "@centraid/design";
 import { Text } from "../../kit/components/NativeText";
 import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { borders, pageMargin, t, useTheme } from "../../kit/theme";
+import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { ThemeValue } from "../../kit/theme/resolve";
 import { searchBlueprints } from "./blueprint-search";
@@ -271,7 +271,7 @@ const makeStyles = (
       flexShrink: 0,
       height: 30,
       justifyContent: "center",
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     cancelLabel: {
       ...t("small"),
@@ -283,7 +283,7 @@ const makeStyles = (
       borderColor: colors.lineStrong,
       borderRadius: radii.md,
       borderWidth: borders.hairline,
-      paddingHorizontal: 10,
+      paddingHorizontal: spacing[3],
       paddingVertical: 4,
     },
     chipLabel: {

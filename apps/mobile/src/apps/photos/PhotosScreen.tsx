@@ -27,7 +27,7 @@ import {
 import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { t, useTheme } from "../../kit/theme";
+import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosShellNavigation } from "../../navigation";
 import VaultBar from "../../screens/home/VaultBar";
@@ -208,7 +208,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flexDirection: "row",
       minHeight: SELECTION_ACTION_TARGET,
-      paddingHorizontal: 4,
+      paddingHorizontal: spacing[1],
       ...bandSurfaceStyle(colors.bg, colors.line, BAND_BORDER),
     },
     selectionLabel: { ...t("control"), textAlign: "center" },

@@ -36,7 +36,14 @@ import {
   motionDuration,
   useReducedMotion,
 } from "../../kit/hooks/useReducedMotion";
-import { family, radii, t, useTheme } from "../../kit/theme";
+import {
+  family,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listVaults } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
@@ -531,7 +538,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     activePill: {
       borderRadius: radii.md,
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
       paddingVertical: 3,
     },
     activePillText: {
@@ -568,7 +575,7 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: t("control").fontSize,
       letterSpacing: 1,
       marginTop: 2,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
     },
     forget: {
       alignItems: "center",
@@ -595,7 +602,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 13,
       marginTop: 12,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 12,
     },
     pairTitle: { ...t("bodyStrong"), color: colors.text },
@@ -617,7 +624,7 @@ const makeStyles = (colors: ThemeColors) =>
     rowName: { ...t("bodyStrong"), color: colors.text },
     rowSub: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     scroll: { flexGrow: 0 },
-    scrollBody: { paddingHorizontal: 20, paddingTop: 18 },
+    scrollBody: { paddingHorizontal: pageMargin, paddingTop: 18 },
     sectionLabel: {
       color: colors.textFaint,
       fontFamily: family.sansMedium,
@@ -638,6 +645,6 @@ const makeStyles = (colors: ThemeColors) =>
       ...t("display"),
       color: colors.text,
       marginTop: 2,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
     },
   });
