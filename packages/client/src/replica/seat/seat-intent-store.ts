@@ -60,6 +60,24 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+/**
+ * A PATCH CLONE THAT KEEPS ITS ERASURES (#1014, R2).
+ *
+ * `JSON.stringify` drops a key whose value is `undefined`, and a patch spells
+ * a CLEAR exactly that way — `{ state: "awaiting-change", reason: undefined }`
+ * is how a successful send retires the `fetch failed …` line an earlier
+ * attempt wrote. Through a plain JSON clone the key vanished and the stale
+ * reason survived under an intent that had since executed, which is what the
+ * member read. The in-memory store never had the bug (`structuredClone` keeps
+ * the key), so this also makes the two stores answer the same.
+ */
+function clonePatch(patch: Partial<ReplicaIntent>): Partial<ReplicaIntent> {
+  const cloned = clone(patch) as Record<string, unknown>;
+  for (const key of Object.keys(patch))
+    if (!(key in cloned)) cloned[key] = undefined;
+  return cloned as Partial<ReplicaIntent>;
+}
+
 export class SeatIntentStore implements IntentRecordStore {
   /**
    * The seat has the cursor (#996, R24): `clearSeatOverlaysAtCommit` runs
@@ -145,7 +163,7 @@ export class SeatIntentStore implements IntentRecordStore {
     if (existing instanceof Error) return Promise.reject(existing);
     const updated: ReplicaIntent = {
       ...existing,
-      ...clone(patch),
+      ...clonePatch(patch),
       intentId,
       createdOrder: existing.createdOrder,
     };
@@ -170,7 +188,7 @@ export class SeatIntentStore implements IntentRecordStore {
     if (existing instanceof Error) return Promise.reject(existing);
     const settled: ReplicaIntent = {
       ...existing,
-      ...clone(patch),
+      ...clonePatch(patch),
       intentId,
       createdOrder: existing.createdOrder,
     };

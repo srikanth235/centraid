@@ -52,6 +52,18 @@ export interface IntentDrainHost {
   readonly queueEveryoneWaiting: (reason: string) => void;
   /** A settled intent, so the session can invalidate what it touched. */
   readonly settled: (intent: ReplicaIntent) => void;
+  /**
+   * This seat's applied commit position, when it has one (#1014, R1).
+   *
+   * ACK AFTER DELTA IS THE SAME ANSWER. The commit an `executed` answer names
+   * may already be in the file — the change feed does not wait for the HTTP
+   * reply — and the applier's in-transaction hook only fires for a commit it
+   * is APPLYING, so an intent parked on a position the cursor has already
+   * passed would never be swept. Reading the cursor here closes that window;
+   * a host with no cursor omits it and the applier's hook is the only path,
+   * as before.
+   */
+  readonly appliedCommitSeq?: () => number | undefined;
   readonly isAuthorizationError: (error: unknown) => boolean;
   readonly onAuthorizationRevoked: () => void;
   readonly scheduleRetry: () => void;
@@ -61,48 +73,85 @@ export interface IntentDrainHost {
 
 /** Drain until the queue is empty, the session closes, or the head fails. */
 export async function drainIntents(host: IntentDrainHost): Promise<void> {
-  if (host.closed() || !host.online()) return;
+  // A LOOP, NOT RECURSION (#1014, P23) — the same de-recursion `uploader.ts`
+  // took for #659, for the same reason: `return drainIntents(host)` held every
+  // earlier intent's promise alive until the last one settled, so a deep
+  // backlog cost memory proportional to the QUEUE'S LENGTH rather than to the
+  // intent in flight. One intent at a time is still the contract (R23); only
+  // the stack the pass leaves behind changes.
+  for (;;) {
+    // oxlint-disable-next-line no-await-in-loop -- the head is sent alone, by contract
+    const step = await drainOne(host);
+    if (step === "stop") return;
+  }
+}
+
+async function drainOne(host: IntentDrainHost): Promise<"stop" | "continue"> {
+  if (host.closed() || !host.online()) return "stop";
   await host.settleRegistrations();
-  if (host.closed()) return;
+  if (host.closed()) return "stop";
   if (!host.online()) {
     host.queueEveryoneWaiting("waiting for a connection");
-    return;
+    return "stop";
   }
   // QUIESCE, WHICH IS NOT A STOP (R23). While the copy is being replaced this
   // claims nothing new — an answer arriving mid-swap would be reconciled
   // against a file that is about to go — but an intent ALREADY SENDING keeps
   // its answer, which is why the check is here and not at the top of the flush.
-  if (host.quiesced?.()) return;
+  if (host.quiesced?.()) return "stop";
   let intent: ReplicaIntent | undefined;
   try {
     intent = await host.queue.claimNext();
   } catch (error) {
     host.rejectAll(error);
-    return;
+    return "stop";
   }
-  if (!intent) return;
+  if (!intent) return "stop";
   const claimed = intent;
   try {
     const { outcome } = await host.send(claimed);
-    if (outcome.status === "executed" || outcome.status === "in-flight") {
-      // NOT SETTLED HERE (#996, R24). The gateway committed; the overlay clears
-      // when the applier reaches the commit, inside its transaction.
-      await host.queue.awaitingChange(claimed.intentId);
+    if (outcome.status === "executed" && outcome.commitSeq !== undefined) {
+      // AN ANSWER THAT NAMES ITS COMMIT GOES THROUGH SETTLEMENT (#1014, R1).
+      // This branch used to park by hand, which threw `outcome.commitSeq`
+      // away — and `clearSeatOverlaysAtCommit` selects on exactly that
+      // column, so the comment it carried ("the overlay clears when the
+      // applier reaches the commit") described a mechanism the line above it
+      // made impossible. The reading of an answer lives in ONE place now;
+      // the drain hands `applyIntentOutcomes` the answer it was given, and
+      // the store's own `settlesByCommitSeq` decides whether the position or
+      // the #929 row versions are what this outbox waits on.
+      await applyOutcome(host, outcome);
+    } else if (
+      outcome.status === "executed" ||
+      outcome.status === "in-flight"
+    ) {
+      // NO POSITION TO WAIT ON. `in-flight` is "accepted, not yet committed",
+      // and an `executed` without a position is a gateway older than wave 1.
+      // Both park — but they park carrying whatever the answer DID name, so
+      // `settleAnsweredIntents` can rescue them by row version (#929 G1);
+      // otherwise the next send settles them from the retained outcome.
+      // Clearing `reason` is R2: a `fetch failed` an earlier attempt wrote is
+      // not what this send did, and it was still being shown under intents
+      // that had since executed.
+      await host.queue.awaitingChange(
+        claimed.intentId,
+        outcome.status === "executed" ? outcome.answeredVersions : undefined
+      );
     } else {
       await applyOutcome(host, outcome as IntentOutcome);
     }
     await host.settleRegistrations();
     host.resolve(claimed.intentId, outcome);
     host.onGatewayOutcome?.(true);
-    return drainIntents(host);
+    return "continue";
   } catch (error) {
     if (host.isAuthorizationError(error)) {
       await host.settleRegistrations();
       host.reject(claimed.intentId, error);
       host.onAuthorizationRevoked();
-      return;
+      return "stop";
     }
-    if (host.closed()) return;
+    if (host.closed()) return "stop";
     if (isPermanentIntentRejection(error)) {
       const outcome: IntentOutcome = {
         intentId: claimed.intentId,
@@ -112,14 +161,14 @@ export async function drainIntents(host: IntentDrainHost): Promise<void> {
       await applyOutcome(host, outcome);
       await host.settleRegistrations();
       host.resolve(claimed.intentId, outcome);
-      return drainIntents(host);
+      return "continue";
     }
     host.onGatewayOutcome?.(false);
     // A SESSION THAT CLOSED MID-SEND WRITES NOTHING. Its store is a handle on a
     // file that is already shut, and recording a transport failure against it
     // would be the drain outliving the thing it drains. The intent stays
     // `sending`, which `recoverSending` puts back at the head on the next open.
-    if (host.closed()) return;
+    if (host.closed()) return "stop";
     await host.queue
       .transportFailed(claimed.intentId, errorMessage(error))
       .catch(() => undefined);
@@ -131,6 +180,7 @@ export async function drainIntents(host: IntentDrainHost): Promise<void> {
     });
     host.queueEveryoneWaiting(QUEUED_RETRYING);
     host.scheduleRetry();
+    return "stop";
   }
 }
 
@@ -139,5 +189,22 @@ async function applyOutcome(
   outcome: IntentOutcome
 ): Promise<void> {
   const [settled] = await host.queue.applyOutcomes([outcome]);
-  if (settled) host.settled(settled);
+  if (!settled) return;
+  host.settled(settled);
+  await sweepPassedCommit(host, settled);
+}
+
+/**
+ * The parked-behind-the-cursor case (#1014, R1). See `appliedCommitSeq`.
+ */
+async function sweepPassedCommit(
+  host: IntentDrainHost,
+  settled: ReplicaIntent
+): Promise<void> {
+  if (settled.state !== "awaiting-change") return;
+  if (settled.commitSeq === undefined) return;
+  const applied = host.appliedCommitSeq?.();
+  if (applied === undefined || applied < settled.commitSeq) return;
+  for (const swept of await host.queue.settleAtCommitSeq(applied))
+    host.settled(swept);
 }

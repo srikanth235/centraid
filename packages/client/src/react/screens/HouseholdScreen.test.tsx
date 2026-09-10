@@ -178,6 +178,7 @@ describe("HouseholdScreen suite", () => {
         onReport: (report) => reports.push(report),
         seatWatermark: {
           applied: 900,
+          appliedCommitSeq: 900,
           head: 1_204,
           behind: 304,
           deferredPending: false,
