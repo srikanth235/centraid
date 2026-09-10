@@ -34,3 +34,30 @@ Ruled by the owner on 2026-09-10, before any lane cut code. Recorded in full at 
 - **`docs/decisions.md`** — new section `## Mobile UX consistency (#1015)`, placed after `## Governance as a constitution (#1005)` and before `## Related docs`: the re-judgement that opens it, D1–D6 as one table of `Id | Current decision | Why`, and the deliberate non-goals this umbrella keeps out of scope.
 - **`docs/decisions.md`** — one row appended to `## Superseded decision pointers`: #712's Title Case menu copy, superseded by D2.
 - **`docs/design-divergences.md`** — the Photos `### Copy` register no longer sanctions Title Case; the entry states sentence case per #1015 and names D2 as the ruling that closed it.
+
+### Lane APPS-A — slice 1: one derived return target for Docs, and a back row for Notes (B7 / S2)
+
+Closes audit `docs/findings.md#1` (blocker) and the back/title/band half of `notes/findings.md#5`.
+
+Docs' `DocsShelfHeader` exists to name the place it returns to, and all thirteen call sites typed that name by hand — all thirteen typed `"All"`, whatever they sat behind. The chevron called `goBack()` while the label and the VoiceOver string named somewhere else. The prop is gone: the head titles itself from the route it is on and names its return target from the route beneath it on the stack, so no call site can disagree with the chevron. A document's title rides along in the route params exactly as `DocsFolder.folderName` already did, so a pushed head names the document before the read lands.
+
+Notes has one navigator screen, so a notebook, a tag filter and the version history are state — and state has no `goBack()`. An `origin` records where a sub-place was entered from; the head draws the chevron plus that place's name and returns to it, and a band tap clears it because a band tap is a new start, not a step deeper. A notebook now titles itself with the notebook's own name (`shelfCopy` always took it; Notes never passed it) and lights **Notebooks**, not Library.
+
+**Supersedes a tested ruling**: `notes-band.test.ts` asserted "a notebook is a filter, not a fifth place" and pinned `library`. A notebook is only ever reached by tapping Notebooks, so lighting Library named a place the member was not looking at — the same reasoning `TasksScreen.tsx:23-25` already applies. The old assertion is replaced, not deleted silently; the root is asked to record it in `docs/decisions.md`.
+
+Proof: `apps/mobile/src/apps/docs/docs-places.test.ts` scans every source file under `apps/{docs,notes,tasks}` for a typed `backTo=` literal and fails on one. It fails on base (13 hits) and passes here.
+
+Files:
+
+- `apps/mobile/src/apps/docs/docs-places.ts` (new) — the route→title table and `docsRouteTitle`.
+- `apps/mobile/src/apps/docs/docs-places.test.ts` (new) — the table's rules plus the call-site scan across Docs, Notes and Tasks.
+- `apps/mobile/src/apps/docs/DocsShelfHeader.tsx` — `backTo` prop removed; both names derived from the stack; `title` now an optional override.
+- `apps/mobile/src/navigation.ts` — `DocumentRead` and `DocumentViewer` gain an optional `title`.
+- `apps/mobile/src/apps/docs/DriveList.tsx` — the three `DocumentRead` pushes carry the row's title.
+- `apps/mobile/src/apps/docs/DocumentRead.tsx` — passes its title on to `DocumentViewer`; overrides the head only once the read lands.
+- `apps/mobile/src/apps/docs/AddToDocs.tsx`, `BulkUpload.tsx`, `DocsCapabilities.tsx`, `DocsScan.tsx`, `DocsStorage.tsx`, `DocsTrash.tsx`, `DocumentEditor.tsx`, `DocumentNames.tsx`, `DocumentProperties.tsx`, `DocumentVersions.tsx`, `ProposedFiling.tsx`, `RecentlyChanged.tsx` — the typed `backTo`/`title` literals dropped.
+- `apps/mobile/src/apps/docs/DocsHome.test.tsx` — the reader-open assertion now expects the title riding along.
+- `apps/mobile/src/apps/notes/NotesHome.tsx` — `origin` state, `enter()`, the back row, the notebook's own name as the head.
+- `apps/mobile/src/apps/notes/NotesHome.styles.ts` — `back` / `backLabel`.
+- `apps/mobile/src/apps/notes/notes-band.ts` — a notebook shelf lights `books`.
+- `apps/mobile/src/apps/notes/notes-band.test.ts` — the superseded assertion replaced.

@@ -38,7 +38,7 @@ export default function DocumentNames({
 
   return (
     <DocsScreen current="all">
-      <DocsShelfHeader title="Who this document names" backTo="All" />
+      <DocsShelfHeader />
       {loading && !doc ? (
         <SkeletonRows accessibilityLabel="Reading this document" />
       ) : (

@@ -32,7 +32,7 @@ export default function ProposedFiling({
 
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Proposed filing" backTo="All" />
+      <DocsShelfHeader />
       <View style={styles.page}>
         <View style={styles.panel}>
           <Text style={styles.eyebrow}>Off</Text>

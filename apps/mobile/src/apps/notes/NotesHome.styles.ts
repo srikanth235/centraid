@@ -3,6 +3,17 @@ import { StyleSheet } from "react-native";
 import { borders, family, radii, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
+  back: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
+    minHeight: 44,
+    marginStart: -8,
+  },
+  backLabel: {
+    fontFamily: family.sansMedium,
+    fontSize: t("control").fontSize,
+  },
   backlink: {
     borderRadius: radii.md,
     borderWidth: borders.hairline,

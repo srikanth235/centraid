@@ -67,7 +67,7 @@ export default function DocumentVersions({
 
   return (
     <DocsScreen current="all">
-      <DocsShelfHeader title="Version history" backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       {loading && !chain ? (
         <SkeletonRows accessibilityLabel="Reading the version chain" />

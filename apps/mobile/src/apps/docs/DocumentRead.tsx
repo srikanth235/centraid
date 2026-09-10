@@ -71,14 +71,16 @@ export default function DocumentRead({
   // off to the Viewer route, replacing this frame rather than stacking on it.
   useEffect(() => {
     if (surface === "stage")
-      navigation.replace("DocumentViewer", { documentId });
-  }, [surface, navigation, documentId]);
+      navigation.replace("DocumentViewer", {
+        documentId,
+        ...(doc?.title ? { title: doc.title } : {}),
+      });
+  }, [surface, navigation, documentId, doc?.title]);
 
   return (
     <DocsScreen current="all">
       <DocsShelfHeader
-        title={doc?.title ?? "Document"}
-        backTo="All"
+        {...(doc?.title ? { title: doc.title } : {})}
         {...(doc && audiences
           ? {
               trailing: (

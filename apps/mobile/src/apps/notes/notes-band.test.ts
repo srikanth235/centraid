@@ -80,8 +80,13 @@ describe("which tab a shelf lights", () => {
     expect(notesBandKeyFor(SEARCH)).toBe("search");
   });
 
-  it("keeps a notebook inside Library — it is a filter, not a fifth place", () => {
-    expect(notesBandKeyFor(notebookShelf("nb1"))).toBe("library");
+  // SUPERSEDES "a notebook is a filter, not a fifth place" (#1015, audit
+  // notes/findings#5): a notebook is only ever reached by tapping Notebooks,
+  // so lighting Library there named a place the member was not looking at —
+  // the same reasoning Tasks already applies to a destination the band cannot
+  // show (`TasksScreen.tsx:23-25`).
+  it("lights Notebooks for a notebook, one level inside that place", () => {
+    expect(notesBandKeyFor(notebookShelf("nb1"))).toBe("books");
   });
 
   it("lights More for every act, and for the sheet itself", () => {

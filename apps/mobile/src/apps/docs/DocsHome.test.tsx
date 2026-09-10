@@ -204,8 +204,10 @@ describe("Docs, on the real React Native host tree", () => {
     const screen = mountDocs();
 
     fireEvent.press(screen.getByRole("button", { name: "Lease agreement" }));
+    // The title rides along (#1015) so the reader's head — and the head of
+    // anything pushed from it — names the document before the read lands.
     expect(navigated.calls).toStrictEqual([
-      ["DocumentRead", { documentId: "d1" }],
+      ["DocumentRead", { documentId: "d1", title: "Lease agreement" }],
     ]);
   });
 

@@ -35,7 +35,7 @@ export default function DocsScan({
 
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Scan a document" backTo="All" />
+      <DocsShelfHeader />
       <View style={styles.page}>
         <View style={styles.panel}>
           <Text accessibilityRole="header" style={styles.title}>

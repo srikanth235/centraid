@@ -40,7 +40,7 @@ export default function DocsStorage(): React.JSX.Element {
 
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Storage" backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       <View style={styles.page}>
         <View style={styles.container}>

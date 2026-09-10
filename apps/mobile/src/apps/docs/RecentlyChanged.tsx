@@ -33,7 +33,7 @@ export default function RecentlyChanged(): React.JSX.Element {
   );
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Recently changed" backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       <DriveList
         shelf={RECENT}

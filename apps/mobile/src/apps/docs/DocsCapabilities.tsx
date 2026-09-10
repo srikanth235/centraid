@@ -39,7 +39,7 @@ export default function DocsCapabilities({
 
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="What Docs may read" backTo="All" />
+      <DocsShelfHeader />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text accessibilityRole="header" style={styles.title}>
           {CAPABILITIES_TITLE}

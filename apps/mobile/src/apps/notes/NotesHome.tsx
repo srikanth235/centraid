@@ -9,7 +9,7 @@
 // Capture, Voice, Tags, Trash and Version history are ACTS behind More. The
 // navigator has ONE Notes route, so a destination is state, not a pushed entry.
 import { FlashList } from "@shopify/flash-list";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, View } from "react-native";
 
 import {
@@ -167,6 +167,16 @@ export default function NotesHome({
   const { session, refresh } = useReplica();
   const state = useNotes();
   const [place, setPlace] = useState<NotesPlace>(null);
+  // WHERE A SUB-PLACE WAS ENTERED FROM (#1015, audit notes/findings#5). Notes
+  // gets one navigator screen, so a notebook, a tag filter and the version
+  // history are STATE — and state has no `goBack()`. `enter` records the
+  // origin so the head can name it and return to it; every other setter
+  // clears it, because a band tap is a new start, not a step deeper.
+  const [origin, setOrigin] = useState<NotesPlace>();
+  const enter = useCallback((next: NotesPlace, from: NotesPlace): void => {
+    setOrigin(from);
+    setPlace(next);
+  }, []);
   const [conceptId, setConceptId] = useState<string>();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
@@ -448,7 +458,12 @@ export default function NotesHome({
 
   const pane = ((): React.JSX.Element => {
     if (place === NOTES_MORE_SHEET)
-      return <MoreSheet rows={NOTES_MORE_ROWS} onPick={setPlace} />;
+      return (
+        <MoreSheet
+          rows={NOTES_MORE_ROWS}
+          onPick={(shelfId) => enter(shelfId, NOTES_MORE_SHEET)}
+        />
+      );
     if (place === BOOKS)
       return (
         <NotebooksPlace
@@ -456,7 +471,7 @@ export default function NotesHome({
           unfiled={
             unfiledNoteIds([...state.visibleNoteIds], state.notebooks).length
           }
-          onOpen={(id) => setPlace(notebookShelf(id))}
+          onOpen={(id) => enter(notebookShelf(id), BOOKS)}
           onCreate={(name) => {
             if (name.trim())
               void write("create-notebook", { name: name.trim() }, undefined);
@@ -479,7 +494,7 @@ export default function NotesHome({
           {...(conceptId ? { active: conceptId } : {})}
           onSelect={(id) => {
             setConceptId(id);
-            setPlace(null);
+            enter(null, TAGS);
           }}
         />
       );
@@ -522,19 +537,53 @@ export default function NotesHome({
   })();
 
   const caption = captionFor(shelf);
+  // The notebook's own NAME, not the generic noun: `shelfCopy` takes it and
+  // Notes never passed it (#1015, audit notes/findings#5).
+  const notebookName = notebookId
+    ? state.notebooks.find((book) => book.notebook_id === notebookId)?.name
+    : undefined;
+  const placeTitle =
+    place === NOTES_MORE_SHEET ? "More" : shelfCopy(shelf, notebookName).title;
+  const originTitle =
+    origin === undefined
+      ? ""
+      : origin === NOTES_MORE_SHEET
+        ? "More"
+        : shelfCopy(origin).title;
   return (
     <NotesScreen
       current={notesBandKeyFor(place)}
       onDestination={(key) => {
+        setOrigin(undefined);
         setPlace(PLACE_FOR_TAB[key]);
         if (key !== "library") setConceptId(undefined);
       }}
       onHome={() => navigation.navigate("Home")}
     >
       <View style={styles.header}>
+        {/* A place entered from another place gets the back row every other
+            app already draws: the chevron plus the NAME of what it returns
+            to, never the word "Back". */}
+        {origin === undefined ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Back to ${originTitle}`}
+            onPress={() => {
+              setPlace(origin);
+              setOrigin(undefined);
+              if (origin === TAGS) setConceptId(undefined);
+            }}
+            style={styles.back}
+          >
+            <Icon name="chevron-left" size={22} color={colors.text} />
+            <Text style={[styles.backLabel, { color: colors.text }]}>
+              {originTitle}
+            </Text>
+          </Pressable>
+        )}
         <View style={styles.headerCopy}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {place === NOTES_MORE_SHEET ? "More" : shelfCopy(shelf).title}
+            {placeTitle}
           </Text>
           {caption ? (
             <Text style={[styles.subtitle, { color: colors.textSoft }]}>
@@ -657,7 +706,7 @@ export default function NotesHome({
         onSendToTasks={(line, text) => void sendToTasks(line, text)}
         onOpenHistory={() => {
           setEditing(false);
-          setPlace(HISTORY);
+          enter(HISTORY, place);
         }}
         onLink={(target, anchor) => void link(target, anchor)}
       />

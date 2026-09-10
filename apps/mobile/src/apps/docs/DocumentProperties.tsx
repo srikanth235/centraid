@@ -95,7 +95,7 @@ export default function DocumentProperties({
 
   return (
     <DocsScreen current="all">
-      <DocsShelfHeader title={STAGE_PROPS.head} backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       {drive.loading && !doc ? (
         <SkeletonRows accessibilityLabel="Reading this document" />

@@ -123,7 +123,7 @@ export default function BulkUpload(
 
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Uploading" backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.controls}>

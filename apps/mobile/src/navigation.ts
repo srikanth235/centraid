@@ -63,8 +63,10 @@ export type DocsStackParamList = {
   // Name rides along so the app bar need not wait a replica round-trip.
   DocsFolder: { folderId: string; folderName: string };
   // One read route: reading view for kinds Docs can set, facts panel for kinds it cannot.
-  DocumentRead: { documentId: string };
-  DocumentViewer: { documentId: string };
+  // `title` rides along like `DocsFolder.folderName`, so this head and the head
+  // one push deeper name the document before the read lands (#1015).
+  DocumentRead: { documentId: string; title?: string };
+  DocumentViewer: { documentId: string; title?: string };
   DocumentEditor: { documentId: string };
   DocumentVersions: { documentId: string };
   DocumentProperties: { documentId: string };

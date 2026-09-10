@@ -37,7 +37,7 @@ export default function DocsTrash(): React.JSX.Element {
   );
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Trash" backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       <DriveList
         shelf={TRASH}

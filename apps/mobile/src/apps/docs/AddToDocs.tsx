@@ -94,7 +94,7 @@ export default function AddToDocs({
 
   return (
     <DocsScreen current="more">
-      <DocsShelfHeader title="Add to Docs" backTo="All" />
+      <DocsShelfHeader />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.panel}>
           <WayIn

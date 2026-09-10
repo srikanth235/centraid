@@ -257,7 +257,11 @@ export default function DriveList({
     const id = doc.document_id;
     return buildDocMenu({ ...doc, canShare: audiences !== null }, folders, {
       share: () => setSharing(doc),
-      open: () => navigation.navigate("DocumentRead", { documentId: id }),
+      open: () =>
+        navigation.navigate("DocumentRead", {
+          documentId: id,
+          title: doc.title,
+        }),
       download: () => void handOver(doc),
       versions: () =>
         navigation.navigate("DocumentVersions", { documentId: id }),
@@ -419,6 +423,7 @@ export default function DriveList({
               onOpen={(opened) =>
                 navigation.navigate("DocumentRead", {
                   documentId: opened.document_id,
+                  title: opened.title,
                 })
               }
               onMenu={openMenu}
@@ -437,6 +442,7 @@ export default function DriveList({
               const open = (opened: MobileDriveDoc): void =>
                 navigation.navigate("DocumentRead", {
                   documentId: opened.document_id,
+                  title: opened.title,
                 });
               if (arrangement === "grid") {
                 return (

@@ -152,7 +152,7 @@ export default function DocumentEditor({
 
   return (
     <DocsScreen current="all">
-      <DocsShelfHeader title="Edit" backTo="All" />
+      <DocsShelfHeader />
       <ReplicaStatusBar />
       {loading && !doc ? (
         <SkeletonRows accessibilityLabel="Reading this document" />
