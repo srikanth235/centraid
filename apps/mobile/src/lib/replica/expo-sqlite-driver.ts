@@ -1,6 +1,7 @@
 import { openDatabaseSync } from "expo-sqlite";
 import type { SQLiteBindValue, SQLiteDatabase } from "expo-sqlite";
 
+import { pathToFileUri } from "../../../modules/centraid-storage";
 import { asReplicaStorageError } from "./replica-storage-error";
 
 /**
@@ -88,7 +89,22 @@ export class ExpoSqliteDriver implements UploadSqliteDriver {
       const db = openDatabaseSync(
         options.name,
         options.useNewConnection === true ? { useNewConnection: true } : {},
-        options.location
+        // A URI, NOT A PATH (#1014, R19) — the same footgun the seat driver
+        // next door already carries a paragraph about, on the one file it did
+        // not cover. expo-sqlite joins this directory with the name and hands
+        // the string to the native module, which resolves it with
+        // `URL(string:)` on iOS; a plain path parses SCHEMELESS, so
+        // `toFilePath()` returns the percent-ENCODED string and the durable
+        // upload queue opened `…/Application%20Support/CentraidReplica/…` —
+        // a SECOND, empty ledger one directory over from the real one. Every
+        // queued upload on an iPhone was therefore invisible to whichever
+        // entry point had opened the other spelling.
+        //
+        // `docs/traps/file-uri-database-locations.md` has the full account,
+        // and `legacyEncodedDatabaseDirectory` moves the stranded file.
+        options.location === undefined
+          ? undefined
+          : encodeURI(pathToFileUri(options.location))
       );
       // THE KEY IS FIRST, or nothing else on this handle can run.
       if (options.key !== undefined) db.execSync(keyPragma(options.key));

@@ -28,6 +28,15 @@ vi.mock(import("../../../modules/centraid-storage"), () => ({
   replicaStorageDirectory: () => "/doc/CentraidReplica",
 }));
 
+// The one-time recovery of a ledger stranded at the percent-encoded path
+// (#1014, R19) reaches the filesystem; this path has nothing to escape, so it
+// plans no move — the stub only keeps `react-native` out of the graph.
+vi.mock(import("expo-file-system"), () => ({
+  File: class {
+    readonly exists = false;
+  } as unknown as (typeof import("expo-file-system"))["File"],
+}));
+
 vi.mock(import("./store"), () => ({
   UploadQueueStore: {
     create: (driver: { close: () => void }) =>

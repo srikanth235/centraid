@@ -115,13 +115,23 @@ const COVER_OPTIONS = {
 } as const;
 
 function UploadReconciliation(): null {
-  const { session, gatewayBase, vaultId } = useReplica();
+  const { session, gatewayBase, vaultId, seat } = useReplica();
   useUploadReconciliation(session);
   // Watcher lives beside the drain, not in Photos (#883 C6): what a sweep does
   // is Photos'; when one may run is the frame's.
+  //
+  // THE SEAT TRAVELS WITH IT (#1014, P18). A sweep dedupes the camera roll
+  // against what the VAULT already holds, and that half of the timeline is
+  // read from this phone's copy — so a sweep wired without one saw no remote
+  // twins and re-uploaded photographs the vault already had, every foreground.
   useCameraRollWatcher(
     session && gatewayBase
-      ? { session, gatewayBase, ...(vaultId ? { vaultId } : {}) }
+      ? {
+          session,
+          gatewayBase,
+          ...(vaultId ? { vaultId } : {}),
+          ...(seat ? { seat } : {}),
+        }
       : undefined
   );
   // The frame, not a screen, tells the member about a re-sync: it outlives

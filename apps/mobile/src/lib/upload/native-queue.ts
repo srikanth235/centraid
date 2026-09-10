@@ -4,6 +4,8 @@
 // sealer and drainer take every one of these by injection so the vitest rig
 // can exercise them.
 
+import { File } from "expo-file-system";
+
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { ExpoSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
@@ -13,6 +15,7 @@ import { enqueueLocalFile } from "./enqueue";
 import type { EnqueueInput } from "./enqueue";
 import { expoFileSource, expoPartPutter } from "./expo-native";
 import { httpDirectTransferClient } from "./gateway-client";
+import { planLegacyDatabaseMove } from "./legacy-db-location";
 import { createNativeDigest } from "./native-digest";
 import { TERMINAL_RETENTION_MS, UploadQueueStore } from "./store";
 import type {
@@ -52,8 +55,41 @@ let shared:
   | { store: UploadQueueStore; holders: number; location: string | undefined }
   | undefined;
 
+/**
+ * Recover a ledger the old percent-encoded path stranded (#1014, R19). Runs at
+ * most once per location per process, before the handle is opened; a failure
+ * is not fatal — the queue opens empty at the right place and the sweep can be
+ * retried on the next launch — but it is never silent (logs.md).
+ */
+const recoveredLocations = new Set<string>();
+
+function recoverLegacyLedger(location: string): void {
+  if (recoveredLocations.has(location)) return;
+  recoveredLocations.add(location);
+  try {
+    const moves = planLegacyDatabaseMove(
+      location,
+      UPLOAD_DB_NAME,
+      (path) => new File(path).exists
+    );
+    for (const move of moves) new File(move.from).move(new File(move.to));
+    if (moves.length > 0) {
+      console.log(
+        `[centraid] uploads: recovered ${moves.length} queue file(s) from the percent-encoded path`
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[centraid] uploads: could not recover the queue stranded at the percent-encoded path: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
 function acquireUploadStore(): UploadQueueStore {
   const location = replicaStorageDirectory();
+  if (location) recoverLegacyLedger(location);
   if (shared && shared.location !== location) {
     // The durable directory moved (a restored container). The old handle names
     // a file that is not this one; nobody may keep holding it.
