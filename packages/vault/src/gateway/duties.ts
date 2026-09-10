@@ -8,6 +8,7 @@ import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { contentReferenceExists } from "../schema/content-references.js";
 import { writeProvenance, writeAuthorityReceipt } from "./evidence.js";
+import { withReplicaCommit } from "./replica-commit.js";
 import type { Identity } from "./types.js";
 
 export interface RevocationResult {
@@ -118,6 +119,15 @@ export interface SweepSkip {
  * done. Everything a row's purge does — the delete, its provenance, the
  * receipts for the answers it ended — either lands together or not at all, and
  * the failure becomes a named skip rather than a dead sweep.
+ *
+ * ONE ROW, ONE COMMIT (#1014, G5). The savepoint stays — it is the rollback
+ * unit, and SQLite's session extension un-records what a `ROLLBACK TO` undid,
+ * so a skipped row leaves no log row behind — but it now sits inside a replica
+ * commit pair. Outside the pair these purges reached no seat at all: a deleted
+ * row simply stayed on every phone until the next full bootstrap. Per row
+ * rather than per sweep, because one commit carrying a 5,000-row `PURGE_BATCH`
+ * would cross `REPLICA_DEFER_THRESHOLD_BYTES` and ship `deferred` to every
+ * metered seat.
  */
 function purgeOneRow(
   db: VaultDb,
@@ -126,21 +136,27 @@ function purgeOneRow(
   id: string,
   body: () => void
 ): boolean {
-  db.vault.exec("SAVEPOINT sweep_row");
-  try {
-    body();
-    db.vault.exec("RELEASE sweep_row");
-    return true;
-  } catch (error) {
-    db.vault.exec("ROLLBACK TO sweep_row");
-    db.vault.exec("RELEASE sweep_row");
-    skipped.push({
-      entity,
-      id,
-      reason: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
+  return withReplicaCommit(
+    db.vault,
+    () => {
+      db.vault.exec("SAVEPOINT sweep_row");
+      try {
+        body();
+        db.vault.exec("RELEASE sweep_row");
+        return true;
+      } catch (error) {
+        db.vault.exec("ROLLBACK TO sweep_row");
+        db.vault.exec("RELEASE sweep_row");
+        skipped.push({
+          entity,
+          id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    },
+    { producer: "sweep" }
+  );
 }
 
 /**
@@ -847,6 +863,57 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const domainTrash = purgeDomainTrash(db, owner, now, PURGE_BATCH, skipped);
   const domainRowsPurged = domainTrash.purged;
   authorityRevoked += domainTrash.authorityRevoked;
+  // THE TAIL, IN ONE PAIR (#1014, G5): the expiry revocations, the thread
+  // projection heal, the staging TTL and the sweep's own receipt are all writes
+  // to replicated tables, and every one of them used to land outside the pair.
+  return withReplicaCommit(
+    db.vault,
+    () =>
+      sweepTail(db, owner, now, {
+        authorityRevoked,
+        blobsReclaimed,
+        contentBlockedByLineage,
+        contentPurged,
+        documentsPurged,
+        lapsedAssets,
+        domainRowsPurged,
+        notesPurged,
+        skipped,
+      }),
+    { producer: "sweep" }
+  );
+}
+
+interface SweepTallies {
+  authorityRevoked: number;
+  blobsReclaimed: number;
+  contentBlockedByLineage: string[];
+  contentPurged: number;
+  documentsPurged: number;
+  lapsedAssets: { purged: number; blocked: string[]; authorityRevoked: number };
+  domainRowsPurged: number;
+  notesPurged: number;
+  skipped: SweepSkip[];
+}
+
+/** The tail of {@link sweepLifecycle}, always called inside one pair. */
+function sweepTail(
+  db: VaultDb,
+  owner: Identity,
+  now: string,
+  tally: SweepTallies
+): SweepResult {
+  const {
+    blobsReclaimed,
+    contentBlockedByLineage,
+    contentPurged,
+    documentsPurged,
+    lapsedAssets,
+    domainRowsPurged,
+    notesPurged,
+    skipped,
+  } = tally;
+  let authorityRevoked = tally.authorityRevoked;
   // An answer that ran out of time ends here, receipted (review 6.1).
   authorityRevoked += revokeExpiredAuthority(db, owner, now);
   // Heal the rebuildable projection (#441 A3). KEEP THE PREDICATE (#883):

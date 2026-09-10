@@ -76,7 +76,6 @@ import {
   generateConversationTitle,
   makeConversationRouteHandler,
   makeConversationRunnerCore,
-  makeLedgerDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
   resolveSubsystemHarnessLadder,
@@ -158,6 +157,7 @@ import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import { rewriteAutomationInstructions } from "../lifecycle/rewrite-automation-instructions.js";
 import type { GatewayPaths } from "../paths.js";
 import { createImagePreviewCodec } from "../preview/codec.js";
+import { makeReplicatedLedgerDbProvider } from "../replicated-ledger-db.js";
 import { makeAppsStoreRouteHandler } from "../routes/apps-store-routes.js";
 import { makeAssistantRouteHandler } from "../routes/assistant-routes.js";
 import {
@@ -2901,7 +2901,7 @@ export async function buildGateway(
     const plane = vaultRegistry.get(vaultId);
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
     const store = new AutomationTriggerStore(
-      makeLedgerDbProvider(plane.workspace.ledgerDbFile)
+      makeReplicatedLedgerDbProvider(plane.workspace.ledgerDbFile)
     );
     triggerStores.set(vaultId, store);
     return store;

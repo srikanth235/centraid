@@ -837,6 +837,15 @@ export {
 } from "./schema/key-store.js";
 export { resealVaultKey, type ResealResult } from "./gateway/reseal.js";
 export { writeReceipt } from "./gateway/evidence.js";
+// THE BRACKET EVERY REPLICATED-TABLE WRITE RUNS INSIDE (#1014).
+export {
+  bracketReplicaWrites,
+  classifyReplicaSql,
+  replicaWritesBracketed,
+  withReplicaCommit,
+  type ReplicaSqlKind,
+  type WithReplicaCommitOptions,
+} from "./gateway/replica-commit.js";
 export {
   admitImportedRow,
   resolveHandle,

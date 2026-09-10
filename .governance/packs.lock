@@ -8,6 +8,7 @@ packs:
   - law
   - no-hardcoded-model-ids
   - gateway-engine-mode-agnostic
+  - bracketed-replica-writes
   - format-check
   - coverage-scope-reachability
   - lint-check

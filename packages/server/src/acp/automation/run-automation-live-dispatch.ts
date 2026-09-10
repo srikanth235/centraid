@@ -23,11 +23,11 @@ import {
   HarnessSessions,
   hydrationMessagesFromLedger,
   isHarnessKind,
-  makeLedgerDbProvider,
   TurnPlane,
 } from "@centraid/server/engine";
 
 import { unrefTimer } from "../../lib/unref-timer.js";
+import { makeReplicatedLedgerDbProvider } from "../../replicated-ledger-db.js";
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the harness's cwd. */
@@ -118,7 +118,7 @@ export async function startLiveDispatch(
   const scratchDir = path.join(opts.workdir, ".automation-scratch", opts.runId);
   let scratchReady = false;
   const runsStore = new ConversationStore(
-    makeLedgerDbProvider(opts.ledgerDbFile)
+    makeReplicatedLedgerDbProvider(opts.ledgerDbFile)
   );
   const lockToken = randomUUID();
   if (!runsStore.acquireTurnLock(opts.automationRef, lockToken)) {

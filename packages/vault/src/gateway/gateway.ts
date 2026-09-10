@@ -130,6 +130,7 @@ import type {
   PortableExport,
   PortableExportOptions,
 } from "./portable-export.js";
+import { withReplicaCommit } from "./replica-commit.js";
 import { searchEntity } from "./search.js";
 import { runReadOnlySql, VAULT_SQL_DEFAULT_ROWS } from "./sql.js";
 import type { VaultSqlRequest, VaultSqlResult } from "./sql.js";
@@ -1461,9 +1462,14 @@ export class Gateway {
           this.db.vault.exec("ROLLBACK");
           throw error;
         }
-        for (const invocationId of invocationIds) {
-          setInvocationStatus(this.db, invocationId, "failed");
-        }
+        // AFTER the cascade's COMMIT and therefore outside its pair (#1014,
+        // G24): `agent_command_invocation` replicates, so the status change
+        // gets a pair of its own rather than riding the next member command's.
+        withReplicaCommit(this.db.vault, () => {
+          for (const invocationId of invocationIds) {
+            setInvocationStatus(this.db, invocationId, "failed");
+          }
+        });
         return invocationIds.length;
       }
     );
@@ -1476,25 +1482,51 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
       throw new GatewayError("access", "only the owner runs sweeps");
+    // THE PROJECTION PASSES, BRACKETED (#1014, G5). Untransacted, as these
+    // were, their rows were lost outright on the first sweep after process
+    // start and otherwise absorbed into the next member command's commit —
+    // mis-attributed to that member, and able to push it past
+    // `REPLICA_PRODUCER_MAX_ROWS` so the member's own edit shipped `deferred`.
+    //
+    // Grouped rather than one pair per mutator: they are the cheap, fully
+    // rebuildable projections of a vault that already fits on a phone, and the
+    // standing clock runs this every tick — six empty write transactions per
+    // idle tick would dirty WAL pages to discover there was nothing to do. The
+    // groups are exactly the ordering constraint above (#724).
+    // The purge passes inside `sweepLifecycle` keep a pair per row, where the
+    // 5,000-row `PURGE_BATCH` makes commit size the thing worth bounding.
     const result = sweepLifecycle(this.db, owner);
     // Cheap, fully rebuildable; rides the standing clock.
-    recomputeDuplicateClusters(this.db.vault);
+    withReplicaCommit(
+      this.db.vault,
+      () => recomputeDuplicateClusters(this.db.vault),
+      { producer: "sweep" }
+    );
     // AFTER the recompute above (#724): a regrouped sweep feeds this pass's
-    // 'similar' memories. Face clusters read what the faces sweep wrote (#724).
+    // 'similar' memories. It owns its own pair — its memo may only be
+    // remembered after the COMMIT, so it cannot join the group below.
     rebuildMemories(this.db.vault);
-    rebuildFaceClusters(this.db.vault);
-    // Seed jobs for old video/audio/PDF content and clear vanished ownership,
-    // so a backstop looking for NULL leases can resume immediately.
-    releaseExpiredEnrichmentLeases(this.db.vault);
-    drainSatisfiedEnrichmentRequests(this.db.vault);
-    queueMissingDeviceEnrichmentBacklog(this.db.vault, {
-      newId: () => uuidv7(),
-      requestedAt: nowIso(),
-      limit: 100,
-    });
+    withReplicaCommit(
+      this.db.vault,
+      () => {
+        // Face clusters read what the faces sweep wrote (#724).
+        rebuildFaceClusters(this.db.vault);
+        // Seed jobs for old video/audio/PDF content and clear vanished
+        // ownership, so a backstop looking for NULL leases resumes immediately.
+        releaseExpiredEnrichmentLeases(this.db.vault);
+        drainSatisfiedEnrichmentRequests(this.db.vault);
+        queueMissingDeviceEnrichmentBacklog(this.db.vault, {
+          newId: () => uuidv7(),
+          requestedAt: nowIso(),
+          limit: 100,
+        });
+      },
+      { producer: "sweep" }
+    );
     this.ringProvenance();
-    // Sweeps commit outside the command path; wake replica SSE streams at the
-    // same post-commit boundary.
+    // Each pair already rang on its own COMMIT; this is the sweep's own
+    // post-commit boundary, and a doorbell is idempotent for a listener that
+    // re-reads from its cursor.
     notifyReplicaCommit(this.db.vault);
     return result;
   }

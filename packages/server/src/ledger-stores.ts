@@ -7,11 +7,10 @@
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  ConversationStore,
-  makeLedgerDbProvider,
-} from "@centraid/server/engine";
+import { ConversationStore } from "@centraid/server/engine";
 import type { DatabaseProvider } from "@centraid/server/engine";
+
+import { makeReplicatedLedgerDbProvider } from "./replicated-ledger-db.js";
 
 interface LedgerEntry {
   store: ConversationStore;
@@ -32,7 +31,7 @@ export function ledgerConversationStore(
   const key = path.resolve(ledgerDbFile);
   const existing = entries.get(key);
   if (existing) return existing.store;
-  const lazy = makeLedgerDbProvider(key);
+  const lazy = makeReplicatedLedgerDbProvider(key);
   let opened: DatabaseSync | undefined;
   const tracking: DatabaseProvider = () => {
     opened = lazy();
