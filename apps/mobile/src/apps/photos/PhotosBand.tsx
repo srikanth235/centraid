@@ -20,6 +20,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -103,6 +104,9 @@ export default function PhotosBand({
               disabled={!interactive}
               onPress={() => {
                 if (!interactive) return;
+                // The band moved to another place: the one selection tick
+                // (#1015, S15 — `kit/haptics.ts` names the three moments).
+                hapticSelect();
                 onSelect(destination.key);
               }}
               style={styles.tab}

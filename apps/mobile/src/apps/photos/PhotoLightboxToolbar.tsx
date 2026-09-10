@@ -3,7 +3,6 @@
 // as whatever sentence `viewerWriteRefusal` returns (§6, §18): read-only
 // vault, or not-in-a-vault-yet for a device row. Trash `--net` ink, never fill.
 
-import * as Haptics from "expo-haptics";
 import React from "react";
 import { View } from "react-native";
 
@@ -67,8 +66,9 @@ export function PhotoLightboxToolbar({
   const run: Record<ViewerActionId, () => void> = {
     copy: () => onSaveToMyVault?.(),
     edit: () => onEdit?.(),
+    // No buzz on a favorite: it is a metadata write, not one of the three
+    // moments `kit/haptics.ts` names (#1015, S15).
     favorite: () => {
-      void Haptics.selectionAsync();
       void onWrite("update-asset", {
         asset_id: asset.assetId!,
         favorite: asset.favorite ? 0 : 1,

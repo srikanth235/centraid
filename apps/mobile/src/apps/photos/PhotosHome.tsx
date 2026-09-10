@@ -14,7 +14,6 @@
 // a destination in place rather than pushing, so the band is wired here and
 // not through `PhotosScreen`), the anchored view-options menu, and the writes.
 
-import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 
@@ -290,13 +289,13 @@ export default function PhotosHome({
           }),
       });
       setSelection(outcome.inCloud);
+      // NO BUZZ FOR A BACKUP THAT WORKED (#1015, S15). The three moments are
+      // `kit/haptics.ts`'s: a band selection, a mode-changing long-press, and
+      // a DESTRUCTIVE write landing. A successful upload is none of them, and
+      // a channel that fires for everything means nothing.
       if (outcome.paused) postStatus(outcome.paused);
       else if (outcome.inCloud.size)
         postStatus(inCloudMessage(outcome.inCloud.size));
-      else
-        void Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success
-        );
     } finally {
       setBackingUp(false);
       setUploadProgress(undefined);

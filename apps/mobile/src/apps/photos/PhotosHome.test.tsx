@@ -75,15 +75,9 @@ vi.mock(import("expo-media-library"), () => ({
   >(() => [null, vi.fn<() => Promise<never>>(), vi.fn<() => Promise<never>>()]),
 }));
 
-vi.mock(import("expo-haptics"), () => ({
-  NotificationFeedbackType: { Success: "success" } as never,
-  notificationAsync: vi.fn<
-    (typeof import("expo-haptics"))["notificationAsync"]
-  >(async () => undefined),
-  selectionAsync: vi.fn<(typeof import("expo-haptics"))["selectionAsync"]>(
-    async () => undefined
-  ),
-}));
+// No `expo-haptics` mock here: this file is in the RNTL project, whose
+// `native-device-seams.ts` setup stands the seam in front of the module for
+// every file it runs (#1015, S15).
 
 vi.mock(import("expo-notifications"), () => ({
   SchedulableTriggerInputTypes: { DATE: "date" } as never,
