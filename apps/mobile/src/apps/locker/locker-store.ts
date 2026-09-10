@@ -191,9 +191,18 @@ export function resetLockerVault(): void {
   subscribers.clear();
 }
 
+/**
+ * S14 (#1015, R-A-15): the exception is a fact about the program. What the
+ * transport, the keychain or the SQLite driver throws goes to the log
+ * (docs/logs.md); the pane gets Locker's own sentence and the one retry word.
+ */
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  console.warn("[locker] read failed", error);
+  return LOCKER_NOT_READ;
 }
+
+/** Locker's ONE read-failure sentence. */
+const LOCKER_NOT_READ = "Locker could not be read. Try again.";
 
 // ─── The clock ──────────────────────────────────────────────────────────────
 

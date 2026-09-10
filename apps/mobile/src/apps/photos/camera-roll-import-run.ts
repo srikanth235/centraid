@@ -76,7 +76,8 @@ async function contributeDeviceRungs(
     set = await generateDeviceDerivatives(localUri, "image/heic", sourceSize);
   } catch (error) {
     console.warn(
-      `[centraid] import: device rungs skipped for ${filename} — could not render on device: ${reasonOf(error)}`
+      `[centraid] import: device rungs skipped for ${filename} — could not render on device`,
+      error
     );
     return;
   }
@@ -98,17 +99,12 @@ async function contributeDeviceRungs(
   } catch (error) {
     // Left backfillable; the sweep is the backstop it always was.
     console.warn(
-      `[centraid] import: device rungs skipped for ${filename} — contribution failed: ${reasonOf(error)}`
+      `[centraid] import: device rungs skipped for ${filename} — contribution failed`,
+      error
     );
   } finally {
     cleanupDeviceDerivatives(set.binary);
   }
-}
-
-/** The contribution helpers name the HTTP status in their message, so the
- *  reason a reader needs is already in there. */
-function reasonOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** One file through the SAME staged-import door as a dropped Takeout zip;

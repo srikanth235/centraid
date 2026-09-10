@@ -190,7 +190,9 @@ describe("resumable import run", () => {
     );
     expect(attempt).toHaveBeenCalledTimes(3);
     expect(progress.imported).toBe(2);
-    expect(progress.failed).toStrictEqual({ b: "stage failed: 500" });
+    // S14 (#1015, R-A-15): "stage failed: 500" is a fact about the program.
+    // It is logged; the row a member sees says what did not happen.
+    expect(progress.failed).toStrictEqual({ b: "This one did not import." });
     // The failed candidate is DONE — a resumed run does not retry it forever
     // on its own; a member (or a future retry affordance) decides that.
     expect([...progress.done].sort()).toStrictEqual(["a", "b", "c"]);
