@@ -137,10 +137,32 @@ export function parseBaseVersions(value: unknown): ReplicaIntentBaseVersion[] {
     };
   });
   return parsed.sort((left, right) =>
-    `${left.entity}\u0000${left.rowId}\u0000${left.shapeId ?? ""}`.localeCompare(
-      `${right.entity}\u0000${right.rowId}\u0000${right.shapeId ?? ""}`
-    )
+    compareBaseVersionKeys(baseVersionSortKey(left), baseVersionSortKey(right))
   );
+}
+
+function baseVersionSortKey(value: {
+  entity: string;
+  rowId: string;
+  shapeId?: string;
+}): string {
+  return `${value.entity}\u0000${value.rowId}\u0000${value.shapeId ?? ""}`;
+}
+
+/**
+ * CODE POINTS, NEVER A LOCALE (#1014, C20).
+ *
+ * The hash covers `baseVersions` IN THIS ORDER, and the seat computes its half
+ * in `packages/client/src/replica/payload-hash.ts`. Both used to sort with
+ * `localeCompare`, which is the runtime's ICU collation — Hermes, V8 and node
+ * can order the same two keys differently, and a disagreement here is a
+ * `replica_intent_hash_mismatch` on a perfectly well-formed write. `<`/`>` on
+ * strings compares UTF-16 code units, which is a property of the string and
+ * not of the machine; the client-side twin carries the same comment.
+ */
+function compareBaseVersionKeys(left: string, right: string): number {
+  if (left < right) return -1;
+  return left > right ? 1 : 0;
 }
 
 /** A row the operation declared it read that the intent never referenced. */
