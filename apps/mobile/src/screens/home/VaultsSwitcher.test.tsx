@@ -100,6 +100,10 @@ vi.mock(
   import("@centraid/design"),
   () =>
     ({
+      // The switcher now mounts the kit confirm, which reaches the band
+      // surface and its hairline (#1015, Wave 2). The mock stays partial;
+      // it just has to answer for what the tree actually reads.
+      borders: { hairline: 1 },
       icons: { Sparkle: () => null },
       identityInk: () => "#mock-ink",
     }) as unknown as Partial<DesignModule>
@@ -151,8 +155,13 @@ vi.mock(
   import("../../kit/theme"),
   () =>
     ({
+      // `borders`, `metrics` and `targetMin`: the kit confirm the switcher
+      // mounts reaches the rooms' style sheet (#1015, Wave 2).
+      borders: { hairline: 1 },
       family: { sansMedium: "sans-medium" },
-      radii: { lg: 12, md: 7 },
+      metrics: { control: 34, controlTouch: 44, row: 44, segmented: 28 },
+      radii: { lg: 12, md: 7, sm: 4 },
+      targetMin: { coarse: 44, fine: 34 },
       pageMargin: 18,
       spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
       t: () => ({ fontSize: 12 }),

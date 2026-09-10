@@ -38,9 +38,10 @@ export default function SheetRoom({
   title,
   onClose,
   primary,
-  cancelLabel = "Cancel",
+  cancelLabel,
   children,
 }: SheetRoomProps): React.JSX.Element | null {
+  const leave = cancelLabel ?? "Cancel";
   const { colors } = useTheme();
   const ink = useMemo(
     () => ({
@@ -65,7 +66,7 @@ export default function SheetRoom({
         </Text>
         <View style={styles.sheetBody}>{children}</View>
         <View style={styles.actionRow}>
-          <Button label={cancelLabel} onPress={onClose} variant="quiet" />
+          <Button label={leave} onPress={onClose} variant="quiet" />
           {primary ? (
             <Button
               disabled={primary.disabled}

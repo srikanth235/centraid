@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -26,6 +25,7 @@ import {
   companionPageContext,
   companionSubmitText,
 } from "./assistant-companion";
+import ConsentSheet from "./ConsentSheet";
 import { useAssistant } from "./useAssistant";
 
 export default function AssistantCompanionSheet({
@@ -43,30 +43,6 @@ export default function AssistantCompanionSheet({
     "attachment" | "harness" | "model" | "effort" | null
   >(null);
   const listRef = useRef<FlatList<(typeof assistant.bubbles)[number]>>(null);
-
-  useEffect(() => {
-    if (!assistant.pendingConsent) return;
-    Alert.alert(
-      "Share with another provider?",
-      assistant.pendingConsent.message,
-      [
-        {
-          onPress: assistant.declineConsent,
-          style: "cancel",
-          text: "Cancel",
-        },
-        {
-          onPress: assistant.approveConsent,
-          text: `Allow ${assistant.pendingConsent.provider}`,
-        },
-      ],
-      { cancelable: true, onDismiss: assistant.declineConsent }
-    );
-  }, [
-    assistant.approveConsent,
-    assistant.declineConsent,
-    assistant.pendingConsent,
-  ]);
 
   const text = companionSubmitText(draft, assistant.sending);
   const submit = (): void => {
@@ -139,8 +115,16 @@ export default function AssistantCompanionSheet({
     (harness) => harness.kind === assistant.config?.harnessKind
   );
 
+  const handleAllowProvider = (): void => assistant.approveConsent();
+  const handleDeclineProvider = (): void => assistant.declineConsent();
+
   return (
     <>
+      <ConsentSheet
+        onAllow={handleAllowProvider}
+        onDecline={handleDeclineProvider}
+        pending={assistant.pendingConsent}
+      />
       <Modal
         animationType="slide"
         onRequestClose={() => navigation.goBack()}

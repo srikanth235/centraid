@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import {
   FlatList,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +26,7 @@ import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
 import type { AssistantFullScreenProps } from "../../navigation";
 import { makeStyles } from "./Assistant.styles";
+import ConsentSheet from "./ConsentSheet";
 import { useAssistant } from "./useAssistant";
 import type { Bubble } from "./useAssistant";
 
@@ -78,21 +78,6 @@ export default function AssistantScreen({
       hide.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (!pendingConsent) return;
-    Alert.alert(
-      "Share with another provider?",
-      pendingConsent.message,
-      [
-        { text: "Cancel", style: "cancel", onPress: declineConsent },
-        { text: `Allow ${pendingConsent.provider}`, onPress: approveConsent },
-      ],
-      // Android's back gesture dismisses without pressing a button. Silence is
-      // not consent — and without this the turn stays wedged on pendingConsent.
-      { cancelable: true, onDismiss: declineConsent }
-    );
-  }, [approveConsent, declineConsent, pendingConsent]);
 
   const renderBubble = useCallback(
     ({ item }: ListRenderItemInfo<Bubble>): React.JSX.Element => (
@@ -171,6 +156,11 @@ export default function AssistantScreen({
 
   return (
     <TopSafeArea style={styles.safe} edges={["top"]}>
+      <ConsentSheet
+        onAllow={approveConsent}
+        onDecline={declineConsent}
+        pending={pendingConsent}
+      />
       <View style={styles.header}>
         <Tappable
           accessibilityRole="button"

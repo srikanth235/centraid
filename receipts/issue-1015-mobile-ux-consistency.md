@@ -459,3 +459,23 @@ Tests: `apps/mobile/src/screens/shell-rooms.test.ts` is new — it reads `script
 - `apps/mobile/src/apps/insights/GatewayAlerts.tsx` — the biggest single reduction in this lane. It drew its own `TopSafeArea`, its own header row with a `display` title and a subtitle nothing else in the shell has, its own gutter, and three bare `Text` lines standing in for loading, error and empty. **Its error line was the exception**: `state.message` was `memberFacingError(error.message)` printed as the whole page. That is exactly S14. The `State` union no longer carries a `message` at all — `{ kind: "error" }` — so there is no longer anywhere for an exception to be stored, let alone shown; the room says one noun and one verb. Loading is a skeleton, empty is the routine block, and the subtitle is a `NoteBlock` in the body. Seven style keys deleted (`empty`, `header`, `headerCopy`, `list`, `safe`, `subtitle`, `title`).
 
 `apps/mobile/src/screens/shell-rooms.test.ts` — both files added to `MIGRATED`.
+
+### Lane SHELL — every system alert in the shell, replaced (Wave 2, S7/D4)
+
+`grep -rn "Alert.alert" apps/mobile/src/screens apps/mobile/src/apps/{assistant,automations,insights}` → **0 call sites** (the seven remaining matches are the comments naming what was replaced). A new sweep test, `src/screens/shell-rooms.test.ts` → "asks with the kit confirm, never a system alert", holds it there over the whole tree, not just the seven files.
+
+Five were destructive confirms and are `useConfirmDestructive` now — the noun in the title, an outlined `--net` verb, and a sheet that can host the status line the undo would post into:
+
+- `apps/mobile/src/screens/devices/DeviceActions.tsx` — "Revoke this device?" / "Sign out this device?".
+- `apps/mobile/src/screens/Settings.tsx` — "Unpair this device?".
+- `apps/mobile/src/screens/home/VaultsSwitcher.tsx` — "Remove this vault from this phone?". The old title was "Remove from this phone?", which names no noun at all.
+- `apps/mobile/src/screens/BackupHealth.tsx` — "Stop backing up this device?", keeping "Keep backing up" as the way out.
+- `apps/mobile/src/screens/PhoneStorage.tsx` — "Free up the offline thumbnails?".
+
+Two were a CHOICE, not a confirm, and are a `SheetRoom` (**D4**): `apps/mobile/src/apps/assistant/ConsentSheet.tsx` is new, and `Assistant.tsx` and `AssistantCompanionSheet.tsx` both mount it. It replaces two spellings of one question in two files. The ink verb is the ALLOW and the quiet way out declines, which the system alert could not express — it gave both buttons the same weight, so the consent ask read as a destructive confirm on one screen and as a neutral prompt on the other. Dismissing still declines: silence is not consent, and both `useEffect`s (the whole imperative-alert-in-an-effect pattern) are gone.
+
+Kit: `ConfirmSheet` gained `cancelLabel`, passed through to `SheetRoom`, because "Keep backing up" is a truer word for staying than "Cancel" — and `SheetRoom`'s own default moved from a parameter default to a `??` so an explicit `undefined` still resolves.
+
+Two test fixtures completed, neither loosened: `src/screens/home/VaultsSwitcher.test.tsx`'s partial `@centraid/design` and `kit/theme` mocks gained `borders`, `metrics`, `targetMin` and `radii.sm` — the switcher mounts the kit confirm now, so its tree genuinely reads them. No assertion changed.
+
+Verification on this head: `bunx vitest run src` → 2469 passed, 295 files; the single failing file is the inherited `src/lib/replica/expo-seat-driver.test.ts` load failure, which fails identically on the base head. `bun run --cwd apps/mobile typecheck` → 0. `lint-mobile-rooms` → `screen-root 172` (from 181 at the start of this lane), `back-literal 47`, `page-margin 107`, `identity-tint 0`, `copy-title-case 0`.

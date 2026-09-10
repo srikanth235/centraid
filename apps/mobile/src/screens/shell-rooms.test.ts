@@ -14,11 +14,12 @@
 // It reads the lint's own rules rather than a second copy of them: one
 // definition of "a room", checked here per file and reported tree-wide there.
 
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { lintTree } from "../../../../scripts/lint-mobile-rooms.mjs";
+import { lintTree, walk } from "../../../../scripts/lint-mobile-rooms.mjs";
 
 const REPO = path.resolve(import.meta.dirname, "../../../..");
 
@@ -53,7 +54,24 @@ const findings = lintTree(REPO).findings.filter((finding) =>
   SHELL.some((tree) => finding.path.startsWith(tree))
 );
 
+/** Every source file in this lane's trees, tests excluded. */
+const shellSources = SHELL.flatMap((tree) => walk(path.join(REPO, tree)))
+  .map((file) => path.relative(REPO, file))
+  .filter((file) => /\.tsx?$/u.test(file) && !file.includes(".test."));
+
 describe("the shell's rooms", () => {
+  it("asks with the kit confirm, never a system alert", () => {
+    // `Alert.alert` draws a system dialog: it cannot carry the outlined
+    // `--net` verb, cannot host a status line, and gives the destructive
+    // choice no more weight than the way out. Five of these were confirms
+    // (`useConfirmDestructive`) and two were the provider-consent CHOICE
+    // (`SheetRoom`, D4). None of the seven had a reason to be an alert.
+    const callers = shellSources.filter((file) =>
+      /\bAlert\.alert\s*\(/u.test(readFileSync(path.join(REPO, file), "utf8"))
+    );
+    expect(callers).toStrictEqual([]);
+  });
+
   it("roots every migrated screen in one of the six rooms", () => {
     const offenders = findings
       .filter((finding) => finding.rule === "screen-root")

@@ -14,7 +14,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Animated,
   Easing,
   Modal,
@@ -28,6 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { icons as ICON_SET, identityInk } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -105,6 +105,11 @@ export default function VaultsSwitcher({
   onPairDesktop,
 }: VaultsSwitcherProps): React.JSX.Element {
   const { colors } = useTheme();
+  // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
+  // title, and a status line it can host - none of which `Alert.alert` can
+  // draw.
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
   const reducedMotion = useReducedMotion();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -235,22 +240,16 @@ export default function VaultsSwitcher({
   const onForget = useCallback(
     (vault: VaultLink): void => {
       const label = vault.vaultName || vault.desktopName || "this vault";
-      Alert.alert(
-        "Remove from this phone?",
-        `“${label}” will be removed from this iPhone. The vault itself stays on ${
+      confirmDestructive({
+        body: `“${label}” will be removed from this iPhone. The vault itself stays on ${
           vault.desktopName || "the desktop"
         } — you can add it again by pairing.`,
-        [
-          { style: "cancel", text: "Cancel" },
-          {
-            style: "destructive",
-            text: "Remove",
-            onPress: () => void runExclusive(() => forgetVaultLink(vault.id)),
-          },
-        ]
-      );
+        noun: "this vault from this phone",
+        onConfirm: () => void runExclusive(() => forgetVaultLink(vault.id)),
+        verb: "Remove",
+      });
     },
-    [runExclusive]
+    [confirmDestructive, runExclusive]
   );
 
   const active = vaultLinks.find((s) => s.id === activeId);
@@ -264,6 +263,7 @@ export default function VaultsSwitcher({
       onRequestClose={onClose}
     >
       <View style={styles.root}>
+        {confirmSheet}
         <Animated.View style={[styles.scrim, { opacity: fade }]}>
           <Pressable
             style={StyleSheet.absoluteFill}
