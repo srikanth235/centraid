@@ -14,7 +14,7 @@ import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
 import { SeatBootstrapNoRoomError } from "./seat-bootstrap-no-room-error.js";
 import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
-import { readSeatState } from "./state.js";
+import { readSeatState, seatStatePresent } from "./state.js";
 
 function workspace(): string {
   return tempDirSync("seat-bootstrap-");
@@ -271,5 +271,35 @@ describe("seat file bootstrap", () => {
         open: () => new NodeSeatDriver(path.join(root, "seat.db")),
       })
     ).rejects.toBeInstanceOf(SeatSnapshotMovedError);
+  });
+  // #1014, C17. R25's forensics were a seat file holding another vault's rows
+  // with `seat_state` ABSENT — the shape a kill between the move and the old
+  // post-install write leaves behind, and the shape `worker-core.ts` reads as
+  // "this seat has no copy" and re-downloads the whole artifact for.
+  it("names the file before the move, so no window holds a copy without seat_state", async () => {
+    const root = workspace();
+    const { bytes, etag } = artifact(root);
+    const drivers: NodeSeatDriver[] = [];
+    let presentAtFirstOpen: boolean | undefined;
+    const result = await bootstrapSeatFile({
+      transport: stubTransport(bytes, etag),
+      staging: staging(root),
+      vaultId: "vault-1",
+      open: () => {
+        const driver = new NodeSeatDriver(path.join(root, "seat.db"));
+        drivers.push(driver);
+        presentAtFirstOpen ??= seatStatePresent(driver);
+        return driver;
+      },
+    });
+    // The FIRST handle on the installed file already sees the seat's tables:
+    // they were written on the incoming copy, so the move published them.
+    expect(presentAtFirstOpen).toBe(true);
+    expect(result.ftsRebuilt).toStrictEqual(["fts_note"]);
+    expect(readSeatState(drivers.at(-1)!)).toMatchObject({
+      vaultId: "vault-1",
+      appliedSeq: 42,
+    });
+    for (const driver of drivers) driver.close();
   });
 });

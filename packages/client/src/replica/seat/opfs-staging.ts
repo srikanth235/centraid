@@ -139,6 +139,16 @@ export function opfsSeatStaging(
       await writer.write({ type: "write", position: at, data: chunk });
       await writer.close();
     },
+    /**
+     * NO `prepare` HERE, AND IT IS NOT AN OVERSIGHT (#1014, C17).
+     *
+     * `importDb` is a wholesale replace: there is no expanded file sitting
+     * beside the destination for the seat's own tables to be written onto
+     * before the swap, so the pre-swap window the other two hosts offer does
+     * not exist. The bootstrap notices that `prepare` was never called and
+     * names the installed file instead — the old order, which a browser tab
+     * killed mid-import recovers from by bootstrapping again.
+     */
     install: async (): Promise<void> => {
       const staged = await (
         await options.directory.getFileHandle(PART)

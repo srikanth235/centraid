@@ -76,8 +76,26 @@ export interface SeatBootstrapStaging {
    * Gunzip the staged artifact into place as the seat's database file, and
    * drop the staging. Atomic from a reader's point of view: a caller that
    * arrives mid-install sees the old file or the new one.
+   *
+   * `prepare` RUNS ON THE INCOMING FILE, BEFORE THE SWAP (#1014, C17). The
+   * bootstrap's `seat_state` used to be written after the move, so a kill in
+   * that window left the gateway's file in place under this seat's name with
+   * no `seat_state` in it — `seatStatePresent()` false, "this seat has no
+   * copy", and the whole artifact downloaded again. Handing the write to the
+   * host that owns the move makes install-and-name-it one step: the file that
+   * appears is already this seat's, or no file appears at all. A host that
+   * throws out of `prepare` must leave the destination UNTOUCHED — that is
+   * what makes a mis-addressed artifact (C16) a refusal rather than a
+   * replacement.
+   *
+   * A host with no window between "expanded" and "in place" (the browser's
+   * SAH pool imports wholesale) simply does not call `prepare`; the bootstrap
+   * notices and falls back to writing on the installed file.
    */
-  install: (etag: string) => Promise<void>;
+  install: (
+    etag: string,
+    prepare?: (driver: SeatSqliteDriver) => void
+  ) => Promise<void>;
   discard: () => Promise<void>;
   /** Free bytes where these files live, or undefined when the host cannot say. */
   freeBytes: () => Promise<number | undefined>;
@@ -182,17 +200,29 @@ export async function bootstrapSeatFile(
     throw new SeatSnapshotMovedError(head.etag, undefined);
   }
 
-  await options.staging.install(head.etag);
+  // ONE STEP, NOT TWO (#1014, C17). `name` is everything that turns the
+  // gateway's file into THIS seat's file, and the host runs it on the incoming
+  // copy so the move is the only observable transition. `named` records
+  // whether it ran: a host with no pre-swap window falls through to the old
+  // order below, which is worse but is still correct on a clean run.
+  let ftsRebuilt: readonly string[] = [];
+  let named = false;
+  const name = (driver: SeatSqliteDriver): void => {
+    openSeatFile(driver);
+    ftsRebuilt = rebuildSeatFtsIndexes(driver);
+    initSeatState(driver, {
+      vaultId: options.vaultId,
+      epoch: head.epoch,
+      schemaEpoch: head.schemaEpoch,
+      appliedSeq: head.seq,
+      gatewayWatermark: head.seq,
+    });
+    named = true;
+  };
+  await options.staging.install(head.etag, name);
   const driver = await options.open();
   openSeatFile(driver);
-  const ftsRebuilt = rebuildSeatFtsIndexes(driver);
-  initSeatState(driver, {
-    vaultId: options.vaultId,
-    epoch: head.epoch,
-    schemaEpoch: head.schemaEpoch,
-    appliedSeq: head.seq,
-    gatewayWatermark: head.seq,
-  });
+  if (!named) name(driver);
   return {
     seq: head.seq,
     epoch: head.epoch,

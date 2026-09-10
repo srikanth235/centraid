@@ -108,6 +108,20 @@ export class NativeSeat implements NativeSeatPort {
         expoSeatStaging({
           directory: `${location}/seat-staging`,
           databasePath,
+          // The seat's own tables are written onto the expanded artifact
+          // BEFORE it is moved into place (#1014, C17), so staging needs the
+          // same driver — and the same key — the installed file is opened
+          // with. A new connection: expo caches by NAME, and `.incoming` is
+          // a different file that must not adopt this seat's handle.
+          openIncoming: (path: string) => {
+            const at = path.lastIndexOf("/");
+            return ExpoSeatDriver.open({
+              name: path.slice(at + 1),
+              location: path.slice(0, at),
+              ...(options.key === undefined ? {} : { key: options.key }),
+              useNewConnection: true,
+            });
+          },
         }),
       transport: (bootstrap) =>
         httpSeatSnapshotTransport({

@@ -22,7 +22,10 @@
 
 import { Directory, File, FileMode, Paths } from "expo-file-system";
 
-import type { SeatBootstrapStaging } from "@centraid/client/replica/native";
+import type {
+  SeatBootstrapStaging,
+  SeatSqliteDriver,
+} from "@centraid/client/replica/native";
 import { gunzip } from "@centraid/client/replica/seat/gunzip";
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
@@ -32,6 +35,15 @@ export interface ExpoSeatStagingOptions {
   readonly directory: string;
   /** The seat's database file — what `install` moves into place. */
   readonly databasePath: string;
+  /**
+   * Open the expanded artifact BEFORE it is moved into place (#1014, C17).
+   *
+   * Handed in rather than built here because the key and the connection
+   * options belong to whoever opens this seat's file for real; staging only
+   * knows where the bytes are. Absent in a host that has no driver to give,
+   * in which case the bootstrap names the file after the move as it used to.
+   */
+  readonly openIncoming?: (path: string) => SeatSqliteDriver;
 }
 
 function fileAt(...parts: string[]): File {
@@ -94,12 +106,37 @@ export function expoSeatStaging(
       }
       return Promise.resolve();
     },
-    install: (): Promise<void> => {
+    install: (
+      _etag: string,
+      prepare?: (driver: SeatSqliteDriver) => void
+    ): Promise<void> => {
       const staged = part().bytesSync();
-      const incoming = fileAt(`${options.databasePath}.incoming`);
+      const incomingPath = `${options.databasePath}.incoming`;
+      const incoming = fileAt(incomingPath);
       removeQuietly(incoming);
       incoming.create({ intermediates: true });
       incoming.write(gunzip(staged));
+      // NAMED BEFORE IT IS MOVED (#1014, C17). R25's forensics were a seat
+      // file holding another vault's rows with `seat_state` absent — the shape
+      // a kill between `moveSync` and the old post-install write leaves. The
+      // seat's own tables now go onto `.incoming`, so the move publishes a
+      // complete file or nothing, and a `prepare` that refuses a mis-addressed
+      // artifact (C16) never touches the destination at all.
+      if (options.openIncoming && prepare) {
+        const driver = options.openIncoming(incomingPath);
+        try {
+          prepare(driver);
+        } catch (error) {
+          driver.close();
+          removeQuietly(fileAt(`${incomingPath}-wal`));
+          removeQuietly(fileAt(`${incomingPath}-shm`));
+          removeQuietly(incoming);
+          throw error;
+        }
+        driver.close();
+        removeQuietly(fileAt(`${incomingPath}-wal`));
+        removeQuietly(fileAt(`${incomingPath}-shm`));
+      }
       const destination = fileAt(options.databasePath);
       removeQuietly(destination);
       incoming.moveSync(destination);

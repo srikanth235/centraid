@@ -29,6 +29,8 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import type { SeatBootstrapStaging } from "./bootstrap.js";
+import type { SeatSqliteDriver } from "./driver.js";
+import { NodeSeatDriver } from "./node-seat-driver.js";
 
 async function sizeOf(file: string): Promise<number> {
   try {
@@ -72,11 +74,37 @@ export function nodeSeatStaging(
       await writeFile(marker, etag, "utf8");
       await appendFile(part, chunk);
     },
-    install: async (): Promise<void> => {
+    install: async (
+      _etag: string,
+      prepare?: (driver: SeatSqliteDriver) => void
+    ): Promise<void> => {
       const staged = await readFile(part);
       const incoming = `${options.databasePath}.incoming`;
       await mkdir(path.dirname(options.databasePath), { recursive: true });
       await writeFile(incoming, gunzipSync(staged));
+      // BEFORE THE RENAME, NOT AFTER (#1014, C17). The seat's own tables are
+      // written onto the incoming file while it is still nameless, so the
+      // rename below publishes a file that is already this seat's — and a
+      // `prepare` that REFUSES (a mis-addressed artifact, C16) leaves the
+      // destination exactly as it was, with only the scratch file to remove.
+      if (prepare) {
+        const driver = new NodeSeatDriver(incoming);
+        try {
+          prepare(driver);
+        } catch (error) {
+          driver.close();
+          await rm(incoming, { force: true });
+          await rm(`${incoming}-wal`, { force: true });
+          await rm(`${incoming}-shm`, { force: true });
+          throw error;
+        }
+        driver.close();
+        // WAL and shm of the INCOMING file: `prepare` opened it in WAL mode,
+        // and a rename that left them behind would carry one file's journal
+        // over another's pages.
+        await rm(`${incoming}-wal`, { force: true });
+        await rm(`${incoming}-shm`, { force: true });
+      }
       await rename(incoming, options.databasePath);
       // The WAL and shm of the file being REPLACED describe pages that no
       // longer exist; leaving them would have SQLite recover a dead journal
