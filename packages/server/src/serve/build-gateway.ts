@@ -3809,7 +3809,7 @@ export async function buildGateway(
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
-                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.retireReplicaDevice(row.endpointId);
                   plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
                 }
               },
@@ -3827,7 +3827,7 @@ export async function buildGateway(
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
-                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.retireReplicaDevice(row.endpointId);
                   plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
                 }
               },

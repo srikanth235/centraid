@@ -148,3 +148,91 @@ describe("vault-plane maintenance sweep", () => {
     expect(revisionCount(plane)).toBe(2);
   }, 30_000);
 });
+
+/*
+ * THE OUTCOME LEDGER'S WINDOW, AND WHO KEEPS IT (#1014, X1; R-1014-12).
+ *
+ * Revoking a device used to DELETE its idempotency ledger while the phone kept
+ * its outbox, so a lost-then-found phone re-paired and replayed intents the
+ * gateway had already executed. The ledger survives now — which makes it the
+ * sweep's job to bound it, and `pruneReplicaIntentOutcomes` had no production
+ * caller at all until this.
+ */
+describe("what a revoked device leaves behind", () => {
+  afterEach(async () => {
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
+  });
+
+  function seedOutcome(
+    plane: ReturnType<typeof openVaultPlane>,
+    intentId: string,
+    expiresAt: string | null
+  ): void {
+    plane.db.vault
+      .prepare(
+        `INSERT INTO replica_intent_outcome
+           (intent_id, device_id, app_id, action, payload_hash, status,
+            created_at, updated_at, expires_at)
+         VALUES (?, 'ep-phone', 'notes', 'create', 'hash', 'executed',
+                 '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', ?)`
+      )
+      .run(intentId, expiresAt);
+  }
+
+  test("keeps the ledger through revocation and revokes only the parked act", async () => {
+    const dir = await tempDir();
+    const plane = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    cleanups.push(() => plane.stop());
+    seedOutcome(plane, "intent-1", null);
+    plane.db.vault
+      .prepare(
+        `INSERT INTO replica_parked_payload (invocation_id, intent_id,
+           identity_json, request_sealed, command_id, command_name, reason,
+           parked_at)
+         VALUES ('inv-1', 'intent-1', '{}', 'sealed', 'notes.create',
+                 'notes.create', 'confirm', '2026-01-01T00:00:00.000Z')`
+      )
+      .run();
+
+    const retired = plane.retireReplicaDevice("ep-phone");
+    // The owner can no longer approve what the revoked device asked for…
+    expect(retired.parkedRevoked).toBe(1);
+    // …and what the gateway already ran for it stays, so a re-paired phone's
+    // replay of `intent-1` is deduped rather than executed a second time.
+    expect(retired.outcomesKept).toBe(1);
+  }, 30_000);
+
+  test("sweeps the retained ledger by its own expiry", async () => {
+    const dir = await tempDir();
+    const plane = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    cleanups.push(() => plane.stop());
+    seedOutcome(
+      plane,
+      "expired",
+      new Date(Date.now() - 3_600_000).toISOString()
+    );
+    seedOutcome(plane, "live", new Date(Date.now() + 86_400_000).toISOString());
+    plane.retireReplicaDevice("ep-phone");
+
+    sweep(plane);
+
+    const left = plane.db.vault
+      .prepare(
+        `SELECT intent_id FROM replica_intent_outcome ORDER BY intent_id`
+      )
+      .all() as { intent_id: string }[];
+    expect(left.map((row) => row.intent_id)).toStrictEqual(["live"]);
+  }, 30_000);
+});
