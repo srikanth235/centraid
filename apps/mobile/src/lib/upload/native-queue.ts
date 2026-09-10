@@ -14,7 +14,7 @@ import type { EnqueueInput } from "./enqueue";
 import { expoFileSource, expoPartPutter } from "./expo-native";
 import { httpDirectTransferClient } from "./gateway-client";
 import { createNativeDigest } from "./native-digest";
-import { UploadQueueStore } from "./store";
+import { TERMINAL_RETENTION_MS, UploadQueueStore } from "./store";
 import type {
   NewUploadFollowup,
   UploadFollowupFactory,
@@ -119,6 +119,9 @@ export class UploadQueue {
       openFile: expoFileSource,
       putPart: expoPartPutter(scope),
       gatewayBaseUrl: options.gatewayBaseUrl,
+      // The resume guard must hash with the same implementation the enqueue
+      // did, or every resumed item would look rewritten (#1014, P22).
+      createDigest: createNativeDigest,
       ...(options.policy ? { policy: options.policy } : {}),
       ...(options.onProgress
         ? {
@@ -178,13 +181,44 @@ export class UploadQueue {
     return this.store.pendingStorageGroups();
   }
 
-  /** Ledger lookup by content sha — the F11 probe and the F6 outcome check. */
-  bySha(sha256: string): UploadItem | undefined {
-    return this.store.bySha(sha256);
+  /** Ledger lookup by (content sha, vault) — the F11 probe and the F6 outcome
+   *  check. Scoped since #1014 P3: the same bytes may be queued for two vaults. */
+  bySha(sha256: string, targetVaultId?: string): UploadItem | undefined {
+    return this.store.bySha(sha256, targetVaultId);
   }
 
   all(): UploadItem[] {
     return this.store.all();
+  }
+
+  /** Bounded newest-first slice; what a screen wants (#1014, P25). */
+  recent(limit?: number): UploadItem[] {
+    return this.store.recent(limit);
+  }
+
+  /** Terminally failed rows the member has not dismissed (#1014, P7). */
+  failed(): UploadItem[] {
+    return this.store.failed();
+  }
+
+  failedCount(): number {
+    return this.store.failedCount();
+  }
+
+  /** Put a failed row back in the queue with a fresh attempt budget. */
+  retry(itemId: string): void {
+    this.store.retry(itemId);
+    notifyUploadQueueChanged();
+  }
+
+  dismissFailed(itemId: string): void {
+    this.store.dismissFailed(itemId);
+    notifyUploadQueueChanged();
+  }
+
+  /** Retention sweep over terminal rows nothing waits on (#1014, P25). */
+  sweepTerminal(olderThanMs: number = TERMINAL_RETENTION_MS): number {
+    return this.store.sweepTerminal({ olderThanMs });
   }
 
   enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {

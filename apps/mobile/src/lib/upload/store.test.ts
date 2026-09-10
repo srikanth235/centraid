@@ -317,6 +317,8 @@ describe("store", () => {
     });
 
     it("adds durable vault targeting to a v4 queue without losing bytes", () => {
+      // A v4 table had neither the column nor the (sha, vault) index over it.
+      driver.exec("DROP INDEX IF EXISTS upload_item_sha_vault");
       driver.exec("ALTER TABLE upload_item DROP COLUMN target_vault_id");
       driver.exec("PRAGMA user_version = 4");
 

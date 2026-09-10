@@ -21,6 +21,13 @@ export interface DirectBeginInput {
   partCount: number;
   mediaType?: string;
   filename?: string;
+  /**
+   * P4 (#1014): the vault these bytes belong to. Sent as `x-centraid-vault`,
+   * never in the body — the gateway resolves the data plane from the header,
+   * so a queue holding items for two vaults would otherwise stage every one of
+   * them into whichever vault the gateway picks by default.
+   */
+  vaultId?: string;
 }
 
 export interface DirectBeginResult {
@@ -47,12 +54,21 @@ export interface DirectTransferClient {
   recordPart: (
     sessionId: string,
     partNumber: number,
-    etag: string
+    etag: string,
+    vaultId?: string
   ) => Promise<void>;
   complete: (
     sessionId: string,
-    parts: readonly MultipartPartReceipt[]
+    parts: readonly MultipartPartReceipt[],
+    vaultId?: string
   ) => Promise<SettlementReceipt>;
+  /** The settlement the gateway already holds for `sha256`, or undefined.
+   *  P22 (#1014): an `alreadyPresent` begin that carried no settlement asks
+   *  here rather than fabricating one. */
+  settlementFor?: (
+    sha256: string,
+    vaultId?: string
+  ) => Promise<SettlementReceipt | undefined>;
 }
 
 export class DirectTransferError extends Error {
@@ -86,21 +102,24 @@ export function httpDirectTransferClient(
 ): DirectTransferClient {
   const fetchImpl = options.fetchImpl ?? fetch;
   const base = options.gatewayBaseUrl.replace(/\/+$/u, "");
-  const headers = (): Record<string, string> => ({
+  const headers = (vaultId?: string): Record<string, string> => ({
     "content-type": "application/json",
     accept: "application/json",
     ...options.headers?.(),
+    // Per REQUEST, not per queue: one queue holds items for several vaults.
+    ...(vaultId ? { "x-centraid-vault": vaultId } : {}),
   });
 
   async function send<T>(
     path: string,
     method: string,
-    body: unknown
+    body: unknown,
+    vaultId?: string
   ): Promise<T> {
     const response = await fetchImpl(`${base}${path}`, {
       method,
-      headers: headers(),
-      body: JSON.stringify(body),
+      headers: headers(vaultId),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
       throw new DirectTransferError(
@@ -112,20 +131,27 @@ export function httpDirectTransferClient(
   }
 
   return {
-    begin: (input) =>
-      send<DirectBeginResult>("/centraid/_vault/blobs/direct", "POST", input),
-    recordPart: async (sessionId, partNumber, etag) => {
+    begin: ({ vaultId, ...input }) =>
+      send<DirectBeginResult>(
+        "/centraid/_vault/blobs/direct",
+        "POST",
+        input,
+        vaultId
+      ),
+    recordPart: async (sessionId, partNumber, etag, vaultId) => {
       await send<{ completedParts: MultipartPartReceipt[] }>(
         `/centraid/_vault/blobs/direct/${encodeURIComponent(sessionId)}/parts/${partNumber}`,
         "PUT",
-        { etag }
+        { etag },
+        vaultId
       );
     },
-    complete: (sessionId, parts) =>
+    complete: (sessionId, parts, vaultId) =>
       send<SettlementReceipt>(
         `/centraid/_vault/blobs/direct/${encodeURIComponent(sessionId)}/complete`,
         "POST",
-        { parts }
+        { parts },
+        vaultId
       ),
   };
 }

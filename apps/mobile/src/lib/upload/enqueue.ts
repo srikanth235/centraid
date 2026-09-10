@@ -64,6 +64,34 @@ export async function sha256OfFile(
   }
 }
 
+/** How much of each end of the file the edge digest covers (#1014, P22). */
+export const EDGE_DIGEST_BYTES = 1024 * 1024;
+
+/**
+ * A cheap fingerprint of the file's first and last {@link EDGE_DIGEST_BYTES}.
+ *
+ * Not a substitute for the content sha — it is the RESUME guard: re-hashing a
+ * 4 GB video on every resumed attempt would cost more than re-uploading it,
+ * while a size check alone passes an in-place rewrite that keeps the byte
+ * count. A file shorter than one window hashes whole, which is exact.
+ */
+export async function edgeDigestOfFile(
+  source: {
+    size: number;
+    read: (offset: number, length: number) => Promise<Uint8Array>;
+  },
+  createDigest: () => StreamingDigest = () => new IncrementalSha256()
+): Promise<string> {
+  const hash = createDigest();
+  const head = Math.min(EDGE_DIGEST_BYTES, source.size);
+  hash.update(await source.read(0, head));
+  if (source.size > EDGE_DIGEST_BYTES) {
+    const tail = Math.min(EDGE_DIGEST_BYTES, source.size - head);
+    hash.update(await source.read(source.size - tail, tail));
+  }
+  return hash.digestHex();
+}
+
 export async function enqueueLocalFile(
   deps: EnqueueDeps,
   input: EnqueueInput,
@@ -82,6 +110,18 @@ export async function enqueueLocalFile(
     );
   }
   const frameCount = frameCountFor(size);
+  // Taken once, here, from the same file the sha addressed; the drainer
+  // re-takes it on every resumed attempt (#1014, P22).
+  const edgeSource = await deps.openFile(input.localUri);
+  let edgeDigest: string;
+  try {
+    edgeDigest = await edgeDigestOfFile(
+      edgeSource,
+      ...(deps.createDigest ? [deps.createDigest] : [])
+    );
+  } finally {
+    edgeSource.close();
+  }
   const upload = {
     itemId: deps.newId(),
     sha256,
@@ -90,6 +130,7 @@ export async function enqueueLocalFile(
     ...(input.mediaType ? { mediaType: input.mediaType } : {}),
     ...(input.filename ? { filename: input.filename } : {}),
     plaintextSize: size,
+    edgeDigest,
     sealedSize: sealedSizeFor(size, frameCount),
     frameCount,
     partCount: partCountFor(frameCount),

@@ -64,12 +64,65 @@ function okSession(): { session: NativeReplicaSession; writes: string[] } {
   return { session, writes };
 }
 
+/** A session that answers for exactly one vault, as the real one does. */
+function sessionForVault(vaultId: string): {
+  session: MobileReplicaSession;
+  write: ReturnType<typeof vi.fn<MobileReplicaSession["write"]>>;
+} {
+  const write = vi.fn<MobileReplicaSession["write"]>(async (_shape, input) => ({
+    intentId: input.intentId!,
+    status: "executed" as const,
+  }));
+  const session = {
+    write,
+    scope: () => ({ vaultId, label: vaultId, canWrite: true }),
+  } as unknown as MobileReplicaSession;
+  return { session, write };
+}
+
 describe("settled upload follow-ups", () => {
-  // #996 wave 3: a follow-up recorded a `targetVaultId` because the phone
-  // held four sessions and the replay had to pick one. A seat opens ONE, so
-  // the replay goes through the session it was handed — and the stamp on the
-  // follow-up is history, not a routing decision.
-  it("replays an upload follow-up through the open session, whatever vault it names", async () => {
+  // #1014 P2. #996 wave 3 read the `targetVaultId` stamp as history and wrote
+  // every follow-up through the mounted session; on a phone that holds two
+  // vaults that put the family photograph into the personal vault, and cleared
+  // the follow-up on the way so nothing could ever put it right.
+  it("does not write a follow-up into a vault the session does not hold", async () => {
+    const { queue, cleared } = fakeQueue([
+      followupOf({ targetVaultId: "vault-family" }),
+    ]);
+    const { session, write } = sessionForVault("vault-personal");
+
+    const summary = await replaySettledUploadFollowups(
+      queue,
+      session,
+      "http://gateway"
+    );
+
+    expect(write).not.toHaveBeenCalled();
+    expect(cleared, "the record survives to be replayed later").toStrictEqual(
+      []
+    );
+    expect(summary).toMatchObject({
+      replayed: 0,
+      poisoned: 0,
+      waitingForVault: { "vault-family": 1 },
+    });
+  });
+
+  it("writes a follow-up whose vault IS the session's", async () => {
+    const { queue, cleared } = fakeQueue([
+      followupOf({ targetVaultId: "vault-family" }),
+    ]);
+    const { session, write } = sessionForVault("vault-family");
+
+    await replaySettledUploadFollowups(queue, session, "http://gateway");
+
+    expect(write).toHaveBeenCalledOnce();
+    expect(cleared).toStrictEqual([7]);
+  });
+
+  // A session double with no scope cannot answer "which vault"; the replay
+  // then behaves as it always did rather than stalling every follow-up.
+  it("replays through a session that names no vault", async () => {
     const { queue } = fakeQueue([
       followupOf({ targetVaultId: "vault-family" }),
     ]);
@@ -121,6 +174,7 @@ describe("settled upload follow-ups", () => {
     await expect(
       replaySettledUploadFollowups(queue, session, "http://gateway")
     ).resolves.toStrictEqual({
+      waitingForVault: {},
       replayed: 1,
       poisoned: 0,
     });

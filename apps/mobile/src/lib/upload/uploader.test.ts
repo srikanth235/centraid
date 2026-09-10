@@ -21,7 +21,7 @@ import { DirectTransferError } from "./gateway-client";
 import type { DirectTransferClient } from "./gateway-client";
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
 import { PENDING_PAGE_LIMIT, UploadQueueStore } from "./store";
-import { UploadDrainer } from "./uploader";
+import { RETRY_BACKOFF_MS, UploadDrainer } from "./uploader";
 import type { PartPutter } from "./uploader";
 
 const crypto = webCryptoUploadCrypto();
@@ -35,6 +35,9 @@ let store: UploadQueueStore;
 let killer: Killer;
 let provider: FakeProvider;
 let gateway: FakeGateway;
+/** A drain now defers a retryable item behind a backoff window (#1014), so
+ *  every multi-pass test drives this clock forward instead of sleeping. */
+let clock: number;
 
 const openFile = async () => bytesFileSource(BYTES);
 
@@ -67,8 +70,15 @@ function drainer(
     gatewayBaseUrl: FAKE_GATEWAY,
     fetchImpl,
     partConcurrency: 1,
+    now: () => clock,
+    random: () => 0,
     ...(overrides.policy ? { policy: overrides.policy } : {}),
   });
+}
+
+/** Past the longest backoff window, so the deferred row is due again. */
+function advance(): void {
+  clock += 10 * 60_000;
 }
 
 describe("uploader", () => {
@@ -76,6 +86,7 @@ describe("uploader", () => {
     dir = tempDirSync("centraid-drain-");
     driver = new NodeSqliteFileDriver(path.join(dir, "uploads.db"));
     store = UploadQueueStore.create(driver);
+    clock = Date.parse("2026-01-01T00:00:00.000Z");
     killer = new Killer();
     provider = new FakeProvider(killer);
     gateway = new FakeGateway(provider, killer);
@@ -236,6 +247,163 @@ describe("uploader", () => {
       });
     });
 
+    // #1014 P22. `settled` was incremented for a dedupe as well as `deduped`,
+    // so a pass over 100 rows the gateway already held reported 200 movements.
+    it("counts a deduped item once", async () => {
+      enqueue();
+      await drainer().drainOnce();
+      driver.run(
+        `UPDATE upload_item SET state = 'pending', receipt_json = NULL WHERE sha256 = ?`,
+        [SHA]
+      );
+
+      const summary = await drainer().drainOnce();
+
+      expect(summary).toMatchObject({ settled: 1, deduped: 1, failed: 0 });
+    });
+
+    // #1014 P22: `alreadyPresent` with no receipt is the gateway telling us
+    // nothing we may record. Settling on a fabricated one would report bytes
+    // durable that nothing acknowledged.
+    it("refuses to settle an alreadyPresent begin that issued no receipt", async () => {
+      enqueue();
+      const silent: DirectTransferClient = {
+        begin: async (input) => ({
+          ...(await gateway.begin(input)),
+          alreadyPresent: true,
+          sessionId: undefined,
+          upload: undefined,
+          settlement: undefined,
+        }),
+        recordPart: async () => undefined,
+        complete: async () => ({}),
+      };
+
+      const summary = await drainer({ client: silent }).drainOnce();
+
+      expect(summary).toMatchObject({ settled: 0, deduped: 0, failed: 0 });
+      const item = store.bySha(SHA)!;
+      expect(item.state, "the row asks again rather than lying").toBe(
+        "pending"
+      );
+      expect(item.receipt).toBeUndefined();
+    });
+
+    // #1014 P4: one queue holds items for several vaults, so the vault is
+    // addressed per REQUEST. Without it the gateway stages every item into
+    // whichever vault it picks by default.
+    it("addresses every gateway call to the item's own vault", async () => {
+      const frameCount = frameCountFor(BYTES.byteLength);
+      store.enqueue({
+        itemId: "item-family",
+        sha256: SHA,
+        localUri: "file://a.jpg",
+        targetVaultId: "vault-family",
+        plaintextSize: BYTES.byteLength,
+        sealedSize: sealedSizeFor(BYTES.byteLength, frameCount),
+        frameCount,
+        partCount: partCountFor(frameCount),
+      });
+      const seen: (string | undefined)[] = [];
+      const recording: DirectTransferClient = {
+        begin: async (input) => {
+          seen.push(input.vaultId);
+          return gateway.begin(input);
+        },
+        recordPart: async (sessionId, partNumber, etag, vaultId) => {
+          seen.push(vaultId);
+          return gateway.recordPart(sessionId, partNumber, etag);
+        },
+        complete: async (sessionId, parts, vaultId) => {
+          seen.push(vaultId);
+          return gateway.complete(sessionId, parts);
+        },
+      };
+
+      await drainer({ client: recording }).drainOnce();
+
+      expect(new Set(seen)).toStrictEqual(new Set(["vault-family"]));
+    });
+
+    // #1014: five attempts used to be spent inside one drain pass, seconds
+    // apart, so a gateway blip handed the member a permanent failure.
+    it("defers a retryable failure behind a backoff window", async () => {
+      enqueue();
+      const flaky: DirectTransferClient = {
+        begin: async () => {
+          throw new DirectTransferError("offline", 503);
+        },
+        recordPart: async () => undefined,
+        complete: async () => ({}),
+      };
+
+      const first = await drainer({ client: flaky }).drainOnce();
+      expect(first).toMatchObject({ failed: 0, deferred: 1 });
+      expect(store.bySha(SHA)?.nextAttemptAt).toBe(
+        new Date(clock + RETRY_BACKOFF_MS[0]!).toISOString()
+      );
+
+      const second = await drainer({ client: flaky }).drainOnce();
+      expect(
+        second,
+        "the deferred row is not touched again in the same window"
+      ).toMatchObject({ failed: 0, deferred: 0, settled: 0 });
+      expect(store.bySha(SHA)?.attempts).toBe(1);
+    });
+
+    // #1014: an item must not spend its attempt budget on a gateway the
+    // transport never reached. Aeroplane mode is not the photograph's fault.
+    it("spends no attempt when the gateway was unreachable", async () => {
+      enqueue();
+      const offline: DirectTransferClient = {
+        begin: async () => {
+          throw new TypeError("Network request failed");
+        },
+        recordPart: async () => undefined,
+        complete: async () => ({}),
+      };
+
+      const drain = async (left: number): Promise<void> => {
+        if (left === 0) return;
+        await drainer({ client: offline }).drainOnce();
+        advance();
+        return drain(left - 1);
+      };
+      await drain(8);
+
+      const item = store.bySha(SHA)!;
+      expect(item.state, "still queued, not failed").toBe("pending");
+      expect(item.attempts).toBe(0);
+    });
+
+    // #1014 P22: a resumed multipart upload trusted the file's SIZE, so an
+    // in-place edit that kept the byte count shipped a mixture of two files
+    // under the first one's content address.
+    it("refuses to resume over a file whose bytes changed", async () => {
+      const frameCount = frameCountFor(BYTES.byteLength);
+      const item = store.enqueue({
+        itemId: "item-edited",
+        sha256: SHA,
+        localUri: "file://a.jpg",
+        plaintextSize: BYTES.byteLength,
+        edgeDigest: "not-the-digest-of-these-bytes",
+        sealedSize: sealedSizeFor(BYTES.byteLength, frameCount),
+        frameCount,
+        partCount: partCountFor(frameCount),
+      });
+      const putPart = vi.fn<PartPutter>(async () => '"etag"');
+
+      await drainer({ putPart }).drainOnce();
+
+      expect(
+        putPart,
+        "nothing is PUT under a stale address"
+      ).toHaveBeenCalledTimes(0);
+      const row = store.get(item.itemId)!;
+      expect(row.state, "the file is not coming back").toBe("failed");
+      expect(row.lastError).toMatch(/local file changed under upload/u);
+    });
+
     it("reconciles gateway-completed parts into the queue and skips re-uploading them", async () => {
       enqueue();
       // The gateway already holds part 1 from a previous life.
@@ -276,6 +444,7 @@ describe("uploader", () => {
       };
       await drainer({ client: flaky }).drainOnce();
       expect(store.bySha(SHA)?.state, "503 is retryable").toBe("pending");
+      advance();
 
       const refused: DirectTransferClient = {
         begin: async () => {
@@ -300,6 +469,7 @@ describe("uploader", () => {
       const drainAttempt = async (attempt: number): Promise<void> => {
         if (attempt >= 5) return;
         await drainer({ client: flaky }).drainOnce();
+        advance();
         return drainAttempt(attempt + 1);
       };
       await drainAttempt(0);
