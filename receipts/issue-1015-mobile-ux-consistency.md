@@ -89,3 +89,35 @@ Answers audit **§3.13**, **S9** and **S10** (the kit's half).
 - **`apps/mobile/src/kit/replica/ReplicaStateCard.test.tsx`**, **`ReplicaStatusBar.test.tsx`** — their theme mocks gain `spacing`.
 
 **Not done, and why**: **S13** (band truth) is not in this commit. Its two halves contradict each other as written — D5 says the editor HIDES the band, while S13 says `hideBand` must never drop the Home capsule, and the only way to keep a capsule with no band is a docked plate on the bottom edge, which is exactly the affordance S6 deleted three commits ago. The band is also per-app (`DocsScreen`, `TallyScreen`, `LockerTrashScreen` each render their own), so there is no kit half to change without inventing a component no caller asks for yet. Raised to the root as a question.
+
+## Verification
+
+Per lane, appended as each lane finishes; the umbrella's own run is the root's at close.
+
+### Lane KIT
+
+| Check | Result |
+| --- | --- |
+| `bunx vitest run src/kit` (apps/mobile) | 64 files, 488 passed |
+| `bunx vitest run src/apps/tasks src/screens/data src/screens/devices` | 7 files, 73 passed |
+| `bunx vitest run src` (whole seat) | 282 files, 2365 passed; **1 file failed to load**: `src/lib/replica/expo-seat-driver.test.ts`, which fails identically on the base head with the lane stashed — inherited, not measured as ours |
+| `bun run --cwd apps/mobile typecheck` | exit 0 |
+| `node scripts/lint-mobile-design.mjs` · `lint-container-opacity.mjs` · `lint-aria-labels.mjs` | all ok; `apps/mobile/src` still at container-opacity budget 0 |
+| `bun run format` then `bun run check:push:static` | 4/4 gates passed (format:check, lint, turbo:lint, typecheck:affected) |
+| `node .governance/law/run.mjs --brief-digest 514cb2fed327` | law green apart from `receipt-per-issue` (this section and the audit below) and `registry-completeness` (the changelog line added with them) |
+| Red-first proof | The `write-outcome` suppression cases, the `EmptyBlock` gutter case and the `AnchoredMenu` reason case fail on base and pass here |
+
+## Audit
+
+Per lane. The umbrella's fresh-context attestation is the root's at close.
+
+### Lane KIT
+
+| Check | Verdict | Notes |
+| --- | --- | --- |
+| What changed faithfully describes the diff | PASS | Each of the four lane sections above names every file it touched by full path, and the diff contains nothing else. |
+| Each claim is realized in the diff | PASS | `variant="floating"` and `refusedLabel` are gone from `apps/mobile/src`; `SearchField.tsx`, `status-host.ts` and `format.ts` exist with tests; `EmptyBlock.styles.ts` insets at `pageMargin`. |
+| Nothing outside the lane's slice was changed to go green | PASS | The only files touched outside `kit/` are the call sites a deleted prop or a deleted export forced (`HomeKey`'s nine callers, Docs' menu, two test mocks) and the two shell places S6 names. No lint config, budget, baseline or ledger was edited. |
+| Unfinished work is stated, not implied | PASS | S13 is recorded as not done, with the contradiction between D5, S13 and S6 that stops it, and raised to the root. |
+
+Verdict: PASS / PASS / PASS / PASS.
