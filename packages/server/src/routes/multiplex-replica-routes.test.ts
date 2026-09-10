@@ -8,11 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import {
-  appendReplicaChange,
-  currentReplicaLogState,
-  pruneReplicaChanges,
-} from "@centraid/vault";
+import { currentReplicaLogState, pruneReplicaLog } from "@centraid/vault";
 import type { ReplicaCursor } from "@centraid/vault";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
@@ -24,6 +20,7 @@ import {
   makeMultiplexReplicaRouteHandler,
 } from "./multiplex-replica-routes.js";
 import type { MultiplexReplicaRouteOptions } from "./multiplex-replica-routes.js";
+import { capturedWrite } from "./replica-write.test-fixtures.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
 const logger = {
@@ -183,17 +180,28 @@ function cursorsFor(body: string, vaultId: string): ReplicaCursor[] {
     .map((frame) => frame.data as ReplicaCursor);
 }
 
-/** Log entries a mounted phone has yet to see; rows stay absent. */
+/**
+ * Commits a mounted phone has yet to see, one per call.
+ *
+ * ONE COMMIT PER ENTRY, and the position returned is where that commit ENDS
+ * (#1014, R-1014-1): a page never splits a transaction, so a commit is the
+ * unit a cursor frame stands for. The trigger log this replaced could fabricate
+ * a bare entry with no row behind it; the one log is decoded from what the
+ * commit actually wrote, so the backlog is real rows.
+ */
 function backlog(plane: VaultPlane, count: number, prefix: string): number[] {
-  return Array.from(
-    { length: count },
-    (_unused, index) =>
-      appendReplicaChange(plane.db.vault, {
-        entity: "schedule.task",
-        rowId: `${prefix}-${index}`,
-        op: "insert",
-      }).seq
-  );
+  return Array.from({ length: count }, (_unused, index) => {
+    capturedWrite(plane.db.vault, () =>
+      plane.db.vault
+        .prepare(
+          `INSERT INTO schedule_task
+             (task_id, owner_party_id, title, status, priority)
+           VALUES (?, ?, 'Backlog', 'needs-action', 0)`
+        )
+        .run(`${prefix}-${index}`, plane.boot.ownerPartyId)
+    );
+    return currentReplicaLogState(plane.db.vault).watermark.seq;
+  });
 }
 
 describe("multiplex replica route", () => {
@@ -302,7 +310,7 @@ describe("multiplex replica route", () => {
     // prunes past it while the phone is offline.
     const stale = currentReplicaLogState(f.family!.db.vault).watermark;
     backlog(f.family!, 2, "pruned");
-    pruneReplicaChanges(f.family!.db.vault, {
+    pruneReplicaLog(f.family!.db.vault, {
       maxAgeMs: 0,
       now: new Date(Date.now() + 60_000),
     });

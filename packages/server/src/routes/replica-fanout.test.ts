@@ -17,11 +17,24 @@ import {
   ReplicaProjectionHub,
   replicaProjectionHub,
 } from "./replica-fanout.js";
+import { capturedWrite } from "./replica-write.test-fixtures.js";
 
 function vault(): ReturnType<typeof openVaultDb> {
   const db = openVaultDb();
   void db.blobTransfers.close();
   bootstrapVault(db, { ownerName: "Priya" });
+  // One captured commit, so the log is not empty: a watermark of zero would
+  // make "a cursor one past it" a rebootstrap rather than the
+  // different-memo-key question this suite asks. `bootstrapVault` writes on a
+  // handle with no capture open, so its rows are not in the log to borrow.
+  capturedWrite(db.vault, () =>
+    db.vault
+      .prepare(
+        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+         VALUES ('fanout-seed', 'urn:fanout-seed', 'Seed', '1')`
+      )
+      .run()
+  );
   return db;
 }
 
