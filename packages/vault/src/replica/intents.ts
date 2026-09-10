@@ -214,6 +214,26 @@ export function intentRowById(
     .get(intentId) as IntentRow | undefined;
 }
 
+/**
+ * WHY AN ADMISSION WAS REFUSED, SAID IN A TYPE (#1014, X20).
+ *
+ * The identity refusals below are the caller's fault and are fixed by minting
+ * a new id; every other throw out of this module is the vault's — a write that
+ * did not run. A door that cannot tell them apart answers both the same, and
+ * the device door answered both `202 in-flight`: an acknowledgement of a write
+ * that will never happen, which is the shape of silent loss. `code` is what a
+ * route puts on the wire.
+ */
+export class ReplicaIntentIdentityError extends Error {
+  constructor(
+    readonly code: "intent_id_reused" | "intent_already_terminal",
+    message: string
+  ) {
+    super(message);
+    this.name = "ReplicaIntentIdentityError";
+  }
+}
+
 function assertIdentity(
   prior: IntentRow,
   input: RecordReplicaIntentOutcomeInput
@@ -224,12 +244,14 @@ function assertIdentity(
     prior.action !== input.action ||
     prior.payload_hash !== input.payloadHash
   ) {
-    throw new Error(
+    throw new ReplicaIntentIdentityError(
+      "intent_id_reused",
       `replica intent ${input.intentId} was replayed with different immutable fields`
     );
   }
   if (TERMINAL.has(prior.status) && prior.status !== input.status) {
-    throw new Error(
+    throw new ReplicaIntentIdentityError(
+      "intent_already_terminal",
       `replica intent ${input.intentId} is already terminal (${prior.status}); refusing ${input.status}`
     );
   }

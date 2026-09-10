@@ -709,6 +709,7 @@ export {
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
   recordReplicaIntentOutcomeInTransaction,
+  ReplicaIntentIdentityError,
   transitionReplicaIntentOutcome,
   type ListReplicaIntentOutcomesOptions,
   type RecordReplicaIntentOutcomeInput,

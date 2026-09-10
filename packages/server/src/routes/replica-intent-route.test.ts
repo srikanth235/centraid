@@ -274,7 +274,74 @@ describe("replica-intent-route suite", () => {
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
-  test("a foreign intent id looks in-flight and never dispatches or mutates its owner row", async () => {
+  /*
+   * X20 (#1014): A VAULT THAT COULD NOT WRITE IS A 500, NEVER AN ACK. Every
+   * throw out of `recordReplicaIntentOutcome` used to become `202 in-flight`,
+   * which is the door telling the seat "accepted, ask again later" about a
+   * write that never happened — the phone re-sends and the member's change is
+   * gone with an acknowledgement over it. A 5xx is what makes the drain hold
+   * the head and retry (`isPermanentIntentRejection` is 4xx only).
+   */
+  test("a vault that cannot record the admission answers 500, not an ack", async () => {
+    const vault = await plane();
+    const input = { title: "unwritable" };
+    const payloadHash = intentHash({
+      appId: "planner",
+      action: "add_task",
+      input,
+    });
+    const prepare = vault.db.vault.prepare.bind(vault.db.vault);
+    vi.spyOn(vault.db.vault, "prepare").mockImplementation(((
+      sql: string
+    ): unknown => {
+      if (sql.includes("INSERT INTO replica_intent_outcome"))
+        throw new Error("disk I/O error");
+      return prepare(sql);
+    }) as typeof vault.db.vault.prepare);
+    const dispatch = vi.fn<ReplicaIntentDispatcher>();
+    const result = response();
+
+    await handleReplicaIntent(
+      request({
+        intentId: "unwritable-intent",
+        appId: "planner",
+        action: "add_task",
+        input,
+        payloadHash,
+      }),
+      result.res,
+      {
+        plane: vault,
+        access: {
+          canWrite: true,
+          rememberDevice: true,
+          deviceId: "device-1",
+          appId: "planner",
+        },
+        dispatch,
+      }
+    );
+
+    expect(result.res.statusCode).toBe(500);
+    expect(result.body()).toMatchObject({
+      error: "replica_intent_outcome_failed",
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  /*
+   * X20 (#1014) RE-RULES THE CONCEALED ANSWER. This id belongs to another
+   * device, so `202 in-flight` used to be the reply: an ordinary
+   * acknowledgement, no existence oracle. It is also an acknowledgement of a
+   * write that CAN NEVER RUN — the prober re-sends forever and the member's
+   * change is silently gone — and the two invariants that answer was protecting
+   * (never dispatch, never touch the owner's row) hold just as well under a
+   * refusal. An intent id is the caller's own 128-bit value, so `409` tells a
+   * caller who already holds the id that it is not theirs to use, and tells
+   * nobody anything they could have guessed.
+   */
+  test("a foreign intent id is refused and never dispatches or mutates its owner row", async () => {
     const vault = await plane();
     const input = { title: "collision probe" };
     const payloadHash = crypto
@@ -315,10 +382,10 @@ describe("replica-intent-route suite", () => {
       }
     );
 
-    expect(result.res.statusCode).toBe(202);
+    expect(result.res.statusCode).toBe(409);
     expect(result.body()).toMatchObject({
-      accepted: true,
-      outcome: { intentId: "foreign-intent", status: "in-flight" },
+      error: "intent_id_reused",
+      intentId: "foreign-intent",
     });
     expect(dispatch).not.toHaveBeenCalled();
     expect(
