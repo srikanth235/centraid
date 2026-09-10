@@ -28,6 +28,7 @@ import {
   registerLockerCommands,
   registerPeopleCommands,
   registerScheduleCommands,
+  withReplicaCommit,
 } from "@centraid/vault";
 import type { Credential, Gateway, VaultDb } from "@centraid/vault";
 
@@ -89,12 +90,17 @@ export function buildScenario(): Scenario {
   registerLockerCommands(gw);
   registerPeopleCommands(gw);
 
-  db.vault
-    .prepare(
-      `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, default_tz, visibility)
-       VALUES (?, ?, 'Personal', 'Asia/Kolkata', 'private')`
-    )
-    .run("cal-inject-1", boot.ownerPartyId);
+  // Bracketed like any other raw write to a replicated table (#1014): the
+  // scenario vault is a real vault, and a seeded row that never reaches the log
+  // is a scenario that does not match what the product would have produced.
+  withReplicaCommit(db.vault, () =>
+    db.vault
+      .prepare(
+        `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, default_tz, visibility)
+         VALUES (?, ?, 'Personal', 'Asia/Kolkata', 'private')`
+      )
+      .run("cal-inject-1", boot.ownerPartyId)
+  );
 
   const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
   const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
