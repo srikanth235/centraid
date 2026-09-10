@@ -53,12 +53,21 @@ export const styles = StyleSheet.create({
   headTrailing: { alignItems: "center", flexDirection: "row", gap: spacing[2] },
   room: { flex: 1 },
   sheet: {
+    // A browsing sheet (all apps, the vaults) carries a list; without a
+    // ceiling the sheet grows past the top of the screen and its scroller
+    // never bounds. The body shrinks inside it, so the grabber, the title and
+    // the action row stay visible while the list scrolls between them.
+    maxHeight: "85%",
     borderTopLeftRadius: spacing[4],
     borderTopRightRadius: spacing[4],
     borderWidth: borders.hairline,
     paddingBottom: spacing[6],
   },
-  sheetBody: { paddingHorizontal: pageMargin, paddingTop: spacing[2] },
+  sheetBody: {
+    flexShrink: 1,
+    paddingHorizontal: pageMargin,
+    paddingTop: spacing[2],
+  },
   sheetTitle: { ...t("title"), paddingHorizontal: pageMargin },
   scrim: { flex: 1 },
 });

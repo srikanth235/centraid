@@ -106,6 +106,8 @@ vi.mock(
       borders: { hairline: 1 },
       icons: { Sparkle: () => null },
       identityInk: () => "#mock-ink",
+      // The room's own action row draws kit `Button`s.
+      nativeButtonStyle: () => ({ label: {}, view: {} }),
     }) as unknown as Partial<DesignModule>
 );
 

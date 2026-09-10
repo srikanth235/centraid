@@ -179,7 +179,10 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
-      // Shared page margin the overlay insets its content by (handoff `R.margin.m`).
+      density: { rowMin: 44 },
+      family: { sansMedium: "m", sansRegular: "r" },
+      metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
+      // Shared page margin the room insets its content by (handoff `R.margin.m`).
       pageMargin: 18,
       radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 12, xs: 0 },
       spacing: [0, 4, 8, 12, 16, 20, 24, 32],
@@ -379,20 +382,13 @@ describe("the search overlay anatomy", () => {
   });
 
   describe("dismissal", () => {
-    it("closes on a tap outside the field", () => {
-      renderOverlay();
-      const scrim = container!.querySelector('[aria-label="Close search"]');
-      expect(scrim).toBeTruthy();
-      act(() =>
-        scrim!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-      );
-      expect(onClose).toHaveBeenCalledOnce();
-    });
-
+    // NO SCRIM (#1015, Wave 2): search is a PUSHED PAGE, not a veil over the
+    // cover. A page is left by its named verb, so there is nothing behind it
+    // to tap and no half-visible Home to aim at by accident.
     it("closes on Cancel", () => {
       renderOverlay();
       const cancel = Array.from(container!.querySelectorAll("button")).find(
-        (candidate) => candidate.getAttribute("aria-label") === "Cancel search"
+        (candidate) => candidate.textContent?.trim() === "Cancel"
       );
       expect(cancel).toBeTruthy();
       act(() =>
