@@ -264,7 +264,7 @@ describe(ApprovalsScreen, () => {
     // Deny is its own row, with the sentence about what a refusal means.
     expect(spans).toContain("Deny this write");
     expect(spans).toContain(
-      "Nothing is sent. The automation is told it was refused, and remembers."
+      "Nothing is sent. The rule is told it was refused, and remembers."
     );
     expect(spans).toContain(
       "1 item waiting on you · Nothing here has happened yet — approving is the act."

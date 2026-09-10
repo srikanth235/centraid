@@ -195,7 +195,7 @@ function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
   const newestRun = data.runs[0];
   return {
     countLine: [
-      plural(memberRows.length, "automation"),
+      plural(memberRows.length, "rule"),
       `${failing.length} failing`,
       `${paused.length} paused`,
     ].join(" · "),
@@ -208,11 +208,11 @@ function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
         ? `${worst.name} has failed its last ${plural(worstStreak.count, "run")}, since ${dayLabel(worstStreak.startedAt)}.`
         : `${worst.name} failed its last run.`
       : newestRun
-        ? `${plural(memberRows.length, "automation")} on this gateway · last run ${newestRun.whenLabel}.`
-        : `${plural(memberRows.length, "automation")} on this gateway · nothing has run yet.`,
+        ? `${plural(memberRows.length, "rule")} on this gateway · last run ${newestRun.whenLabel}.`
+        : `${plural(memberRows.length, "rule")} on this gateway · nothing has run yet.`,
     healthLabel:
       failing.length > 0
-        ? `${plural(failing.length, "automation")} failing`
+        ? `${plural(failing.length, "rule")} failing`
         : "Nothing is failing",
     lastRunClock: newestRun ? clockLabel(newestRun.startedAt) : null,
     memberRows,

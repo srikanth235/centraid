@@ -218,9 +218,7 @@ describe(AutomationsScreen, () => {
     const skeleton = nodesOf(container, "div").find(
       (node) => node.dataset.role === "progressbar"
     );
-    expect(skeleton?.getAttribute("aria-label")).toBe(
-      "Reading your automations"
-    );
+    expect(skeleton?.getAttribute("aria-label")).toBe("Reading your rules");
     const spans = textOf(container);
     expect(spans).toContain(
       "A row knows its shape before its content arrives, so nothing reflows when it does."
@@ -228,11 +226,11 @@ describe(AutomationsScreen, () => {
     expect(spans).toContain("Reading from the gateway");
   });
 
-  it("says what an automation is, quietly, when nothing runs on its own", async () => {
+  it("says what a rule is, quietly, when nothing runs on its own", async () => {
     const container = await render();
     const spans = textOf(container);
     expect(spans).toContain("Nothing runs on its own yet");
-    expect(spans).toContain("An automation is a trigger and a thing to do.");
+    expect(spans).toContain("A rule is a trigger and a thing to do.");
     expect(spans).toContain("Nothing to attend to");
   });
 
@@ -279,7 +277,7 @@ describe(AutomationsScreen, () => {
     expect(
       spans.some((span) =>
         span.startsWith(
-          "1 automation is failing · Weekly digest has failed its last 2 runs, since "
+          "1 rule is failing · Weekly digest has failed its last 2 runs, since "
         )
       )
     ).toBe(true);

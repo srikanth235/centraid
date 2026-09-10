@@ -55,7 +55,7 @@ const LOADING_NOTE = SKELETON_NOTE;
 const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
 const NO_RUNS_NOTE =
-  "Nothing has run yet — run an automation once, or wait for its trigger.";
+  "Nothing has run yet — run a rule once, or wait for its trigger.";
 
 export default function AutomationsScreen({
   navigation,
@@ -102,7 +102,7 @@ function AutomationsBody({
   if (state === "loading")
     return (
       <>
-        <SkeletonRows accessibilityLabel="Reading your automations" />
+        <SkeletonRows accessibilityLabel="Reading your rules" />
         <NoteBlock text={LOADING_NOTE} />
       </>
     );
@@ -216,7 +216,7 @@ function AutomationsBody({
     <>
       {full ? (
         <ChipsBlock
-          accessibilityLabel="Filter automations"
+          accessibilityLabel="Filter rules"
           chips={filterChips(page.filter).map((chip) => ({
             id: chip.key,
             label: chip.label,
@@ -236,7 +236,7 @@ function AutomationsBody({
       {automationRows.length > 0 ? (
         <RowsBlock accessibilityLabel="Rules" rows={automationRows} />
       ) : (
-        <NoteBlock text="No automation is in that state right now." />
+        <NoteBlock text="No rule is in that state right now." />
       )}
 
       <SectionBlock

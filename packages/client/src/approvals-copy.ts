@@ -11,7 +11,7 @@ export const APPROVALS_EMPTY_ACTION = "Review standing grants";
 
 export const APPROVALS_DENY_TITLE = "Deny this write";
 export const APPROVALS_DENY_SUB =
-  "Nothing is sent. The automation is told it was refused, and remembers.";
+  "Nothing is sent. The rule is told it was refused, and remembers.";
 
 export const APPROVALS_SENDING_FACT_KEY = "nothing has been sent";
 export const APPROVALS_SENDING_FACT_VALUE =

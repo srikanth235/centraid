@@ -121,7 +121,7 @@ describe("the staged write", () => {
     );
     expect(callerPhrase("app", "Photos")).toBe("the app Photos");
     expect(callerPhrase("agent", "Tidy downloads")).toBe(
-      "the automation Tidy downloads"
+      "the rule Tidy downloads"
     );
     expect(callerPhrase("owner-device", null)).toBe("owner-device");
     expect(
@@ -292,7 +292,7 @@ describe("the standing line and the reference tail", () => {
   it("keeps the verbatim rule sentences", () => {
     expect(DENY_TITLE).toBe("Deny this write");
     expect(DENY_SUB).toBe(
-      "Nothing is sent. The automation is told it was refused, and remembers."
+      "Nothing is sent. The rule is told it was refused, and remembers."
     );
     expect(GRANTS_NOTE).toBe(
       "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."

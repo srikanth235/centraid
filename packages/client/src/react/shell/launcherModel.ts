@@ -72,11 +72,13 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   {
     icon: DESTINATION_MARKS.automations,
     id: "automations",
-    label: "Automations",
+    // One noun across both seats (#1015, R-SH-11): the place is Rules and its
+    // rows are rules. `id`/`page`/`route` stay `automations` — persisted pin
+    // keys and route keys, not copy. "Rules" needs no short form.
+    label: "Rules",
     page: "automations",
     requires: "automations",
     route: { kind: "automations" },
-    shortLabel: "Autos",
   },
   {
     icon: DESTINATION_MARKS.connectors,

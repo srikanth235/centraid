@@ -51,10 +51,10 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
   },
   atlas: { ...VAULT, page: "atlas" },
   automations: {
-    commit: { label: "New automation" },
+    commit: { label: "New rule" },
     page: "automations",
     secondary: { label: "Templates" },
-    title: "Automations",
+    title: "Rules",
     tone: "net",
   },
   connectors: {

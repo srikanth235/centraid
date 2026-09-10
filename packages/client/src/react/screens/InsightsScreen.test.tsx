@@ -444,7 +444,7 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     const el = screen({ summary: nothingRan });
     expect(el.textContent).toContain("Nothing has run yet");
     expect(el.textContent).toContain(
-      "Once automations and the assistant start doing work, their volume and outcomes appear here."
+      "Once rules and the assistant start doing work, their volume and outcomes appear here."
     );
     // Empty offers NO action — there is nothing to do here but wait — but the
     // window picker stays, or a member who picked 7 days could not leave it.

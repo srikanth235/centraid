@@ -128,7 +128,7 @@ export function callerPhrase(kind: string, caller: string | null): string {
     case "app":
       return `the app ${name}`;
     case "agent":
-      return `the automation ${name}`;
+      return `the rule ${name}`;
     case "assistant":
       return "the assistant";
     default:

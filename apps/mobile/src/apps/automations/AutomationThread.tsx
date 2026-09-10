@@ -15,10 +15,10 @@ import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
 
 /** One noun for this page (#1015, S14). */
-const AUTOMATION_NOT_READ = "This automation could not be read";
+const AUTOMATION_NOT_READ = "This rule could not be read";
 
 /** …and when a run does not start. */
-const AUTOMATION_NOT_RUN = "This automation did not run. Try again.";
+const AUTOMATION_NOT_RUN = "This rule did not run. Try again.";
 
 type State =
   | { kind: "loading" }
