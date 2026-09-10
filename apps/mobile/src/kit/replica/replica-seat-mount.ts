@@ -59,6 +59,10 @@ export async function openMountSeat(
       headers: authHeader(),
       storageLocation: options.storageLocation,
       digest: nativeReplicaDigest,
+      // THE FOREGROUND IS THE OWNER (#1014, P1/C8). The lease it takes here
+      // is what makes the headless pass skip this vault rather than open a
+      // second handle over it — which on expo-sqlite is the SAME handle.
+      owner: "foreground",
     });
   } catch (error) {
     // SAID ONCE, THEN SWALLOWED (#1011). The refusal itself is not an error a

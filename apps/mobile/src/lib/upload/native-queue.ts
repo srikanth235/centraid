@@ -32,6 +32,61 @@ import type { DrainSummary, UploadPolicy } from "./uploader";
  */
 export const UPLOAD_DB_NAME = "centraid-uploads.db";
 
+/**
+ * ONE HANDLE, HELD BY WHOEVER STILL WANTS IT (#1014, P21).
+ *
+ * Five entry points opened this database and closed it again — boot's
+ * reconcile, the Phone storage screen, the media producer, the transfer queue
+ * and Photos' long-lived timeline engine — and expo-sqlite caches connections
+ * by NAME, so all five were the SAME handle. Whichever finished first called
+ * `closeSync()` on it and the others went on using a closed database:
+ * `withDrainLock` serialises DRAINS, and none of these are drains.
+ *
+ * So the handle is reference-counted here, in the one module that owns it. A
+ * `close()` while another holder is live is a no-op, and the last holder out
+ * really does close. `withUploadQueue` is the shape every entry point should
+ * use, because a caller that forgets its `close()` now leaks the handle rather
+ * than merely leaking a wrapper.
+ */
+let shared:
+  | { store: UploadQueueStore; holders: number; location: string | undefined }
+  | undefined;
+
+function acquireUploadStore(): UploadQueueStore {
+  const location = replicaStorageDirectory();
+  if (shared && shared.location !== location) {
+    // The durable directory moved (a restored container). The old handle names
+    // a file that is not this one; nobody may keep holding it.
+    shared.store.close();
+    shared = undefined;
+  }
+  shared ??= {
+    store: UploadQueueStore.create(
+      ExpoSqliteDriver.open({
+        name: UPLOAD_DB_NAME,
+        ...(location ? { location } : {}),
+      })
+    ),
+    holders: 0,
+    location,
+  };
+  shared.holders += 1;
+  return shared.store;
+}
+
+function releaseUploadStore(): void {
+  if (!shared) return;
+  shared.holders -= 1;
+  if (shared.holders > 0) return;
+  shared.store.close();
+  shared = undefined;
+}
+
+/** How many holders the shared handle has right now. For the suites. */
+export function uploadStoreHolders(): number {
+  return shared?.holders ?? 0;
+}
+
 export interface UploadQueueOptions {
   gatewayBaseUrl: string;
   /** Extra headers for gateway calls (e.g. Authorization in manual dev mode). */
@@ -43,6 +98,8 @@ export interface UploadQueueOptions {
 }
 
 export class UploadQueue {
+  private released = false;
+
   private constructor(
     private readonly store: UploadQueueStore,
     private readonly drainer: UploadDrainer,
@@ -50,14 +107,7 @@ export class UploadQueue {
   ) {}
 
   static open(options: UploadQueueOptions): UploadQueue {
-    const store = UploadQueueStore.create(
-      ExpoSqliteDriver.open({
-        name: UPLOAD_DB_NAME,
-        ...(replicaStorageDirectory()
-          ? { location: replicaStorageDirectory() }
-          : {}),
-      })
-    );
+    const store = acquireUploadStore();
     const scope = { gatewayBaseUrl: options.gatewayBaseUrl };
     const drainer = new UploadDrainer({
       store,
@@ -165,7 +215,29 @@ export class UploadQueue {
     return this.store.poisonedFollowupCount();
   }
 
+  /**
+   * Let go of the shared handle. Idempotent, and NOT necessarily a close:
+   * another entry point may still be holding it (see the header).
+   */
   close(): void {
-    this.store.close();
+    if (this.released) return;
+    this.released = true;
+    releaseUploadStore();
+  }
+}
+
+/**
+ * Open the queue, do something with it, and let go — the shape every entry
+ * point should take (#1014, P21). A `finally` nobody can forget.
+ */
+export async function withUploadQueue<T>(
+  options: UploadQueueOptions,
+  work: (queue: UploadQueue) => Promise<T> | T
+): Promise<T> {
+  const queue = UploadQueue.open(options);
+  try {
+    return await work(queue);
+  } finally {
+    queue.close();
   }
 }
