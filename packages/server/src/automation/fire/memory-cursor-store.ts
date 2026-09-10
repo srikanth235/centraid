@@ -21,7 +21,12 @@ export class MemoryCursorStore {
   }
 
   putCursor(input: Parameters<AutomationTriggerStore["putCursor"]>[0]): void {
-    this.rows.set(rowKey(input.automationId, input.triggerIndex), {
+    const key = rowKey(input.automationId, input.triggerIndex);
+    // Omitting `deadLetterJson` PRESERVES it, exactly as the durable store's
+    // `COALESCE` does (#1014, B1): the tail outlives the batch that wrote it.
+    const deadLetterJson =
+      input.deadLetterJson ?? this.rows.get(key)?.deadLetterJson;
+    this.rows.set(key, {
       automationId: input.automationId,
       triggerIndex: input.triggerIndex,
       sourceKind: input.sourceKind,
@@ -37,6 +42,7 @@ export class MemoryCursorStore {
       ...(input.windowTo === undefined ? {} : { windowTo: input.windowTo }),
       skipped: input.skipped ?? 0,
       ...(input.gapReason === undefined ? {} : { gapReason: input.gapReason }),
+      ...(deadLetterJson === undefined ? {} : { deadLetterJson }),
       updatedAt: input.updatedAt,
     });
   }

@@ -176,19 +176,28 @@ describe("VaultCursorEngine cursor invariants", () => {
   it("re-runs a doorbell that was rung while a batch was failing", async () => {
     const cursors = store();
     const attempts: string[] = [];
+    const errors: string[] = [];
+    // A failed delivery is now BACKED OFF rather than retried instantly
+    // (#1014, B1), so the clock has to move for the doorbell's drain to be
+    // able to try again — which is exactly the behaviour under test.
+    let clock = Date.now();
     const engine: VaultCursorEngine = new VaultCursorEngine({
       store: cursors,
+      now: () => new Date(clock),
       fire: vi.fn<VaultCursorEngineOptions["fire"]>(),
       readCursor: async () => ({
         elements: [{ position: "9", occurredAt: 9 }],
         positionJson: "9",
       }),
+      onError: (error) =>
+        errors.push(error instanceof Error ? error.message : String(error)),
       fireCursor: ({ element }) => {
         attempts.push(element.position);
         if (attempts.length > 1) return;
         // A delivery lands mid-failure. Webhook triggers are reached by
         // neither `tick` nor `nudge`, so a swallowed flag strands it until the
         // next POST or a restart.
+        clock += 60_000;
         engine.nudgeIngress("hook-id");
         throw new Error("gateway stopped");
       },
@@ -199,13 +208,12 @@ describe("VaultCursorEngine cursor invariants", () => {
       secretHash: "a".repeat(64),
     };
 
-    await expect(
-      engine.reconcile([row("hooks/doorbell", [trigger])])
-    ).rejects.toThrow("gateway stopped");
+    await engine.reconcile([row("hooks/doorbell", [trigger])]);
 
     // The doorbell was drained inside the same serialized run — and the
     // failure was still surfaced rather than swallowed by the retry.
     expect(attempts).toStrictEqual(["9", "9"]);
+    expect(errors).toStrictEqual(["gateway stopped"]);
     expect(cursors.getCursor("hooks/doorbell", 0)).toMatchObject({
       positionJson: "9",
     });

@@ -3146,6 +3146,13 @@ export async function buildGateway(
         event: input.element.payload,
       };
     }
+    // KEYED BY (ELEMENT, ATTEMPT) (#1014, B1). The run id is memoised: a
+    // second delivery under the same id finds the first run's ended turn and
+    // returns early. That is exactly right for a REDELIVERY of work already
+    // done and exactly wrong for a RETRY of work that failed, so the attempt
+    // number is part of the key from the second attempt on. Attempt one keeps
+    // the historical id so an in-flight batch upgrades without re-running
+    // everything it already delivered.
     const sourceTurnId = crypto
       .createHash("sha256")
       .update(
@@ -3153,8 +3160,9 @@ export async function buildGateway(
       )
       .digest("hex")
       .slice(0, 24);
-    await fireAutomation(input.automationRef, {
-      runId: `${input.automationRef}:trigger:${sourceTurnId}`,
+    const attemptSuffix = input.attempt > 1 ? `:${input.attempt}` : "";
+    const outcome = await fireAutomation(input.automationRef, {
+      runId: `${input.automationRef}:trigger:${sourceTurnId}${attemptSuffix}`,
       triggerKind: "scheduled",
       triggerOrigin: input.sourceKind,
       idempotent: true,
@@ -3162,6 +3170,19 @@ export async function buildGateway(
       ...(payload === undefined ? {} : { input: payload }),
       ...(gapNote(input) ? { note: gapNote(input) } : {}),
     });
+    // A HANDLER FAILURE IS A FAILED DELIVERY (#1014, B1). `propagateError`
+    // covers only what throws before or around the run; a run that reached the
+    // handler and came back `ok: false` returned normally, and the cursor
+    // engine acked the element on the strength of that return. Raising it here
+    // is what puts the element on the retry-then-dead-letter path instead.
+    // A SKIPPED run is not a failure: a paused or preparing system automation
+    // deliberately did nothing, and its element waits for the next tick.
+    if (outcome.outcome && !outcome.outcome.ok && !outcome.outcome.skipped) {
+      throw new Error(
+        outcome.outcome.error ??
+          `automation ${input.automationRef} did not complete`
+      );
+    }
   };
 
   const schedulerFor = (vaultId: string): automation.LocalScheduler => {
@@ -3195,6 +3216,33 @@ export async function buildGateway(
               health.reportError("automation-runs", message);
               logger.warn(message);
             },
+            // GIVEN UP ON, OUT LOUD (#1014, B1). The engine has already
+            // recorded the element on the cursor row by the time this runs;
+            // this is the half the member can see. One notice per element,
+            // keyed by position so a second dead letter for the same element
+            // (a re-read after a cursor reset) does not nag.
+            onDeadLetter: (entry) =>
+              runWithVaultContext({ vaultId }, () => {
+                const detail =
+                  `${entry.automationRef} gave up on trigger element ` +
+                  `${entry.position} after ${entry.attempts} attempts: ${entry.error}`;
+                health.reportError("automation-runs", detail);
+                logger.warn(detail);
+                const name = humanizeAutomationRef(entry.automationRef);
+                vaultRegistry.current().notices.put({
+                  kind: "automation",
+                  sourceRef: `${entry.automationRef}#dead-letter:${entry.position}`,
+                  headline: `${name} gave up on one item`,
+                  severity: "high",
+                  detail: {
+                    sourceType: "automation",
+                    outcome: "failure",
+                    automationRef: entry.automationRef,
+                    error: entry.error,
+                    deepLink: `/automations/${encodeURIComponent(entry.automationRef)}`,
+                  },
+                });
+              }),
             // The owner's background pause, honoured BEFORE the cursor is
             // read (#528). The same predicate `fireAutomation` applies to a
             // scheduled system fire, one layer up: a paused pass does no
