@@ -49,7 +49,11 @@ import type {
 import { discardBatch, publishBatch } from "../ingest/staging.js";
 import type { PublishResult } from "../ingest/staging.js";
 import { archivedSegmentShas } from "../journal-archive.js";
-import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import {
+  abandonReplicaCommit,
+  beginReplicaCommit,
+  endReplicaCommit,
+} from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
 import { stampReplicaOutcomeCommitsInTransaction } from "../replica/intent-chain.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "../replica/intents.js";
@@ -312,6 +316,9 @@ export class Gateway {
       }
       return results;
     } catch (error) {
+      // The sessions go with the transaction (#1014, G3): a capture left open
+      // over a ROLLBACK decodes undone changes on the next commit.
+      abandonReplicaCommit(this.db.vault);
       if (this.db.vault.isTransaction) this.db.vault.exec("ROLLBACK");
       throw error;
     } finally {
@@ -1459,6 +1466,8 @@ export class Gateway {
           endReplicaCommit(this.db.vault, replicaCommit);
           this.db.vault.exec("COMMIT");
         } catch (error) {
+          // As above (#1014, G3).
+          abandonReplicaCommit(this.db.vault);
           this.db.vault.exec("ROLLBACK");
           throw error;
         }

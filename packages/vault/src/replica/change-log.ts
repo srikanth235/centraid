@@ -9,6 +9,7 @@ import type { ReplicaCursor, ReplicaCursorInput } from "./cursor.js";
 import {
   captureReplicaCommit,
   closeReplicaCapture,
+  inReadTransaction,
   openReplicaCapture,
 } from "./log.js";
 import type { ReplicaCaptureResult } from "./log.js";
@@ -90,7 +91,12 @@ export class ReplicaRebootstrapRequiredError extends Error {
 
 interface MetaRow {
   epoch: string;
-  floor_seq: number;
+  /**
+   * THE TRIGGER LOG'S OWN FLOOR (#1014, G1). `replica_meta.floor_seq` belongs
+   * to `replica_log`; this log runs ~19 rows to its 1, so sharing one column
+   * across the two sequence spaces stamped a floor no seat cursor could clear.
+   */
+  change_floor_seq: number;
   schema_epoch: number;
   trigger_schema_version: number;
   active_commit_id: string | null;
@@ -278,7 +284,7 @@ export function refreshReplicaTriggers(vault: DatabaseSync): void {
 function meta(vault: DatabaseSync): MetaRow {
   const row = prepared(
     vault,
-    `SELECT epoch, floor_seq, schema_epoch, trigger_schema_version,
+    `SELECT epoch, change_floor_seq, schema_epoch, trigger_schema_version,
               active_commit_id,
               epoch_reason, epoch_started_at
          FROM replica_meta WHERE singleton = 1`
@@ -487,11 +493,11 @@ export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
     vault,
     `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ?`
   ).get(row.epoch) as { seq: number | null };
-  const watermarkSeq = Math.max(row.floor_seq, latest.seq ?? 0);
+  const watermarkSeq = Math.max(row.change_floor_seq, latest.seq ?? 0);
   return {
     epoch: row.epoch,
     schemaEpoch: row.schema_epoch,
-    floor: { epoch: row.epoch, seq: row.floor_seq },
+    floor: { epoch: row.epoch, seq: row.change_floor_seq },
     watermark: { epoch: row.epoch, seq: watermarkSeq },
     epochReason: row.epoch_reason,
     epochStartedAt: row.epoch_started_at,
@@ -596,7 +602,22 @@ export interface ReadReplicaChangesOptions {
   limit?: number;
 }
 
+/**
+ * ONE STABLE VIEW, LIKE THE SEAT LOG'S (#1014, G6). State, rows, the tail of
+ * the last commit group and `hasMore` are four statements; a prune of
+ * `(since, watermark]` landing between them yielded no changes, `hasMore:
+ * false` and `next: watermark`, and the subscriber skipped a span it never
+ * received. The bracket is re-entrant: `projectReplicaPage` already runs
+ * inside `withReplicaSnapshot`.
+ */
 export function readReplicaChanges(
+  vault: DatabaseSync,
+  options: ReadReplicaChangesOptions = {}
+): ReplicaChangePage {
+  return inReadTransaction(vault, () => readReplicaChangePage(vault, options));
+}
+
+function readReplicaChangePage(
   vault: DatabaseSync,
   options: ReadReplicaChangesOptions = {}
 ): ReplicaChangePage {
@@ -705,19 +726,44 @@ function bumpReplicaEpochInTransaction(
   const epoch = options.epoch ?? randomUUID();
   formatReplicaCursor({ epoch, seq: 0 });
   const now = (options.now ?? new Date()).toISOString();
+  // EACH FLOOR FROM ITS OWN LOG (#1014, G2). The seat log's floor used to be
+  // derived from `sqlite_sequence('replica_change')` — the OTHER log's space.
+  // Landing above `MAX(replica_log.seq)` made `readReplicaLog` default
+  // `since = floor`, skip every real row, and report caught-up because
+  // `watermark == floor`: seats went silently and permanently stale on every
+  // schema change and every backup restore.
   const sequence = vault
     .prepare(`SELECT seq FROM sqlite_sequence WHERE name = 'replica_change'`)
     .get() as { seq: number } | undefined;
-  const existing = meta(vault);
-  const floor = Math.max(existing.floor_seq, sequence?.seq ?? 0);
+  const logHigh = (
+    vault.prepare(`SELECT MAX(seq) AS seq FROM replica_log`).get() as {
+      seq: number | null;
+    }
+  ).seq;
+  const existing = vault
+    .prepare(
+      `SELECT floor_seq, change_floor_seq FROM replica_meta WHERE singleton = 1`
+    )
+    .get() as { floor_seq: number; change_floor_seq: number } | undefined;
+  if (!existing) throw new Error("replica metadata is missing");
+  const floor = Math.max(existing.floor_seq, logHigh ?? 0);
+  const changeFloor = Math.max(existing.change_floor_seq, sequence?.seq ?? 0);
   vault
     .prepare(
       `UPDATE replica_meta
-          SET epoch = ?, floor_seq = ?, schema_epoch = ?, epoch_reason = ?,
-              epoch_started_at = ?, updated_at = ?
+          SET epoch = ?, floor_seq = ?, change_floor_seq = ?, schema_epoch = ?,
+              epoch_reason = ?, epoch_started_at = ?, updated_at = ?
         WHERE singleton = 1`
     )
-    .run(epoch, floor, currentSchemaEpoch(vault), options.reason, now, now);
+    .run(
+      epoch,
+      floor,
+      changeFloor,
+      currentSchemaEpoch(vault),
+      options.reason,
+      now,
+      now
+    );
 }
 
 export interface PruneReplicaChangesOptions {
@@ -878,8 +924,22 @@ function compactSupersededCommits(
       ).seq ?? candidate.seq
     );
   }
+  // AN ANSWER A SEAT IS STILL WAITING ON IS NOT SUPERSEDED (#1014, G25).
+  // Compaction judged an entry by its entity alone, and `replica.intent` is
+  // not on the held list — so a transition a device is holding a pending
+  // projection against (its outcome row names the commit it settles at, R24)
+  // could be folded away before that device ever tailed it, and the pending
+  // badge never cleared. The outcome row IS the record that someone is
+  // waiting; it leaves by its own idempotency window, not by this sweep.
+  const awaitedIntent = vault.prepare(
+    `SELECT 1 AS present FROM replica_intent_outcome WHERE intent_id = ?`
+  );
+  const awaited = (candidate: CompactionCandidate): boolean =>
+    candidate.entity === "replica.intent" &&
+    awaitedIntent.get(candidate.rowId) !== undefined;
   const superseded = (candidate: CompactionCandidate): boolean =>
     !heldEntities.has(candidate.entity) &&
+    !awaited(candidate) &&
     candidate.seq < (latest.get(candidate.key) ?? candidate.seq);
 
   const groups = new Map<string, CompactionCandidate[]>();
@@ -1074,11 +1134,13 @@ export function pruneReplicaChanges(
       }
     }
 
-    const existingFloor = meta(vault).floor_seq;
+    // ITS OWN COLUMN (#1014, G1): this prune moves the TRIGGER log's floor,
+    // never `replica_log`'s — `pruneReplicaLog` is the only writer of that.
+    const existingFloor = meta(vault).change_floor_seq;
     const floor = Math.max(existingFloor, floorCandidate);
     vault
       .prepare(
-        `UPDATE replica_meta SET floor_seq = ?, updated_at = ? WHERE singleton = 1`
+        `UPDATE replica_meta SET change_floor_seq = ?, updated_at = ? WHERE singleton = 1`
       )
       .run(floor, (options.now ?? new Date()).toISOString());
     vault.exec("COMMIT");

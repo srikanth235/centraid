@@ -25,7 +25,11 @@ import { gzipSync } from "node:zlib";
 import { encodeWireValue } from "@centraid/core/protocol";
 import type { SeatLogRowWire, WireValue } from "@centraid/core/protocol";
 
-import { replicatedTablesOf } from "../schema/private-tables.js";
+import {
+  isPrivateTable,
+  isReplicatedTable,
+  replicatedTablesOf,
+} from "../schema/private-tables.js";
 import {
   REPLICA_DDL_VERSION,
   REPLICA_SCHEMA_EPOCH,
@@ -209,6 +213,30 @@ export function openReplicaCapture(
   CAPTURES.set(vault, { sessions, producer, reads: new Map() });
 }
 
+/**
+ * WATCH A TABLE THAT DID NOT EXIST WHEN THE CAPTURE OPENED (#1014, G21).
+ *
+ * `openReplicaCapture` enumerates the replicated tables ONCE and re-runs only
+ * at the tail of the next successful capture, so DDL that plants a new
+ * physical mid-session — an app's ext band being installed, `recreateExtTables`
+ * on the import path — left every row written into it before the next commit
+ * with no session watching, and those rows never reached a seat.
+ *
+ * ADDITIVE, NEVER A REOPEN: closing and reopening the whole set would discard
+ * the changesets the open sessions are already holding for this transaction.
+ * A table already watched is a no-op, so this is safe to call after any DDL.
+ */
+export function watchReplicaTable(vault: DatabaseSync, table: string): void {
+  const state = CAPTURES.get(vault);
+  if (!state) return;
+  if (!isReplicatedTable(table) || isPrivateTable(table)) return;
+  if (state.sessions.some((open) => open.table === table)) return;
+  state.sessions.push({
+    table,
+    session: vault.createSession({ table }) as OpenSession["session"],
+  });
+}
+
 /** Drop the sessions without decoding — the rollback path. */
 export function closeReplicaCapture(vault: DatabaseSync): void {
   const state = CAPTURES.get(vault);
@@ -338,26 +366,45 @@ export function decodeChangeset(
   return decoded;
 }
 
-const COLUMN_NAMES = new WeakMap<DatabaseSync, Map<string, string[]>>();
+// KEYED ON `PRAGMA schema_version`, LIKE `REPLICATED` (#1014, G15). These
+// names are the SOLE source of column order for a DELETE image, which is
+// positional: the changeset gives values by index and nothing else says what
+// they are. A cache that never invalidated meant that after `alterExtTable`
+// dropped a column every delete row for that table carried its values under
+// the wrong keys — and a seat applied it. SQLite's own counter is bumped by
+// every table, index and trigger change, including one an ext band installs
+// mid-session, so it is the only notion of "the schema moved" that cannot
+// disagree with the schema.
+const COLUMN_NAMES = new WeakMap<
+  DatabaseSync,
+  { schemaVersion: number; names: Map<string, string[]> }
+>();
+
+function schemaVersionOf(vault: DatabaseSync): number {
+  return (
+    vault.prepare("PRAGMA schema_version").get() as { schema_version: number }
+  ).schema_version;
+}
 
 function tableColumnNames(
   vault: DatabaseSync,
   table: string,
   _reads: Map<string, StatementSync>
 ): string[] {
-  let perDb = COLUMN_NAMES.get(vault);
-  if (!perDb) {
-    perDb = new Map();
-    COLUMN_NAMES.set(vault, perDb);
+  const schemaVersion = schemaVersionOf(vault);
+  let cached = COLUMN_NAMES.get(vault);
+  if (!cached || cached.schemaVersion !== schemaVersion) {
+    cached = { schemaVersion, names: new Map() };
+    COLUMN_NAMES.set(vault, cached);
   }
-  let names = perDb.get(table);
+  let names = cached.names.get(table);
   if (!names) {
     names = (
       vault.prepare(`PRAGMA table_info(${quoted(table)})`).all() as {
         name: string;
       }[]
     ).map((column) => column.name);
-    perDb.set(table, names);
+    cached.names.set(table, names);
   }
   return names;
 }
@@ -425,13 +472,22 @@ export function captureReplicaCommit(
   const images = decoded.map((row) =>
     row.row === null ? null : JSON.stringify(row.row)
   );
-  // A CONFORMING PRODUCER IS NEVER MEASURED. Within the bound a commit is
-  // ~38 KB gzipped against a 1 MB threshold, so compressing every commit to
-  // discover that would be paying the cost on the write path to learn a
-  // number the bound already guarantees. Over the bound, the producer failed
-  // to chunk and the seat needs the real answer.
+  // A CONFORMING PRODUCER IS NEVER MEASURED — BUT "CONFORMING" IS ABOUT BYTES
+  // (#1014, G20). The bound below is stated in rows, and the guarantee behind
+  // it ("~38 KB gzipped") holds only for rows of ordinary size. A 2,000-row
+  // commit of `enrich_embedding` BLOB images is tens of megabytes and used to
+  // report `deferred: false`, so the one commit a metered seat most needed to
+  // skip was the one the threshold could not see. The uncompressed image size
+  // is already in hand — it costs a sum, not a compression — so a commit is
+  // measured when EITHER its row count or its raw image bytes could plausibly
+  // reach the threshold.
+  const rawBytes = images.reduce(
+    (total, image) => total + (image === null ? 0 : image.length),
+    0
+  );
   const compressedBytes =
-    decoded.length > REPLICA_PRODUCER_MAX_ROWS
+    decoded.length > REPLICA_PRODUCER_MAX_ROWS ||
+    rawBytes > REPLICA_DEFER_THRESHOLD_BYTES
       ? gzipSync(Buffer.from(images.join("\n"), "utf8"), { level: 6 }).length
       : 0;
   const deferred = compressedBytes > REPLICA_DEFER_THRESHOLD_BYTES;
@@ -576,7 +632,45 @@ export class ReplicaRebootstrapRequiredError extends Error {
  * that ends mid-commit would force it to either hold an open transaction
  * across a round trip or write a state no single transaction produced.
  */
+/**
+ * Run a read as ONE STABLE VIEW of the file (#1014, G6).
+ *
+ * Re-entrant on purpose: the projection plane already brackets its reads with
+ * `withReplicaSnapshot`, and a nested `BEGIN` is an error rather than a
+ * nesting. `ROLLBACK` rather than `COMMIT` because nothing here writes.
+ */
+export function inReadTransaction<T>(vault: DatabaseSync, read: () => T): T {
+  if (vault.isTransaction) return read();
+  vault.exec("BEGIN");
+  try {
+    const value = read();
+    vault.exec("ROLLBACK");
+    return value;
+  } catch (error) {
+    try {
+      vault.exec("ROLLBACK");
+    } catch {
+      // The read already failed; a failed rollback must not mask why.
+    }
+    throw error;
+  }
+}
+
 export function readReplicaLog(
+  vault: DatabaseSync,
+  options: { since?: ReplicaLogCursor; limit?: number } = {}
+): ReplicaLogPage {
+  return inReadTransaction(vault, () => readReplicaLogRows(vault, options));
+}
+
+/**
+ * THE FOUR STATEMENTS THAT HAVE TO AGREE (#1014, G6): state, rows, the tail
+ * of the last commit, and `hasMore`. Run apart, a prune of `(since,
+ * watermark]` landing between them yielded no rows, `hasMore: false` and
+ * `next: watermark` — and the seat skipped a span it never received, silently.
+ * Its caller brackets it; it is separate only so the bracket is re-entrant.
+ */
+function readReplicaLogRows(
   vault: DatabaseSync,
   options: { since?: ReplicaLogCursor; limit?: number } = {}
 ): ReplicaLogPage {
@@ -674,6 +768,23 @@ export function readReplicaLog(
 export const REPLICA_LOG_RETENTION_DAYS = 30;
 export const REPLICA_LOG_RETENTION_MAX_ROWS = 200_000;
 
+/**
+ * HOW LONG A SEAT'S CURSOR PINS THE LOG (#1014, T9).
+ *
+ * The hold exists so a prune cannot convert a cheap tail into a forced
+ * re-bootstrap on the gateway's schedule. It needs a bound for the opposite
+ * failure: a phone that is lost, wiped or simply never opened again holds a
+ * cursor forever, and with it every log row above that cursor — which is the
+ * unbounded growth the retention window was written to stop.
+ *
+ * 30 days is the retention window itself; the hold is shorter on purpose, so
+ * a device that has not asked for a page in this long stops pinning BEFORE
+ * the window it is pinning would have expired anyway. A device that comes
+ * back after the bound re-bootstraps from a snapshot — visibly, once — which
+ * is the outcome a member can understand.
+ */
+export const REPLICA_SEAT_HOLD_DAYS = 14;
+
 export interface PruneReplicaLogOptions {
   now?: Date;
   maxAgeMs?: number;
@@ -694,14 +805,78 @@ export interface ReplicaLogPruneResult {
   readonly heldBySeat: number | undefined;
 }
 
-/** The lowest position any enrolled seat still needs served. */
-export function lowestSeatCursor(vault: DatabaseSync): number | undefined {
+/**
+ * RECORD WHERE A SEAT HAS ACTUALLY GOT TO (#1014, V1/T9).
+ *
+ * The hold below reads `access_device_secret.sync_cursor`, which until now was
+ * only ever written NULL at enrollment — so the guard on the prune was inert
+ * and the day the prune was wired it would have pruned past every live seat.
+ * The seat-log door calls this with the cursor the device SENT, not the one it
+ * was served: the sent cursor is the position the device has, and the hold has
+ * to stand on what a seat has rather than on what is in flight to it.
+ *
+ * BEST-EFFORT, LIKE A DOORBELL: this is bookkeeping about a page that has
+ * already been served, so a failure here may never fail the page. It returns
+ * whether it wrote, for the door's own logging.
+ */
+export function recordSeatCursor(
+  vault: DatabaseSync,
+  deviceId: string,
+  seq: number,
+  now: Date = new Date()
+): boolean {
+  if (!Number.isSafeInteger(seq) || seq < 0) return false;
+  try {
+    return (
+      Number(
+        vault
+          .prepare(
+            `UPDATE access_device_secret
+                SET sync_cursor = ?, sync_cursor_at = ?
+              WHERE device_id = ?
+                AND (sync_cursor IS NULL OR CAST(sync_cursor AS INTEGER) <= ?)`
+          )
+          .run(String(seq), now.toISOString(), deviceId, seq).changes
+      ) > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+export interface LowestSeatCursorOptions {
+  now?: Date;
+  /** Defaults to {@link REPLICA_SEAT_HOLD_DAYS}. */
+  abandonAfterMs?: number;
+}
+
+/**
+ * The lowest position any LIVE enrolled seat still needs served.
+ *
+ * A cursor with no `sync_cursor_at`, or one older than the abandonment bound,
+ * does not pin: it is a device that has not come to the door inside the window
+ * (#1014, T9). A device that never asked at all never had a cursor to begin
+ * with, so it cannot hold a floor it has no position in.
+ */
+export function lowestSeatCursor(
+  vault: DatabaseSync,
+  options: LowestSeatCursorOptions = {}
+): number | undefined {
+  const abandonAfterMs =
+    options.abandonAfterMs ?? REPLICA_SEAT_HOLD_DAYS * 24 * 60 * 60 * 1_000;
+  const now = options.now ?? new Date();
+  const since = new Date(
+    Math.max(0, now.getTime() - abandonAfterMs)
+  ).toISOString();
   const row = vault
     .prepare(
       `SELECT MIN(CAST(sync_cursor AS INTEGER)) AS seq
-         FROM access_device_secret WHERE sync_cursor IS NOT NULL`
+         FROM access_device_secret
+        WHERE sync_cursor IS NOT NULL
+          AND sync_cursor_at IS NOT NULL
+          AND sync_cursor_at >= ?`
     )
-    .get() as { seq: number | null } | undefined;
+    .get(since) as { seq: number | null } | undefined;
   return row?.seq ?? undefined;
 }
 
@@ -746,7 +921,7 @@ export function pruneReplicaLog(
   // window gets that answer rather than an Invalid Date.
   const cutoff = new Date(Math.max(0, now.getTime() - maxAgeMs)).toISOString();
   const epoch = meta(vault).epoch;
-  const heldBySeat = options.holdAtOrAbove ?? lowestSeatCursor(vault);
+  const heldBySeat = options.holdAtOrAbove ?? lowestSeatCursor(vault, { now });
 
   let pruned = 0;
   vault.exec("BEGIN IMMEDIATE");
