@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from "expo-file-system";
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { formatBytes } from "@centraid/design";
 
@@ -11,8 +11,8 @@ import {
 import { useConfirmDestructive } from "../kit/components/ConfirmSheet";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
-import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
+import { SystemPlace } from "../kit/rooms";
 import { density, family, metrics, radii, t, useTheme } from "../kit/theme";
 import { getReplicaBackgroundRegistrationStatus } from "../lib/replica/background-sync";
 import type { ReplicaBackgroundRegistrationStatus } from "../lib/replica/background-sync";
@@ -29,6 +29,7 @@ import {
 } from "../lib/replica/thumbnail-pack";
 import { UPLOAD_DB_NAME, UploadQueue } from "../lib/upload/native-queue";
 import type { SettingsScreenProps } from "../navigation";
+import { useShellParent } from "./shell-places";
 
 interface ScopeStorage {
   vaultId: string;
@@ -54,6 +55,7 @@ export default function PhoneStorage({
   // title, and a status line it can host - none of which `Alert.alert` can
   // draw.
   const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+  const backTo = useShellParent();
 
   const { scopes = [], session, refresh: refreshReplica } = useReplica();
   const [background, setBackground] =
@@ -141,269 +143,254 @@ export default function PhoneStorage({
   const databaseTotal = rows.reduce((sum, row) => sum + row.databaseBytes, 0);
   const thumbnailTotal = rows.reduce((sum, row) => sum + row.thumbnailBytes, 0);
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      {confirmSheet}
-      <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Settings"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.back}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            On this phone
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-            <Text style={[t("mono"), { color: colors.textSoft }]}>
-              {formatBytes(total)} used ·{" "}
-              {formatBytes(Paths.availableDiskSpace)} free
-            </Text>
-          </Text>
-        </View>
-      </View>
-      <ScrollView contentContainerStyle={styles.body}>
-        {route.params?.signalCause ? (
-          <View
-            accessibilityLabel="Arrived from Notifications"
-            accessibilityLiveRegion="polite"
-            accessibilityRole="alert"
-            style={[
-              styles.attention,
-              {
-                backgroundColor: colors.bg,
-                borderColor: colors.line,
-                borderLeftColor: colors.attention,
-              },
-            ]}
-          >
-            <Text style={[styles.attentionTitle, { color: colors.text }]}>
-              From Notifications
-            </Text>
-            <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
-              {route.params.signalCause}
-            </Text>
-          </View>
-        ) : null}
-        {!queueReadable || pendingCount > 0 ? (
-          <View
-            style={[
-              styles.attention,
-              {
-                backgroundColor: colors.bg,
-                borderColor: colors.line,
-                borderLeftColor: colors.attention,
-              },
-            ]}
-          >
-            <Text style={[styles.attentionTitle, { color: colors.text }]}>
-              {queueReadable
-                ? pendingVideos > 0
-                  ? `${pendingVideos} video${pendingVideos === 1 ? " exists" : "s exist"} here and nowhere else`
-                  : `${pendingCount} item${pendingCount === 1 ? " exists" : "s exist"} here and nowhere else`
-                : "Upload status could not be read"}
-            </Text>
-            <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
-              {queueReadable
-                ? "These stay on this phone until their uploads finish."
-                : "The upload ledger is still here — reopen this page after making room."}
-            </Text>
-          </View>
-        ) : null}
-        {backgroundNotice ? (
-          <View
-            style={[
-              styles.attention,
-              {
-                backgroundColor: colors.bg,
-                borderColor: colors.line,
-                borderLeftColor: colors.attention,
-              },
-            ]}
-          >
-            <Text style={[styles.attentionTitle, { color: colors.text }]}>
-              {backgroundNotice.title}
-            </Text>
-            <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
-              {backgroundNotice.body}
-            </Text>
-          </View>
-        ) : null}
-        <Text style={[styles.section, { color: colors.text }]}>
-          Cache by vault
+    <SystemPlace
+      backTo={backTo}
+      onBack={() => navigation.goBack()}
+      overlay={confirmSheet}
+      title="On this phone"
+    >
+      <Text style={[styles.subtitle, { color: colors.textSoft }]}>
+        <Text style={[t("mono"), { color: colors.textSoft }]}>
+          {formatBytes(total)} used · {formatBytes(Paths.availableDiskSpace)}{" "}
+          free
         </Text>
-        {rows.map((row) => {
-          const used =
-            row.databaseBytes + row.thumbnailBytes + row.pendingUploadBytes;
-          return (
-            <View
-              key={row.vaultId}
-              style={[
-                styles.card,
-                { backgroundColor: colors.bgElev, borderColor: colors.line },
-              ]}
-            >
-              <Pressable
-                accessibilityLabel={`Storage breakdown for ${row.label}`}
-                style={styles.cardHeader}
-                onPress={() =>
-                  setExpandedVaultId((current) =>
-                    current === row.vaultId ? undefined : row.vaultId
-                  )
-                }
-              >
-                <Text style={[styles.cardTitle, { color: colors.text }]}>
-                  {row.label}
-                </Text>
-                <Text style={[t("mono"), styles.total, { color: colors.text }]}>
-                  {formatBytes(used)}
-                </Text>
-              </Pressable>
-              {expandedVaultId === row.vaultId ? (
-                <>
-                  <StorageLine
-                    label="Database · Docs, Photos & app metadata"
-                    bytes={row.databaseBytes}
-                    color={colors.textSoft}
-                  />
-                  <StorageLine
-                    label={
-                      <>
-                        Offline thumbnails ·{" "}
-                        <Text style={[t("mono"), { color: colors.textSoft }]}>
-                          {formatBytes(THUMBNAIL_SOURCE_BUDGET_BYTES)}
-                        </Text>{" "}
-                        budget
-                      </>
-                    }
-                    bytes={row.thumbnailBytes}
-                    color={colors.textSoft}
-                  />
-                  <StorageLine
-                    label={`Pending uploads · ${row.pendingUploadCount}`}
-                    bytes={row.pendingUploadBytes}
-                    color={colors.textSoft}
-                  />
-                </>
-              ) : null}
-            </View>
-          );
-        })}
-        {unassignedPendingCount > 0 ? (
-          <View
-            style={[styles.explainer, { backgroundColor: colors.bgSunken }]}
-          >
-            <Icon name="alert-circle" size={18} color={colors.accent} />
-            <Text style={[styles.explainerText, { color: colors.textSoft }]}>
-              <Text style={[t("mono"), { color: colors.textSoft }]}>
-                {formatBytes(unassignedPendingBytes)}
-              </Text>{" "}
-              across {unassignedPendingCount} pending upload
-              {unassignedPendingCount === 1 ? " is" : "s are"} not assigned to a
-              vault. They remain durable and are not assigned to whichever vault
-              is currently focused.
-            </Text>
-          </View>
-        ) : null}
-        {otherTotal > 0 ? (
-          <>
-            <Text style={[styles.section, { color: colors.text }]}>
-              Other Centraid data on this phone
-            </Text>
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: colors.bgElev, borderColor: colors.line },
-              ]}
-            >
-              <StorageLine
-                label="Upload ledger · the queue's own database"
-                bytes={other.uploadLedgerBytes}
-                color={colors.textSoft}
-              />
-              {other.unmountedVaultCount > 0 ? (
-                <StorageLine
-                  label={`Vault databases not currently mounted · ${other.unmountedVaultCount}`}
-                  bytes={other.unmountedVaultBytes}
-                  color={colors.textSoft}
-                />
-              ) : null}
-            </View>
-          </>
-        ) : null}
-        <Text style={[styles.section, { color: colors.text }]}>Room</Text>
-        <View style={[styles.explainer, { backgroundColor: colors.bgSunken }]}>
-          <Icon name="shield" size={18} color={colors.textSoft} />
-          <Text style={[styles.explainerText, { color: colors.textSoft }]}>
-            {formatBytes(Paths.availableDiskSpace)} free on this phone. Vault
-            databases stay in protected storage. Thumbnail packs can download
-            again; pending uploads cannot be cleared here.
-          </Text>
-        </View>
-        <Text style={[styles.section, { color: colors.text }]}>
-          Free up space
-        </Text>
+      </Text>
+      {route.params?.signalCause ? (
         <View
+          accessibilityLabel="Arrived from Notifications"
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
           style={[
-            styles.card,
-            { backgroundColor: colors.bgElev, borderColor: colors.line },
+            styles.attention,
+            {
+              backgroundColor: colors.bg,
+              borderColor: colors.line,
+              borderLeftColor: colors.attention,
+            },
           ]}
         >
-          <StorageLine
-            label="Thumbnail packs · can clear"
-            bytes={thumbnailTotal}
-            color={colors.textSoft}
-          />
-          <StorageLine
-            label="Vault databases · stay"
-            bytes={databaseTotal}
-            color={colors.textSoft}
-          />
-          <StorageLine
-            label="Only-here uploads · cannot clear"
-            bytes={
-              unassignedPendingBytes +
-              rows.reduce((sum, row) => sum + row.pendingUploadBytes, 0)
-            }
-            color={pendingCount > 0 ? colors.attention : colors.textSoft}
-          />
-          {otherTotal > 0 ? (
+          <Text style={[styles.attentionTitle, { color: colors.text }]}>
+            From Notifications
+          </Text>
+          <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
+            {route.params.signalCause}
+          </Text>
+        </View>
+      ) : null}
+      {!queueReadable || pendingCount > 0 ? (
+        <View
+          style={[
+            styles.attention,
+            {
+              backgroundColor: colors.bg,
+              borderColor: colors.line,
+              borderLeftColor: colors.attention,
+            },
+          ]}
+        >
+          <Text style={[styles.attentionTitle, { color: colors.text }]}>
+            {queueReadable
+              ? pendingVideos > 0
+                ? `${pendingVideos} video${pendingVideos === 1 ? " exists" : "s exist"} here and nowhere else`
+                : `${pendingCount} item${pendingCount === 1 ? " exists" : "s exist"} here and nowhere else`
+              : "Upload status could not be read"}
+          </Text>
+          <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
+            {queueReadable
+              ? "These stay on this phone until their uploads finish."
+              : "The upload ledger is still here — reopen this page after making room."}
+          </Text>
+        </View>
+      ) : null}
+      {backgroundNotice ? (
+        <View
+          style={[
+            styles.attention,
+            {
+              backgroundColor: colors.bg,
+              borderColor: colors.line,
+              borderLeftColor: colors.attention,
+            },
+          ]}
+        >
+          <Text style={[styles.attentionTitle, { color: colors.text }]}>
+            {backgroundNotice.title}
+          </Text>
+          <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
+            {backgroundNotice.body}
+          </Text>
+        </View>
+      ) : null}
+      <Text style={[styles.section, { color: colors.text }]}>
+        Cache by vault
+      </Text>
+      {rows.map((row) => {
+        const used =
+          row.databaseBytes + row.thumbnailBytes + row.pendingUploadBytes;
+        return (
+          <View
+            key={row.vaultId}
+            style={[
+              styles.card,
+              { backgroundColor: colors.bgElev, borderColor: colors.line },
+            ]}
+          >
+            <Pressable
+              accessibilityLabel={`Storage breakdown for ${row.label}`}
+              style={styles.cardHeader}
+              onPress={() =>
+                setExpandedVaultId((current) =>
+                  current === row.vaultId ? undefined : row.vaultId
+                )
+              }
+            >
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                {row.label}
+              </Text>
+              <Text style={[t("mono"), styles.total, { color: colors.text }]}>
+                {formatBytes(used)}
+              </Text>
+            </Pressable>
+            {expandedVaultId === row.vaultId ? (
+              <>
+                <StorageLine
+                  label="Database · Docs, Photos & app metadata"
+                  bytes={row.databaseBytes}
+                  color={colors.textSoft}
+                />
+                <StorageLine
+                  label={
+                    <>
+                      Offline thumbnails ·{" "}
+                      <Text style={[t("mono"), { color: colors.textSoft }]}>
+                        {formatBytes(THUMBNAIL_SOURCE_BUDGET_BYTES)}
+                      </Text>{" "}
+                      budget
+                    </>
+                  }
+                  bytes={row.thumbnailBytes}
+                  color={colors.textSoft}
+                />
+                <StorageLine
+                  label={`Pending uploads · ${row.pendingUploadCount}`}
+                  bytes={row.pendingUploadBytes}
+                  color={colors.textSoft}
+                />
+              </>
+            ) : null}
+          </View>
+        );
+      })}
+      {unassignedPendingCount > 0 ? (
+        <View style={[styles.explainer, { backgroundColor: colors.bgSunken }]}>
+          <Icon name="alert-circle" size={18} color={colors.accent} />
+          <Text style={[styles.explainerText, { color: colors.textSoft }]}>
+            <Text style={[t("mono"), { color: colors.textSoft }]}>
+              {formatBytes(unassignedPendingBytes)}
+            </Text>{" "}
+            across {unassignedPendingCount} pending upload
+            {unassignedPendingCount === 1 ? " is" : "s are"} not assigned to a
+            vault. They remain durable and are not assigned to whichever vault
+            is currently focused.
+          </Text>
+        </View>
+      ) : null}
+      {otherTotal > 0 ? (
+        <>
+          <Text style={[styles.section, { color: colors.text }]}>
+            Other Centraid data on this phone
+          </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.bgElev, borderColor: colors.line },
+            ]}
+          >
             <StorageLine
-              label="Other Centraid data · stays"
-              bytes={otherTotal}
+              label="Upload ledger · the queue's own database"
+              bytes={other.uploadLedgerBytes}
               color={colors.textSoft}
             />
-          ) : null}
-        </View>
-        <Pressable
-          style={[styles.button, { borderColor: colors.line }]}
-          onPress={() =>
-            confirmDestructive({
-              body: "This clears thumbnail packs only. Vault databases and pending uploads stay; only-here videos cannot be cleared.",
-              noun: "the offline thumbnails",
-              onConfirm: () => {
-                clearPinnedThumbnailPacks();
-                // Room alone does not restart sync: the coordinator parked the
-                // feed when the disk filled and stays parked until it is told
-                // the space exists (coordinator.ts). The pull that follows is
-                // what clears `out of room` from the status bar.
-                session?.resumeAfterStorageFull();
-                void refreshReplica?.();
-                refresh();
-              },
-              verb: "Free up",
-            })
+            {other.unmountedVaultCount > 0 ? (
+              <StorageLine
+                label={`Vault databases not currently mounted · ${other.unmountedVaultCount}`}
+                bytes={other.unmountedVaultBytes}
+                color={colors.textSoft}
+              />
+            ) : null}
+          </View>
+        </>
+      ) : null}
+      <Text style={[styles.section, { color: colors.text }]}>Room</Text>
+      <View style={[styles.explainer, { backgroundColor: colors.bgSunken }]}>
+        <Icon name="shield" size={18} color={colors.textSoft} />
+        <Text style={[styles.explainerText, { color: colors.textSoft }]}>
+          {formatBytes(Paths.availableDiskSpace)} free on this phone. Vault
+          databases stay in protected storage. Thumbnail packs can download
+          again; pending uploads cannot be cleared here.
+        </Text>
+      </View>
+      <Text style={[styles.section, { color: colors.text }]}>
+        Free up space
+      </Text>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: colors.bgElev, borderColor: colors.line },
+        ]}
+      >
+        <StorageLine
+          label="Thumbnail packs · can clear"
+          bytes={thumbnailTotal}
+          color={colors.textSoft}
+        />
+        <StorageLine
+          label="Vault databases · stay"
+          bytes={databaseTotal}
+          color={colors.textSoft}
+        />
+        <StorageLine
+          label="Only-here uploads · cannot clear"
+          bytes={
+            unassignedPendingBytes +
+            rows.reduce((sum, row) => sum + row.pendingUploadBytes, 0)
           }
-        >
-          <Icon name="trash-2" size={18} color={colors.text} />
-          <Text style={[styles.buttonText, { color: colors.text }]}>
-            Free up thumbnail packs
-          </Text>
-        </Pressable>
-      </ScrollView>
-    </TopSafeArea>
+          color={pendingCount > 0 ? colors.attention : colors.textSoft}
+        />
+        {otherTotal > 0 ? (
+          <StorageLine
+            label="Other Centraid data · stays"
+            bytes={otherTotal}
+            color={colors.textSoft}
+          />
+        ) : null}
+      </View>
+      <Pressable
+        style={[styles.button, { borderColor: colors.line }]}
+        onPress={() =>
+          confirmDestructive({
+            body: "This clears thumbnail packs only. Vault databases and pending uploads stay; only-here videos cannot be cleared.",
+            noun: "the offline thumbnails",
+            onConfirm: () => {
+              clearPinnedThumbnailPacks();
+              // Room alone does not restart sync: the coordinator parked the
+              // feed when the disk filled and stays parked until it is told
+              // the space exists (coordinator.ts). The pull that follows is
+              // what clears `out of room` from the status bar.
+              session?.resumeAfterStorageFull();
+              void refreshReplica?.();
+              refresh();
+            },
+            verb: "Free up",
+          })
+        }
+      >
+        <Icon name="trash-2" size={18} color={colors.text} />
+        <Text style={[styles.buttonText, { color: colors.text }]}>
+          Free up thumbnail packs
+        </Text>
+      </Pressable>
+    </SystemPlace>
   );
 }
 
@@ -482,12 +469,6 @@ const styles = StyleSheet.create({
   attentionBody: { ...t("body") },
   attentionTitle: { ...t("bodyStrong") },
   body: { gap: 14, padding: 18 },
-  back: {
-    alignItems: "center",
-    height: metrics.row,
-    justifyContent: "center",
-    width: metrics.row,
-  },
   button: {
     alignItems: "center",
     borderRadius: radii.md,
@@ -525,13 +506,6 @@ const styles = StyleSheet.create({
     flex: 1,
     ...t("small"),
   },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    padding: 18,
-  },
-  headerCopy: { flex: 1 },
   line: {
     alignItems: "center",
     flexDirection: "row",
@@ -543,13 +517,11 @@ const styles = StyleSheet.create({
     fontSize: t("mono").fontSize,
   },
   lineValue: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
-  safe: { flex: 1 },
   section: { ...t("bodyStrong"), marginTop: 4 },
   subtitle: {
     fontFamily: family.sansRegular,
     fontSize: t("mono").fontSize,
     marginTop: 2,
   },
-  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   total: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
 });

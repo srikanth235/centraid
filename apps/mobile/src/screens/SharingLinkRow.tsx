@@ -15,7 +15,7 @@ import { RETRY_ACTION } from "@centraid/client/surface-copy";
 
 import { Text } from "../kit/components/NativeText";
 import type { useTheme } from "../kit/theme";
-import { density, family, radii, t } from "../kit/theme";
+import { density, family, radii, spacing, t } from "../kit/theme";
 import {
   mintLinkTicket,
   redeemLinkTicket,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     marginTop: 4,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     paddingVertical: 6,
   },
   rowActions: { flexDirection: "row", gap: 8 },

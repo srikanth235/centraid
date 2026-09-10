@@ -4,7 +4,6 @@
 // is the state; inactive icon is `textFaint`. Native-stack chrome, never
 // bottom-tabs: apps are covers pushed from Home.
 
-import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,6 +15,7 @@ import {
 } from "../../kit/band-surface";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import {
@@ -67,7 +67,7 @@ export default function HomeBand({
           colors={colors}
           styles={styles}
           onPress={() => {
-            void Haptics.selectionAsync();
+            hapticSelect();
             onSelect(tab.id);
           }}
         />
@@ -77,7 +77,7 @@ export default function HomeBand({
         accessibilityRole="button"
         accessibilityLabel="All apps and places"
         onPress={() => {
-          void Haptics.selectionAsync();
+          hapticSelect();
           onSelect("more");
         }}
         style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}

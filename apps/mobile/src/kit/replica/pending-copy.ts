@@ -98,10 +98,17 @@ export function pendingChangeTitle(change: PendingChange): string {
 }
 
 /**
- * The sentence under the row, for the states where the law says more than the
- * status word does: parked names the steward, conflict prints both versions,
- * denied and failed carry the reason the vault gave.
+ * ONE ERROR NOUN, NEVER THE ENGINE'S (#1015, S14). A row that failed used to
+ * print `change.reason` — the gateway's own words, which is an exception
+ * string wearing a sentence's clothes ("SQLITE_BUSY", a stack frame, a status
+ * code). A member cannot act on any of that, and the action they CAN take is
+ * already on the row as a verb. So the states the kit has words for keep them
+ * (parked names the steward, a conflict prints both versions), and everything
+ * else gets the one sentence below.
  */
+export const PENDING_CHANGE_NOT_ACCEPTED =
+  "This change was not accepted. Try again.";
+
 export function pendingChangeExplanation(
   change: PendingChange
 ): string | undefined {
@@ -111,7 +118,7 @@ export function pendingChangeExplanation(
     (overlay.status === "parked" || pendingOverlayCanRetry(overlay))
   )
     return pendingOverlayCopy(overlay);
-  return change.reason;
+  return change.reason === undefined ? undefined : PENDING_CHANGE_NOT_ACCEPTED;
 }
 
 /** Which doors this row actually has; drawing one that cannot fire is worse

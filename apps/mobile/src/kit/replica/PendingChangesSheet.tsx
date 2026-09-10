@@ -1,12 +1,12 @@
 import React from "react";
-import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 
 import { formatRelativeTime } from "@centraid/design";
 
-import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
 import Tappable from "../components/Tappable";
-import { borders, family, radii, t, useTheme } from "../theme";
+import { SheetRoom } from "../rooms";
+import { borders, family, radii, spacing, t, useTheme } from "../theme";
 import type { PendingChange } from "./pending-changes";
 import {
   humanStatus,
@@ -73,160 +73,143 @@ export default function PendingChangesSheet({
     void work.then(refresh, refresh);
   };
   return (
-    <Modal
+    <SheetRoom
+      cancelLabel="Close"
+      onClose={onClose}
+      title="Pending changes"
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
     >
-      <View style={[styles.sheet, { backgroundColor: colors.bg }]}>
-        <View style={styles.sheetHeader}>
-          <View>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Pending changes
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-              Saved on this phone until each target accepts them
-            </Text>
-          </View>
-          <Tappable
-            accessibilityLabel="Close pending changes"
-            onPress={onClose}
-          >
-            <Icon name="x" size={24} color={colors.text} />
-          </Tappable>
-        </View>
-        <ScrollView contentContainerStyle={styles.list}>
-          {pending.length === 0 ? (
-            <Text style={[styles.empty, { color: colors.textSoft }]}>
-              Nothing is waiting.
-            </Text>
-          ) : (
-            pending.map((item) => {
-              const verbs = pendingChangeVerbs(item);
-              const explanation = pendingChangeExplanation(item);
-              const stuck = pendingChangeStuckLine(item);
-              const title = pendingChangeTitle(item);
-              return (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.card,
-                    {
-                      backgroundColor: colors.bgElev,
-                      borderColor: colors.line,
-                    },
-                  ]}
-                >
-                  <View style={styles.cardCopy}>
-                    <Text style={[styles.cardTitle, { color: colors.text }]}>
-                      {title}
-                    </Text>
-                    <Text style={[styles.cardMeta, { color: colors.textSoft }]}>
-                      {item.vaultLabel} ·{" "}
-                      {/* A held dependent is not "waiting to send": nothing is
+      <Text style={[styles.subtitle, { color: colors.textSoft }]}>
+        Saved on this phone until each target accepts them
+      </Text>
+      <ScrollView contentContainerStyle={styles.list}>
+        {pending.length === 0 ? (
+          <Text style={[styles.empty, { color: colors.textSoft }]}>
+            Nothing is waiting.
+          </Text>
+        ) : (
+          pending.map((item) => {
+            const verbs = pendingChangeVerbs(item);
+            const explanation = pendingChangeExplanation(item);
+            const stuck = pendingChangeStuckLine(item);
+            const title = pendingChangeTitle(item);
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.bgElev,
+                    borderColor: colors.line,
+                  },
+                ]}
+              >
+                <View style={styles.cardCopy}>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>
+                    {title}
+                  </Text>
+                  <Text style={[styles.cardMeta, { color: colors.textSoft }]}>
+                    {item.vaultLabel} ·{" "}
+                    {/* A held dependent is not "waiting to send": nothing is
                           wrong with it, and it releases when the change in
                           front of it lands (R23). */}
-                      {item.heldBadge ?? humanStatus(item.status)}
+                    {item.heldBadge ?? humanStatus(item.status)}
+                  </Text>
+                  {explanation ? (
+                    <Text
+                      style={[
+                        styles.reason,
+                        {
+                          color: verbs.retry ? colors.danger : colors.textSoft,
+                        },
+                      ]}
+                    >
+                      {explanation}
                     </Text>
-                    {explanation ? (
-                      <Text
-                        style={[
-                          styles.reason,
-                          {
-                            color: verbs.retry
-                              ? colors.danger
-                              : colors.textSoft,
-                          },
-                        ]}
-                      >
-                        {explanation}
-                      </Text>
-                    ) : null}
-                    {stuck ? (
-                      <Text style={[styles.stuck, { color: colors.textFaint }]}>
-                        {stuck}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.verbs}>
-                    {verbs.retry ? (
-                      <SheetVerb
-                        label="Retry"
-                        subject={title}
-                        color={colors.accent}
-                        onPress={() =>
-                          run(
-                            actions?.retryPendingWrite(item.id) ??
-                              Promise.resolve()
-                          )
-                        }
-                      />
-                    ) : null}
-                    {verbs.discard ? (
-                      <SheetVerb
-                        label="Discard"
-                        subject={title}
-                        color={colors.danger}
-                        onPress={() =>
-                          run(
-                            (
-                              actions?.discardPendingWrite(item.id) ??
-                              Promise.resolve(false)
-                            ).then((discarded) => {
-                              // The outbox can settle between the poll that
-                              // drew this row and the tap: clearing the
-                              // attention row is then the same outcome.
-                              if (!discarded)
-                                actions?.dismissPendingChange(item.id);
-                            })
-                          )
-                        }
-                      />
-                    ) : null}
-                    {verbs.cancel ? (
-                      <SheetVerb
-                        label="Cancel"
-                        subject={title}
-                        color={colors.danger}
-                        onPress={() =>
-                          run(
-                            actions?.cancelPendingChange(item.id) ??
-                              Promise.resolve(false)
-                          )
-                        }
-                      />
-                    ) : null}
-                    {verbs.dismiss ? (
-                      <SheetVerb
-                        label="Dismiss"
-                        subject={title}
-                        color={colors.textSoft}
-                        onPress={() => {
-                          actions?.dismissPendingChange(item.id);
-                          refresh();
-                        }}
-                      />
-                    ) : null}
-                  </View>
+                  ) : null}
+                  {stuck ? (
+                    <Text style={[styles.stuck, { color: colors.textFaint }]}>
+                      {stuck}
+                    </Text>
+                  ) : null}
                 </View>
-              );
-            })
-          )}
-          {scopes.map((scope) => (
-            <Text
-              key={scope.vaultId}
-              style={[styles.source, { color: colors.textFaint }]}
-            >
-              {scope.label}:{" "}
-              {scope.updatedAt
-                ? `updated ${formatRelativeTime(Date.parse(scope.updatedAt))}`
-                : "not updated yet"}
-            </Text>
-          ))}
-        </ScrollView>
-      </View>
-    </Modal>
+                <View style={styles.verbs}>
+                  {verbs.retry ? (
+                    <SheetVerb
+                      label="Retry"
+                      subject={title}
+                      color={colors.accent}
+                      onPress={() =>
+                        run(
+                          actions?.retryPendingWrite(item.id) ??
+                            Promise.resolve()
+                        )
+                      }
+                    />
+                  ) : null}
+                  {verbs.discard ? (
+                    <SheetVerb
+                      label="Discard"
+                      subject={title}
+                      color={colors.danger}
+                      onPress={() =>
+                        run(
+                          (
+                            actions?.discardPendingWrite(item.id) ??
+                            Promise.resolve(false)
+                          ).then((discarded) => {
+                            // The outbox can settle between the poll that
+                            // drew this row and the tap: clearing the
+                            // attention row is then the same outcome.
+                            if (!discarded)
+                              actions?.dismissPendingChange(item.id);
+                          })
+                        )
+                      }
+                    />
+                  ) : null}
+                  {verbs.cancel ? (
+                    <SheetVerb
+                      label="Cancel"
+                      subject={title}
+                      color={colors.danger}
+                      onPress={() =>
+                        run(
+                          actions?.cancelPendingChange(item.id) ??
+                            Promise.resolve(false)
+                        )
+                      }
+                    />
+                  ) : null}
+                  {verbs.dismiss ? (
+                    <SheetVerb
+                      label="Dismiss"
+                      subject={title}
+                      color={colors.textSoft}
+                      onPress={() => {
+                        actions?.dismissPendingChange(item.id);
+                        refresh();
+                      }}
+                    />
+                  ) : null}
+                </View>
+              </View>
+            );
+          })
+        )}
+        {scopes.map((scope) => (
+          <Text
+            key={scope.vaultId}
+            style={[styles.source, { color: colors.textFaint }]}
+          >
+            {scope.label}:{" "}
+            {scope.updatedAt
+              ? `updated ${formatRelativeTime(Date.parse(scope.updatedAt))}`
+              : "not updated yet"}
+          </Text>
+        ))}
+      </ScrollView>
+    </SheetRoom>
   );
 }
 
@@ -272,18 +255,11 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     textAlign: "center",
   },
-  list: { gap: 10, padding: 18 },
+  list: { gap: spacing[3], paddingBottom: spacing[4], paddingTop: spacing[3] },
   reason: {
     fontFamily: family.sansRegular,
     fontSize: t("control").fontSize,
     marginTop: 6,
-  },
-  sheet: { flex: 1 },
-  sheetHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 18,
   },
   source: {
     fontFamily: family.sansRegular,
@@ -300,6 +276,5 @@ const styles = StyleSheet.create({
     fontSize: t("control").fontSize,
     marginTop: 3,
   },
-  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   verbs: { alignItems: "flex-end", gap: 10 },
 });

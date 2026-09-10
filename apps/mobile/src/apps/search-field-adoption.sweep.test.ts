@@ -32,9 +32,16 @@ const SEARCH_SURFACES = [
 describe("search fields", () => {
   it.each(SEARCH_SURFACES)("%s reaches for the kit field", (relative) => {
     const source = readFileSync(path.join(SRC, relative), "utf8");
-    expect(source).toMatch(
-      /import SearchField from "[^"]*kit\/components\/SearchField";/u
-    );
+    // Either directly, or through the ROOM that hands it the field (#1015,
+    // Wave 2): a surface inside `AppPlace`/`PushedPage` declares `search` as
+    // a prop and the room mounts the one field, which is the same claim one
+    // level up rather than a looser one.
+    expect(
+      /import SearchField from "[^"]*kit\/components\/SearchField";/u.test(
+        source
+      ) ||
+        (/from "[^"]*kit\/rooms";/u.test(source) && /\bsearch=\{/u.test(source))
+    ).toBe(true);
   });
 
   it.each(SEARCH_SURFACES)("%s hand-rolls no field of its own", (relative) => {
