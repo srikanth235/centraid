@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import createExpoConfig from "../app.config";
 import { nativeBuildNumber } from "./version-core.js";
 
 const here = import.meta.dirname;
@@ -35,57 +36,24 @@ describe("nativeBuildNumber (J6)", () => {
     expect(() => nativeBuildNumber("nope")).toThrow(/unparseable/u);
   });
 
-  it("matches the shipped native project numbers for 0.1.0", () => {
-    // Formula is the single source; app.config.ts + android/ios must track it.
+  it("matches the native build numbers the Expo config resolves for 0.1.0", () => {
+    // Formula is the single source. `android/` and `ios/` are generated
+    // (#996 CNG wave), so the numbers that reach a build are the ones
+    // `app.config.ts` resolves — `android.versionCode`, `ios.buildNumber` and
+    // `version` — not literals in a committed project. This reads the same
+    // config factory `expo prebuild` calls.
     const expected = nativeBuildNumber("0.1.0");
     expect(expected).toBe(1_000);
 
-    const gradle = readFileSync(
-      path.join(mobileRoot, "android/app/build.gradle"),
-      "utf8"
-    );
-    expect(gradle).toMatch(new RegExp(`versionCode\\s+${expected}\\b`, "u"));
-    expect(gradle).toMatch(/versionName\s+"0\.1\.0"/u);
-
-    const pbx = readFileSync(
-      path.join(mobileRoot, "ios/Centraid.xcodeproj/project.pbxproj"),
-      "utf8"
-    );
-    // Every CURRENT_PROJECT_VERSION must equal the formula (no leftover "1").
-    const versions = [
-      ...pbx.matchAll(/CURRENT_PROJECT_VERSION = (?<version>\d+);/gu),
-    ]
-      .map((m) => m[1])
-      .filter((v): v is string => v != null);
-    expect(versions.length).toBeGreaterThan(0);
-    for (const v of versions) {
-      expect(Number(v)).toBe(expected);
-    }
-    // MARKETING_VERSION must be the app semver everywhere (no leftover "1.0").
-    const marketing = [
-      ...pbx.matchAll(/MARKETING_VERSION = (?<version>[^;]+);/gu),
-    ]
-      .map((m) => m[1])
-      .filter((v): v is string => v != null)
-      .map((v) => v.trim());
-    expect(marketing.length).toBeGreaterThan(0);
-    for (const v of marketing) {
-      expect(v).toBe("0.1.0");
-    }
-
-    // Info.plist CFBundleVersion must match the formula (not a stale 1000000).
-    const infoPlist = readFileSync(
-      path.join(mobileRoot, "ios/Centraid/Info.plist"),
-      "utf8"
-    );
-    const cfBundleVersion = infoPlist.match(
-      /<key>CFBundleVersion<\/key>\s*<string>(?<version>[^<]+)<\/string>/u
-    )?.[1];
-    expect(cfBundleVersion).toBe(String(expected));
-    const shortVersion = infoPlist.match(
-      /<key>CFBundleShortVersionString<\/key>\s*<string>(?<version>[^<]+)<\/string>/u
-    )?.[1];
-    expect(shortVersion).toBe("0.1.0");
+    const config = createExpoConfig({
+      config: {} as never,
+    } as never);
+    expect(config.version).toBe("0.1.0");
+    expect(config.android?.versionCode).toBe(expected);
+    expect(config.ios?.buildNumber).toBe(String(expected));
+    // OTA identity rides the same semver, so an update can never be offered to
+    // a binary built from a different native recipe.
+    expect(config.runtimeVersion).toBe("0.1.0");
 
     const configSrc = readFileSync(
       path.join(mobileRoot, "app.config.ts"),

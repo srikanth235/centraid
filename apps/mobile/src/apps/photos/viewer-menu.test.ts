@@ -10,11 +10,11 @@ import type {
   MenuActionRow,
   MenuGroup,
 } from "../../kit/components/AnchoredMenu";
+import { viewerOverflowMenuGroups } from "./viewer-menu";
 import {
   NOT_IN_A_VAULT_YET_REASON,
-  viewerOverflowMenuGroups,
-} from "./viewer-menu";
-import { READ_ONLY_VAULT_REASON } from "./viewer-model";
+  READ_ONLY_VAULT_REASON,
+} from "./viewer-model";
 
 function noop(): void {
   // A stand-in for a callback the test does not care about firing.

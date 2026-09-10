@@ -190,6 +190,11 @@ export const CONTAINER_COMMAND_ROUTES: readonly ContainerCommandRoute[] = [
   onAsset("media.set_favorite"),
   onAsset("media.update_asset"),
   onAsset("enrich.upsert_faces", "enrich"),
+  // Regeneration names a photograph, so it addresses the same container as any
+  // other write to it: on a shared asset the origin refuses it by name rather
+  // than dropping the stamp privately and leaving the audience's projection
+  // pointing at a derivation nobody re-derived (#1011).
+  onAsset("enrich.regenerate", "enrich"),
 
   // Locker items are single-vault — none of these is declared actable, so the
   // origin refuses them by NAME rather than letting a write land privately.

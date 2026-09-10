@@ -17,6 +17,7 @@ import {
 } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import { isMeteredConnection } from "../../kit/fetch-gate/gate";
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 
 /** The tone a control takes. Resolved to `colors.onStage` / `colors.net`. */
 export type ViewerTone = "ink" | "net";
@@ -106,6 +107,25 @@ export function viewerChromeHeight(insetTop: number): number {
 /** The ONE sentence for this truth on the phone (§6, §18). Since #880 it
  *  lives in `kit/replica/row-provenance.ts`, read by five apps. */
 export { READ_ONLY_SOURCE_REASON as READ_ONLY_VAULT_REASON } from "../../kit/replica/row-provenance";
+
+/** A device-only photograph nothing has backed up yet — the phone imported it
+ *  but this seat has not pulled the row. NOT a read-only vault. */
+export const NOT_IN_A_VAULT_YET_REASON =
+  "This photograph is not in a vault yet.";
+
+/** The ONE refusal ladder every writing surface in the viewer climbs — the
+ *  toolbar, the `···` menu and `PhotoLightbox`'s `writeReason` all read it, so
+ *  a device row cannot be told the vault is read-only when the truth is that
+ *  the photograph is not in it yet. Read-only beats no-vault-row; a writable
+ *  vault row refuses nothing. */
+export function viewerWriteRefusal(input: {
+  writable: boolean;
+  hasVaultAsset: boolean;
+}): string | undefined {
+  if (!input.writable) return READ_ONLY_SOURCE_REASON;
+  if (!input.hasVaultAsset) return NOT_IN_A_VAULT_YET_REASON;
+  return undefined;
+}
 
 /** Kept on the phone: swipe and the strip are one control from two directions,
  *  and dropping it makes the phone a slideshow. */
@@ -491,12 +511,13 @@ export function originalWhereabouts(status: OriginalStatus): string {
 // The one status line inside the stage
 // ───────────────────────────────────────────────────────────────────────────
 
-/** The phone's teaching line (proto 4637–4639): its gestures are not
- *  discoverable, so the stage's one line teaches them until the bytes have
- *  something better to say. */
-const VIEWER_GESTURE_STATUS =
-  "Swipe for the next · pinch or double tap to zoom · swipe up for info";
-
+// NO STANDING TEACHING LINE. The stage used to end every quiet moment on
+// "Swipe for the next · pinch or double tap to zoom · swipe up for info" — a
+// sentence that is true forever, so it is furniture rather than status, and it
+// was holding a permanent band open under a photograph that wanted the room.
+// The gestures keep their POINTER EQUIVALENTS (§15): the pager chevrons, the
+// filmstrip, the zoom pill and the toolbar's Info are all on the stage, which
+// is where a member finds them by looking rather than by reading a label.
 /** Video's status (proto 4642): what is playing, and which copy of it. */
 const VIDEO_STATUS = PHOTOS_VIDEO_STATUS;
 
@@ -513,7 +534,7 @@ export interface ViewerStatus {
 
 /**
  * The stage's ONE line, and the precedence is deliberate — NOT "the bytes
- * always win", which would keep the gesture line and zoom readout off screen.
+ * always win", which would keep the zoom readout off screen.
  *
  * 1. **Zoomed** outranks everything, and drops the inline action (proto 4644):
  *    a fetch that reflows the photograph under a pinched finger fires into a
@@ -521,8 +542,9 @@ export interface ViewerStatus {
  * 2. **A byte status with something to DO** — the only case offering a choice,
  *    and an offer beats a lesson.
  * 3. **Video**, describing the copy that is playing.
- * 4. Otherwise the teaching line. "Original on this device" lands here: no
- *    action, no cost, and the info sheet carries it under Facts anyway.
+ * 4. Otherwise NOTHING. "Original on this device" lands here: no action, no
+ *    cost, and the info sheet carries it under Facts anyway — an empty text is
+ *    the caller's instruction to draw no line at all.
  */
 export function viewerStatus(input: {
   scale: number;
@@ -533,7 +555,47 @@ export function viewerStatus(input: {
   if (input.bytes.action)
     return { action: input.bytes.action, text: input.bytes.text };
   if (input.kind === "video") return { text: VIDEO_STATUS };
-  return { text: VIEWER_GESTURE_STATUS };
+  return { text: "" };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Whether the chrome is on the stage
+// ────────────────────────────────────────────────────────────────────────
+
+/** The viewer OPENS with its chrome drawn. A photograph that arrives bare is a
+ *  screen with no visible way back, whatever the gesture can do. */
+export const CHROME_VISIBLE_ON_OPEN = true;
+
+export type ViewerMode = "viewer" | "slideshow" | "editor";
+
+/**
+ * A single tap on the photograph puts the chrome away, and another brings it
+ * back — the phone's whole screen is the photograph, so the controls are guests
+ * on it (#1011).
+ *
+ * This REVERSES the earlier "NO TAP-TO-TOGGLE: hiding every control hides the
+ * way back" ruling, and the objection is answered rather than waved away:
+ *
+ * - **The way back is one tap.** Nothing else is bound to a bare single tap on
+ *   the stage, so the gesture that hid the chrome is the gesture that returns
+ *   it, anywhere on the screen.
+ * - **Navigation re-shows it.** Stepping to another photograph draws the
+ *   controls again, so a member is never carried further into a bare screen.
+ * - **A screen reader pins it open.** Nothing reachable only by an unlabelled
+ *   full-screen tap is reachable at all under VoiceOver, so with a reader
+ *   running the chrome does not hide, whatever this state says.
+ * - **The editor and the slideshow keep theirs**, because their own controls
+ *   (Cancel/Save, Leave) are the only doors out of those modes.
+ */
+export function viewerChromeVisible(input: {
+  /** What the member's taps have asked for. */
+  hidden: boolean;
+  screenReader: boolean;
+  mode: ViewerMode;
+}): boolean {
+  if (input.screenReader) return true;
+  if (input.mode !== "viewer") return true;
+  return !input.hidden;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

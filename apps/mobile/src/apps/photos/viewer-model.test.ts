@@ -17,6 +17,7 @@ import {
   SLIDESHOW_ACTION,
   SLIDESHOW_INTERVAL_MS,
   captureStamp,
+  CHROME_VISIBLE_ON_OPEN,
   isZoomed,
   slideshowMeta,
   slideshowPosition,
@@ -38,6 +39,7 @@ import {
   vaultLine,
   viewerAction,
   viewerChromeHeight,
+  viewerChromeVisible,
   zoomReadout,
 } from "./viewer-model";
 
@@ -147,6 +149,40 @@ describe("the floating chrome at the head of the stage", () => {
   });
 });
 
+describe("whether the chrome is on the stage", () => {
+  const viewer = {
+    hidden: false,
+    mode: "viewer" as const,
+    screenReader: false,
+  };
+
+  test("the viewer opens with its chrome drawn", () => {
+    // A photograph that arrives bare is a screen with no visible way back.
+    expect(CHROME_VISIBLE_ON_OPEN).toBe(true);
+    expect(viewerChromeVisible(viewer)).toBe(true);
+  });
+
+  test("a tap puts it away, and only in the viewer", () => {
+    expect(viewerChromeVisible({ ...viewer, hidden: true })).toBe(false);
+    // The editor's Cancel/Save and the slideshow's Leave are the only doors
+    // out of those modes, so they are never hidden.
+    expect(
+      viewerChromeVisible({ ...viewer, hidden: true, mode: "editor" })
+    ).toBe(true);
+    expect(
+      viewerChromeVisible({ ...viewer, hidden: true, mode: "slideshow" })
+    ).toBe(true);
+  });
+
+  test("a screen reader pins it open, whatever the taps asked for", () => {
+    // Nothing reachable only by an unlabelled full-screen tap is reachable at
+    // all under VoiceOver.
+    expect(
+      viewerChromeVisible({ ...viewer, hidden: true, screenReader: true })
+    ).toBe(true);
+  });
+});
+
 describe("the filmstrip", () => {
   test("survives on the phone at 58px", () => {
     // Dropping it would make the phone a slideshow — swipe and the strip are
@@ -253,14 +289,14 @@ describe("what the stage's one line says", () => {
     "home-gateway"
   );
 
-  test("a phone with nothing to fetch teaches the gestures", () => {
-    // None of these gestures are discoverable by looking, and nothing else
-    // says them.
+  test("a phone with nothing to fetch says NOTHING", () => {
+    // The stage used to end here on a standing gesture lesson — a sentence
+    // true forever, so furniture rather than status, and it held a band open
+    // under the photograph (#1011). The gestures keep their pointer
+    // equivalents on the stage; they no longer keep a label.
     expect(
       viewerStatus({ bytes: onDevice, kind: "photo", scale: 1 })
-    ).toStrictEqual({
-      text: "Swipe for the next · pinch or double tap to zoom · swipe up for info",
-    });
+    ).toStrictEqual({ text: "" });
   });
 
   test("zoomed, it reads the live percentage and the way back", () => {

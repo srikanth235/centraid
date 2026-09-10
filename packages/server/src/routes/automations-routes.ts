@@ -28,6 +28,8 @@ import {
   SseStream,
 } from "@centraid/server/engine";
 
+import { modelReadinessFields } from "../enrich/system-model-assets.js";
+import type { SystemModelReadiness } from "../enrich/system-model-assets.js";
 import {
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_REFS,
@@ -83,6 +85,10 @@ export interface AutomationsRouteOptions {
     attachmentRefs?: TurnAttachmentRef[];
   }) => Promise<void>;
   subscriberCap?: SseSubscriberCap;
+  /** Model-asset readiness for a SYSTEM automation (#1011) — `undefined` for
+   *  everything else. Reported HERE, beside the row's own state, because this
+   *  is where a client already reads what an automation is doing. */
+  modelReadiness?: (automationId: string) => SystemModelReadiness | undefined;
 }
 
 /** Raw string on parse failure. */
@@ -159,6 +165,10 @@ export function makeAutomationsRouteHandler(
   const codeAppsDir = (): string =>
     path.join(opts.store.getActiveMainLink(), "apps");
   const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
+  // `modelState` sits beside `enabled` and the connector's `paused`: one place
+  // a client reads what an automation is currently able to do (#1011).
+  const modelReadinessFor = (id: string): Record<string, unknown> =>
+    modelReadinessFields(opts.modelReadiness?.(id));
 
   // One `vault.db` per vault (#280); a missing file means no turn yet.
   const turnsStore = ledgerConversationStore(opts.ledgerDbFile);
@@ -296,6 +306,7 @@ export function makeAutomationsRouteHandler(
             ...(isSystemRecognitionRef(row.ref)
               ? { systemLane: "recognition" as const }
               : {}),
+            ...modelReadinessFor(row.id),
           })),
         });
       }
@@ -309,7 +320,11 @@ export function makeAutomationsRouteHandler(
         return sendJson(res, 200, {
           row:
             row && isSystemRecognitionRef(row.ref)
-              ? { ...row, systemLane: "recognition" as const }
+              ? {
+                  ...row,
+                  systemLane: "recognition" as const,
+                  ...modelReadinessFor(row.id),
+                }
               : (row ?? null),
         });
       }

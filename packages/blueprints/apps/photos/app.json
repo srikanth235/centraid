@@ -521,7 +521,7 @@
     },
     {
       "name": "request-enrichment",
-      "description": "Ask the enricher to run now through enrich.request_enrichment (issue #352) — the owner's on-demand \"Detect faces now\", reason 'manual'. Only fires when enrichment-status says the photos domain isn't 'off'.",
+      "description": "Ask the enricher to run now through enrich.request_enrichment (issue #352) — the owner's \"Prioritise faces\" ask, reason 'manual'. Recognition is ambient (ruled 2026-09-09); this row only moves a library sooner in the queue. Only fires when enrichment-status says the photos domain isn't 'off'.",
       "confirmation": "none",
       "input": {
         "type": "object",

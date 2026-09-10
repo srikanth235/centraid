@@ -211,7 +211,7 @@ export default function PhotosHome({
     setGrain((current) => (current === "years" ? "months" : "all"));
   }, []);
   // Trailing control is destination-scoped (#712). Search has no honest menu.
-  // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
+  // `detectFacesFor` is the gateway question — the rung the sweep runs on.
   const enrichPolicies = usePhotoEntity("enrichPolicies");
   const detectFacesAvailability = detectFacesFor(
     enrichPolicies.loading
@@ -231,8 +231,8 @@ export default function PhotosHome({
         grain,
         detectFaces: {
           availability: detectFacesAvailability,
-          // The consent gate (the People roster's empty state), never the
-          // enrichment write — see `photos-library-menu.ts`'s header.
+          // The People roster's empty state holds the priority ask; never
+          // the enrichment write — see `photos-library-menu.ts`'s header.
           onDetectFaces: () => navigation.navigate("PhotosPeople"),
         },
       });

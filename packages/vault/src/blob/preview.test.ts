@@ -21,8 +21,16 @@ import {
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { backfillPreviews } from "./preview.js";
+import {
+  backfillPreviews,
+  clearPreviewUnsupported,
+  contributeIngressPreviews,
+  markPreviewUnsupported,
+  previewUnsupportedMarker,
+  PREVIEW_CODEC_MODEL_ID,
+} from "./preview.js";
 import type { PreviewCodec } from "./preview.js";
+import { stageBlobBytes } from "./staging.js";
 import { shaOfBlobUri } from "./store.js";
 
 // A 1×1 PNG — appending zero bytes keeps the PNG signature (so it still sniffs
@@ -312,5 +320,213 @@ describe("preview", () => {
       .get() as { drained_at: string | null; lease_device_id: string | null };
     expect(request.drained_at).not.toBeNull();
     expect(request.lease_device_id).toBeNull();
+  });
+
+  // The durable decline (#1011). "No preview yet" and "no preview ever" read
+  // identically from `ctx.vault.content`, so every recognition recipe parked
+  // its cursor before an undecodable original and the ambient walk of the
+  // library stopped there for good. The ledger now records the difference.
+
+  /** Flush the fire-and-forget ingress contributor `addImage` kicked off. */
+  async function settleContributions(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+
+  // The ingress contributor validates every rung it stages (`validateDerivative`),
+  // so its stub must emit a REAL raster: `stubCodec`'s four magic bytes have no
+  // decodable dimensions and would throw before any marker was decided.
+  const stubIngressCodec: PreviewCodec = {
+    downscale(_source, mediaType) {
+      if (mediaType !== "image/png" && mediaType !== "image/jpeg") return null;
+      return {
+        bytes: PNG_BYTES,
+        mediaType: "image/png",
+        width: 1,
+        height: 1,
+      };
+    },
+    perceptualHash: stubCodec.perceptualHash,
+    thumbhash: stubCodec.thumbhash,
+  };
+
+  async function contributeAs(
+    contentId: string,
+    mediaType: string,
+    bytes: Buffer
+  ): Promise<number> {
+    return contributeIngressPreviews(db, stubIngressCodec, {
+      sha256: originalSha(contentId),
+      bytes,
+      mediaType,
+    });
+  }
+
+  test("the ingress contributor marks an original the codec declined", async () => {
+    const bytes = Buffer.concat([PNG_BYTES, Buffer.alloc(30)]);
+    const contentId = addImage(bytes);
+    await settleContributions();
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
+
+    await expect(contributeAs(contentId, "image/gif", bytes)).resolves.toBe(0);
+    const marker = previewUnsupportedMarker(db, contentId);
+    expect(marker).not.toBeNull();
+    expect(marker!.model).toBe(PREVIEW_CODEC_MODEL_ID);
+    expect(marker!.current).toBe(true);
+    const payload = db.vault
+      .prepare(
+        `SELECT payload_json FROM enrich_derivation
+          WHERE target_type = 'core.content_item' AND target_id = ?
+            AND variant = 'preview' AND capability = 'previews'`
+      )
+      .get(contentId) as { payload_json: string };
+    expect(JSON.parse(payload.payload_json)).toStrictEqual({
+      unsupported: true,
+      codec: PREVIEW_CODEC_MODEL_ID,
+    });
+  });
+
+  test("a supported original is never marked, and a rung retires a stale marker", async () => {
+    const bytes = Buffer.concat([PNG_BYTES, Buffer.alloc(31)]);
+    const contentId = addImage(bytes);
+    await settleContributions();
+    await expect(
+      contributeAs(contentId, "image/png", bytes)
+    ).resolves.toBeGreaterThan(0);
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
+
+    // A marker an OLDER codec generation left, on content this one previews.
+    markPreviewUnsupported(db, contentId);
+    expect(previewUnsupportedMarker(db, contentId)).not.toBeNull();
+    await contributeAs(contentId, "image/png", bytes);
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
+  });
+
+  test("an oversized or non-raster original is not a decline — the sweep still owns it", async () => {
+    const bytes = Buffer.concat([PNG_BYTES, Buffer.alloc(32)]);
+    const contentId = addImage(bytes);
+    await settleContributions();
+    clearPreviewUnsupported(db, contentId);
+    await expect(
+      contributeAs(contentId, "application/pdf", bytes)
+    ).resolves.toBe(0);
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
+  });
+
+  test("the backfill marks a declined original and never retries it at this codec", async () => {
+    const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(33)]));
+    await settleContributions();
+    db.vault
+      .prepare(
+        "UPDATE core_content_representation SET media_type = 'image/gif' WHERE content_id = ?"
+      )
+      .run(contentId);
+    db.vault
+      .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
+      .run(contentId);
+    clearPreviewUnsupported(db, contentId);
+
+    const first = await backfillPreviews(db, stubCodec);
+    expect(first.scanned).toBe(1);
+    expect(first.skippedUnsupported).toBe(1);
+    expect(previewUnsupportedMarker(db, contentId)?.current).toBe(true);
+
+    // (b) marked items are not retried: the selector skips them entirely.
+    const second = await backfillPreviews(db, stubCodec);
+    expect(second.scanned).toBe(0);
+    expect(second.skippedUnsupported).toBe(0);
+
+    // (c) the marker is keyed by CODEC VERSION, so a bump re-evaluates. Rewrite
+    // the stamp at a different generation and the selector picks it back up.
+    db.vault
+      .prepare(
+        `UPDATE enrich_derivation SET model = 'preview-codec@0'
+          WHERE target_type = 'core.content_item' AND target_id = ?`
+      )
+      .run(contentId);
+    expect(previewUnsupportedMarker(db, contentId)?.current).toBe(false);
+    const third = await backfillPreviews(db, stubCodec);
+    expect(third.scanned).toBe(1);
+    expect(previewUnsupportedMarker(db, contentId)?.model).toBe(
+      PREVIEW_CODEC_MODEL_ID
+    );
+  });
+
+  // ---------------------------------------------------------------------
+  // The phone's rungs for an original THIS codec cannot decode (#1011).
+  //
+  // sharp's pinned libvips ships libheif WITHOUT an HEVC decoder, so the HEIC
+  // an iPhone writes declines on the gateway. The phone decodes it natively and
+  // contributes JPEG rungs through the variant door — against an original that
+  // is STAGED BUT NOT YET PUBLISHED, since the camera-roll import stages, then
+  // contributes, then publishes.
+
+  test("a client rung is accepted against a staged-but-unpublished original, and no decline survives it", async () => {
+    const bytes = Buffer.concat([PNG_BYTES, Buffer.alloc(40)]);
+    // Stage the original WITHOUT claiming it: exactly the window the phone
+    // contributes in, between `POST /_vault/imports` and the publish.
+    const staged = gw.stageBlob(owner, { bytes, filename: "IMG_0001.heic" });
+
+    // `variant_of` "identifies staged or claimed content" — the staging row is
+    // enough, so the rungs need not wait for the publish.
+    for (const variant of ["thumb", "preview"] as const) {
+      expect(() =>
+        stageBlobBytes(db, {
+          bytes: PNG_BYTES,
+          mediaType: "image/png",
+          variant,
+          variantOf: staged.sha256,
+          validateDerivative: true,
+        })
+      ).not.toThrow();
+    }
+
+    // Now the publish claims the original; the rungs promote onto its content.
+    const out = gw.invoke(owner, {
+      command: "media.add_asset",
+      input: { staged_sha: staged.sha256 },
+    });
+    const contentId = (out as { output: { content_id: string } }).output
+      .content_id;
+    await settleContributions();
+    expect(Object.keys(derivativeShas(contentId)).sort()).toStrictEqual([
+      "preview",
+      "thumb",
+    ]);
+
+    // The gateway codec declines these bytes as HEIC — and must NOT record a
+    // decline over rungs that already exist.
+    await contributeAs(contentId, "image/gif", bytes);
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
+
+    // Nor may the sweep: it re-selects the item for the missing phash, asks the
+    // same codec, and gets the same refusal.
+    await backfillPreviews(db, {
+      downscale: () => null,
+      perceptualHash: () => null,
+      thumbhash: () => null,
+    });
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
+  });
+
+  test("a client rung arriving after a marker retires it", async () => {
+    const bytes = Buffer.concat([PNG_BYTES, Buffer.alloc(41)]);
+    const contentId = addImage(bytes);
+    await settleContributions();
+    // The decline the gateway already stamped on this HEIC.
+    clearPreviewUnsupported(db, contentId);
+    markPreviewUnsupported(db, contentId);
+    expect(previewUnsupportedMarker(db, contentId)).not.toBeNull();
+
+    // The phone's thumb, through the variant door, against the CLAIMED parent.
+    stageBlobBytes(db, {
+      bytes: PNG_BYTES,
+      mediaType: "image/png",
+      variant: "thumb",
+      variantOf: originalSha(contentId),
+      validateDerivative: true,
+    });
+    expect(previewUnsupportedMarker(db, contentId)).toBeNull();
   });
 });

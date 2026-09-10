@@ -1,0 +1,11 @@
+# CONTINUOUS NATIVE GENERATION (#996 CNG wave).
+#
+# `ios/` and `android/` are OUTPUTS of `expo prebuild`, not sources. Everything
+# this app decides about them lives in `app.config.ts`, the config plugins under
+# `plugins/`, and the autolinked local modules under `modules/` — the generated
+# projects carry no edit that is not written from one of those on every run.
+#
+# There is no exception below on purpose: a file that has to survive a
+# regeneration is a file a plugin must write.
+/ios/
+/android/

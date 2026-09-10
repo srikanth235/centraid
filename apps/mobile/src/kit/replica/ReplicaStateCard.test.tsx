@@ -6,7 +6,7 @@
 // mosaic with no explanation is a bug").
 //
 // react-native is mocked to plain DOM elements (the same approach
-// `EnrichmentConsent.test.tsx` uses) so this can run under jsdom without a
+// `PeopleEmptyState.test.tsx` uses) so this can run under jsdom without a
 // full RN test renderer in this workspace.
 // @vitest-environment jsdom
 import React, { act } from "react";

@@ -155,6 +155,7 @@ export function reactNativeStub(): Record<string, unknown> {
   return {
     AccessibilityInfo: {
       isReduceMotionEnabled: () => Promise.resolve(false),
+      isScreenReaderEnabled: () => Promise.resolve(false),
       addEventListener: () => ({ remove: () => undefined }),
     },
     ActivityIndicator: (props: Props) => host("div", props),

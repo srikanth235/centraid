@@ -72,7 +72,7 @@ Supporting scripts:
 | Script | Role |
 | --- | --- |
 | `bun run release:matrix` | Print surface catalog / ship set |
-| `bun run release:sync-versions` | Re-stamp workspace + mobile natives to root version |
+| `bun run release:sync-versions` | Re-stamp every workspace package to the root version (mobile native numbers derive from it at prebuild) |
 | `bun run release:verify-secrets` | Report secret _names_ present/absent (never values) |
 | `bun run release:restamp` | I8 rewrite `releaseDate` / rollout on `latest*.yml` |
 | `bun run boot:smoke` | Structural desktop package surface |

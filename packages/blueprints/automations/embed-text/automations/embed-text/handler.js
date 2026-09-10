@@ -14,11 +14,11 @@ function i() {
 }
 var O = i(),
   L = G.join(O, "models");
-import { existsSync as N, readFileSync as a, statSync as t } from "node:fs";
-import u from "node:path";
+import { existsSync as N, readFileSync as t, statSync as a } from "node:fs";
+import M from "node:path";
 import { pathToFileURL as e } from "node:url";
 var U;
-class M extends Error {
+class u extends Error {
   constructor(v, B) {
     super(
       `Automation model runtime dependency "${v}" is not installed. ` +
@@ -30,27 +30,27 @@ class M extends Error {
   }
 }
 function E(v, B = O) {
-  let q = u.join(B, "node_modules");
-  if (!N(q)) throw new M(v);
-  let J = u.join(q, ...v.split("/"));
+  let q = M.join(B, "node_modules");
+  if (!N(q)) throw new u(v);
+  let J = M.join(q, ...v.split("/"));
   try {
-    let $ = S(J);
+    let $ = b(J);
     if ($ === null) throw Error(`no entry point in ${J}`);
     return $;
   } catch ($) {
-    throw new M(v, $);
+    throw new u(v, $);
   }
 }
-function S(v, B = 0) {
-  let q = u.join(v, "package.json"),
-    J = N(q) ? JSON.parse(a(q, "utf8")) : {},
+function b(v, B = 0) {
+  let q = M.join(v, "package.json"),
+    J = N(q) ? JSON.parse(t(q, "utf8")) : {},
     $ = [
       ...y(qv(J.exports)),
       ...(typeof J.main === "string" ? [J.main] : []),
       "index.js",
     ];
   for (let V of $) {
-    let W = vv(u.resolve(v, V), B);
+    let W = vv(M.resolve(v, V), B);
     if (W !== null) return W;
   }
   return null;
@@ -58,7 +58,7 @@ function S(v, B = 0) {
 function vv(v, B) {
   let q = I(v);
   if (q?.isFile()) return v;
-  if (q?.isDirectory()) return B >= 4 ? null : S(v, B + 1);
+  if (q?.isDirectory()) return B >= 4 ? null : b(v, B + 1);
   for (let J of [".js", ".json", ".node"]) {
     let $ = `${v}${J}`;
     if (I($)?.isFile()) return $;
@@ -67,7 +67,7 @@ function vv(v, B) {
 }
 function I(v) {
   try {
-    return t(v);
+    return a(v);
   } catch {
     return null;
   }
@@ -88,18 +88,18 @@ function y(v, B = 0) {
     if ($ in q) J.push(...y(q[$], B + 1));
   return J;
 }
-async function z() {
+async function D() {
   if (U) return U;
   let v = E("onnxruntime-node");
   return ((U = await import(e(v).href)), U);
 }
 var A;
-async function b(v) {
+async function S(v) {
   A ??= new Map();
   let B = A.get(v);
   if (B) return B;
-  if (!N(v)) throw new M(v);
-  let q = z().then((J) => J.InferenceSession.create(v));
+  if (!N(v)) throw new u(v);
+  let q = D().then((J) => J.InferenceSession.create(v));
   A.set(v, q);
   try {
     return await q;
@@ -190,15 +190,15 @@ function x(v) {
     let Z = Kv(K),
       H = [];
     for (let h of Z) {
-      let r = _(h);
-      for (let s of Q(r)) {
+      let n = _(h);
+      for (let s of Q(n)) {
         let T = v.vocab.get(s);
         if (T !== void 0) H.push(T);
       }
     }
     let l = Y - 2,
-      n = H.slice(0, Math.max(0, l)),
-      f = [W, ...n, j];
+      r = H.slice(0, Math.max(0, l)),
+      f = [W, ...r, j];
     while (f.length < Y) f.push(0);
     return f;
   }
@@ -211,7 +211,7 @@ var c = "clip-vit-b-32@1",
   jv = w.join(F, "vocab.json"),
   Xv = w.join(F, "merges.txt");
 var Zv = 77;
-function D(v = L) {
+function P(v = L) {
   let B = w.join(v, "clip");
   return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
     (q) => Wv(w.join(B, q))
@@ -249,11 +249,11 @@ function Uv(v, B) {
     throw Error("embed: expected a float32 tensor as the model's first output");
   return J.data;
 }
-async function P(v) {
+async function z(v) {
   try {
     let q = (await Gv()).encode(v.text, Zv),
-      J = await z(),
-      $ = await b(_v),
+      J = await D(),
+      $ = await S(_v),
       W = {
         [$.inputNames[0] ?? "input_ids"]: new J.Tensor(
           "int64",
@@ -269,10 +269,10 @@ async function P(v) {
   }
 }
 var R = 16,
-  k = P,
-  g = D;
+  k = z,
+  g = P;
 function lv(v) {
-  ((k = v?.infer ?? P), (g = v?.weightsPresent ?? D));
+  ((k = v?.infer ?? z), (g = v?.weightsPresent ?? P));
 }
 function Av() {
   return g() ? c : null;
@@ -284,7 +284,7 @@ function p(v, B, q) {
       : v?.source_version;
   return v?.model === B && J === q;
 }
-async function uv(v, B) {
+async function Mv(v, B) {
   let J = (
     await v.vault.read({
       entity: "core.content_derivative",
@@ -304,7 +304,7 @@ async function uv(v, B) {
   });
   return p($.rows?.[0], B, J.derivative_id) ? J.derivative_id : "";
 }
-async function Mv({ ctx: v, log: B }) {
+async function uv({ ctx: v, log: B }) {
   let q = Av();
   if (!q)
     return { summary: "text embedding skipped — model assets unavailable" };
@@ -321,7 +321,7 @@ async function Mv({ ctx: v, log: B }) {
   }
   let J = await v.state.get("model");
   if (J !== q)
-    (await v.state.set("cursor", J === void 0 ? await uv(v, q) : ""),
+    (await v.state.set("cursor", J === void 0 ? await Mv(v, q) : ""),
       await v.state.set("model", q));
   let $ = (await v.state.get("cursor")) ?? "",
     V = await v.vault.read({
@@ -385,4 +385,4 @@ async function Mv({ ctx: v, log: B }) {
     },
   };
 }
-export { lv as setEmbedTextRuntimeForTests, Mv as default };
+export { lv as setEmbedTextRuntimeForTests, uv as default };

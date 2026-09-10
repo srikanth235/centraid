@@ -27,8 +27,8 @@ See `LICENSES.md` and `models.lock.json` for model versions, hashes, upstream lo
 ## Capability status
 
 - `embed-image` / `embed-text`: bundled CLIP implementation and local weights.
-- `photo-ocr`: bundled PP-OCRv4 orchestration and model implementation for images and PDFs. The handler loads the shared runtime's pinned PDF.js; pages use embedded text where present and locally render image-only pages for OCR.
-- `faces`: bundled YuNet detection and SFace recognition.
+- `photo-ocr`: bundled PP-OCRv5 orchestration and model implementation for images and PDFs. The handler loads the shared runtime's pinned PDF.js; pages use embedded text where present and locally render image-only pages for OCR.
+- `faces`: bundled YuNet detection and ArcFace recognition (512-d embeddings).
 - `transcript`: bundled Whisper tiny.en ASR. The handler decodes bounded audio or video locally with the runtime's pinned FFmpeg binary, then runs quantized ONNX inference without network access.
 
 ## Tests

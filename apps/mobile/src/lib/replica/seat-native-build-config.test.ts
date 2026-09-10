@@ -1,21 +1,17 @@
-// THE FLAGS HAVE TO REACH THE BUILD, AND NOTHING HERE RUNS `expo prebuild`.
+// THE FLAGS HAVE TO REACH THE BUILD.
 //
-// `app.config.ts`'s expo-sqlite plugin block is what a prebuild would READ; the
-// committed `android/` and `ios/` projects are what actually gets compiled. No
-// lane in this repo regenerates them, so a flag set only in the plugin block is
-// INERT — Android would ship the vendored 3.50.3 with no SQLCipher and no
-// fts5, and the phone would silently stop being the 3.49.1 seat every byte the
-// gateway ships is cut to fit.
+// `android/` and `ios/` are generated (#996 CNG wave): `expo prebuild` writes
+// `android/gradle.properties` and `ios/Podfile.properties.json` from the
+// expo-sqlite plugin block in `app.config.ts`, so the block IS the build. What
+// still has to be held is that the block asks for all three flags, and that it
+// names them the way the plugin reads them — a renamed key would write nothing
+// and Android would silently ship the vendored 3.50.3 with no SQLCipher and no
+// fts5, and the phone would stop being the 3.49.1 seat every byte the gateway
+// ships is cut to fit.
 //
-// So the two have to agree, and this is what makes them. The property names
-// are the plugin's own (`node_modules/expo-sqlite/plugin/build/withSQLite.js`,
-// `updateAndroidBuildPropertyIfNeeded`), and the values it writes are
-// `String(value)` — hence the string comparison.
-//
-// BOTH PROJECTS. `android/gradle.properties` and `ios/Podfile.properties.json`
-// carry the same three keys, written the two ways the plugin writes them
-// (`updateAndroidBuildPropertyIfNeeded` / `updateIOSBuildPropertyIfNeeded`) —
-// a gradle `k=v` line and a JSON string. Only the emulator gate's
+// The property names are the plugin's own
+// (`node_modules/expo-sqlite/plugin/build/withSQLite.js`,
+// `updateAndroidBuildPropertyIfNeeded`). Only the emulator gate's
 // `assembleRelease` and a macOS `pod install` prove they LINK; what this holds
 // is that they are asked for at all.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -40,35 +36,6 @@ function pluginBlockFlags(): Record<string, string> {
   for (const key of KEYS) {
     const found = new RegExp(`${key}:\\s*(true|false)`, "u").exec(block);
     if (found) flags[key] = found[1]!;
-  }
-  return flags;
-}
-
-/** What the committed iOS project will actually be compiled with. */
-function podfileFlags(): Record<string, string> {
-  const properties = JSON.parse(
-    readFileSync(path.join(mobileRoot, "ios/Podfile.properties.json"), "utf8")
-  ) as Record<string, string>;
-  const flags: Record<string, string> = {};
-  for (const key of KEYS) {
-    const value = properties[`expo.sqlite.${key}`];
-    if (value !== undefined) flags[key] = value;
-  }
-  return flags;
-}
-
-/** What the committed Android project will actually be compiled with. */
-function gradleFlags(): Record<string, string> {
-  const source = readFileSync(
-    path.join(mobileRoot, "android/gradle.properties"),
-    "utf8"
-  );
-  const flags: Record<string, string> = {};
-  for (const key of KEYS) {
-    const found = new RegExp(`^expo\\.sqlite\\.${key}=(.*)$`, "mu").exec(
-      source
-    );
-    if (found) flags[key] = found[1]!.trim();
   }
   return flags;
 }
@@ -128,18 +95,25 @@ describe("one OpenSSL in the Android build", () => {
     const versions = [
       ...new Set(opensslConsumers().map((consumer) => consumer.version)),
     ];
-    const gradle = readFileSync(
-      path.join(mobileRoot, "android/build.gradle"),
+    const plugin = readFileSync(
+      path.join(mobileRoot, "plugins/withCentraidAndroidBuild.cjs"),
       "utf8"
     );
+    // The plugin declares the coordinate once and interpolates it into both the
+    // Gradle block it writes and the guard that skips a second write, so the
+    // constant is the single place a version can be stated.
     const forced =
-      /force\s+["']io\.github\.ronickg:openssl:(?<version>[\w.-]+)["']/u.exec(
-        gradle
+      /OPENSSL_COORDINATE =\s*"io\.github\.ronickg:openssl:(?<version>[\w.-]+)"/u.exec(
+        plugin
       );
     expect(
       forced,
-      "apps/mobile/android/build.gradle must force one io.github.ronickg:openssl version"
+      "withCentraidAndroidBuild.cjs must force one io.github.ronickg:openssl version"
     ).not.toBeNull();
+    expect(
+      plugin,
+      "the forced coordinate must reach the Gradle block by interpolation"
+    ).toContain(`force '\${OPENSSL_COORDINATE}'`);
     // The forced version must be one a consumer actually asks for, and the
     // NEWEST of them: OpenSSL 3.x is ABI-stable within the major line, so
     // linking the older headers against the newer library is the safe
@@ -151,16 +125,15 @@ describe("one OpenSSL in the Android build", () => {
   it("refuses a `pickFirst` on libcrypto as the answer", () => {
     // The symptom fix. It would make the build green and leave two OpenSSLs in
     // the tree with SQLCipher bound to whichever the merger happened to pick.
-    const gradle = readFileSync(
-      path.join(mobileRoot, "android/build.gradle"),
-      "utf8"
-    );
-    const appGradle = readFileSync(
-      path.join(mobileRoot, "android/app/build.gradle"),
-      "utf8"
-    );
-    for (const source of [gradle, appGradle])
-      expect(source).not.toMatch(/pickFirst\s+["'][^"']*libcrypto\.so["']/u);
+    // Both plugins that can reach a Gradle file are checked, so the symptom fix
+    // cannot be smuggled in beside the real one.
+    for (const file of [
+      "plugins/withCentraidAndroidBuild.cjs",
+      "app.config.ts",
+    ])
+      expect(readFileSync(path.join(mobileRoot, file), "utf8")).not.toMatch(
+        /pickFirst\s+["'][^"']*libcrypto\.so["']/u
+      );
   });
 });
 
@@ -173,15 +146,7 @@ describe("the seat's native SQLite build", () => {
     });
   });
 
-  it("carries the same three into the committed Android project", () => {
-    expect(gradleFlags()).toStrictEqual(pluginBlockFlags());
-  });
-
-  it("carries the same three into the committed iOS project", () => {
-    expect(podfileFlags()).toStrictEqual(pluginBlockFlags());
-  });
-
-  it("names them exactly as the plugin does, so a prebuild would not move them", () => {
+  it("names them exactly as the plugin reads them, so the prebuild writes them", () => {
     const plugin = readFileSync(
       path.join(
         mobileRoot,

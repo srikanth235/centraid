@@ -3,7 +3,7 @@
   "entries": [],
   "copyRatchet": {
     "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
-    "maxEntries": 29,
+    "maxEntries": 27,
     "entries": [
       {
         "file": "packages/blueprints/apps/locker/view-copy.ts",
@@ -118,16 +118,6 @@
       {
         "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
         "literal": "Faster, and the photographs leave this device. Choosing it is a separate consent with its own receipt, and the grant is revocable afterwards.",
-        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
-        "literal": "Not available: this build has no device-side face detector. The Faces recognition recipe runs only on the gateway, which this vault’s device-only policy does not allow.",
-        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
-        "literal": "This is not a settings toggle. It is asked once, answered once, and receipted — and the answer is visible in Privacy afterwards.",
         "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
       },
       {

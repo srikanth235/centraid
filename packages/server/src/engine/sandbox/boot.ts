@@ -63,6 +63,8 @@ export interface SandboxBoot {
   automationHandlerPolicy: () => SandboxPolicy;
   mediaTranscodePolicy: (readRoots: readonly string[]) => SandboxPolicy;
   modelRuntimePolicy: (readRoots: readonly string[]) => SandboxPolicy;
+  /** Provenance-keyed; the caller must have decided the id is first-party. */
+  systemAutomationPolicy: () => SandboxPolicy;
 }
 
 /*
@@ -79,6 +81,7 @@ export async function loadSandbox(): Promise<SandboxBoot> {
     automationHandlerPolicy: SandboxBoot["automationHandlerPolicy"];
     mediaTranscodePolicy: SandboxBoot["mediaTranscodePolicy"];
     modelRuntimePolicy: SandboxBoot["modelRuntimePolicy"];
+    systemAutomationPolicy: SandboxBoot["systemAutomationPolicy"];
   };
   return {
     installWorkerSandbox: install.installWorkerSandbox,
@@ -87,5 +90,6 @@ export async function loadSandbox(): Promise<SandboxBoot> {
     automationHandlerPolicy: policy.automationHandlerPolicy,
     mediaTranscodePolicy: policy.mediaTranscodePolicy,
     modelRuntimePolicy: policy.modelRuntimePolicy,
+    systemAutomationPolicy: policy.systemAutomationPolicy,
   };
 }

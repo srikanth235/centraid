@@ -1,14 +1,13 @@
 // The People shelf (v4 §5). Face PROPOSALS render beside confirmed people
 // (#711), never named — confirming is Face Review's (§8). NOTHING REFLOWS: a
-// card keeps its square with no cover (§14). While the roster is empty and the
-// consent question open, `gate` renders IN PLACE of the grid (#712).
+// card keeps its square with no cover (§14). An empty roster renders
+// `emptyState` — signage, not consent.
 import { faceCropStyle } from "../../_shared/face-crop.ts";
+import type { PeopleEmptyStateProps } from "../enrichment-gate.ts";
 import { mountMedia } from "../media.ts";
 import type { FaceProposal, Person } from "../people.ts";
 import type { Asset } from "../types.ts";
 import { peopleConfirmedByNote, peoplePendingNote } from "../view-copy.ts";
-import { EnrichmentConsent } from "./EnrichmentConsent.tsx";
-import type { EnrichmentConsentProps } from "./EnrichmentConsent.tsx";
 
 import styles from "./People.module.css";
 
@@ -77,7 +76,7 @@ export function PeopleShelf({
   onOpen,
   onReview,
   onNameProposal,
-  gate,
+  emptyState,
 }: {
   people: readonly Person[];
   proposals?: readonly FaceProposal[];
@@ -87,12 +86,33 @@ export function PeopleShelf({
   onOpen: (partyId: string) => void;
   onReview?: () => void;
   onNameProposal?: (regionId: string) => void;
-  gate?: EnrichmentConsentProps;
+  emptyState?: PeopleEmptyStateProps;
 }) {
-  if (gate) {
+  if (emptyState) {
+    // ONE sentence, ONE action; an inert action states its reason BESIDE
+    // itself (#712 E1).
+    const handlePrioritise = emptyState.onPrioritise;
     return (
       <div className={styles.shelf}>
-        <EnrichmentConsent {...gate} />
+        <div className={styles.empty}>
+          <p className={styles.emptyStatus}>{emptyState.statusLine}</p>
+          <p className={styles.note}>{emptyState.line}</p>
+          {emptyState.prioritise.reason ? (
+            <p className={styles.emptyReason}>{emptyState.prioritise.reason}</p>
+          ) : null}
+          <button
+            type="button"
+            className="kit-btn secondary"
+            disabled={
+              !emptyState.prioritise.available ||
+              emptyState.busy ||
+              emptyState.prioritised
+            }
+            onClick={handlePrioritise}
+          >
+            {emptyState.action}
+          </button>
+        </div>
       </div>
     );
   }

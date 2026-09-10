@@ -91,7 +91,7 @@ jobs:
       # would be a correct verdict about the wrong artifact — the worst kind.
       #
       # AND DELIBERATELY NO GRADLE/NATIVE CACHE EITHER, unlike the three lanes
-      # that share `android-gradle-v2-*` (#916). It would work — the mutation is
+      # that share `android-gradle-v3-*` (#916). It would work — the mutation is
       # an `EXPO_PUBLIC_*` value inlined at bundle time, and
       # `android-emulator-install.sh` forces the bundle task with `--rerun`, so a
       # warm native directory could not carry the unmutated JS. It is refused
@@ -108,6 +108,16 @@ jobs:
       # greenness the cache exists to help deliver. `Post AVD cache` reported
       # `skipped` on every red run while `Create AVD + snapshot` ran on every one,
       # which is that same fact stated twice in the logs.
+      # GENERATE THE ANDROID PROJECT (#996). `apps/mobile/android` is a prebuild
+      # output and is gitignored, so the checkout carries no gradle project for
+      # `android-emulator-pr-gate.sh` to build the mutated binary in. This lane
+      # caches nothing native by design (see above), so prebuild is unconditional
+      # and its output is thrown away with the runner.
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: bun run native:prebuild
       - name: AVD cache
         id: avd_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

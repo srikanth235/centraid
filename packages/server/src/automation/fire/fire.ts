@@ -19,6 +19,7 @@ import type {
 import type { EnrichEgressClass } from "@centraid/vault";
 import { BUILT_IN_PROFILE } from "@centraid/vault";
 
+import { isSystemAutomationRef } from "../../enrich/system-recognition.js";
 import { runHandler } from "../handler/runner.js";
 import type {
   DelegateDispatcher,
@@ -140,30 +141,60 @@ export interface RunRecord {
   delegateCalls: number;
 }
 
-/** An absent block is read as the strict `automation-handler` floor, never "no
- *  sandbox" (#846). A sandboxed handler has no `process.env`, so the runtime-dir
- *  override must be planted here. */
+/**
+ * An absent block is read as the strict `automation-handler` floor, never "no
+ * sandbox" (#846). A sandboxed handler has no `process.env`, so the runtime-dir
+ * override must be planted here.
+ *
+ * THE LANE IS CHOSEN BY PROVENANCE, NOT BY THE MANIFEST. A first-party system
+ * automation (`SYSTEM_AUTOMATION_IDS`) is routed to the `system` lane from its
+ * id — a constant in this repo, resolved before any bundle is read — and its
+ * `sandbox.lane` field is not consulted at all. Everything else keeps exactly
+ * the lane its manifest declares, which the manifest parser restricts to
+ * `model-runtime` / `media-transcode`; there is no way for a bundle to ask for
+ * the system lane.
+ */
 function sandboxRequest(
   sandbox: { lane: "model-runtime" | "media-transcode" } | undefined,
-  automationDir: string
+  automationDir: string,
+  system: boolean
 ): {
-  sandboxLane?: "model-runtime" | "media-transcode";
+  sandboxLane?: "model-runtime" | "media-transcode" | "system";
   sandboxReadRoots?: string[];
   sandboxRuntimeDir?: string;
 } {
-  if (!sandbox) return {};
+  const lane = system ? "system" : sandbox?.lane;
+  if (lane === undefined) return {};
   const override = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR;
-  const runtimeDir = override
-    ? path.resolve(override)
-    : path.join(path.resolve(automationDir, ".."), "runtime");
+  const automationsDir = path.resolve(automationDir, "..");
   return {
-    sandboxLane: sandbox.lane,
+    sandboxLane: lane,
     sandboxReadRoots: [
-      path.resolve(automationDir, ".."),
+      automationsDir,
       ...(override ? [path.resolve(override)] : []),
     ],
-    sandboxRuntimeDir: runtimeDir,
+    sandboxRuntimeDir: resolveAutomationRuntimeDir(automationsDir),
   };
+}
+
+/**
+ * WHERE A HANDLER'S WEIGHTS LIVE — the one resolver (#1011).
+ *
+ * `CENTRAID_AUTOMATION_RUNTIME_DIR` when set (the documented deployment: one
+ * shared asset directory for every recipe), otherwise the `runtime/` sibling
+ * of the app's own `automations/` directory, which is what the bundled
+ * handler resolves for itself. The gateway's boot-time provisioning
+ * (`enrich/system-model-assets.ts`) fetches into exactly this directory, so
+ * weights can never land somewhere the handler does not read.
+ *
+ * @param automationsDir the app's `automations/` directory — the PARENT of an
+ *   individual automation's own directory.
+ */
+export function resolveAutomationRuntimeDir(automationsDir: string): string {
+  const override = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR;
+  return override
+    ? path.resolve(override)
+    : path.join(path.resolve(automationsDir), "runtime");
 }
 
 export async function runFire(
@@ -246,6 +277,8 @@ export async function runFire(
   // enforced, BEFORE `openDispatch`, so a refused run starts no harness process.
   // Fail-closed three ways: absent seam, throwing seam, unreadable tier.
   const enrich = row.manifest.enrich;
+  /** Provenance, decided from the id constant — never from the manifest. */
+  const systemProvenance = isSystemAutomationRef(opts.automationRef);
   /** Set under the `device` tier: the domain that seals `ctx.delegate`. */
   let sealedDomain: EnrichDomain | undefined;
   let selectedProfileId: string | undefined;
@@ -272,7 +305,8 @@ export async function runFire(
         policy = resolveEnrichmentPolicy(
           answer.rules ?? [],
           answer.tier,
-          enrich.capability
+          enrich.capability,
+          { system: systemProvenance }
         );
         if (policy) profileEgress = answer.egressForProfile?.(policy.profileId);
         egressConsent = answer.egressConsent;
@@ -294,6 +328,7 @@ export async function runFire(
       capability: enrich.capability,
       lane: enrich.lane,
       tier,
+      system: systemProvenance,
       ...(policy ? { policy, profileEgress } : {}),
       ...(egressConsent ? { egressConsent } : {}),
     });
@@ -485,7 +520,11 @@ export async function runFire(
       automationName: row.name,
       automationDir: row.dir,
       handlerFile: handlerPath(row.dir),
-      ...sandboxRequest(row.manifest.sandbox, row.dir),
+      ...sandboxRequest(
+        row.manifest.sandbox,
+        row.dir,
+        isSystemAutomationRef(opts.automationRef)
+      ),
       runId,
       now: new Date(startedAt).toISOString(),
       delegateDispatcher,

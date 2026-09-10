@@ -287,6 +287,64 @@ describe("seat-routes", () => {
     expect(tail.hasMore).toBe(false);
   });
 
+  test("every seat door answer leaves a line in the gateway log", async () => {
+    // WHY THIS IS A TEST AND NOT A CONVENIENCE (#1011). A phone that never
+    // caught up left NO trace: the log door only reads, and the snapshot door
+    // only writes the first time a watermark is asked for. "Did this seat ever
+    // ask?" was unanswerable from the gateway's own logs, which is where
+    // docs/logs.md sends every debug session first.
+    const lines: string[] = [];
+    const dir = await tempDir(`seat-routes-log-${crypto.randomUUID()}-`);
+    const plane = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger,
+      enableWalShipper: false,
+    });
+    const enrollments = EnrollmentStore.open(path.join(dir, "gateway.db"));
+    const deviceKey = "seat-device";
+    enrollments.enroll({
+      endpointId: deviceKey,
+      vaultIds: [plane.boot.vaultId],
+      label: "Seat",
+      rememberDevice: true,
+    });
+    cleanups.push(
+      () => fs.rm(dir, { recursive: true, force: true }),
+      () => plane.stop()
+    );
+    const handler = makeSeatRouteHandler(
+      { current: () => plane } as unknown as VaultRegistry,
+      {
+        enrollments,
+        logger: { ...logger, info: (message) => lines.push(message) },
+      }
+    );
+    note(plane, "a", "A");
+    const res = new MockResponse();
+    await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+      handler(
+        request(`${SEAT_LOG_PATH}?since=0&limit=1000`),
+        res as unknown as ServerResponse
+      )
+    );
+    expect(res.statusCode).toBe(200);
+    const served = lines.find((line) => line.startsWith("seat log page"));
+    expect(served).toContain(plane.boot.vaultId);
+    expect(served).toContain("since 0");
+    expect(served).toMatch(/\d+ rows/u);
+
+    const snapshot = new MockResponse();
+    await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+      handler(
+        request(SEAT_SNAPSHOT_PATH),
+        snapshot as unknown as ServerResponse
+      )
+    );
+    expect(snapshot.statusCode).toBe(200);
+    expect(lines.some((line) => line.startsWith("seat snapshot"))).toBe(true);
+  });
+
   test("the log door refuses a bad bound and a stale cursor", async () => {
     const { plane, handler } = await fixture();
     note(plane, "a", "A");

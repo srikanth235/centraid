@@ -76,7 +76,7 @@ describe(toOpenCvBgrPlanar, () => {
 });
 
 describe(toOpenCvRgbPlanar, () => {
-  it("matches SFace's unscaled RGB channel planes", () => {
+  it("matches ArcFace's unscaled RGB channel planes", () => {
     const image = {
       data: new Uint8Array([10, 20, 30, 40, 50, 60]),
       width: 2,

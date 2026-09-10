@@ -1,12 +1,7 @@
 import { openDatabaseSync } from "expo-sqlite";
 import type { SQLiteBindValue, SQLiteDatabase } from "expo-sqlite";
 
-import { ReplicaFts5UnavailableError } from "./replica-fts5-error";
-import { ReplicaSqliteVecUnavailableError } from "./replica-sqlite-vec-error";
-import {
-  asReplicaStorageError,
-  isReplicaStorageFullError,
-} from "./replica-storage-error";
+import { asReplicaStorageError } from "./replica-storage-error";
 
 /**
  * WHAT IS LEFT OF THIS FILE AFTER #996 W5.
@@ -169,37 +164,6 @@ export class ExpoSqliteDriver implements UploadSqliteDriver {
 
   close(): void {
     this.db.closeSync();
-  }
-
-  assertCapabilities(): void {
-    try {
-      this.db.execSync(
-        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.__fts5_probe USING fts5(x)"
-      );
-      this.db.execSync("DROP TABLE IF EXISTS temp.__fts5_probe");
-    } catch (error) {
-      if (isReplicaStorageFullError(error)) throw asReplicaStorageError(error);
-      throw new ReplicaFts5UnavailableError();
-    }
-  }
-
-  /** NOT wired into `open()`/`assertCapabilities()`: a build without sqlite-vec
-   *  must still open. Probe right before needing a vector table (#721). Both
-   *  platforms carry the extension now — iOS's `vec.xcframework` is built by
-   *  `scripts/build-sqlite-vec-ios.sh` rather than shipped by expo-sqlite —
-   *  which is exactly why the probe stays: a shell built before that script ran
-   *  opens fine and has no `vec0`, and this is the gate that says so rather
-   *  than a crash inside a vector query. */
-  probeSqliteVec(): void {
-    try {
-      this.db.execSync(
-        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.__sqlite_vec_probe USING vec0(x float[1])"
-      );
-      this.db.execSync("DROP TABLE IF EXISTS temp.__sqlite_vec_probe");
-    } catch (error) {
-      if (isReplicaStorageFullError(error)) throw asReplicaStorageError(error);
-      throw new ReplicaSqliteVecUnavailableError();
-    }
   }
 }
 

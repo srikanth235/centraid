@@ -12,10 +12,15 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import {
+  SYSTEM_AUTOMATION_IDS,
+  BUNDLED_OPTIONAL_AUTOMATION_IDS,
+} from "../../enrich/system-recognition.ts";
+import {
   automationHandlerPolicy,
   builtinDecision,
   mediaTranscodePolicy,
   modelRuntimePolicy,
+  systemAutomationPolicy,
 } from "./policy.ts";
 
 const AUTOMATIONS_DIR = path.resolve(
@@ -31,6 +36,9 @@ const RECOGNITION = new Set([
 ]);
 
 const SHELLS_OUT = new Set(["transcript"]);
+
+/** Provenance, read from the ONE constant that decides it. */
+const SYSTEM = new Set<string>(SYSTEM_AUTOMATION_IDS);
 
 interface Bundle {
   readonly id: string;
@@ -167,6 +175,63 @@ describe("shipped automation bundles against the sandbox lanes", () => {
         refusals(bundle, modelRuntimePolicy(["/roots"])).length === 0
     ).map((bundle) => bundle.id);
     expect(needlessSubprocess).toStrictEqual([]);
+  });
+
+  test("the system tier is exactly the constant, and nothing declares its lane", () => {
+    // Provenance is a repo constant, never a manifest field: the parser accepts
+    // only `model-runtime` / `media-transcode` under `sandbox.lane`, so no
+    // bundle — bundled-optional or a future code-store one — can ask for the
+    // system lane. Widening this set is a deliberate edit to that constant.
+    expect([...SYSTEM].sort()).toStrictEqual(
+      ["doc-text-extractor", "faces", "photo-ocr"].sort()
+    );
+    expect(
+      [...SYSTEM].some((id) =>
+        BUNDLED_OPTIONAL_AUTOMATION_IDS.includes(id as never)
+      )
+    ).toBe(false);
+    const declaringSystem = ALL.filter(
+      (bundle) => (bundle.declared as string | undefined) === "system"
+    ).map((bundle) => bundle.id);
+    expect(declaringSystem).toStrictEqual([]);
+  });
+
+  test("the same require is admitted in the system lane and refused in model-runtime", () => {
+    // The whole change is WHICH CODE IS ROUTED WHERE. `node:child_process` is
+    // what `sharp` reaches for through `detect-libc` at load; the system lane
+    // takes it because first-party release code runs with the gateway's own
+    // authority, and the model-runtime lane still refuses it, so the boundary
+    // for bundled-optional and future external code is demonstrably unmoved.
+    expect(
+      builtinDecision(systemAutomationPolicy(), "child_process")
+    ).toStrictEqual({
+      kind: "allow",
+    });
+    const refused = builtinDecision(
+      modelRuntimePolicy(["/models"]),
+      "child_process"
+    );
+    expect(refused.kind).toBe("deny");
+    expect(refused.kind === "deny" ? refused.reason : "").toContain(
+      'lane "model-runtime"'
+    );
+    // …and the floor is unmoved too.
+    expect(
+      builtinDecision(automationHandlerPolicy(), "child_process").kind
+    ).toBe("deny");
+  });
+
+  test("every non-system bundle conforms exactly as it did before", () => {
+    // The optional tier is measured against the lane its own manifest declares,
+    // with no system-tier exemption anywhere in the calculation.
+    const blocked = ALL.filter((bundle) => !SYSTEM.has(bundle.id))
+      .map((bundle) => ({
+        id: bundle.id,
+        declared: bundle.declared ?? "automation-handler (floor)",
+        denied: refusals(bundle, declaredPolicy(bundle)),
+      }))
+      .filter((entry) => entry.denied.length > 0);
+    expect(blocked).toStrictEqual([]);
   });
 
   test("transcript is the ONE bundle that needs a subprocess, and it declares it", () => {

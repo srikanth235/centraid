@@ -119,7 +119,7 @@ describe("the Library header menu's model has no Sort section", () => {
   });
 });
 
-describe("the Library header menu's Detect faces row (issue #724 W5)", () => {
+describe("the Library header menu's Prioritise faces row (issue #724 W5)", () => {
   function row(groups: ReturnType<typeof libraryMenuGroups>) {
     const found = groups
       .flatMap((group) => group.rows)
@@ -143,9 +143,9 @@ describe("the Library header menu's Detect faces row (issue #724 W5)", () => {
         })
       )
     );
-    expect(found).toMatchObject({ label: "Detect faces", disabled: false });
+    expect(found).toMatchObject({ label: "Prioritise faces", disabled: false });
     found!.onSelect!();
-    // The row OPENS the question. That the handler is the consent gate rather
+    // The row OPENS the People shelf. That the handler is navigation rather
     // than the enrichment write is the consumer's contract; what this model
     // guarantees is that it fires the caller's handler and nothing else.
     expect(onDetectFaces).toHaveBeenCalledOnce();
@@ -168,7 +168,7 @@ describe("the Library header menu's Detect faces row (issue #724 W5)", () => {
     );
     expect(found).toMatchObject({
       disabled: true,
-      label: "Detect faces — Enrichment is switched off for photographs.",
+      label: "Prioritise faces — Enrichment is switched off for photographs.",
     });
   });
 

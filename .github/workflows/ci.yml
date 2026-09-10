@@ -944,7 +944,7 @@ jobs:
   # green, and files `[lanes] promote <lane>` on the second one in 30 days.
 
   # Required-check-capable mobile liveness gate (#587 E22–E23/F26–F29).
-  # Bundle export + committed-native-tree ratchets + shipped-weight ceilings.
+  # Bundle export + native-INPUT ratchets (#996) + shipped-weight ceilings.
   # #892 — it no longer compiles anything: see the note where `ci:android-native`
   # used to be for why that claim belongs to `mobile-device-gate`.
   mobile-smoke:
@@ -957,16 +957,14 @@ jobs:
         run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.2.0
-        with:
-          distribution: temurin
-          java-version: "17"
-      # #637 Phase 3 — dependency/wrapper cache only (not task-output cache).
-      # Writes only on the default branch by setup-gradle defaults; keeps the
-      # 431 compile tasks honest so this smoke lane still catches native breaks.
-      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
-        with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      # NO JDK AND NO GRADLE HERE (#996). The `setup-java` + `setup-gradle` pair
+      # was left behind when #892 Phase 1 removed `ci:android-native`, and it has
+      # had nothing to compile since: this lane runs `ci:native-state`,
+      # `ci:bundle` and the weight ceilings, none of which touches a JVM. Under
+      # CNG it is worse than dead weight — `apps/mobile/android` does not exist
+      # in a checkout, so `setup-gradle` would be configuring caches for a gradle
+      # project that is not there. The Android compile claim belongs to
+      # `mobile-device-gate` below, which prebuilds and then builds for real.
       # Advisory only (#646): long pin skew lists must not drown real L4 failures.
       # Hard Expo pin alignment is a dedicated follow-up; this step never fails the job.
       - name: Advisory — Expo compatibility map (non-blocking)
@@ -986,7 +984,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/ci-versions.out
           exit 0
-      - name: Verify native locks, paths, and fingerprint ratchets
+      # #996 — INPUTS, not a native tree. `ios/` and `android/` are prebuild
+      # outputs and gitignored, so this lane deliberately does NOT prebuild:
+      # the gate's whole claim is that the committed fingerprints are
+      # reproducible from app.config.ts, plugins/ and modules/ alone, and a
+      # runner that generated the projects first could not make that claim.
+      - name: Verify the native inputs and the fingerprint ratchet
         run: bun run --cwd apps/mobile ci:native-state
       - name: Bundle iOS and Android through Metro
         run: bun run --cwd apps/mobile ci:bundle
@@ -1004,9 +1007,10 @@ jobs:
       #
       # The `android/app/src/debug` and `debugOptimized` source sets Release never
       # touches are the one thing that went with it. They are dev-client scaffolding
-      # (#890 W1 moved every lane off the dev client), and `ci:native-state` still
-      # ratchets the committed native trees, so a change to them is not
-      # unobserved — it is unCOMPILED, which is the trade being made here.
+      # (#890 W1 moved every lane off the dev client). Since #996 there are no
+      # committed native trees to ratchet at all: those source sets are written
+      # by prebuild from the inputs `ci:native-state` does ratchet, so a change
+      # to them is not unobserved — it is unCOMPILED, which is the trade here.
       #
       # The job's own header rationale ("fails before an expensive macOS build")
       # went stale at the same time: since #890 W4 the mobile gate is Android on
@@ -1073,7 +1077,7 @@ jobs:
     # cold-apk rebuild was a FULL native compile at 11m19s (run 33467906385)
     # because the gradle cache restored no task outputs and no native build
     # directory at all; the caching restructure below is aimed squarely at that
-    # number, and the first run on the new `android-gradle-v2-` keys is what
+    # number, and the first run on the new `android-gradle-v3-` keys is what
     # measures it. The timeout stays at 30 until a measurement says otherwise —
     # tightening it on a projection would be trading a slow lane for a cancelled
     # one, and a job this timeout cancels loses every verdict it had written
@@ -1129,6 +1133,23 @@ jobs:
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
+      # GENERATE THE ANDROID PROJECT (#996). `apps/mobile/android` is a prebuild
+      # output and is gitignored, so a checkout has no gradle project to build:
+      # `android-emulator-install.sh` invokes `./gradlew` directly, and every
+      # cache below restores directories that live INSIDE the generated tree.
+      # Prebuild therefore runs BEFORE both restores, so the banked `.gradle`
+      # and `build` directories land on top of the project they were produced
+      # against rather than being generated over.
+      #
+      # It runs AFTER the fingerprint step on purpose: the fingerprint ignores
+      # both generated trees (native-fingerprint.mjs), so its value is the same
+      # either way, and keeping the ratchet's inputs untouched by a prebuild is
+      # what makes that ignore assertable.
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: bun run native:prebuild
       - name: Install Maestro CLI
         # Pinned to the SAME version every other mobile lane installs;
         # scripts/test-report/validate-nightly-wiring.mjs fails when the three
@@ -1205,12 +1226,15 @@ jobs:
       #      without the record that vouches for them is a slower way of
       #      restoring nothing.
       #
-      # The key namespace is `android-gradle-v2-` for exactly that reason: a v1
-      # entry names a different path set, and a `restore-keys` match against one
-      # would hand this lane build directories with no `.gradle` beside them —
-      # the shape that gets deleted at task-graph time. All three Android lanes
-      # cut over in the same change. A lane that saves a directory another lane
-      # does not restore is worse than no cache.
+      # The key namespace is versioned for exactly that reason: a v1 entry names
+      # a different path set, and a `restore-keys` match against one would hand
+      # this lane build directories with no `.gradle` beside them — the shape
+      # that gets deleted at task-graph time. v2 → v3 is #996: those entries were
+      # produced against the hand-maintained android/ project, and the widest
+      # `restore-keys` prefix carries no fingerprint, so without the bump a
+      # pre-CNG directory could be restored into a generated tree. All three
+      # Android lanes cut over in the same change, every time. A lane that saves
+      # a directory another lane does not restore is worse than no cache.
       #
       # A STALE JS BUNDLE CANNOT RIDE IN ON THIS. Now that gradle arrives with an
       # execution history it can legitimately report tasks UP-TO-DATE, and
@@ -1246,10 +1270,10 @@ jobs:
             node_modules/@*/*/android/build
             node_modules/@*/*/android/.cxx
             !node_modules/@centraid/**
-          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          key: android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
           restore-keys: |
-            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-v2-${{ runner.os }}-
+            android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v3-${{ runner.os }}-
       # ON A COLD SHELL THIS LANE RECONSTRUCTS IT. OWNER-RULED (#916), reversing
       # the earlier rule that a miss was a lane failure.
       #
@@ -1426,7 +1450,7 @@ jobs:
             node_modules/@*/*/android/build
             node_modules/@*/*/android/.cxx
             !node_modules/@centraid/**
-          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          key: android-gradle-v3-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

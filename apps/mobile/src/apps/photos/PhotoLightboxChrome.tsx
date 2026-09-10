@@ -1,6 +1,10 @@
 // Stage chrome — `PhotoLightbox` owns viewer STATE; this is a pure view.
 // NO TOP BAR: a full-width strip is a second ground. Head is three FLOATING elements (`chevron-left`, not `✕` — this viewer is stacked).
-// NO TAP-TO-TOGGLE: hiding every control hides the way back (§15).
+// TAP TO TOGGLE (#1011): a single tap on the photograph puts this chrome away
+// and another brings it back. It reverses the earlier "hiding every control
+// hides the way back" ruling — see `viewerChromeVisible` for the three guards
+// that answer it (one-tap return, re-shown on navigation, pinned open under a
+// screen reader).
 // Token rule, not a look: `--on-stage` / `--stage-line` / `--stage-sunken`. Plates are OPAQUE — glass makes contrast a property of the photograph.
 
 import React from "react";
@@ -199,9 +203,21 @@ export function ViewerStatusLine({
   /** The one offer to spend the bytes, or null — two controls for one fetch is two states to keep in step. */
   actionLabel: string | null;
   onAction: () => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  // Nothing to say ⇒ NO LINE. The stage used to end every quiet moment on a
+  // standing gesture lesson, which is furniture rather than status and held a
+  // band open under the photograph (#1011).
+  if (!text) return null;
   return (
-    <View style={[styles.statusLine, { borderTopColor: colors.stageLine }]}>
+    <View
+      style={[
+        styles.statusLine,
+        {
+          backgroundColor: colors.stageSunken,
+          borderColor: colors.stageLine,
+        },
+      ]}
+    >
       <Text
         numberOfLines={2}
         style={[styles.statusText, { color: colors.onStageSoft }]}

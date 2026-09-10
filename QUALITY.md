@@ -2,6 +2,98 @@
 
 ## Open
 
+- **Switching vaults on a two-vault phone destroys the other vault's replica
+  and its outbox.** Live on two simulators against a real gateway (#996). Only
+  the *active* mount replicates: 25 commits landed on `Personal` while the
+  phone sat foregrounded on `Family` and its Personal seat never moved. Then
+  the switch itself poisons the target — the catch-up session keeps the
+  previous mount's vaultId while opening the new mount's file, so every pass
+  raises `SeatDriftError: page is for vault <Family>, this file is <Personal>`
+  (`seat-sync-error.ts:42`, `native-session.ts:148`, `seat-sync-loop.ts:64`)
+  and the mount can never advance. The next launch installs the *other*
+  vault's snapshot into this vault's seat file: `replica_meta.epoch` becomes
+  Family's, `seat_state` and `seat_outbox` are gone (queued intents with
+  them), and `integrity_check` still reports ok. It does not recover —
+  removing the vault does not repair it, and the phone then loops a 135 KB
+  snapshot fetch of the removed vault every ~6 s forever. The user sees an
+  empty vault reading "Can't reach your vault" on a healthy connection.
+
+- **The seat's live change feed never connects, so nothing pulls until the app
+  is foregrounded.** With two phones awake and the gateway running, `lsof` on
+  the gateway shows zero connections from either device; a write committed at
+  06:09:03Z drew no `seat log page` for 5+ minutes, and a
+  background→foreground cycle pulled it instantly (#996). Every "stale
+  replica" symptom below rides on this.
+
+- **Every executed intent parks in `awaiting-change` forever.**
+  `shell-intent-drain.ts:87` calls `queue.awaitingChange(intentId)` on an
+  executed outcome and drops `outcome.commitSeq`, so the only writer of
+  `commitSeq` (`intent-settlement.ts:88-100`) never runs and
+  `clearSeatOverlaysAtCommit`'s `WHERE commit_seq IS NOT NULL` can never
+  match. Ten intents wedged across two devices in one session, the oldest
+  eight hours old; the pending badge never clears (#996).
+
+- **A stale replica silently overwrites newer rows, with no outage needed.**
+  Phone writes carry `base_versions_json = []` whenever the offline chain has
+  not settled, so conflict detection never fires. Reproduced three ways: two
+  devices editing offline (the loser is never told), and — with both sides
+  online the whole time — a foregrounded phone left stale by the feed bug
+  overwriting two newer edits and losing them (#996, #922).
+
+- **Cross-vault sharing delivers once and then stops following its subject.**
+  Link, grant and initial projection are correct (rows and blobs both land),
+  but an edit to the shared subject never advances
+  `share_subscription.cursor_seq`; only a commit that touches the grant plane
+  walks the subjects and catches every subscription up at once. Measured
+  twice, 2.5 min and 32 s with no movement (#929, #825). The delivery
+  machinery is sound — the wake is not; suspect the replica-intent dispatch
+  path never reaching the `onProvenanceCommitted` ring that `vault.invoke`
+  does, or `indexFor`'s cached subject index.
+
+- **The gateway cannot decode iPhone HEIC.** The pinned `@img/sharp-libvips-darwin-arm64`
+  builds libheif with `aom` only — no HEVC decoder (patent licensing) — so
+  every HEVC-coded HEIC declines on the gateway and gets the `preview-codec@1`
+  unsupported stamp; the phone renders the rungs instead (#1011). A libvips
+  build with HEVC, or a platform decoder on macOS hosts, would let the sweep
+  backfill HEIC uploaded from any door, not only the phone's Import.
+
+- **`pipeline.ts` sniffs `ftypavif` as `video/mp4`.** Only `hei*`/`mif*`
+  brands map to `image/heic` (#1011, found while adding HEIF support).
+
+- **`S3TestServer` implements neither CopyObject nor Range GET**, so the direct
+  upload door (`direct-transfers.ts`, which mints its CAS object with
+  CopyObject and reads CBSF sections with ranged GETs) has no in-repo
+  integration test; the #1011 reproduction proxied both by hand.
+
+- **The mobile replica writes under both `Library/Application Support` and
+  `Library/Application%20Support`.** The seat file lives in the first, the
+  uploads db in the percent-encoded second — a URI-vs-path slip in the
+  replica storage location (seen in the simulator container, #1011).
+
+- **`peer-link-tickets.test.ts` mints a ticket with a 1 ms TTL and expects
+  the immediate claim to be expired.** On a fast machine the clock has not
+  advanced, so "the sweep changes no answer the store gives" fails about one
+  run in four in isolation and reddened the otherwise-green full server suite
+  under #1011. The file was not touched by that work. Fix is a fake clock or a
+  ticket already past its expiry, not a longer TTL.
+
+- **`.mjs` scripts should be TypeScript.** ~460 `.mjs` files under `scripts/`,
+  `.governance/law/`, `tests/agent-e2e-mobile/` and `apps/mobile/scripts/`
+  exist because their call sites say `node …`, not because the runtime needs
+  JS: Bun runs `.ts` natively and Node ≥ 22.18 strips types by default. A
+  sweep is a rename plus every call site (workflows, hooks, `package.json`),
+  collides with the file-size ledger and the law estate, and should pick one
+  runner rule (`bun` under `scripts/`, Node type-stripping for the law).
+  Expo config plugins stay `.cjs` unless imported from `app.config.ts` by
+  value. Its own issue, not a rider.
+
+- **The face-cluster thresholds were tuned for SFace and now serve ArcFace.**
+  `packages/vault/src/enrich/face-clusters.ts` keeps 0.3 / 0.22 cosine
+  distance after #1011 moved recognition to 512-d ArcFace; conservative
+  (false splits, not merges), but untuned. The Photos sample corpus is
+  synthetic renders that ArcFace collapses, so tuning needs a small labelled
+  fixture set of real photographs.
+
 - **The command palette's photo target reads a `title` column the vault
   deleted, so a photo can never be a palette hit.**
   `packages/client/src/react/shell/routes/paletteEntitySearch.ts` and

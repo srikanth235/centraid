@@ -9,7 +9,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
-import { READ_ONLY_VAULT_REASON, VIEWER_BOTTOM_ACTIONS } from "./viewer-model";
+import {
+  NOT_IN_A_VAULT_YET_REASON,
+  READ_ONLY_VAULT_REASON,
+  VIEWER_BOTTOM_ACTIONS,
+  viewerWriteRefusal,
+} from "./viewer-model";
 
 const TOOLBAR_SRC = fs.readFileSync(
   path.resolve(import.meta.dirname, "PhotoLightboxToolbar.tsx"),
@@ -39,16 +44,23 @@ describe("READ_ONLY_VAULT_REASON — one sentence for one truth", () => {
     expect(READ_ONLY_VAULT_REASON).toBe(READ_ONLY_SOURCE_REASON);
   });
 
-  it("is what PhotoLightboxToolbar, PhotoLightbox and the overflow menu import — never re-typed", () => {
+  it("reaches PhotoLightboxToolbar, PhotoLightbox and the overflow menu from viewer-model — never re-typed", () => {
+    // Since the ladder moved into `viewerWriteRefusal`, the toolbar and the
+    // menu read the sentence THROUGH it; the lightbox still names it directly
+    // for the editor refusal. Either way the import is from `viewer-model`.
     expect(TOOLBAR_SRC).toMatch(
-      /import\s*\{[^}]*READ_ONLY_VAULT_REASON[^}]*\}\s*from\s*"\.\/viewer-model"/u
+      /import\s*\{[^}]*viewerWriteRefusal[^}]*\}\s*from\s*"\.\/viewer-model"/u
+    );
+    expect(MENU_SRC).toMatch(
+      /import\s*\{[^}]*viewerWriteRefusal[^}]*\}\s*from\s*"\.\/viewer-model"/u
     );
     expect(LIGHTBOX_SRC).toMatch(
       /import\s*\{[^}]*READ_ONLY_VAULT_REASON[^}]*\}\s*from\s*"\.\/viewer-model"/u
     );
-    expect(MENU_SRC).toMatch(
-      /import\s*\{[^}]*READ_ONLY_VAULT_REASON[^}]*\}\s*from\s*"\.\/viewer-model"/u
-    );
+    for (const src of [TOOLBAR_SRC, LIGHTBOX_SRC, MENU_SRC]) {
+      expect(src).not.toContain(READ_ONLY_VAULT_REASON);
+      expect(src).not.toContain(NOT_IN_A_VAULT_YET_REASON);
+    }
   });
 
   it("leaves no trace of the two old, DIFFERENT stub strings", () => {
@@ -62,10 +74,8 @@ describe("READ_ONLY_VAULT_REASON — one sentence for one truth", () => {
 });
 
 describe("the viewer bottom bar states the reason inline, never only in a hint (§6, §18)", () => {
-  it("renders READ_ONLY_VAULT_REASON as visible Text children, not only as accessibilityHint", () => {
-    expect(TOOLBAR_SRC).toMatch(
-      /<Text[^>]*>\s*\{READ_ONLY_VAULT_REASON\}\s*<\/Text>/u
-    );
+  it("renders the refusal sentence as visible Text children, not only as accessibilityHint", () => {
+    expect(TOOLBAR_SRC).toMatch(/<Text[^>]*>\s*\{refusal\}\s*<\/Text>/u);
   });
 
   it("still offers accessibilityHint too — belt and suspenders, not a replacement", () => {
@@ -100,6 +110,38 @@ describe("a disabled viewer control's handler does not fire (§6, §18)", () => 
     expect(TOOLBAR_SRC).toMatch(/disabled=\{!on\}/u);
     expect(TOOLBAR_SRC).toMatch(
       /onPress=\{\(\) => \{\s*if \(!on\) return;\s*run\[id\]\(\);\s*\}\}/u
+    );
+  });
+});
+
+describe("the refusal ladder — a device row is not a read-only vault (#1011 M1)", () => {
+  it("says nothing when the vault row is writable", () => {
+    expect(
+      viewerWriteRefusal({ writable: true, hasVaultAsset: true })
+    ).toBeUndefined();
+  });
+
+  it("blames the vault only when the grant is read-only", () => {
+    expect(viewerWriteRefusal({ writable: false, hasVaultAsset: true })).toBe(
+      READ_ONLY_VAULT_REASON
+    );
+  });
+
+  it("says the photograph is not in a vault yet for a device row the seat has not pulled", () => {
+    expect(viewerWriteRefusal({ writable: true, hasVaultAsset: false })).toBe(
+      NOT_IN_A_VAULT_YET_REASON
+    );
+  });
+
+  it("keeps read-only ahead of no-vault-row when both are true", () => {
+    expect(viewerWriteRefusal({ writable: false, hasVaultAsset: false })).toBe(
+      READ_ONLY_VAULT_REASON
+    );
+  });
+
+  it("is the toolbar's OWN ladder: it feeds canWrite and the vault row separately", () => {
+    expect(TOOLBAR_SRC).toMatch(
+      /viewerWriteRefusal\(\{\s*writable: asset\.canWrite === true,\s*hasVaultAsset: Boolean\(asset\.assetId && asset\.sourceVaultId\),/u
     );
   });
 });

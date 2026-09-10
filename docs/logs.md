@@ -22,6 +22,29 @@ Code pointers:
 - `packages/server/src/cli/paths.ts` — daemon `gateway-logs/`
 - `apps/desktop/src/main/local-gateway.ts` — desktop `logsDir` wiring
 
+## Seat (replica) doors
+
+One line per answer from the seat doors, in the gateway log ring above ([#1011](https://github.com/srikanth235/centraid/issues/1011)):
+
+| Line | Emitted by |
+| --- | --- |
+| `seat log page for <vaultId>: since <seq>, <n> rows, next <seq>, watermark <seq>, hasMore <bool>` | `packages/server/src/routes/seat-routes.ts` |
+| `seat snapshot for <vaultId>: seq <seq>, <bytes> bytes, GET\|HEAD` | same |
+
+Absence is the signal: a phone with an empty copy and NO `seat log page` lines never asked. The device-side counterpart lines and the two rows to compare are in [mobile-offline.md](mobile-offline.md#the-seat-is-stale-how-to-tell).
+
+## Camera-roll import device rungs
+
+The phone is the ONLY producer of display rungs for HEVC-coded HEIC (the gateway codec declines it — [photos/derived-ledger.md](photos/derived-ledger.md)), and the contribution is never fatal to the import. So its failures are swallowed by contract; they are not silent. In the Metro / device console, one line per still the phone rendered rungs for ([#1011](https://github.com/srikanth235/centraid/issues/1011)):
+
+| Line | Means |
+| --- | --- |
+| `[centraid] import: device rungs landed for <filename> — thumb, preview, phash, thumbhash` | The variant door took every rung, before the publish claimed the original. |
+| `[centraid] import: device rungs skipped for <filename> — could not render on device: <reason>` | Nothing was sent: the device imaging stack refused. |
+| `[centraid] import: device rungs skipped for <filename> — contribution failed: <reason>` | Rendered, but the variant POST was refused — the HTTP status is in the reason. |
+
+Both `skipped` lines mean the item stays exactly as backfillable as it was, and the gateway will stamp it `preview-codec@1` unsupported until a sweep or a re-import. Emitted by `contributeDeviceRungs` in `apps/mobile/src/apps/photos/camera-roll-import-run.ts`. Absence of all three for an HEIC still means the rung branch was never entered — check the candidate's filename extension, which is what routes it.
+
 ## Desktop crash log
 
 | Path | Contents |

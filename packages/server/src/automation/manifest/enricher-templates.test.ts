@@ -15,6 +15,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { ENRICH_CAPABILITIES } from "../../enrich/capability-registry.js";
+import { SYSTEM_AUTOMATION_IDS } from "../../enrich/system-recognition.js";
 import { lintHandlerSource } from "../handler/lint.js";
 import { parseManifest } from "./manifest.js";
 
@@ -42,6 +43,15 @@ const ENRICHERS = [
 ] as const;
 /** The reminder's whole logic IS its condition trigger. */
 const CONDITION_ENRICHERS = new Set(["renewal-reminders"]);
+/**
+ * SYSTEM ⇒ ON, and provenance decides which is which (#1011). A system
+ * automation is first-party code the release shipped, present in every vault
+ * and armed from the catalogue; a bundled-OPTIONAL one ships in the same
+ * release and stays off until the member turns it on. The list is not repeated
+ * here — it is read from the constant that actually routes the behaviour, so a
+ * recipe cannot change tier without this expectation moving with it.
+ */
+const ON_BY_DEFAULT = new Set<string>(SYSTEM_AUTOMATION_IDS);
 
 /** A valid one-page born-digital PDF for the generated handler's pdf.js path. */
 function searchablePdf(text: string): Buffer {
@@ -260,12 +270,14 @@ function stubCtx(options: {
 
 describe("enricher template hygiene", () => {
   it.each(ENRICHERS.map((id) => [id] as const))(
-    "%s: manifest parses, data trigger + vault block cohere, ships disabled",
+    "%s: manifest parses, data trigger + vault block cohere, ships at its ruled default",
     (id) => {
       const manifest = parseManifest(
         readFileSync(path.join(automationDir(id), "automation.json"), "utf8")
       );
-      expect(manifest.enabled).toBe(false); // enabling IS the owner's opt-in
+      // Recognition is on and turned OFF by the member; a billed or
+      // owner-authored enricher is off and turned ON by them.
+      expect(manifest.enabled).toBe(ON_BY_DEFAULT.has(id));
       expect(manifest.vault).toBeDefined();
       const wantKind = CONDITION_ENRICHERS.has(id) ? "condition" : "data";
       expect(manifest.triggers.some((t) => t.kind === wantKind)).toBe(true);
@@ -382,7 +394,7 @@ describe("photo-ocr capture behavior", () => {
       text: "Total\n42",
       confidence: 0.7,
       engine: "automation",
-      model: "pp-ocrv4@1",
+      model: "pp-ocrv5@1",
     });
     expect(harness.invokes).toHaveLength(0);
   });
@@ -428,7 +440,7 @@ describe("photo-ocr capture behavior", () => {
       output: {
         text: "Centraid PDF automation",
         engine: "automation",
-        model: "pp-ocrv4@1",
+        model: "pp-ocrv5@1",
       },
     });
   });
@@ -465,10 +477,10 @@ describe("recognition automation spine", () => {
         headers: {},
         text:
           call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "pp-ocrv4@1" })
+            ? JSON.stringify({ status: "ok", model: "pp-ocrv5@1" })
             : JSON.stringify({
                 status: "ok",
-                model: "pp-ocrv4@1",
+                model: "pp-ocrv5@1",
                 results: [{ regions: [{ text: "Total", box: [1, 2, 3, 4] }] }],
               }),
       }),
@@ -483,7 +495,7 @@ describe("recognition automation spine", () => {
       input: {
         text: "Total",
         capability: "ocr",
-        model: "pp-ocrv4@1",
+        model: "pp-ocrv5@1",
         regions: [{ text: "Total", box: [1, 2, 3, 4] }],
       },
     });
@@ -503,7 +515,7 @@ describe("recognition automation spine", () => {
             : [];
         }
         if (request.entity === "enrich.derivation")
-          return [{ model: "pp-ocrv4@1", target_id: "c1" }];
+          return [{ model: "pp-ocrv5@1", target_id: "c1" }];
         return [];
       },
       fetch: async (call) => {
@@ -511,7 +523,7 @@ describe("recognition automation spine", () => {
         return {
           status: 200,
           headers: {},
-          text: JSON.stringify({ status: "ok", model: "pp-ocrv4@1" }),
+          text: JSON.stringify({ status: "ok", model: "pp-ocrv5@1" }),
         };
       },
     });
@@ -685,10 +697,10 @@ describe("recognition automation spine", () => {
         headers: {},
         text:
           call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "yunet-sface@1" })
+            ? JSON.stringify({ status: "ok", model: "yunet-arcface@1" })
             : JSON.stringify({
                 status: "ok",
-                model: "yunet-sface@1",
+                model: "yunet-arcface@1",
                 results: [{ faces: [] }],
               }),
       }),
@@ -719,10 +731,10 @@ describe("recognition automation spine", () => {
         headers: {},
         text:
           call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "yunet-sface@1" })
+            ? JSON.stringify({ status: "ok", model: "yunet-arcface@1" })
             : JSON.stringify({
                 status: "ok",
-                model: "yunet-sface@1",
+                model: "yunet-arcface@1",
                 results: [{ faces: [] }],
               }),
       }),
@@ -750,7 +762,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
   };
   const audioAsset = { asset_id: "a1", content_id: "c1", kind: "audio" };
 
-  it("photo-ocr throws when the preview fetch fails mid-batch — the cursor never advances", async () => {
+  it("photo-ocr counts an unlanded preview as not-ready — no stamp, cursor parked (issue #1011)", async () => {
     const handler = await loadHandler("photo-ocr");
     const harness = stubCtx({
       reads: {},
@@ -759,11 +771,19 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     });
     // An already-established cursor (not the first fire) — so a subsequent
     // outage is the only thing under test, not the one-time seed.
-    harness.state.set("selection", "deterministic:pp-ocrv4@1:local");
+    harness.state.set("selection", "deterministic:pp-ocrv5@1:local");
     harness.state.set("cursor", "a0");
-    await expect(
-      handler({ ctx: harness.ctx, log: harness.log })
-    ).rejects.toThrow(/preview is unavailable/u);
+    const result = (await handler({
+      ctx: harness.ctx,
+      log: harness.log,
+    })) as { output: { derived: number; skipped: number; notReady: number } };
+    // A display rung that has not landed yet is not a failed turn: the asset
+    // stays eligible and the walk parks behind it instead of stamping it.
+    expect(result.output).toMatchObject({
+      derived: 0,
+      skipped: 0,
+      notReady: 1,
+    });
     expect(harness.state.get("cursor")).toBe("a0");
     expect(harness.invokes).toHaveLength(0);
   });
@@ -787,7 +807,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     expect(harness.invokes).toHaveLength(0);
   });
 
-  it("embed-image throws when the preview fetch fails mid-batch — the cursor never advances", async () => {
+  it("embed-image counts an unlanded preview as not-ready — no stamp, cursor parked (issue #1011)", async () => {
     const handler = await loadHandler("embed-image");
     const harness = stubCtx({
       reads: {},
@@ -796,9 +816,15 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     });
     harness.state.set("model", "clip-vit-b-32@1");
     harness.state.set("cursor", "a0");
-    await expect(
-      handler({ ctx: harness.ctx, log: harness.log })
-    ).rejects.toThrow(/preview is unavailable/u);
+    const result = (await handler({
+      ctx: harness.ctx,
+      log: harness.log,
+    })) as { output: { derived: number; skipped: number; notReady: number } };
+    expect(result.output).toMatchObject({
+      derived: 0,
+      skipped: 0,
+      notReady: 1,
+    });
     expect(harness.state.get("cursor")).toBe("a0");
     expect(harness.invokes).toHaveLength(0);
   });

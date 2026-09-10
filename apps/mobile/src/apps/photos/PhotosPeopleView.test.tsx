@@ -1,10 +1,9 @@
-// Pins #711 people-roster defects plus #712's re-homed consent gate: a party
+// Pins #711 people-roster defects plus #712's re-homed empty state: a party
 // without display_name still shows as "Unnamed" (README:217, proto:3760); card
 // taps open THAT PERSON'S photographs (`PhotoStateView`, mode "person"), never
-// `FaceReview`; the consent gate lives in THIS view's empty state only while
-// unanswered; the unmatched-faces note substitutes the LIVE count for the
-// mock's 54 (proto:4433 sentence). `kit/components/ConsentGate` is stubbed —
-// its own contract is pinned by EnrichmentConsent.test.tsx.
+// `FaceReview`; an empty roster shows signage, never a consent question, and
+// its one action writes the PRIORITY `enrich.request`; the unmatched-faces
+// note takes the LIVE count, not the mock's 54 (proto:4433).
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -19,7 +18,7 @@ type DesignModule = typeof import("@centraid/design");
 type ReplicaProviderModule = typeof import("../../kit/replica/ReplicaProvider");
 type WriteOutcomeModule = typeof import("../../kit/replica/write-outcome");
 type StatusLineModule = typeof import("../../kit/components/status-line");
-type ConsentGateModule = typeof import("../../kit/components/ConsentGate");
+type PeopleEmptyStateModule = typeof import("./PeopleEmptyState");
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -32,8 +31,8 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
   },
   postStatus: vi.fn<(message: string) => void>(),
-  // `enrich.policy`'s photos row: tier `device`, refused by this build.
-  policies: [{ domain: "photos", tier: "device" }] as Array<{
+  // `enrich.policy`'s photos row: `gateway`, the Faces recipe's lane.
+  policies: [{ domain: "photos", tier: "gateway" }] as Array<{
     domain: string;
     tier: string;
   }>,
@@ -235,39 +234,33 @@ vi.mock(import("./PhotosScreen"), async () => {
   } as never;
 });
 
-// A stub, not the real renderer (see header): the two answers + a domain
-// marker, enough to prove wiring of handlers and gating.
-vi.mock(import("../../kit/components/ConsentGate"), async () => {
+vi.mock(import("./PeopleEmptyState"), async () => {
   const ReactModule = await import("react");
   return {
-    ConsentGate: (props: {
-      domain: string;
-      onRunOnDevice: () => void;
-      onDecline: () => void;
-      onDevice: { available: boolean; reason?: string };
-      answered?: string | null;
+    default: (props: {
+      prioritise: { available: boolean; reason?: string };
       busy?: boolean;
+      prioritised?: boolean;
+      onPrioritise: () => void;
     }) =>
       ReactModule.createElement(
         "div",
-        { "data-domain": props.domain, "data-testid": "consent-gate" },
+        { "data-testid": "people-empty-state" },
         ReactModule.createElement(
           "button",
           {
-            disabled: !props.onDevice.available,
-            onClick: props.onRunOnDevice,
+            disabled:
+              !props.prioritise.available ||
+              !!props.busy ||
+              !!props.prioritised,
+            onClick: props.onPrioritise,
             type: "button",
           },
-          "Run on this device"
+          "Prioritise faces"
         ),
-        props.onDevice.reason,
-        ReactModule.createElement(
-          "button",
-          { onClick: props.onDecline, type: "button" },
-          "Not now"
-        )
+        props.prioritise.reason
       ),
-  } as unknown as Partial<ConsentGateModule>;
+  } as unknown as Partial<PeopleEmptyStateModule>;
 });
 
 let root: Root | undefined;
@@ -343,15 +336,19 @@ describe("the people roster's grid and card behaviour", () => {
   });
 });
 
-describe("the people roster's consent gate (issue 712 C2)", () => {
+describe("the people roster's empty state (issue 712 C2, ruled 2026-09-09)", () => {
   const facesWithConfirmed = mocks.faces;
+
+  const priorityButton = (): HTMLButtonElement | undefined =>
+    Array.from(container!.querySelectorAll("button")).find(
+      (button) => button.textContent === "Prioritise faces"
+    );
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
-    // No confirmed faces at all — an empty roster, the gate's natural home.
     mocks.faces = [];
-    mocks.policies = [{ domain: "photos", tier: "device" }];
+    mocks.policies = [{ domain: "photos", tier: "gateway" }];
     mocks.session.write.mockClear();
     mocks.postStatus.mockClear();
   });
@@ -364,50 +361,61 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
     mocks.faces = facesWithConfirmed;
   });
 
-  it("renders the gate instead of the plain empty copy when the roster is empty and unanswered", () => {
+  it("shows the empty state on an empty roster, and writes nothing to do it", () => {
     renderView();
     expect(
-      container!.querySelector('[data-testid="consent-gate"]')
+      container!.querySelector('[data-testid="people-empty-state"]')
     ).toBeTruthy();
-    expect(container!.textContent).not.toContain("No people yet");
-  });
-
-  it("falls back to the plain empty copy once the question is declined", () => {
-    renderView();
-    const decline = Array.from(container!.querySelectorAll("button")).find(
-      (button) => button.textContent === "Not now"
-    );
-    act(() =>
-      decline!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    );
-    expect(
-      container!.querySelector('[data-testid="consent-gate"]')
-    ).toBeFalsy();
-    expect(container!.textContent).toContain("No people yet");
     expect(mocks.session.write).not.toHaveBeenCalled();
-    expect(mocks.postStatus).toHaveBeenCalledOnce();
+    expect(mocks.postStatus).not.toHaveBeenCalled();
   });
 
-  it("does not render the gate once a non-empty roster answers the question on its own", () => {
+  it("writes exactly one manual request from the priority press", () => {
+    renderView();
+    act(() =>
+      priorityButton()!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      )
+    );
+    expect(mocks.session.write).toHaveBeenCalledExactlyOnceWith("photos", {
+      action: "request-enrichment",
+      input: { entity_type: "media.asset" },
+    });
+  });
+
+  it("says the run comes SOONER, never that it was withheld until now", async () => {
+    renderView();
+    act(() =>
+      priorityButton()!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      )
+    );
+    await act(async () => undefined);
+    expect(mocks.postStatus).toHaveBeenCalledExactlyOnceWith(
+      "Faces prioritised — this library runs sooner"
+    );
+  });
+
+  it("does not show the empty state once the roster has people in it", () => {
     mocks.faces = facesWithConfirmed;
     renderView();
     expect(
-      container!.querySelector('[data-testid="consent-gate"]')
+      container!.querySelector('[data-testid="people-empty-state"]')
     ).toBeFalsy();
   });
 
-  it("does not offer a device run when this build has no device faces producer", () => {
+  it("withholds the ask on the device tier, with the lane named, and writes nothing", () => {
+    mocks.policies = [{ domain: "photos", tier: "device" }];
     renderView();
-    expect(mocks.session.write).not.toHaveBeenCalled();
-    const run = Array.from(container!.querySelectorAll("button")).find(
-      (button) => button.textContent === "Run on this device"
-    );
-    expect(run).toBeTruthy();
-    expect((run as HTMLButtonElement).disabled).toBe(true);
+    const control = priorityButton();
+    expect(control).toBeTruthy();
+    expect(control!.disabled).toBe(true);
     expect(container!.textContent).toContain(
-      "this build has no device-side face detector"
+      "the Faces recipe runs on the gateway"
     );
-    act(() => run!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    act(() =>
+      control!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(mocks.session.write).not.toHaveBeenCalled();
   });
 });

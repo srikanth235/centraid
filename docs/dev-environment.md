@@ -51,6 +51,47 @@ Pinning `CENTRAID_GATEWAY_TOKEN` is only for a **parent process that spawns the 
 
 The product CLI's `--token` / `CENTRAID_TOKEN` is a separate, wire-client concern and is unaffected.
 
+## Mobile: the native projects are generated
+
+`apps/mobile/ios` and `apps/mobile/android` are **outputs of `expo prebuild`**, gitignored and never committed ([apps/mobile/.gitignore](../apps/mobile/.gitignore)). The sources are:
+
+| Source | What it decides |
+| --- | --- |
+| `apps/mobile/app.config.ts` | the Expo config, the plugin list, and everything an upstream plugin can express |
+| `apps/mobile/plugins/*.cjs` | everything it cannot — Android backup/cleartext rules, the OpenSSL resolution, the Play upload signing config, the iOS pod deployment floor, the share extension's bundle id and version pair, the replacement `ShareViewController.swift` |
+| `apps/mobile/plugins/native/` | repo-owned native files those plugins copy in verbatim |
+| `apps/mobile/modules/centraid-*` | autolinked local Expo modules, including the Android upload foreground service |
+
+**Never commit a native file, and never hand-edit one.** An edit inside `ios/` or `android/` survives until the next prebuild and then silently disappears; if something has to be in the generated project, a plugin writes it. Centraid's own plugins are listed **first** in `app.config.ts` because `@expo/config-plugins` runs the last-registered mod first — first in the list is last to run, which is what lets them overwrite what upstream plugins produced.
+
+Running the app needs no explicit prebuild — `expo run:ios` / `expo run:android` generate the missing project themselves:
+
+```sh
+bun run --cwd apps/mobile ios       # builds vec.xcframework, then run:ios
+bun run --cwd apps/mobile android
+```
+
+To regenerate the projects on their own — after changing a plugin, adding a native dependency, or to inspect the output:
+
+```sh
+bun run --cwd apps/mobile native:prebuild   # expo prebuild --no-install + the sqlite-vec build
+bun run --cwd apps/mobile native:sqlite-vec # the iOS framework alone (no-op off macOS)
+```
+
+`native:sqlite-vec` is not optional on iOS and not a step CocoaPods can do for you: expo-sqlite 57 pre-bundles the sqlite-vec extension for Android only, so `scripts/build-sqlite-vec-ios.sh` builds `vec.xcframework` from the same upstream tag and it must exist **before `pod install`** or the `withSQLiteVecExtension` flag points the podspec at a framework that is not there. It is idempotent — a framework already built from the pinned tag is left alone — and EAS runs it through `eas-build-post-install`.
+
+`Podfile.lock` is generated too, and is therefore not a reviewable artifact any more.
+
+The gate over all of this is `bun run --cwd apps/mobile ci:native-state` (path-filtered from the root as `bun run check:mobile-native-state`, and run by `ci.yml`'s `mobile-smoke` on every mobile-touching PR). It checks the **inputs**, not a native tree: nothing under `ios/` or `android/` is tracked or unignored, the config plugins and local modules are what the fingerprint actually reads, no prebuild output contributes to the hash, and `native-fingerprints.json` matches. See [docs/traps/mobile-native-state.md](traps/mobile-native-state.md) for the layers and the remediation. Every CI lane that runs `./gradlew` or reads a path inside the generated project prebuilds first, in a step of its own, before restoring any cache that lives in there.
+
+To see what the config produces without generating anything:
+
+```sh
+bunx expo config --type introspect   # the merged manifest, entitlements, Info.plist
+```
+
+One thing introspection does **not** show: the upload foreground service's `<service>` entry and its three permissions live in the local module's own library manifest (`apps/mobile/modules/centraid-upload/android/src/main/AndroidManifest.xml`) and reach the app manifest through AGP's manifest merge at build time, not through a config plugin.
+
 ## Preview the web app in a browser against an existing vault
 
 The desktop app controls a local gateway, detached by default so it survives the window. A fresh browser origin served by a standalone gateway still lands on onboarding rather than your data. Web onboarding is **ticket-only** since issue #603 — there is no "This Mac" card and no founding probe in a browser tab, because a browser cannot start a gateway. The supported (and only) way to reach an existing vault from a browser is **pair a device**, exactly like a phone or a second desktop:

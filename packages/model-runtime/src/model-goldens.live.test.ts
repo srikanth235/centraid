@@ -49,7 +49,7 @@ async function fixtureItem(
 let goldens: {
   embedding: string;
   ocr: Array<{ text: string; confidence: number; box: number[] }>;
-  faces: Array<{ confidence: number; box: number[] }>;
+  faces: Array<{ confidence: number; box: number[]; embeddingDim: number }>;
 };
 
 function cosine(left: readonly number[], right: readonly number[]): number {
@@ -82,8 +82,8 @@ describe("[law:enrichment-live] pinned real-model goldens", () => {
     }).toStrictEqual({
       "embed-image": "clip-vit-b-32@1",
       "embed-text": "clip-vit-b-32@1",
-      ocr: "pp-ocrv4@1",
-      faces: "yunet-sface@1",
+      ocr: "pp-ocrv5@1",
+      faces: "yunet-arcface@1",
       transcript: "whisper-tiny.en-q8@1",
     });
   });
@@ -127,6 +127,11 @@ describe("[law:enrichment-live] pinned real-model goldens", () => {
     detected.faces.forEach((face, index) => {
       const golden = goldens.faces[index]!;
       expect(face.confidence).toBeGreaterThan(golden.confidence - 0.03);
+      // The dimension is the model's identity as far as the vault is
+      // concerned: `enrich_embedding.dim` is written from this length, and
+      // ArcFace's 512 is what separates it from the 128-d SFace rows it
+      // replaced (#1011).
+      expect(face.embedding).toHaveLength(golden.embeddingDim);
       face.box.forEach((coordinate, coordinateIndex) => {
         expect(
           Math.abs(coordinate - golden.box[coordinateIndex]!)

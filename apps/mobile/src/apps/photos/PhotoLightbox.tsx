@@ -7,6 +7,14 @@
 // the stage head (no top bar), the five actions in a chip · capsule · chip row
 // where a thumb is, a 58px filmstrip above it, the info rail as a 64% sheet,
 // and one status line. Slideshow is a different MODE — no filmstrip, no info.
+//
+// IMAGE FIRST (#1011). The pager is an ABSOLUTE layer running the full window,
+// and every other piece is chrome floating on top of it — so a square
+// photograph is centred in 402×874 rather than squeezed into whatever a column
+// of stacked bars happened to leave. It was leaving 313pt: the filmstrip's
+// `ScrollView` carries `flexGrow: 1` of its own and was absorbing half the free
+// height into a band of black. Nothing here may go back to stacking the
+// photograph and the controls in one flex column.
 
 import { useNetworkState } from "expo-network";
 import React, {
@@ -70,6 +78,7 @@ import type { VaultAsset } from "./photos-selection-writes";
 import { PhotoShareChoice } from "./PhotoShareChoice";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useScreenReader } from "./use-screen-reader";
 import {
   saveToCameraRoll,
   sendCopy,
@@ -80,13 +89,16 @@ import {
   READ_ONLY_VAULT_REASON,
   SLIDESHOW_INTERVAL_MS,
   SLIDESHOW_TITLE,
+  VIEWER_CHROME_INSET,
   captureStamp,
   originalStatus,
   resolveOriginalPlacement,
   slideshowMeta,
   viewerChromeHeight,
+  viewerChromeVisible,
   viewerStatus,
   viewerTitle,
+  viewerWriteRefusal,
 } from "./viewer-model";
 
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
@@ -116,6 +128,10 @@ export default function PhotoLightbox({
   // device pages land after mount and shift every index.
   const [currentId, setCurrentId] = useState(route.params.assetId);
   const [infoOpen, setInfoOpen] = useState(false);
+  // Drawn on open (`CHROME_VISIBLE_ON_OPEN`): a photograph that arrives bare is
+  // a screen with no visible way back. A tap hides it, a tap brings it back.
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const screenReader = useScreenReader();
   const [slideshow, setSlideshow] = useState(false);
   // The place-precision sheet, not the OS share sheet: what a copy says about
   // where it was taken is decided before any bytes leave (#816).
@@ -256,6 +272,10 @@ export default function PhotoLightbox({
     };
   }, [current?.assetId, current?.sourceVaultId, gatewayBase]);
   const openInfo = useCallback(() => setInfoOpen(true), []);
+  const toggleChrome = useCallback(
+    () => setChromeHidden((hidden) => !hidden),
+    []
+  );
   const dismiss = buildDismissGesture(navigation.goBack, openInfo);
   // Hoisted: a fresh renderer means a fresh MediaPage identity, which resets
   // the quality ladder mid-swipe.
@@ -266,12 +286,13 @@ export default function PhotoLightbox({
         companionUri={item.liveVideoUri}
         networkType={networkType}
         onZoom={setZoomScale}
+        onSingleTap={toggleChrome}
         originalRequested={fullQualityUnlocked}
         width={width}
         height={stageHeight}
       />
     ),
-    [fullQualityUnlocked, networkType, stageHeight, width]
+    [fullQualityUnlocked, networkType, stageHeight, toggleChrome, width]
   );
 
   useEffect(() => {
@@ -293,6 +314,9 @@ export default function PhotoLightbox({
       if (!target) return;
       list.current?.scrollToIndex({ animated: true, index: nextIndex });
       setCurrentId(target.id);
+      // Navigation always brings the controls back: a member stepping through
+      // photographs is never carried further into a bare screen.
+      setChromeHidden(false);
     },
     [assets]
   );
@@ -312,9 +336,11 @@ export default function PhotoLightbox({
   ): Promise<string | undefined> => {
     if (!session || !current)
       return "This photograph has no vault to write to.";
-    if (current.canWrite !== true) return READ_ONLY_VAULT_REASON;
-    const sourceVaultId = current.sourceVaultId;
-    if (!sourceVaultId) return "This photograph is not in a vault yet.";
+    const refusal = viewerWriteRefusal({
+      writable: current.canWrite === true,
+      hasVaultAsset: Boolean(current.sourceVaultId),
+    });
+    if (refusal) return refusal;
     try {
       // One open vault, so one write target (#996 wave 3). `canWrite` above
       // is still the gate — it is the row's own answer.
@@ -524,6 +550,13 @@ export default function PhotoLightbox({
     : slideshow
       ? slideshowMeta(index, assets.length)
       : stamp.time;
+  // The one answer to "is the chrome on the stage" — never a bare `!hidden`,
+  // because the screen-reader and mode guards live with the rule (§15).
+  const chromeVisible = viewerChromeVisible({
+    hidden: chromeHidden,
+    mode: editing ? "editor" : slideshow ? "slideshow" : "viewer",
+    screenReader,
+  });
   // Here, not in the editor: the vault grant and the gateway are this screen's
   // facts.
   const editRefusal =
@@ -560,7 +593,7 @@ export default function PhotoLightbox({
           </View>
         ) : (
           <View
-            style={styles.fill}
+            style={styles.stageLayer}
             onLayout={(event) =>
               setStageHeight(event.nativeEvent.layout.height)
             }
@@ -586,85 +619,105 @@ export default function PhotoLightbox({
                   event.nativeEvent.contentOffset.x / width
                 );
                 setCurrentId((activeId) => assets[nextIndex]?.id ?? activeId);
+                // A swipe is navigation too: the controls come back with the
+                // next photograph.
+                setChromeHidden(false);
               }}
               renderItem={renderPage}
               showsHorizontalScrollIndicator={false}
             />
-            {/* Start and end, so they mirror under RTL. */}
-            <Pressable
-              accessibilityLabel="Previous photograph"
-              accessibilityRole="button"
-              testID={TEST_IDS.photos.viewerPrev}
-              accessibilityState={{ disabled: index <= 0 }}
-              disabled={index <= 0}
-              onPress={() => goTo(index - 1)}
-              style={[
-                styles.pager,
-                styles.pagerPrev,
-                { borderColor: colors.stageLine },
-              ]}
-            >
-              <Icon
-                name="chevron-left"
-                size={20}
-                color={index <= 0 ? colors.textDisabled : colors.onStage}
-              />
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Next photograph"
-              accessibilityRole="button"
-              testID={TEST_IDS.photos.viewerNext}
-              accessibilityState={{ disabled: index >= assets.length - 1 }}
-              disabled={index >= assets.length - 1}
-              onPress={() => goTo(index + 1)}
-              style={[
-                styles.pager,
-                styles.pagerNext,
-                { borderColor: colors.stageLine },
-              ]}
-            >
-              <Icon
-                name="chevron-right"
-                size={20}
-                color={
-                  index >= assets.length - 1
-                    ? colors.textDisabled
-                    : colors.onStage
-                }
-              />
-            </Pressable>
+            {/* Start and end, so they mirror under RTL. The pointer
+                equivalents of the swipe (§15) — they go away with the rest of
+                the chrome, and one tap on the photograph brings them back. */}
+            {chromeVisible ? (
+              <>
+                <Pressable
+                  accessibilityLabel="Previous photograph"
+                  accessibilityRole="button"
+                  testID={TEST_IDS.photos.viewerPrev}
+                  accessibilityState={{ disabled: index <= 0 }}
+                  disabled={index <= 0}
+                  onPress={() => goTo(index - 1)}
+                  style={[
+                    styles.pager,
+                    styles.pagerPrev,
+                    { borderColor: colors.stageLine },
+                  ]}
+                >
+                  <Icon
+                    name="chevron-left"
+                    size={20}
+                    color={index <= 0 ? colors.textDisabled : colors.onStage}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Next photograph"
+                  accessibilityRole="button"
+                  testID={TEST_IDS.photos.viewerNext}
+                  accessibilityState={{ disabled: index >= assets.length - 1 }}
+                  disabled={index >= assets.length - 1}
+                  onPress={() => goTo(index + 1)}
+                  style={[
+                    styles.pager,
+                    styles.pagerNext,
+                    { borderColor: colors.stageLine },
+                  ]}
+                >
+                  <Icon
+                    name="chevron-right"
+                    size={20}
+                    color={
+                      index >= assets.length - 1
+                        ? colors.textDisabled
+                        : colors.onStage
+                    }
+                  />
+                </Pressable>
+              </>
+            ) : null}
           </View>
         )}
 
-        <ViewerStatusLine
-          colors={colors}
-          text={
-            editing
-              ? editorLine
-              : slideshow
-                ? "Leaving the slideshow keeps the photograph you stopped on"
-                : status.text
-          }
-          actionLabel={
-            !slideshow && !editing && status.action ? status.action : null
-          }
-          onAction={() => setFullQualityUnlocked(true)}
-        />
-
-        {/* The home-indicator inset must land on whichever control is last in
-            each mode, or the foot of the stage sits under the indicator. */}
-        {slideshow || editing ? (
-          <View style={{ height: insets.bottom }} />
-        ) : (
-          <>
-            <PhotoFilmstrip
-              assets={assets}
-              currentId={currentId}
-              onSelect={(assetId) =>
-                goTo(assets.findIndex((asset) => asset.id === assetId))
+        {/* THE FOOT OF THE STAGE — one overlay, `box-none`, so the whole
+            window under it is still the photograph's to receive. */}
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.chromeBottom,
+            { paddingBottom: insets.bottom + VIEWER_CHROME_INSET },
+          ]}
+        >
+          {/* The line goes away with the rest of the chrome — it is a plate on
+              the photograph, not a band under it. */}
+          {chromeVisible ? (
+            <ViewerStatusLine
+              colors={colors}
+              text={
+                editing
+                  ? editorLine
+                  : slideshow
+                    ? "Leaving the slideshow keeps the photograph you stopped on"
+                    : status.text
               }
+              actionLabel={
+                !slideshow && !editing && status.action ? status.action : null
+              }
+              onAction={() => setFullQualityUnlocked(true)}
             />
-            <View style={{ paddingBottom: insets.bottom }}>
+          ) : null}
+
+          {/* The filmstrip sits DIRECTLY above the action row, both floating on
+              the photograph; the home-indicator inset is the overlay's, so it
+              lands under whichever control is last in each mode. */}
+          {chromeVisible && !slideshow && !editing ? (
+            <>
+              <PhotoFilmstrip
+                assets={assets}
+                currentId={currentId}
+                onSelect={(assetId) =>
+                  goTo(assets.findIndex((asset) => asset.id === assetId))
+                }
+              />
               <PhotoLightboxToolbar
                 asset={current}
                 onEdit={() => setEditing(true)}
@@ -674,30 +727,32 @@ export default function PhotoLightbox({
                   : {})}
                 onWrite={write}
               />
-            </View>
-          </>
-        )}
+            </>
+          ) : null}
+        </View>
 
         {/* LAST in the tree: paint order is what puts these on the stage, and
             `zIndex` alone is not enough on every Android surface. */}
-        <ViewerTopChrome
-          colors={colors}
-          insets={insets}
-          title={stampTitle}
-          meta={stampMeta}
-          name={photographName}
-          editing={editing}
-          slideshow={slideshow}
-          onClose={() => navigation.goBack()}
-          onLeaveSlideshow={() => setSlideshow(false)}
-          onOverflow={() => {
-            // Never cached: a rotation between openings would hang the card off
-            // a stale rectangle.
-            measureOverflowAnchor();
-            setOverflowOpen(true);
-          }}
-          overflowRef={overflowAnchorRef}
-        />
+        {chromeVisible ? (
+          <ViewerTopChrome
+            colors={colors}
+            insets={insets}
+            title={stampTitle}
+            meta={stampMeta}
+            name={photographName}
+            editing={editing}
+            slideshow={slideshow}
+            onClose={() => navigation.goBack()}
+            onLeaveSlideshow={() => setSlideshow(false)}
+            onOverflow={() => {
+              // Never cached: a rotation between openings would hang the card off
+              // a stale rectangle.
+              measureOverflowAnchor();
+              setOverflowOpen(true);
+            }}
+            overflowRef={overflowAnchorRef}
+          />
+        ) : null}
 
         <PhotoInfoSheet
           asset={current}

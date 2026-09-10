@@ -1,4 +1,4 @@
-// Pure-math helpers for faces (YuNet decode + SFace alignment). Separate from
+// Pure-math helpers for faces (YuNet decode + ArcFace alignment). Separate from
 // src/capabilities/faces.ts so every formula is unit-testable — no ONNX/sharp.
 
 export function sigmoid(x: number): number {
@@ -85,8 +85,8 @@ export function decodeYuNetLevel(
   return results;
 }
 
-/** ArcFace/SFace 5-point template for a 112x112 crop (L-eye, R-eye, nose, L-mouth, R-mouth). */
-export const SFACE_TEMPLATE_112: readonly Point[] = [
+/** ArcFace 5-point template for a 112x112 crop (L-eye, R-eye, nose, L-mouth, R-mouth). */
+export const ARCFACE_TEMPLATE_112: readonly Point[] = [
   { x: 38.2946, y: 51.6963 },
   { x: 73.5318, y: 51.5014 },
   { x: 56.0252, y: 71.7366 },

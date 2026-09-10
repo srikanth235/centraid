@@ -1,94 +1,133 @@
 #!/usr/bin/env node
 /**
- * Native recipe + identity ratchet for apps/mobile (#587 E23, #646).
+ * Native input purity + identity ratchet for apps/mobile (#587 E23, #646;
+ * rebuilt for Continuous Native Generation in #996).
+ *
+ * `ios/` and `android/` are prebuild OUTPUTS and are gitignored, so the gate no
+ * longer reads a committed Podfile.lock or a committed Xcode project — there is
+ * none, and the checks that did (pod-lock completeness, pod version coherence,
+ * REACT_NATIVE_PATH hygiene) protected a reviewable artifact that no longer
+ * exists. `pod install` now runs only inside the macOS lanes that prebuild
+ * first, against a lock those lanes generate and discard, so there is nothing
+ * left for a repo-wide checker to compare it to.
+ *
+ * What is left is the same invariant with its current subject: the inputs are
+ * the whole recipe, and the recipe is reproducible.
  *
  * Layers (fail-closed; L1-L3 must pass before fingerprints may be written):
- *   L1 recipe completeness — every local modules/<name>/ios/<Name>.podspec in Podfile.lock;
- *     Android: expo-module.config.json declares platforms its directories imply
- *   L2 pod version coherence — Expo / React-Core / Hermes vs node_modules
- *   L3 path hygiene — no absolute / wrong-depth REACT_NATIVE_PATH
+ *   L1 generated-tree purity — nothing under ios/ or android/ is tracked, and
+ *     both are ignored by git
+ *   L2 input coverage — every config plugin and local module directory is in
+ *     the fingerprint's source list, and each module declares the platforms its
+ *     directories imply
+ *   L3 host independence — no prebuild output contributes to the hash, so a
+ *     prebuilt worktree and a fresh checkout agree
  *   L4 identity ratchet — committed native-fingerprints.json vs @expo/fingerprint
  *
  * CLI (sole entry \`ci:native-state\`; no alias):
  *   bun run --cwd apps/mobile ci:native-state           # verify
- *   bun run --cwd apps/mobile ci:native-state --status  # L1 vs L4 why
+ *   bun run --cwd apps/mobile ci:native-state --status  # per-layer why
  *   bun run --cwd apps/mobile ci:native-state --write   # refresh hashes after L1-L3
  */
+import { execFileSync } from "node:child_process";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { fingerprintForPlatform } from "./native-fingerprint.mjs";
+import { fingerprintReportForPlatform } from "./native-fingerprint.mjs";
 import {
   attachRemediation,
   formatStatusReport,
   formatWriteSummary,
-  moduleLockDelta,
   parseNativeStateArgs,
+  validateFingerprintInputCoverage,
   validateFingerprints,
-  validateIosModuleLockCompleteness,
-  validateLockedNodeModulePods,
+  validateGeneratedTreesNotHashed,
+  validateGeneratedTreesUntracked,
   validateModulePlatformShape,
-  validatePodLock,
-  validateReactNativePaths,
-  FIX_RECIPE_HINT,
+  FIX_INPUTS_HINT,
+  GENERATED_NATIVE_DIRS,
 } from "./verify-native-state-lib.mjs";
 
 // Re-export pure API for existing tests and external importers.
 export {
   attachRemediation,
   classifyNativeStateError,
-  dependencyPodNames,
-  externalSourcePodNames,
   formatStatusReport,
   formatWriteSummary,
-  lockedNodeModulePackages,
-  lockSectionBody,
-  moduleLockDelta,
   parseNativeStateArgs,
-  podVersions,
+  validateFingerprintInputCoverage,
   validateFingerprints,
-  validateIosModuleLockCompleteness,
-  validateLockedNodeModulePods,
+  validateGeneratedTreesNotHashed,
+  validateGeneratedTreesUntracked,
   validateModulePlatformShape,
-  validatePodLock,
-  validateReactNativePaths,
   WRITE_CMD,
-  FIX_RECIPE_HINT,
-  MACOS_POD_INSTALL,
+  FIX_INPUTS_HINT,
+  GENERATED_NATIVE_DIRS,
 } from "./verify-native-state-lib.mjs";
 
 const mobileRoot = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(mobileRoot, "..", "..");
 
-export async function discoverLocalPodNames(
-  modulesRoot = path.join(mobileRoot, "modules")
+/**
+ * The tracked half of L1, asked of git rather than of the filesystem: the
+ * question is what the INDEX carries, and a prebuilt worktree answers it wrong.
+ */
+export function trackedGeneratedNativeFiles(cwd = repoRoot) {
+  const output = execFileSync(
+    "git",
+    ["ls-files", "--", ...GENERATED_NATIVE_DIRS],
+    { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  return output.split("\n").filter(Boolean);
+}
+
+/**
+ * The ignore half of L1, asked of git so it survives however the rule is
+ * spelled — a leading slash, a trailing slash, a parent `.gitignore`, or an
+ * exclude file.
+ *
+ * The path is queried WITH a trailing slash, and that is load-bearing: the rule
+ * is `/ios/`, which matches directories only, and `git check-ignore` cannot tell
+ * that a bare `apps/mobile/ios` names a directory when the directory is absent.
+ * On a fresh checkout — the state this gate must be green in — the bare form
+ * answers "not ignored" and the trailing-slash form answers correctly in both
+ * states. `--no-index` so the answer is the RULE's, independent of whether
+ * anything happens to be tracked; the tracked half is a separate check.
+ */
+export function generatedNativeDirsIgnored(cwd = repoRoot) {
+  const ignored = {};
+  for (const dir of GENERATED_NATIVE_DIRS) {
+    try {
+      execFileSync(
+        "git",
+        ["check-ignore", "--quiet", "--no-index", `${dir}/`],
+        { cwd, stdio: "ignore" }
+      );
+      ignored[dir] = true;
+    } catch {
+      ignored[dir] = false;
+    }
+  }
+  return ignored;
+}
+
+/** Repo-owned config plugins, mobile-root-relative (the fingerprint's units). */
+export async function discoverConfigPlugins(
+  pluginsRoot = path.join(mobileRoot, "plugins")
 ) {
   let entries;
   try {
-    entries = await readdir(modulesRoot, { withFileTypes: true });
+    entries = await readdir(pluginsRoot);
   } catch (error) {
     if (error && typeof error === "object" && error.code === "ENOENT")
       return [];
     throw error;
   }
-  const dirs = entries.filter((e) => e.isDirectory());
-  const perDir = await Promise.all(
-    dirs.map(async (entry) => {
-      const iosDir = path.join(modulesRoot, entry.name, "ios");
-      try {
-        const iosEntries = await readdir(iosDir);
-        return iosEntries
-          .filter((file) => file.endsWith(".podspec"))
-          .map((file) => file.replace(/\.podspec$/u, ""));
-      } catch (error) {
-        if (error && typeof error === "object" && error.code === "ENOENT")
-          return [];
-        throw error;
-      }
-    })
-  );
-  return perDir.flat().sort();
+  return entries
+    .filter((file) => file.endsWith(".cjs"))
+    .map((file) => `plugins/${file}`)
+    .sort();
 }
 
 export async function loadLocalModulePlatforms(
@@ -107,12 +146,12 @@ export async function loadLocalModulePlatforms(
     dirs.map(async (entry) => {
       const moduleRoot = path.join(modulesRoot, entry.name);
       const configPath = path.join(moduleRoot, "expo-module.config.json");
+      const [hasIosDir, hasAndroidDir] = await Promise.all([
+        dirExists(path.join(moduleRoot, "ios")),
+        dirExists(path.join(moduleRoot, "android")),
+      ]);
       try {
         const config = JSON.parse(await readFile(configPath, "utf8"));
-        const [hasIosDir, hasAndroidDir] = await Promise.all([
-          dirExists(path.join(moduleRoot, "ios")),
-          dirExists(path.join(moduleRoot, "android")),
-        ]);
         return {
           moduleId: entry.name,
           config,
@@ -125,8 +164,8 @@ export async function loadLocalModulePlatforms(
           return {
             moduleId: entry.name,
             config: null,
-            hasIosDir: false,
-            hasAndroidDir: false,
+            hasIosDir,
+            hasAndroidDir,
             missingConfig: true,
           };
         }
@@ -147,66 +186,32 @@ async function dirExists(dir) {
   }
 }
 
-/**
- * The dependency half of the L1 recipe, read from the tree rather than from the
- * pod lock: every package `bun.lock` resolves, and every apps/mobile dependency
- * that autolinks an iOS pod. validateLockedNodeModulePods matches both against
- * the pod lock's EXTERNAL SOURCES. `bun.lock` is the presence oracle because
- * an uninstalled package can outlive its removal as a directory; the Expo
- * module configs are read from disk because only the installed package says
- * whether it has a native Apple side.
- */
-export async function discoverNodeModulePodPackages() {
-  const nodeModules = path.join(repoRoot, "node_modules");
-  const bunLock = await readFile(path.join(repoRoot, "bun.lock"), "utf8");
-  const resolvedPackages = [
-    ...bunLock.matchAll(/^ {4}"(?<pkg>[^"]+)": \[/gmu),
-  ].map((match) => match.groups?.pkg ?? "");
-  const manifest = await readJson(path.join(mobileRoot, "package.json"));
-  const iosAutolinkedPackages = (
-    await Promise.all(
-      Object.keys(manifest.dependencies ?? {}).map(async (pkg) => {
-        const config = await readOptionalJson(
-          path.join(nodeModules, pkg, "expo-module.config.json")
-        );
-        const platforms = Array.isArray(config?.platforms)
-          ? config.platforms
-          : [];
-        // Expo SDK 57 writes "apple"; older module configs write "ios".
-        return platforms.includes("ios") || platforms.includes("apple")
-          ? pkg
-          : null;
-      })
-    )
-  ).filter((pkg) => pkg !== null);
-  return { resolvedPackages, iosAutolinkedPackages };
+/** The per-platform module directories autolinking is expected to have found. */
+export function moduleNativeDirsFor(platform, modulePlatforms) {
+  return modulePlatforms
+    .filter((mod) => (platform === "ios" ? mod.hasIosDir : mod.hasAndroidDir))
+    .map((mod) => `modules/${mod.moduleId}/${platform}`)
+    .sort();
 }
 
 /**
- * Collect L1–L3 errors (recipe + coherence + paths). Does not touch fingerprints.
+ * Collect L1–L3 errors (purity + coverage + host independence). Does not
+ * compare fingerprints against the committed file.
  */
-export async function collectRecipeErrors(inputs) {
-  const {
-    lock,
-    project,
-    expoVersion,
-    reactNativeVersion,
-    hermesTags,
-    localPodNames,
-    modulePlatforms,
-    podsRoot,
-    expectedReactNativePath,
-    resolvedPackages,
-    iosAutolinkedPackages,
-  } = inputs;
-
+export function collectInputErrors({
+  trackedNativeFiles,
+  ignoredDirs,
+  modulePlatforms,
+  pluginFiles,
+  reports,
+}) {
   const errors = [
-    ...validateIosModuleLockCompleteness({ localPodNames, lock }),
+    ...validateGeneratedTreesUntracked({ trackedNativeFiles, ignoredDirs }),
   ];
   for (const mod of modulePlatforms) {
     if (mod.missingConfig || mod.config == null) {
       errors.push(
-        `L1 Android/shape: module ${mod.moduleId} is missing expo-module.config.json (${FIX_RECIPE_HINT})`
+        `L2 module shape: module ${mod.moduleId} is missing expo-module.config.json (${FIX_INPUTS_HINT})`
       );
       continue;
     }
@@ -219,124 +224,68 @@ export async function collectRecipeErrors(inputs) {
       })
     );
   }
-  errors.push(
-    ...validateLockedNodeModulePods({
-      lock,
-      resolvedPackages,
-      iosAutolinkedPackages,
-    }),
-    ...validatePodLock({
-      lock,
-      expoVersion,
-      reactNativeVersion,
-      hermesTags,
-    }),
-    ...validateReactNativePaths(project, {
-      podsRoot,
-      expected: expectedReactNativePath,
-    })
-  );
+  for (const { platform, sources } of reports) {
+    errors.push(
+      ...validateFingerprintInputCoverage({
+        platform,
+        sources,
+        pluginFiles,
+        moduleNativeDirs: moduleNativeDirsFor(platform, modulePlatforms),
+      }),
+      ...validateGeneratedTreesNotHashed({ platform, sources })
+    );
+  }
   return errors;
 }
 
 export async function verifyNativeState(options = {}) {
   const { write = false, status = false } = options;
-  const [
-    expected,
-    lock,
-    project,
-    expoPackage,
-    reactNativePackage,
-    hermesTag,
-    hermesV1Tag,
-    localPodNames,
-    modulePlatforms,
-  ] = await Promise.all([
-    readJson(path.join(mobileRoot, "native-fingerprints.json")),
-    readFile(path.join(mobileRoot, "ios", "Podfile.lock"), "utf8"),
-    readFile(
-      path.join(mobileRoot, "ios", "Centraid.xcodeproj", "project.pbxproj"),
-      "utf8"
-    ),
-    readJson(path.join(repoRoot, "node_modules", "expo", "package.json")),
-    readJson(
-      path.join(repoRoot, "node_modules", "react-native", "package.json")
-    ),
-    readOptionalLine(
-      path.join(
-        repoRoot,
-        "node_modules",
-        "react-native",
-        "sdks",
-        ".hermesversion"
-      )
-    ),
-    readOptionalLine(
-      path.join(
-        repoRoot,
-        "node_modules",
-        "react-native",
-        "sdks",
-        ".hermesv1version"
-      )
-    ),
-    discoverLocalPodNames(),
-    loadLocalModulePlatforms(),
-  ]);
+  const [expected, pluginFiles, modulePlatforms, ...reports] =
+    await Promise.all([
+      readJson(path.join(mobileRoot, "native-fingerprints.json")),
+      discoverConfigPlugins(),
+      loadLocalModulePlatforms(),
+      ...["ios", "android"].map(async (platform) => ({
+        platform,
+        ...(await fingerprintReportForPlatform(platform)),
+      })),
+    ]);
 
-  const { resolvedPackages, iosAutolinkedPackages } =
-    await discoverNodeModulePodPackages();
-  const recipeErrors = await collectRecipeErrors({
-    lock,
-    project,
-    resolvedPackages,
-    iosAutolinkedPackages,
-    expoVersion: expoPackage.version,
-    reactNativeVersion: reactNativePackage.version,
-    hermesTags: [hermesTag, hermesV1Tag].filter(Boolean),
-    localPodNames,
+  const inputErrors = collectInputErrors({
+    trackedNativeFiles: trackedGeneratedNativeFiles(),
+    ignoredDirs: generatedNativeDirsIgnored(),
     modulePlatforms,
-    podsRoot: path.join(mobileRoot, "ios", "Pods"),
-    expectedReactNativePath: path.join(
-      repoRoot,
-      "node_modules",
-      "react-native"
-    ),
+    pluginFiles,
+    reports,
   });
+  const inputInventory = {
+    pluginFiles,
+    modules: modulePlatforms.map((mod) => mod.moduleId).sort(),
+  };
+  const actualByPlatform = Object.fromEntries(
+    reports.map(({ platform, hash }) => [platform, hash])
+  );
 
-  const moduleDelta = moduleLockDelta({ localPodNames, lock });
-
-  if (write && recipeErrors.length > 0) {
-    const errors = attachRemediation(recipeErrors);
+  if (write && inputErrors.length > 0) {
     return {
-      errors,
+      errors: attachRemediation(inputErrors),
       wrote: false,
       statusText: status
         ? formatStatusReport({
-            errors: recipeErrors,
-            moduleDelta,
+            errors: inputErrors,
+            inputInventory,
             fingerprints: null,
           })
         : null,
       writeSummary: null,
-      moduleDelta,
+      inputInventory,
     };
   }
-
-  const fingerprints = await Promise.all(
-    ["ios", "android"].map(async (platform) => ({
-      platform,
-      actual: await fingerprintForPlatform(platform),
-    }))
-  );
-  const actualByPlatform = Object.fromEntries(
-    fingerprints.map(({ platform, actual }) => [platform, actual])
-  );
 
   if (write) {
     const next = {
       _comment:
-        "Expected @expo/fingerprint hashes. Native/dependency changes must update these values after a human reviews the generated-project diff (#587 E23/F31).",
+        "Expected @expo/fingerprint hashes over the CNG inputs (app.config.ts, plugins/, modules/, the dependency set). Changing them must be a reviewed act — see docs/traps/mobile-native-state.md.",
       ios: actualByPlatform.ios,
       android: actualByPlatform.android,
     };
@@ -348,68 +297,46 @@ export async function verifyNativeState(options = {}) {
       `${JSON.stringify(next, null, 2)}\n`,
       "utf8"
     );
-    const writeSummary = formatWriteSummary({
-      previous: expected,
-      next,
-      moduleDelta,
-      platformsMoved,
-    });
     return {
       errors: [],
       wrote: true,
       statusText: status
         ? formatStatusReport({
             errors: [],
-            moduleDelta,
+            inputInventory,
             fingerprints: { expected: next, actual: actualByPlatform },
           })
         : null,
-      writeSummary,
-      moduleDelta,
+      writeSummary: formatWriteSummary({
+        previous: expected,
+        next,
+        inputInventory,
+        platformsMoved,
+      }),
+      inputInventory,
       fingerprints: { expected: next, actual: actualByPlatform },
     };
   }
 
   const identityErrors = validateFingerprints(expected, actualByPlatform);
-  const allErrors = attachRemediation([...recipeErrors, ...identityErrors]);
   return {
-    errors: allErrors,
+    errors: attachRemediation([...inputErrors, ...identityErrors]),
     wrote: false,
     statusText: status
       ? formatStatusReport({
-          errors: [...recipeErrors, ...identityErrors],
-          moduleDelta,
+          errors: [...inputErrors, ...identityErrors],
+          inputInventory,
           fingerprints: { expected, actual: actualByPlatform },
         })
       : null,
     writeSummary: null,
-    moduleDelta,
+    inputInventory,
     fingerprints: { expected, actual: actualByPlatform },
   };
 }
 
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
-}
-
-async function readOptionalJson(file) {
-  try {
-    return JSON.parse(await readFile(file, "utf8"));
-  } catch (error) {
-    if (error && typeof error === "object" && error.code === "ENOENT")
-      return null;
-    throw error;
-  }
-}
-
-async function readOptionalLine(file) {
-  try {
-    return (await readFile(file, "utf8")).trim();
-  } catch (error) {
-    if (error && typeof error === "object" && error.code === "ENOENT")
-      return "";
-    throw error;
-  }
 }
 
 if (
@@ -426,7 +353,7 @@ if (
   if (flags.help) {
     console.log(`usage: verify-native-state.mjs [--status] [--write]
   (default)  verify L1–L4
-  --status   human-readable L1 recipe vs L4 identity report
+  --status   human-readable per-layer report
   --write    recompute native-fingerprints.json only when L1–L3 pass`);
     process.exit(0);
   }
@@ -439,7 +366,7 @@ if (
   }
   if (!result.wrote && !result.statusText) {
     console.log(
-      "native-state: Pod lock, project paths, and iOS/Android fingerprints agree"
+      "native-state: ios/ and android/ are untracked outputs, the inputs are what the ratchet reads, and both fingerprints agree"
     );
   }
 }

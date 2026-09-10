@@ -111,6 +111,12 @@ export async function openNodeSeat(
       rowKeys ??= new SeatRowKeys(loop);
       return seatBaseVersions(loop, rowKeys, mutations);
     },
+    // The phone's real port moves per launch (the tunnel picks it), so the
+    // port is state the session re-points rather than open configuration.
+    // This tier's base is fixed, but the port must exist for a session test
+    // to exercise a reconnect the way the device does.
+    updateGatewayBase: (baseUrl: string): void =>
+      loop.updateGatewayBase(baseUrl),
     sync: (): Promise<SeatWatermark | undefined> => loop.sync(),
     watermark: (): SeatWatermark | undefined => loop.watermark(),
     purge: (): Promise<void> => loop.purge(),

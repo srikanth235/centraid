@@ -12,7 +12,7 @@ import CollectionShelfBody from "./CollectionShelfBody";
 import PhotoAccessPanel from "./PhotoAccessPanel";
 import { PhotoFilmstrip } from "./PhotoFilmstrip";
 import PhotoGrainView from "./PhotoGrainView";
-import { ViewerTopChrome } from "./PhotoLightboxChrome";
+import { ViewerStatusLine, ViewerTopChrome } from "./PhotoLightboxChrome";
 import { makePhotosFixture } from "./photos-fixtures";
 import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import PhotosHome from "./PhotosHome";
@@ -514,6 +514,38 @@ describe("Photos native component coverage", () => {
         name: `Show photograph ${assets[1]!.filename}`,
       }).props
     ).toMatchObject({ accessibilityState: { selected: true } });
+
+    // #1011: a `ScrollView`'s own base style carries `flexGrow: 1`, and the
+    // strip's `height` does not cancel it. Left growing it absorbed half the
+    // viewer's free height into a band of black and squeezed the photograph
+    // into a letterbox, so the zero is load-bearing.
+    expect(
+      StyleSheet.flatten(
+        strip.getByLabelText("Filmstrip").props.style as object
+      )
+    ).toMatchObject({ flexGrow: 0, height: 58 });
+
+    // The stage's line draws only when it has something to say: an empty text
+    // is no line at all, never an empty band under the photograph.
+    const quiet = render(
+      <ViewerStatusLine
+        colors={colors}
+        text=""
+        actionLabel={null}
+        onAction={noop}
+      />
+    );
+    expect(quiet.toJSON()).toBeNull();
+    const loud = render(
+      <ViewerStatusLine
+        colors={colors}
+        text="Original on home-gateway"
+        actionLabel="Load the original"
+        onAction={noop}
+      />
+    );
+    fireEvent.press(loud.getByRole("button", { name: "Load the original" }));
+    expect(noop.mock.calls.length).toBeGreaterThan(0);
   });
 
   it("renders collection shelf emptiness and collapse state", () => {

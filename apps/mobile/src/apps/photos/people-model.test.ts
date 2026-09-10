@@ -236,10 +236,8 @@ describe("the People shelf's model", () => {
     ).toBe(PEOPLE_PENDING_EMPTY);
   });
 
-  it("offers Detect faces only at the rung that can actually answer it", () => {
+  it("offers Prioritise faces only at the rung that actually runs the sweep", () => {
     expect(detectFacesFor("gateway")).toStrictEqual({ available: true });
-    // COMPAT: the pre-#712 name for the same rung stays legible.
-    expect(detectFacesFor("model")).toStrictEqual({ available: true });
     // On-device enrichment is a real setting and a real refusal, with a reason
     // that names the road ("allow that in Privacy") rather than just failing.
     const device = detectFacesFor("device");
