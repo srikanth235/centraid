@@ -45,6 +45,28 @@ export function failedItems(
     .map(toItem);
 }
 
+/**
+ * Non-terminal rows that failed at least once and are waiting to try again —
+ * INCLUDING rows inside a backoff window (#1014).
+ *
+ * The member-facing failure list used to read `pending()`, which now hides a
+ * deferred row from the DRAIN; hiding it from the readout too would make a
+ * refusal vanish from Backup health for minutes at a time.
+ */
+export function retryingItems(
+  driver: Driver,
+  limit: number = PENDING_PAGE_LIMIT
+): UploadItem[] {
+  return driver
+    .all<ItemRow>(
+      `SELECT * FROM upload_item
+         WHERE state NOT IN ('settled', 'failed') AND last_error IS NOT NULL
+         ORDER BY created_order LIMIT ?`,
+      [limit]
+    )
+    .map(toItem);
+}
+
 export function failedItemCount(driver: Driver): number {
   return (
     driver.all<{ count: number }>(

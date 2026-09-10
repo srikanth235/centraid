@@ -205,6 +205,11 @@ export class UploadQueue {
     return this.store.failedCount();
   }
 
+  /** Rows that failed and will try again, backoff window included (#1014). */
+  retrying(): UploadItem[] {
+    return this.store.retrying();
+  }
+
   /** Put a failed row back in the queue with a fresh attempt budget. */
   retry(itemId: string): void {
     this.store.retry(itemId);

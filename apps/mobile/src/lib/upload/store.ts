@@ -28,6 +28,7 @@ import {
   failedItems,
   recentItems,
   retryFailedItem,
+  retryingItems,
   sweepTerminalItems,
 } from "./store-retention";
 import { toItem, toPart } from "./store-rows";
@@ -314,6 +315,11 @@ export class UploadQueueStore {
 
   failedCount(): number {
     return failedItemCount(this.driver);
+  }
+
+  /** Rows that failed and will try again, backoff window included (#1014). */
+  retrying(limit?: number): UploadItem[] {
+    return retryingItems(this.driver, limit);
   }
 
   /** Member-driven retry: back to `pending` with a fresh attempt budget. */
