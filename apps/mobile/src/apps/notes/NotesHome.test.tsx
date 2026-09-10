@@ -51,7 +51,14 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
         request: { action: string; input: Record<string, unknown> }
       ) => {
         vaultWrites.calls.push(request);
-        return { status: "executed" as const };
+        // `create-note` hands the minted row id back, the way the gateway
+        // does; every other write answers with nothing but its status.
+        return request.action === "create-note"
+          ? {
+              status: "executed" as const,
+              output: { note_id: "minted-1" },
+            }
+          : { status: "executed" as const };
       },
       // Only the three members this surface reaches; the session's other 55
       // are not part of any claim here.
@@ -221,6 +228,32 @@ describe("Notes, on the real React Native host tree", () => {
     expect(vaultWrites.calls[0]!.input["body_text"]).toBe(
       "Old body, plus a thought"
     );
+  });
+
+  it("adopts the id a new note was minted with, so the next tick edits it (#1015)", async () => {
+    // THE DEFECT: a brand-new note had no id to save against, so autosave was
+    // withheld until close — and a second tick would have created a SECOND
+    // note. `create-note` answers with the id; the seat adopts it.
+    seedNotes([]);
+    const screen = mountNotes();
+
+    fireEvent.press(screen.getByRole("button", { name: "New note" }));
+    fireEvent.changeText(screen.getByLabelText("Note body"), "A first line");
+    await vi.waitFor(() => expect(vaultWrites.calls).toHaveLength(1), {
+      timeout: 3000,
+    });
+    expect(vaultWrites.calls[0]!.action).toBe("create-note");
+
+    fireEvent.changeText(
+      screen.getByLabelText("Note body"),
+      "A first line, and a second"
+    );
+    await vi.waitFor(() => expect(vaultWrites.calls).toHaveLength(2), {
+      timeout: 3000,
+    });
+    // The SAME note, by the id the vault handed back — never a second one.
+    expect(vaultWrites.calls[1]!.action).toBe("edit-note");
+    expect(vaultWrites.calls[1]!.input["note_id"]).toBe("minted-1");
   });
 
   it("offers a cancel, not a done, before the first keystroke (#1015)", () => {

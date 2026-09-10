@@ -7,10 +7,10 @@
 // about whichever screen happened to draw it. `DriveList.tsx` renders the
 // groups through the kit's `AnchoredMenu` and adds nothing.
 //
-// Trash carries NO destroy verb, here or anywhere: a trashed row offers
-// Restore and nothing else — destruction happens only on the schedule its
-// purge date announces (§14, and `TRASH_FALLBACK`'s one sentence), and no
-// Share — a grant the purge would break.
+// A trashed ROW carries no destroy verb: it offers Restore and nothing else,
+// and no Share — a grant the purge would break. Deleting forever is a
+// question about the whole shelf, not about one row, so it lives on the
+// shelf's own control (`DocsTrash.tsx`, #1015 D1) behind its own confirm.
 
 import { MENU_ICON_NAMES } from "@centraid/blueprints/apps/docs/icons";
 import type { Folder } from "@centraid/blueprints/apps/docs/types";

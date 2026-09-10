@@ -8,6 +8,7 @@ import {
 } from "@centraid/design/elements";
 
 import { pruneSelection } from "../_shared/selection-engine.ts";
+import { EMPTY_TRASH_COPY } from "./drive-copy.ts";
 import { applyFilters } from "./filters.ts";
 import { typeMeta } from "./format.ts";
 import { createMetadata } from "./metadata.ts";
@@ -262,6 +263,20 @@ export function createLogic({
     await refresh();
   }
 
+  /**
+   * The WHOLE trash, not a selection — a different question, with its own
+   * confirm in front of it (EmptyTrash.tsx). One command: the vault collapses
+   * every trashed document's grace window and its own sweep destroys them,
+   * so nothing here loops over rows or invents a second destruction path.
+   */
+  async function emptyTrash() {
+    const count = trashedFiles().length;
+    const outcome = await act("empty-trash", {});
+    if (!narrate(outcome)) return;
+    statusLine(EMPTY_TRASH_COPY.done(count));
+    await refresh();
+  }
+
   async function restoreDoc(doc: DriveDoc) {
     const outcome = await act("restore", { document_id: doc.document_id });
     if (narrate(outcome)) {
@@ -484,6 +499,7 @@ export function createLogic({
     openDocMenu,
     trashDoc,
     restoreDoc,
+    emptyTrash,
     toggleStar,
     moveDocs,
     startRenameDoc,

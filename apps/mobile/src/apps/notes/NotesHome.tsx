@@ -79,6 +79,7 @@ import {
 } from "../../kit/replica/write-outcome";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
+import type { NativeWriteResult } from "../../lib/replica/native-session-types";
 import type { NotesScreenProps as NotesRouteProps } from "../../navigation";
 import NoteEditor from "./NoteEditor";
 import {
@@ -171,6 +172,12 @@ function NoteRow({
  *  puts the phone down mid-thought has already been saved. */
 const AUTOSAVE_MS = 900;
 
+/** The id `create-note` handed back, when the write actually reached the vault. */
+function noteIdOf(result: NativeWriteResult): string | undefined {
+  const output = (result as { output?: { note_id?: unknown } }).output;
+  return typeof output?.note_id === "string" ? output.note_id : undefined;
+}
+
 export default function NotesHome({
   navigation,
 }: NotesRouteProps): React.JSX.Element {
@@ -245,10 +252,30 @@ export default function NotesHome({
     term,
   ]);
 
+  /**
+   * THE NOTE THIS SESSION JUST MINTED (#1015, D3). A new note used to be
+   * written once, on close, because the seat had no id to save AGAINST: a
+   * second autosave tick would have created a second note. `create-note`
+   * hands the id back in its outcome, so the first save adopts it and every
+   * tick after it is an edit — a new note autosaves exactly like an old one.
+   * The saved text rides along, so an unchanged draft writes nothing while
+   * the replica is still catching up with the row.
+   */
+  const [created, setCreated] = useState<
+    { id: string; title: string; body: string } | undefined
+  >(undefined);
+  /** A save is in flight — never two creates for one draft. */
+  const saving = useRef(false);
+  /** A create landed without an id (queued offline): no autosave can name
+   *  that note, so the draft goes back to being written once, on close. */
+  const unnamed = useRef(false);
+
   const closeEditor = (): void => {
     setEditing(false);
     setCreating(false);
     setSelectedId(undefined);
+    setCreated(undefined);
+    unnamed.current = false;
     setTitle("");
     setBody("");
   };
@@ -263,7 +290,9 @@ export default function NotesHome({
   const dirty = editing
     ? selected
       ? title !== selected.title || body !== selected.body
-      : Boolean(title.trim() || body.trim())
+      : created
+        ? title !== created.title || body !== created.body
+        : Boolean(title.trim() || body.trim())
     : false;
 
   const openNote = (note: NativeNote): void => {
@@ -278,18 +307,18 @@ export default function NotesHome({
     action: string,
     input: Record<string, ReplicaValue>,
     note = selected
-  ): Promise<boolean> => {
-    if (!session) return false;
+  ): Promise<NativeWriteResult | undefined> => {
+    if (!session) return undefined;
     if (note && !note.canWrite) {
       postStatus("Read-only note — open the writable copy in its own vault.");
-      return false;
+      return undefined;
     }
     try {
       const request = { action, input: input as ReplicaValue };
       // One open vault, so one write target (#996 wave 3). The read-only
       // refusal above is still the gate — it is the row's own answer.
       const result = await session.write("notes", request);
-      return surfaceWriteOutcome(result, {
+      const ok = surfaceWriteOutcome(result, {
         onParked: () => {
           closeEditor();
           navigation.navigate("Settings", { screen: "Approvals" });
@@ -297,9 +326,10 @@ export default function NotesHome({
         queuedMessage: "This Notes change will sync automatically.",
         failureTitle: "Not applied",
       });
+      return ok ? result : undefined;
     } catch (error) {
       surfaceWriteFailure(error, "Action failed");
-      return false;
+      return undefined;
     }
   };
 
@@ -309,6 +339,7 @@ export default function NotesHome({
    * out, so the member never sees the derivation.
    */
   const save = async ({ closeAfter = false } = {}): Promise<void> => {
+    if (saving.current) return;
     const typed = title.trim();
     const text = body.trim();
     if (!typed && !text) {
@@ -316,30 +347,48 @@ export default function NotesHome({
       return;
     }
     const name = typed || text.split("\n")[0]!.slice(0, 80);
-    const changed = selected
-      ? await write("edit-note", {
-          note_id: selected.rawId,
-          title: name,
-          body_text: text || name,
-          format: "markdown",
-        })
-      : await write(
-          "create-note",
-          {
+    const body_text = text || name;
+    const existingId = selected?.rawId ?? created?.id;
+    saving.current = true;
+    let changed: NativeWriteResult | undefined;
+    try {
+      changed = existingId
+        ? await write("edit-note", {
+            note_id: existingId,
             title: name,
-            body_text: text || name,
+            body_text,
             format: "markdown",
-            ...(notebookId ? { notebook_id: notebookId } : {}),
-          },
-          undefined
-        );
-    if (changed && closeAfter) closeEditor();
+          })
+        : await write(
+            "create-note",
+            {
+              title: name,
+              body_text,
+              format: "markdown",
+              ...(notebookId ? { notebook_id: notebookId } : {}),
+            },
+            undefined
+          );
+    } finally {
+      saving.current = false;
+    }
+    if (!changed) return;
+    // A queued write has no output yet; that note keeps the old shape and is
+    // written once more on close rather than adopted mid-flight.
+    const mintedId = noteIdOf(changed);
+    const savedId = existingId ?? mintedId;
+    if (savedId) {
+      setCreated({ id: savedId, title: name, body: body_text });
+      if (mintedId && !selectedId) setSelectedId(mintedId);
+    } else unnamed.current = true;
+    if (closeAfter) closeEditor();
   };
 
-  // The debounce runs for a note that EXISTS: a second tick on a note still
-  // being created would create a second note, because `create-note` does not
-  // hand back the id this seat would need to adopt the first one. A new note
-  // is written once, on close — `close = done` (D3).
+  // The debounce saves a NEW note too (#1015): the first tick creates it, the
+  // outcome hands the id back, and every tick after it is an edit of that row.
+  // `saving` is what makes that safe — two ticks can never both create. A
+  // create that landed without an id (queued offline) sets `unnamed` and the
+  // draft goes back to being written once, on close.
   // `save` is rebuilt every render over the current draft, so the timer holds
   // the latest through a ref rather than through a dependency that would reset
   // it on every keystroke's re-render and therefore never fire.
@@ -348,7 +397,7 @@ export default function NotesHome({
     saveRef.current = save;
   });
   useEffect(() => {
-    if (!editing || !dirty || !selectedId) return undefined;
+    if (!editing || !dirty || unnamed.current) return undefined;
     const timer = setTimeout(() => void saveRef.current(), AUTOSAVE_MS);
     return () => clearTimeout(timer);
   }, [editing, dirty, selectedId, title, body]);

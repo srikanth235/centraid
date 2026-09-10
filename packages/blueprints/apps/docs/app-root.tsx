@@ -360,6 +360,7 @@ export function Root({
     removeTag: handleRemoveTag,
     renameFolder: handleRenameFolder,
     replaceDocument: handleReplaceDocument,
+    emptyTrash: handleEmptyTrash,
     restoreDoc: handleRestoreDoc,
     restoreSelected: handleRestoreSelected,
     starSelected: handleStarSelected,
@@ -1081,6 +1082,8 @@ export function Root({
         onOpenMenu={handleOpenDocMenu}
         onRestore={handleRestoreDoc}
         onShowMore={handleShowMoreDocs}
+        trashCount={trashCount}
+        onEmptyTrash={() => void handleEmptyTrash()}
         sortKey={state.sortKey}
         sortDir={state.sortDir}
         onSortBy={onSortBy}
