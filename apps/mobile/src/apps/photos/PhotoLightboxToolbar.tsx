@@ -19,6 +19,7 @@ import {
   viewerWriteRefusal,
 } from "./viewer-model";
 import type { ViewerActionId } from "./viewer-model";
+import { viewerToolbarStates } from "./viewer-toolbar-states";
 
 interface PhotoLightboxToolbarProps {
   asset: PhotoAsset;
@@ -48,28 +49,18 @@ export function PhotoLightboxToolbar({
     hasVaultAsset: Boolean(asset.assetId && asset.sourceVaultId),
   });
   const writable = refusal === undefined;
-  // Crop/rotate are raster on a still; do not pretend a video has a non-destructive editor.
-  const editable = asset.kind === "photo" || asset.kind === "scan";
-  const enabled: Record<ViewerActionId, boolean> = {
-    // "Copy" is now ONLY "keep this shared photo in my vault" (#996 wave 3).
-    // The cross-vault placement it also used to offer went with the plane that
-    // carried it, so an item with no commons offer has nothing to copy INTO.
-    copy: Boolean(onSaveToMyVault),
-    edit: writable && editable && onEdit !== undefined,
-    favorite: writable,
-    info: true,
-    trash: writable,
-  };
-  const reason: Partial<Record<ViewerActionId, string>> = {
-    copy: onSaveToMyVault ? undefined : "This photograph is already yours",
-    edit: writable
-      ? editable
-        ? undefined
-        : "Crop and rotate work on photographs, not on this kind of media"
-      : refusal,
-    favorite: refusal,
-    trash: refusal,
-  };
+  // The table is DATA (#1015 B10) — see `viewerToolbarStates`. Every disabled
+  // control here renders in `--on-stage-soft` with `accessibilityState.disabled`
+  // and its reason as the hint; the row's shared refusal stays on screen below.
+  const states = viewerToolbarStates({
+    writable: asset.canWrite === true,
+    hasVaultAsset: Boolean(asset.assetId && asset.sourceVaultId),
+    // Crop/rotate are raster on a still; do not pretend a video has a
+    // non-destructive editor.
+    editable: asset.kind === "photo" || asset.kind === "scan",
+    canSaveToMyVault: Boolean(onSaveToMyVault),
+    hasEditor: onEdit !== undefined,
+  });
   const run: Record<ViewerActionId, () => void> = {
     copy: () => onSaveToMyVault?.(),
     edit: () => onEdit?.(),
@@ -103,8 +94,8 @@ export function PhotoLightboxToolbar({
           <ViewerChromePlate colors={colors} key={group.actions.join("-")}>
             {group.actions.map((id) => {
               const action = viewerAction(id);
-              const on = enabled[id];
-              const why = reason[id];
+              const on = states[id].enabled;
+              const why = states[id].reason;
               const selected = id === "favorite" ? asset.favorite : undefined;
               const label =
                 id === "copy" && onSaveToMyVault

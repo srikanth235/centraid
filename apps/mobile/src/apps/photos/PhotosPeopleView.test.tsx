@@ -150,6 +150,13 @@ vi.mock(import("react-native"), async () => {
 });
 
 vi.mock(
+  import("../../kit/components/Icon"),
+  () =>
+    ({
+      default: () => null,
+    }) as never
+);
+vi.mock(
   import("../../kit/theme"),
   () =>
     ({
@@ -256,7 +263,7 @@ vi.mock(import("./PeopleEmptyState"), async () => {
             onClick: props.onPrioritise,
             type: "button",
           },
-          "Prioritise faces"
+          "Prioritize faces"
         ),
         props.prioritise.reason
       ),
@@ -341,7 +348,7 @@ describe("the people roster's empty state (issue 712 C2, ruled 2026-09-09)", () 
 
   const priorityButton = (): HTMLButtonElement | undefined =>
     Array.from(container!.querySelectorAll("button")).find(
-      (button) => button.textContent === "Prioritise faces"
+      (button) => button.textContent === "Prioritize faces"
     );
 
   beforeEach(() => {
@@ -392,7 +399,7 @@ describe("the people roster's empty state (issue 712 C2, ruled 2026-09-09)", () 
     );
     await act(async () => undefined);
     expect(mocks.postStatus).toHaveBeenCalledExactlyOnceWith(
-      "Faces prioritised — this library runs sooner"
+      "Faces prioritized — this library runs sooner"
     );
   });
 

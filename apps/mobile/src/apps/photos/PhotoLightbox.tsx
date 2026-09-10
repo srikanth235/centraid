@@ -392,7 +392,7 @@ export default function PhotoLightbox({
       navigation.navigate("PhotosLibrary");
       return;
     }
-    Alert.alert("Add to Album", photographName, [
+    Alert.alert("Add to album", photographName, [
       ...albums.map((album) => ({
         text: String(album.name ?? "Album"),
         onPress: () => {
@@ -647,7 +647,10 @@ export default function PhotoLightbox({
                   <Icon
                     name="chevron-left"
                     size={20}
-                    color={index <= 0 ? colors.textDisabled : colors.onStage}
+                    // `--on-stage-soft`, like every other disabled control on
+                    // the stage: page-ramp `textDisabled` vanishes here, so the
+                    // circle would read as absent rather than as refused.
+                    color={index <= 0 ? colors.onStageSoft : colors.onStage}
                   />
                 </Pressable>
                 <Pressable
@@ -668,7 +671,7 @@ export default function PhotoLightbox({
                     size={20}
                     color={
                       index >= assets.length - 1
-                        ? colors.textDisabled
+                        ? colors.onStageSoft
                         : colors.onStage
                     }
                   />

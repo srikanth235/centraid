@@ -39,11 +39,12 @@ export const PEOPLE_EMPTY_LINE =
 
 /** A plain action, not a question: pressing it writes a manual
  *  `enrich.request`; not pressing it withholds nothing. */
-export const PRIORITISE_ACTION = "Prioritise faces";
+// American spelling, like `favorite` — the app ships one English (#1015).
+export const PRIORITISE_ACTION = "Prioritize faces";
 
 /** SOONER, never WHETHER: the ambient pass reaches this library regardless. */
 export const ENRICHMENT_PRIORITISED_NOTE =
-  "Faces prioritised — this library runs sooner";
+  "Faces prioritized — this library runs sooner";
 
 /** The request is durable but undelivered; only its delivery waits. */
 export const ENRICHMENT_QUEUED_NOTE =
@@ -82,7 +83,7 @@ export const CLOUD_EGRESS_DISCLOSURE = "a downscaled copy of every photograph";
 export const ENRICHMENT_UNAVAILABLE = {
   /** `off` is the real stop: no face run happens, so none can be moved up. */
   offTier:
-    "Not available: the vault’s enrichment policy is off for photographs, so no face run happens to prioritise.",
+    "Not available: the vault’s enrichment policy is off for photographs, so no face run happens to prioritize.",
   /** `device` permits the device lane only; Faces declares `lane: "gateway"`,
    *  so `decideEnrichmentGate` refuses it on rank. */
   deviceTier:

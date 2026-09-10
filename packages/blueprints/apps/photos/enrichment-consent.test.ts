@@ -114,7 +114,7 @@ describe("the People shelf's empty-state copy", () => {
   });
 
   it("labels the action as an action, not a question", () => {
-    expect(copy.PRIORITISE_ACTION).toBe("Prioritise faces");
+    expect(copy.PRIORITISE_ACTION).toBe("Prioritize faces");
   });
 });
 

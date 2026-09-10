@@ -63,7 +63,7 @@ describe("viewerOverflowMenuGroups — the row set", () => {
   });
 
   // The ORDER is the parity, not just the set. iOS reads Copy · Duplicate ·
-  // Hide · Slideshow, then Add to Album, then the Adjust pair, then Delete
+  // Hide · Slideshow, then Add to album, then the Adjust pair, then Delete
   // last; strike the two rows this vault cannot carry and the remainder must
   // still fall in that sequence, with Download / Send a copy — which iOS puts
   // behind its share chip and this vault has to state separately — sitting
@@ -129,14 +129,14 @@ describe("viewerOverflowMenuGroups — Archive / Unarchive", () => {
 });
 
 describe("viewerOverflowMenuGroups — the read-only grant", () => {
-  test("Add to Album is enabled and plainly labelled when the vault will take the write", () => {
+  test("Add to album is enabled and plainly labelled when the vault will take the write", () => {
     const rows = flatten(viewerOverflowMenuGroups(baseInput()));
     const row = rows.find((candidate) => candidate.key === "add-to-album");
     expect(row?.disabled).toBeFalsy();
-    expect(row?.label).toBe("Add to Album");
+    expect(row?.label).toBe("Add to album");
   });
 
-  test("Add to Album disables with READ_ONLY_VAULT_REASON reaching the row's own label — not a re-typed stub", () => {
+  test("Add to album disables with READ_ONLY_VAULT_REASON reaching the row's own label — not a re-typed stub", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(baseInput({ writable: false }))
     );
@@ -145,7 +145,7 @@ describe("viewerOverflowMenuGroups — the read-only grant", () => {
     expect(row?.label).toContain(READ_ONLY_VAULT_REASON);
   });
 
-  test("Add to Album disables with its own reason when the photograph has no vault row yet", () => {
+  test("Add to album disables with its own reason when the photograph has no vault row yet", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(baseInput({ hasVaultAsset: false }))
     );
@@ -154,7 +154,7 @@ describe("viewerOverflowMenuGroups — the read-only grant", () => {
     expect(row?.label).toContain(NOT_IN_A_VAULT_YET_REASON);
   });
 
-  test("a read-only grant never disables Slideshow, Adjust Location, Download or Send a copy — none of them write", () => {
+  test("a read-only grant never disables Slideshow, Adjust location, Download or Send a copy — none of them write", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(
         baseInput({ hasVaultAsset: false, writable: false })
@@ -225,7 +225,7 @@ describe("viewerOverflowMenuGroups — Make key photo (issue #721 B5)", () => {
     expect(rows.filter((row) => row.key === "make-key-photo")).toHaveLength(1);
   });
 
-  test("sits directly after Add to Album, in the same group", () => {
+  test("sits directly after Add to album, in the same group", () => {
     const groups = viewerOverflowMenuGroups(baseInput({ albums: ONE_ALBUM }));
     const albumGroup = groups.find((group) => group.key === "album")!;
     expect(albumGroup.rows.map((row) => row.key)).toStrictEqual([
@@ -234,7 +234,7 @@ describe("viewerOverflowMenuGroups — Make key photo (issue #721 B5)", () => {
     ]);
   });
 
-  test("disables with READ_ONLY_VAULT_REASON on a read-only grant, same as Add to Album", () => {
+  test("disables with READ_ONLY_VAULT_REASON on a read-only grant, same as Add to album", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(
         baseInput({ albums: ONE_ALBUM, writable: false })
@@ -297,13 +297,13 @@ describe("viewerOverflowMenuGroups — wiring", () => {
     );
   });
 
-  test("Adjust Location opens the info sheet rather than carrying its own place editor", () => {
+  test("Adjust location opens the info sheet rather than carrying its own place editor", () => {
     // The row's presence and its wiring to `onAdjustLocation` (asserted
     // above) is the whole claim: there is no second `onSelect` branch here
     // that edits place data directly, which is what would have to exist for
     // this menu to duplicate `PhotoInfoSheet.tsx`'s editor.
     const rows = flatten(viewerOverflowMenuGroups(baseInput()));
     const row = rows.find((candidate) => candidate.key === "adjust-location");
-    expect(row?.label).toBe("Adjust Location");
+    expect(row?.label).toBe("Adjust location");
   });
 });

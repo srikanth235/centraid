@@ -90,7 +90,7 @@ export default function PlacesMap({
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
-          accessibilityLabel="Back to Photos"
+          accessibilityLabel="Back to Places"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
           style={styles.headerBtn}

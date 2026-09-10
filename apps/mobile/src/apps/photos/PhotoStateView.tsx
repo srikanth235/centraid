@@ -39,6 +39,7 @@ import {
   emptyTrashOrder,
   emptyTrashSummary,
 } from "./photos-trash";
+import PhotosBackControl from "./PhotosBackControl";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
@@ -262,6 +263,13 @@ export default function PhotoStateView({
     // People is off the band (#712) — `more` is current for every mode, including person (`PlacesView`/`FaceReview`).
     <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
+        {/* The band says More for every mode here, which none of them is
+            reached from; the chevron is the honest exit (#1015 S2). */}
+        <PhotosBackControl
+          onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
+          to="Photos"
+        />
         <View style={styles.copy}>
           <Text
             style={[styles.title, { color: colors.text }]}
