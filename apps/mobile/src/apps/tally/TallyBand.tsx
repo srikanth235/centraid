@@ -37,7 +37,9 @@ const PLATE_GAP = 8;
 
 export interface TallyBandProps {
   owner: BandOwner;
-  current: TallyBandDestinationKey;
+  /** Which of the five is lit. Derived from the route's shelf
+   *  (`tally-places.ts`), never written down by a screen (#1015, audit B7). */
+  destination: TallyBandDestinationKey;
   onSelect: (key: TallyBandDestinationKey) => void;
   /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
@@ -45,7 +47,7 @@ export interface TallyBandProps {
 
 export default function TallyBand({
   owner,
-  current,
+  destination: lit,
   onSelect,
   onHome,
 }: TallyBandProps): React.JSX.Element {
@@ -74,7 +76,7 @@ export default function TallyBand({
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
-          const active = destination.key === current;
+          const active = destination.key === lit;
           return (
             <Pressable
               key={destination.key}

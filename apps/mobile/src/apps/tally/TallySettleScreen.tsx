@@ -115,12 +115,7 @@ export default function TallySettleScreen({
   };
 
   return (
-    <TallyScreen
-      current="balances"
-      shelf={SETTLE}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={SETTLE} hideBand onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.title}>{SETTLE_HEAD}</Text>
         <Text style={styles.lede}>{SETTLE_LEDE}</Text>

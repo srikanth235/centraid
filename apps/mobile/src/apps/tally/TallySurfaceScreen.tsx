@@ -56,12 +56,7 @@ export default function TallySurfaceScreen({
   const data = vault.exported;
 
   return (
-    <TallyScreen
-      current="more"
-      shelf={EXPORT}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={EXPORT} hideBand onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={[styles.title, { color: colors.text }]}>
           {EXPORT_HEAD}

@@ -1,7 +1,7 @@
 // One filtered shelf (Favorites / Archive / Trash / person): the same `PhotoTimeline` under a filter. Reached from More, so `more` is current — the band is the way out, not a back chevron.
 
 import React, { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import {
   PHOTOS_ARCHIVE_EMPTY,
@@ -9,6 +9,7 @@ import {
 } from "@centraid/blueprints/apps/photos/shared-copy";
 import type { PageQuery } from "@centraid/core/page";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
@@ -39,7 +40,6 @@ import {
   emptyTrashOrder,
   emptyTrashSummary,
 } from "./photos-trash";
-import PhotosBackControl from "./PhotosBackControl";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
@@ -78,6 +78,7 @@ export default function PhotoStateView({
   const { pending } = usePendingChanges(session);
   const pendingLine = photosPendingLine(pending);
   const [selection, setSelection] = useState(new Set<string>());
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const params = route.params;
   const mode = params.mode;
   // Person mode: confirmed faces, not an asset flag — same join FaceReview/PhotosCollectionsView use; one call site, kept local.
@@ -172,37 +173,33 @@ export default function PhotoStateView({
   const runEmptyTrash = (): void => {
     const count = purgeTargets.length;
     if (count === 0) return;
-    Alert.alert(
-      EMPTY_TRASH_CONFIRM.title(count),
-      EMPTY_TRASH_CONFIRM.body(count),
-      [
-        { text: EMPTY_TRASH_CONFIRM.cancel, style: "cancel" },
-        {
-          text: EMPTY_TRASH_CONFIRM.confirm(count),
-          style: "destructive",
-          onPress: () => {
-            let purged = 0;
-            const tally = (result: NativeWriteResult): void => {
-              if (result.status === "executed") purged += 1;
-              surfaceWriteOutcome(result);
-            };
-            void batchPurge(
-              session!,
-              emptyTrashOrder(purgeTargets, sourceOf),
-              tally
-            )
-              .then(() => {
-                setSelection(new Set());
-                postStatus(emptyTrashSummary({ purged, kept: count - purged }));
-                return refreshNow();
-              })
-              .catch((error: unknown) =>
-                surfaceWriteFailure(error, "Trash not emptied")
-              );
-          },
-        },
-      ]
-    );
+    confirmDestructive({
+      body: EMPTY_TRASH_CONFIRM.body(count),
+      count,
+      noun: "photograph",
+      onConfirm: () => {
+        let purged = 0;
+        const tally = (result: NativeWriteResult): void => {
+          if (result.status === "executed") purged += 1;
+          surfaceWriteOutcome(result);
+        };
+        void batchPurge(
+          session!,
+          emptyTrashOrder(purgeTargets, sourceOf),
+          tally
+        )
+          .then(() => {
+            setSelection(new Set());
+            postStatus(emptyTrashSummary({ purged, kept: count - purged }));
+            return refreshNow();
+          })
+          .catch((error: unknown) =>
+            surfaceWriteFailure(error, "Trash not emptied")
+          );
+      },
+      // "Empty trash", the copy table's own word for the count.
+      verb: EMPTY_TRASH_CONFIRM.confirm(count),
+    });
   };
   // A non-writable shelf still SHOWS every target (§6); the sentence below the bar is why nothing will fire.
   const writeBlockedReason = session
@@ -223,6 +220,8 @@ export default function PhotoStateView({
   };
   const blocked = { unavailableReason: writeBlockedReason ?? "" };
   const selectionBar = {
+    // The room's one way out of the mode (D5); the word is always "Cancel".
+    onCancel: () => setSelection(new Set()),
     count: selection.size,
     // Trash swaps the fifth target for Restore (§6).
     shelf: mode === "trash" ? ("trash" as const) : ("normal" as const),
@@ -261,25 +260,17 @@ export default function PhotoStateView({
   };
   return (
     // People is off the band (#712) — `more` is current for every mode, including person (`PlacesView`/`FaceReview`).
-    <PhotosScreen current="more" selection={selectionBar}>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="state"
+      selection={selectionBar}
+      title={title}
+    >
       <View style={styles.header}>
-        {/* The band says More for every mode here, which none of them is
-            reached from; the chevron is the honest exit (#1015 S2). */}
-        <PhotosBackControl
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-          to="Photos"
-        />
         <View style={styles.copy}>
           <Text
-            style={[styles.title, { color: colors.text }]}
             numberOfLines={1}
-          >
-            {title}
-          </Text>
-          <Text
             style={[styles.meta, { color: colors.textSoft }]}
-            numberOfLines={1}
           >
             {meta}
           </Text>
@@ -389,6 +380,7 @@ export default function PhotoStateView({
         onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
+      {confirmSheet}
     </PhotosScreen>
   );
 }

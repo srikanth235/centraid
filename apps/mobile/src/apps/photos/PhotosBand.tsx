@@ -31,14 +31,25 @@ const ACTIVE_RULE_INSET = 14;
 
 export interface PhotosBandProps {
   owner: BandOwner;
-  current: BandDestinationKey;
+  /** Which of the four is lit. Derived from the route
+   *  (`photos-places.ts`), never written down by a screen (#1015, audit B7). */
+  destination: BandDestinationKey;
+  /**
+   * The state the ROOM puts the band in while a selection runs (D5): dim
+   * through leaf tokens — never a container opacity — and deaf, so a tap aimed
+   * at a foot verb cannot navigate away (audit B8).
+   */
+  dimmed?: boolean;
+  interactive?: boolean;
   onSelect: (key: BandDestinationKey) => void;
   onHome: () => void;
 }
 
 export default function PhotosBand({
   owner,
-  current,
+  destination: lit,
+  dimmed = false,
+  interactive = true,
   onSelect,
   onHome,
 }: PhotosBandProps): React.JSX.Element | null {
@@ -53,7 +64,7 @@ export default function PhotosBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <BandCapsuleControl onPress={onHome} />
+        <BandCapsuleControl disabled={!interactive} onPress={onHome} />
       </View>
     );
   }
@@ -66,12 +77,16 @@ export default function PhotosBand({
       testID={TEST_IDS.photos.band}
     >
       {/* A FRAME control on the frame's page colour, never Photos' mat. */}
-      <BandCapsuleControl capsule={capsule} onPress={onHome} />
+      <BandCapsuleControl
+        capsule={capsule}
+        disabled={!interactive}
+        onPress={onHome}
+      />
 
       {/* ONE group; the gap between the plates is the seam. */}
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
-          const active = destination.key === current;
+          const active = destination.key === lit;
           return (
             <Pressable
               key={destination.key}
@@ -81,25 +96,41 @@ export default function PhotosBand({
               // handoff may re-word, and a flow that tapped it would then tap
               // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.photos}${destination.key}`}
-              accessibilityState={{ selected: active }}
-              onPress={() => onSelect(destination.key)}
+              accessibilityState={{ disabled: !interactive, selected: active }}
+              disabled={!interactive}
+              onPress={() => {
+                if (!interactive) return;
+                onSelect(destination.key);
+              }}
               style={styles.tab}
             >
               {/* A mark on the leaf, never a container opacity. */}
               <View
                 style={[
                   styles.activeRule,
-                  active ? { backgroundColor: colors.text } : styles.ruleHidden,
+                  active && !dimmed
+                    ? { backgroundColor: colors.text }
+                    : styles.ruleHidden,
                 ]}
               />
               <Icon
                 name={destination.icon}
                 size={20}
-                color={active ? colors.text : colors.textSoft}
+                color={
+                  dimmed
+                    ? colors.textDisabled
+                    : active
+                      ? colors.text
+                      : colors.textSoft
+                }
               />
               <Text
                 numberOfLines={1}
-                style={[styles.label, active ? styles.labelActive : undefined]}
+                style={[
+                  styles.label,
+                  active ? styles.labelActive : undefined,
+                  dimmed ? { color: colors.textDisabled } : undefined,
+                ]}
               >
                 {destination.label}
               </Text>

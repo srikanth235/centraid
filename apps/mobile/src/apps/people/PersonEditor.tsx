@@ -19,12 +19,10 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { agoLabel } from "@centraid/blueprints/apps/people/format";
 import {
-  APP_TITLE,
   CADENCE_CHIPS,
   CADENCE_NEVER,
   FIELDS,
   LABELS,
-  ROUTE_TITLES,
   VERBS,
 } from "@centraid/blueprints/apps/people/people-copy";
 import { IDENTITY_HUE_KEYS } from "@centraid/design";
@@ -34,7 +32,6 @@ import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import {
   borders,
   pageMargin,
@@ -45,8 +42,9 @@ import {
 } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
 import { storedHueValue } from "./people-model";
+import { personPlace } from "./people-places";
 import { usePeopleWrites } from "./people-writes";
-import { BackRow, Commits, FieldRow } from "./PeopleKit";
+import { Commits, FieldRow } from "./PeopleKit";
 import PeopleScreen from "./PeopleScreen";
 import { usePeople } from "./usePeople";
 
@@ -123,107 +121,105 @@ export default function PersonEditor({
   };
 
   return (
-    <PeopleScreen current="people">
-      <TopSafeArea edges={[]} style={styles.page}>
-        <View style={styles.body}>
-          <BackRow
-            destination={existing?.name ?? APP_TITLE}
-            onPress={() => navigation.goBack()}
-            title={existing ? ROUTE_TITLES.editPerson : ROUTE_TITLES.newPerson}
-          />
-          {seeded ? (
-            <ScrollView contentContainerStyle={styles.scroll}>
-              <FieldRow
-                label={FIELDS.name}
-                value={seeded.name}
-                onChange={(name) => patch({ name })}
-              />
-              <FieldRow
-                label={FIELDS.role}
-                value={seeded.role}
-                placeholder={FIELDS.rolePlaceholder}
-                onChange={(role) => patch({ role })}
-              />
+    <PeopleScreen
+      onBack={() => navigation.goBack()}
+      parent={
+        existing ? personPlace(existing.name, existing.party_id) : undefined
+      }
+      route={existing ? "editPerson" : "newPerson"}
+    >
+      <View style={styles.body}>
+        {seeded ? (
+          <ScrollView contentContainerStyle={styles.scroll}>
+            <FieldRow
+              label={FIELDS.name}
+              value={seeded.name}
+              onChange={(name) => patch({ name })}
+            />
+            <FieldRow
+              label={FIELDS.role}
+              value={seeded.role}
+              placeholder={FIELDS.rolePlaceholder}
+              onChange={(role) => patch({ role })}
+            />
 
-              <Text
-                style={[
-                  t("annotLabel"),
-                  styles.fieldLabel,
-                  { color: colors.textSoft },
-                ]}
-              >
-                {FIELDS.colour}
-              </Text>
-              <View
-                accessibilityLabel={FIELDS.colour}
-                accessibilityRole="radiogroup"
-                style={styles.swatches}
-              >
-                {IDENTITY_HUE_KEYS.map((key: ColorKey) => {
-                  const value = storedHueValue(key);
-                  const on = seeded.avatar_color === value;
-                  const fill =
-                    colors[
-                      `c${key.slice(0, 1).toUpperCase()}${key.slice(1)}`
-                    ] ?? colors.accent;
-                  return (
-                    <Pressable
-                      key={key}
-                      accessibilityRole="radio"
-                      accessibilityLabel={LABELS.colour(key)}
-                      accessibilityState={{ selected: on }}
-                      onPress={() => patch({ avatar_color: value })}
-                      style={{
-                        backgroundColor: fill,
-                        borderColor: on ? colors.text : "transparent",
-                        borderRadius: radii.pill,
-                        borderWidth: 2 * borders.hairline,
-                        height: 40,
-                        width: 40,
-                      }}
-                    />
-                  );
-                })}
-              </View>
+            <Text
+              style={[
+                t("annotLabel"),
+                styles.fieldLabel,
+                { color: colors.textSoft },
+              ]}
+            >
+              {FIELDS.colour}
+            </Text>
+            <View
+              accessibilityLabel={FIELDS.colour}
+              accessibilityRole="radiogroup"
+              style={styles.swatches}
+            >
+              {IDENTITY_HUE_KEYS.map((key: ColorKey) => {
+                const value = storedHueValue(key);
+                const on = seeded.avatar_color === value;
+                const fill =
+                  colors[`c${key.slice(0, 1).toUpperCase()}${key.slice(1)}`] ??
+                  colors.accent;
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="radio"
+                    accessibilityLabel={LABELS.colour(key)}
+                    accessibilityState={{ selected: on }}
+                    onPress={() => patch({ avatar_color: value })}
+                    style={{
+                      backgroundColor: fill,
+                      borderColor: on ? colors.text : "transparent",
+                      borderRadius: radii.pill,
+                      borderWidth: 2 * borders.hairline,
+                      height: 40,
+                      width: 40,
+                    }}
+                  />
+                );
+              })}
+            </View>
 
-              <Text
-                style={[
-                  t("annotLabel"),
-                  styles.fieldLabel,
-                  { color: colors.textSoft },
-                ]}
-              >
-                {FIELDS.cadence}
-              </Text>
-              <ChipsBlock
-                accessibilityLabel={FIELDS.cadence}
-                chips={CADENCE_OPTIONS.map((option) => ({
-                  id: option.id,
-                  label: option.label,
-                  on: option.id === String(seeded.cadence_days),
-                  onPress: () => patch({ cadence_days: Number(option.id) }),
-                }))}
+            <Text
+              style={[
+                t("annotLabel"),
+                styles.fieldLabel,
+                { color: colors.textSoft },
+              ]}
+            >
+              {FIELDS.cadence}
+            </Text>
+            <ChipsBlock
+              accessibilityLabel={FIELDS.cadence}
+              chips={CADENCE_OPTIONS.map((option) => ({
+                id: option.id,
+                label: option.label,
+                on: option.id === String(seeded.cadence_days),
+                onPress: () => patch({ cadence_days: Number(option.id) }),
+              }))}
+            />
+
+            <Commits>
+              <Button
+                label={VERBS.save}
+                variant="primary"
+                disabled={!seeded.name.trim()}
+                onPress={() => void save()}
               />
-
-              <Commits>
-                <Button
-                  label={VERBS.save}
-                  variant="primary"
-                  disabled={!seeded.name.trim()}
-                  onPress={() => void save()}
-                />
-                <Button
-                  label={VERBS.cancel}
-                  variant="quiet"
-                  onPress={() => navigation.goBack()}
-                />
-              </Commits>
-            </ScrollView>
-          ) : (
-            <SkeletonRows rows={5} accessibilityLabel="Reading this person" />
-          )}
-        </View>
-      </TopSafeArea>
+              <Button
+                label={VERBS.cancel}
+                variant="quiet"
+                onPress={() => navigation.goBack()}
+              />
+            </Commits>
+          </ScrollView>
+        ) : (
+          <SkeletonRows rows={5} accessibilityLabel="Reading this person" />
+        )}
+      </View>
     </PeopleScreen>
   );
 }
@@ -231,7 +227,6 @@ export default function PersonEditor({
 const styles = StyleSheet.create({
   body: { flex: 1, paddingHorizontal: pageMargin },
   fieldLabel: { paddingBottom: spacing[1], paddingTop: spacing[3] },
-  page: { flex: 1 },
   scroll: { paddingBottom: spacing[6] },
   swatches: {
     flexDirection: "row",

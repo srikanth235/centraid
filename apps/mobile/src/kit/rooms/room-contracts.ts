@@ -65,6 +65,12 @@ export interface RoomSelection {
   actions: readonly RoomSelectionAction[];
   /** The noun for the spoken count, e.g. `photos` in "3 photos selected". */
   noun?: string;
+  /**
+   * One line above the row saying why some verb in it is unavailable — a
+   * read-only vault, say. Never the ONLY place that reason lives: the
+   * unavailable control carries it as its own hint too (§6).
+   */
+  note?: string;
 }
 
 export interface RoomSelectionAction extends RoomAction {

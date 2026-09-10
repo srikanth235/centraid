@@ -382,7 +382,6 @@ export default function TallyGroupScreen({
 
   return (
     <TallyScreen
-      current="groups"
       shelf={GROUP}
       shared={shared}
       onBack={() => navigation.goBack()}

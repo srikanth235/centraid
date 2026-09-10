@@ -40,6 +40,19 @@ export interface AppPlaceProps {
   onBack: () => void;
   /** At most one, per DESIGN.md's one-primary rule. */
   action?: RoomAction;
+  /** The quiet verb beside it, as `PushedPage` already has. People's roster
+   *  reaches Trash from here and from nowhere else; a room with only one slot
+   *  would have made Trash unreachable rather than made the bar quieter. */
+  secondary?: RoomAction;
+  /**
+   * The frame's own lockup (`VaultBar`) above the app's header: which vault,
+   * which gateway, and the product's two global verbs. It belongs to the
+   * frame rather than to the room, so it arrives as a node — but it must sit
+   * INSIDE the room's safe area, or the app draws its own inset and the two
+   * disagree by the status bar's height (Tally, Locker, People, Photos all
+   * had their own `paddingTop: insets.top` before #1015 Wave 2).
+   */
+  lockup?: React.ReactNode;
   search?: SearchFieldProps;
   selection?: RoomSelection;
   /** The app's own band, told what state the room puts it in. */
@@ -54,6 +67,8 @@ export default function AppPlace({
   app,
   onBack,
   action,
+  secondary,
+  lockup,
   search,
   selection,
   band,
@@ -68,6 +83,7 @@ export default function AppPlace({
   const selecting = !bandState.interactive;
   return (
     <TopSafeArea style={[styles.room, ink]}>
+      {lockup}
       {selecting && selection ? (
         <SelectionHeader selection={selection} />
       ) : (
@@ -81,6 +97,14 @@ export default function AppPlace({
               title={app.title}
             />
           </View>
+          {secondary ? (
+            <Button
+              disabled={secondary.disabled}
+              label={secondary.label}
+              onPress={() => secondary.onPress()}
+              variant="quiet"
+            />
+          ) : null}
           {action ? (
             <Button
               disabled={action.disabled}

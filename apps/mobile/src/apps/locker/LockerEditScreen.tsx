@@ -149,7 +149,6 @@ export default function LockerEditScreen({
 
   return (
     <LockerScreen
-      current="items"
       hideBand
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
       route="edit"

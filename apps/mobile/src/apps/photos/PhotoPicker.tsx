@@ -108,7 +108,11 @@ export default function PhotoPicker({
 
   return (
     // No `selection` to the shell — this picked set is its own (proto:3963).
-    <PhotosScreen current="collections">
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="picker"
+      title={`Add to “${albumTitle}”`}
+    >
       <View style={styles.header}>
         <Tappable
           accessibilityLabel="Cancel"

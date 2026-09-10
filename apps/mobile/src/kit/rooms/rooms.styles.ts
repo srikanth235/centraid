@@ -61,4 +61,10 @@ export const styles = StyleSheet.create({
   sheetBody: { paddingHorizontal: pageMargin, paddingTop: spacing[2] },
   sheetTitle: { ...t("title"), paddingHorizontal: pageMargin },
   scrim: { flex: 1 },
+  selectionNote: {
+    ...t("mono"),
+    paddingHorizontal: pageMargin,
+    paddingTop: spacing[2],
+    textAlign: "center",
+  },
 });

@@ -42,11 +42,7 @@ export default function TallyTrashScreen({
   const trash = vault.dashboard.trash;
 
   return (
-    <TallyScreen
-      current="more"
-      shelf={TRASH}
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={TRASH} onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Section
           label={SECTIONS.trash}

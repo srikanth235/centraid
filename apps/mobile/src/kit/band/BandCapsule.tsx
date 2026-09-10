@@ -13,23 +13,32 @@ import type { BandCapsule } from "./band-capsule";
 export interface BandCapsuleProps {
   onPress: () => void;
   capsule?: BandCapsule;
+  /** Deaf and dim while a selection runs, with the rest of the band (#1015,
+   *  D5): the glyph takes `textDisabled`, never a container opacity. */
+  disabled?: boolean;
 }
 
 export default function BandCapsuleControl({
   onPress,
   capsule = BAND_CAPSULE,
+  disabled = false,
 }: BandCapsuleProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Tappable
       accessibilityLabel={capsule.label}
+      disabled={disabled}
       // Already 52 square: the kit's default slop would reach into the tabs.
       hitSlop={0}
       onPress={onPress}
       style={[styles.capsule, { width: capsule.size }]}
     >
-      <Icon name={capsule.icon} size={19} color={colors.textSoft} />
+      <Icon
+        color={disabled ? colors.textDisabled : colors.textSoft}
+        name={capsule.icon}
+        size={19}
+      />
     </Tappable>
   );
 }

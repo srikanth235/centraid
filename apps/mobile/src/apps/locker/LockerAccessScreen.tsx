@@ -30,7 +30,6 @@ export default function LockerAccessScreen({
 
   return (
     <LockerScreen
-      current="more"
       hideBand
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
       route="access"

@@ -321,12 +321,7 @@ export default function TallyExpenseScreen({
   })();
 
   return (
-    <TallyScreen
-      current="activity"
-      shelf={EXPENSE}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={EXPENSE} hideBand onBack={() => navigation.goBack()}>
       {body}
       <TallyAskSheet ask={ask} onClose={() => setAsk(null)} />
     </TallyScreen>

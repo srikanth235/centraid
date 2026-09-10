@@ -8,7 +8,6 @@
 
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -20,9 +19,8 @@ import {
   PHOTOS_EMPTY_DUPLICATES,
 } from "@centraid/blueprints/apps/photos/shared-copy";
 
-import Icon from "../../kit/components/Icon";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
-import Tappable from "../../kit/components/Tappable";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
@@ -41,6 +39,7 @@ import {
 } from "./duplicate-clusters";
 import type { DuplicateCluster } from "./duplicate-clusters";
 import { justify } from "./justify";
+import { TRASH_KEEPS_THE_COPY_IN_ITS_ALBUMS } from "./photos-confirm-copy";
 import { usePhotosRung } from "./photos-rung-store";
 import { rungHeight } from "./photos-rungs";
 import {
@@ -68,6 +67,7 @@ export default function DuplicatesShelf({
   const { session, online } = useReplica();
   const timeline = usePhotoTimeline();
   const [selection, setSelection] = useState(new Set<string>());
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const clusters = useMemo(
     () => duplicateClusters(timeline.assets),
     [timeline.assets]
@@ -110,6 +110,8 @@ export default function DuplicatesShelf({
   };
 
   const selectionBar = {
+    // The room's one way out of the mode (D5); the word is always "Cancel".
+    onCancel: () => setSelection(new Set()),
     count: selection.size,
     shelf: "normal" as const,
     copyLabel: share.copyLabel,
@@ -134,56 +136,37 @@ export default function DuplicatesShelf({
       ? { unavailableReason: writeBlockedReason }
       : {
           run: () =>
-            Alert.alert(
-              `Move ${selection.size} to trash?`,
-              "The copy you keep stays in every album it is already in. The device original is never deleted by this action.",
-              [
-                { text: "Cancel" },
-                {
-                  text: "Trash",
-                  style: "destructive" as const,
-                  onPress: runSelection(
-                    () => batchTrash(session!, selected, emit),
-                    "Photos not trashed"
-                  ),
-                },
-              ]
-            ),
+            confirmDestructive({
+              body: TRASH_KEEPS_THE_COPY_IN_ITS_ALBUMS,
+              count: selection.size,
+              noun: "photograph",
+              onConfirm: runSelection(
+                () => batchTrash(session!, selected, emit),
+                "Photos not trashed"
+              ),
+              verb: "Trash",
+            }),
         },
   };
 
   return (
-    <PhotosScreen current="more" selection={selectionBar}>
-      <View style={styles.header}>
-        <Tappable
-          accessibilityLabel={selecting ? "Clear selection" : "Back to Photos"}
-          accessibilityRole="button"
-          onPress={() =>
-            selecting ? setSelection(new Set()) : navigation.goBack()
-          }
-        >
-          <Icon
-            name={selecting ? "x" : "chevron-left"}
-            size={selecting ? 22 : 26}
-            color={colors.text}
-          />
-        </Tappable>
-        <Text style={styles.title} numberOfLines={1}>
-          {selecting ? `${selection.size} selected` : "Duplicates"}
-        </Text>
-        {/* Primary (proto:4800-4803): into the cluster-at-a-time review.
-            Hidden while a selection is live — the foot is then the bar. */}
-        {selecting || clusters.length === 0 ? null : (
-          <Tappable
-            accessibilityLabel="Review duplicates"
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("DuplicateReview")}
-            style={styles.primary}
-          >
-            <Text style={styles.primaryText}>Review duplicates</Text>
-          </Tappable>
-        )}
-      </View>
+    <PhotosScreen
+      // The header swaps IN PLACE under a selection and the verbs go to the
+      // room's one foot row (D5); the review verb is hidden with the rest of
+      // the header while that is up.
+      {...(selecting || clusters.length === 0
+        ? {}
+        : {
+            action: {
+              label: "Review duplicates",
+              onPress: () => navigation.navigate("DuplicateReview"),
+            },
+          })}
+      onBack={() => navigation.goBack()}
+      route="duplicates"
+      selection={selectionBar}
+      title="Duplicates"
+    >
       <ReplicaStatusBar />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={styles.note}>
@@ -213,6 +196,7 @@ export default function DuplicatesShelf({
         onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
+      {confirmSheet}
     </PhotosScreen>
   );
 }
