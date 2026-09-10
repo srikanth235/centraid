@@ -52,7 +52,25 @@ function header(message, name) {
   return hit ? hit.value : null;
 }
 
-let observedProfile;
+/**
+ * Pages one fire may draw from the provider (#1014, B15). The listing loops
+ * here were unbounded `do…while (pageToken)` walks with an all-or-nothing
+ * return, so a large mailbox never converged: every fire started the same walk
+ * and every fire ran out of budget before finishing it. `serve/
+ * automation-event-sources.ts` bounds its provider polls the same way.
+ */
+const MAX_PAGES_PER_RUN = 8;
+
+/**
+ * PER RUN, NEVER PER MODULE (#1014, B14). `observedProfile` used to be a
+ * module-level `let`: the worker reuses a module across fires, connections and
+ * VAULTS, so a run whose `principal()` probe failed — or a second connection
+ * sharing the loaded module — read the PREVIOUS mailbox's `historyId` and set
+ * it as this mailbox's watermark. Every message between the two watermarks was
+ * skipped, silently. `pullCtx` is constructed fresh for each
+ * `principal`/`pull` pair, so it is the correct home for the pair's state.
+ */
+const PROFILE = "__gmailObservedProfile";
 
 export default {
   protocol: "centraid.pull/v1",
@@ -60,56 +78,70 @@ export default {
   async principal({ ctx }) {
     // Capture the next watermark before listing so messages arriving during
     // this pull remain visible to the following run.
-    observedProfile = await api(ctx, "/profile");
-    return observedProfile.emailAddress;
+    const profile = await api(ctx, "/profile");
+    ctx[PROFILE] = profile;
+    return profile.emailAddress;
   },
 
   async pull({ ctx, log, cursor }) {
+    const observedProfile = ctx[PROFILE];
     if (!observedProfile)
       throw new Error("gmail principal probe did not return a profile");
     const historyId = cursor.provider("gmail.historyId");
+    const pageCursor = cursor.provider("gmail.pageToken");
     // 2. Which message ids are new?
     const startHistoryId = historyId.current;
     const ids = [];
     let mode = "incremental";
+    // A page token saved by the previous fire resumes exactly where it
+    // stopped; the mode it belongs to rides with it.
+    let pageToken = pageCursor.current || null;
+    let nextPageToken = null;
+    let gap = null;
     if (startHistoryId) {
-      let pageToken = null;
-      do {
-        const page = await api(
+      for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
+        const listing = await api(
           ctx,
           `/history?startHistoryId=${startHistoryId}&historyTypes=messageAdded&maxResults=100` +
             (pageToken ? `&pageToken=${pageToken}` : "")
         );
-        if (page.notFound) {
-          // The cursor expired upstream — fall back to the bounded window.
+        if (listing.notFound) {
+          // A GAP, NOT A SILENT RESTART (#1014, B15). The cursor expired
+          // upstream, so everything between it and the bounded window below is
+          // unreachable — say so rather than let the window's 30 days look
+          // like the whole truth.
+          gap = `gmail history cursor ${startHistoryId} expired upstream; anything older than the 30-day window was not re-read`;
           mode = "window";
+          pageToken = null;
           break;
         }
-        for (const h of page.history || []) {
+        for (const h of listing.history || []) {
           for (const added of h.messagesAdded || []) {
             if (added.message && added.message.id) ids.push(added.message.id);
           }
         }
-        pageToken = page.nextPageToken || null;
-      } while (pageToken);
+        nextPageToken = listing.nextPageToken || null;
+        if (!nextPageToken) break;
+        pageToken = nextPageToken;
+      }
     } else {
       mode = "window";
     }
     if (mode === "window") {
-      let pageToken = null;
-      do {
-        const page = await api(
+      nextPageToken = null;
+      for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
+        const listing = await api(
           ctx,
           `/messages?q=newer_than:30d&maxResults=100` +
             (pageToken ? `&pageToken=${pageToken}` : "")
         );
-        for (const m of page.messages || []) ids.push(m.id);
-        pageToken = page.nextPageToken || null;
-      } while (pageToken);
+        for (const m of listing.messages || []) ids.push(m.id);
+        nextPageToken = listing.nextPageToken || null;
+        if (!nextPageToken) break;
+        pageToken = nextPageToken;
+      }
     }
-    // A historyId is a mailbox-wide watermark, not a per-page cursor. Drain
-    // every page before advancing it; truncating here would permanently skip
-    // every message beyond the cap.
+    const hasMore = nextPageToken !== null;
     const batchIds = [...new Set(ids)];
 
     // 3+4. Metadata per message → social.message staging rows.
@@ -136,11 +168,26 @@ export default {
       });
     }
 
-    historyId.set(observedProfile.historyId);
-    log.info(`gmail pull: ${rows.length} row(s) returned (${mode})`);
+    // A historyId is a mailbox-wide watermark, not a per-page cursor: it may
+    // only advance once the listing it belongs to is DRAINED. An unfinished
+    // walk keeps its page token instead, so the next fire continues rather
+    // than restarting — and nothing between the two watermarks is skipped.
+    if (hasMore) {
+      pageCursor.set(nextPageToken);
+    } else {
+      pageCursor.clear();
+      historyId.set(observedProfile.historyId);
+    }
+    if (gap) log.warn(gap);
+    log.info(
+      `gmail pull: ${rows.length} row(s) returned (${mode}${hasMore ? ", more pending" : ""})`
+    );
     return {
       rows,
-      summary: `pulled ${rows.length} message(s) (${mode})`,
+      summary:
+        `pulled ${rows.length} message(s) (${mode})` +
+        (hasMore ? "; more pages pending" : "") +
+        (gap ? `; gap: ${gap}` : ""),
     };
   },
 };
