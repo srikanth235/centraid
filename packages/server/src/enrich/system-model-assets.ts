@@ -11,6 +11,7 @@ import type {
   ModelLock,
 } from "@centraid/model-runtime";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import { SYSTEM_AUTOMATION_IDS } from "./system-recognition.js";
 
 /**
@@ -160,7 +161,7 @@ const HEALTH_COMPONENT = "recognition-models";
 
 function defaultSchedule(fn: () => void, delayMs: number): () => void {
   const timer = setTimeout(fn, delayMs);
-  timer.unref?.();
+  unrefTimer(timer);
   return () => clearTimeout(timer);
 }
 
