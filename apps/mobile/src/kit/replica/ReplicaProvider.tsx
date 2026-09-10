@@ -282,7 +282,7 @@ export function ReplicaProvider({
             baseUrl: identity.auth.baseUrl,
             gatewayId: identity.gatewayId,
           },
-          storage: AsyncStorage,
+          resumeFrom: () => session?.watermark(),
           onStreamOutcome: noteGatewayOutcome,
           onScopeUpdated: updateScopeFreshness,
           onScopeRevoked: (vaultId) => {
