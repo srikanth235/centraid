@@ -67,6 +67,8 @@ const PRIVATE_TABLES_BY_KIND: Readonly<
     blob_replica: "which objects THIS host has proven are also remote",
     conversation_harness_sessions: "a harness process's session handle",
     enrich_request: "the enrichment queue — work, not data",
+    enrich_target_failure:
+      "which targets this host could not derive, and how often",
     harness_health: "a harness process's liveness on this host",
     outbox_item: "the gateway's own delivery queue",
     replica_intent_outcome: "device-scoped outcome of one submitted intent",

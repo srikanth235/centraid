@@ -45,7 +45,7 @@ import {
   MEDIA_DDL,
 } from "./domains-social-knowledge-media.js";
 import { TALLY_DDL, TALLY_LINE_ITEM_DDL } from "./domains-tally.js";
-import { ENRICH_DDL } from "./enrich.js";
+import { ENRICH_DDL, ENRICH_TARGET_FAILURE_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import {
   CORE_ENTITY_DDL,
@@ -54,7 +54,7 @@ import {
 } from "./entity.js";
 import { APP_EXT_DDL } from "./ext.js";
 import { FTS_DDL, assertFtsSpecsRegistered } from "./fts.js";
-import { LEDGER_DDL } from "./ledger.js";
+import { AUTOMATION_TRIGGER_DEAD_LETTER_DDL, LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { SHARE_PARTY_BINDING_DDL } from "./party-vault-binding.js";
@@ -234,6 +234,15 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // not in `REPLICA_DDL` / `ACCESS_DDL` — `ADD COLUMN` has no `IF NOT
   // EXISTS`, so a column stated in both places would fail the rung.
   REPLICA_FLOOR_SPLIT_DDL,
+  // RUNG NINE (#1014, B1/B2) — the two registers that make a poisoned unit of
+  // work visible instead of silent: the tail of trigger elements a cursor gave
+  // up on, and the per-target enrichment failure counter. Its own rung for the
+  // reason rung five gives: a file that has climbed a rung never climbs it
+  // again, so a shape change made after the freeze is a new rung or it reaches
+  // nothing. The `ADD COLUMN` half is stated only here — `ADD COLUMN` has no
+  // `IF NOT EXISTS`, so a column also stated in `LEDGER_DDL` would fail the
+  // rung on a fresh file.
+  [AUTOMATION_TRIGGER_DEAD_LETTER_DDL, ENRICH_TARGET_FAILURE_DDL].join("\n"),
 ];
 
 /**

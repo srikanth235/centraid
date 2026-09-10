@@ -103,6 +103,11 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
     note: "Open enrichment queued for a purged entity would send an enricher after a dead row. `target_id` is NULLABLE — a search-miss request names a KIND and no row, and a composite FK with a NULL column is satisfied by definition, which is exactly the right reading. The hand sweep scoped itself to open rows; the cascade takes drained ones too, and a drained request for a row that no longer exists is inert history nothing reads.",
   },
   {
+    table: "enrich_target_failure",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    note: "One host's count of what it could not derive for a target (#1014, B2). It follows the target: a purged row's failure count is meaningless, and an id reused by a later row would inherit a `declined` verdict that would keep the new row out of every walk.",
+  },
+  {
     table: "outbox_item",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     note: "The row the queued artifact is ABOUT. Read as an audit value until #916 (E1) — but an item still PENDING when its subject is purged would drain afterwards and publish about a row the member deleted, so the queue is emptied of it instead. `target_id` is NULLABLE (an outbound write with no canonical subject), and a composite key with a NULL column is satisfied by definition.",

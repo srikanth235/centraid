@@ -72,6 +72,12 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
   ["blob_outbox", "this device's queue of objects still to be replicated"],
   ["blob_replica", "which objects this device has proven are also remote"],
   ["blob_staging", "bytes staged for a command that has not committed yet"],
+  // The enrichment pipeline's poison register (#1014, B2). Derived twice
+  // over: it records what THIS host failed to derive, and a restore re-derives
+  // it by simply attempting the work again. `enrich_request` next door is
+  // registered because a seat's request is data the member made; a failure
+  // count is a fact about one gateway's attempts.
+  ["enrich_target_failure", "one host's per-target enrichment failure counter"],
   // The replica protocol's own plane. Its whole job is to describe changes to
   // registered rows; a change log inside the export it feeds would be a loop.
   ["replica_change", "the change log itself — the mechanism, not the data"],

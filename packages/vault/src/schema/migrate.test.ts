@@ -145,13 +145,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("EIGHT rungs: the baseline, #929's three, #928's ask tables, #996's key plane and unlock-credential drop and #1014's floor split, and a fresh vault stops at user_version 8", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(8);
+  test("NINE rungs: the baseline, #929's three, #928's ask tables, #996's key plane and unlock-credential drop, #1014's floor split and its poison registers, and a fresh vault stops at user_version 9", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(9);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(8);
+    expect(version.user_version).toBe(9);
     for (const table of [
       "locker_key",
       "core_entity",
@@ -237,7 +237,7 @@ describe("schema/migrate", () => {
     expect(
       (raw.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(8);
+    ).toBe(9);
     expect(
       raw
         .prepare(
@@ -255,6 +255,32 @@ describe("schema/migrate", () => {
     raw.close();
   });
 
+  test("rung nine lands the poison registers on a file already at user_version 8", () => {
+    // #1014, B1/B2. Both registers exist to make a stuck unit of work
+    // VISIBLE, which is worth nothing on a file that already has history —
+    // exactly the file whose walk is already stalled — so the rung has to
+    // reach it.
+    const raw = new DatabaseSync(":memory:");
+    raw.exec(VAULT_MIGRATIONS[0] ?? "");
+    raw.exec("PRAGMA user_version = 8");
+    migrate(raw, VAULT_MIGRATIONS);
+    expect(
+      (raw.prepare("PRAGMA user_version").get() as { user_version: number })
+        .user_version
+    ).toBe(9);
+    expect(columnNames(raw, "automation_trigger_cursor")).toContain(
+      "dead_letter_json"
+    );
+    expect(
+      raw
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'enrich_target_failure'`
+        )
+        .get()
+    ).toBeTruthy();
+    raw.close();
+  });
+
   test("rung five lands the #928 ask tables on a file already at user_version 4", () => {
     // The #929 golden froze at v2; files that have climbed past rung 1 never
     // re-run SHARE_AUTHORITY_DDL, so the ask/use tables #928 composed into
@@ -269,7 +295,7 @@ describe("schema/migrate", () => {
     const version = raw.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(8);
+    expect(version.user_version).toBe(9);
     for (const table of ["share_authority_request", "share_authority_use"]) {
       expect(
         raw
@@ -552,10 +578,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(8);
+    expect(userVersionOf(vaultFile)).toBe(9);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(8);
+    expect(userVersionOf(vaultFile)).toBe(9);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });
