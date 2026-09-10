@@ -257,6 +257,23 @@ describe(PushedPage, () => {
     expect(labels).toContain("Back to Taxes");
   });
 
+  // The back key is chrome a flow selects BY HANDLE: `docs-breadcrumb` is
+  // asserted gone to prove the band pops rather than pushes, and a negative
+  // asserted on copy passes forever the day the copy is re-worded (#890 W2).
+  it("passes the back key's handle through to the control it draws", () => {
+    const container = render(
+      <PushedPage
+        backTestID="docs-breadcrumb"
+        backTo={parentPlace(stack)}
+        onBack={noop}
+        title="2024 return"
+      />
+    );
+    expect(
+      container.querySelector('[data-testid="docs-breadcrumb"]')
+    ).toBeTruthy();
+  });
+
   it("draws frame chrome above the back row", () => {
     const container = render(
       <PushedPage

@@ -33,6 +33,7 @@ import {
 } from "../../kit/replica/write-outcome";
 import { placeStack, parentPlace } from "../../kit/rooms/place";
 import PushedPage from "../../kit/rooms/PushedPage";
+import { TEST_IDS } from "../../kit/test-ids";
 import { pageMargin, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 import type { AgendaScreenProps } from "../../navigation";
@@ -189,6 +190,7 @@ export default function AgendaEvent({
   return (
     <PushedPage
       backTo={parentPlace(stack)}
+      backTestID={TEST_IDS.agenda.eventBack}
       band={band}
       chrome={
         <>

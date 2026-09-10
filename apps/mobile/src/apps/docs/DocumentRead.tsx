@@ -32,6 +32,7 @@ import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import PushedPage from "../../kit/rooms/PushedPage";
 import GrantSheet from "../../kit/share/GrantSheet";
+import { TEST_IDS } from "../../kit/test-ids";
 import {
   borders,
   pageMargin,
@@ -87,6 +88,7 @@ export default function DocumentRead({
   return (
     <PushedPage
       backTo={room.backTo}
+      backTestID={TEST_IDS.docs.breadcrumb}
       band={room.band}
       chrome={room.chrome}
       onBack={room.handleBack}

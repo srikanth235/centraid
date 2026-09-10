@@ -34,6 +34,14 @@ export interface PushedPageProps {
   title: string;
   /** Computed from the stack (`parentPlace`), never written down. */
   backTo?: PlaceRef;
+  /**
+   * A handle from `kit/test-ids` for the back control (#890 W2). The back key
+   * is chrome an end-to-end flow selects by handle rather than by words —
+   * `docs-breadcrumb` is asserted GONE to prove the band pops rather than
+   * pushes, and a negative asserted on copy passes forever the day the copy
+   * is re-worded. Rooms that swallowed the handle would take that proof away.
+   */
+  backTestID?: string;
   onBack: () => void;
   /** Frame chrome above the back row — see `AppPlaceProps.chrome`. */
   chrome?: React.ReactNode;
@@ -71,9 +79,11 @@ export interface PushedPageProps {
 export function BackKey({
   backTo,
   onBack,
+  testID,
 }: {
   backTo: PlaceRef;
   onBack: () => void;
+  testID?: string;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ color: colors.text }), [colors]);
@@ -84,6 +94,7 @@ export function BackKey({
       hitSlop={12}
       onPress={onBack}
       style={styles.backRow}
+      testID={testID}
     >
       <Icon color={colors.text} name="ArrowLeft" size={20} />
       <Text numberOfLines={1} style={[t("control"), ink]}>
@@ -96,6 +107,7 @@ export function BackKey({
 export default function PushedPage({
   title,
   backTo,
+  backTestID,
   onBack,
   chrome,
   action,
@@ -123,7 +135,9 @@ export default function PushedPage({
         <SelectionHeader selection={selection} />
       ) : (
         <>
-          {backTo ? <BackKey backTo={backTo} onBack={onBack} /> : null}
+          {backTo ? (
+            <BackKey backTo={backTo} onBack={onBack} testID={backTestID} />
+          ) : null}
           <PlaceHeader
             primary={
               action
