@@ -144,7 +144,7 @@ jobs:
 
           _Auto-filed by enrichment-live-weekly.yml. Prefer updating this issue over opening duplicates._
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[enrichment-live] real-model goldens red' \
             --search '[enrichment-live] real-model goldens red' \
             --body-file /tmp/body.md \

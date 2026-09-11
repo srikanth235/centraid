@@ -1448,7 +1448,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/lane-health.mjs \
+          node scripts/ci/lane-health.ts \
             --repo "${{ github.repository }}" \
             --workflow ci.yml \
             --rung 2 \
@@ -1484,7 +1484,7 @@ jobs:
           The per-lane first-attempt pass rates and red streaks are in the
           \`nightly-evidence-lane-health\` artifact on run ${{ github.run_id }}.
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[lanes] a required lane has been red on main for days' \
             --search '[lanes] a required lane has been red on main' \
             --body-file /tmp/chronic-red.md \
@@ -2174,7 +2174,7 @@ jobs:
 
           Auto-filed by #496 E2/E3. Update this issue rather than opening duplicates.
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[nightly] test-health report HTML missing' \
             --search '[nightly] test-health report HTML missing' \
             --body-file /tmp/missing-html.md \
@@ -2352,7 +2352,7 @@ jobs:
               printf '\n| Candidate under test | `%s` |\n' "$CANDIDATE_SHA"
               printf '| Report for this run (immutable) | %s |\n' "$REPORT_URL"
             } >> /tmp/rolling-body.md
-            node scripts/ci/file-tracking-issue.mjs --update \
+            node scripts/ci/file-tracking-issue.ts --update \
               --title "[nightly] lane red — ${lane}" \
               --search "[nightly] lane red — ${lane}" \
               --body-file /tmp/rolling-body.md \

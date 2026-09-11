@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -7,10 +9,10 @@ import {
   pairedVerdict,
   renderVerdicts,
   sampleAt,
-} from "./paired-journeys.mjs";
+} from "./paired-journeys.ts";
 
 /** A deterministic sample series with a known shape. */
-function series(base, jitter, rounds) {
+function series(base: number, jitter: number, rounds: number): number[] {
   return Array.from(
     { length: rounds },
     (_, index) => base + jitter * ((index % 3) - 1)

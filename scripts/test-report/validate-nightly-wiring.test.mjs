@@ -52,18 +52,18 @@ describe("validate-nightly-wiring structure (#545)", () => {
 
   test("a failed issue create is loud, never swallowed (A11)", () => {
     // #557 moved the open-or-update logic out of four near-identical inline
-    // shell blocks into scripts/ci/file-tracking-issue.mjs. The A11 invariant
+    // shell blocks into scripts/ci/file-tracking-issue.ts. The A11 invariant
     // is unchanged — a failed create must not be swallowed — so this asserts it
     // in both halves: the workflow delegates rather than hand-rolling `gh`, and
     // the script it delegates to exits non-zero. (The decision tree itself is
-    // covered by scripts/ci/file-tracking-issue.test.mjs.)
+    // covered by scripts/ci/file-tracking-issue.test.ts.)
     const failBlock = e2e.slice(e2e.indexOf("nightly-lane-issues:"));
-    expect(failBlock).toMatch(/scripts\/ci\/file-tracking-issue\.mjs/u);
+    expect(failBlock).toMatch(/scripts\/ci\/file-tracking-issue\.ts/u);
     expect(failBlock).not.toMatch(/gh issue create/u);
     expect(failBlock).not.toMatch(/gh issue create[^\n]*\|\|\s*true/u);
 
     const filer = readFileSync(
-      path.join(root, "scripts/ci/file-tracking-issue.mjs"),
+      path.join(root, "scripts/ci/file-tracking-issue.ts"),
       "utf8"
     );
     expect(filer).toMatch(

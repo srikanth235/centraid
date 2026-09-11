@@ -22,7 +22,7 @@ const line = (label: string, values: unknown): string =>
   }`;
 /**
  * The report's own ranked attention queue (#839 Wave 5), carried into the body
- * `scripts/ci/file-tracking-issue.mjs` opens or updates. `generate.mjs` puts
+ * `scripts/ci/file-tracking-issue.ts` opens or updates. `generate.mjs` puts
  * only the S1/S2 band in `summary.attentionQueue` — the items whose 24h SLA
  * starts tonight — so the issue names owners rather than restating the whole
  * grey inventory the report page already shows.

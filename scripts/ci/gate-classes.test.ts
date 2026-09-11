@@ -8,6 +8,8 @@
 // without arriving in the weekly lane is enforced NOWHERE, which is the exact
 // failure the #782 comment block in ci.yml exists to prevent. This file is
 // what makes that impossible to do by accident.
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -17,21 +19,64 @@ import { HYGIENE_GATES } from "../hygiene-lane.mjs";
 import { PRODUCT_GATES } from "../lint-product.mjs";
 import { STATIC_TIER } from "./gate-stamp.ts";
 
-const root = path.resolve(import.meta.dirname, "../..");
-const read = (rel) => readFileSync(path.join(root, rel), "utf8");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-const pkg = JSON.parse(read("package.json"));
-const classes = JSON.parse(read("scripts/ci/gate-classes.json"));
+const root = path.resolve(import.meta.dirname, "../..");
+const read = (rel: string): string =>
+  readFileSync(path.join(root, rel), "utf8");
+
+const pkgRaw: unknown = JSON.parse(read("package.json"));
+const classesRaw: unknown = JSON.parse(read("scripts/ci/gate-classes.json"));
 const hygieneWorkflow = read(".github/workflows/hygiene.yml");
 
-const scripts = new Set(Object.keys(pkg.scripts));
-const classified = Object.entries(classes).filter(
+if (!isRecord(pkgRaw) || !isRecord(pkgRaw.scripts)) {
+  throw new Error("package.json scripts missing");
+}
+if (!isRecord(classesRaw)) {
+  throw new Error("gate-classes.json is not an object");
+}
+
+const pkgScripts = pkgRaw.scripts;
+const scripts = new Set(
+  Object.entries(pkgScripts)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .map(([name]) => name)
+);
+const classified = Object.entries(classesRaw).filter(
   ([key]) => !key.startsWith("_")
 );
-const checkPushGates = pkg.scripts["check:push"]
+const checkPushRaw = pkgScripts["check:push"];
+if (typeof checkPushRaw !== "string") {
+  throw new Error("check:push missing");
+}
+const checkPushGates = checkPushRaw
   .split(/\s+/u)
   .slice(2)
   .filter((token) => !token.startsWith("--"));
+
+function asClassRow(value: unknown): {
+  class: unknown;
+  rung: unknown;
+  why: unknown;
+  door: unknown;
+} {
+  if (!isRecord(value)) {
+    return {
+      class: undefined,
+      rung: undefined,
+      why: undefined,
+      door: undefined,
+    };
+  }
+  return {
+    class: value.class,
+    rung: value.rung,
+    why: value.why,
+    door: value.door,
+  };
+}
 
 test("check:push names at most 25 gates", () => {
   assert.ok(
@@ -42,7 +87,11 @@ test("check:push names at most 25 gates", () => {
 });
 
 test("the branch tier is a subset of the full tier, and every member is static", () => {
-  const staticGates = pkg.scripts["check:push:static"]
+  const staticRaw = pkgScripts["check:push:static"];
+  if (typeof staticRaw !== "string") {
+    throw new Error("check:push:static missing");
+  }
+  const staticGates = staticRaw
     .split(/\s+/u)
     .slice(2)
     .filter((token) => !token.startsWith("--"));
@@ -62,24 +111,30 @@ test("the branch tier is a subset of the full tier, and every member is static",
 test("every gate in check:push is classified", () => {
   for (const gate of checkPushGates) {
     assert.ok(
-      classes[gate],
+      classesRaw[gate],
       `${gate} is in check:push but not in gate-classes.json`
     );
   }
 });
 
 test("every classified gate is a real root script with a class, a rung and a reason", () => {
-  for (const [gate, row] of classified) {
+  for (const [gate, rowRaw] of classified) {
+    const row = asClassRow(rowRaw);
     assert.ok(
       scripts.has(gate),
       `gate-classes.json names ${gate}, which package.json does not`
     );
     assert.ok(
-      ["product", "contract", "hygiene"].includes(row.class),
-      `${gate} has class ${row.class}`
+      row.class === "product" ||
+        row.class === "contract" ||
+        row.class === "hygiene",
+      `${gate} has class ${String(row.class)}`
     );
     assert.ok(
-      Number.isInteger(row.rung) && row.rung >= 0 && row.rung <= 5,
+      typeof row.rung === "number" &&
+        Number.isInteger(row.rung) &&
+        row.rung >= 0 &&
+        row.rung <= 5,
       `${gate} rung`
     );
     assert.ok(
@@ -97,29 +152,24 @@ test("every classified gate is a real root script with a class, a rung and a rea
 // value outside the vocabulary.
 const DOORS = ["hook", "window", "owner"];
 
-/**
- * The door a rung belongs to.
- *
- * @param {number} rung The ladder rung.
- * @returns {string} The door.
- */
-const doorForRung = (rung) =>
+const doorForRung = (rung: number): string =>
   rung <= 1 ? "hook" : rung === 2 ? "window" : "owner";
 
 test("every gate declares a door, in the rules' vocabulary, matching its rung", () => {
-  for (const [gate, row] of classified) {
+  for (const [gate, rowRaw] of classified) {
+    const row = asClassRow(rowRaw);
     assert.ok(
-      DOORS.includes(row.door),
+      typeof row.door === "string" && DOORS.includes(row.door),
       `${gate} declares door ${JSON.stringify(row.door)}; the vocabulary is ${DOORS.join(", ")}`
     );
     assert.equal(
       row.door,
-      doorForRung(row.rung),
-      `${gate} is rung ${row.rung} but door ${row.door} — a gate is answerable where its rung runs it`
+      typeof row.rung === "number" ? doorForRung(row.rung) : undefined,
+      `${gate} is rung ${String(row.rung)} but door ${String(row.door)} — a gate is answerable where its rung runs it`
     );
   }
   assert.match(
-    classes._comment,
+    String(classesRaw._comment ?? ""),
     /door/u,
     "the register's own comment must explain the door field"
   );
@@ -127,7 +177,7 @@ test("every gate declares a door, in the rules' vocabulary, matching its rung", 
 
 test("hygiene gates left check:push and arrived in the weekly lane", () => {
   const hygiene = classified
-    .filter(([, row]) => row.class === "hygiene")
+    .filter(([, row]) => asClassRow(row).class === "hygiene")
     .map(([gate]) => gate);
   assert.ok(hygiene.length > 0, "the register classifies no gate as hygiene");
   for (const gate of hygiene) {
@@ -140,7 +190,7 @@ test("hygiene gates left check:push and arrived in the weekly lane", () => {
       `${gate} is hygiene-class but the weekly lane does not run it — it would be enforced nowhere`
     );
     assert.equal(
-      classes[gate].rung,
+      asClassRow(classesRaw[gate]).rung,
       5,
       `${gate} is hygiene-class, so it belongs to rung 5`
     );
@@ -159,12 +209,14 @@ test("every gate the weekly lane runs exists in package.json", () => {
       `hygiene lane runs ${gate}, which package.json does not define`
     );
   }
-  for (const { groups } of hygieneWorkflow.matchAll(
+  for (const match of hygieneWorkflow.matchAll(
     /bun run (?<gate>[a-z0-9:-]+)/gu
   )) {
+    const gate = match.groups?.["gate"];
+    if (gate === undefined) continue;
     assert.ok(
-      scripts.has(groups.gate),
-      `hygiene.yml runs ${groups.gate}, which package.json does not define`
+      scripts.has(gate),
+      `hygiene.yml runs ${gate}, which package.json does not define`
     );
   }
   assert.match(
@@ -185,9 +237,10 @@ test("the lint:product bundle holds classified, non-hygiene gates and duplicates
       scripts.has(gate),
       `lint:product runs ${gate}, which package.json does not define`
     );
-    assert.ok(classes[gate], `${gate} is bundled but unclassified`);
+    const row = asClassRow(classesRaw[gate]);
+    assert.ok(classesRaw[gate], `${gate} is bundled but unclassified`);
     assert.notEqual(
-      classes[gate].class,
+      row.class,
       "hygiene",
       `${gate} is hygiene-class; it belongs to the weekly lane, not the push bundle`
     );

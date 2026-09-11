@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The bundle's runner (#915 Wave 4). `scripts/ci/gate-classes.test.mjs` owns
+// The bundle's runner (#915 Wave 4). `scripts/ci/gate-classes.test.ts` owns
 // the membership contract; this file owns the behaviour that makes bundling
 // safe to do at all: every gate runs even after one fails, and a failing
 // gate's own output is reproduced verbatim under its own name.

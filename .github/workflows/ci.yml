@@ -908,7 +908,7 @@ jobs:
       # (#556's shape, one level down). An out-of-range leg is a hard error in
       # the script rather than an empty slice, for the same reason.
       - name: Burn in shard ${{ matrix.shard }}, three times each, alone
-        run: node scripts/ci/burn-in.mjs --base origin/main --runs 3 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: node scripts/ci/burn-in.ts --base origin/main --runs 3 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Write lane evidence
         if: always()
         env:
@@ -939,7 +939,7 @@ jobs:
   # ~25-30 minutes of a 15-minute merge budget for a secondary surface.
   #
   # The promotion rule recorded in lane-client-e2e.yml is unchanged and is now
-  # counted rather than remembered: `scripts/ci/lane-health.mjs` tallies the
+  # counted rather than remembered: `scripts/ci/lane-health.ts` tallies the
   # times a rung-3 lane caught something the merge gate had already called
   # green, and files `[lanes] promote <lane>` on the second one in 30 days.
 
@@ -1087,7 +1087,7 @@ jobs:
     # KNOWN, OWNER-ACCEPTED COST (#916). `tests/budgets.json#suiteWallClock.lanes.pr-gate`
     # is 15.0 min of ELAPSED SPAN across `check`'s needs and is tighten-only. The
     # budget is not widened to match: the overrun is reported by
-    # `scripts/ci/pr-gate-wall-clock.mjs` on the run that spends it, which is the
+    # `scripts/ci/pr-gate-wall-clock.ts` on the run that spends it, which is the
     # honest place for it to show up, and it is how the restructure gets scored.
     timeout-minutes: 30
     steps:
@@ -2003,6 +2003,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/pr-gate-wall-clock.mjs \
+          node scripts/ci/pr-gate-wall-clock.ts \
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}"

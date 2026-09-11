@@ -117,7 +117,7 @@ jobs:
 
           _Auto-filed by interop-weekly.yml. Prefer updating this issue over opening duplicates._
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[interop-weekly] backup interop red' \
             --search '[interop-weekly] backup interop red' \
             --body-file /tmp/body.md \

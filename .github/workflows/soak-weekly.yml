@@ -169,7 +169,7 @@ jobs:
 
           _Auto-filed by soak-weekly.yml. Prefer updating this issue over opening duplicates._
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[soak] weekly four-hour soak red' \
             --search '[soak] weekly four-hour soak red' \
             --body-file /tmp/body.md \

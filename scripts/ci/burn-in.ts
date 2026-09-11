@@ -26,7 +26,7 @@
  *
  * WHY IT SHARDS. The guarantee is per-FILE — three isolated runs of each — so
  * it costs the SUM of the files, on one runner, sequentially, while the rung-2
- * budget is a SPAN (`scripts/ci/pr-gate-wall-clock.mjs`: `max(completed_at) −
+ * budget is a SPAN (`scripts/ci/pr-gate-wall-clock.ts`: `max(completed_at) −`
  * min(started_at)`). A wave that rewrites 237 suites at once is ~53 minutes of
  * that sum and blew a 15-minute span it was the only lane over. `--shard i/N`
  * deals the same sorted list across N runners: every file still runs, still
@@ -44,9 +44,9 @@
  * empty slice exits 0 and that is the silence the guarantee cannot survive.
  *
  * Usage:
- *   node scripts/ci/burn-in.mjs [--base origin/main] [--runs 3] [--list]
- *   node scripts/ci/burn-in.mjs --files packages/core/src/a.test.ts
- *   node scripts/ci/burn-in.mjs --shard 3/8
+ *   node scripts/ci/burn-in.ts [--base origin/main] [--runs 3] [--list]
+ *   node scripts/ci/burn-in.ts --files packages/core/src/a.test.ts
+ *   node scripts/ci/burn-in.ts --shard 3/8
  */
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -102,7 +102,7 @@ export const NIGHTLY_RIG_PREFIXES = Object.freeze([
  * @param {string} file Repository-relative path.
  * @returns {string|null} Human-readable skip reason, or null to burn it in.
  */
-export function skipReason(file) {
+export function skipReason(file: string): string | null {
   const name = path.basename(file);
   if (!/\.(?:test|spec)\./u.test(name)) return "not a test file";
   if (!BURN_IN_EXTENSIONS.includes(path.extname(file)))
@@ -126,9 +126,12 @@ export function skipReason(file) {
  * @param {string} stdout Raw diff output, one path per line.
  * @returns {{files: string[], skipped: {file: string, why: string}[]}} Partitioned paths.
  */
-export function partitionChangedFiles(stdout) {
-  const files = [];
-  const skipped = [];
+export function partitionChangedFiles(stdout: string | null | undefined): {
+  files: string[];
+  skipped: { file: string; why: string }[];
+} {
+  const files: string[] = [];
+  const skipped: { file: string; why: string }[] = [];
   for (const line of (stdout ?? "").split("\n")) {
     const file = line.trim();
     if (!file) continue;
@@ -154,12 +157,12 @@ export function partitionChangedFiles(stdout) {
  * @returns {{shard: number, total: number}} The 1-based leg and the matrix size.
  * @throws {Error} When the value is not `i/N` with `1 <= i <= N`.
  */
-export function parseShard(value) {
+export function parseShard(value: string): { shard: number; total: number } {
   const match = /^(?<shard>\d+)\/(?<total>\d+)$/u.exec(String(value).trim());
   if (!match)
     throw new Error(`--shard wants "i/N", got ${JSON.stringify(value)}`);
-  const shard = Number(match.groups.shard);
-  const total = Number(match.groups.total);
+  const shard = Number(match.groups?.["shard"]);
+  const total = Number(match.groups?.["total"]);
   if (total < 1) throw new Error(`--shard total must be >= 1, got ${total}`);
   if (shard < 1 || shard > total)
     throw new Error(`--shard ${shard}/${total} is out of range: 1..${total}`);
@@ -182,7 +185,11 @@ export function parseShard(value) {
  * @param {number} total Number of legs.
  * @returns {string[]} This leg's files, a subset of `files`.
  */
-export function selectShard(files, shard, total) {
+export function selectShard(
+  files: readonly string[],
+  shard: number,
+  total: number
+): string[] {
   if (total <= 1) return [...files];
   return [...files].sort().filter((_, index) => index % total === shard - 1);
 }
@@ -225,7 +232,10 @@ const VITEST_PROJECT_CONFIGS = Object.freeze([
  * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
  * @returns {string} Repository-relative project directory (`.` for the root).
  */
-export function nearestVitestProjectDir(file, hasFile) {
+export function nearestVitestProjectDir(
+  file: string,
+  hasFile: (candidate: string) => boolean
+): string {
   let dir = path.dirname(file);
   while (dir && dir !== "." && dir !== path.sep) {
     if (
@@ -244,7 +254,10 @@ export function nearestVitestProjectDir(file, hasFile) {
  * @param {boolean[]} outcomes One boolean per run, true when the run passed.
  * @returns {{ok: boolean, why: string}} Verdict plus the sentence to print.
  */
-export function verdictForRuns(outcomes) {
+export function verdictForRuns(outcomes: readonly boolean[]): {
+  ok: boolean;
+  why: string;
+} {
   const passed = outcomes.filter(Boolean).length;
   if (passed === outcomes.length)
     return { ok: true, why: `${passed}/${outcomes.length} passed` };
@@ -318,7 +331,15 @@ export const RUNNERS = Object.freeze([
  * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
  * @returns {{runner: "node"|"vitest", cwd: string, filter: string, config?: string}} Run plan.
  */
-export function planRun(file, hasFile) {
+export function planRun(
+  file: string,
+  hasFile: (candidate: string) => boolean
+): {
+  runner: "node" | "vitest";
+  cwd: string;
+  filter: string;
+  config?: string;
+} {
   for (const entry of RUNNERS) {
     if (!file.startsWith(entry.prefix)) continue;
     if (entry.runner === "node")
@@ -339,7 +360,11 @@ export function planRun(file, hasFile) {
  * @param {{runner: "node"|"vitest", filter: string, config?: string}} plan Run plan.
  * @returns {string[]} Node argv.
  */
-export function argvFor(plan) {
+export function argvFor(plan: {
+  runner: "node" | "vitest";
+  filter: string;
+  config?: string;
+}): string[] {
   if (plan.runner === "node") return ["--test", plan.filter];
   return [
     VITEST,
@@ -350,8 +375,22 @@ export function argvFor(plan) {
   ];
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): {
+  base: string;
+  runs: number;
+  files: string[] | null;
+  list: boolean;
+  shard: number;
+  total: number;
+} {
+  const out: {
+    base: string;
+    runs: number;
+    files: string[] | null;
+    list: boolean;
+    shard: number;
+    total: number;
+  } = {
     base: "origin/main",
     runs: 3,
     files: null,
@@ -360,21 +399,29 @@ function parseArgs(argv) {
     total: 1,
   };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--base" && argv[i + 1]) out.base = argv[++i];
-    else if (argv[i] === "--runs" && argv[i + 1]) out.runs = Number(argv[++i]);
-    else if (argv[i] === "--shard" && argv[i + 1])
-      Object.assign(out, parseShard(argv[++i]));
-    else if (argv[i] === "--files" && argv[i + 1])
-      out.files = argv[++i]
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (current === "--base" && next !== undefined) {
+      out.base = next;
+      i += 1;
+    } else if (current === "--runs" && next !== undefined) {
+      out.runs = Number(next);
+      i += 1;
+    } else if (current === "--shard" && next !== undefined) {
+      Object.assign(out, parseShard(next));
+      i += 1;
+    } else if (current === "--files" && next !== undefined) {
+      out.files = next
         .split(",")
         .map((f) => f.trim())
         .filter(Boolean);
-    else if (argv[i] === "--list") out.list = true;
+      i += 1;
+    } else if (current === "--list") out.list = true;
   }
   return out;
 }
 
-function changedTestFiles(base) {
+function changedTestFiles(base: string): string {
   // `A...B` is the merge-base diff: the files THIS branch changed, not the ones
   // main moved underneath it. `--diff-filter=AM` drops deletions and renames'
   // old halves, which have nothing to run.
@@ -397,7 +444,7 @@ function changedTestFiles(base) {
   return result.stdout ?? "";
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const { files: candidates, skipped } = args.files
     ? partitionChangedFiles(args.files.join("\n"))
@@ -473,7 +520,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
     // A bad `--shard` is a wiring bug in the workflow, and the only wrong
     // answer is a quiet zero: that is a leg reporting green over files it never
     // selected. Named, and red.
-    console.error(`::error title=New-test burn-in::${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`::error title=New-test burn-in::${message}`);
     process.exitCode = 2;
   }
 }

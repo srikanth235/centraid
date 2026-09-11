@@ -26,14 +26,14 @@
  *
  * 3. THE RULES TABLE (#915). Pass rate, escapes, consecutive reds, expired
  *    parks and p95-over-budget are now decided mechanically by
- *    `scripts/ci/lane-rules.mjs` and written to the summary as `findings`, each
+ *    `scripts/ci/lane-rules.ts` and written to the summary as `findings`, each`
  *    carrying the rolling issue title the workflow should open or update. The
  *    report-level `verdict` (`HOLD` / `OK`) over the parks ledger is written
  *    beside them, so the nightly page and this lane can never disagree about
  *    how much debt the ladder is carrying.
  *
  * Usage:
- *   node scripts/ci/lane-health.mjs --repo owner/name [--workflow ci.yml]
+ *   node scripts/ci/lane-health.ts --repo owner/name [--workflow ci.yml]
  *        [--rung 2] [--escape-workflow ci.yml]
  *        [--runs 40] [--chronic-red-days 3] [--out artifacts/lane-health/summary.json]
  */
@@ -55,7 +55,25 @@ import {
   laneDurations,
   overallVerdict,
   percentile,
-} from "./lane-rules.mjs";
+} from "./lane-rules.ts";
+import type {
+  LaneFinding,
+  LaneJob,
+  ParkEntry,
+  RateEntry,
+  StreakEntry,
+} from "./lane-rules.ts";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface HealthRun {
+  runAttempt: number;
+  startedAt: string;
+  headSha?: string;
+  jobs: LaneJob[];
+}
 
 const root = path.resolve(import.meta.dirname, "../..");
 // Lane parks merged into the quarantine ledger beside the flaky-test entries
@@ -74,8 +92,10 @@ const QUARANTINE_PATH = path.join(root, "tests/quarantine.json");
  * @param {{runAttempt: number, jobs: {name: string, conclusion: string}[]}[]} runs completed workflow runs on main
  * @returns {Map<string, {attempts: number, passed: number, rate: number}>} per-lane first-attempt tally and rate
  */
-export function firstAttemptRates(runs) {
-  const tally = new Map();
+export function firstAttemptRates(
+  runs: readonly HealthRun[]
+): Map<string, RateEntry> {
+  const tally = new Map<string, RateEntry>();
   for (const run of runs) {
     if (run.runAttempt !== 1) continue;
     for (const job of run.jobs) {
@@ -104,9 +124,12 @@ export function firstAttemptRates(runs) {
  * @param {string} now ISO timestamp to measure the streak against
  * @returns {Map<string, {since: string, days: number, runs: number}>} per-lane current red streak
  */
-export function redStreaks(runsNewestFirst, now) {
-  const streaks = new Map();
-  const settled = new Set();
+export function redStreaks(
+  runsNewestFirst: readonly HealthRun[],
+  now: string
+): Map<string, StreakEntry> {
+  const streaks = new Map<string, StreakEntry>();
+  const settled = new Set<string>();
   for (const run of runsNewestFirst) {
     for (const job of run.jobs) {
       if (settled.has(job.name)) continue;
@@ -145,8 +168,25 @@ export function redStreaks(runsNewestFirst, now) {
  * @param {string} today ISO date, to judge whether a park has expired
  * @returns {{lane: string, days: number, runs: number, since: string, reason: string}[]} lanes past the rule, worst first
  */
-export function chronicRed(streaks, quarantine, maxDays, today) {
-  const offenders = [];
+export function chronicRed(
+  streaks: Map<string, StreakEntry>,
+  quarantine: Record<string, ParkEntry | undefined>,
+  maxDays: number,
+  today: string
+): {
+  lane: string;
+  days: number;
+  runs: number;
+  since: string;
+  reason: string;
+}[] {
+  const offenders: {
+    lane: string;
+    days: number;
+    runs: number;
+    since: string;
+    reason: string;
+  }[] = [];
   for (const [lane, streak] of streaks) {
     if (streak.days <= maxDays) continue;
     const parked = quarantine[lane];
@@ -166,7 +206,11 @@ export function chronicRed(streaks, quarantine, maxDays, today) {
 }
 
 /** Markdown for the Job Summary. */
-export function renderLaneHealth(rates, streaks, floor) {
+export function renderLaneHealth(
+  rates: Map<string, RateEntry>,
+  streaks: Map<string, StreakEntry>,
+  floor: number
+): string {
   const rows = [...rates.entries()].sort(
     (left, right) => left[1].rate - right[1].rate
   );
@@ -199,7 +243,11 @@ export function renderLaneHealth(rates, streaks, floor) {
  * @param {number|null} rung Which rung was scored.
  * @returns {string} Markdown.
  */
-export function renderFindings(findings, verdict, rung) {
+export function renderFindings(
+  findings: readonly LaneFinding[],
+  verdict: { verdict: string; reasons: string[] },
+  rung: number | null
+): string {
   const lines = [
     `### Lane rules (rung ${rung ?? "?"}) — verdict ${verdict.verdict}`,
     "",
@@ -223,7 +271,7 @@ export function renderFindings(findings, verdict, rung) {
 
 // --- fetching ---------------------------------------------------------------
 
-async function gh(url, token) {
+async function gh(url: string, token: string | undefined): Promise<unknown> {
   const response = await fetch(url, {
     headers: {
       accept: "application/vnd.github+json",
@@ -237,37 +285,75 @@ async function gh(url, token) {
   return response.json();
 }
 
-async function fetchRuns(repo, workflow, limit, token) {
+async function fetchRuns(
+  repo: string,
+  workflow: string,
+  limit: number,
+  token: string | undefined
+): Promise<HealthRun[]> {
   const list = await gh(
     `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?branch=main&status=completed&per_page=${Math.min(limit, 100)}`,
     token
   );
+  const workflowRuns =
+    isRecord(list) && Array.isArray(list.workflow_runs)
+      ? list.workflow_runs
+      : [];
   // Fetched concurrently: 40 sequential round trips is a minute of nothing, and
   // the jobs endpoint is per-run so there is no ordering between them.
   return Promise.all(
-    (list.workflow_runs ?? []).map(async (run) => {
-      const jobs = await gh(
-        `https://api.github.com/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`,
+    workflowRuns.map(async (runRaw) => {
+      const run = isRecord(runRaw) ? runRaw : {};
+      const jobsRaw = await gh(
+        `https://api.github.com/repos/${repo}/actions/runs/${String(run.id)}/jobs?per_page=100`,
         token
       );
+      const jobsList =
+        isRecord(jobsRaw) && Array.isArray(jobsRaw.jobs) ? jobsRaw.jobs : [];
       return {
         id: run.id,
-        headSha: run.head_sha ?? "",
-        runAttempt: run.run_attempt ?? 1,
-        startedAt: run.run_started_at ?? run.created_at,
-        jobs: (jobs.jobs ?? []).map((job) => ({
-          name: job.name,
-          conclusion: job.conclusion,
-          startedAt: job.started_at,
-          completedAt: job.completed_at,
-        })),
+        headSha: String(run.head_sha ?? ""),
+        runAttempt: typeof run.run_attempt === "number" ? run.run_attempt : 1,
+        startedAt: String(run.run_started_at ?? run.created_at ?? ""),
+        jobs: jobsList.map((jobRaw) => {
+          const job = isRecord(jobRaw) ? jobRaw : {};
+          return {
+            name: String(job.name ?? ""),
+            conclusion:
+              typeof job.conclusion === "string" ? job.conclusion : null,
+            startedAt:
+              typeof job.started_at === "string" ? job.started_at : undefined,
+            completedAt:
+              typeof job.completed_at === "string"
+                ? job.completed_at
+                : undefined,
+          };
+        }),
       };
     })
   );
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): {
+  repo: string | null;
+  workflow: string;
+  runs: number;
+  chronicRedDays: number | null;
+  floor: number;
+  out: string | null;
+  rung: number | null;
+  escapeWorkflow: string | null;
+} {
+  const out: {
+    repo: string | null;
+    workflow: string;
+    runs: number;
+    chronicRedDays: number | null;
+    floor: number;
+    out: string | null;
+    rung: number | null;
+    escapeWorkflow: string | null;
+  } = {
     repo: process.env.GITHUB_REPOSITORY ?? null,
     workflow: "ci.yml",
     runs: 40,
@@ -278,24 +364,40 @@ function parseArgs(argv) {
     escapeWorkflow: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--repo" && argv[i + 1]) out.repo = argv[++i];
-    else if (argv[i] === "--workflow" && argv[i + 1]) out.workflow = argv[++i];
-    else if (argv[i] === "--runs" && argv[i + 1]) out.runs = Number(argv[++i]);
-    else if (argv[i] === "--chronic-red-days" && argv[i + 1])
-      out.chronicRedDays = Number(argv[++i]);
-    else if (argv[i] === "--floor" && argv[i + 1])
-      out.floor = Number(argv[++i]);
-    else if (argv[i] === "--out" && argv[i + 1]) out.out = argv[++i];
-    else if (argv[i] === "--rung" && argv[i + 1]) out.rung = Number(argv[++i]);
-    else if (argv[i] === "--escape-workflow" && argv[i + 1])
-      out.escapeWorkflow = argv[++i];
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (current === "--repo" && next !== undefined) {
+      out.repo = next;
+      i += 1;
+    } else if (current === "--workflow" && next !== undefined) {
+      out.workflow = next;
+      i += 1;
+    } else if (current === "--runs" && next !== undefined) {
+      out.runs = Number(next);
+      i += 1;
+    } else if (current === "--chronic-red-days" && next !== undefined) {
+      out.chronicRedDays = Number(next);
+      i += 1;
+    } else if (current === "--floor" && next !== undefined) {
+      out.floor = Number(next);
+      i += 1;
+    } else if (current === "--out" && next !== undefined) {
+      out.out = next;
+      i += 1;
+    } else if (current === "--rung" && next !== undefined) {
+      out.rung = Number(next);
+      i += 1;
+    } else if (current === "--escape-workflow" && next !== undefined) {
+      out.escapeWorkflow = next;
+      i += 1;
+    }
   }
   // A workflow this repo knows about implies its rung; an unknown one must say.
   if (out.rung == null) out.rung = WORKFLOW_RUNG[out.workflow] ?? null;
   return out;
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (!args.repo) {
     console.error("lane-health: --repo owner/name is required");
@@ -316,9 +418,13 @@ async function main() {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`);
   }
 
-  const quarantine = existsSync(QUARANTINE_PATH)
-    ? (JSON.parse(readFileSync(QUARANTINE_PATH, "utf8")).lanes ?? {})
+  const quarantineRaw: unknown = existsSync(QUARANTINE_PATH)
+    ? JSON.parse(readFileSync(QUARANTINE_PATH, "utf8"))
     : {};
+  const quarantine: Record<string, ParkEntry | undefined> =
+    isRecord(quarantineRaw) && isRecord(quarantineRaw.lanes)
+      ? (quarantineRaw.lanes as Record<string, ParkEntry | undefined>)
+      : {};
   const today = new Date().toISOString().slice(0, 10);
 
   // Escapes need BOTH sides: what the deep rung caught, and which SHAs the
@@ -338,7 +444,7 @@ async function main() {
       escapes = countEscapes(runs, greenShas(gateRuns));
     } catch (error) {
       console.error(
-        `::warning title=Escapes unmeasured::could not read ${args.escapeWorkflow} runs (${error.message}); the escape column is empty this run rather than zero`
+        `::warning title=Escapes unmeasured::could not read ${args.escapeWorkflow} runs (${error instanceof Error ? error.message : String(error)}); the escape column is empty this run rather than zero`
       );
     }
   }

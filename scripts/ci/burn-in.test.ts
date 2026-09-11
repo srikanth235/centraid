@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -12,29 +14,32 @@ import {
   selectShard,
   skipReason,
   verdictForRuns,
-} from "./burn-in.mjs";
+} from "./burn-in.ts";
 
 test("only *.test.* / *.spec.* modules Vitest can load are candidates", () => {
   assert.equal(skipReason("packages/core/src/a.test.ts"), null);
   assert.equal(skipReason("packages/core/src/a.spec.tsx"), null);
-  assert.equal(skipReason("scripts/ci/burn-in.test.mjs"), null);
-  assert.match(skipReason("packages/core/src/a.ts"), /not a test file/u);
+  assert.equal(skipReason("scripts/ci/burn-in.test.ts"), null);
+  assert.match(skipReason("packages/core/src/a.ts") ?? "", /not a test file/u);
   assert.match(
-    skipReason("apps/mobile/flows/pairing.test.yaml"),
+    skipReason("apps/mobile/flows/pairing.test.yaml") ?? "",
     /not a Vitest module/u
   );
 });
 
 test("Playwright and Maestro specs are skipped with a reason, not silently", () => {
   assert.match(
-    skipReason("tests/e2e/vault.spec.ts"),
+    skipReason("tests/e2e/vault.spec.ts") ?? "",
     /Playwright\/Maestro \(tests\/e2e\/\)/u
   );
   assert.match(
-    skipReason("apps/web/tests/e2e/pwa.spec.ts"),
+    skipReason("apps/web/tests/e2e/pwa.spec.ts") ?? "",
     /Playwright\/Maestro/u
   );
-  assert.match(skipReason("packages/server/e2e/boot.test.ts"), /\/e2e\/ path/u);
+  assert.match(
+    skipReason("packages/server/e2e/boot.test.ts") ?? "",
+    /\/e2e\/ path/u
+  );
 });
 
 test("nightly rigs are skipped: their input is another job's artifact", () => {
@@ -42,10 +47,13 @@ test("nightly rigs are skipped: their input is another job's artifact", () => {
   // nightly desktop-e2e report is absent — correct at rung 4, and a guaranteed
   // "broken test" verdict at rung 2, where the artifact cannot exist.
   assert.match(
-    skipReason("tests/perf/desktop-launch.perf.test.ts"),
+    skipReason("tests/perf/desktop-launch.perf.test.ts") ?? "",
     /nightly rig fed by another job's artifact/u
   );
-  assert.match(skipReason("tests/scale/backup.scale.test.ts"), /nightly rig/u);
+  assert.match(
+    skipReason("tests/scale/backup.scale.test.ts") ?? "",
+    /nightly rig/u
+  );
   assert.equal(skipReason("tests/quality/user-facing-qualities.test.ts"), null);
 });
 
@@ -70,7 +78,7 @@ test("partitionChangedFiles reports skips and ignores non-test files entirely", 
 });
 
 test("nearestVitestProjectDir walks up to the owning project, not the repo root", () => {
-  const has = (candidate) =>
+  const has = (candidate: string) =>
     [
       "packages/core/package.json",
       "packages/core/vitest.config.ts",
@@ -89,7 +97,7 @@ test("nearestVitestProjectDir walks up to the owning project, not the repo root"
 // whose `include` cannot see the file, which exits 1 with "No test files
 // found" — reported as a broken test for all 206 blueprint suites.
 test("a package.json without a Vitest config is not a project", () => {
-  const has = (candidate) =>
+  const has = (candidate: string) =>
     [
       "packages/blueprints/apps/people/package.json",
       "packages/blueprints/package.json",
@@ -121,10 +129,10 @@ test("a package.json without a Vitest config is not a project", () => {
 // harness its apps need, so eight copies would be eight things to drift.
 test("every real test file plans onto a directory Vitest can collect from", () => {
   const root = path.resolve(import.meta.dirname, "../..");
-  const has = (candidate) => existsSync(path.join(root, candidate));
+  const has = (candidate: string) => existsSync(path.join(root, candidate));
   const CONFIGS = ["vitest.config.ts", "vitest.config.mts", "vite.config.ts"];
-  const files = [];
-  const walk = (dir) => {
+  const files: string[] = [];
+  const walk = (dir: string): void => {
     for (const entry of readdirSync(path.join(root, dir), {
       withFileTypes: true,
     })) {
@@ -161,7 +169,7 @@ test("every real test file plans onto a directory Vitest can collect from", () =
 });
 
 test("each candidate is planned onto the runner that actually owns it", () => {
-  const has = (candidate) =>
+  const has = (candidate: string) =>
     [
       "packages/core/package.json",
       "packages/core/vitest.config.ts",
@@ -170,10 +178,10 @@ test("each candidate is planned onto the runner that actually owns it", () => {
   // Regression (#915): `scripts/**` unit tests are node:test modules. Planning
   // them onto a root Vitest run collected zero files and reported every one of
   // them as a broken test.
-  assert.deepEqual(planRun("scripts/ci/lane-health.test.mjs", has), {
+  assert.deepEqual(planRun("scripts/ci/lane-health.test.ts", has), {
     runner: "node",
     cwd: ".",
-    filter: "scripts/ci/lane-health.test.mjs",
+    filter: "scripts/ci/lane-health.test.ts",
   });
   assert.deepEqual(planRun("scripts/test-report/derive.test.mjs", has), {
     runner: "vitest",
@@ -218,7 +226,7 @@ test("argvFor names the runner's own invocation, not a generic one", () => {
     "tests/perf/a.perf.test.ts",
     "--no-coverage",
   ]);
-  assert.match(vitest[0], /vitest\.mjs$/u);
+  assert.match(vitest[0] ?? "", /vitest\.mjs$/u);
   assert.deepEqual(argvFor({ runner: "vitest", filter: "src/a.test.ts" }), [
     vitest[0],
     "run",

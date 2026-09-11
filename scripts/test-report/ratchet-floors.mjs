@@ -50,7 +50,7 @@ export const PERF_BUDGET_SOURCES = [
     legacy: "tests/suite-wall-clock.json",
   },
   // #915 — the ladder's own p95 budget per rung, lifted out of a literal in
-  // scripts/ci/lane-rules.mjs so that widening a rung is a reviewed edit.
+  // scripts/ci/lane-rules.ts so that widening a rung is a reviewed edit.
   { path: "tests/budgets.json", section: "rungs" },
   // #915 Wave 2/4 — the mobile suite budgets, mirrored from the roster. The
   // roster is still ratcheted at its own source by check-mobile-suite-budgets;

@@ -220,6 +220,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title "[mobile-alarm-test] the mobile suite did not notice a blanked Home" \
             --body "The weekly alarm test built the app with EXPO_PUBLIC_CENTRAID_E2E_ALARM=home — Home renders nothing — and the rung-2 `pr-gate` suite passed anyway. Every recent green on the PR gate, the canary and the nightly is suspect until this is explained: a suite that cannot be shown to go red is not evidence. Evidence: the mobile-alarm-test-runs artifact on run ${{ github.run_id }}. Do not silence this lane."

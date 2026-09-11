@@ -407,7 +407,7 @@ for (const required of [
   "bun run --cwd packages/model-runtime setup",
   "bun run test:enrich:live",
   "artifacts/enrichment-live/",
-  "scripts/ci/file-tracking-issue.mjs",
+  "scripts/ci/file-tracking-issue.ts",
   "[enrichment-live] real-model goldens red",
   "within 24 hours or before the next scheduled run",
   "eight-day freshness window",
@@ -427,7 +427,7 @@ for (const required of [
   "workflow_dispatch:",
   "tests/scale/long-run-soak.scale.test.ts",
   'CENTRAID_SOAK_MINUTES: "240"',
-  "scripts/ci/file-tracking-issue.mjs",
+  "scripts/ci/file-tracking-issue.ts",
   "[soak] weekly four-hour soak red",
   "within 24 hours or before the next scheduled run",
 ]) {

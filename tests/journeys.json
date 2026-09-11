@@ -812,13 +812,13 @@
       "spans": ["gateway.replica.bootstrap"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "bootstrapPageMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "probe": "scripts/ci/paired-journeys.ts — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
           "pairedSample": "journeys.bootstrapPage.durationMs",
           "ceilingMs": 600,
           "_provenance": {
@@ -979,13 +979,13 @@
       "spans": ["gateway.turn.dispatch"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "replicaIntentWarmP50": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "probe": "scripts/ci/paired-journeys.ts — 8 intents, warm p50",
           "pairedSample": "journeys.replicaIntent.warm.p50Ms",
           "ceilingMs": 700,
           "_provenance": {
@@ -1006,13 +1006,13 @@
       "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "lastSubscriberDeliveryMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "probe": "scripts/ci/paired-journeys.ts — one subscriber, 5 commits",
           "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
           "ceilingMs": 300,
           "_provenance": {
@@ -1033,13 +1033,13 @@
       "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "tenSubscriberCommitMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "probe": "scripts/ci/paired-journeys.ts — ten subscribers, 5 commits",
           "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
           "ceilingMs": 400,
           "_provenance": {
@@ -1560,13 +1560,13 @@
       "spans": ["gateway.replica.bootstrap"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "bootstrapPageMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "probe": "scripts/ci/paired-journeys.ts — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
           "pairedSample": "journeys.bootstrapPage.durationMs",
           "ceilingMs": 340,
           "_provenance": {
@@ -1587,13 +1587,13 @@
       "spans": ["gateway.replica.bootstrap"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "bootstrapPageMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "probe": "scripts/ci/paired-journeys.ts — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
           "pairedSample": "journeys.bootstrapPage.durationMs",
           "ceilingMs": 450,
           "_provenance": {
@@ -1614,13 +1614,13 @@
       "spans": ["gateway.turn.dispatch"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "replicaIntentWarmP50": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "probe": "scripts/ci/paired-journeys.ts — 8 intents, warm p50",
           "pairedSample": "journeys.replicaIntent.warm.p50Ms",
           "ceilingMs": 340,
           "_provenance": {
@@ -1641,13 +1641,13 @@
       "spans": ["gateway.turn.dispatch"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "replicaIntentWarmP50": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "probe": "scripts/ci/paired-journeys.ts — 8 intents, warm p50",
           "pairedSample": "journeys.replicaIntent.warm.p50Ms",
           "ceilingMs": 520,
           "_provenance": {
@@ -1668,13 +1668,13 @@
       "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "lastSubscriberDeliveryMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "probe": "scripts/ci/paired-journeys.ts — one subscriber, 5 commits",
           "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
           "ceilingMs": 200,
           "_provenance": {
@@ -1695,13 +1695,13 @@
       "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "lastSubscriberDeliveryMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "probe": "scripts/ci/paired-journeys.ts — one subscriber, 5 commits",
           "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
           "ceilingMs": 240,
           "_provenance": {
@@ -1722,13 +1722,13 @@
       "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "tenSubscriberCommitMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "probe": "scripts/ci/paired-journeys.ts — ten subscribers, 5 commits",
           "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
           "ceilingMs": 200,
           "_provenance": {
@@ -1749,13 +1749,13 @@
       "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
       "consumers": [
         "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
+        "scripts/ci/paired-journeys.ts"
       ],
       "tolerancePercent": 10,
       "metrics": {
         "tenSubscriberCommitMs": {
           "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "probe": "scripts/ci/paired-journeys.ts — ten subscribers, 5 commits",
           "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
           "ceilingMs": 250,
           "_provenance": {

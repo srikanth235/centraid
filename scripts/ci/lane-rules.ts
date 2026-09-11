@@ -3,7 +3,7 @@
  * The lane-health rules table, as code (#915).
  *
  * The issue states six mechanical rules and their automatic actions. They live
- * here rather than inside `lane-health.mjs` so each one is a pure function with
+ * here rather than inside `lane-health.ts` so each one is a pure function with
  * a fixture beside it: a rule that decides to demote a required lane, or to
  * declare the night a HOLD, has to be readable and testable without a network.
  *
@@ -19,6 +19,10 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * The ladder's p95 budgets, in milliseconds, keyed by rung.
  *
@@ -27,21 +31,26 @@ import path from "node:path";
  * ceiling, so cutting one is free and widening one is a reviewed edit with an
  * approvedDeviation. `_`-prefixed keys are prose, not rungs.
  */
-export const RUNG_BUDGET_MS = Object.freeze(
+const budgetsRaw: unknown = JSON.parse(
+  readFileSync(
+    path.join(import.meta.dirname, "../../tests/budgets.json"),
+    "utf8"
+  )
+);
+const rungsRaw =
+  isRecord(budgetsRaw) && isRecord(budgetsRaw.rungs) ? budgetsRaw.rungs : {};
+export const RUNG_BUDGET_MS: Readonly<Record<string, number>> = Object.freeze(
   Object.fromEntries(
-    Object.entries(
-      JSON.parse(
-        readFileSync(
-          path.join(import.meta.dirname, "../../tests/budgets.json"),
-          "utf8"
-        )
-      ).rungs
-    ).filter(([key]) => !key.startsWith("_"))
+    Object.entries(rungsRaw)
+      .filter(([key]) => !key.startsWith("_"))
+      .filter(
+        (entry): entry is [string, number] => typeof entry[1] === "number"
+      )
   )
 );
 
 /** Which rung a workflow's lanes sit on. */
-export const WORKFLOW_RUNG = Object.freeze({
+export const WORKFLOW_RUNG: Readonly<Record<string, number>> = Object.freeze({
   "ci.yml": 2,
   "candidate.yml": 3,
   "e2e.yml": 4,
@@ -62,32 +71,57 @@ export const RUNG2_PASS_FLOOR = 0.99;
 /** Escapes in the trailing window before a lane is promoted toward rung 2. */
 export const PROMOTE_AFTER_ESCAPES = 2;
 
-/**
- * The p-th percentile of a sample, nearest-rank.
- *
- * Nearest-rank rather than interpolation because the samples are whole runs and
- * "the 95th percentile run took N" is a statement about a run that happened.
- *
- * @param {number[]} values Sample.
- * @param {number} p Percentile in [0,1].
- * @returns {number|null} The value, or null for an empty sample.
- */
-export function percentile(values, p) {
+export interface LaneJob {
+  name: string;
+  conclusion?: string | null;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface LaneRun {
+  headSha?: string;
+  jobs?: LaneJob[];
+}
+
+export interface RateEntry {
+  attempts: number;
+  passed: number;
+  rate: number;
+}
+
+export interface StreakEntry {
+  days: number;
+  runs: number;
+  since: string;
+}
+
+export interface ParkEntry {
+  issue?: number | string;
+  expires?: string;
+  why?: string;
+}
+
+export interface LaneFinding {
+  lane: string;
+  kind: string;
+  title: string;
+  detail: string;
+}
+
+/** The p-th percentile of a sample, nearest-rank. */
+export function percentile(
+  values: readonly number[],
+  p: number
+): number | null {
   const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   if (!sorted.length) return null;
   const rank = Math.max(1, Math.ceil(p * sorted.length));
-  return sorted[rank - 1];
+  return sorted[rank - 1] ?? null;
 }
 
-/**
- * Per-lane durations, in milliseconds, across the given runs.
- *
- * @param {{jobs: {name: string, startedAt?: string, completedAt?: string}[]}[]} runs Runs with per-job timestamps.
- * @returns {Map<string, number[]>} Lane → durations.
- */
-export function laneDurations(runs) {
-  /** @type {Map<string, number[]>} */
-  const out = new Map();
+/** Per-lane durations, in milliseconds, across the given runs. */
+export function laneDurations(runs: readonly LaneRun[]): Map<string, number[]> {
+  const out = new Map<string, number[]>();
   for (const run of runs) {
     for (const job of run.jobs ?? []) {
       const start = Date.parse(job.startedAt ?? "");
@@ -114,16 +148,14 @@ export function laneDurations(runs) {
  * for a signal whose action is "consider promoting this lane". The report says
  * so beside the number; do not quietly tighten the rule without replacing the
  * approximation with case ids from the evidence files.
- *
- * @param {{headSha: string, jobs: {name: string, conclusion: string}[]}[]} deepRuns Rung ≥ 3 runs.
- * @param {Set<string>} greenRung2Shas SHAs whose rung-2 gate was entirely green.
- * @returns {Map<string, number>} Lane → escape count.
  */
-export function countEscapes(deepRuns, greenRung2Shas) {
-  /** @type {Map<string, number>} */
-  const out = new Map();
+export function countEscapes(
+  deepRuns: readonly LaneRun[],
+  greenRung2Shas: ReadonlySet<string>
+): Map<string, number> {
+  const out = new Map<string, number>();
   for (const run of deepRuns) {
-    if (!greenRung2Shas.has(run.headSha)) continue;
+    if (!run.headSha || !greenRung2Shas.has(run.headSha)) continue;
     for (const job of run.jobs ?? []) {
       if (job.conclusion === "success" || job.conclusion === "skipped")
         continue;
@@ -134,15 +166,11 @@ export function countEscapes(deepRuns, greenRung2Shas) {
   return out;
 }
 
-/**
- * The SHAs whose rung-2 gate reported no failure.
- *
- * @param {{headSha: string, jobs: {conclusion: string}[]}[]} runs Rung-2 runs.
- * @returns {Set<string>} Green SHAs.
- */
-export function greenShas(runs) {
-  const out = new Set();
+/** The SHAs whose rung-2 gate reported no failure. */
+export function greenShas(runs: readonly LaneRun[]): Set<string> {
+  const out = new Set<string>();
   for (const run of runs) {
+    if (!run.headSha) continue;
     const bad = (run.jobs ?? []).some(
       (job) =>
         job.conclusion != null &&
@@ -155,7 +183,7 @@ export function greenShas(runs) {
 }
 
 /** Whole days between two ISO dates (YYYY-MM-DD), or null. */
-export function daysBetween(from, to) {
+export function daysBetween(from: string, to: string): number | null {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
@@ -167,16 +195,6 @@ export function daysBetween(from, to) {
  *
  * Each finding carries the issue title the caller should open or update, so the
  * workflow step is a loop rather than a second copy of the rules.
- *
- * @param {object} input Everything the rules read.
- * @param {Map<string, {attempts: number, passed: number, rate: number}>} input.rates Pass rates on the primary workflow.
- * @param {Map<string, {days: number, runs: number, since: string}>} input.streaks Current red streaks.
- * @param {Map<string, number[]>} input.durations Per-lane durations.
- * @param {Map<string, number>} input.escapes Per-lane escape counts.
- * @param {Record<string, {issue?: number, expires?: string, why?: string}>} input.quarantine The parks ledger `lanes` map.
- * @param {number} input.rung Which rung the primary workflow's lanes sit on.
- * @param {string} input.today ISO date.
- * @returns {{lane: string, kind: string, title: string, detail: string}[]} Findings.
  */
 export function applyLaneRules({
   rates,
@@ -186,9 +204,17 @@ export function applyLaneRules({
   quarantine,
   rung,
   today,
-}) {
-  const findings = [];
-  const budgetMs = RUNG_BUDGET_MS[rung];
+}: {
+  rates: Map<string, RateEntry>;
+  streaks: Map<string, StreakEntry>;
+  durations: Map<string, number[]>;
+  escapes: Map<string, number>;
+  quarantine: Record<string, ParkEntry | undefined>;
+  rung: number;
+  today: string;
+}): LaneFinding[] {
+  const findings: LaneFinding[] = [];
+  const budgetMs = RUNG_BUDGET_MS[String(rung)];
 
   for (const [lane, entry] of rates) {
     if (rung === 2 && entry.attempts > 0 && entry.rate < RUNG2_PASS_FLOOR) {
@@ -207,7 +233,7 @@ export function applyLaneRules({
         lane,
         kind: "promote",
         title: `[lanes] promote ${lane}`,
-        detail: `caught ${count} regression(s) in the trailing window on a SHA whose rung-2 gate was green. Promote it to rung 2 if its p95 fits the 15-minute budget; if it does not, this is a "make it fit" issue instead. (The escape count is an over-approximation — see countEscapes in scripts/ci/lane-rules.mjs.)`,
+        detail: `caught ${count} regression(s) in the trailing window on a SHA whose rung-2 gate was green. Promote it to rung 2 if its p95 fits the 15-minute budget; if it does not, this is a "make it fit" issue instead. (The escape count is an over-approximation — see countEscapes in scripts/ci/lane-rules.ts.)`,
       });
     }
   }
@@ -236,7 +262,7 @@ export function applyLaneRules({
     }
   }
 
-  if (Number.isFinite(budgetMs)) {
+  if (Number.isFinite(budgetMs) && budgetMs !== undefined) {
     for (const [lane, samples] of durations) {
       const p95 = percentile(samples, 0.95);
       if (p95 == null || p95 <= budgetMs) continue;
@@ -252,15 +278,12 @@ export function applyLaneRules({
   return findings;
 }
 
-/**
- * The report-level verdict over the parks ledger.
- *
- * @param {Record<string, {expires?: string, why?: string}>} quarantine Parks ledger `lanes` map.
- * @param {string} today ISO date.
- * @returns {{verdict: "HOLD"|"OK", reasons: string[]}} The verdict and why.
- */
-export function overallVerdict(quarantine, today) {
-  const reasons = [];
+/** The report-level verdict over the parks ledger. */
+export function overallVerdict(
+  quarantine: Record<string, ParkEntry | undefined>,
+  today: string
+): { verdict: "HOLD" | "OK"; reasons: string[] } {
+  const reasons: string[] = [];
   const live = Object.entries(quarantine).filter(
     ([, park]) => park?.expires && park.expires >= today
   );

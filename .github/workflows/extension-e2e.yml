@@ -68,7 +68,7 @@ jobs:
 
           _Auto-filed by extension-e2e.yml. Prefer updating this issue over opening duplicates._
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[companion-e2e] live relay lane red — tracking' \
             --search '[companion-e2e] live relay lane red' \
             --body-file /tmp/body.md \

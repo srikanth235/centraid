@@ -85,7 +85,7 @@ The duplication metric excludes `packages/design/src/roles.ts` because its repea
 
 ### Noise policy
 
-The `NOISE_RULES` list in [`scripts/ci/configure-sonarcloud.mjs`](../scripts/ci/configure-sonarcloud.mjs) silences rules already owned elsewhere or known to be false positives in this monorepo: style preferences, React prop/index-key pedantry, intentional path inheritance and loopback URLs, locale sorting, and workflow/CLI logging false positives. ReDoS (`S5852`), postMessage origin (`S2819`), download-then-exec (`S8482`), empty tests (`S2187`), real control-flow bugs, CSP review, and vault/gateway sinks remain active.
+The `NOISE_RULES` list in [`scripts/ci/configure-sonarcloud.ts`](../scripts/ci/configure-sonarcloud.ts) silences rules already owned elsewhere or known to be false positives in this monorepo: style preferences, React prop/index-key pedantry, intentional path inheritance and loopback URLs, locale sorting, and workflow/CLI logging false positives. ReDoS (`S5852`), postMessage origin (`S2819`), download-then-exec (`S8482`), empty tests (`S2187`), real control-flow bugs, CSP review, and vault/gateway sinks remain active.
 
 On the Free plan, the custom Centraid profile and gate can be created but cannot be assigned. Keep those copies (without a coverage condition) for a future paid assignment; until then, exclusions and multicriteria protect hygiene/tooling PRs while product PRs fail closed on new BUG/VULNERABILITY findings in `packages/` and `apps/`.
 
@@ -95,8 +95,8 @@ CI applies this on every push to `main` that touches the configurator, weekly, a
 
 ```sh
 export SONAR_TOKEN=$(security find-generic-password -s sonarqube-cli -w)
-bun run scripts/ci/configure-sonarcloud.mjs
-bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
+bun run scripts/ci/configure-sonarcloud.ts
+bun run scripts/ci/configure-sonarcloud.ts --resolve-noise
 ```
 
 The settings apply on the next Autoscan analysis. Dashboard: <https://sonarcloud.io/project/overview?id=srikanth235_centraid>.

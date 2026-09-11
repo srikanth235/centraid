@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -9,7 +11,13 @@ import {
   renderWallClock,
   selectGateJobs,
   wallClockMs,
-} from "./pr-gate-wall-clock.mjs";
+} from "./pr-gate-wall-clock.ts";
+import type { WallClock } from "./pr-gate-wall-clock.ts";
+
+function mustMeasure(value: WallClock | null): WallClock {
+  if (value === null) throw new Error("expected a wall-clock measurement");
+  return value;
+}
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -90,24 +98,26 @@ test("matrix legs count, skipped lanes and foreign jobs do not", () => {
 });
 
 test("overlapping lanes collapse into one interval, so parallelism is not punished", () => {
-  const measured = wallClockMs([
-    {
-      name: "a",
-      started_at: "2026-09-02T10:00:00Z",
-      completed_at: "2026-09-02T10:10:00Z",
-    },
-    {
-      name: "b",
-      started_at: "2026-09-02T10:01:00Z",
-      completed_at: "2026-09-02T10:12:00Z",
-    },
-  ]);
+  const measured = mustMeasure(
+    wallClockMs([
+      {
+        name: "a",
+        started_at: "2026-09-02T10:00:00Z",
+        completed_at: "2026-09-02T10:10:00Z",
+      },
+      {
+        name: "b",
+        started_at: "2026-09-02T10:01:00Z",
+        completed_at: "2026-09-02T10:12:00Z",
+      },
+    ])
+  );
   // Not 21 minutes (the sum): the two lanes overlapped, and the gate was busy
   // for 12 of the 12 elapsed minutes.
   assert.equal(measured.ms, 12 * 60_000);
   assert.equal(measured.spanMs, 12 * 60_000);
   assert.equal(measured.queuedMs, 0);
-  assert.equal(measured.slowest.name, "b");
+  assert.equal(measured.slowest?.name, "b");
   assert.equal(wallClockMs([]), null);
 });
 
@@ -128,7 +138,7 @@ test("queue wait alone cannot blow the budget (#931 item 6)", () => {
       completed_at: "2026-09-02T10:26:00Z",
     },
   ];
-  const measured = wallClockMs(jobs);
+  const measured = mustMeasure(wallClockMs(jobs));
   assert.equal(measured.spanMs, 26 * 60_000);
   assert.ok(
     measured.spanMs > budgetMs,
@@ -142,18 +152,20 @@ test("queue wait alone cannot blow the budget (#931 item 6)", () => {
 test("a lane still running while another queues is work, not queue", () => {
   // No idle gap: `slow` covers the whole span, so nothing is subtracted and a
   // genuinely slow gate is still charged for every minute of it.
-  const measured = wallClockMs([
-    {
-      name: "slow",
-      started_at: "2026-09-02T10:00:00Z",
-      completed_at: "2026-09-02T10:20:00Z",
-    },
-    {
-      name: "queued",
-      started_at: "2026-09-02T10:18:00Z",
-      completed_at: "2026-09-02T10:19:00Z",
-    },
-  ]);
+  const measured = mustMeasure(
+    wallClockMs([
+      {
+        name: "slow",
+        started_at: "2026-09-02T10:00:00Z",
+        completed_at: "2026-09-02T10:20:00Z",
+      },
+      {
+        name: "queued",
+        started_at: "2026-09-02T10:18:00Z",
+        completed_at: "2026-09-02T10:19:00Z",
+      },
+    ])
+  );
   assert.equal(measured.ms, 20 * 60_000);
   assert.equal(measured.queuedMs, 0);
 });

@@ -532,7 +532,7 @@ jobs:
 
   # #842 W5.2 — the desktop journey on darwin, moved off the PR loop (#915).
   # The "twice-burned promotion rule" recorded in lane-client-e2e.yml is what
-  # would move it back to rung 2, and `scripts/ci/lane-health.mjs` now counts
+  # would move it back to rung 2, and `scripts/ci/lane-health.ts` now counts
   # the burns instead of leaving them to memory.
   #
   # This launches the desktop journey, NOT a signed packaged build. Booting the
@@ -756,7 +756,7 @@ jobs:
         if: steps.baseline.outcome == 'success'
         run: |
           mkdir -p artifacts/perf
-          node scripts/ci/paired-journeys.mjs \
+          node scripts/ci/paired-journeys.ts \
             --candidate ../candidate-baseline \
             --pr . \
             --rounds 14 \
@@ -1177,7 +1177,7 @@ jobs:
             node scripts/ci/rolling-issue-fallback-body.ts \
               --lane "$lane" --rung 3 --result failure \
               --run-url "$RUN_URL" --out /tmp/rolling-body.md
-            node scripts/ci/file-tracking-issue.mjs --update \
+            node scripts/ci/file-tracking-issue.ts --update \
               --title "[candidate] lane red — ${lane}" \
               --search "[candidate] lane red — ${lane}" \
               --body-file /tmp/rolling-body.md \
@@ -1218,7 +1218,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/lane-health.mjs \
+          node scripts/ci/lane-health.ts \
             --repo "${{ github.repository }}" \
             --workflow candidate.yml \
             --rung 3 \
@@ -1257,7 +1257,7 @@ jobs:
               printf 'This issue is rolling: its body is rewritten every run and never appended to. Close it when the rule stops firing.\n\n'
               printf 'Run: %s\n' "$RUN_URL"
             } > /tmp/rule-body.md
-            node scripts/ci/file-tracking-issue.mjs --update \
+            node scripts/ci/file-tracking-issue.ts --update \
               --title "$title" --search "$title" \
               --body-file /tmp/rule-body.md --label tech-debt --run-url "$RUN_URL"
           done < /tmp/findings.jsonl

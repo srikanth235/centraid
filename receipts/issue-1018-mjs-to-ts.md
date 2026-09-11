@@ -243,4 +243,24 @@ node --test scripts/ci/osv-lockfile-scan.test.ts scripts/ci/resolve-candidate.te
 
 Remaining `scripts/ci/*.mjs`: 13.
 
+## Slice 2e — remaining `scripts/ci` cluster
+
+Converted `burn-in` (+ test), `configure-sonarcloud`, `file-tracking-issue` (+ test), `gate-classes.test`, `lane-health` (+ test), `lane-rules`, `paired-journeys` (+ test), `pr-gate-wall-clock` (+ test). Direct-run usage strings match `.ts`. `configure-sonarcloud` imports `node:process` instead of an empty `export {}` so `unicorn/require-module-specifiers` stays green. `package.json` (`scripts:test`), workflows (`ci.yml`, `candidate.yml`, `e2e.yml`, weekly filer/health/paired/sonar jobs), `tests/journeys.json` `_comment` paths, `SECURITY.md`, `TESTING.md`, `docs/toolchain.md`, `docs/dev-environment.md`, and `docs/decisions.md` **G-rolling-issues** / **G-lane-rules** / **G-pr-gate-budget** / **R-1005-25** follow. `tests/budgets.json` and `tests/quarantine.json` `_comment` paths left as `.mjs` (ledger estate). Live Sonar network skipped.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0. `tsc -p scripts --listFiles` includes the thirteen converted cluster files. `packages/*/src` count: 0. Program size: 356 files.
+
+```sh
+node --test scripts/ci/gate-classes.test.ts scripts/ci/paired-journeys.test.ts scripts/ci/pr-gate-wall-clock.test.ts scripts/ci/file-tracking-issue.test.ts scripts/ci/burn-in.test.ts scripts/ci/lane-health.test.ts
+```
+
+79 pass, 0 fail.
+
+Remaining `scripts/ci/*.mjs`: 0.
+
 

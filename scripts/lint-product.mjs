@@ -26,7 +26,7 @@
 // bit-identical to what `scripts/ci/run-gates.ts` reported before.
 //
 // The membership list is a contract: `scripts/ci/gate-classes.json` classifies
-// every gate, and `scripts/ci/gate-classes.test.mjs` fails if a member is
+// every gate, and `scripts/ci/gate-classes.test.ts` fails if a member is
 // unclassified, is hygiene-class (those belong to the weekly lane), or is also
 // named separately in `check:push`.
 import { spawn } from "node:child_process";

@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -8,13 +10,13 @@ import {
   parseArgs,
   parseExistingNumber,
   updateTrackingIssue,
-} from "./file-tracking-issue.mjs";
+} from "./file-tracking-issue.ts";
 
 /** Record every `gh` invocation and reply from a scripted queue. */
-function fakeGh(replies) {
-  const calls = [];
+function fakeGh(replies: { status: number; stdout: string; stderr: string }[]) {
+  const calls: string[][] = [];
   const queue = [...replies];
-  const run = (argv) => {
+  const run = (argv: string[]) => {
     calls.push(argv);
     return queue.shift() ?? { status: 0, stdout: "", stderr: "" };
   };
@@ -85,9 +87,9 @@ test("comments on an existing open issue rather than opening a duplicate", () =>
     body: "B",
   });
   assert.deepEqual(result, { ok: true, action: "comment", number: 556 });
-  assert.equal(gh.calls[1][0], "issue");
-  assert.equal(gh.calls[1][1], "comment");
-  assert.equal(gh.calls[1][2], "556");
+  assert.equal(gh.calls[1]?.[0], "issue");
+  assert.equal(gh.calls[1]?.[1], "comment");
+  assert.equal(gh.calls[1]?.[2], "556");
 });
 
 test("a failed comment is reported as not-ok, never swallowed", () => {
@@ -112,7 +114,7 @@ test("creates a labelled issue when no open one matches", () => {
     label: "tech-debt",
   });
   assert.deepEqual(result, { ok: true, action: "create", labelled: true });
-  assert.ok(gh.calls[1].includes("--label"));
+  assert.ok(gh.calls[1]?.includes("--label"));
 });
 
 test("falls back to an unlabelled create when the label does not exist", () => {
@@ -126,7 +128,7 @@ test("falls back to an unlabelled create when the label does not exist", () => {
   });
   assert.deepEqual(result, { ok: true, action: "create", labelled: false });
   assert.equal(gh.calls.length, 3);
-  assert.ok(!gh.calls[2].includes("--label"));
+  assert.ok(!gh.calls[2]?.includes("--label"));
 });
 
 test("reports failure when even the unlabelled create fails", () => {

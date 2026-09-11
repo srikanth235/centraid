@@ -79,7 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HYGIENE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[hygiene] weekly ratchets red' \
             --search '[hygiene] weekly ratchets red' \
             --body-file artifacts/hygiene/issue-body.md \

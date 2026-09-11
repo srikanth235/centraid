@@ -3,7 +3,7 @@
  *
  * It existed because these rigs gated on wall clock, and a wall clock is only
  * meaningful when nothing else on the host competes for the cores. The gate is
- * now the paired candidate/PR run (scripts/ci/paired-journeys.mjs), which
+ * now the paired candidate/PR run (scripts/ci/paired-journeys.ts), which
  * measures BOTH trees under whatever contention the runner has and compares the
  * paired difference — so serialising the whole lane bought nothing for the gate
  * that matters and cost the lane its own duration.

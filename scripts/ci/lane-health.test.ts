@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -7,7 +9,7 @@ import {
   redStreaks,
   renderFindings,
   renderLaneHealth,
-} from "./lane-health.mjs";
+} from "./lane-health.ts";
 import {
   RUNG_BUDGET_MS,
   WORKFLOW_RUNG,
@@ -17,10 +19,19 @@ import {
   laneDurations,
   overallVerdict,
   percentile,
-} from "./lane-rules.mjs";
+} from "./lane-rules.ts";
 
-const run = (runAttempt, startedAt, jobs) => ({ runAttempt, startedAt, jobs });
-const job = (name, conclusion) => ({ name, conclusion });
+const run = (
+  runAttempt: number,
+  startedAt: string,
+  jobs: {
+    name: string;
+    conclusion?: string;
+    startedAt?: string;
+    completedAt?: string;
+  }[]
+) => ({ runAttempt, startedAt, jobs });
+const job = (name: string, conclusion: string) => ({ name, conclusion });
 
 test("only FIRST attempts count — a green third try is not a healthy lane", () => {
   const rates = firstAttemptRates([
@@ -28,8 +39,8 @@ test("only FIRST attempts count — a green third try is not a healthy lane", ()
     run(2, "2026-08-30T01:00:00Z", [job("verify", "success")]),
     run(3, "2026-08-30T02:00:00Z", [job("verify", "success")]),
   ]);
-  assert.equal(rates.get("verify").attempts, 1);
-  assert.equal(rates.get("verify").rate, 0);
+  assert.equal(rates.get("verify")?.attempts, 1);
+  assert.equal(rates.get("verify")?.rate, 0);
 });
 
 test("a skipped path-gated lane has no opinion about its own health", () => {
@@ -43,8 +54,8 @@ test("a skipped path-gated lane has no opinion about its own health", () => {
       job("verify", "success"),
     ]),
   ]);
-  assert.equal(rates.get("docs").attempts, 1);
-  assert.equal(rates.get("verify").attempts, 2);
+  assert.equal(rates.get("docs")?.attempts, 1);
+  assert.equal(rates.get("verify")?.attempts, 2);
 });
 
 test("the rate is passed over attempted, and an empty tally cannot divide by zero", () => {
@@ -52,7 +63,7 @@ test("the rate is passed over attempted, and an empty tally cannot divide by zer
     run(1, "2026-08-30T00:00:00Z", [job("a", "success")]),
     run(1, "2026-08-30T01:00:00Z", [job("a", "failure")]),
   ]);
-  assert.equal(rates.get("a").rate, 0.5);
+  assert.equal(rates.get("a")?.rate, 0.5);
   assert.equal(firstAttemptRates([]).size, 0);
 });
 
@@ -77,9 +88,9 @@ test("a streak stops at the lane's most recent success", () => {
     "2026-08-31T12:00:00Z"
   );
   assert.equal(streaks.has("a"), false);
-  assert.equal(streaks.get("b").runs, 3);
-  assert.equal(streaks.get("b").since, "2026-08-29T00:00:00Z");
-  assert.equal(streaks.get("b").days, 2.5);
+  assert.equal(streaks.get("b")?.runs, 3);
+  assert.equal(streaks.get("b")?.since, "2026-08-29T00:00:00Z");
+  assert.equal(streaks.get("b")?.days, 2.5);
 });
 
 test("chronicRed fires past the threshold and not before", () => {
@@ -89,7 +100,7 @@ test("chronicRed fires past the threshold and not before", () => {
   assert.deepEqual(chronicRed(streaks, {}, 3, "2026-08-31"), []);
   const offenders = chronicRed(streaks, {}, 2, "2026-08-31");
   assert.equal(offenders.length, 1);
-  assert.equal(offenders[0].reason, "not quarantined");
+  assert.equal(offenders[0]?.reason, "not quarantined");
 });
 
 test("an unexpired quarantine parks a lane; an EXPIRED one does not", () => {
@@ -112,7 +123,7 @@ test("an unexpired quarantine parks a lane; an EXPIRED one does not", () => {
     "2026-08-31"
   );
   assert.equal(expired.length, 1);
-  assert.match(expired[0].reason, /which has passed/u);
+  assert.match(expired[0]?.reason ?? "", /which has passed/u);
 });
 
 test("a quarantine entry with no expiry is a mute, and is refused", () => {
@@ -184,7 +195,7 @@ test("an escape is a deep red on a SHA the merge gate called green", () => {
   assert.equal(escapes.has("web-e2e"), false);
 });
 
-const rules = (overrides) =>
+const rules = (overrides: Partial<Parameters<typeof applyLaneRules>[0]> = {}) =>
   applyLaneRules({
     rates: new Map(),
     streaks: new Map(),
@@ -202,7 +213,7 @@ test("a rung-2 lane below 99% is demoted, and a rung-3 lane is not", () => {
   ]);
   const demote = rules({ rates }).filter((f) => f.kind === "demote");
   assert.equal(demote.length, 1);
-  assert.equal(demote[0].title, "[lanes] demote verify");
+  assert.equal(demote[0]?.title, "[lanes] demote verify");
   assert.deepEqual(
     rules({ rates, rung: 3 }).filter((f) => f.kind === "demote"),
     []
@@ -219,7 +230,7 @@ test("two escapes in the window ask for a promotion, one does not", () => {
   const promote = rules({ escapes: new Map([["desktop-e2e", 2]]) }).find(
     (f) => f.kind === "promote"
   );
-  assert.equal(promote.title, "[lanes] promote desktop-e2e");
+  assert.equal(promote?.title, "[lanes] promote desktop-e2e");
 });
 
 test("three consecutive reds demand a park; a live park satisfies the rule", () => {
@@ -252,7 +263,7 @@ test("an expired park counts as red again and says which date passed", () => {
     quarantine: { "mobile-e2e-ios": { issue: 870, expires: "2026-08-01" } },
   }).filter((f) => f.kind === "park-expired");
   assert.equal(findings.length, 1);
-  assert.match(findings[0].detail, /expired on 2026-08-01/u);
+  assert.match(findings[0]?.detail ?? "", /expired on 2026-08-01/u);
 });
 
 test("a lane over its rung budget is red with the number to cut to", () => {
@@ -260,7 +271,7 @@ test("a lane over its rung budget is red with the number to cut to", () => {
     durations: new Map([["verify", [20 * 60_000, 20 * 60_000]]]),
   }).filter((f) => f.kind === "over-budget");
   assert.equal(findings.length, 1);
-  assert.match(findings[0].detail, /Cut 5\.0 min/u);
+  assert.match(findings[0]?.detail ?? "", /Cut 5\.0 min/u);
   assert.equal(
     rules({ durations: new Map([["verify", [10 * 60_000]]]) }).filter(
       (f) => f.kind === "over-budget"
@@ -289,14 +300,10 @@ test("more than three live parks, or a park too far out, is a HOLD", () => {
   };
   const hold = overallVerdict(many, "2026-09-02");
   assert.equal(hold.verdict, "HOLD");
-  assert.match(hold.reasons[0], /4 lanes are parked/u);
-  const far = overallVerdict(
-    { a: { expires: "2026-12-31" } },
-    "2026-09-02",
-    []
-  );
+  assert.match(hold.reasons[0] ?? "", /4 lanes are parked/u);
+  const far = overallVerdict({ a: { expires: "2026-12-31" } }, "2026-09-02");
   assert.equal(far.verdict, "HOLD");
-  assert.match(far.reasons[0], /no park may exceed 30 days/u);
+  assert.match(far.reasons[0] ?? "", /no park may exceed 30 days/u);
 });
 
 test("an expired park is a HOLD reason as well as a lane finding", () => {
@@ -305,7 +312,7 @@ test("an expired park is a HOLD reason as well as a lane finding", () => {
     "2026-09-02"
   );
   assert.equal(verdict.verdict, "HOLD");
-  assert.match(verdict.reasons[0], /expired 32 day\(s\) ago/u);
+  assert.match(verdict.reasons[0] ?? "", /expired 32 day\(s\) ago/u);
 });
 
 test("renderFindings names the verdict and every rule that fired", () => {

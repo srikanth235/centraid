@@ -8,11 +8,12 @@
  *
  * Auth: SONAR_TOKEN env (user token with project administer). Example:
  *   export SONAR_TOKEN=$(security find-generic-password -s sonarqube-cli -w)
- *   bun run scripts/ci/configure-sonarcloud.mjs
- *   bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
+ *   bun run scripts/ci/configure-sonarcloud.ts
+ *   bun run scripts/ci/configure-sonarcloud.ts --resolve-noise
  *
  * Policy: docs/toolchain.md#sonarcloud-autoscan
  */
+import process from "node:process";
 
 const ORG = "centraid";
 const PROJECT = "srikanth235_centraid";
@@ -23,7 +24,11 @@ const API = "https://sonarcloud.io/api";
 // Split so rule keys never form a `javascript:` URL literal (eslint no-script-url).
 const LANG_TS = "typescript";
 const LANG_JS = "javascript";
-const ruleKey = (lang, id) => `${lang}:${id}`;
+const ruleKey = (lang: string, id: string): string => `${lang}:${id}`;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /**
  * Globs excluded from source analysis (Autoscan UI/API supports wildcards).
@@ -185,10 +190,7 @@ const RESOLVE_COMMENT =
 
 const BULK_CHUNK = 100;
 
-/**
- * @returns {string} SonarCloud user token from the environment.
- */
-function token() {
+function token(): string {
   const t = process.env.SONAR_TOKEN?.trim();
   if (!t) {
     console.error(
@@ -199,20 +201,16 @@ function token() {
   return t;
 }
 
-/**
- * Call a SonarCloud Web API endpoint.
- * @param {string} method HTTP method.
- * @param {string} path API path beginning with `/`.
- * @param {Record<string, string | string[] | undefined> | undefined} [form] Form body for POST.
- * @returns {Promise<{ status: number, json: unknown }>} Response status and parsed body.
- */
-async function api(method, path, form) {
+async function api(
+  method: string,
+  path: string,
+  form?: Record<string, string | string[] | undefined>
+): Promise<{ status: number; json: unknown }> {
   const url = `${API}${path}`;
-  const headers = {
+  const headers: Record<string, string> = {
     Authorization: `Basic ${Buffer.from(`${token()}:`).toString("base64")}`,
   };
-  /** @type {RequestInit} */
-  const init = { method, headers };
+  const init: RequestInit = { method, headers };
   if (form) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
     const body = new URLSearchParams();
@@ -227,7 +225,7 @@ async function api(method, path, form) {
   }
   const res = await fetch(url, init);
   const text = await res.text();
-  let json = null;
+  let json: unknown = null;
   if (text) {
     try {
       json = JSON.parse(text);
@@ -238,13 +236,7 @@ async function api(method, path, form) {
   return { status: res.status, json };
 }
 
-/**
- * Set a multi-value project setting.
- * @param {string} key Setting key.
- * @param {string[]} values Values to store.
- * @returns {Promise<void>}
- */
-async function setMulti(key, values) {
+async function setMulti(key: string, values: string[]): Promise<void> {
   const { status, json } = await api("POST", "/settings/set", {
     component: PROJECT,
     key,
@@ -258,11 +250,7 @@ async function setMulti(key, values) {
   console.log(`  ${key}: ${values.length} values (HTTP ${status})`);
 }
 
-/**
- * Apply issue-ignore multicriteria for all noise rules.
- * @returns {Promise<void>}
- */
-async function setMulticriteria() {
+async function setMulticriteria(): Promise<void> {
   const fieldValues = NOISE_RULES.map((rule) =>
     JSON.stringify({ ruleKey: rule, resourceKey: "**/*" })
   );
@@ -283,20 +271,20 @@ async function setMulticriteria() {
  * Ensure Centraid quality profiles exist for ts/js with noise rules off.
  * @returns {Promise<void>}
  */
-async function ensureProfiles() {
+async function ensureProfiles(): Promise<void> {
   const { json: search } = await api(
     "GET",
     `/qualityprofiles/search?organization=${ORG}`
   );
   const profiles =
-    search && typeof search === "object" && Array.isArray(search.profiles)
-      ? search.profiles
-      : [];
+    isRecord(search) && Array.isArray(search.profiles) ? search.profiles : [];
   const by = Object.fromEntries(
-    profiles.map((p) => [`${p.language}:${p.name}`, p])
+    profiles
+      .filter(isRecord)
+      .map((p) => [`${String(p.language)}:${String(p.name)}`, p])
   );
 
-  await ["ts", "js"].reduce(async (prev, lang) => {
+  await ["ts", "js"].reduce(async (prev: Promise<void>, lang: string) => {
     await prev;
     const way = by[`${lang}:Sonar way`];
     if (!way) {
@@ -305,25 +293,25 @@ async function ensureProfiles() {
     }
     let profile = by[`${lang}:${PROFILE_NAME}`];
     if (profile) {
-      console.log(`  profile ${lang} ${PROFILE_NAME} exists (${profile.key})`);
+      console.log(
+        `  profile ${lang} ${PROFILE_NAME} exists (${String(profile.key)})`
+      );
     } else {
       const { status, json } = await api("POST", "/qualityprofiles/copy", {
-        fromKey: way.key,
+        fromKey: String(way.key),
         toName: PROFILE_NAME,
       });
       console.log(
         `  copy ${lang} → ${PROFILE_NAME}: HTTP ${status}`,
-        json?.key ?? json
+        isRecord(json) ? json.key : json
       );
       const again = await api(
         "GET",
         `/qualityprofiles/search?organization=${ORG}&language=${lang}`
       );
       const againProfiles =
-        again.json &&
-        typeof again.json === "object" &&
-        Array.isArray(again.json.profiles)
-          ? again.json.profiles
+        isRecord(again.json) && Array.isArray(again.json.profiles)
+          ? again.json.profiles.filter(isRecord)
           : [];
       profile = againProfiles.find((p) => p.name === PROFILE_NAME);
     }
@@ -331,7 +319,7 @@ async function ensureProfiles() {
 
     const prefix = lang === "ts" ? `${LANG_TS}:` : `${LANG_JS}:`;
     const noiseForLang = NOISE_RULES.filter((r) => r.startsWith(prefix));
-    await deactivateRules(profile.key, noiseForLang);
+    await deactivateRules(String(profile.key), noiseForLang);
 
     // Free plan may reject project association — try, report, continue.
     const assoc = await api("POST", "/qualityprofiles/add_project", {
@@ -356,8 +344,11 @@ async function ensureProfiles() {
  * @param {string[]} rules Rule keys to deactivate.
  * @returns {Promise<void>}
  */
-async function deactivateRules(profileKey, rules) {
-  await rules.reduce(async (prev, rule) => {
+async function deactivateRules(
+  profileKey: string,
+  rules: string[]
+): Promise<void> {
+  await rules.reduce(async (prev: Promise<void>, rule: string) => {
     await prev;
     const { status } = await api("POST", "/qualityprofiles/deactivate_rule", {
       key: profileKey,
@@ -373,16 +364,18 @@ async function deactivateRules(profileKey, rules) {
  * Ensure the Centraid quality gate exists with the desired conditions.
  * @returns {Promise<void>}
  */
-async function ensureGate() {
+async function ensureGate(): Promise<void> {
   const { json: list } = await api(
     "GET",
     `/qualitygates/list?organization=${ORG}`
   );
   const gates =
-    list && typeof list === "object" && Array.isArray(list.qualitygates)
-      ? list.qualitygates
+    isRecord(list) && Array.isArray(list.qualitygates)
+      ? list.qualitygates.filter(isRecord)
       : [];
-  let gate = gates.find((g) => g.name === GATE_NAME);
+  let gate: Record<string, unknown> | undefined = gates.find(
+    (g) => g.name === GATE_NAME
+  );
   if (gate) {
     console.log(`  gate ${GATE_NAME} exists (id=${gate.id})`);
   } else {
@@ -393,10 +386,8 @@ async function ensureGate() {
     console.log(`  create gate: HTTP ${status}`, json);
     const again = await api("GET", `/qualitygates/list?organization=${ORG}`);
     const againGates =
-      again.json &&
-      typeof again.json === "object" &&
-      Array.isArray(again.json.qualitygates)
-        ? again.json.qualitygates
+      isRecord(again.json) && Array.isArray(again.json.qualitygates)
+        ? again.json.qualitygates.filter(isRecord)
         : [];
     gate = againGates.find((g) => g.name === GATE_NAME);
   }
@@ -407,23 +398,28 @@ async function ensureGate() {
     `/qualitygates/show?id=${gate.id}&organization=${ORG}`
   );
   const existing =
-    show && typeof show === "object" && Array.isArray(show.conditions)
-      ? show.conditions
+    isRecord(show) && Array.isArray(show.conditions)
+      ? show.conditions.filter(isRecord)
       : [];
   const want = new Map(
     GATE_CONDITIONS.map((c) => [c.metric, `${c.op}:${c.error}`])
   );
-  const have = new Map(existing.map((c) => [c.metric, `${c.op}:${c.error}`]));
+  const have = new Map(
+    existing.map((c) => [
+      String(c.metric),
+      `${String(c.op)}:${String(c.error)}`,
+    ])
+  );
   const matches =
     want.size === have.size &&
     [...want.entries()].every(([m, v]) => have.get(m) === v);
   if (matches) {
     console.log(`  conditions already match (${existing.length})`);
   } else {
-    await existing.reduce(async (prev, c) => {
+    await existing.reduce(async (prev: Promise<void>, c) => {
       await prev;
       const del = await api("POST", "/qualitygates/delete_condition", {
-        id: c.id,
+        id: String(c.id),
         organization: ORG,
       });
       if (del.status !== 200 && del.status !== 204) {
@@ -433,25 +429,28 @@ async function ensureGate() {
         );
       }
     }, Promise.resolve());
-    await GATE_CONDITIONS.reduce(async (prev, c) => {
+    await GATE_CONDITIONS.reduce(async (prev: Promise<void>, c) => {
       await prev;
       const { status, json } = await api(
         "POST",
         "/qualitygates/create_condition",
         {
-          gateId: gate.id,
+          gateId: String(gate.id),
           metric: c.metric,
           op: c.op,
           error: c.error,
           organization: ORG,
         }
       );
-      console.log(`  condition ${c.metric}: HTTP ${status}`, json?.id ?? json);
+      console.log(
+        `  condition ${c.metric}: HTTP ${status}`,
+        isRecord(json) ? json.id : json
+      );
     }, Promise.resolve());
   }
 
   const select = await api("POST", "/qualitygates/select", {
-    gateId: gate.id,
+    gateId: String(gate.id),
     projectKey: PROJECT,
     organization: ORG,
   });
@@ -471,7 +470,11 @@ async function ensureGate() {
  * @param {string[]} [acc] Accumulator.
  * @returns {Promise<string[]>} Issue keys.
  */
-async function collectOpenIssueKeys(rule, page = 1, acc = []) {
+async function collectOpenIssueKeys(
+  rule: string,
+  page = 1,
+  acc: string[] = []
+): Promise<string[]> {
   const { status, json } = await api(
     "GET",
     `/issues/search?componentKeys=${PROJECT}&branch=main&resolved=false&rules=${encodeURIComponent(rule)}&ps=500&p=${page}`
@@ -481,14 +484,12 @@ async function collectOpenIssueKeys(rule, page = 1, acc = []) {
     return acc;
   }
   const issues =
-    json && typeof json === "object" && Array.isArray(json.issues)
-      ? json.issues
+    isRecord(json) && Array.isArray(json.issues)
+      ? json.issues.filter(isRecord)
       : [];
-  const next = acc.concat(issues.map((issue) => issue.key));
+  const next = acc.concat(issues.map((issue) => String(issue.key)));
   const total =
-    json && typeof json === "object" && typeof json.total === "number"
-      ? json.total
-      : 0;
+    isRecord(json) && typeof json.total === "number" ? json.total : 0;
   if (page * 500 >= total) return next;
   return collectOpenIssueKeys(rule, page + 1, next);
 }
@@ -497,42 +498,45 @@ async function collectOpenIssueKeys(rule, page = 1, acc = []) {
  * Bulk-WONTFIX residual open issues on silenced noise rules.
  * @returns {Promise<void>}
  */
-async function resolveNoise() {
-  const total = await NOISE_RULES.reduce(async (prevTotalP, rule) => {
-    const prevTotal = await prevTotalP;
-    const keys = await collectOpenIssueKeys(rule);
-    if (keys.length === 0) {
-      console.log(`  ${rule}: 0 open`);
-      return prevTotal;
-    }
-    const chunks = [];
-    for (let i = 0; i < keys.length; i += BULK_CHUNK) {
-      chunks.push(keys.slice(i, i + BULK_CHUNK));
-    }
-    const added = await chunks.reduce(async (prevN, chunk) => {
-      const nSoFar = await prevN;
-      const { status, json } = await api("POST", "/issues/bulk_change", {
-        issues: chunk.join(","),
-        do_transition: "wontfix",
-        comment: RESOLVE_COMMENT,
-      });
-      const ok = status === 200 || status === 204;
-      const n =
-        ok &&
-        json &&
-        typeof json === "object" &&
-        typeof json.success === "number"
-          ? json.success
-          : ok
-            ? chunk.length
-            : 0;
-      console.log(
-        `  ${rule}: chunk ${chunk.length} → HTTP ${status} success=${n}`
+async function resolveNoise(): Promise<void> {
+  const total = await NOISE_RULES.reduce(
+    async (prevTotalP: Promise<number>, rule: string) => {
+      const prevTotal = await prevTotalP;
+      const keys = await collectOpenIssueKeys(rule);
+      if (keys.length === 0) {
+        console.log(`  ${rule}: 0 open`);
+        return prevTotal;
+      }
+      const chunks = [];
+      for (let i = 0; i < keys.length; i += BULK_CHUNK) {
+        chunks.push(keys.slice(i, i + BULK_CHUNK));
+      }
+      const added = await chunks.reduce(
+        async (prevN: Promise<number>, chunk: string[]) => {
+          const nSoFar = await prevN;
+          const { status, json } = await api("POST", "/issues/bulk_change", {
+            issues: chunk.join(","),
+            do_transition: "wontfix",
+            comment: RESOLVE_COMMENT,
+          });
+          const ok = status === 200 || status === 204;
+          const n =
+            ok && isRecord(json) && typeof json.success === "number"
+              ? json.success
+              : ok
+                ? chunk.length
+                : 0;
+          console.log(
+            `  ${rule}: chunk ${chunk.length} → HTTP ${status} success=${n}`
+          );
+          return nSoFar + n;
+        },
+        Promise.resolve(0)
       );
-      return nSoFar + n;
-    }, Promise.resolve(0));
-    return prevTotal + added;
-  }, Promise.resolve(0));
+      return prevTotal + added;
+    },
+    Promise.resolve(0)
+  );
   console.log(`  resolved ~${total} issues`);
 }
 
@@ -540,24 +544,23 @@ async function resolveNoise() {
  * Print open-issue summary and active gate/profiles.
  * @returns {Promise<void>}
  */
-async function summary() {
+async function summary(): Promise<void> {
   const { json } = await api(
     "GET",
     `/issues/search?componentKeys=${PROJECT}&branch=main&resolved=false&ps=1&facets=types`
   );
   const openTotal =
-    json && typeof json === "object" && typeof json.total === "number"
-      ? json.total
-      : "?";
+    isRecord(json) && typeof json.total === "number" ? json.total : "?";
   console.log(`  open issues on main: ${openTotal}`);
   const facets =
-    json && typeof json === "object" && Array.isArray(json.facets)
-      ? json.facets
+    isRecord(json) && Array.isArray(json.facets)
+      ? json.facets.filter(isRecord)
       : [];
   for (const f of facets) {
     if (f.property === "types") {
-      for (const v of f.values ?? []) {
-        if (v.count) console.log(`    ${v.val}: ${v.count}`);
+      const values = Array.isArray(f.values) ? f.values.filter(isRecord) : [];
+      for (const v of values) {
+        if (v.count) console.log(`    ${String(v.val)}: ${String(v.count)}`);
       }
     }
   }
@@ -566,24 +569,20 @@ async function summary() {
     `/navigation/component?component=${PROJECT}`
   );
   const gateName =
-    nav &&
-    typeof nav === "object" &&
-    nav.qualityGate &&
-    typeof nav.qualityGate === "object"
-      ? nav.qualityGate.name
-      : "?";
-  console.log(`  quality gate: ${gateName ?? "?"}`);
+    isRecord(nav) && isRecord(nav.qualityGate) ? nav.qualityGate.name : "?";
+  console.log(`  quality gate: ${String(gateName ?? "?")}`);
   const profiles =
-    nav && typeof nav === "object" && Array.isArray(nav.qualityProfiles)
+    isRecord(nav) && Array.isArray(nav.qualityProfiles)
       ? nav.qualityProfiles
+          .filter(isRecord)
           .filter((p) => p.language === "ts" || p.language === "js")
-          .map((p) => `${p.language}=${p.name}`)
+          .map((p) => `${String(p.language)}=${String(p.name)}`)
           .join(", ")
       : "";
   console.log(`  ts/js profiles: ${profiles || "?"}`);
 }
 
-async function main() {
+async function main(): Promise<void> {
   const resolve = process.argv.includes("--resolve-noise");
   console.log(`Configuring SonarCloud project ${PROJECT} (org ${ORG})…`);
 

@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
  * broken has to be the least surprising code in the repo.
  *
  * Usage:
- *   node scripts/ci/file-tracking-issue.mjs \
+ *   node scripts/ci/file-tracking-issue.ts \
  *     --title '[nightly] lane red — mobile-e2e-ios' \
  *     --search '[nightly] lane red — mobile-e2e-ios' \
  *     --body-file /tmp/body.md \
@@ -44,13 +44,44 @@ import { spawnSync } from "node:child_process";
  */
 import { readFileSync } from "node:fs";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface GhResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+export type GhRunner = (args: string[]) => GhResult;
+
+export interface TrackingResult {
+  ok: boolean;
+  action: string;
+  number?: number;
+  labelled?: boolean;
+  error?: string;
+  runUrl?: string;
+}
+
+export interface TrackingArgs {
+  title: string;
+  search: string;
+  "body-file": string;
+  label?: string;
+  "run-url"?: string;
+  update?: boolean;
+}
+
 /** Parse `--flag value` pairs. Unknown flags are an error, not a silent no-op. */
-export function parseArgs(argv) {
+export function parseArgs(argv: string[]): TrackingArgs {
   const known = new Set(["title", "search", "body-file", "label", "run-url"]);
   const booleans = new Set(["update"]);
-  const out = {};
+  const out: Record<string, string | boolean> = {};
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
+    if (token === undefined) continue;
     if (!token.startsWith("--"))
       throw new Error(`unexpected argument \`${token}\``);
     const key = token.slice(2);
@@ -65,10 +96,24 @@ export function parseArgs(argv) {
     out[key] = value;
     index += 1;
   }
-  for (const required of ["title", "search", "body-file"]) {
-    if (!out[required]) throw new Error(`--${required} is required`);
-  }
-  return out;
+  const title = out.title;
+  const search = out.search;
+  const bodyFile = out["body-file"];
+  if (typeof title !== "string" || title.length === 0)
+    throw new Error("--title is required");
+  if (typeof search !== "string" || search.length === 0)
+    throw new Error("--search is required");
+  if (typeof bodyFile !== "string" || bodyFile.length === 0)
+    throw new Error("--body-file is required");
+  const parsed: TrackingArgs = {
+    title,
+    search,
+    "body-file": bodyFile,
+  };
+  if (typeof out.label === "string") parsed.label = out.label;
+  if (typeof out["run-url"] === "string") parsed["run-url"] = out["run-url"];
+  if (out.update === true) parsed.update = true;
+  return parsed;
 }
 
 /**
@@ -76,7 +121,7 @@ export function parseArgs(argv) {
  * and `--state open` is what keeps a closed issue from being resurrected and a
  * body mention from matching.
  */
-export function buildSearchQuery(search) {
+export function buildSearchQuery(search: string): string {
   return `in:title ${search}`;
 }
 
@@ -86,31 +131,23 @@ export function buildSearchQuery(search) {
  * "nothing found" — treating `"null"` as an issue number is how you end up
  * commenting on issue NaN.
  */
-export function parseExistingNumber(stdout) {
+export function parseExistingNumber(
+  stdout: string | null | undefined
+): number | null {
   const trimmed = (stdout ?? "").trim();
   if (!trimmed || trimmed === "null") return null;
   if (!/^\d+$/u.test(trimmed)) return null;
   return Number(trimmed);
 }
 
-/**
- * The open issue whose title is EXACTLY `title`, from a `--json number,title`
- * listing.
- *
- * `gh issue list --search 'in:title X'` is a full-text query: it matches word
- * stems, ignores punctuation, and happily returns `… — mobile-e2e-ios-smoke`
- * for a search naming `mobile-e2e-ios`. In comment mode a near-match costs one
- * misplaced comment; in `--update` mode it OVERWRITES another lane's issue
- * body, so the exact match is a correctness requirement rather than tidiness.
- *
- * @param {string} stdout Raw stdout of `gh issue list --json number,title`.
- * @param {string} title The title to match exactly.
- * @returns {number|null} The issue number, or null when nothing matches.
- */
-export function findExactTitleNumber(stdout, title) {
+/** The open issue whose title is EXACTLY `title`, from a `--json number,title` listing. */
+export function findExactTitleNumber(
+  stdout: string | null | undefined,
+  title: string
+): number | null {
   const trimmed = (stdout ?? "").trim();
   if (!trimmed) return null;
-  let parsed;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
@@ -118,7 +155,7 @@ export function findExactTitleNumber(stdout, title) {
   }
   if (!Array.isArray(parsed)) return null;
   for (const entry of parsed) {
-    if (entry && typeof entry === "object" && entry.title === title) {
+    if (isRecord(entry) && entry.title === title) {
       const number = Number(entry.number);
       if (Number.isInteger(number) && number > 0) return number;
     }
@@ -126,18 +163,20 @@ export function findExactTitleNumber(stdout, title) {
   return null;
 }
 
-/**
- * Rewrite the matching open issue's body in place, or open it if none is open.
- *
- * Never re-creates: an issue that exists is edited, so the lane has exactly one
- * rolling issue for as long as it is red and the URL in yesterday's report
- * still resolves to today's state.
- *
- * @param {object} options Title/search/body plus the injected `gh` runner.
- * @param {(args: string[]) => {status: number|null, stdout: string, stderr: string}} options.run Invokes `gh` with the given argv.
- * @returns {{ok: boolean, action: string, number?: number, labelled?: boolean, error?: string}} What happened.
- */
-export function updateTrackingIssue({ run, title, search, body, label }) {
+/** Rewrite the matching open issue's body in place, or open it if none is open. */
+export function updateTrackingIssue({
+  run,
+  title,
+  search,
+  body,
+  label,
+}: {
+  run: GhRunner;
+  title: string;
+  search: string;
+  body: string;
+  label?: string;
+}): TrackingResult {
   const found = run([
     "issue",
     "list",
@@ -168,18 +207,18 @@ export function updateTrackingIssue({ run, title, search, body, label }) {
   return createTrackingIssue({ run, title, body, label });
 }
 
-/**
- * Open a tracking issue, preferring the labelled form.
- *
- * Split out of `fileTrackingIssue` so `--update` shares the exact same
- * create-with-label-fallback path: a repo without the label must still get the
- * issue, because losing the alert is worse than losing the label.
- *
- * @param {object} options Title/body/label plus the injected `gh` runner.
- * @param {(args: string[]) => {status: number|null, stdout: string, stderr: string}} options.run Invokes `gh` with the given argv.
- * @returns {{ok: boolean, action: string, labelled?: boolean, error?: string}} What happened.
- */
-export function createTrackingIssue({ run, title, body, label }) {
+/** Open a tracking issue, preferring the labelled form. */
+export function createTrackingIssue({
+  run,
+  title,
+  body,
+  label,
+}: {
+  run: GhRunner;
+  title: string;
+  body: string;
+  label?: string;
+}): TrackingResult {
   if (label) {
     const labelled = run([
       "issue",
@@ -201,15 +240,22 @@ export function createTrackingIssue({ run, title, body, label }) {
   return { ok: true, action: "create", labelled: false };
 }
 
-/**
- * Comment on the matching open issue, or open a new one.
- *
- * @param {object} options Title/search/body plus the injected `gh` runner.
- * @param {(args: string[]) => {status: number|null, stdout: string, stderr: string}} options.run
- *   Invokes `gh` with the given argv. Injected so the whole decision tree is
- *   testable without a network or a repo.
- */
-export function fileTrackingIssue({ run, title, search, body, label, runUrl }) {
+/** Comment on the matching open issue, or open a new one. */
+export function fileTrackingIssue({
+  run,
+  title,
+  search,
+  body,
+  label,
+  runUrl,
+}: {
+  run: GhRunner;
+  title: string;
+  search: string;
+  body: string;
+  label?: string;
+  runUrl?: string;
+}): TrackingResult {
   const found = run([
     "issue",
     "list",
@@ -244,16 +290,14 @@ export function fileTrackingIssue({ run, title, search, body, label, runUrl }) {
     return { ok: true, action: "comment", number: existing };
   }
 
-  // Label first; a repo without that label must still get the issue, so fall
-  // back to an unlabelled create rather than losing the alert.
   const created = createTrackingIssue({ run, title, body, label });
   return created.ok ? created : { ...created, runUrl };
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const body = readFileSync(args["body-file"], "utf8");
-  const run = (argv) => {
+  const run: GhRunner = (argv) => {
     const result = spawnSync("gh", argv, { encoding: "utf8" });
     return {
       status: result.status,
@@ -298,11 +342,12 @@ function main() {
     );
 }
 
-if (process.argv[1] && process.argv[1].endsWith("file-tracking-issue.mjs")) {
+if (process.argv[1] && process.argv[1].endsWith("file-tracking-issue.ts")) {
   try {
     main();
   } catch (error) {
-    console.error(`::error::${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`::error::${message}`);
     process.exitCode = 1;
   }
 }
