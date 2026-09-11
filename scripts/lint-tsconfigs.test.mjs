@@ -224,3 +224,136 @@ test("a workspace directory with no tsconfig.json is skipped", (t) => {
   });
   assert.deepEqual(lintTsconfigs(root), []);
 });
+
+const nodeProfile = json({
+  extends: "./tsconfig.base.json",
+  compilerOptions: {
+    module: "NodeNext",
+    moduleResolution: "NodeNext",
+    noEmit: true,
+  },
+});
+const scriptsProgram = json({
+  extends: "../tsconfig.node.json",
+  include: ["**/*.ts"],
+});
+const pricingProgram = json({
+  extends: "../tsconfig.base.json",
+  include: ["refresh-pricing-snapshot.ts"],
+});
+const rootTypecheckScripts = json({
+  name: "centraid",
+  scripts: {
+    typecheck:
+      "tsc -p tests && tsc -p scripts && tsc -p scripts/tsconfig.pricing.json",
+    "typecheck:affected":
+      "tsc -p tests && tsc -p scripts && tsc -p scripts/tsconfig.pricing.json",
+  },
+});
+
+test("root Node tooling programs that extend the shared profile pass", (t) => {
+  const root = fixture(t, {
+    "package.json": rootTypecheckScripts,
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": scriptsProgram,
+    "scripts/tsconfig.pricing.json": pricingProgram,
+    "scripts/refresh-pricing-snapshot.ts": "export {};\n",
+    "scripts/tool.ts": "export {};\n",
+  });
+  assert.deepEqual(lintTsconfigs(root), []);
+});
+
+test("a root typecheck that omits tsc -p scripts is rejected", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests",
+        "typecheck:affected": "tsc -p tests",
+      },
+    }),
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": scriptsProgram,
+  });
+  assert.deepEqual(lintTsconfigs(root).sort(), [
+    "package.json: typecheck must target tsc -p scripts",
+    "package.json: typecheck:affected must target tsc -p scripts",
+  ]);
+});
+
+test("a scripts program that does not extend tsconfig.node.json is rejected", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests && tsc -p scripts",
+        "typecheck:affected": "tsc -p tests && tsc -p scripts",
+      },
+    }),
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": json({
+      extends: "../tsconfig.base.json",
+      include: ["**/*.ts"],
+    }),
+  });
+  assert.deepEqual(lintTsconfigs(root), [
+    "scripts/tsconfig.json: must extend tsconfig.node.json",
+  ]);
+});
+
+test("a scripts program with a removed moduleResolution is rejected", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests && tsc -p scripts",
+        "typecheck:affected": "tsc -p tests && tsc -p scripts",
+      },
+    }),
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": json({
+      extends: "../tsconfig.node.json",
+      compilerOptions: { moduleResolution: "node" },
+      include: ["**/*.ts"],
+    }),
+  });
+  assert.deepEqual(lintTsconfigs(root), [
+    "scripts/tsconfig.json: moduleResolution node is removed by TypeScript 7",
+  ]);
+});
+
+test("a missing scripts program cannot drop out of typecheck", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests && tsc -p scripts",
+        "typecheck:affected": "tsc -p tests && tsc -p scripts",
+      },
+    }),
+  });
+  assert.deepEqual(lintTsconfigs(root).sort(), [
+    "scripts/tsconfig.json: missing Node tooling program",
+    "tsconfig.node.json: missing Node tooling compiler profile",
+  ]);
+});
+
+test("refresh-pricing-snapshot.ts requires the bundler program in typecheck", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests && tsc -p scripts",
+        "typecheck:affected": "tsc -p tests && tsc -p scripts",
+      },
+    }),
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": scriptsProgram,
+    "scripts/refresh-pricing-snapshot.ts": "export {};\n",
+  });
+  assert.deepEqual(lintTsconfigs(root).sort(), [
+    "package.json: typecheck must target tsc -p scripts/tsconfig.pricing.json",
+    "package.json: typecheck:affected must target tsc -p scripts/tsconfig.pricing.json",
+    "scripts/tsconfig.pricing.json: missing Node tooling program",
+  ]);
+});

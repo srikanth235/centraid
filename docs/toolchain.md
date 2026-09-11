@@ -36,7 +36,7 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `lint` | ordinary Oxlint pass, warnings denied |
 | `lint:fix` | Oxlint safe fixes only |
 | `lint:types` | compiler-compatible type-aware allowlist plus policy fixtures |
-| `typecheck` | pinned TypeScript compiler across the monorepo |
+| `typecheck` | pinned TypeScript compiler across workspaces, `tests/`, and repository scripts |
 | `test:affected` | Vitest for workspaces changed from `origin/main` |
 | `check:fast` | format check, ordinary lint, and affected typecheck |
 | `check:pr` | frozen install, static policy, typecheck, affected tests, and Knip |
@@ -114,6 +114,14 @@ Knip's dead-export detection stops at workspace entry files: a capability re-exp
 **Scope.** The configured modules are the sharing plane on all three seats: the server's peer/share/commons/edges routes, the vault's grant and share modules, the blueprint grant and share modules under `packages/blueprints/apps/_shared` plus `apps/people/grant-dashboard.ts`, and the phone's `apps/mobile/src/kit/share`. The `_shared` tree is listed module by module rather than globbed: most of it is not the sharing plane (consent gates, nav, search scaffolding), and `grant-sheet-harness.ts` is a test kit that no production file may reach. The three modules once held out for genuinely dead exports are resolved: `_shared/ShareSheet.tsx` is deleted (the web seat lives in `GrantSheet`), and `grant-plane.ts` and `placement-registry.ts` lost their dead exports and are in the gate ([#883](https://github.com/srikanth235/centraid/issues/883)).
 
 Documented exceptions live in the config's `allowlist`, one non-empty `reason` string per entry (the same documented-exception style as `knip.json`); a stale entry — one whose capability gained a production caller or disappeared — is itself a failure, so the list only shrinks. The allowlist is currently **empty** and should stay that way: a failing capability is fixed by wiring the production caller or deleting the export, not by adding an entry.
+
+## TypeScript programs
+
+Root `typecheck` and `typecheck:affected` run the turbo workspace programs, then `tsc -p tests`, then the repository scripts programs. Scripts is not a turbo workspace.
+
+Directly executed Node tooling under `scripts/` uses `tsconfig.node.json`: `module` / `moduleResolution` NodeNext, `erasableSyntaxOnly`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, and `.ts` import specifiers. Node runs those files with native type stripping (`node path/to/script.ts`). Compiled package runtime keeps NodeNext `.js` specifiers. `tsconfig.base.json` stays the application/bundler default (`module: Preserve`, `moduleResolution: bundler`).
+
+Scripts that import package source (`scripts/refresh-pricing-snapshot.ts`) have a separate bundler/Preserve program (`scripts/tsconfig.pricing.json`) so the Node tooling program does not typecheck `packages/*/src`. `scripts/perf/app-waterfall.run.ts` is excluded from the NodeNext program for the same reason: it imports `@centraid/test-kit` source and compiled package specifiers.
 
 Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:pr`. No hook mutates a tracked file: token cost per arrival is no longer appended to anything, it is read back out of the touched receipt's `## Accounting` section and printed on the generated front page, or printed as `token cost: not recorded` when the author recorded none ([#1005](https://github.com/srikanth235/centraid/issues/1005), [decisions.md](decisions.md#governance-as-a-constitution-1005)).
 

@@ -217,7 +217,7 @@ bun run check:fast     # edit loop: format + lint + affected typecheck
 bun run check:full     # shared infra: dependents + coverage + e2e
 bun run test           # per-package vitest (hundreds of test files)
 bun run coverage       # repo-wide v8 coverage
-bun run typecheck      # turbo typecheck + tests/ tsc (check:pr; push tier uses typecheck:affected)
+bun run typecheck      # turbo typecheck + tests/ and scripts/ tsc (check:pr; push tier uses typecheck:affected)
 bun run lint:types     # type-aware lint (check:pr and CI, not the push tier)
 bun run toolchain:doctor # non-mutating Ultracite/config drift check
 bun run ci             # alias of check:pr

@@ -1,12 +1,10 @@
 {
-  "extends": "../tsconfig.base.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "types": ["node"]
-  },
-  "include": [
+  "extends": "../tsconfig.node.json",
+  // Package-source importers stay out of this NodeNext program (#1018).
+  "include": ["**/*.ts"],
+  "exclude": [
+    "fixtures/**",
     "refresh-pricing-snapshot.ts",
-    "release/vitest.config.ts",
-    "test-report/vitest.config.ts"
+    "perf/app-waterfall.run.ts"
   ]
 }

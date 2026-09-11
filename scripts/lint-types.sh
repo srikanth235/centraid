@@ -211,7 +211,7 @@ for entry in "${EXTRA_TARGETS[@]}"; do
   source_ignore='**/*.{test,spec}.{ts,tsx}'
   if [[ "$label" == "repository-scripts" ]]; then
     all_ignore='scripts/fixtures/**|**/*.{js,jsx,mjs,cjs}'
-    source_ignore="$all_ignore"
+    source_ignore="${source_ignore}|${all_ignore}"
   elif [[ "$label" == "repository-tests" ]]; then
     all_ignore='**/*.{js,jsx,mjs,cjs}'
   fi

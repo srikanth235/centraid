@@ -13,6 +13,106 @@ import ts from "typescript";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKSPACE_ROOTS = ["packages", "apps"];
 const REMOVED_MODULE_RESOLUTIONS = new Set(["node", "node10", "classic"]);
+const NODE_TOOLING_PROFILE = "tsconfig.node.json";
+/** Root programs that are not turbo workspaces (#1018). */
+const ROOT_TOOLING_PROGRAMS = [
+  {
+    rel: "scripts/tsconfig.json",
+    extendsNeedle: NODE_TOOLING_PROFILE,
+    typecheckNeedles: ["tsc -p scripts"],
+  },
+  {
+    rel: "scripts/tsconfig.pricing.json",
+    requiredWhen: "scripts/refresh-pricing-snapshot.ts",
+    extendsNeedle: "tsconfig.base.json",
+    typecheckNeedles: ["tsc -p scripts/tsconfig.pricing.json"],
+  },
+];
+
+function typecheckMentions(script, needle) {
+  if (needle === "tsc -p scripts") {
+    return /(?:^|[\s;&])tsc -p scripts(?:\s|$|&|;)/u.test(script);
+  }
+  return script.includes(needle);
+}
+
+function reportRemovedModuleResolution(failures, rel, compilerOptions) {
+  const moduleResolution = compilerOptions.moduleResolution;
+  if (
+    typeof moduleResolution === "string" &&
+    REMOVED_MODULE_RESOLUTIONS.has(moduleResolution.toLowerCase())
+  ) {
+    failures.push(
+      `${rel}: moduleResolution ${moduleResolution} is removed by TypeScript 7`
+    );
+  }
+}
+
+function lintRootTooling(root, failures) {
+  const packageJson = path.join(root, "package.json");
+  if (!existsSync(packageJson)) return;
+  const scripts = readJsonc(packageJson, root).scripts ?? {};
+  const typecheck = scripts.typecheck ?? "";
+  const affected = scripts["typecheck:affected"] ?? "";
+  if (typeof typecheck !== "string" || !typecheck.includes("tsc -p tests")) {
+    return;
+  }
+
+  const profileRel = NODE_TOOLING_PROFILE;
+  const profile = path.join(root, profileRel);
+  if (existsSync(profile)) {
+    const json = readJsonc(profile, root);
+    if (
+      typeof json.extends !== "string" ||
+      !json.extends.includes("tsconfig.base.json")
+    ) {
+      failures.push(`${profileRel}: must extend a shared tsconfig base`);
+    }
+    reportRemovedModuleResolution(
+      failures,
+      profileRel,
+      json.compilerOptions ?? {}
+    );
+  } else {
+    failures.push(`${profileRel}: missing Node tooling compiler profile`);
+  }
+
+  for (const program of ROOT_TOOLING_PROGRAMS) {
+    const file = path.join(root, program.rel);
+    const requiredFile = program.requiredWhen
+      ? path.join(root, program.requiredWhen)
+      : null;
+    const required =
+      existsSync(file) || !requiredFile || existsSync(requiredFile);
+    if (!required) continue;
+    if (existsSync(file)) {
+      const json = readJsonc(file, root);
+      if (typeof json.extends !== "string" || json.extends.length === 0) {
+        failures.push(`${program.rel}: must extend a shared tsconfig base`);
+      } else if (
+        program.extendsNeedle &&
+        !json.extends.includes(program.extendsNeedle)
+      ) {
+        failures.push(`${program.rel}: must extend ${program.extendsNeedle}`);
+      }
+      reportRemovedModuleResolution(
+        failures,
+        program.rel,
+        json.compilerOptions ?? {}
+      );
+    } else {
+      failures.push(`${program.rel}: missing Node tooling program`);
+    }
+    for (const needle of program.typecheckNeedles) {
+      if (!typecheckMentions(typecheck, needle)) {
+        failures.push(`package.json: typecheck must target ${needle}`);
+      }
+      if (!typecheckMentions(affected, needle)) {
+        failures.push(`package.json: typecheck:affected must target ${needle}`);
+      }
+    }
+  }
+}
 
 function readJsonc(file, root = ROOT) {
   const result = ts.parseConfigFileTextToJson(file, readFileSync(file, "utf8"));
@@ -80,6 +180,7 @@ function includesTests(parsed, tests) {
  */
 export function lintTsconfigs(root = ROOT) {
   const failures = [];
+  lintRootTooling(root, failures);
   for (const workspace of workspaceDirs(root)) {
     const rel = path.relative(root, workspace);
     const configs = tsconfigs(workspace);
@@ -96,16 +197,7 @@ export function lintTsconfigs(root = ROOT) {
       if (compilerOptions.baseUrl !== undefined) {
         failures.push(`${configRel}: baseUrl is removed by TypeScript 7`);
       }
-      if (
-        typeof compilerOptions.moduleResolution === "string" &&
-        REMOVED_MODULE_RESOLUTIONS.has(
-          compilerOptions.moduleResolution.toLowerCase()
-        )
-      ) {
-        failures.push(
-          `${configRel}: moduleResolution ${compilerOptions.moduleResolution} is removed by TypeScript 7`
-        );
-      }
+      reportRemovedModuleResolution(failures, configRel, compilerOptions);
     }
 
     const mainConfig = byName.get("tsconfig.json");

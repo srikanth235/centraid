@@ -1,0 +1,103 @@
+# Issue #1018 — migrate maintained `.mjs` source to TypeScript (Slice A)
+
+Umbrella: compiler profile for directly executed Node tooling. No `.mjs` rename in this lane.
+
+## What changed
+
+Root typecheck now includes the repository scripts TypeScript programs. Directly executed Node tooling uses a shared `tsconfig.node.json` profile (`module`/`moduleResolution` NodeNext, `erasableSyntaxOnly`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, `.ts` import specifiers). Node runs those files with native type stripping (`node path/to/script.ts`). `tsconfig.base.json` application/bundler defaults are unchanged. Compiled package runtime still uses NodeNext `.js` specifiers.
+
+`scripts/tsconfig.json` extends that profile and includes every maintained `scripts/**/*.ts` file except negative lint fixtures and two package-source importers. `scripts/refresh-pricing-snapshot.ts` has a separate bundler/Preserve program (`scripts/tsconfig.pricing.json`) so the NodeNext program does not typecheck `packages/server/src`. `scripts/perf/app-waterfall.run.ts` is excluded from the NodeNext program for the same reason (`tsc --listFiles` pulled `packages/test-kit/src` and failed to resolve compiled package specifiers without `dist/`).
+
+`lint:types` `repository-scripts` `source_ignore` keeps `**/*.{test,spec}.{ts,tsx}` when fixtures/`*.mjs` ignores are applied. `lint:tsconfigs` requires the new programs to stay in root `typecheck` / `typecheck:affected` (extends-base, no removed `moduleResolution`).
+
+## Verification
+
+```sh
+tsc -p scripts --listFiles --pretty false
+```
+
+297 files. Scripts TypeScript members: `scripts/fuzz/vitest.config.ts`, `scripts/release/vitest.config.ts`, `scripts/test-report/vitest.config.ts`. `packages/server/src` count: 0. `packages/*/src` count: 0. Fixtures absent.
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0.
+
+```sh
+tsc -p scripts/tsconfig.pricing.json --listFiles --pretty false
+```
+
+193 files. Non-lib members: `scripts/refresh-pricing-snapshot.ts`, `packages/server/src/engine/pricing/filter.ts`, `packages/server/src/engine/pricing/types.ts`. Isolated from the NodeNext program.
+
+```sh
+tsc -p scripts/tsconfig.pricing.json --noEmit
+```
+
+Exit 0. Import `../packages/server/src/engine/pricing/filter.ts` typechecks with `allowImportingTsExtensions` on the bundler program.
+
+```sh
+tsc -p tests --noEmit
+```
+
+Exit 2, 815 `error TS` diagnostics, identical count after stashing this lane's files. Inherited red: package `dist/` is absent in this worktree (`packages/core/dist/protocol/index.d.ts` missing). Not introduced by this change.
+
+```sh
+bun run lint:tsconfigs
+```
+
+`tsconfigs: ok (base inheritance, TS7 options, emit/test coverage)`
+
+```sh
+node --test scripts/lint-tsconfigs.test.mjs
+```
+
+18 pass, 0 fail.
+
+```sh
+bun run format:check
+```
+
+All matched files use the correct format.
+
+```sh
+bun run lint
+```
+
+0 warnings, 0 errors.
+
+`npx` was not used. `check:push:static` was not run: `typecheck:affected` includes `tsc -p tests`, which is inherited-red without package `dist/`.
+
+## Baseline (Slice B, identities only)
+
+`scripts:test` was not executed (long). Identity set from root `package.json#scripts["scripts:test"]`:
+
+- vitest: `scripts/release/vitest.config.ts`
+- `bun run release:surfaces:test`
+- `node --test` files: `scripts/lib/sanitize-connector-svg.test.mjs`, `scripts/design-gallery-fidelity.test.mjs`, `scripts/lint-design-tokens.test.mjs`, `scripts/lint-mobile-design.test.mjs`, `scripts/lint-logical-insets.test.mjs`, `scripts/lint-hairline.test.mjs`, `scripts/lint-workflow-pins.test.mjs`, `scripts/ci/file-tracking-issue.test.mjs`, `scripts/ci/rolling-issue-fallback-body.test.mjs`, `scripts/ci/burn-in.test.mjs`, `scripts/ci/mutation-cap.test.mjs`, `scripts/ci/pr-gate-wall-clock.test.mjs`, `scripts/ci/turbo-floor.test.mjs`, `scripts/ci/write-candidate.test.mjs`, `scripts/ci/resolve-candidate.test.mjs`, `scripts/ci/run-slug.test.mjs`, `scripts/ci/hygiene-gates.test.mjs`, `scripts/ci/collection-tripwire.test.mjs`, `scripts/ci/assert-shard-blobs.test.mjs`, `scripts/ci/advisory-expiry.test.mjs`, `scripts/ci/lane-health.test.mjs`, `scripts/ci/osv-lockfile-scan.test.mjs`, `scripts/lint-e2e-flows.test.mjs`, `scripts/lint-e2e-wiring.test.mjs`, `scripts/lint-mobile-testids.test.mjs`, `scripts/lint-vault-sql.test.mjs`, `scripts/check-mobile-suite-budgets.test.mjs`, `scripts/lint-tsconfigs.test.mjs`, `scripts/lint-turbo-cache.test.mjs`, `scripts/lint-path-filters.test.mjs`, `scripts/ci/turbo-cache-report.test.mjs`, `scripts/lint-css-classes.test.mjs`, `scripts/lint-protocol-routes.test.mjs`, `scripts/lint-law-registry.test.mjs`, `scripts/lint-engine-conformance.test.mjs`, `scripts/lint-engine-conformance-registry.test.mjs`, `scripts/check-mobile-native-state.test.mjs`, `scripts/check-share-reachability.test.mjs`, `scripts/lint-hermes-array-surface.test.mjs`, `scripts/security/dast-scan.test.mjs`, `scripts/security/rust-supply-chain.test.mjs`, `scripts/security/unsafe-edge-audit.test.mjs`, `scripts/security/supply-chain-core.test.mjs`, `scripts/security/dependency-behaviour.test.mjs`, `tests/agent-e2e-compat/lib/skew.test.mjs`, `tests/agent-e2e-compat/lib/upgrade.test.mjs`, `scripts/check-ledgers.test.mjs`, `scripts/check-comment-density-ratchet.test.mjs`, `scripts/lint-app-conformance.test.mjs`, `scripts/lint-product.test.mjs`, `scripts/validate-ui-receipt.test.mjs`, `scripts/ci/gate-classes.test.mjs`, `scripts/ci/gate-stamp.test.mjs`, `scripts/ci/run-gates.test.mjs`, `scripts/ci/turbo.test.mjs`, `scripts/lint-test-reachability.test.mjs`, `scripts/lint-no-nul-bytes.test.mjs`, `scripts/design-gallery-browser.test.mjs`, `scripts/ci/work-counter-gate.test.mjs`, `scripts/lint-journey-ledger.test.mjs`, `scripts/ci/paired-journeys.test.mjs`, `scripts/ci/bisect-journeys.test.mjs`, `scripts/perf/app-waterfall.test.mjs`
+- `bun run governance:law:test`
+
+## Changed paths
+
+- `tsconfig.node.json`
+- `scripts/tsconfig.json`
+- `scripts/tsconfig.pricing.json`
+- `package.json`
+- `scripts/lint-types.sh`
+- `scripts/lint-tsconfigs.mjs`
+- `scripts/lint-tsconfigs.test.mjs`
+- `docs/toolchain.md`
+- `README.md`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`
+
+## Audit
+
+| Check | Verdict | Notes |
+| --- | --- | --- |
+| What changed faithfully describes the diff | PASS | Compiler profile, two scripts programs, typecheck wiring, lint-types source_ignore, lint-tsconfigs membership tests, toolchain/README/CHANGELOG match the staged paths. |
+| NodeNext program does not typecheck package src | PASS | `tsc -p scripts --listFiles` has 0 `packages/server/src` and 0 `packages/*/src` hits; three scripts `.ts` files only. |
+| Extra program is reached by typecheck | PASS | Root `typecheck` and `typecheck:affected` run `tsc -p scripts/tsconfig.pricing.json`. |
+| Gates not weakened | PASS | No allowlist/budget/strictness edits; law estate untouched. |
+
+Verdict: PASS

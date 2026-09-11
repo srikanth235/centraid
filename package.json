@@ -169,8 +169,8 @@
     "toolchain:doctor": "ultracite doctor",
     "turbo": "node scripts/ci/turbo.mjs",
     "turbo:lint": "node scripts/ci/turbo.mjs run lint",
-    "typecheck": "node scripts/ci/turbo.mjs run typecheck && tsc -p tests",
-    "typecheck:affected": "node scripts/ci/turbo.mjs run typecheck --filter='[origin/main]' && tsc -p tests",
+    "typecheck": "node scripts/ci/turbo.mjs run typecheck && tsc -p tests && tsc -p scripts && tsc -p scripts/tsconfig.pricing.json",
+    "typecheck:affected": "node scripts/ci/turbo.mjs run typecheck --filter='[origin/main]' && tsc -p tests && tsc -p scripts && tsc -p scripts/tsconfig.pricing.json",
     "web:build": "node scripts/ci/turbo.mjs run build --filter=@centraid/web",
     "web:smoke": "node scripts/web/smoke.mjs"
   },
