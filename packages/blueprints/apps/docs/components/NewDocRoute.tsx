@@ -1,4 +1,4 @@
-// "Add to Docs" — the ways in (Docs spec §4.4).
+// "Add a document" — the ways in (Docs spec §4.4).
 //
 // A ROUTE, NOT A MENU, so that it can be described. A dropdown can offer
 // "Upload files" and "New folder"; it cannot tell a member that dragging onto
@@ -74,7 +74,7 @@ export function NewDocRoute({
   ];
 
   return (
-    <Screen label="Add to Docs">
+    <Screen label="Add a document">
       <Rows ariaLabel="Ways in" rows={rows} />
 
       {/* NO DUPLICATES SHELF, and the judgement behind that belongs here —

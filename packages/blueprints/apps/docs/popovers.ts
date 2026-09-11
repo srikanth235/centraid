@@ -104,7 +104,7 @@ export function createPopovers({
             { iconHtml: MENU_ICONS.history }
           ),
           popItem(
-            "Details",
+            "Properties",
             () => {
               closePopover();
               openDetails(doc.document_id);
@@ -168,7 +168,7 @@ export function createPopovers({
           { iconHtml: MENU_ICONS.history }
         ),
         popItem(
-          "Details",
+          "Properties",
           () => {
             closePopover();
             openDetails(doc.document_id);

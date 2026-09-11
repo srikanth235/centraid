@@ -140,7 +140,8 @@ export default function DocsHome({
             // way in is three taps down an overflow sheet has buried the
             // reason it exists.
             action: {
-              label: "New",
+              // The destination's own name, not a second one (R-NY-11).
+              label: "Add a document",
               onPress: () => navigation.navigate("DocsAdd"),
             },
           }

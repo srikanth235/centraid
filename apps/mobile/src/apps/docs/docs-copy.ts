@@ -7,8 +7,10 @@ export function allStatus(count: number): string {
   return `${fmt(count)} · press and hold a row for quick actions`;
 }
 
+/** The count alone: the caption under the set states what a folder is, once
+ *  (R-NY-11). */
 export function foldersStatus(count: number): string {
-  return `${fmt(count)} ${count === 1 ? "folder" : "folders"} · a folder is a label, not a place`;
+  return `${fmt(count)} ${count === 1 ? "folder" : "folders"}`;
 }
 
 /** A folder row's own count, as prose — see the row for why not a figure. */
@@ -19,8 +21,10 @@ export function folderCount(count: number): string {
 /** Unfiled is a condition, not a place; the row says which. */
 export const UNFILED_NOTE = "never put in a folder — not an error";
 
+/** The count alone: the shared trash caption states the 30-day purge, once
+ *  (R-NY-11). */
 export function trashStatus(count: number): string {
-  return `${fmt(count)} in trash · each purged 30 days after it was deleted`;
+  return `${fmt(count)} in trash`;
 }
 
 /** Photograph count WITHHELD: Docs' replica scope reads document tags only. */
@@ -37,7 +41,8 @@ export function starredStatus(count: number): string {
 // — naming the sender needs a live link binding for the origin vault, and
 // without one the vault stays unnamed rather than wearing a truncated id.
 
-export const SHARED_TITLE = "Shared with you";
+/** One noun per destination (R-NY-11): the band tab's word is the title. */
+export const SHARED_TITLE = "Shared";
 
 export function sharedStatus(count: number): string {
   return `${fmt(count)} ${count === 1 ? "document" : "documents"} · each stays while its share stands`;

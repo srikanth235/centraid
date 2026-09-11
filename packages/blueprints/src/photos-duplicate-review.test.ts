@@ -171,7 +171,7 @@ describe("what the review promises before it trashes anything", () => {
   it("states the count it will destroy in the title, the body and the act", () => {
     const html = review(cluster);
     expect(html).toContain("2 copies to trash");
-    expect(html).toContain("The other 2 go to trash for 30 days.");
+    expect(html).toContain("The other 2 go to trash.");
     expect(html).toContain("Trash 2 copies");
   });
 
@@ -188,7 +188,7 @@ describe("what the review promises before it trashes anything", () => {
     };
     const html = review(pair);
     expect(html).toContain("One copy to trash");
-    expect(html).toContain("The other copy goes to trash for 30 days.");
+    expect(html).toContain("The other copy goes to trash.");
     expect(html).toContain("Trash 1 copy");
     expect(html).toContain("Keep all 2");
   });

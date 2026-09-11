@@ -94,7 +94,6 @@ export function PropsTab({
         <Fact
           k={doc.trashed ? "Was filed under" : "Folder"}
           v={displayText(folderName(doc.folder_id))}
-          note={RAIL_NOTES.folder}
         />
         {/* CUSTODY IS A PROPERTY OF THE BYTES, and the one custody state a
             member can lose something to is named on the row itself (§4.1
