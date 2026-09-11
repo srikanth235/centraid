@@ -378,6 +378,18 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("Nothing to attend to");
   });
 
+  // #1015 R-NY-2: the error replaces the body, the standing Alerts row with
+  // it, yet the alerts read the notices, not the run log that failed.
+  it("keeps the way into the alerts when the run log does not load", async () => {
+    wire.summary.mockRejectedValue(new Error("vault host returned HTTP 404"));
+    const container = await render();
+    expect(textOf(container)).toContain("The run log is unavailable");
+    press(labelled(container, "Open alerts"));
+    expect(navigation.push).toHaveBeenCalledWith("Insights", {
+      initialTab: "alerts",
+    });
+  });
+
   it("reports a failed read as the net panel, with an honest verb", async () => {
     wire.summary.mockRejectedValue(new Error("connect ECONNREFUSED"));
     const container = await render();

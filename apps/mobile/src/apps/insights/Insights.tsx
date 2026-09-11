@@ -283,6 +283,11 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
   );
   const summary = page.load.kind === "ready" ? page.load.summary : undefined;
   const line = healthLineFor(page.state, originActivityHealth(summary));
+  // PUSHED, not navigated: navigating to this same route name would swap the
+  // overview's own params and leave no Activity to go back to. Pushed over
+  // Activity, the alerts view draws a back key (R-NY-1).
+  const openAlerts = (): void =>
+    navigation.push("Insights", { initialTab: "alerts" });
 
   return (
     <SystemPlace
@@ -294,6 +299,11 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
               // and Try again, never the transport.
               body: ERROR_BODY,
               retry: { label: ERROR_RETRY, onPress: page.retry },
+              // The error replaces the whole body, standing Alerts row
+              // included — but the alerts read a different source (the
+              // notices), so the way in must survive a run log that did not
+              // load (#1015 R-NY-2).
+              secondary: { label: "Open alerts", onPress: openAlerts },
               title: ERROR_TITLE,
             }
           : undefined
@@ -323,12 +333,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
       ) : null}
       <AnalyticsBody
         alertCount={alertCount}
-        // PUSHED, not navigated: navigating to this same route name would
-        // swap the overview's own params and leave no Activity to go back to.
-        // Pushed over Activity, the alerts view draws a back key (R-NY-1).
-        onOpenAlerts={() =>
-          navigation.push("Insights", { initialTab: "alerts" })
-        }
+        onOpenAlerts={openAlerts}
         onOpenAutomation={(automationRef) =>
           navigation.navigate("Automations", { automationRef })
         }
