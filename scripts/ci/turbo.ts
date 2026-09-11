@@ -21,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 
-export function turboCacheDir() {
+export function turboCacheDir(): string {
   if (process.env.TURBO_CACHE_DIR) return process.env.TURBO_CACHE_DIR;
   if (process.env.CENTRAID_TURBO_CACHE_DIR) {
     return path.resolve(process.env.CENTRAID_TURBO_CACHE_DIR);
@@ -36,7 +36,9 @@ export function turboCacheDir() {
  * @param {NodeJS.ProcessEnv} [env] Base environment; defaults to this process's.
  * @returns {NodeJS.ProcessEnv} The same environment with the shared cache directory set.
  */
-export function turboEnv(env = process.env) {
+export function turboEnv(
+  env: NodeJS.ProcessEnv = process.env
+): NodeJS.ProcessEnv {
   return { ...env, TURBO_CACHE_DIR: turboCacheDir() };
 }
 

@@ -41,7 +41,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { turboEnv } from "./turbo.mjs";
+import { turboEnv } from "./turbo.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const RUNS_DIR = path.join(root, ".turbo/runs");

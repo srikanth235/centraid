@@ -16,13 +16,13 @@ import { spawnSync } from "node:child_process";
  * re-publish of the same run (a re-run hours later, or a run that straddles
  * midnight UTC) must land in the slot it already has.
  *
- * Usage:  node scripts/ci/run-slug.mjs --repo owner/name --run-id 123
+ * Usage:  node scripts/ci/run-slug.ts --repo owner/name --run-id 123
  * Writes `date=` and `slug=` to $GITHUB_OUTPUT, and prints them to stdout.
  */
 import { appendFileSync } from "node:fs";
 
 /** GitHub returns an ISO-8601 timestamp; we key the slot on the UTC date. */
-export function toRunDate(createdAt, fallbackNow) {
+export function toRunDate(createdAt: unknown, fallbackNow: Date): string {
   const candidate = String(createdAt ?? "").slice(0, 10);
   if (/^\d{4}-\d{2}-\d{2}$/u.test(candidate)) {
     // Reject a well-shaped but impossible date (e.g. 2026-13-45) — silently
@@ -38,13 +38,13 @@ export function toRunDate(createdAt, fallbackNow) {
   return fallbackNow.toISOString().slice(0, 10);
 }
 
-export function toSlug(date, runId) {
+export function toSlug(date: string, runId: string): string {
   return `${date}-${runId}`;
 }
 
 function main() {
   const argv = process.argv.slice(2);
-  const flag = (name) => {
+  const flag = (name: string): string | undefined => {
     const index = argv.indexOf(`--${name}`);
     return index === -1 ? undefined : argv[index + 1];
   };
@@ -72,11 +72,12 @@ function main() {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("run-slug.mjs")) {
+if (process.argv[1] && process.argv[1].endsWith("run-slug.ts")) {
   try {
     main();
   } catch (error) {
-    console.error(`::error::${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`::error::${message}`);
     process.exitCode = 1;
   }
 }

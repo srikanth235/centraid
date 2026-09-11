@@ -20,7 +20,7 @@ const root = path.resolve(import.meta.dirname, "../..");
  * @param {string} rel Path from repo root.
  * @returns {string} File contents.
  */
-export function readRepoFile(rel) {
+export function readRepoFile(rel: string): string {
   return readFileSync(path.join(root, rel), "utf8");
 }
 
@@ -28,14 +28,14 @@ export function readRepoFile(rel) {
  * Validate that the three hygiene gates remain wired in shipped configs.
  * @returns {{ ok: boolean, errors: string[] }} Whether the contract holds and any violations.
  */
-export function checkHygieneGates() {
-  const errors = [];
+export function checkHygieneGates(): { ok: boolean; errors: string[] } {
+  const errors: string[] = [];
 
-  let ci;
-  let imageLane;
-  let gitleaksToml;
-  let trivyIgnore;
-  let osvToml;
+  let ci: string;
+  let imageLane: string;
+  let gitleaksToml: string | undefined;
+  let trivyIgnore: string | undefined;
+  let osvToml: string | undefined;
 
   try {
     ci = readRepoFile(".github/workflows/ci.yml");
@@ -143,9 +143,10 @@ function main() {
   console.log("hygiene-gates: ok (gitleaks + osv-scanner + trivy wired)");
 }
 
+const entry = process.argv[1];
 const isMain =
-  Boolean(process.argv[1]) &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+  entry !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(entry)).href;
 if (isMain) {
   main();
 }

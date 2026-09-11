@@ -150,3 +150,29 @@ bun run lint
 - `package.json`
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Slice 2a — small `scripts/ci` cluster
+
+Converted `governance-run`, `lockfile-lint`, `node-version`, `turbo` (+ test), `run-slug` (+ test), `hygiene-gates` (+ test). `governance-run` still imports leftover `gate-stamp.mjs`. `hygiene-gates` still asserts `ci.yml` runs `osv-lockfile-scan.mjs` (not in this cluster). `turbo-cache-report.mjs` imports `./turbo.ts`. Direct-run guard on `run-slug` matches `.ts`.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0. `listFiles` includes the nine converted cluster files. `packages/*/src` count: 0.
+
+```sh
+node --test scripts/ci/turbo.test.ts scripts/ci/run-slug.test.ts scripts/ci/hygiene-gates.test.ts
+```
+
+14 pass, 0 fail.
+
+```sh
+node scripts/ci/node-version.ts
+```
+
+`node-version: 24.4.1`
+
+Remaining `scripts/ci/*.mjs`: 42.

@@ -19,17 +19,29 @@ import { readFileSync } from "node:fs";
 // fatal under CI, where a mismatch means the workflow is genuinely misconfigured.
 
 const pinned = readFileSync(".node-version", "utf8").trim();
-const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+const manifest: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+const engines =
+  manifest &&
+  typeof manifest === "object" &&
+  "engines" in manifest &&
+  manifest.engines &&
+  typeof manifest.engines === "object"
+    ? manifest.engines
+    : null;
+const enginesNode =
+  engines && "node" in engines && typeof engines.node === "string"
+    ? engines.node
+    : undefined;
 const running = process.version.replace(/^v/u, "");
 const isCI = process.env.CI === "true" || process.env.CI === "1";
 
-const failures = [];
+const failures: string[] = [];
 if (!/^\d+\.\d+\.\d+$/u.test(pinned)) {
   failures.push(`.node-version must be an exact semver, got ${pinned}`);
 }
-if (manifest.engines?.node !== pinned) {
+if (enginesNode !== pinned) {
   failures.push(
-    `package.json engines.node must equal .node-version (${pinned}), got ${manifest.engines?.node ?? "missing"}`
+    `package.json engines.node must equal .node-version (${pinned}), got ${enginesNode ?? "missing"}`
   );
 }
 

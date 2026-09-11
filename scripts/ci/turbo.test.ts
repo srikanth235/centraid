@@ -1,20 +1,22 @@
 // One cache directory, chosen the same way by every turbo entry point (#988).
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { turboCacheDir, turboEnv } from "./turbo.mjs";
+import { turboCacheDir, turboEnv } from "./turbo.ts";
 
-function withEnv(overrides, body) {
+function withEnv(overrides: NodeJS.ProcessEnv, body: () => void): void {
   const saved = { ...process.env };
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
   try {
-    return body();
+    body();
   } finally {
     for (const k of Object.keys(process.env)) delete process.env[k];
     Object.assign(process.env, saved);
@@ -60,19 +62,29 @@ test("turboEnv only adds the cache directory", () => {
 });
 
 test("every root script that runs turbo goes through the launcher", () => {
-  const pkg = JSON.parse(
+  const pkg: unknown = JSON.parse(
     readFileSync(
       path.resolve(import.meta.dirname, "../../package.json"),
       "utf8"
     )
   );
+  if (
+    typeof pkg !== "object" ||
+    pkg === null ||
+    !("scripts" in pkg) ||
+    typeof pkg.scripts !== "object" ||
+    pkg.scripts === null
+  ) {
+    throw new Error("package.json scripts is missing");
+  }
   for (const [name, body] of Object.entries(pkg.scripts)) {
+    if (typeof body !== "string") continue;
     // `dev:*` are turbo's persistent tasks: never cached, and they keep the
     // plain binary so an interactive run has nothing between it and its TTY.
     if (name.startsWith("dev:")) continue;
     assert.ok(
       !/(?:^|&&\s*|\|\s*)turbo\s/u.test(body),
-      `${name} calls turbo directly; route it through scripts/ci/turbo.mjs so it shares the cache`
+      `${name} calls turbo directly; route it through scripts/ci/turbo.ts so it shares the cache`
     );
   }
 });

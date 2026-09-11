@@ -2206,7 +2206,7 @@ jobs:
           echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
           # Emits date= and slug= — the same derivation nightly-failure-issue
           # uses, so the issue's dated link and this publish cannot disagree.
-          node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
+          node scripts/ci/run-slug.ts --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
       - name: Merge report into site tree
         if: steps.has_report.outputs.ok == 'true'
         run: |
@@ -2312,7 +2312,7 @@ jobs:
         id: slug
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
+        run: node scripts/ci/run-slug.ts --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
       - name: Open or update one rolling issue per red lane
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

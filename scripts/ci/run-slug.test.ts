@@ -1,7 +1,9 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { toRunDate, toSlug } from "./run-slug.mjs";
+import { toRunDate, toSlug } from "./run-slug.ts";
 
 const NOW = new Date("2026-07-26T09:15:00Z");
 

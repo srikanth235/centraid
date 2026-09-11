@@ -58,7 +58,7 @@ Nothing a gate or a build caches belongs in the repository. Both directories def
 | What | Default | Override | Owner |
 | --- | --- | --- | --- |
 | Gate stamps (`static`, `governance`, `governance-deferred`) | `${XDG_CACHE_HOME:-~/.cache}/centraid/gate-stamps` | `CENTRAID_GATE_STAMP_DIR`; `CENTRAID_GATE_STAMPS=0` disables stamping | `scripts/ci/gate-stamp.mjs` |
-| Turbo filesystem cache, shared by every worktree | `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo` | `TURBO_CACHE_DIR`, then `CENTRAID_TURBO_CACHE_DIR` | `scripts/ci/turbo.mjs` |
+| Turbo filesystem cache, shared by every worktree | `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo` | `TURBO_CACHE_DIR`, then `CENTRAID_TURBO_CACHE_DIR` | `scripts/ci/turbo.ts` |
 
 Turbo's per-run summaries stay in each checkout's `.turbo/runs`, which is what `scripts/ci/turbo-cache-report.mjs` reads. Why the tiers and stamps are shaped this way: [dev-environment.md](dev-environment.md#tiers-stamps-and-one-cache-988).
 

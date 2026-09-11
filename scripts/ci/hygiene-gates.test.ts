@@ -1,7 +1,9 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { checkHygieneGates, readRepoFile } from "./hygiene-gates.mjs";
+import { checkHygieneGates, readRepoFile } from "./hygiene-gates.ts";
 
 test("shipped hygiene gates pass the structural contract", () => {
   const { ok, errors } = checkHygieneGates();
