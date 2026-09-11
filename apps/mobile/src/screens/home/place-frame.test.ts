@@ -7,7 +7,7 @@ import { SHELL_TITLES } from "../shell-copy";
 import { bandStack } from "./band-navigation";
 import { beneathTitle, placeStanding } from "./place-frame";
 import type { FrameNavigator, FrameRoute } from "./place-frame";
-import { PLACES } from "./places";
+import { PLACES, getPlace } from "./places";
 
 // `shell-places` (the Settings stack's title table) imports the navigator's
 // hooks, which this pure rule never calls and the stub tier cannot load.
@@ -70,7 +70,8 @@ describe(placeStanding, () => {
     expect(beneathTitle(photos)).toBeUndefined();
   });
 
-  it("names Settings' stack by the screen showing in it", () => {
+  it("names Settings' stack by the screen showing in it, in the band's noun", () => {
+    // R-NY-4: one noun. A back key to Needs you says what the band says.
     const needsYou: FrameRoute = {
       key: "set",
       name: "Settings",
@@ -81,7 +82,20 @@ describe(placeStanding, () => {
       beneath: needsYou,
       root: false,
     });
-    expect(beneathTitle(needsYou)).toBe(SHELL_TITLES.alerts);
+    expect(beneathTitle(needsYou)).toBe(getPlace("notifs").name);
+    expect(beneathTitle(needsYou)).toBe(SHELL_TITLES.needsYou);
+  });
+
+  it("makes Needs you opened from Activity's alerts a sub-page of Activity", () => {
+    // An alert about a staged write opens the queue over Activity.
+    const activity: FrameRoute = { key: "ins", name: "Insights" };
+    const outer = navigator([home, activity, { key: "set", name: "Settings" }]);
+    const inner = navigator([{ key: "ap", name: "Approvals" }], outer);
+    expect(placeStanding(inner, "ap")).toStrictEqual({
+      beneath: activity,
+      root: false,
+    });
+    expect(beneathTitle(activity)).toBe(getPlace("stats").name);
   });
 
   it("makes a place with no Home beneath it (a cold deep link) a root", () => {
