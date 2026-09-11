@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { decideShellPath } from "./ios-shell-cache.mjs";
+import { decideShellPath } from "./ios-shell-cache.ts";
 
 const base = {
   cacheHit: true,
@@ -18,7 +18,7 @@ const base = {
   hermescPresent: true,
 };
 
-describe("decideShellPath", () => {
+describe(decideShellPath, () => {
   it("builds when nothing is banked for this native fingerprint", () => {
     expect(decideShellPath({ ...base, cacheHit: false }).path).toBe("build");
   });

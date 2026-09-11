@@ -12,11 +12,14 @@ import {
   bundleInputFiles,
   digestFiles,
   isBundleInput,
-} from "./js-bundle-fingerprint.mjs";
+} from "./js-bundle-fingerprint.ts";
 
-const read = (contents) => (file) => contents[file] ?? "";
+const read =
+  (contents: Record<string, string>) =>
+  (file: string): string =>
+    contents[file] ?? "";
 
-describe("digestFiles", () => {
+describe(digestFiles, () => {
   it("moves when a file's content changes", () => {
     const files = ["apps/mobile/src/a.ts"];
     const before = digestFiles(files, read({ "apps/mobile/src/a.ts": "one" }));
@@ -54,8 +57,8 @@ describe("digestFiles", () => {
   });
 });
 
-describe("JS_BUNDLE_PATHSPECS", () => {
-  it("excludes the native projects, which native-fingerprint.mjs owns", () => {
+describe("JS bundle pathspecs", () => {
+  it("excludes the native projects, which native-fingerprint.ts owns", () => {
     // Including them would make the two key components move together, which
     // collapses the apk cache into "rebuild on any change" — the state #535
     // spent a fingerprint escaping.
@@ -80,24 +83,24 @@ describe("JS_BUNDLE_PATHSPECS", () => {
   });
 });
 
-describe("bundleInputFiles", () => {
+describe(bundleInputFiles, () => {
   it("resolves a non-trivial tracked file set in this repo", () => {
     const files = bundleInputFiles();
     expect(files.length).toBeGreaterThan(100);
     // Sorted, so the digest cannot depend on git's enumeration order.
-    expect([...files].sort()).toEqual(files);
+    expect([...files].sort()).toStrictEqual(files);
   });
 
   it("hands the digest nothing the Hermes bundle could not contain", () => {
     // The live sweep, not a fixture: a pathspec added later without the filter
     // in mind would fail here rather than on a 21-minute Android lane (#931).
-    expect(bundleInputFiles().filter((file) => !isBundleInput(file))).toEqual(
-      []
-    );
+    expect(
+      bundleInputFiles().filter((file) => !isBundleInput(file))
+    ).toStrictEqual([]);
   });
 });
 
-describe("isBundleInput", () => {
+describe(isBundleInput, () => {
   // #931 item 5. A test-only edit under a bundled workspace package moved this
   // key, missed the apk cache and paid a cold Android build (#934).
   const tracked = [
@@ -108,10 +111,15 @@ describe("isBundleInput", () => {
     "packages/blueprints/apps/locker/README.md",
   ];
   const inputs = tracked.filter(isBundleInput);
-  const at = (edited) => (file) => (file === edited ? "edited" : "original");
+  const at =
+    (edited: string) =>
+    (file: string): string =>
+      file === edited ? "edited" : "original";
 
   it("keeps only what the bundle can contain", () => {
-    expect(inputs).toEqual(["packages/blueprints/apps/locker/queries.ts"]);
+    expect(inputs).toStrictEqual([
+      "packages/blueprints/apps/locker/queries.ts",
+    ]);
   });
 
   it.each([

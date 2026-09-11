@@ -23,7 +23,7 @@ const repoRoot = path.resolve(mobileRoot, "..", "..");
  */
 const TAG_LINE = /^TAG="(?<tag>v[^"]+)"$/mu;
 /**
- * The runtime constant, read as text because this file is a plain `.mjs` and
+ * The runtime constant, read as text because this file is a test script and
  * the module it lives in is TypeScript. It is the third statement of the same
  * version: the shell script's TAG builds iOS, Expo's `.so` is Android, and
  * `EXPECTED_SQLITE_VEC_VERSION` is what `ExpoSeatDriver.open` demands of the
@@ -73,7 +73,7 @@ describe("sqlite-vec version agreement", () => {
     expect(
       versions,
       "expo-sqlite's bundled vec.so states exactly one version"
-    ).toEqual([tag]);
+    ).toStrictEqual([tag]);
   });
 
   test("the gateway's own pin is recorded where the phone's constant is", async () => {
@@ -86,15 +86,16 @@ describe("sqlite-vec version agreement", () => {
         path.join(repoRoot, "packages", "server", "package.json"),
         "utf8"
       )
-    );
-    const pin = serverManifest.dependencies["sqlite-vec"];
+    ) as { dependencies?: Record<string, string> };
+    const pin = serverManifest.dependencies?.["sqlite-vec"];
     expect(pin, "packages/server pins sqlite-vec").toBeTruthy();
     const constantSource = await readFile(
       path.join(mobileRoot, "src", "lib", "replica", "sqlite-vec-version.ts"),
       "utf8"
     );
+    expect(pin, "packages/server pins sqlite-vec").toBeTruthy();
     expect(constantSource).toContain(
-      `sqlite-vec@${pin.replace(/^[\^~]/u, "")}`
+      `sqlite-vec@${(pin ?? "").replace(/^[\^~]/u, "")}`
     );
   });
 });

@@ -4,7 +4,7 @@
  * Hermes bundle — and nothing that does not.
  *
  * WHY THIS EXISTS (issue #892 Phase 0). The Android device lanes key their apk
- * cache on `native-fingerprint.mjs`, which is `@expo/fingerprint` over the
+ * cache on `native-fingerprint.ts`, which is `@expo/fingerprint` over the
  * NATIVE inputs and deliberately ignores `src/**`. Under the dev client that was
  * exactly right: Metro served the JS live, so a JS-only commit had no business
  * rebuilding a binary. #890 W1 moved every device lane onto the RELEASE
@@ -28,7 +28,7 @@
  * never depend on gitignored build products the way the pre-#535 hand-rolled key
  * did.
  *
- * Usage: `node scripts/js-bundle-fingerprint.mjs` → prints the bare hash with no
+ * Usage: `node scripts/js-bundle-fingerprint.ts` → prints the bare hash with no
  * trailing newline, suitable for `>> "$GITHUB_OUTPUT"`.
  */
 import { execFileSync } from "node:child_process";
@@ -44,7 +44,7 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
  * Pathspecs, repo-root relative, of everything the release bundle is built from.
  *
  * `apps/mobile/{android,ios}` are deliberately ABSENT: they are the native
- * project and are already the whole subject of `native-fingerprint.mjs`. Adding
+ * project and are already the whole subject of `native-fingerprint.ts`. Adding
  * them here would make the two components move together and collapse the apk
  * cache into "rebuild on any change", which is the state #535 spent a fingerprint
  * getting out of.
@@ -98,7 +98,7 @@ const NOT_IN_BUNDLE =
  * @param {string} file A repo-relative path.
  * @returns {boolean} False for test, spec, fixture and markdown files.
  */
-export function isBundleInput(file) {
+export function isBundleInput(file: string): boolean {
   return !NOT_IN_BUNDLE.test(file);
 }
 
@@ -106,7 +106,7 @@ export function isBundleInput(file) {
 export function bundleInputFiles(
   cwd = REPO_ROOT,
   pathspecs = JS_BUNDLE_PATHSPECS
-) {
+): string[] {
   const out = execFileSync("git", ["ls-files", "-z", "--", ...pathspecs], {
     cwd,
     encoding: "utf8",
@@ -125,7 +125,10 @@ export function bundleInputFiles(
  * @param {(file: string) => Buffer | string} read content reader (injectable for tests)
  * @returns {string} hex sha256
  */
-export function digestFiles(files, read) {
+export function digestFiles(
+  files: string[],
+  read: (file: string) => Buffer | string
+): string {
   const hash = createHash("sha256");
   for (const file of files) {
     hash.update(file);
@@ -136,7 +139,7 @@ export function digestFiles(files, read) {
   return hash.digest("hex");
 }
 
-export function jsBundleFingerprint(cwd = REPO_ROOT) {
+export function jsBundleFingerprint(cwd = REPO_ROOT): string {
   const files = bundleInputFiles(cwd);
   // A silent empty list would produce a constant digest — an always-hit key,
   // i.e. exactly the stale-apk failure this module exists to remove. Fail loud.
@@ -158,7 +161,9 @@ if (
     // over a repo's worth of commits is ample.
     process.stdout.write(jsBundleFingerprint().slice(0, 16));
   } catch (error) {
-    process.stderr.write(`::error::${error.message}\n`);
+    process.stderr.write(
+      `::error::${error instanceof Error ? error.message : String(error)}\n`
+    );
     process.exit(1);
   }
 }

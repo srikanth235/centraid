@@ -12,12 +12,12 @@ import {
   maxVersion,
   requiredXcodeVersion,
   versionAtLeast,
-} from "./check-xcode-minimum.mjs";
+} from "./check-xcode-minimum.ts";
 import {
   NATIVE_FINGERPRINT_IGNORE_PATHS,
   NATIVE_FINGERPRINT_SOURCE_SKIPS,
   nativeFingerprintOptions,
-} from "./native-fingerprint.mjs";
+} from "./native-fingerprint.ts";
 import {
   attachRemediation,
   classifyNativeStateError,
@@ -33,7 +33,7 @@ import {
   validateGeneratedTreesUntracked,
   validateModulePlatformShape,
   GENERATED_NATIVE_DIRS,
-} from "./verify-native-state.mjs";
+} from "./verify-native-state.ts";
 
 const IGNORED_BOTH = {
   "apps/mobile/ios": true,
@@ -55,7 +55,7 @@ describe("native state guards", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("2 tracked file(s)");
     expect(errors[0]).toContain("apps/mobile/ios/Podfile.lock");
-    expect(classifyNativeStateError(errors[0])).toBe("L1");
+    expect(classifyNativeStateError(errors[0] ?? "")).toBe("L1");
     const remediated = attachRemediation(errors);
     expect(remediated.at(-1)).toMatch(/fix the native inputs first/u);
     expect(remediated.at(-1)).not.toMatch(/--write`$/u);
@@ -67,7 +67,7 @@ describe("native state guards", () => {
         trackedNativeFiles: [],
         ignoredDirs: { "apps/mobile/ios": true, "apps/mobile/android": false },
       })
-    ).toEqual([
+    ).toStrictEqual([
       "L1 generated tree: apps/mobile/android is not ignored by git — the next `git add .` would commit a prebuild output (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)",
     ]);
   });
@@ -78,15 +78,15 @@ describe("native state guards", () => {
         trackedNativeFiles: [],
         ignoredDirs: IGNORED_BOTH,
       })
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   // The live answer, on whatever tree the suite runs against: a developer's
   // worktree (prebuilt) and CI (never prebuilt) must both say the same thing.
   test("this repository's generated trees are untracked and ignored", () => {
-    expect(trackedGeneratedNativeFiles()).toEqual([]);
-    expect(generatedNativeDirsIgnored()).toEqual(IGNORED_BOTH);
-    expect(GENERATED_NATIVE_DIRS).toEqual([
+    expect(trackedGeneratedNativeFiles()).toStrictEqual([]);
+    expect(generatedNativeDirsIgnored()).toStrictEqual(IGNORED_BOTH);
+    expect(GENERATED_NATIVE_DIRS).toStrictEqual([
       "apps/mobile/ios",
       "apps/mobile/android",
     ]);
@@ -109,10 +109,10 @@ describe("native state guards", () => {
       ],
       moduleNativeDirs: [],
     });
-    expect(errors).toEqual([
+    expect(errors).toStrictEqual([
       "L2 input coverage: config plugin plugins/withCentraidAndroidBuild.cjs is not in the ios fingerprint source list — the ratchet cannot notice a change to it (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)",
     ]);
-    expect(classifyNativeStateError(errors[0])).toBe("L2");
+    expect(classifyNativeStateError(errors[0] ?? "")).toBe("L2");
   });
 
   test("L2 fails when autolinking has stopped seeing a local module", () => {
@@ -139,7 +139,7 @@ describe("native state guards", () => {
       pluginFiles: ["plugins/withCentraidIos.cjs"],
       moduleNativeDirs: [],
     });
-    expect(errors.map((e) => e.split(" carries")[0])).toEqual([
+    expect(errors.map((e) => e.split(" carries")[0])).toStrictEqual([
       "L2 input coverage: the ios fingerprint",
       "L2 input coverage: the ios fingerprint",
     ]);
@@ -154,10 +154,10 @@ describe("native state guards", () => {
       { moduleId: "centraid-upload", hasIosDir: false, hasAndroidDir: true },
       { moduleId: "centraid-ocr", hasIosDir: true, hasAndroidDir: true },
     ];
-    expect(moduleNativeDirsFor("ios", modules)).toEqual([
+    expect(moduleNativeDirsFor("ios", modules)).toStrictEqual([
       "modules/centraid-ocr/ios",
     ]);
-    expect(moduleNativeDirsFor("android", modules)).toEqual([
+    expect(moduleNativeDirsFor("android", modules)).toStrictEqual([
       "modules/centraid-ocr/android",
       "modules/centraid-upload/android",
     ]);
@@ -176,7 +176,7 @@ describe("native state guards", () => {
     });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("hashes ios");
-    expect(classifyNativeStateError(errors[0])).toBe("L3");
+    expect(classifyNativeStateError(errors[0] ?? "")).toBe("L3");
   });
 
   test("L3 accepts the emptied bareNativeDir source", () => {
@@ -188,7 +188,7 @@ describe("native state guards", () => {
           { filePath: "modules/centraid-upload/android", hash: "abc" },
         ],
       })
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   test("L2 module shape fails when a platform directory is undeclared", () => {
@@ -201,10 +201,10 @@ describe("native state guards", () => {
       hasIosDir: true,
       hasAndroidDir: true,
     });
-    expect(errors).toEqual([
+    expect(errors).toStrictEqual([
       'L2 module shape: module centraid-ocr has an android/ directory but expo-module.config.json platforms omit "android" (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)',
     ]);
-    expect(classifyNativeStateError(errors[0])).toBe("L2");
+    expect(classifyNativeStateError(errors[0] ?? "")).toBe("L2");
   });
 
   test("L2 module shape fails when platforms list a missing config block", () => {
@@ -215,7 +215,7 @@ describe("native state guards", () => {
         hasIosDir: true,
         hasAndroidDir: true,
       })
-    ).toEqual([
+    ).toStrictEqual([
       'L2 module shape: module centraid-storage lists platform "android" but has no android config block (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)',
     ]);
   });
@@ -225,7 +225,7 @@ describe("native state guards", () => {
       { ios: "committed-ios", android: "committed-android" },
       { ios: "current-ios", android: "current-android" }
     );
-    expect(errors).toEqual([
+    expect(errors).toStrictEqual([
       "ios native fingerprint mismatch: committed committed-ios, current current-ios; review the input diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
       "android native fingerprint mismatch: committed committed-android, current current-android; review the input diff and run `bun run --cwd apps/mobile ci:native-state --write` only after L1–L3 are green",
     ]);
@@ -283,7 +283,7 @@ describe("native state guards", () => {
   });
 
   test("parseNativeStateArgs accepts --status and --write", () => {
-    expect(parseNativeStateArgs(["--status", "--write"])).toEqual({
+    expect(parseNativeStateArgs(["--status", "--write"])).toStrictEqual({
       write: true,
       status: true,
     });
@@ -298,7 +298,7 @@ describe("native state guards", () => {
     expect(NATIVE_FINGERPRINT_IGNORE_PATHS).toContain("android/**");
     const opts = nativeFingerprintOptions("ios");
     expect(opts.sourceSkips).toBe(SourceSkips.PackageJsonScriptsAll);
-    expect(opts.ignorePaths).toEqual(NATIVE_FINGERPRINT_IGNORE_PATHS);
+    expect(opts.ignorePaths).toStrictEqual(NATIVE_FINGERPRINT_IGNORE_PATHS);
   });
 
   test("shipped fingerprint options omit packageJson:scripts and never hash a prebuild output", async () => {
@@ -309,7 +309,7 @@ describe("native state guards", () => {
     const { createFingerprintAsync } = await import("@expo/fingerprint");
     const mobileRoot = path.resolve(import.meta.dirname, "..");
     const fingerprints = await Promise.all(
-      ["ios", "android"].map(async (platform) => ({
+      (["ios", "android"] as const).map(async (platform) => ({
         platform,
         fp: await createFingerprintAsync(
           mobileRoot,
@@ -319,16 +319,18 @@ describe("native state guards", () => {
     );
     for (const { platform, fp } of fingerprints) {
       expect(fp.hash).toMatch(/^[a-f0-9]{40}$/u);
-      const scriptSources = fp.sources.filter(
-        (s) =>
-          s.id === "packageJson:scripts" ||
+      const scriptSources = fp.sources.filter((s) => {
+        const id = "id" in s ? s.id : undefined;
+        return (
+          id === "packageJson:scripts" ||
           (Array.isArray(s.reasons) &&
             s.reasons.includes("packageJson:scripts"))
-      );
-      expect(scriptSources).toEqual([]);
+        );
+      });
+      expect(scriptSources).toStrictEqual([]);
       expect(
         validateGeneratedTreesNotHashed({ platform, sources: fp.sources })
-      ).toEqual([]);
+      ).toStrictEqual([]);
     }
   }, 300_000);
 
@@ -338,14 +340,14 @@ describe("native state guards", () => {
     const mobileRoot = path.resolve(import.meta.dirname, "..");
     const pkgPath = path.join(mobileRoot, "package.json");
     const original = await readFile(pkgPath, "utf8");
-    const { fingerprintForPlatform } = await import("./native-fingerprint.mjs");
+    const { fingerprintForPlatform } = await import("./native-fingerprint.ts");
 
     try {
       const [beforeIos, beforeAndroid] = await Promise.all([
         fingerprintForPlatform("ios"),
         fingerprintForPlatform("android"),
       ]);
-      const pkg = JSON.parse(original);
+      const pkg = JSON.parse(original) as Record<string, unknown>;
       const entries = Object.entries(pkg.scripts ?? {});
       expect(entries.length).toBeGreaterThan(1);
       pkg.scripts = Object.fromEntries(entries.toReversed());

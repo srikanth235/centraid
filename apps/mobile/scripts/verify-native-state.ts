@@ -34,7 +34,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { fingerprintReportForPlatform } from "./native-fingerprint.mjs";
+import { fingerprintReportForPlatform } from "./native-fingerprint.ts";
 import {
   attachRemediation,
   formatStatusReport,
@@ -47,7 +47,7 @@ import {
   validateModulePlatformShape,
   FIX_INPUTS_HINT,
   GENERATED_NATIVE_DIRS,
-} from "./verify-native-state-lib.mjs";
+} from "./verify-native-state-lib.ts";
 
 // Re-export pure API for existing tests and external importers.
 export {
@@ -64,7 +64,7 @@ export {
   WRITE_CMD,
   FIX_INPUTS_HINT,
   GENERATED_NATIVE_DIRS,
-} from "./verify-native-state-lib.mjs";
+} from "./verify-native-state-lib.ts";
 
 const mobileRoot = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(mobileRoot, "..", "..");
@@ -73,7 +73,7 @@ const repoRoot = path.resolve(mobileRoot, "..", "..");
  * The tracked half of L1, asked of git rather than of the filesystem: the
  * question is what the INDEX carries, and a prebuilt worktree answers it wrong.
  */
-export function trackedGeneratedNativeFiles(cwd = repoRoot) {
+export function trackedGeneratedNativeFiles(cwd = repoRoot): string[] {
   const output = execFileSync(
     "git",
     ["ls-files", "--", ...GENERATED_NATIVE_DIRS],
@@ -95,8 +95,10 @@ export function trackedGeneratedNativeFiles(cwd = repoRoot) {
  * states. `--no-index` so the answer is the RULE's, independent of whether
  * anything happens to be tracked; the tracked half is a separate check.
  */
-export function generatedNativeDirsIgnored(cwd = repoRoot) {
-  const ignored = {};
+export function generatedNativeDirsIgnored(
+  cwd = repoRoot
+): Record<string, boolean> {
+  const ignored: Record<string, boolean> = {};
   for (const dir of GENERATED_NATIVE_DIRS) {
     try {
       execFileSync(
@@ -115,12 +117,17 @@ export function generatedNativeDirsIgnored(cwd = repoRoot) {
 /** Repo-owned config plugins, mobile-root-relative (the fingerprint's units). */
 export async function discoverConfigPlugins(
   pluginsRoot = path.join(mobileRoot, "plugins")
-) {
+): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(pluginsRoot);
   } catch (error) {
-    if (error && typeof error === "object" && error.code === "ENOENT")
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    )
       return [];
     throw error;
   }
@@ -137,7 +144,12 @@ export async function loadLocalModulePlatforms(
   try {
     entries = await readdir(modulesRoot, { withFileTypes: true });
   } catch (error) {
-    if (error && typeof error === "object" && error.code === "ENOENT")
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    )
       return [];
     throw error;
   }
@@ -151,7 +163,15 @@ export async function loadLocalModulePlatforms(
         dirExists(path.join(moduleRoot, "android")),
       ]);
       try {
-        const config = JSON.parse(await readFile(configPath, "utf8"));
+        const parsed: unknown = JSON.parse(await readFile(configPath, "utf8"));
+        const config =
+          typeof parsed === "object" && parsed !== null
+            ? (parsed as {
+                platforms?: unknown;
+                ios?: unknown;
+                android?: unknown;
+              })
+            : null;
         return {
           moduleId: entry.name,
           config,
@@ -160,7 +180,12 @@ export async function loadLocalModulePlatforms(
           missingConfig: false,
         };
       } catch (error) {
-        if (error && typeof error === "object" && error.code === "ENOENT") {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
           return {
             moduleId: entry.name,
             config: null,
@@ -175,19 +200,31 @@ export async function loadLocalModulePlatforms(
   );
 }
 
-async function dirExists(dir) {
+async function dirExists(dir: string): Promise<boolean> {
   try {
     await readdir(dir);
     return true;
   } catch (error) {
-    if (error && typeof error === "object" && error.code === "ENOENT")
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    )
       return false;
     throw error;
   }
 }
 
 /** The per-platform module directories autolinking is expected to have found. */
-export function moduleNativeDirsFor(platform, modulePlatforms) {
+export function moduleNativeDirsFor(
+  platform: "ios" | "android",
+  modulePlatforms: {
+    moduleId: string;
+    hasIosDir: boolean;
+    hasAndroidDir: boolean;
+  }[]
+): string[] {
   return modulePlatforms
     .filter((mod) => (platform === "ios" ? mod.hasIosDir : mod.hasAndroidDir))
     .map((mod) => `modules/${mod.moduleId}/${platform}`)
@@ -204,8 +241,23 @@ export function collectInputErrors({
   modulePlatforms,
   pluginFiles,
   reports,
-}) {
-  const errors = [
+}: {
+  trackedNativeFiles: string[];
+  ignoredDirs: Record<string, boolean>;
+  modulePlatforms: {
+    moduleId: string;
+    config: { platforms?: unknown; ios?: unknown; android?: unknown } | null;
+    hasIosDir: boolean;
+    hasAndroidDir: boolean;
+    missingConfig: boolean;
+  }[];
+  pluginFiles: string[];
+  reports: {
+    platform: "ios" | "android";
+    sources: { filePath?: string; id?: string; hash?: string | null }[];
+  }[];
+}): string[] {
+  const errors: string[] = [
     ...validateGeneratedTreesUntracked({ trackedNativeFiles, ignoredDirs }),
   ];
   for (const mod of modulePlatforms) {
@@ -238,14 +290,16 @@ export function collectInputErrors({
   return errors;
 }
 
-export async function verifyNativeState(options = {}) {
+export async function verifyNativeState(
+  options: { write?: boolean; status?: boolean } = {}
+) {
   const { write = false, status = false } = options;
   const [expected, pluginFiles, modulePlatforms, ...reports] =
     await Promise.all([
       readJson(path.join(mobileRoot, "native-fingerprints.json")),
       discoverConfigPlugins(),
       loadLocalModulePlatforms(),
-      ...["ios", "android"].map(async (platform) => ({
+      ...(["ios", "android"] as const).map(async (platform) => ({
         platform,
         ...(await fingerprintReportForPlatform(platform)),
       })),
@@ -286,10 +340,10 @@ export async function verifyNativeState(options = {}) {
     const next = {
       _comment:
         "Expected @expo/fingerprint hashes over the CNG inputs (app.config.ts, plugins/, modules/, the dependency set). Changing them must be a reviewed act — see docs/traps/mobile-native-state.md.",
-      ios: actualByPlatform.ios,
-      android: actualByPlatform.android,
+      ios: String(actualByPlatform.ios ?? ""),
+      android: String(actualByPlatform.android ?? ""),
     };
-    const platformsMoved = ["ios", "android"].filter(
+    const platformsMoved = (["ios", "android"] as const).filter(
       (p) => expected[p] !== next[p]
     );
     await writeFile(
@@ -304,11 +358,14 @@ export async function verifyNativeState(options = {}) {
         ? formatStatusReport({
             errors: [],
             inputInventory,
-            fingerprints: { expected: next, actual: actualByPlatform },
+            fingerprints: {
+              expected: next,
+              actual: actualByPlatform,
+            },
           })
         : null,
       writeSummary: formatWriteSummary({
-        previous: expected,
+        previous: expected as Record<string, string | undefined>,
         next,
         inputInventory,
         platformsMoved,
@@ -318,7 +375,10 @@ export async function verifyNativeState(options = {}) {
     };
   }
 
-  const identityErrors = validateFingerprints(expected, actualByPlatform);
+  const identityErrors = validateFingerprints(
+    expected as Record<string, string | undefined>,
+    actualByPlatform
+  );
   return {
     errors: attachRemediation([...inputErrors, ...identityErrors]),
     wrote: false,
@@ -326,7 +386,10 @@ export async function verifyNativeState(options = {}) {
       ? formatStatusReport({
           errors: [...inputErrors, ...identityErrors],
           inputInventory,
-          fingerprints: { expected, actual: actualByPlatform },
+          fingerprints: {
+            expected: expected as Record<string, string | undefined>,
+            actual: actualByPlatform,
+          },
         })
       : null,
     writeSummary: null,
@@ -335,8 +398,12 @@ export async function verifyNativeState(options = {}) {
   };
 }
 
-async function readJson(file) {
-  return JSON.parse(await readFile(file, "utf8"));
+async function readJson(file: string): Promise<Record<string, unknown>> {
+  const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error(`${file} is not a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
 }
 
 if (
@@ -347,11 +414,13 @@ if (
   try {
     flags = parseNativeStateArgs(process.argv.slice(2));
   } catch (error) {
-    console.error(`native-state: ${error.message}`);
+    console.error(
+      `native-state: ${error instanceof Error ? error.message : String(error)}`
+    );
     process.exit(2);
   }
   if (flags.help) {
-    console.log(`usage: verify-native-state.mjs [--status] [--write]
+    console.log(`usage: verify-native-state.ts [--status] [--write]
   (default)  verify L1–L4
   --status   human-readable per-layer report
   --write    recompute native-fingerprints.json only when L1–L3 pass`);

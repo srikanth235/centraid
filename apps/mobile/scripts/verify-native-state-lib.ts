@@ -34,8 +34,11 @@ export const GENERATED_NATIVE_DIRS = ["apps/mobile/ios", "apps/mobile/android"];
 export function validateGeneratedTreesUntracked({
   trackedNativeFiles,
   ignoredDirs,
-}) {
-  const errors = [];
+}: {
+  trackedNativeFiles: string[];
+  ignoredDirs: Record<string, boolean>;
+}): string[] {
+  const errors: string[] = [];
   const tracked = [...trackedNativeFiles].sort();
   if (tracked.length > 0) {
     const shown = tracked.slice(0, 5).join(", ");
@@ -72,12 +75,21 @@ export function validateFingerprintInputCoverage({
   sources,
   pluginFiles,
   moduleNativeDirs,
-}) {
+}: {
+  platform: "ios" | "android";
+  sources: { type?: string; filePath?: string; id?: string }[];
+  pluginFiles: string[];
+  moduleNativeDirs: string[];
+}): string[] {
   const filePaths = new Set(
-    sources.map((source) => source.filePath).filter(Boolean)
+    sources
+      .map((source) => source.filePath)
+      .filter((path): path is string => Boolean(path))
   );
-  const ids = new Set(sources.map((source) => source.id).filter(Boolean));
-  const errors = [];
+  const ids = new Set(
+    sources.map((source) => source.id).filter((id): id is string => Boolean(id))
+  );
+  const errors: string[] = [];
   for (const plugin of [...pluginFiles].sort()) {
     if (!filePaths.has(plugin)) {
       errors.push(
@@ -120,8 +132,14 @@ export function validateFingerprintInputCoverage({
  *
  * @param {{platform: "ios"|"android", sources: {filePath?: string, hash?: string|null}[]}} input the fingerprint's source list, each entry carrying the hash it contributed
  */
-export function validateGeneratedTreesNotHashed({ platform, sources }) {
-  const errors = [];
+export function validateGeneratedTreesNotHashed({
+  platform,
+  sources,
+}: {
+  platform: "ios" | "android";
+  sources: { filePath?: string; hash?: string | null }[];
+}): string[] {
+  const errors: string[] = [];
   for (const source of sources) {
     const filePath = source.filePath ?? "";
     const insideGenerated =
@@ -149,9 +167,14 @@ export function validateModulePlatformShape({
   config,
   hasIosDir,
   hasAndroidDir,
-}) {
+}: {
+  moduleId: string;
+  config: { platforms?: unknown; ios?: unknown; android?: unknown } | null;
+  hasIosDir: boolean;
+  hasAndroidDir: boolean;
+}): string[] {
   const platforms = Array.isArray(config?.platforms) ? config.platforms : [];
-  const errors = [];
+  const errors: string[] = [];
   if (hasIosDir && !platforms.includes("ios")) {
     errors.push(
       `L2 module shape: module ${moduleId} has an ios/ directory but expo-module.config.json platforms omit "ios" (${FIX_INPUTS_HINT})`
@@ -176,8 +199,11 @@ export function validateModulePlatformShape({
 }
 
 /** L4 identity ratchet: committed hashes vs what the inputs currently produce. */
-export function validateFingerprints(expected, actualByPlatform) {
-  const errors = [];
+export function validateFingerprints(
+  expected: Record<string, string | undefined>,
+  actualByPlatform: Record<string, string | undefined>
+): string[] {
+  const errors: string[] = [];
   for (const platform of ["ios", "android"]) {
     const actual = actualByPlatform[platform];
     if (expected[platform] !== actual) {
@@ -190,7 +216,9 @@ export function validateFingerprints(expected, actualByPlatform) {
 }
 
 /** Classify a free-text error into L1–L4 for --status presentation. */
-export function classifyNativeStateError(message) {
+export function classifyNativeStateError(
+  message: string
+): "L1" | "L2" | "L3" | "L4" | "L?" {
   if (message.startsWith("L1 ")) return "L1";
   if (message.startsWith("L2 ")) return "L2";
   if (message.startsWith("L3 ")) return "L3";
@@ -198,10 +226,12 @@ export function classifyNativeStateError(message) {
   return "L?";
 }
 
-export function attachRemediation(errors) {
+export function attachRemediation(errors: string[]): string[] {
   if (errors.length === 0) return errors;
   const layers = new Set(errors.map(classifyNativeStateError));
-  const hasInputProblem = ["L1", "L2", "L3"].some((layer) => layers.has(layer));
+  const hasInputProblem = (["L1", "L2", "L3"] as const).some((layer) =>
+    layers.has(layer)
+  );
   const hasIdentity = layers.has("L4");
 
   if (hasIdentity && !hasInputProblem && layers.size === 1) {
@@ -219,8 +249,25 @@ export function attachRemediation(errors) {
   return errors;
 }
 
-export function formatStatusReport({ errors, inputInventory, fingerprints }) {
-  const byLayer = { L1: [], L2: [], L3: [], L4: [], "L?": [] };
+export function formatStatusReport({
+  errors,
+  inputInventory,
+  fingerprints,
+}: {
+  errors: string[];
+  inputInventory?: { pluginFiles: string[]; modules: string[] } | null;
+  fingerprints?: {
+    expected: Record<string, string | undefined>;
+    actual: Record<string, string | undefined>;
+  } | null;
+}): string {
+  const byLayer: Record<"L1" | "L2" | "L3" | "L4" | "L?", string[]> = {
+    L1: [],
+    L2: [],
+    L3: [],
+    L4: [],
+    "L?": [],
+  };
   for (const error of errors) {
     byLayer[classifyNativeStateError(error)].push(error);
   }
@@ -243,7 +290,7 @@ export function formatStatusReport({ errors, inputInventory, fingerprints }) {
     );
   }
   lines.push("");
-  for (const layer of ["L1", "L2", "L3", "L4", "L?"]) {
+  for (const layer of ["L1", "L2", "L3", "L4", "L?"] as const) {
     const items = byLayer[layer];
     if (items.length === 0) {
       if (layer !== "L?") lines.push(`  ${layer}: ok`);
@@ -267,7 +314,12 @@ export function formatWriteSummary({
   next,
   inputInventory,
   platformsMoved,
-}) {
+}: {
+  previous: Record<string, string | undefined>;
+  next: Record<string, string>;
+  inputInventory: { pluginFiles: string[]; modules: string[] };
+  platformsMoved: string[];
+}): string {
   const moved =
     platformsMoved.length > 0
       ? platformsMoved.join(", ")
@@ -281,8 +333,15 @@ export function formatWriteSummary({
   ].join("\n");
 }
 
-export function parseNativeStateArgs(argv) {
-  const flags = { write: false, status: false };
+export function parseNativeStateArgs(argv: string[]): {
+  write: boolean;
+  status: boolean;
+  help?: boolean;
+} {
+  const flags: { write: boolean; status: boolean; help?: boolean } = {
+    write: false,
+    status: false,
+  };
   for (const arg of argv) {
     if (arg === "--write") flags.write = true;
     else if (arg === "--status") flags.status = true;

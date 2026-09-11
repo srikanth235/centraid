@@ -29,7 +29,7 @@ const expoModulesJsiPackagePath = path.join(
  */
 export const EXPO_MODULES_JSI_MIN_XCODE = "26.4";
 
-export function requiredXcodeVersion(helpers) {
+export function requiredXcodeVersion(helpers: string): string {
   const match =
     /def self\.min_xcode_version_supported[\s\S]{0,160}?return ['"](?<version>\d+(?:\.\d+)*)['"]/u.exec(
       helpers
@@ -40,7 +40,7 @@ export function requiredXcodeVersion(helpers) {
   return match.groups.version;
 }
 
-export function expoModulesJsiSwiftToolsVersion(packageSwift) {
+export function expoModulesJsiSwiftToolsVersion(packageSwift: string): string {
   const match =
     /^\/\/\s*swift-tools-version:\s*(?<version>\d+(?:\.\d+)*)/mu.exec(
       packageSwift
@@ -57,13 +57,13 @@ export function expoModulesJsiSwiftToolsVersion(packageSwift) {
  * When expo-modules-jsi declares Swift tools ≥ 6.2, require Expo's documented
  * Xcode floor. Absent / older Package.swift falls back to React Native alone.
  */
-export function expoModulesJsiMinXcode(packageSwift) {
+export function expoModulesJsiMinXcode(packageSwift: string): string | null {
   const tools = expoModulesJsiSwiftToolsVersion(packageSwift);
   if (versionAtLeast(tools, "6.2")) return EXPO_MODULES_JSI_MIN_XCODE;
   return null;
 }
 
-export function installedXcodeVersion(output) {
+export function installedXcodeVersion(output: string): string {
   const match = /^Xcode\s+(?<version>\d+(?:\.\d+)*)/mu.exec(output);
   if (!match?.groups?.version) {
     throw new Error(`installed Xcode version could not be parsed: ${output}`);
@@ -71,7 +71,7 @@ export function installedXcodeVersion(output) {
   return match.groups.version;
 }
 
-export function versionAtLeast(actual, required) {
+export function versionAtLeast(actual: string, required: string): boolean {
   const left = actual.split(".").map(Number);
   const right = required.split(".").map(Number);
   for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
@@ -81,13 +81,13 @@ export function versionAtLeast(actual, required) {
   return true;
 }
 
-export function maxVersion(...versions) {
+export function maxVersion(...versions: string[]): string {
   return versions.reduce((best, next) =>
     versionAtLeast(next, best) ? next : best
   );
 }
 
-async function recordInfraMismatch(message) {
+async function recordInfraMismatch(message: string): Promise<void> {
   const directory = path.join(repoRoot, "artifacts", "e2e");
   await mkdir(directory, { recursive: true });
   await writeFile(
@@ -108,7 +108,13 @@ async function recordInfraMismatch(message) {
   );
 }
 
-export async function checkXcodeMinimum(options = {}) {
+export async function checkXcodeMinimum(
+  options: {
+    helpers?: string;
+    packageSwift?: string;
+    xcodeOutput?: string;
+  } = {}
+) {
   const helpers = options.helpers ?? (await readFile(helpersPath, "utf8"));
   const packageSwift =
     options.packageSwift ?? (await readFile(expoModulesJsiPackagePath, "utf8"));
@@ -158,7 +164,7 @@ if (
     );
   } catch (error) {
     console.error(
-      `::error title=Mobile runner infrastructure::${error.message}`
+      `::error title=Mobile runner infrastructure::${error instanceof Error ? error.message : String(error)}`
     );
     process.exit(1);
   }

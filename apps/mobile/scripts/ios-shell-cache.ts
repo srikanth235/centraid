@@ -34,19 +34,27 @@ export const PATHS = ["build", "inject", "install"];
  * @param {boolean} input.cacheHit      the restore step reported a hit
  * @param {boolean} input.appPresent    `Centraid.app` is actually on disk
  * @param {string|undefined} input.bankedJs the `js-bundle.hash` stamped beside it
- * @param {string} input.currentJs      `js-bundle-fingerprint.mjs` for this SHA
+ * @param {string} input.currentJs      `js-bundle-fingerprint.ts` for this SHA
  * @param {boolean} input.hermescPresent the banked `hermesc` is on disk
  * @returns {{path: string, why: string}} the path to take and the sentence the
  *   lane log should carry, so a rebuild always says which of the three reasons
  *   bought its thirty minutes
  */
+export type ShellPath = "build" | "inject" | "install";
+
 export function decideShellPath({
   cacheHit,
   appPresent,
   bankedJs,
   currentJs,
   hermescPresent,
-}) {
+}: {
+  cacheHit: boolean;
+  appPresent: boolean;
+  bankedJs: string | undefined;
+  currentJs: string;
+  hermescPresent: boolean;
+}): { path: ShellPath; why: string } {
   if (!currentJs)
     throw new Error(
       "empty JS bundle fingerprint; refusing to install an unverifiable app"

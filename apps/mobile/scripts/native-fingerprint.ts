@@ -24,7 +24,7 @@ import { pathToFileURL } from "node:url";
  * the fingerprint step for how the host toolchain (Xcode/SDK) is folded in
  * separately — fingerprint hashes the *project*, not the *machine*.
  *
- * Usage: `node scripts/native-fingerprint.mjs <ios|android>` → prints the hash
+ * Usage: `node scripts/native-fingerprint.ts <ios|android>` → prints the hash
  * to stdout with no trailing newline, suitable for `>> "$GITHUB_OUTPUT"`.
  */
 import { createFingerprintAsync, SourceSkips } from "@expo/fingerprint";
@@ -44,7 +44,7 @@ export const NATIVE_FINGERPRINT_IGNORE_PATHS = [
   // Ignoring them leaves @expo/fingerprint's `bareNativeDir` source present but
   // empty (`hash: null`), which is exactly the value it takes when the
   // directory is absent — the two states become indistinguishable, which is the
-  // point. `verify-native-state.mjs` L3 asserts that emptiness, so deleting
+  // point. `verify-native-state.ts` L3 asserts that emptiness, so deleting
   // these two entries fails a gate rather than quietly localising every hash.
   "ios/**",
   "android/**",
@@ -70,12 +70,15 @@ export const NATIVE_FINGERPRINT_IGNORE_PATHS = [
 export const NATIVE_FINGERPRINT_SOURCE_SKIPS =
   SourceSkips.PackageJsonScriptsAll;
 
-export function nativeFingerprintOptions(platform) {
+export type NativePlatform = "ios" | "android";
+
+export function nativeFingerprintOptions(platform: string) {
   if (platform !== "ios" && platform !== "android") {
     throw new Error(`unsupported native fingerprint platform: ${platform}`);
   }
+  const platforms: NativePlatform[] = [platform];
   return {
-    platforms: [platform],
+    platforms,
     // The committed expectation is the ratchet output, not an input. Including
     // it would make every refresh self-referential and impossible to settle.
     ignorePaths: NATIVE_FINGERPRINT_IGNORE_PATHS,
@@ -85,11 +88,11 @@ export function nativeFingerprintOptions(platform) {
 
 /**
  * The hash AND the source list it was computed from. The identity ratchet
- * (`verify-native-state.mjs`) checks the sources as well as the digest: a
+ * (`verify-native-state.ts`) checks the sources as well as the digest: a
  * fingerprint that quietly stopped reading a config plugin would keep matching
  * the committed hash forever, which is a silent gate rather than a red one.
  */
-export async function fingerprintReportForPlatform(platform) {
+export async function fingerprintReportForPlatform(platform: NativePlatform) {
   const fingerprint = await createFingerprintAsync(
     projectRoot,
     nativeFingerprintOptions(platform)
@@ -103,7 +106,9 @@ export async function fingerprintReportForPlatform(platform) {
   return { hash: fingerprint.hash, sources: fingerprint.sources };
 }
 
-export async function fingerprintForPlatform(platform) {
+export async function fingerprintForPlatform(
+  platform: NativePlatform
+): Promise<string> {
   return (await fingerprintReportForPlatform(platform)).hash;
 }
 
@@ -113,13 +118,15 @@ if (
 ) {
   const platform = process.argv[2];
   if (platform !== "ios" && platform !== "android") {
-    process.stderr.write("usage: native-fingerprint.mjs <ios|android>\n");
+    process.stderr.write("usage: native-fingerprint.ts <ios|android>\n");
     process.exit(2);
   }
   try {
     process.stdout.write(await fingerprintForPlatform(platform));
   } catch (error) {
-    process.stderr.write(`::error::${error.message}\n`);
+    process.stderr.write(
+      `::error::${error instanceof Error ? error.message : String(error)}\n`
+    );
     process.exit(1);
   }
 }

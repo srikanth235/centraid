@@ -39,7 +39,31 @@ function readStdin() {
  * @returns `{ udid, name, runtime, rung }` — `rung` is 0 for the pin itself and
  *   1..n for a named fallback, so the caller can report a substitution.
  */
-export function resolveSimulator(listing, pin) {
+export interface SimulatorPin {
+  deviceName: string;
+  osPrefix?: string;
+  fallbackDeviceNames?: string[];
+}
+
+export interface SimctlDevice {
+  name: string;
+  udid: string;
+  isAvailable?: boolean;
+}
+
+export interface SimctlListing {
+  devices?: Record<string, SimctlDevice[] | undefined>;
+}
+
+export function resolveSimulator(
+  listing: SimctlListing | null | undefined,
+  pin: SimulatorPin
+): {
+  udid: string;
+  name: string;
+  runtime: string;
+  rung: number;
+} | null {
   const ladder = [pin.deviceName, ...(pin.fallbackDeviceNames ?? [])];
   // simctl keys the map by runtime identifier
   // (com.apple.CoreSimulator.SimRuntime.iOS-26-1). Only iOS runtimes are
@@ -70,10 +94,20 @@ export function resolveSimulator(listing, pin) {
 }
 
 function main() {
-  const pin = JSON.parse(readFileSync(MATRIX_PATH, "utf8")).ios;
-  let listing;
+  const matrix: unknown = JSON.parse(readFileSync(MATRIX_PATH, "utf8"));
+  if (
+    typeof matrix !== "object" ||
+    matrix === null ||
+    !("ios" in matrix) ||
+    typeof matrix.ios !== "object" ||
+    matrix.ios === null
+  ) {
+    throw new Error("device-matrix.json is missing an ios pin");
+  }
+  const pin = matrix.ios as SimulatorPin;
+  let listing: SimctlListing;
   try {
-    listing = JSON.parse(readStdin());
+    listing = JSON.parse(readStdin()) as SimctlListing;
   } catch {
     console.error(
       "::error::resolve-ios-simulator: stdin was not the JSON from " +
