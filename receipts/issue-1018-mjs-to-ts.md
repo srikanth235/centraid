@@ -216,9 +216,15 @@ Oversized splits (under 625):
 
 `kill-mid-write-child.mjs` was a type-stripping loader around `kill-mid-write-child.ts` (package-src `.js` specifiers). The body is `kill-mid-write-child-run.ts`; the loader is `kill-mid-write-child.ts`. Spawn still runs the loader.
 
-Compiler: `tests/tsconfig.agent-e2e.json` extends `tsconfig.node.json` (NodeNext, `allowImportingTsExtensions`, `erasableSyntaxOnly`). Include is the four `tests/agent-e2e-*` globs. Exclude: `ci-gateway.ts` (package `dist/` imports), pairing `harness.ts` / `device-redeem.ts` / `docker-harness.ts` / pairing flows / `released-binary-skew.ts` (package `dist/` / `@centraid/tunnel`), and `**/*.test.ts` (vitest + `@centraid/test-kit`). Root `typecheck` and `typecheck:affected` run `tsc -p tests/tsconfig.agent-e2e.json`. `lint-tsconfigs` ROOT_TOOLING_PROGRAMS requires that needle when `tests/agent-e2e-shared/harness.ts` exists.
+Compiler: `tests/tsconfig.agent-e2e.json` extends `tsconfig.node.json` (NodeNext, `allowImportingTsExtensions`, `erasableSyntaxOnly`). Include is the four `tests/agent-e2e-*` globs. Exclude: `ci-gateway.ts` (package `dist/` imports), pairing `harness.ts` / `device-redeem.ts` / `docker-harness.ts` / pairing flows / `released-binary-skew.ts` (package `dist/` / `@centraid/tunnel`), and `**/*.test.ts` (vitest + `@centraid/test-kit`). The DOM `tests/tsconfig.json` program excludes the NodeNext crash-child loader. Root `typecheck` and `typecheck:affected` run `tsc -p tests/tsconfig.agent-e2e.json`. `lint-tsconfigs` ROOT_TOOLING_PROGRAMS requires that needle when `tests/agent-e2e-shared/harness.ts` exists.
 
 ### Verification
+
+```sh
+tsc -p tests --noEmit
+```
+
+Exit 0.
 
 ```sh
 tsc -p tests/tsconfig.agent-e2e.json --noEmit

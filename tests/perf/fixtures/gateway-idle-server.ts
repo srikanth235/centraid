@@ -19,8 +19,13 @@ const handle = await serve({
 
 process.send?.({ type: "ready", url: handle.url, token: handle.token });
 
-process.on("message", async (message) => {
-  if (message?.type === "measure-idle") {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+process.on("message", async (message: unknown) => {
+  if (!isRecord(message)) return;
+  if (message.type === "measure-idle") {
     const windowMs = Number(message.windowMs ?? 5000);
     const cpuStart = process.cpuUsage();
     const wallStart = performance.now();
@@ -38,7 +43,7 @@ process.on("message", async (message) => {
     });
     return;
   }
-  if (message?.type === "close") {
+  if (message.type === "close") {
     await handle.close();
     process.exit(0);
   }

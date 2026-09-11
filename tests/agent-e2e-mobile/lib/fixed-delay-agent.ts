@@ -68,7 +68,7 @@ export function stubHarnessPrefs() {
     "harness.kind": "acp",
     "harness.binPath": process.execPath,
     "harness.extraArgs": [
-      fileURLToPath(new URL("fixed-delay-agent.mjs", import.meta.url)),
+      fileURLToPath(new URL("fixed-delay-agent.ts", import.meta.url).href),
     ],
   };
 }
