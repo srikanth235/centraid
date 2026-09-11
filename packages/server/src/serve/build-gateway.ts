@@ -279,6 +279,7 @@ import { probeHostLimits } from "./host-limits.js";
 import { reconcileLinkBindings } from "./link-party-bindings.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
+  automationNoticeHeadline,
   enrichRefusalNotice,
   humanizeAutomationRef,
   noticeGist,
@@ -1756,20 +1757,15 @@ export async function buildGateway(
       plane.notices.put({
         kind: "automation",
         sourceRef: automationRef,
-        headline:
-          outcome === "failure"
-            ? gist
-              ? `${name} failed — ${gist}`
-              : `${name} failed`
-            : previousOutcome === "failure"
-              ? `${name} recovered`
-              : `${name} completed`,
+        // R-NY-5 (#1015): a sentence; the gist is the run log's, not the title's.
+        headline: automationNoticeHeadline(name, outcome, previousOutcome),
         severity: outcome === "failure" ? "high" : "info",
         detail: {
           sourceType: "automation",
           outcome,
           automationRef,
           runId,
+          ...(gist ? { gist } : {}),
           ...(noticeContext
             ? {
                 appId: noticeContext.appId,
