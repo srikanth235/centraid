@@ -297,11 +297,11 @@ export default function PhotosLibrary({
       verb: "Delete from device",
     });
   };
+  // The band is the way out now (§F, proto:4953-4954), so the head carries
+  // NO back chevron: this surface is the band's `Library` destination, and a
+  // destination that also owns a back arrow gives a member two answers to
+  // "where does this go".
   return (
-    // The band is the way out now (§F, proto:4953-4954), so the head carries
-    // NO back chevron: this surface is the band's `Library` destination, and a
-    // destination that also owns a back arrow gives a member two answers to
-    // "where does this go".
     <PhotosScreen
       action={{ label: "Create album", onPress: () => setNewAlbum(true) }}
       route="library"

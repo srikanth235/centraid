@@ -187,6 +187,21 @@ vi.mock(
       useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
     }) as never
 );
+// The frame is the room's (#1015, R-NY-7); what this suite asserts is the
+// title the screen hands it and everything inside it.
+vi.mock(
+  import("./PhotosScreen"),
+  () =>
+    ({
+      default: ({
+        children,
+        title,
+      }: {
+        children?: React.ReactNode;
+        title: string;
+      }) => React.createElement("div", {}, title, children),
+    }) as never
+);
 vi.mock(
   import("../../kit/components/Icon"),
   () =>

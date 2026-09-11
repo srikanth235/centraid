@@ -30,10 +30,8 @@ import type { PageQuery } from "@centraid/core/page";
 
 import { Text } from "../../kit/components/NativeText";
 import SearchField from "../../kit/components/SearchField";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
@@ -106,21 +104,13 @@ interface SemanticHit {
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
-/** Dead registration: nothing pushes this route — the band renders
- *  `PhotosSearchView` in place. Kept only so `App.tsx` does not dangle. */
-export default function PhotosSearch({
-  navigation,
-}: PhotosScreenProps<"PhotosSearch">): React.JSX.Element {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <ReplicaStatusBar />
-      <PhotosSearchView navigation={navigation as unknown as Nav} />
-    </TopSafeArea>
-  );
-}
-
+/*
+ * NO ROUTE OF ITS OWN (#1015, R-NY-7). Search is the band's destination, and
+ * `PhotosHome` renders this view in place. A standalone `PhotosSearch` route
+ * used to be registered as well, pushed by nothing and kept "so App.tsx does
+ * not dangle" — a bare safe area with no header and no band. It was deleted
+ * rather than given a room: a route nobody reaches has nothing to migrate.
+ */
 export function PhotosSearchView({
   navigation,
 }: {
@@ -610,6 +600,5 @@ const makeStyles = (colors: ThemeColors) =>
     panelBody: { ...t("small"), color: colors.textSoft },
     panelNet: { borderColor: colors.net },
     panelTitle: { ...t("display"), color: colors.text },
-    safe: { flex: 1 },
     status: { ...t("mono"), color: colors.textSoft },
   });
