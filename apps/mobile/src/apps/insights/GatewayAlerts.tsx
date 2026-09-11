@@ -9,6 +9,11 @@
 // the source recovers, and a line the member can file away before then is a
 // problem the member can hide instead of fix.
 //
+// A VIEW OF THE ACTIVITY PLACE, on Activity's own route, so it takes the
+// Activity frame (`usePlaceFrame("stats")`, R-NY-1): pushed over Activity it
+// is a sub-page with a back key to Activity and no band; standing on Home (a
+// deep link) it is Activity's root and draws the band.
+//
 // Words live in `alerts-model.ts`. The headline still goes through
 // `memberFacingError`: R-NY-5 made new headlines sentences, but a vault can
 // hold cards written before it, and R-SH-9 keeps the filter for exactly the
@@ -32,6 +37,7 @@ import {
 import type { MobileNotice } from "../../lib/gateway";
 import { mobileNotificationsDestination } from "../../lib/notifications-navigation";
 import type { InsightsScreenProps } from "../../navigation";
+import { usePlaceFrame } from "../../screens/home/usePlaceFrame";
 import { alertLines } from "./alerts-model";
 
 /** No `message`: what failed is not the member's vocabulary, and the room
@@ -47,9 +53,9 @@ const RETRY_FAILED = "That rule did not start";
 
 export default function GatewayAlerts(props: {
   navigation: InsightsScreenProps["navigation"];
-  onLeave: () => void;
 }): React.JSX.Element {
   const { navigation } = props;
+  const frame = usePlaceFrame("stats");
   const { colors } = useTheme();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
@@ -179,7 +185,7 @@ export default function GatewayAlerts(props: {
       loading={
         state.kind === "loading" ? { label: "Reading the alerts" } : undefined
       }
-      onHome={props.onLeave}
+      {...frame}
       onRefresh={() => {
         setRefreshing(true);
         void load().finally(() => setRefreshing(false));

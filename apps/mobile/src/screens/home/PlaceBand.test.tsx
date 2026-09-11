@@ -253,12 +253,20 @@ describe("the place roots", () => {
         path.resolve(import.meta.dirname, file),
         "utf8"
       );
-      // Needs you hands its room the band directly; its back key is lane A's.
-      expect(source).toContain(
-        id === "notifs"
-          ? `band={<PlaceBand place="${id}" />}`
-          : `usePlaceFrame("${id}")`
-      );
+      expect(source).toContain(`usePlaceFrame("${id}")`);
+      expect(source).not.toContain("onHome=");
     }
   );
+
+  it("gives Activity's alerts view the Activity frame", () => {
+    const source = fs.readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        "../../apps/insights/GatewayAlerts.tsx"
+      ),
+      "utf8"
+    );
+    expect(source).toContain('usePlaceFrame("stats")');
+    expect(source).not.toContain("onHome=");
+  });
 });

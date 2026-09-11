@@ -116,10 +116,7 @@ export default function InsightsScreen({
   route,
 }: InsightsScreenProps): React.JSX.Element {
   return route.params?.initialTab === "alerts" ? (
-    <GatewayAlerts
-      navigation={navigation}
-      onLeave={() => navigation.goBack()}
-    />
+    <GatewayAlerts navigation={navigation} />
   ) : (
     <Analytics navigation={navigation} route={route} />
   );
