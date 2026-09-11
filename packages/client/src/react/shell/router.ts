@@ -37,7 +37,7 @@ export function routeKey(route: ShellRoute): string {
     case "starred":
     case "automations":
     case "connectors":
-    case "approvals":
+    case "needs-you":
     case "household":
     case "storage":
     case "atlas":

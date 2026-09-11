@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShellActions } from "../actions.js";
 import type * as TypeImport_qcp7vy from "../actions.js";
-import type * as TypeImport_1lvx9zk from "./ApprovalsRoute.js";
+import type * as TypeImport_1lvx9zk from "./NeedsYouRoute.js";
 
 type OutboxModule = typeof import("../../../gateway-client-outbox.js");
 type PushModule = typeof import("../../../gateway-client-push.js");
@@ -52,7 +52,7 @@ vi.mock(import("../../../gateway-client-push.js"), () => ({
   syncWebNotifications: () => syncWebNotifications(),
 }));
 
-let ApprovalsRoute: typeof TypeImport_1lvx9zk.default;
+let NeedsYouRoute: typeof TypeImport_1lvx9zk.default;
 let ShellActionsProvider: typeof TypeImport_qcp7vy.ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -71,9 +71,9 @@ function makeActions(): ShellActions {
   };
 }
 
-describe("ApprovalsRoute", () => {
+describe("NeedsYouRoute", () => {
   beforeEach(async () => {
-    ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
+    ({ default: NeedsYouRoute } = await import("./NeedsYouRoute.js"));
     // The route's data lives in the shell's shared stale-while-revalidate
     // cache (#659), which deliberately outlives a mount — so each case
     // starts from the same empty cache a fresh vault would give it.
@@ -108,7 +108,7 @@ describe("ApprovalsRoute", () => {
     await act(async () => {
       root!.render(
         <ShellActionsProvider value={makeActions()}>
-          <ApprovalsRoute />
+          <NeedsYouRoute />
         </ShellActionsProvider>
       );
     });
@@ -122,7 +122,7 @@ describe("ApprovalsRoute", () => {
     host = null;
   });
 
-  describe("ApprovalsRoute", () => {
+  describe("NeedsYouRoute", () => {
     it("shows a loading state, then the empty state once the blocking notifications resolves empty", async () => {
       const el = await render();
       expect(el.textContent).toContain("Nothing is waiting on you");

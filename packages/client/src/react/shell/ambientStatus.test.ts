@@ -105,7 +105,7 @@ describe("shell/ambientSignal", () => {
       })
     ).toMatchObject({
       copy: "Can’t reach your vault · 2 items exist only here",
-      action: { route: { kind: "approvals" } },
+      action: { route: { kind: "needs-you" } },
       tone: "urgent",
     });
     expect(

@@ -1,7 +1,6 @@
 import { plural } from "@centraid/blueprints/apps/_shared/format-kit";
 
 import { relativeTime } from "../../../app-format.js";
-import { APPROVALS_HEALTH_DETAIL } from "../../../approvals-copy.js";
 import type { EnrichConsentRecord } from "../../../enrich-policy.js";
 import type {
   OutboxGrant,
@@ -11,50 +10,51 @@ import type {
   ReviewEntry,
 } from "../../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
+import { NEEDS_YOU_HEALTH_DETAIL } from "../../../needs-you-copy.js";
 import type {
-  ApprovalsEnrichConsentRowDTO,
-  ApprovalsGrantRowDTO,
-  ApprovalsNeedsAuthRowDTO,
-  ApprovalsOutboxRowDTO,
-  ApprovalsParkedRowDTO,
-  ApprovalsScopeRequestRowDTO,
-  ApprovalsActivityRowDTO,
-} from "../../screens/ApprovalsScreen.js";
+  NeedsYouEnrichConsentRowDTO,
+  NeedsYouGrantRowDTO,
+  NeedsYouNeedsAuthRowDTO,
+  NeedsYouOutboxRowDTO,
+  NeedsYouParkedRowDTO,
+  NeedsYouScopeRequestRowDTO,
+  NeedsYouActivityRowDTO,
+} from "../../screens/NeedsYouScreen.js";
 
 // ── What the frame says about this page (issue #765): count line, bar-deciding state, one status sentence. ──
 // Kept beside the DTO builders: all three derive from the same fetch, so a
 // screen computing them separately could disagree with its own bar.
 
-export interface ApprovalsTally {
+export interface NeedsYouTally {
   /** Decisions plus demand-not-news notices. */
   waiting: number;
   grants: number;
 }
 
 /** Above this many waiting items the queue earns its filter chips (`full`). */
-export const APPROVALS_FULL_AT = 4;
+export const NEEDS_YOU_FULL_AT = 4;
 
-export function approvalsState(
-  tally: ApprovalsTally
+export function needsYouState(
+  tally: NeedsYouTally
 ): "ready" | "full" | "empty" {
   if (tally.waiting === 0) return "empty";
-  return tally.waiting > APPROVALS_FULL_AT ? "full" : "ready";
+  return tally.waiting > NEEDS_YOU_FULL_AT ? "full" : "ready";
 }
 
 /** The app bar's count line; empty says "nothing waiting", never a zero. */
-export function approvalsCountLine(tally: ApprovalsTally): string {
+export function needsYouCountLine(tally: NeedsYouTally): string {
   const standing = plural(tally.grants, "standing grant", "standing grants");
   if (tally.waiting === 0) return `Nothing waiting · ${standing}`;
   return `${plural(tally.waiting, "decision waiting", "decisions waiting")} · ${standing}`;
 }
 
 /** Status line in ready/full — no inline action: every verb attaches to what it acts on. */
-export function approvalsHealth(tally: ApprovalsTally): {
+export function needsYouHealth(tally: NeedsYouTally): {
   label: string;
   detail: string;
 } {
   return {
-    detail: APPROVALS_HEALTH_DETAIL,
+    detail: NEEDS_YOU_HEALTH_DETAIL,
     label: `${tally.waiting} waiting on you`,
   };
 }
@@ -81,7 +81,7 @@ function recipientFrom(
   return fallbackTarget;
 }
 
-export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
+export function buildOutboxRow(item: OutboxItem): NeedsYouOutboxRowDTO {
   const artifact = item.artifact ?? {};
   const subject =
     typeof artifact.subject === "string" ? artifact.subject : null;
@@ -116,7 +116,7 @@ export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
 
 export function buildNeedsAuthRow(
   row: OutboxNeedsAuth
-): ApprovalsNeedsAuthRowDTO {
+): NeedsYouNeedsAuthRowDTO {
   return {
     connectionId: row.connectionId,
     label: row.label,
@@ -125,7 +125,7 @@ export function buildNeedsAuthRow(
   };
 }
 
-export function buildParkedRow(row: VaultParkedEntry): ApprovalsParkedRowDTO {
+export function buildParkedRow(row: VaultParkedEntry): NeedsYouParkedRowDTO {
   return {
     invocationId: row.invocationId,
     command: row.command,
@@ -154,7 +154,7 @@ function scopeSummary(scopes: OutboxScopeRequest["scopes"]): string {
 
 export function buildScopeRequestRow(
   row: OutboxScopeRequest
-): ApprovalsScopeRequestRowDTO {
+): NeedsYouScopeRequestRowDTO {
   return {
     requestId: row.requestId,
     appId: row.appId,
@@ -163,7 +163,7 @@ export function buildScopeRequestRow(
   };
 }
 
-export function buildGrantRow(row: OutboxGrant): ApprovalsGrantRowDTO {
+export function buildGrantRow(row: OutboxGrant): NeedsYouGrantRowDTO {
   return {
     grantId: row.grantId,
     actorLabel: row.actor ?? row.actorId,
@@ -219,7 +219,7 @@ export function formatActivityDetail(
 }
 
 /** Map one wire `ReviewEntry` to the screen's activity row DTO (#552). */
-export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
+export function buildActivityRow(row: ReviewEntry): NeedsYouActivityRowDTO {
   const label = humanizeActivityLabel(
     row.action,
     row.decision,
@@ -232,7 +232,7 @@ export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
     row.context,
     row.action
   );
-  const attribution: ApprovalsActivityRowDTO["attribution"] =
+  const attribution: NeedsYouActivityRowDTO["attribution"] =
     row.grantId != null && row.grantId.length > 0
       ? "grant"
       : row.decision === "allow"
@@ -259,10 +259,10 @@ export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
 
 /** Collapse ADJACENT activity rows sharing verb + object + decision (#552); pure adjacency, no time window. */
 export function collapseAdjacentActivity(
-  rows: readonly ApprovalsActivityRowDTO[]
-): ApprovalsActivityRowDTO[] {
+  rows: readonly NeedsYouActivityRowDTO[]
+): NeedsYouActivityRowDTO[] {
   if (rows.length === 0) return [];
-  const out: ApprovalsActivityRowDTO[] = [];
+  const out: NeedsYouActivityRowDTO[] = [];
   for (const row of rows) {
     const prev = out[out.length - 1];
     if (
@@ -302,7 +302,7 @@ export function enrichCapabilityLabel(capability: string): string {
 
 export function buildEnrichConsentRow(
   record: EnrichConsentRecord
-): ApprovalsEnrichConsentRowDTO {
+): NeedsYouEnrichConsentRowDTO {
   const answer = record.decision === "granted" ? "Granted" : "Declined";
   const where = EGRESS_PHRASE[record.egress];
   const scope =

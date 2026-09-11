@@ -36,6 +36,21 @@ export interface NotificationRow {
   key: string;
   title: string;
   body: string;
+  /** What the push is ABOUT, so a tap lands where it can be acted on
+   *  (#1015 R-NY-16, mirroring the phone's `notifications-plan.ts`): a
+   *  decision opens Needs you, a notice opens Activity. The wake relay is
+   *  content-free, so this composer is the only place the difference is known. */
+  about: "decision" | "notice";
+}
+
+/**
+ * Where a tapped push lands. The web seat has no alerts view inside Activity
+ * (the phone's alerts tab has no web counterpart), so a notice opens Activity
+ * itself. `App.tsx` reads these two query keys; `apps/web/public/sw.js`
+ * mirrors them for background delivery.
+ */
+export function notificationTarget(about: NotificationRow["about"]): string {
+  return about === "decision" ? "/?needs-you=1" : "/?activity=1";
 }
 
 /**
@@ -48,7 +63,7 @@ export function composeWebNotifications(
   notifications: NotificationsPull,
   delivered: ReadonlySet<string>
 ): NotificationRow[] {
-  return [
+  const decisions: NotificationRow[] = [
     ...notifications.decisions.outbox.map((row) => ({
       key: `outbox:${row.itemId}:${row.stagedAt}`,
       title:
@@ -73,17 +88,19 @@ export function composeWebNotifications(
       title: `${row.appId} requests access`,
       body: NOTIFY_SCOPE_BODY,
     })),
-    ...notifications.notices
-      .filter(
-        (notice) =>
-          notice.severity === "high" &&
-          notice.readAt === null &&
-          notice.archivedAt === null
-      )
-      .map((notice) => ({
-        key: `notice:${notice.noticeId}:${notice.lastAt}`,
-        title: notice.headline,
-        body: NOTIFY_NOTICE_BODY,
-      })),
-  ].filter((row) => !delivered.has(row.key));
+  ].map((row) => ({ ...row, about: "decision" as const }));
+  const notices: NotificationRow[] = notifications.notices
+    .filter(
+      (notice) =>
+        notice.severity === "high" &&
+        notice.readAt === null &&
+        notice.archivedAt === null
+    )
+    .map((notice) => ({
+      about: "notice" as const,
+      body: NOTIFY_NOTICE_BODY,
+      key: `notice:${notice.noticeId}:${notice.lastAt}`,
+      title: notice.headline,
+    }));
+  return [...decisions, ...notices].filter((row) => !delivered.has(row.key));
 }

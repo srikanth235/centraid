@@ -2,10 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import {
-  APPROVALS_ERROR_BODY,
-  APPROVALS_ERROR_TITLE,
-} from "../../../approvals-copy.js";
-import {
   decideOutboxItem,
   decideScopeRequest,
   getNotifications,
@@ -26,8 +22,12 @@ import {
   revokeVaultGrant,
   vaultApps,
 } from "../../../gateway-client-vault.js";
+import {
+  NEEDS_YOU_ERROR_BODY,
+  NEEDS_YOU_ERROR_TITLE,
+} from "../../../needs-you-copy.js";
 import { RETRY_ACTION } from "../../../surface-copy.js";
-import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
+import NeedsYouScreen from "../../screens/NeedsYouScreen.js";
 import { groupGrantsByStore } from "../../screens/privacyStores.js";
 import type { StoreHolderDTO } from "../../screens/privacyStores.js";
 import NoteBlock from "../../ui/NoteBlock.js";
@@ -42,9 +42,9 @@ import {
 } from "../routeVitals.js";
 import { PageSkeleton } from "../status.js";
 import {
-  approvalsCountLine,
-  approvalsHealth,
-  approvalsState,
+  needsYouCountLine,
+  needsYouHealth,
+  needsYouState,
   buildGrantRow,
   buildActivityRow,
   buildEnrichConsentRow,
@@ -53,12 +53,12 @@ import {
   buildOutboxRow,
   buildParkedRow,
   buildScopeRequestRow,
-} from "./approvalsData.js";
+} from "./needsYouData.js";
 
 const REVIEW_LIMIT_DEFAULT = 20;
 const REVIEW_LIMIT_SEE_ALL = 200;
 
-interface Approvals {
+interface NeedsYou {
   notifications: Awaited<ReturnType<typeof getNotifications>>;
   grants: Awaited<ReturnType<typeof listOutboxGrants>>;
   review: Awaited<ReturnType<typeof getReview>>;
@@ -71,7 +71,7 @@ interface Approvals {
   enrichConsent: Awaited<ReturnType<typeof listEnrichEgressConsent>> | null;
 }
 
-async function loadApprovals(reviewLimit: number): Promise<Approvals> {
+async function loadNeedsYou(reviewLimit: number): Promise<NeedsYou> {
   const [notifications, grants, review, apps, agents, enrichConsent] =
     await Promise.all([
       getNotifications(true),
@@ -88,10 +88,10 @@ async function loadApprovals(reviewLimit: number): Promise<Approvals> {
 
 const DISCARD_CONSEQUENCE = "Nothing will be sent. This can’t be undone.";
 
-// The Notifications route (#306/#308/#647): wire rows map to the screen's DTOs
-// in `approvalsData.ts`, decisions return over `gateway-client-outbox`. Every
+// The Needs you route (#306/#308/#647): wire rows map to the screen's DTOs
+// in `needsYouData.ts`, decisions return over `gateway-client-outbox`. Every
 // irreversible verb confirms IN PLACE beside its row, never in an overlay.
-export default function ApprovalsRoute(): JSX.Element {
+export default function NeedsYouRoute(): JSX.Element {
   const { showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
@@ -114,8 +114,8 @@ export default function ApprovalsRoute(): JSX.Element {
   // Stale-while-revalidate (#659): revalidation runs BEHIND the page, so
   // half-edited text, expansions and chips survive.
   const { state, refresh, mutate } = useCachedQuery(
-    `approvals:${reviewLimit}`,
-    () => loadApprovals(reviewLimit)
+    `needs-you:${reviewLimit}`,
+    () => loadNeedsYou(reviewLimit)
   );
 
   const reload = useCallback((): void => void refresh(), [refresh]);
@@ -124,7 +124,7 @@ export default function ApprovalsRoute(): JSX.Element {
     void subscribeNotificationsChanges(reload, controller.signal).catch(() => {
       // The sidebar's 60s poll is the SSE fallback.
     });
-    // Opening Notifications is the consent gesture: never prompt at launch.
+    // Opening Needs you is the consent gesture: never prompt at launch.
     // The wake relay stays opaque; content is composed locally.
     void enableWebPushWake(true)
       .then((enabled) => (enabled ? syncWebNotifications() : Promise.resolve()))
@@ -134,12 +134,12 @@ export default function ApprovalsRoute(): JSX.Element {
 
   // "History" is `GatewayAlertsTab`; never copy it here.
   useEffect(() => {
-    publishRouteVerbs("approvals", {
+    publishRouteVerbs("needs-you", {
       onCommit: () =>
         setReviewAll((prev) => ({ nonce: (prev?.nonce ?? 0) + 1 })),
       onSecondary: () => navigate({ kind: "gateway", tab: "alerts" }),
     });
-    return () => clearRouteSignals("approvals");
+    return () => clearRouteSignals("needs-you");
   }, [navigate]);
 
   // From the query resolution, never a render: the bar and the body must not
@@ -164,11 +164,11 @@ export default function ApprovalsRoute(): JSX.Element {
   const lastReadAt = useRef<number | null>(null);
   useEffect(() => {
     if (state.status === "loading") {
-      publishRouteSignals("approvals", { state: "loading" });
+      publishRouteSignals("needs-you", { state: "loading" });
       return;
     }
     if (state.status === "error") {
-      publishRouteSignals("approvals", {
+      publishRouteSignals("needs-you", {
         state: "error",
         ...(lastReadAt.current === null
           ? {}
@@ -178,10 +178,10 @@ export default function ApprovalsRoute(): JSX.Element {
     }
     lastReadAt.current = Date.now();
     const tally = { grants: standing, waiting };
-    publishRouteSignals("approvals", {
-      count: approvalsCountLine(tally),
-      health: approvalsHealth(tally),
-      state: approvalsState(tally),
+    publishRouteSignals("needs-you", {
+      count: needsYouCountLine(tally),
+      health: needsYouHealth(tally),
+      state: needsYouState(tally),
     });
   }, [standing, state.status, waiting]);
 
@@ -190,7 +190,7 @@ export default function ApprovalsRoute(): JSX.Element {
   const runDecision = async (
     id: string,
     action: () => Promise<void>,
-    apply: (previous: Approvals) => Approvals = (previous) => previous,
+    apply: (previous: NeedsYou) => NeedsYou = (previous) => previous,
     /** Set when the reversal has a CARD to come back to (#815). */
     itemId: string | null = null
   ): Promise<void> => {
@@ -208,10 +208,10 @@ export default function ApprovalsRoute(): JSX.Element {
   };
 
   const withoutDecision = (
-    previous: Approvals,
+    previous: NeedsYou,
     list: "outbox" | "parked" | "scopeRequests",
     id: string
-  ): Approvals => {
+  ): NeedsYou => {
     const decisions = previous.notifications.decisions;
     const remaining =
       list === "outbox"
@@ -340,7 +340,7 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   };
 
-  /** `ApprovalsScreen` owns the struck-through row; splice the ANSWER out of
+  /** `NeedsYouScreen` owns the struck-through row; splice the ANSWER out of
    *  `agents` so a background revalidate cannot resurrect it (#708). An app
    *  holds no answer to splice: its reach is its declared manifest (#928 A1),
    *  and this handler is never offered one. */
@@ -398,7 +398,7 @@ export default function ApprovalsRoute(): JSX.Element {
   if (state.status === "loading") {
     return (
       <PageScroll>
-        <PageSkeleton rows={6} label="Loading Notifications…" />
+        <PageSkeleton rows={6} label="Loading Needs you…" />
         <NoteBlock>
           A row knows its shape before its content arrives, so nothing reflows
           when it does.
@@ -413,8 +413,8 @@ export default function ApprovalsRoute(): JSX.Element {
       <PageScroll>
         <PanelBlock
           action={{ label: RETRY_ACTION, onClick: reload }}
-          body={APPROVALS_ERROR_BODY}
-          eyebrow={APPROVALS_ERROR_TITLE}
+          body={NEEDS_YOU_ERROR_BODY}
+          eyebrow={NEEDS_YOU_ERROR_TITLE}
           facts={[{ key: "what it said", value: state.error }]}
           tone="net"
           wide
@@ -432,7 +432,7 @@ export default function ApprovalsRoute(): JSX.Element {
     review.length >= reviewLimit && reviewLimit < REVIEW_LIMIT_SEE_ALL;
   return (
     <PageScroll>
-      <ApprovalsScreen
+      <NeedsYouScreen
         outbox={blocking.outbox.map(buildOutboxRow)}
         needsAuth={blocking.needsAuth.map(buildNeedsAuthRow)}
         parked={blocking.parked.map(buildParkedRow)}
@@ -509,7 +509,7 @@ export default function ApprovalsRoute(): JSX.Element {
               nonce: (prev?.nonce ?? 0) + 1,
             }));
           } else {
-            navigate({ kind: "approvals" });
+            navigate({ kind: "needs-you" });
           }
         }}
         onSeeAllActivity={() => setReviewLimit(REVIEW_LIMIT_SEE_ALL)}

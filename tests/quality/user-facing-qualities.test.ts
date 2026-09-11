@@ -1536,7 +1536,7 @@ describe("issue #679 user-facing quality gates", () => {
 
   test("F3: every confirmation-gated capability renders as an Approvals row", async () => {
     const approvalsModule = (await import(
-      path.join(root, "packages/client/src/react/shell/routes/approvalsData.ts")
+      path.join(root, "packages/client/src/react/shell/routes/needsYouData.ts")
     )) as {
       buildParkedRow: (input: {
         invocationId: string;

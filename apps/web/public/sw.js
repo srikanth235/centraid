@@ -357,10 +357,15 @@
 
   // Mirrors packages/client/src/notifications-model.ts. Content is built
   // only after the authenticated local fetch; the push provider still receives
-  // exactly the opaque `replica-wake` marker.
+  // exactly the opaque `replica-wake` marker. Each row says what it is ABOUT
+  // (R-NY-16): a decision opens Needs you, a notice opens Activity.
+  function notificationTarget(about) {
+    return about === 'decision' ? '/?needs-you=1' : '/?activity=1';
+  }
+
   function composeWebNotifications(notifications, delivered) {
     const decisions = notifications?.decisions || {};
-    return [
+    const decisionRows = [
       ...(decisions.outbox || []).map((row) => ({
         key: `outbox:${row.itemId}:${row.stagedAt}`,
         title:
@@ -372,31 +377,35 @@
       ...(decisions.needsAuth || []).map((row) => ({
         key: `auth:${row.connectionId}:${row.attentionAt}`,
         title: `${row.label} needs reconnection`,
-        body: 'Open Notifications to reconnect',
+        body: 'Open Needs you to reconnect',
       })),
       ...(decisions.parked || []).map((row) => ({
         key: `parked:${row.invocationId}`,
         title: row.command,
-        body: 'A decision is waiting in Notifications',
+        body: 'A decision is waiting in Needs you',
       })),
       ...(decisions.scopeRequests || []).map((row) => ({
         key: `scope:${row.requestId}`,
         title: `${row.appId} requests access`,
-        body: 'Review the requested scope in Notifications',
+        body: 'Review the requested scope in Needs you',
       })),
-      ...(notifications?.notices || [])
-        .filter(
-          (notice) =>
-            notice.severity === 'high' &&
-            notice.readAt === null &&
-            notice.archivedAt === null,
-        )
-        .map((notice) => ({
-          key: `notice:${notice.noticeId}:${notice.lastAt}`,
-          title: notice.headline,
-          body: 'Open Notifications for details',
-        })),
-    ].filter((row) => !delivered.has(row.key));
+    ].map((row) => ({ ...row, about: 'decision' }));
+    const noticeRows = (notifications?.notices || [])
+      .filter(
+        (notice) =>
+          notice.severity === 'high' &&
+          notice.readAt === null &&
+          notice.archivedAt === null,
+      )
+      .map((notice) => ({
+        about: 'notice',
+        key: `notice:${notice.noticeId}:${notice.lastAt}`,
+        title: notice.headline,
+        body: 'Open Activity for details',
+      }));
+    return [...decisionRows, ...noticeRows].filter(
+      (row) => !delivered.has(row.key),
+    );
   }
 
   async function notifyClosedNotifications() {
@@ -408,7 +417,7 @@
         self.registration.showNotification(row.title, {
           body: row.body,
           tag: row.key,
-          data: { url: '/?notifications=1' },
+          data: { url: notificationTarget(row.about) },
         }),
       ),
     );

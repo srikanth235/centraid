@@ -121,12 +121,12 @@
         "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
       },
       {
-        "file": "packages/client/src/approvals-copy.ts",
+        "file": "packages/client/src/needs-you-copy.ts",
         "literal": "Nothing is sent. The automation is told it was refused, and remembers.",
         "reason": "Deny sheet — a destructive confirm, the one surface DESIGN.md's Copy budget gives full sentences, because what a denial DOES is the decision being made. Promoted from two surfaces to one home (#805)."
       },
       {
-        "file": "packages/client/src/react/shell/routes/ApprovalsRoute.tsx",
+        "file": "packages/client/src/react/shell/routes/NeedsYouRoute.tsx",
         "literal": "Nothing will be sent. This can’t be undone.",
         "reason": "destructive confirm — outbox discard sheet states the consequence at the point of no return"
       },

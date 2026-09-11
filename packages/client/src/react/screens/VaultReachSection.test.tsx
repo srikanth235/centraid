@@ -42,7 +42,7 @@ describe(VaultReachSection, () => {
     const went: string[] = [];
     const el = render({
       collapsed: false,
-      onOpenApprovals: () => went.push("notifications"),
+      onOpenNeedsYou: () => went.push("notifications"),
       onOpenEnrichment: () => went.push("enrichment"),
       onToggle: () => {},
     });
@@ -59,7 +59,7 @@ describe(VaultReachSection, () => {
     press(el, "Apps and agents holding a store");
     press(el, "Standing grants");
     press(el, "What Centraid reads");
-    // Two rows about consent land on Notifications; enrichment is a Settings
+    // Two rows about consent land on Needs you; enrichment is a Settings
     // page, and neither row invents a third place.
     expect(went).toStrictEqual([
       "notifications",
@@ -71,7 +71,7 @@ describe(VaultReachSection, () => {
   it("says the rule where a member can act on it, in two statements", () => {
     const el = render({
       collapsed: false,
-      onOpenApprovals: () => {},
+      onOpenNeedsYou: () => {},
       onOpenEnrichment: () => {},
       onToggle: () => {},
     });
@@ -83,7 +83,7 @@ describe(VaultReachSection, () => {
     let toggled = 0;
     const el = render({
       collapsed: true,
-      onOpenApprovals: () => {},
+      onOpenNeedsYou: () => {},
       onOpenEnrichment: () => {},
       onToggle: () => {
         toggled += 1;

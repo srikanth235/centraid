@@ -19,9 +19,9 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { APPROVALS_DENY_SUB } from "@centraid/client/approvals-copy";
 import { AUTOMATIONS_EMPTY_BODY } from "@centraid/client/automations-copy";
 import { INSIGHTS_EMPTY_BODY } from "@centraid/client/insights-copy";
+import { NEEDS_YOU_DENY_SUB } from "@centraid/client/needs-you-copy";
 
 import { isTitleCase, walk } from "../../../../scripts/lint-mobile-rooms.mjs";
 import { PLACES } from "./home/places";
@@ -37,7 +37,7 @@ const REPO = path.resolve(import.meta.dirname, "../../../..");
 /** The shared sentences both seats read — swept with the shell's own. */
 const SHARED_COPY = [
   "packages/client/src/automations-copy.ts",
-  "packages/client/src/approvals-copy.ts",
+  "packages/client/src/needs-you-copy.ts",
   "packages/client/src/insights-copy.ts",
   "packages/client/src/react/shell/launcherModel.ts",
   "packages/client/src/react/shell/opsBar.ts",
@@ -135,7 +135,7 @@ describe("the shell's copy", () => {
     // three are read as VALUES, so a re-export cannot hide a rename.
     const shared = [
       AUTOMATIONS_EMPTY_BODY,
-      APPROVALS_DENY_SUB,
+      NEEDS_YOU_DENY_SUB,
       INSIGHTS_EMPTY_BODY,
     ];
     expect(shared.filter((t) => /\bautomations?\b/iu.test(t))).toStrictEqual(

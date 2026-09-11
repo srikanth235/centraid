@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShellActions } from "../actions.js";
 import type * as TypeImport_qcp7vy from "../actions.js";
-import type * as TypeImport_1lvx9zk from "./ApprovalsRoute.js";
+import type * as TypeImport_1lvx9zk from "./NeedsYouRoute.js";
 
 type OutboxModule = typeof import("../../../gateway-client-outbox.js");
 type PushModule = typeof import("../../../gateway-client-push.js");
@@ -50,7 +50,7 @@ vi.mock(import("../../../gateway-client-push.js"), () => ({
   syncWebNotifications: () => syncWebNotifications(),
 }));
 
-let ApprovalsRoute: typeof TypeImport_1lvx9zk.default;
+let NeedsYouRoute: typeof TypeImport_1lvx9zk.default;
 let ShellActionsProvider: typeof TypeImport_qcp7vy.ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -69,9 +69,9 @@ function makeActions(): ShellActions {
   };
 }
 
-describe("ApprovalsRoute held tray and write-back", () => {
+describe("NeedsYouRoute held tray and write-back", () => {
   beforeEach(async () => {
-    ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
+    ({ default: NeedsYouRoute } = await import("./NeedsYouRoute.js"));
     (await import("../queryCache.js")).resetQueryCache();
     ({ ShellActionsProvider } = await import("../actions.js"));
     getNotifications.mockReset().mockResolvedValue({
@@ -103,7 +103,7 @@ describe("ApprovalsRoute held tray and write-back", () => {
     await act(async () => {
       root!.render(
         <ShellActionsProvider value={makeActions()}>
-          <ApprovalsRoute />
+          <NeedsYouRoute />
         </ShellActionsProvider>
       );
     });
@@ -237,7 +237,7 @@ describe("ApprovalsRoute held tray and write-back", () => {
       ring();
       await Promise.resolve();
     });
-    expect(el.textContent).not.toContain("Loading Notifications…");
+    expect(el.textContent).not.toContain("Loading Needs you…");
     expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
     expect(getNotifications).toHaveBeenCalledTimes(2);
   });

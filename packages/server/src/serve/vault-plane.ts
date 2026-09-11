@@ -978,7 +978,7 @@ export class VaultPlane {
     const answers = automationAnswers(this.db.vault);
     return listEnrolledAgents(this.db).map((agent) => ({
       ...agent,
-      // The standing answer the Approvals surfaces read (#928 A3), keyed by
+      // The standing answer the Needs you surfaces read (#928 A3), keyed by
       // the automation's own id rather than by its agent party.
       answers: answers.filter(
         (answer) => answer.principalId === agent.enrollmentKey

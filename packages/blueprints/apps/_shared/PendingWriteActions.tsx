@@ -60,16 +60,16 @@ export function PendingWriteActions({
       ) : null}
       {stuckSince ? <small>Queued {stuckSince}</small> : null}
       {pending.status === "parked" ? (
-        window.centraid.openApprovals ? (
+        window.centraid.openNeedsYou ? (
           <button
             type="button"
             className="kit-btn"
-            onClick={act(window.centraid.openApprovals)}
+            onClick={act(window.centraid.openNeedsYou)}
           >
-            Review in Approvals
+            Review in Needs you
           </button>
         ) : (
-          <small>Review in Approvals.</small>
+          <small>Review in Needs you.</small>
         )
       ) : null}
       {retryable && onEdit ? (

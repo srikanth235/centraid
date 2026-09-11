@@ -369,7 +369,7 @@ export const ACCESS_OFFLINE =
 export const ACCESS_NO_VALUES =
   "A receipt has never carried a value · these rows name the act, the item and the columns, and nothing else.";
 export const ACCESS_WHERE =
-  "Approvals shows the same receipts, across every app.";
+  "Needs you shows the same receipts, across every app.";
 
 // ---------------------------------------------------------------------------
 // Trash

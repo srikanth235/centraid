@@ -592,7 +592,7 @@ describe("outbox-executor", () => {
     });
 
     // The review feed carries acts with their salience marker, and widens
-    // actorKind / authorityId for the Approvals activity surface (#552).
+    // actorKind / authorityId for the Needs you activity surface (#552).
     const feed = plane.reviewFeed(10);
     expect(feed.length).toBeGreaterThan(0);
     expect(feed.every((e) => e.action.startsWith("act "))).toBe(true);

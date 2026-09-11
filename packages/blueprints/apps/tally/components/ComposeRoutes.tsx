@@ -54,7 +54,7 @@ export interface ComposeView {
   settleVerdict: SettleVerdict;
   contrib: ContribSections;
   /** Does this host hold an approval inbox at all? */
-  hasApprovals: boolean;
+  hasNeedsYou: boolean;
   /** An authed `blob:` URL for the open receipt's photograph, or `null`. */
   shotUrl: string | null;
   /** The chosen group's members, empty until that group's read lands. */
@@ -223,7 +223,7 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
     return (
       <WaitingScreen
         sections={compose.contrib}
-        hasApprovals={compose.hasApprovals}
+        hasNeedsYou={compose.hasNeedsYou}
         canDecide={compose.canDecide}
         nudges={dashboard.nudges ?? []}
         people={dashboard.friends}

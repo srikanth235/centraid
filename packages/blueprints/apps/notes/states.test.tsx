@@ -113,11 +113,11 @@ describe("parked: the owner's approval, said in both library shapes", () => {
   ] as const)(
     "the %s carries the chip, the sentence and the way in",
     async (_label, Shape) => {
-      // The Approvals door records what reached it, so the assertion below is
+      // The Needs you door records what reached it, so the assertion below is
       // the OUTCOME the press produced rather than the fact that a mock ran.
       const opened: string[] = [];
       (window as unknown as { centraid: unknown }).centraid = {
-        openApprovals: () => opened.push("approvals"),
+        openNeedsYou: () => opened.push("needs-you"),
       };
       const container = document.createElement("div");
       document.body.append(container);
@@ -138,11 +138,11 @@ describe("parked: the owner's approval, said in both library shapes", () => {
       expect(container.textContent).toContain(REASON);
 
       const review = [...container.querySelectorAll("button")].find(
-        (button) => button.textContent === "Review in Approvals"
+        (button) => button.textContent === "Review in Needs you"
       );
       expect(review).toBeDefined();
       await act(async () => review?.click());
-      expect(opened).toStrictEqual(["approvals"]);
+      expect(opened).toStrictEqual(["needs-you"]);
 
       act(() => reactRoot.unmount());
       container.remove();

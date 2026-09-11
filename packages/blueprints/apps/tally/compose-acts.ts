@@ -318,7 +318,7 @@ export function useComposeActs(args: {
     (verb: ContribVerb, row: ContribRow) => {
       const client = window.centraid;
       if (verb === "approvals") {
-        client.openApprovals?.();
+        client.openNeedsYou?.();
         return;
       }
       // THE STEWARD'S ANSWER goes through its own door and reports its own

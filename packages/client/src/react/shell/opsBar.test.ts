@@ -9,14 +9,14 @@ describe("the operational routes' app bar", () => {
     // (v11), and both route kinds resolve to it so old pins and old deep links
     // land. They share one definition rather than two that happen to agree.
     expect(OPS_PAGES.map((p) => opsBarDef(p).title)).toStrictEqual([
-      "Notifications",
+      "Needs you",
       "Rules",
       "Connectors",
       "Activity",
       "Vault",
       "Vault",
     ]);
-    expect(isOpsPage("approvals")).toBe(true);
+    expect(isOpsPage("needs-you")).toBe(true);
     // Places in the frame that are NOT operational routes: they keep the bare
     // titlebar and draw their own body.
     expect(isOpsPage("home")).toBe(false);
@@ -45,7 +45,7 @@ describe("the operational routes' app bar", () => {
   });
 
   it("tones the page without ever spending an app hue on it", () => {
-    expect(opsBarDef("approvals").tone).toBe("net");
+    expect(opsBarDef("needs-you").tone).toBe("net");
     expect(opsBarDef("insights").tone).toBe("ok");
     // The seam page, under both its keys: a pending pairing is neither an
     // alarm nor nothing.

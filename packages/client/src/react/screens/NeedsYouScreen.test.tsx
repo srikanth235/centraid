@@ -11,25 +11,25 @@ import {
   noticeSeverityLabel,
   noticeSpanPhrase,
   outboundLabel,
-} from "../shell/routes/approvalsPhrasing.js";
+} from "../shell/routes/needsYouPhrasing.js";
 // Presentation rules live outside the component — phrasings in
-// `approvalsPhrasing`, the store ledger's revoked-row bookkeeping in
+// `needsYouPhrasing`, the store ledger's revoked-row bookkeeping in
 // `privacyStores` (#815) — and this suite exercises them beside the screen
 // they are the contract for.
-import ApprovalsScreen from "./ApprovalsScreen.js";
+import NeedsYouScreen from "./NeedsYouScreen.js";
 import type {
-  ApprovalsActivityRowDTO,
-  ApprovalsGrantRowDTO,
-  ApprovalsNeedsAuthRowDTO,
-  ApprovalsOutboxRowDTO,
-  ApprovalsParkedRowDTO,
-  ApprovalsScopeRequestRowDTO,
-  ApprovalsScreenProps,
+  NeedsYouActivityRowDTO,
+  NeedsYouGrantRowDTO,
+  NeedsYouNeedsAuthRowDTO,
+  NeedsYouOutboxRowDTO,
+  NeedsYouParkedRowDTO,
+  NeedsYouScopeRequestRowDTO,
+  NeedsYouScreenProps,
   NoticeRowDTO,
-} from "./ApprovalsScreen.js";
+} from "./NeedsYouScreen.js";
 import { mergeRevokedHolders, revokedHolderKey } from "./privacyStores.js";
 
-const outboxRow: ApprovalsOutboxRowDTO = {
+const outboxRow: NeedsYouOutboxRowDTO = {
   itemId: "item1",
   connectionLabel: "personal",
   connectionKind: "pull.gmail",
@@ -51,7 +51,7 @@ const outboxRow: ApprovalsOutboxRowDTO = {
   callerKind: "agent",
 };
 
-const editableOutboxRow: ApprovalsOutboxRowDTO = {
+const editableOutboxRow: NeedsYouOutboxRowDTO = {
   ...outboxRow,
   canEdit: true,
   fields: [
@@ -66,14 +66,14 @@ const editableOutboxRow: ApprovalsOutboxRowDTO = {
   },
 };
 
-const needsAuthRow: ApprovalsNeedsAuthRowDTO = {
+const needsAuthRow: NeedsYouNeedsAuthRowDTO = {
   connectionId: "c1",
   label: "work gmail",
   kind: "pull.gmail",
   note: "token expired",
 };
 
-const parkedRow: ApprovalsParkedRowDTO = {
+const parkedRow: NeedsYouParkedRowDTO = {
   invocationId: "inv1",
   command: "social.send_message",
   caller: "Briefing",
@@ -82,14 +82,14 @@ const parkedRow: ApprovalsParkedRowDTO = {
   inputPreview: '{\n  "to": "x"\n}',
 };
 
-const scopeRow: ApprovalsScopeRequestRowDTO = {
+const scopeRow: NeedsYouScopeRequestRowDTO = {
   requestId: "r1",
   appId: "invoicer",
   scopeSummary: "schedule.task (act)",
   requestedAgo: "1h ago",
 };
 
-const grantRow: ApprovalsGrantRowDTO = {
+const grantRow: NeedsYouGrantRowDTO = {
   grantId: "g1",
   actorLabel: "gmail-send",
   verb: "gmail.send",
@@ -118,8 +118,8 @@ function noticeRow(over: Partial<NoticeRowDTO> = {}): NoticeRowDTO {
 }
 
 function activityRow(
-  over: Partial<ApprovalsActivityRowDTO> = {}
-): ApprovalsActivityRowDTO {
+  over: Partial<NeedsYouActivityRowDTO> = {}
+): NeedsYouActivityRowDTO {
   return {
     receiptId: "receipt-1",
     label: "Sync remove connection",
@@ -155,8 +155,8 @@ const fillActivity = activityRow({
 });
 
 function makeProps(
-  over: Partial<ApprovalsScreenProps> = {}
-): ApprovalsScreenProps {
+  over: Partial<NeedsYouScreenProps> = {}
+): NeedsYouScreenProps {
   return {
     outbox: [],
     needsAuth: [],
@@ -166,20 +166,20 @@ function makeProps(
     storeGrants: [],
     activity: [],
     busyId: null,
-    onApproveOutbox: vi.fn<ApprovalsScreenProps["onApproveOutbox"]>(),
-    onDenyOutbox: vi.fn<ApprovalsScreenProps["onDenyOutbox"]>(),
-    onOpenSettings: vi.fn<ApprovalsScreenProps["onOpenSettings"]>(),
-    onConfirmParked: vi.fn<ApprovalsScreenProps["onConfirmParked"]>(),
-    onDecideScopeRequest: vi.fn<ApprovalsScreenProps["onDecideScopeRequest"]>(),
-    onRevokeGrant: vi.fn<ApprovalsScreenProps["onRevokeGrant"]>(),
-    onRevokeStoreGrant: vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>(),
+    onApproveOutbox: vi.fn<NeedsYouScreenProps["onApproveOutbox"]>(),
+    onDenyOutbox: vi.fn<NeedsYouScreenProps["onDenyOutbox"]>(),
+    onOpenSettings: vi.fn<NeedsYouScreenProps["onOpenSettings"]>(),
+    onConfirmParked: vi.fn<NeedsYouScreenProps["onConfirmParked"]>(),
+    onDecideScopeRequest: vi.fn<NeedsYouScreenProps["onDecideScopeRequest"]>(),
+    onRevokeGrant: vi.fn<NeedsYouScreenProps["onRevokeGrant"]>(),
+    onRevokeStoreGrant: vi.fn<NeedsYouScreenProps["onRevokeStoreGrant"]>(),
     ...over,
   };
 }
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-describe("screens/ApprovalsScreen", () => {
+describe("screens/NeedsYouScreen", () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
@@ -187,18 +187,18 @@ describe("screens/ApprovalsScreen", () => {
     container = null;
     vi.clearAllMocks();
   });
-  function mount(props: ApprovalsScreenProps): HTMLDivElement {
+  function mount(props: NeedsYouScreenProps): HTMLDivElement {
     container = document.createElement("div");
     document.body.appendChild(container);
     act(() => {
       root = createRoot(container as HTMLDivElement);
-      root.render(<ApprovalsScreen {...props} />);
+      root.render(<NeedsYouScreen {...props} />);
     });
     return container;
   }
-  function rerender(props: ApprovalsScreenProps): void {
+  function rerender(props: NeedsYouScreenProps): void {
     act(() => {
-      root?.render(<ApprovalsScreen {...props} />);
+      root?.render(<NeedsYouScreen {...props} />);
     });
   }
   /** Buttons carry their whole label as text, so an EXACT match is the honest
@@ -230,7 +230,7 @@ describe("screens/ApprovalsScreen", () => {
     return head?.nextElementSibling?.textContent ?? undefined;
   }
 
-  describe(ApprovalsScreen, () => {
+  describe(NeedsYouScreen, () => {
     it("says empty is the healthy state, and still keeps the standing grants reachable", () => {
       const el = mount(makeProps());
       expect(el.textContent).toContain("Nothing is waiting on you");
@@ -361,7 +361,7 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("fires onApproveOutbox with the always-allow state from the card's commit", () => {
-      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
+      const onApproveOutbox = vi.fn<NeedsYouScreenProps["onApproveOutbox"]>();
       const el = mount(makeProps({ outbox: [outboxRow], onApproveOutbox }));
       click(el, "Review");
       click(el, "Approve");
@@ -473,7 +473,7 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("Cancel leaves the editor without approving, and the quote survives", () => {
-      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
+      const onApproveOutbox = vi.fn<NeedsYouScreenProps["onApproveOutbox"]>();
       const el = mount(
         makeProps({ outbox: [editableOutboxRow], onApproveOutbox })
       );
@@ -530,7 +530,7 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("opens a second staged write from its own Review, closing the first", () => {
-      const second: ApprovalsOutboxRowDTO = {
+      const second: NeedsYouOutboxRowDTO = {
         ...outboxRow,
         itemId: "item2",
         subject: "Second draft",
@@ -554,7 +554,7 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("opens the staged write an outbox notice names", () => {
-      const other: ApprovalsOutboxRowDTO = {
+      const other: NeedsYouOutboxRowDTO = {
         ...outboxRow,
         itemId: "item2",
         subject: "Second draft",
@@ -628,7 +628,7 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("sends a lapsed connection to Connectors, where re-authorizing happens", () => {
-      const onOpenSettings = vi.fn<ApprovalsScreenProps["onOpenSettings"]>();
+      const onOpenSettings = vi.fn<NeedsYouScreenProps["onOpenSettings"]>();
       const el = mount(
         makeProps({ needsAuth: [needsAuthRow], onOpenSettings })
       );
@@ -750,9 +750,9 @@ describe("screens/ApprovalsScreen", () => {
 
     it("keeps a demanding notice in the queue and files news under Notices", () => {
       const onReadNotice =
-        vi.fn<NonNullable<ApprovalsScreenProps["onReadNotice"]>>();
+        vi.fn<NonNullable<NeedsYouScreenProps["onReadNotice"]>>();
       const onArchiveNotice =
-        vi.fn<NonNullable<ApprovalsScreenProps["onArchiveNotice"]>>();
+        vi.fn<NonNullable<NeedsYouScreenProps["onArchiveNotice"]>>();
       const el = mount(
         makeProps({
           notices: [
@@ -783,7 +783,7 @@ describe("screens/ApprovalsScreen", () => {
 
     it("opens a notice at its own surface and keeps archived ones in their section", () => {
       const onOpenNotice =
-        vi.fn<NonNullable<ApprovalsScreenProps["onOpenNotice"]>>();
+        vi.fn<NonNullable<NeedsYouScreenProps["onOpenNotice"]>>();
       const el = mount(
         makeProps({
           notices: [
@@ -901,7 +901,7 @@ describe("screens/ApprovalsScreen", () => {
 
     it("revoking a store grant strikes the row through instead of removing it", () => {
       const onRevokeStoreGrant =
-        vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>();
+        vi.fn<NeedsYouScreenProps["onRevokeStoreGrant"]>();
       const el = mount(
         makeProps({
           storeGrants: [
@@ -1050,7 +1050,7 @@ describe("screens/ApprovalsScreen", () => {
       const el = mount(props);
       click(el, "Review");
       click(el, "Edit and approve");
-      const second: ApprovalsOutboxRowDTO = {
+      const second: NeedsYouOutboxRowDTO = {
         ...outboxRow,
         itemId: "item2",
         subject: "Arrived while editing",
@@ -1072,7 +1072,7 @@ describe("screens/ApprovalsScreen", () => {
       const props = makeProps({ outbox: [outboxRow] });
       const el = mount(props);
       click(el, "Review");
-      const second: ApprovalsOutboxRowDTO = {
+      const second: NeedsYouOutboxRowDTO = {
         ...outboxRow,
         itemId: "item2",
         subject: "Arrived while reading",
@@ -1086,7 +1086,7 @@ describe("screens/ApprovalsScreen", () => {
 
     it("shows See all only when the feed is truncated, and fires onSeeAllActivity", () => {
       const onSeeAllActivity =
-        vi.fn<NonNullable<ApprovalsScreenProps["onSeeAllActivity"]>>();
+        vi.fn<NonNullable<NeedsYouScreenProps["onSeeAllActivity"]>>();
       const el = mount(
         makeProps({
           activity: [activityRow()],
@@ -1110,7 +1110,7 @@ describe("screens/ApprovalsScreen", () => {
 
     it("links the durable alert history rather than restating it", () => {
       const onOpenAlertHistory =
-        vi.fn<NonNullable<ApprovalsScreenProps["onOpenAlertHistory"]>>();
+        vi.fn<NonNullable<NeedsYouScreenProps["onOpenAlertHistory"]>>();
       const el = mount(
         makeProps({ activity: [activityRow()], onOpenAlertHistory })
       );

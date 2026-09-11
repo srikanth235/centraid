@@ -28,15 +28,15 @@ describe("route vitals", () => {
   });
 
   it("starts silent, so the bar falls back to the page's static definition", () => {
-    expect(readVitals("approvals")).toBeUndefined();
+    expect(readVitals("needs-you")).toBeUndefined();
   });
 
   it("carries the page's own count line in ready, full and empty", () => {
-    publishVitals("approvals", {
+    publishVitals("needs-you", {
       count: "3 decisions waiting · 2 standing grants",
       state: "ready",
     });
-    expect(readVitals("approvals")).toStrictEqual({
+    expect(readVitals("needs-you")).toStrictEqual({
       count: "3 decisions waiting · 2 standing grants",
       state: "ready",
     });

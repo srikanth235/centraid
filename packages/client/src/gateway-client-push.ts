@@ -1,6 +1,9 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 import { notifyEventReminderBody } from "./notifications-copy.js";
-import { composeWebNotifications } from "./notifications-model.js";
+import {
+  composeWebNotifications,
+  notificationTarget,
+} from "./notifications-model.js";
 import type { NotificationsPull } from "./notifications-model.js";
 
 const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
@@ -214,7 +217,7 @@ export async function syncWebNotifications(): Promise<void> {
         await registration.showNotification(row.title, {
           body: row.body,
           tag: row.key,
-          data: { url: "/?notifications=1" },
+          data: { url: notificationTarget(row.about) },
         });
         return;
       }
@@ -224,7 +227,7 @@ export async function syncWebNotifications(): Promise<void> {
       });
       notification.addEventListener("click", () => {
         window.focus();
-        window.location.assign("/?notifications=1");
+        window.location.assign(notificationTarget(row.about));
       });
     })
   );
