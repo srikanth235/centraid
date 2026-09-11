@@ -205,7 +205,7 @@ export default function BackupHealth({
       </Text>
       {route.params?.signalCause ? (
         <View
-          accessibilityLabel={`Arrived from ${SHELL_TITLES.alerts}`}
+          accessibilityLabel={`Arrived from ${SHELL_TITLES.needsYou}`}
           accessibilityLiveRegion="polite"
           accessibilityRole="alert"
           style={[

@@ -136,9 +136,11 @@ describe("ApprovalsRoute", () => {
       // takes: what failed, what is still safe, one way forward — with the
       // gateway's own words carried as a fact rather than swallowed.
       const panel = el.querySelector('[data-tone="net"]');
-      expect(panel?.textContent).toContain("Could not reach the consent store");
       expect(panel?.textContent).toContain(
-        "The gateway answered; the queue that holds staged writes did not."
+        "Could not read what is waiting on you"
+      );
+      expect(panel?.textContent).toContain(
+        "Nothing waiting was sent or changed."
       );
       expect(panel?.textContent).toContain("offline");
       expect(

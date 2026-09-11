@@ -31,8 +31,8 @@ export interface Place {
    * words from `name` — "On this phone" → "On phone" — never substitute a
    * different noun for the same place. The band speaks `name` to VoiceOver and
    * paints `short`, so a substitution ships two names to two members at once,
-   * which is how the Alerts place ended up wearing four. `places.test.ts`
-   * holds this.
+   * which is how Needs you once ended up wearing four (#1015 R-NY-4).
+   * `places.test.ts` holds this.
    */
   short: string;
   icon: IconName;
@@ -58,10 +58,11 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.notifications,
     id: "notifs",
     law: false,
-    name: "Alerts",
+    // R-NY-4 (#1015): one noun, and short enough for the tab as it is.
+    name: "Needs you",
     pin: true,
-    short: "Alerts",
-    what: "Everything the vault wanted to tell you",
+    short: "Needs you",
+    what: "Decisions waiting on you",
   },
   {
     icon: DESTINATION_MARKS.analytics,

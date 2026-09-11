@@ -3,9 +3,10 @@
  *
  * Two rules, and this file is where both are checkable:
  *
- * ONE NOUN PER DESTINATION. The audit found the Alerts place wearing four
- * names at once — "Alerts" in the band, "Notifications" in More, a clipped
- * "Notificati…" in its own bar, and a Settings section headed NOTIFICATIONS
+ * ONE NOUN PER DESTINATION. The audit found the place now named Needs you
+ * (R-NY-4) wearing four names at once — "Alerts" in the band,
+ * "Notifications" in More, a clipped "Notificati…" in its own bar, and a
+ * Settings section headed NOTIFICATIONS
  * over a row that said "Decisions and updates" — while VoiceOver read a fifth
  * thing, because the band spoke `name` and painted `short`. A member cannot
  * learn a place they are never told the name of twice.
@@ -46,11 +47,11 @@ export function desktopLinkStatus(status: TunnelStatus | undefined): string {
  */
 export const SHELL_ERROR = {
   access: "Your standing permissions could not be read",
-  alerts: "Your alerts could not be loaded",
   connectors: "Your connectors could not be loaded",
   copies: "The copies of your vault could not be read",
   desktopLink: "This phone could not link to your desktop",
   enrichment: "Your enrichment settings could not be read",
+  needsYou: "Your decision did not go through",
   scan: "This code could not be read",
   sharing: "Your sharing links could not be read",
   vault: "Your vault's contents could not be read",
@@ -59,8 +60,8 @@ export const SHELL_ERROR = {
 
 /** The shell's own destinations, one noun each; `places.ts` holds the rest. */
 export const SHELL_TITLES = {
-  alerts: "Alerts",
   backupHealth: "Backup health",
+  needsYou: "Needs you",
   onThisPhone: "On this phone",
   settings: "Settings",
   sharing: "Sharing",

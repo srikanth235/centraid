@@ -156,6 +156,53 @@ describe(RowsBlock, () => {
     expect(calls).toStrictEqual(["b"]);
   });
 
+  // #1015 R-NY-2: a row can be one tap target. The face is the verb's SIBLING,
+  // so two controls never nest, and each keeps its own press.
+  it("makes the whole row a press target beside its verb, never around it", () => {
+    const calls: string[] = [];
+    const container = render(
+      <RowsBlock
+        rows={[
+          {
+            action: { label: "Review", onPress: () => calls.push("verb") },
+            key: "a",
+            meta: "High risk",
+            onPress: () => calls.push("row"),
+            sub: "asked by the rule Tidy downloads",
+            title: "delete_files",
+          },
+        ]}
+      />
+    );
+    const [face, verb] = nodesOf(container, "button");
+    expect(face?.textContent).toBe(
+      "delete_filesasked by the rule Tidy downloadsHigh risk"
+    );
+    expect(face?.querySelector("button")).toBeNull();
+    press(face);
+    press(verb);
+    expect(calls).toStrictEqual(["row", "verb"]);
+  });
+
+  it("refuses an off row's face on the leaf, like its verb", () => {
+    const calls: string[] = [];
+    const container = render(
+      <RowsBlock
+        rows={[
+          {
+            key: "a",
+            off: true,
+            onPress: () => calls.push("row"),
+            title: "Gmail",
+          },
+        ]}
+      />
+    );
+    const [face] = nodesOf(container, "button");
+    expect(face?.getAttribute("aria-disabled")).toBe("true");
+    expect(styleOf(face ?? null).opacity).toBeUndefined();
+  });
+
   it("renders a row's expansion under its own line, inside the same cell", () => {
     const container = render(
       <RowsBlock

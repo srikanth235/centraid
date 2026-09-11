@@ -1,55 +1,68 @@
-// SYSTEM ALERTS (#1015, Wave 2) — the health transitions and recovery updates
-// the gateway posted, read from the Activity place's `alerts` tab.
+// ALERTS (#1015 R-NY-2) — Activity's alerts tab: every notice the gateway
+// posted, one standing line per source. A notice is news, not a decision, so
+// this is where it stands and Needs you never shows one.
 //
-// It used to draw its own place: a `TopSafeArea`, its own header row with a
-// `display` title and a subtitle nothing else in the shell has, its own
-// gutter, and three bare `Text` lines standing in for loading, error and
-// empty. The error line was `state.message` — an exception, lowered through
-// `memberFacingError` and then printed as the whole page (S14). All four are
-// the ROOM's now: loading is a skeleton, error is one noun and one verb, and
-// empty is the routine empty block.
+// A line is one tap target that opens its source — a rule's thread, the queue
+// for a write, the machine for a health change — and marks it read on the way.
+// A failed rule offers "Try again", which re-runs it. Nothing else: no Mark
+// read / Archive pair, because a standing line is rewritten by its source when
+// the source recovers, and a line the member can file away before then is a
+// problem the member can hide instead of fix.
+//
+// Words live in `alerts-model.ts`. The headline still goes through
+// `memberFacingError`: R-NY-5 made new headlines sentences, but a vault can
+// hold cards written before it, and R-SH-9 keeps the filter for exactly the
+// strings a seat RECEIVES.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 
-import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
-import NoteBlock from "../../kit/components/NoteBlock";
+import RowsBlock from "../../kit/components/RowsBlock";
+import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import { memberFacingError } from "../../kit/member-error";
 import { SystemPlace } from "../../kit/rooms";
-import { radii, spacing, t, useTheme } from "../../kit/theme";
-import type { ThemeColors } from "../../kit/theme";
+import { spacing, t, useTheme } from "../../kit/theme";
+import { runAutomation } from "../../lib/automations";
 import {
   getNotifications,
   subscribeMobileNotificationsChanges,
   updateMobileNotice,
 } from "../../lib/gateway";
 import type { MobileNotice } from "../../lib/gateway";
+import { mobileNotificationsDestination } from "../../lib/notifications-navigation";
+import type { InsightsScreenProps } from "../../navigation";
+import { alertLines } from "./alerts-model";
 
 /** No `message`: what failed is not the member's vocabulary, and the room
- *  says the one true sentence about a read that did not land (S14). */
+ *  says the one true sentence about a read that did not land (S14). `at`
+ *  anchors every relative phrase — never a render-time clock read. */
 type State =
   | { kind: "loading" }
-  | { kind: "ready"; rows: MobileNotice[] }
+  | { kind: "ready"; at: number; notices: MobileNotice[] }
   | { kind: "error" };
 
+/** The one line a re-run that did not start gets; the row keeps its verb. */
+const RETRY_FAILED = "That rule did not start";
+
 export default function GatewayAlerts(props: {
+  navigation: InsightsScreenProps["navigation"];
   onLeave: () => void;
 }): React.JSX.Element {
+  const { navigation } = props;
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<State>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | undefined>();
+  const [retryFailed, setRetryFailed] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const notifications = await getNotifications(true);
+      const notifications = await getNotifications();
       setState({
+        at: Date.now(),
         kind: "ready",
-        rows: notifications.notices.filter(
-          (notice) => notice.kind === "gateway-health"
-        ),
+        notices: notifications.notices,
       });
     } catch {
       setState({ kind: "error" });
@@ -69,22 +82,88 @@ export default function GatewayAlerts(props: {
     };
   }, [load]);
 
-  const update = (noticeId: string, action: "read" | "archive"): void => {
-    setBusy(noticeId);
-    void updateMobileNotice(noticeId, action)
-      .then(load)
-      .finally(() => setBusy(undefined));
-  };
+  /** Where a line leads, or nothing: a notice with no screen of its own (an
+   *  app's, a received share's) is a line and not a link. */
+  const openerFor = useCallback(
+    (notice: MobileNotice): (() => void) | undefined => {
+      const destination = mobileNotificationsDestination(notice);
+      const go = ((): (() => void) | undefined => {
+        switch (destination.kind) {
+          case "automation-thread":
+            return () =>
+              navigation.navigate("Automations", {
+                automationRef: destination.automationRef,
+              });
+          case "outbox":
+            return () =>
+              navigation.navigate("Settings", { screen: "Approvals" });
+          case "gateway-alerts":
+            return () => navigation.navigate("SystemOnPhone");
+          case "notifications":
+            return undefined;
+        }
+      })();
+      if (!go) return undefined;
+      return () => {
+        // Opening IS reading. Best-effort: a read mark that does not land
+        // must never stand between the member and the source.
+        if (notice.readAt === null)
+          void updateMobileNotice(notice.noticeId, "read").catch(
+            () => undefined
+          );
+        go();
+      };
+    },
+    [navigation]
+  );
 
-  const rows = state.kind === "ready" ? state.rows : [];
+  const retry = useCallback(
+    (noticeId: string, ref: string): void => {
+      setBusy(noticeId);
+      setRetryFailed(false);
+      void runAutomation(ref)
+        .then(load)
+        .catch(() => setRetryFailed(true))
+        .finally(() => setBusy(undefined));
+    },
+    [load]
+  );
+
+  const rows = useMemo((): RowsBlockRow[] => {
+    if (state.kind !== "ready") return [];
+    return alertLines(state.notices, state.at).map(({ line, notice }) => {
+      const title = memberFacingError(line.title);
+      const open = openerFor(notice);
+      const retryRef = line.retryRef;
+      return {
+        key: line.key,
+        meta: line.meta,
+        net: line.net,
+        off: busy === line.key,
+        sub: line.sub,
+        title,
+        ...(open ? { onPress: open } : {}),
+        ...(retryRef
+          ? {
+              action: {
+                hint: `Try again — ${title}`,
+                label: "Try again",
+                onPress: () => retry(line.key, retryRef),
+              },
+            }
+          : {}),
+      };
+    });
+  }, [busy, openerFor, retry, state]);
+
   return (
     <SystemPlace
       empty={
         state.kind === "ready" && rows.length === 0
           ? {
-              body: "Health transitions and recovery updates land here when the gateway posts one.",
+              body: "When a rule does not finish or the system goes down, it shows here until it recovers.",
               routine: true,
-              title: "No system alerts",
+              title: "Nothing to report",
             }
           : undefined
       }
@@ -98,9 +177,7 @@ export default function GatewayAlerts(props: {
           : undefined
       }
       loading={
-        state.kind === "loading"
-          ? { label: "Reading the system alerts" }
-          : undefined
+        state.kind === "loading" ? { label: "Reading the alerts" } : undefined
       }
       onHome={props.onLeave}
       onRefresh={() => {
@@ -108,81 +185,19 @@ export default function GatewayAlerts(props: {
         void load().finally(() => setRefreshing(false));
       }}
       refreshing={refreshing}
-      title="System alerts"
+      title="Alerts"
     >
-      <NoteBlock text="Health transitions and recovery updates" />
-      {rows.map((row) => (
-        <View
-          key={row.noticeId}
-          style={[
-            styles.card,
-            row.readAt === null && { borderColor: colors.accent },
-          ]}
-        >
-          <Text style={styles.cardTitle}>
-            {memberFacingError(row.headline)}
-          </Text>
-          <Text style={styles.meta}>
-            <Text style={[styles.meta, t("mono")]}>
-              {new Date(row.lastAt).toLocaleString()}
-            </Text>
-            {row.count > 1 ? (
-              <>
-                {" · "}
-                <Text style={[styles.meta, t("mono")]}>{row.count}</Text> events
-              </>
-            ) : null}
-          </Text>
-          <Text selectable style={styles.detail}>
-            {gatewayAlertDetail(row.detail)}
-          </Text>
-          {row.archivedAt === null ? (
-            <View style={styles.actions}>
-              {row.readAt === null ? (
-                <Button
-                  disabled={busy === row.noticeId}
-                  label="Mark read"
-                  onPress={() => update(row.noticeId, "read")}
-                  style={styles.button}
-                  variant="secondary"
-                />
-              ) : null}
-              <Button
-                disabled={busy === row.noticeId}
-                label="Archive"
-                onPress={() => update(row.noticeId, "archive")}
-                style={styles.button}
-                variant="secondary"
-              />
-            </View>
-          ) : null}
-        </View>
-      ))}
+      {retryFailed ? (
+        <Text style={[styles.retryFailed, { color: colors.net }]}>
+          {RETRY_FAILED}
+        </Text>
+      ) : null}
+      <RowsBlock accessibilityLabel="Alerts" rows={rows} />
     </SystemPlace>
   );
 }
 
-function gatewayAlertDetail(detail: Record<string, unknown>): string {
-  const preferred = ["detail", "error", "gatewayLabel"]
-    .map((key) => detail[key])
-    .find((value): value is string => typeof value === "string");
-  return memberFacingError(
-    preferred ?? "Open System on the home machine for live diagnostics."
-  );
-}
-
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    actions: { flexDirection: "row", gap: spacing[2], marginTop: spacing[3] },
-    button: { flex: 1 },
-    card: {
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      padding: spacing[4],
-    },
-    cardTitle: { ...t("bodyStrong"), color: colors.text },
-    detail: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
-    meta: { ...t("small"), color: colors.textFaint, marginTop: spacing[1] },
-  });
+const styles = StyleSheet.create({
+  // About the tap that just happened, so it sits above the lines it is about.
+  retryFailed: { ...t("mono"), paddingBottom: spacing[2] },
+});

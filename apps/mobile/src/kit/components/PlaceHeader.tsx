@@ -1,7 +1,7 @@
 // PLACE HEADER — the bar an operational page draws for itself (#765).
 //
 // Not `AppHeader`: that one draws a tinted app-identity chip, and a PLACE
-// spends no colour on itself — Notifications is not an app with a hue, it is
+// spends no colour on itself — Needs you is not an app with a hue, it is
 // somewhere the frame goes. So this bar is ink only: a title, at most one
 // filled verb, at most one quiet verb.
 //

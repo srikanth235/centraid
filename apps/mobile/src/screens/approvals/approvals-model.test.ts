@@ -1,5 +1,5 @@
-// What the Notifications place says (#765, spec §2) — the copy contract,
-// under test without a renderer.
+// What Needs you says (#765, spec §2) — the copy contract, under test without
+// a renderer.
 //
 // The sentences that state a RULE are asserted verbatim: they are promises
 // about what approving does, and a promise that drifts is a promise broken.
@@ -11,20 +11,14 @@ import {
   DENY_SUB,
   DENY_TITLE,
   EMPTY_BODY,
-  GRANTS_NOTE,
   LOADING_NOTE,
   SENDING_FACT_KEY,
   SENDING_FACT_VALUE,
   agoPhrase,
   approvalsHealth,
   callerPhrase,
-  grantRowCopy,
-  isAttention,
   matchesFilter,
   needsAuthRowCopy,
-  noticeRowCopy,
-  noticeSeverityLabel,
-  noticeSpanPhrase,
   opsStateFor,
   outboundLabel,
   outboxRowCopy,
@@ -101,9 +95,12 @@ describe("the staged write", () => {
     expect(facts.map((fact) => fact.key)).not.toContain("subject");
   });
 
-  it("says so, rather than offering an edit, when the verb has no rebuilder", () => {
+  it("says so, rather than offering an edit, when the write cannot be edited", () => {
     const facts = stagedFacts(outbox({ canEdit: false }));
-    expect(facts.map((fact) => fact.key)).toContain("cannot be edited");
+    const fact = facts.find((one) => one.key === "cannot be edited");
+    // The member's words: what approving sends, not why the engine cannot
+    // rebuild it (#1015 R-NY-2).
+    expect(fact?.value).toBe("approving sends exactly what is quoted above");
   });
 
   it("keeps every other staged field visible instead of hiding it", () => {
@@ -131,7 +128,7 @@ describe("the staged write", () => {
 });
 
 describe("the queue", () => {
-  it("counts everything that demands something, and nothing that reports", () => {
+  it("counts decisions only — a failing notice is news, not a decision", () => {
     const data = {
       decisions: {
         count: 2,
@@ -148,14 +145,15 @@ describe("the queue", () => {
         parked: [],
         scopeRequests: [],
       },
-      notices: [notice(), notice({ noticeId: "n-2", severity: "info" })],
+      // A HIGH notice included on purpose: R-NY-2 (#1015) moved every notice,
+      // failures too, to Activity's alerts tab.
+      notices: [
+        notice({ severity: "high" }),
+        notice({ noticeId: "n-2", severity: "info" }),
+      ],
       unreadNoticeCount: 2,
     };
-    expect(waitingTotal(data)).toBe(3);
-    expect(isAttention(notice({ severity: "info" }))).toBe(false);
-    expect(
-      isAttention(notice({ archivedAt: "2026-08-13T09:00:00.000Z" }))
-    ).toBe(false);
+    expect(waitingTotal(data)).toBe(2);
   });
 
   it("states what is on screen when a filter hides part of it", () => {
@@ -208,7 +206,6 @@ describe("the queue", () => {
         false
       ).kind
     ).toBe("auth");
-    expect(noticeRowCopy(notice(), NOW).kind).toBe("risk");
     expect(matchesFilter("all", "risk")).toBe(true);
     expect(matchesFilter("staged", "risk")).toBe(false);
   });
@@ -223,8 +220,6 @@ describe("the queue", () => {
         note: null,
       }).net
     ).toBe(true);
-    expect(noticeRowCopy(notice({ severity: "high" }), NOW).net).toBe(true);
-    expect(noticeRowCopy(notice({ severity: "warning" }), NOW).net).toBe(false);
   });
 
   it("says where a reconnection finishes, on the row that starts it", () => {
@@ -240,31 +235,6 @@ describe("the queue", () => {
     );
   });
 
-  it("turns severity into a word, and gives an FYI none", () => {
-    expect(noticeSeverityLabel("automation-failed", "high")).toBe("Failed");
-    expect(noticeSeverityLabel("gateway-health", "warning")).toBe("Degraded");
-    expect(noticeSeverityLabel("automation-failed", "info")).toBe("");
-  });
-
-  it("tells a long failure as a span, and a short one as a count", () => {
-    expect(noticeSpanPhrase(notice({ count: 1 }))).toBeUndefined();
-    expect(
-      noticeSpanPhrase(
-        notice({
-          count: 6,
-          firstAt: "2026-08-07T08:00:00.000Z",
-          lastAt: "2026-08-13T08:00:00.000Z",
-        })
-      )
-    ).toBe("failing for 6 days");
-    expect(noticeSpanPhrase(notice({ count: 6 }))).toBe("×6 over 30 minutes");
-    // An unreadable or non-advancing pair states the multiplicity only —
-    // never an invented duration.
-    expect(noticeSpanPhrase(notice({ count: 6, lastAt: "nonsense" }))).toBe(
-      "×6"
-    );
-  });
-
   it("dates things the way a member would say them", () => {
     // The seat's ONE relative register (`kit/format`, #1015 S8): this
     // ladder was typed out twice, and `moments ago` is the word the whole
@@ -275,13 +245,11 @@ describe("the queue", () => {
   });
 });
 
-describe("the standing line and the reference tail", () => {
-  it("states the count and that nothing has happened yet", () => {
-    const copy = approvalsHealth(3);
-    expect(copy.label).toBe("3 items waiting on you");
-    expect(copy.detail).toBe(
-      "Nothing here has happened yet — approving is the act."
-    );
+describe("the standing line", () => {
+  it("states one true thing, and never restates the section's count", () => {
+    const copy = approvalsHealth();
+    expect(copy.label).toBe("");
+    expect(copy.detail).toBe("Nothing here happens until you decide.");
     // No inline verb, ever: the page's whole content IS the thing to act on.
     expect(copy.action).toBeUndefined();
     expect(copy.emptyText).toBe("Nothing to attend to");
@@ -294,32 +262,11 @@ describe("the standing line and the reference tail", () => {
     expect(DENY_SUB).toBe(
       "Nothing is sent. The rule is told it was refused, and remembers."
     );
-    expect(GRANTS_NOTE).toBe(
-      "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
-    );
     expect(EMPTY_BODY).toBe(
       "Staged writes, lapsed connections and access requests land here."
     );
     expect(LOADING_NOTE).toBe(
       "A row knows its shape before its content arrives, so nothing reflows when it does."
     );
-  });
-
-  it("words a grant as the standing permission it is", () => {
-    const copy = grantRowCopy(
-      {
-        actor: "Photos",
-        actorId: "app:photos",
-        createdAt: "2026-08-13T08:00:00.000Z",
-        grantId: "g-1",
-        revokedAt: null,
-        target: "ana@pemberton.example",
-        verb: "share",
-      },
-      NOW
-    );
-    expect(copy.title).toBe("Photos may always share");
-    expect(copy.sub).toBe("share → ana@pemberton.example");
-    expect(copy.meta).toBe("granted 1 hour ago");
   });
 });

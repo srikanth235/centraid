@@ -15,7 +15,10 @@ export default function SignalNotification({
     [route.params]
   );
   return (
-    <SystemPlace onHome={() => navigation.goBack()} title={SHELL_TITLES.alerts}>
+    <SystemPlace
+      onHome={() => navigation.goBack()}
+      title={SHELL_TITLES.needsYou}
+    >
       <PanelBlock
         action={{
           label: copy.actionLabel,

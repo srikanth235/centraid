@@ -1,8 +1,8 @@
-// The Notifications place's data half (#765): read (`getNotifications(true)`),
-// SSE doorbell, poll, push permission, replica wake, and all five writes —
-// all load-bearing. Standing grants ride here too (`/centraid/_vault/
-// outbox-grants`, #308): a gateway without them leaves the section absent
-// rather than failing the page — the queue is what the page is FOR.
+// Needs you's data half (#765): read (`getNotifications()`), SSE doorbell,
+// poll, push permission, replica wake, and the four decision writes — all
+// load-bearing. Notices ride the read and are never counted or written here,
+// and standing grants are Settings → Access's (#1015 R-NY-2): the queue of
+// decisions is what the page is FOR.
 
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,25 +14,20 @@ import {
   reconnectFailureMessage,
 } from "../../lib/connection-reauth";
 import {
-  apiHeaders,
   beginNotificationsConnectionAuthorization,
   completeNotificationsConnectionAuthorization,
   confirmParked,
   decideNotificationsOutbox,
   decideNotificationsScope,
-  fetchJson,
   getNotifications,
-  requireGatewayBase,
   resolveGatewayBase,
   subscribeMobileNotificationsChanges,
-  updateMobileNotice,
 } from "../../lib/gateway";
 import type { MobileNotifications } from "../../lib/gateway";
 import { requestNotificationPermission } from "../../lib/notifications-core";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { SHELL_ERROR } from "../shell-copy";
 import { NOT_PAIRED, opsStateFor, waitingTotal } from "./approvals-model";
-import type { OutboxGrant } from "./approvals-model";
 
 /** How often the page re-reads while it is open, between doorbells. */
 const POLL_MS = 60_000;
@@ -40,12 +35,7 @@ const POLL_MS = 60_000;
 export type ApprovalsLoad =
   | { kind: "loading" }
   /** `at` anchors every relative phrase — never a render-time clock read. */
-  | {
-      at: number;
-      kind: "ready";
-      data: MobileNotifications;
-      grants: OutboxGrant[];
-    }
+  | { at: number; kind: "ready"; data: MobileNotifications }
   /** `reason` is the error panel's one fact; its body never changes. */
   | { kind: "error"; reason: string; unpaired: boolean };
 
@@ -53,7 +43,6 @@ export interface ApprovalsController {
   load: ApprovalsLoad;
   state: OpsState;
   data: MobileNotifications | undefined;
-  grants: readonly OutboxGrant[];
   now: number;
   waiting: number;
   refreshing: boolean;
@@ -73,29 +62,13 @@ export interface ApprovalsController {
   denyOutbox: (itemId: string) => void;
   confirmParkedInvocation: (invocationId: string, approve: boolean) => void;
   decideScope: (requestId: string, approve: boolean) => void;
-  readNotice: (noticeId: string) => void;
-  archiveNotice: (noticeId: string) => void;
   reconnect: (connectionId: string) => void;
-  revokeGrant: (grantId: string) => void;
 }
 
-// S14 (#1015): one noun for this place, whatever the exception said.
+// S14 (#1015): one noun for a decision that did not land, whatever the
+// exception said. A failed READ is the room's error, never this line.
 function describe(_error: unknown): string {
-  return SHELL_ERROR.alerts;
-}
-
-/** Standing grants, or none — never an exception that takes the queue down. */
-async function readGrants(): Promise<OutboxGrant[]> {
-  try {
-    const base = await requireGatewayBase();
-    const body = await fetchJson<{ grants?: OutboxGrant[] }>(
-      `${base}/centraid/_vault/outbox-grants`,
-      { headers: apiHeaders(), method: "GET" }
-    );
-    return body.grants ?? [];
-  } catch {
-    return [];
-  }
+  return SHELL_ERROR.needsYou;
 }
 
 async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
@@ -104,9 +77,8 @@ async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
       apply({ kind: "error", reason: NOT_PAIRED, unpaired: true });
       return;
     }
-    // Archived notices ride the same read; their section needs no second fetch.
-    const data = await getNotifications(true);
-    apply({ at: Date.now(), data, grants: await readGrants(), kind: "ready" });
+    const data = await getNotifications();
+    apply({ at: Date.now(), data, kind: "ready" });
   } catch (error) {
     apply({ kind: "error", reason: describe(error), unpaired: false });
   }
@@ -125,14 +97,6 @@ async function reauthorize(connectionId: string): Promise<void> {
   if (outcome.kind === "assist-handoff")
     await completeNotificationsConnectionAuthorization(outcome.handoff);
   // `closed` needs nothing: BYO finishes at the gateway; caller re-reads.
-}
-
-async function revoke(grantId: string): Promise<void> {
-  const base = await requireGatewayBase();
-  await fetchJson<unknown>(
-    `${base}/centraid/_vault/outbox-grants/${encodeURIComponent(grantId)}`,
-    { headers: apiHeaders(), method: "DELETE" }
-  );
 }
 
 export function useApprovals(): ApprovalsController {
@@ -213,8 +177,6 @@ export function useApprovals(): ApprovalsController {
           alwaysAllow,
         })
       ),
-    archiveNotice: (noticeId) =>
-      act(noticeId, () => updateMobileNotice(noticeId, "archive")),
     busyId,
     confirmParkedInvocation: (invocationId, approve) =>
       act(invocationId, () => confirmParked(invocationId, approve)),
@@ -223,18 +185,14 @@ export function useApprovals(): ApprovalsController {
       act(requestId, () => decideNotificationsScope(requestId, approve)),
     denyOutbox: (itemId) =>
       act(itemId, () => decideNotificationsOutbox(itemId, "discard")),
-    grants: load.kind === "ready" ? load.grants : [],
     load,
     // Nothing not `ready` shows a time; epoch keeps clocks out of render.
     now: load.kind === "ready" ? load.at : 0,
-    readNotice: (noticeId) =>
-      act(noticeId, () => updateMobileNotice(noticeId, "read")),
     reconnect: (connectionId) =>
       act(connectionId, () => reauthorize(connectionId)),
     refresh,
     refreshing,
     retry,
-    revokeGrant: (grantId) => act(grantId, () => revoke(grantId)),
     state,
     waiting,
   };

@@ -10,9 +10,7 @@ import type { ButtonVariant } from "@centraid/design";
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
-import type { MobileNotice } from "../../lib/gateway";
 import { styles } from "./Approvals.styles";
-import type { ApprovalsController } from "./useApprovals";
 
 /** What was actually asked, plus the two verbs that answer it. Shown in the
  *  row's own cell so nothing is approved sight-unseen (#647). */
@@ -49,33 +47,6 @@ export function Detail(props: {
           </>
         )}
       </View>
-    </View>
-  );
-}
-
-/** The two disposal verbs a notice keeps once it is a row. */
-export function NoticeVerbs(props: {
-  notice: MobileNotice;
-  busy: boolean;
-  page: ApprovalsController;
-}): React.JSX.Element | null {
-  const { busy, notice, page } = props;
-  if (busy || notice.archivedAt !== null) return null;
-  return (
-    <View style={styles.detailActions}>
-      {notice.readAt === null ? (
-        <ActionButton
-          label="Mark read"
-          onPress={() => page.readNotice(notice.noticeId)}
-        />
-      ) : null}
-      {/* Disposal is the quieter of the two verbs: three buttons at one
-          weight per row is no hierarchy at all (shell/findings 15). */}
-      <ActionButton
-        label="Archive"
-        onPress={() => page.archiveNotice(notice.noticeId)}
-        variant="quiet"
-      />
     </View>
   );
 }

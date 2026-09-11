@@ -1,7 +1,6 @@
-// The Notifications screen's own view state, shared by its three view files
-// (#765). None of it is the gateway's, and none of it survives a re-read.
+// Needs you's own view state, shared by its view files (#765). None of it is
+// the gateway's, and none of it survives a re-read.
 
-import type { MobileNotice } from "../../lib/gateway";
 import type { WaitingFilter } from "./approvals-model";
 import type { ApprovalsController } from "./useApprovals";
 
@@ -14,18 +13,12 @@ export interface Focus {
   expandedId: string | undefined;
 }
 
-/** Everything a body block needs: the data half, the view state, and the
- *  navigations only the screen can perform. `onOpenSettings` left with the
- *  room migration (#1015, Wave 2): an unpaired phone's one way forward is the
- *  room error's `secondary` now. */
+/** Everything a body block needs: the data half and the view state. The
+ *  notice and standing-grant navigations left with R-NY-2 (#1015): notices
+ *  live in Activity's alerts tab and grants in Settings → Access, so nothing on
+ *  this page leaves it except a decision's own ceremony. */
 export interface BodyProps {
   page: ApprovalsController;
   focus: Focus;
   patch: (next: Partial<Focus>) => void;
-  onOpenNotice: (notice: MobileNotice) => void;
-  onGrantsLayout: (y: number) => void;
-  /** The empty QUEUE's verb. Not the room's `empty`: this page still has a
-   *  tail (the standing grants) when nothing is waiting, and a room empty
-   *  replaces the body wholesale. */
-  reviewGrants: () => void;
 }

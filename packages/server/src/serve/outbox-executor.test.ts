@@ -349,9 +349,14 @@ describe("outbox-executor", () => {
       "allowed_hosts"
     );
     expect(plane.notices.getBySource("outbox", itemId)).toMatchObject({
-      // D4: the reason rides the headline; the full detail stays in the card.
-      headline: expect.stringContaining("failed: "),
-      detail: expect.objectContaining({ outcome: "failed", itemId }),
+      // R-NY-5 (#1015): the headline is a sentence; the reason's gist rides
+      // `detail.gist` for the run log, never the title.
+      headline: expect.stringMatching(/ was not sent$/u),
+      detail: expect.objectContaining({
+        gist: expect.stringContaining("allowed_hosts"),
+        itemId,
+        outcome: "failed",
+      }),
       severity: "high",
     });
   });
@@ -503,7 +508,7 @@ describe("outbox-executor", () => {
     expect(row.decided_at).toBeNull();
     expect(row.note).toContain("expired");
     expect(plane.notices.getBySource("outbox", itemId)).toMatchObject({
-      headline: expect.stringContaining("needs approval again"),
+      headline: expect.stringMatching(/ needs your approval again$/u),
       detail: expect.objectContaining({ outcome: "reparked", itemId }),
       severity: "warning",
     });

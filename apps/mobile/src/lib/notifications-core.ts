@@ -90,7 +90,8 @@ export async function installNotificationCategories(): Promise<void> {
       [
         {
           identifier: NotificationModel.OPEN_ITEM,
-          buttonTitle: "Open Notifications",
+          // The place's one noun (#1015 R-NY-4); the category id is not copy.
+          buttonTitle: "Open Needs you",
           options: { opensAppToForeground: true },
         },
       ]

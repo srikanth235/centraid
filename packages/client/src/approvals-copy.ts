@@ -19,13 +19,13 @@ export const APPROVALS_SENDING_FACT_VALUE =
 
 export const APPROVALS_CANNOT_EDIT_KEY = "cannot be edited";
 export const APPROVALS_CANNOT_EDIT_VALUE =
-  "the gateway has no rebuilder for this verb, so approving sends exactly what is quoted above";
+  "approving sends exactly what is quoted above";
 
 export const APPROVALS_GRANTS_NOTE =
   "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run.";
 
 export const APPROVALS_NO_GRANTS_NOTE =
-  "No standing grants yet — “always allow” on an approval mints one.";
+  "No standing grants yet — “always allow” on an approval adds one.";
 
 export const APPROVALS_ALWAYS_TITLE = "Approve without asking again";
 
@@ -50,9 +50,10 @@ export const APPROVALS_OLD_GATEWAY_TITLE =
 export const APPROVALS_OLD_GATEWAY_BODY =
   "It cannot say which questions were answered.";
 
-export const APPROVALS_ERROR_TITLE = "Could not reach the consent store";
-export const APPROVALS_ERROR_BODY =
-  "The gateway answered; the queue that holds staged writes did not.";
+// Seat-neutral on purpose (#1015 R-NY-2): both seats render these, and a
+// failed READ changes nothing — which is the one thing a member deciding on a
+// write needs to know when the queue does not arrive.
+export const APPROVALS_ERROR_TITLE = "Could not read what is waiting on you";
+export const APPROVALS_ERROR_BODY = "Nothing waiting was sent or changed.";
 
-export const APPROVALS_HEALTH_DETAIL =
-  "Nothing here has happened yet — approving is the act.";
+export const APPROVALS_HEALTH_DETAIL = "Nothing here happens until you decide.";

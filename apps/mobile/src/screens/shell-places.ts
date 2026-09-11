@@ -22,7 +22,7 @@ import { SHELL_TITLES } from "./shell-copy";
 
 /** Route name → the words on a back control; the nouns are `shell-copy`'s. */
 const ROUTE_TITLES: Readonly<Record<string, string>> = Object.freeze({
-  Approvals: SHELL_TITLES.alerts,
+  Approvals: SHELL_TITLES.needsYou,
   BackupHealth: SHELL_TITLES.backupHealth,
   Home: "Home",
   PhoneStorage: SHELL_TITLES.onThisPhone,

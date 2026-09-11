@@ -1,4 +1,4 @@
-// Frame geometry for the Notifications place (#765). The blocks bring their
+// Frame geometry for the Needs you place (#765). The blocks bring their
 // own sheets; what is left here is the page's margins, its head row, the line
 // that reports a failed action, and the two in-row controls the panel cannot
 // express (the edit form and the always-allow toggle).
