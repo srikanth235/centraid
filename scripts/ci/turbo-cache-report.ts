@@ -28,8 +28,8 @@
  * the opposite of. Seed it from real runs, then ratchet.
  *
  * Usage:
- *   node scripts/ci/turbo-cache-report.mjs --task build [-- <extra turbo args>]
- *   node scripts/ci/turbo-cache-report.mjs --report-only
+ *   node scripts/ci/turbo-cache-report.ts --task build [-- <extra turbo args>]
+ *   node scripts/ci/turbo-cache-report.ts --report-only
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -46,6 +46,34 @@ import { turboEnv } from "./turbo.ts";
 const root = path.resolve(import.meta.dirname, "../..");
 const RUNS_DIR = path.join(root, ".turbo/runs");
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export type CacheStatus = "hit" | "miss" | "unknown";
+
+export interface CacheClassification {
+  status: CacheStatus;
+  source: string;
+}
+
+export interface TaskRow {
+  task: string;
+  status: CacheStatus;
+  source: string;
+  durationMs: number;
+}
+
+export interface CacheSummary {
+  rows: TaskRow[];
+  total: number;
+  hits: number;
+  misses: number;
+  unknown: number;
+  hitRate: number;
+  missMs: number;
+}
+
 /**
  * Classify one summary task entry.
  *
@@ -53,13 +81,12 @@ const RUNS_DIR = path.join(root, ".turbo/runs");
  * in 2.x, a bare `cacheState` before it), so read defensively and report
  * `unknown` rather than silently counting an unrecognised shape as a hit — a
  * cache report that rounds toward "it worked" is worse than none.
- *
- * @param {Record<string, unknown>} task one entry from a turbo run summary
- * @returns {{ status: "hit" | "miss" | "unknown", source: string }} the cache verdict and, on a hit, which cache served it
  */
-export function classifyTask(task) {
-  const cache = task?.cache ?? task?.cacheState?.local ?? null;
-  if (cache && typeof cache === "object") {
+export function classifyTask(task: unknown): CacheClassification {
+  if (!isRecord(task)) return { status: "unknown", source: "-" };
+  const cacheState = isRecord(task.cacheState) ? task.cacheState.local : null;
+  const cache = task.cache ?? cacheState ?? null;
+  if (isRecord(cache)) {
     const local = cache.local === true;
     const remote = cache.remote === true;
     if (cache.status === "HIT" || local || remote) {
@@ -79,9 +106,14 @@ export function classifyTask(task) {
  * a `duration`. Read both, and fall back to 0 rather than NaN so one unfamiliar
  * entry cannot poison the aggregate.
  */
-export function taskDurationMs(execution) {
-  if (!execution || typeof execution !== "object") return 0;
-  if (Number.isFinite(execution.duration)) return Number(execution.duration);
+export function taskDurationMs(execution: unknown): number {
+  if (!isRecord(execution)) return 0;
+  if (
+    typeof execution.duration === "number" &&
+    Number.isFinite(execution.duration)
+  ) {
+    return execution.duration;
+  }
   const start = Number(execution.startTime);
   const end = Number(execution.endTime);
   if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
@@ -91,14 +123,17 @@ export function taskDurationMs(execution) {
 }
 
 /** Summarize a turbo run summary object into rows plus totals. */
-export function summarize(summary) {
-  const rows = (summary?.tasks ?? []).map((task) => {
+export function summarize(summary: unknown): CacheSummary {
+  const tasks =
+    isRecord(summary) && Array.isArray(summary.tasks) ? summary.tasks : [];
+  const rows = tasks.map((task) => {
     const { status, source } = classifyTask(task);
+    const record = isRecord(task) ? task : {};
     return {
-      task: `${task.package ?? "<root>"}#${task.task ?? "?"}`,
+      task: `${record.package ?? "<root>"}#${record.task ?? "?"}`,
       status,
       source,
-      durationMs: taskDurationMs(task?.execution),
+      durationMs: taskDurationMs(record.execution),
     };
   });
   const hits = rows.filter((r) => r.status === "hit").length;
@@ -118,7 +153,10 @@ export function summarize(summary) {
 }
 
 /** Markdown for the Job Summary. */
-export function renderReport(result, globalHashInputs) {
+export function renderReport(
+  result: CacheSummary,
+  globalHashInputs: unknown
+): string {
   const pct = (result.hitRate * 100).toFixed(1);
   const lines = [
     "### Turbo cache",
@@ -152,18 +190,30 @@ export function renderReport(result, globalHashInputs) {
   return lines.join("\n");
 }
 
-function newestSummary() {
+function newestSummary(): unknown {
   if (!existsSync(RUNS_DIR)) return null;
   const files = readdirSync(RUNS_DIR)
     .filter((f) => f.endsWith(".json"))
     .map((f) => path.join(RUNS_DIR, f))
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  if (!files.length) return null;
-  return JSON.parse(readFileSync(files[0], "utf8"));
+  const newest = files[0];
+  if (newest === undefined) return null;
+  const parsed: unknown = JSON.parse(readFileSync(newest, "utf8"));
+  return parsed;
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): {
+  task: string | null;
+  minHitRate: number | null;
+  reportOnly: boolean;
+  passthrough: string[];
+} {
+  const out: {
+    task: string | null;
+    minHitRate: number | null;
+    reportOnly: boolean;
+    passthrough: string[];
+  } = {
     task: null,
     minHitRate: null,
     reportOnly: false,
@@ -173,15 +223,22 @@ function parseArgs(argv) {
   const own = separator === -1 ? argv : argv.slice(0, separator);
   if (separator !== -1) out.passthrough = argv.slice(separator + 1);
   for (let i = 0; i < own.length; i += 1) {
-    if (own[i] === "--task" && own[i + 1]) out.task = own[++i];
-    else if (own[i] === "--min-hit-rate" && own[i + 1])
-      out.minHitRate = Number(own[++i]);
-    else if (own[i] === "--report-only") out.reportOnly = true;
+    const current = own[i];
+    const next = own[i + 1];
+    if (current === "--task" && next !== undefined) {
+      out.task = next;
+      i += 1;
+    } else if (current === "--min-hit-rate" && next !== undefined) {
+      out.minHitRate = Number(next);
+      i += 1;
+    } else if (current === "--report-only") {
+      out.reportOnly = true;
+    }
   }
   return out;
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   if (!args.task && !args.reportOnly) {
     console.error("turbo-cache-report: --task <name> is required");
@@ -193,7 +250,7 @@ function main() {
   if (!args.reportOnly) {
     const result = spawnSync(
       path.join(root, "node_modules/.bin/turbo"),
-      ["run", args.task, "--summarize", ...args.passthrough],
+      ["run", args.task ?? "", "--summarize", ...args.passthrough],
       { cwd: root, env: turboEnv(), stdio: "inherit" }
     );
     taskStatus = result.status ?? 1;
@@ -212,7 +269,10 @@ function main() {
   }
 
   const result = summarize(summary);
-  const report = renderReport(result, summary.globalCacheInputs);
+  const globalHashInputs = isRecord(summary)
+    ? summary.globalCacheInputs
+    : undefined;
+  const report = renderReport(result, globalHashInputs);
   console.log(report);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`);

@@ -223,3 +223,24 @@ node --test scripts/ci/gate-stamp.test.ts scripts/ci/run-gates.test.ts scripts/c
 
 Remaining `scripts/ci/*.mjs`: 25.
 
+## Slice 2d — candidate / turbo-floor cluster
+
+Converted `osv-lockfile-scan` (+ test), `resolve-candidate` (+ test), `write-candidate` (+ test), `turbo-floor` (+ test), `mutation-cap` (+ test), `turbo-cache-report` (+ test). Direct-run usage strings match `.ts`. `hygiene-gates` now asserts `ci.yml` runs `osv-lockfile-scan.ts`. `package.json` (`build:ci`, `build:ci:floored`, `scripts:test`), `ci.yml`, `e2e.yml`, `candidate.yml`, weekly resolve-candidate jobs, `SECURITY.md`, `docs/toolchain.md`, `docs/dev-environment.md`, and `docs/decisions.md` **G-mutation-cap** / **G-turbo-floor-waiver** follow.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0. `tsc -p scripts --listFiles` includes the twelve converted cluster files. `packages/*/src` count: 0. Program size: 341 files.
+
+```sh
+node --test scripts/ci/osv-lockfile-scan.test.ts scripts/ci/resolve-candidate.test.ts scripts/ci/write-candidate.test.ts scripts/ci/turbo-floor.test.ts scripts/ci/mutation-cap.test.ts scripts/ci/turbo-cache-report.test.ts
+```
+
+35 pass, 0 fail.
+
+Remaining `scripts/ci/*.mjs`: 13.
+
+

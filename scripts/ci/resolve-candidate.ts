@@ -18,7 +18,7 @@
  * behaviour and is announced as such rather than silently restored.
  *
  * Usage (in a `resolve-candidate` job, output `sha`):
- *   node scripts/ci/resolve-candidate.mjs --repo owner/name [--ref <sha-or-ref>]
+ *   node scripts/ci/resolve-candidate.ts --repo owner/name [--ref <sha-or-ref>]
  */
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -27,36 +27,43 @@ import path from "node:path";
 /** The ref rung 3 moves on every green promotion. */
 export const CANDIDATE_REF = "refs/candidates/latest";
 
-/**
- * The 40-hex SHA in `git ls-remote` output, or null.
- *
- * @param {string} stdout Raw `git ls-remote` output (`<sha>\t<ref>`).
- * @returns {string|null} The SHA.
- */
-export function parseLsRemote(stdout) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface CandidateResolution {
+  sha: string;
+  source: string;
+  note: string;
+}
+
+/** The 40-hex SHA in `git ls-remote` output, or null. */
+export function parseLsRemote(
+  stdout: string | null | undefined
+): string | null {
   const line = (stdout ?? "").trim().split("\n")[0] ?? "";
   const sha = line.split(/\s+/u)[0] ?? "";
   return /^[0-9a-f]{40}$/u.test(sha) ? sha : null;
 }
 
-/**
- * The head SHA of the newest successful run in a `gh api` listing.
- *
- * @param {string} stdout JSON from `gh api .../runs?...`.
- * @returns {string|null} The SHA.
- */
-export function parseLastGreenRun(stdout) {
+/** The head SHA of the newest successful run in a `gh api` listing. */
+export function parseLastGreenRun(
+  stdout: string | null | undefined
+): string | null {
   const trimmed = (stdout ?? "").trim();
   if (!trimmed) return null;
-  let parsed;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
     return null;
   }
-  const runs = Array.isArray(parsed?.workflow_runs) ? parsed.workflow_runs : [];
+  const runs =
+    isRecord(parsed) && Array.isArray(parsed.workflow_runs)
+      ? parsed.workflow_runs
+      : [];
   for (const run of runs) {
-    if (run?.conclusion !== "success") continue;
+    if (!isRecord(run) || run.conclusion !== "success") continue;
     const sha = String(run.head_sha ?? "");
     if (/^[0-9a-f]{40}$/u.test(sha)) return sha;
   }
@@ -67,20 +74,18 @@ export function parseLastGreenRun(stdout) {
  * Resolve the SHA, reporting which rung of the chain answered.
  *
  * Pure apart from the injected probes, so every branch has a test.
- *
- * @param {object} options Inputs and probes.
- * @param {string} options.ref The `workflow_dispatch` ref input (may be empty).
- * @param {string} options.fallbackSha `github.sha`, the last resort.
- * @param {() => string|null} options.candidatePointer Reads `refs/candidates/latest`.
- * @param {() => string|null} options.lastGreenGate Reads the last green rung-2 run.
- * @returns {{sha: string, source: string, note: string}} The SHA and why.
  */
 export function resolveCandidate({
   ref,
   fallbackSha,
   candidatePointer,
   lastGreenGate,
-}) {
+}: {
+  ref: string;
+  fallbackSha: string;
+  candidatePointer: () => string | null;
+  lastGreenGate: () => string | null;
+}): CandidateResolution {
   const requested = (ref ?? "").trim();
   if (requested) {
     return {
@@ -112,7 +117,12 @@ export function resolveCandidate({
   };
 }
 
-function parseArgs(argv) {
+function parseArgs(argv: string[]): {
+  repo: string;
+  ref: string;
+  fallback: string;
+  gateWorkflow: string;
+} {
   const out = {
     repo: process.env.GITHUB_REPOSITORY ?? "",
     ref: "",
@@ -120,17 +130,26 @@ function parseArgs(argv) {
     gateWorkflow: "ci.yml",
   };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--repo" && argv[i + 1]) out.repo = argv[++i];
-    else if (argv[i] === "--ref" && argv[i + 1]) out.ref = argv[++i];
-    else if (argv[i] === "--fallback-sha" && argv[i + 1])
-      out.fallback = argv[++i];
-    else if (argv[i] === "--gate-workflow" && argv[i + 1])
-      out.gateWorkflow = argv[++i];
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (current === "--repo" && next !== undefined) {
+      out.repo = next;
+      i += 1;
+    } else if (current === "--ref" && next !== undefined) {
+      out.ref = next;
+      i += 1;
+    } else if (current === "--fallback-sha" && next !== undefined) {
+      out.fallback = next;
+      i += 1;
+    } else if (current === "--gate-workflow" && next !== undefined) {
+      out.gateWorkflow = next;
+      i += 1;
+    }
   }
   return out;
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const resolved = resolveCandidate({
     ref: args.ref,

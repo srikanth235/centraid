@@ -595,7 +595,7 @@ jobs:
   # rotting without any commit touching its watch list.
   #
   # It is also where `mutation-pr` sends the PRs whose affected-seed set ran past
-  # the rung-2 cap (scripts/ci/mutation-cap.mjs): "deferred to rung 3" names this
+  # the rung-2 cap (scripts/ci/mutation-cap.ts): "deferred to rung 3" names this
   # job, so removing it would make that deferral a lie.
   mutation-full:
     runs-on: ubuntu-latest
@@ -1110,7 +1110,7 @@ jobs:
           set -euo pipefail
           mkdir -p site/test-report
           rm -rf site/.git
-          node scripts/ci/write-candidate.mjs \
+          node scripts/ci/write-candidate.ts \
             --sha "$GITHUB_SHA" \
             --previous "${{ steps.previous.outputs.sha }}" \
             --run-id "${{ github.run_id }}" \

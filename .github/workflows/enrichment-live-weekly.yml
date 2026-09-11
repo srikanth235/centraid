@@ -24,7 +24,7 @@ jobs:
   # #915 Wave 1 — RUNG 5 CONSUMES THE CANDIDATE, like rung 4. A weekly lane that
   # tests whatever `main` happened to point at on Saturday morning cannot tell a
   # product regression from Friday's merge, and it has a whole week to be wrong
-  # about it. `scripts/ci/resolve-candidate.mjs` prints which link of the
+  # about it. `scripts/ci/resolve-candidate.ts` prints which link of the
   # fallback chain answered (dispatch input -> refs/candidates/latest -> the last
   # green ci.yml run -> this run's own SHA).
   resolve-candidate:
@@ -40,7 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/resolve-candidate.mjs \
+          node scripts/ci/resolve-candidate.ts \
             --repo "${{ github.repository }}" \
             --ref "${{ github.event.inputs.ref }}" \
             --fallback-sha "${{ github.sha }}"

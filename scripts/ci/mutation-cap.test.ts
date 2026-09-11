@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -8,7 +10,7 @@ import {
   deferComment,
   findMarkedCommentId,
   resolveCapMs,
-} from "./mutation-cap.mjs";
+} from "./mutation-cap.ts";
 
 test("the cap defaults to eight minutes and the env overrides it", () => {
   assert.equal(resolveCapMs({}, {}), DEFAULT_CAP_MS);
@@ -53,7 +55,7 @@ test("an uncapped run records the real verdict of the seeds", () => {
       exitCode: 0,
       durationMs: 1200,
       capMs: 480_000,
-    })[0].verdict,
+    })[0]?.verdict,
     "passed"
   );
   assert.equal(
@@ -62,7 +64,7 @@ test("an uncapped run records the real verdict of the seeds", () => {
       exitCode: 1,
       durationMs: 1200,
       capMs: 480_000,
-    })[0].verdict,
+    })[0]?.verdict,
     "failed"
   );
 });

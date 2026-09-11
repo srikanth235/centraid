@@ -21,7 +21,7 @@
  * is the difference between an exception and a hole.
  *
  * Usage:
- *   node scripts/ci/turbo-floor.mjs --min-hit-rate 0.15 [--task build]
+ *   node scripts/ci/turbo-floor.ts --min-hit-rate 0.15 [--task build]
  */
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -42,7 +42,7 @@ const root = path.resolve(import.meta.dirname, "../..");
  * add one only when a run has PROVED it moves the global hash — the `### Turbo
  * cache` step summary prints `globalCacheInputs` for exactly this purpose.
  */
-export const GLOBAL_HASH_INPUTS = Object.freeze([
+export const GLOBAL_HASH_INPUTS: readonly string[] = Object.freeze([
   "bun.lock",
   "package.json",
   "turbo.json",
@@ -53,7 +53,16 @@ export const GLOBAL_HASH_INPUTS = Object.freeze([
 ]);
 
 /** Directory prefixes that are global-hash inputs in their entirety. */
-export const GLOBAL_HASH_PREFIXES = Object.freeze([".github/actions/setup/"]);
+export const GLOBAL_HASH_PREFIXES: readonly string[] = Object.freeze([
+  ".github/actions/setup/",
+]);
+
+export interface FloorDecision {
+  enforce: boolean;
+  minHitRate: number;
+  reason: string;
+  movers: string[];
+}
 
 /**
  * Which changed paths move turbo's global hash.
@@ -62,13 +71,10 @@ export const GLOBAL_HASH_PREFIXES = Object.freeze([".github/actions/setup/"]);
  * package's hash and is exactly the case the floor is meant to catch, while the
  * root manifest changes all of them. Treating them alike would waive the floor
  * on most PRs in the repo.
- *
- * @param {string[]} files Repository-relative changed paths.
- * @returns {string[]} The subset that moves the global hash, in input order.
  */
-export function globalHashInputsIn(files) {
+export function globalHashInputsIn(files: readonly string[]): string[] {
   const changed = new Set(files.map((file) => file.trim()).filter(Boolean));
-  const hits = [];
+  const hits: string[] = [];
   for (const input of GLOBAL_HASH_INPUTS) {
     if (changed.has(input)) hits.push(input);
   }
@@ -83,26 +89,22 @@ export function globalHashInputsIn(files) {
   return [...new Set(hits)];
 }
 
-/**
- * Split `git diff --name-only` output into paths.
- *
- * @param {string} stdout Raw output.
- * @returns {string[]} Paths.
- */
-export function parseDiffOutput(stdout) {
+/** Split `git diff --name-only` output into paths. */
+export function parseDiffOutput(stdout: string | null | undefined): string[] {
   return (stdout ?? "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 }
 
-/**
- * Decide whether to enforce the floor, and say why either way.
- *
- * @param {{files: string[]|null, minHitRate: number}} input The diff (null when unreadable) and the floor.
- * @returns {{enforce: boolean, minHitRate: number, reason: string, movers: string[]}} The decision.
- */
-export function decideFloor({ files, minHitRate }) {
+/** Decide whether to enforce the floor, and say why either way. */
+export function decideFloor({
+  files,
+  minHitRate,
+}: {
+  files: string[] | null;
+  minHitRate: number;
+}): FloorDecision {
   if (files === null) {
     // Unreadable diff waives rather than enforces. The alternative reds a lane
     // for a fact about the checkout depth, which is a false red about something
@@ -135,7 +137,7 @@ export function decideFloor({ files, minHitRate }) {
 }
 
 /** Markdown for the Job Summary. */
-export function renderFloorDecision(decision) {
+export function renderFloorDecision(decision: FloorDecision): string {
   return [
     "### Turbo cache floor",
     "",
@@ -149,7 +151,7 @@ export function renderFloorDecision(decision) {
   ].join("\n");
 }
 
-function git(args) {
+function git(args: readonly string[]): string | null {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
   return result.status === 0 ? (result.stdout ?? "") : null;
 }
@@ -163,7 +165,7 @@ function git(args) {
  * `HEAD~1` is the push-to-main shape. A best-effort shallow fetch runs first so
  * a depth-1 checkout still has an `origin/main` object to diff against.
  */
-function changedFiles() {
+function changedFiles(): string[] | null {
   if (git(["rev-parse", "--verify", "--quiet", "origin/main"]) === null) {
     spawnSync("git", ["fetch", "--no-tags", "--depth=1", "origin", "main"], {
       cwd: root,
@@ -182,20 +184,34 @@ function changedFiles() {
   return null;
 }
 
-function parseArgs(argv) {
-  const out = { minHitRate: 0.15, task: "build", passthrough: [] };
+function parseArgs(argv: string[]): {
+  minHitRate: number;
+  task: string;
+  passthrough: string[];
+} {
+  const out: { minHitRate: number; task: string; passthrough: string[] } = {
+    minHitRate: 0.15,
+    task: "build",
+    passthrough: [],
+  };
   const separator = argv.indexOf("--");
   const own = separator === -1 ? argv : argv.slice(0, separator);
   if (separator !== -1) out.passthrough = argv.slice(separator + 1);
   for (let i = 0; i < own.length; i += 1) {
-    if (own[i] === "--min-hit-rate" && own[i + 1])
-      out.minHitRate = Number(own[++i]);
-    else if (own[i] === "--task" && own[i + 1]) out.task = own[++i];
+    const current = own[i];
+    const next = own[i + 1];
+    if (current === "--min-hit-rate" && next !== undefined) {
+      out.minHitRate = Number(next);
+      i += 1;
+    } else if (current === "--task" && next !== undefined) {
+      out.task = next;
+      i += 1;
+    }
   }
   return out;
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const decision = decideFloor({
     files: changedFiles(),
@@ -216,7 +232,7 @@ function main() {
   const report = spawnSync(
     process.execPath,
     [
-      path.join(root, "scripts/ci/turbo-cache-report.mjs"),
+      path.join(root, "scripts/ci/turbo-cache-report.ts"),
       "--task",
       args.task,
       ...(decision.enforce

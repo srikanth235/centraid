@@ -1,11 +1,10 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-import {
-  runOsvLockfileScan,
-  summarizeOsvReport,
-} from "./osv-lockfile-scan.mjs";
+import { runOsvLockfileScan, summarizeOsvReport } from "./osv-lockfile-scan.ts";
 
 test("summarizeOsvReport classifies critical vs high from max_severity", () => {
   const report = {
@@ -33,9 +32,9 @@ test("summarizeOsvReport classifies critical vs high from max_severity", () => {
   };
   const s = summarizeOsvReport(report);
   assert.equal(s.critical.length, 1);
-  assert.match(s.critical[0], /crit-pkg@1\.0\.0/u);
+  assert.match(s.critical[0] ?? "", /crit-pkg@1\.0\.0/u);
   assert.equal(s.high.length, 1);
-  assert.match(s.high[0], /high-pkg@2\.0\.0/u);
+  assert.match(s.high[0] ?? "", /high-pkg@2\.0\.0/u);
   assert.equal(s.totalPackages, 3);
 });
 

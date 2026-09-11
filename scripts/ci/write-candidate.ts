@@ -14,7 +14,7 @@
  * a contract rather than a convenience — see PLAN C1 and docs/release.md.
  *
  * Usage:
- *   node scripts/ci/write-candidate.mjs --sha <40hex> --run-id 1 --run-url URL \
+ *   node scripts/ci/write-candidate.ts --sha <40hex> --run-id 1 --run-url URL \
  *     [--previous <40hex>] [--needs <path to toJSON(needs)>] \
  *     [--out artifacts/candidate.json] [--history <path to candidates.json>]
  */
@@ -26,25 +26,50 @@ const root = path.resolve(import.meta.dirname, "../..");
 /** How many promotions the durable history keeps. */
 export const HISTORY_LIMIT = 200;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface LaneVerdict {
+  verdict: string;
+  durationMs: number;
+}
+
+export interface CandidateRecord {
+  schema: number;
+  sha: string;
+  promotedAt: string;
+  previousSha: string | null;
+  runId: string;
+  runUrl: string;
+  lanes: Record<string, unknown>;
+}
+
+export interface HistoryEntry {
+  sha: string;
+  promotedAt: string;
+}
+
+export interface CandidateHistory {
+  schema: number;
+  candidates: HistoryEntry[];
+}
+
 /**
  * Turn GitHub's `toJSON(needs)` into the candidate's per-lane verdicts.
  *
  * `skipped` becomes `skipped` rather than `passed`: a lane that did not run has
  * no opinion, and recording it as a pass is how a candidate comes to claim
  * proof it never had.
- *
- * @param {unknown} needs Parsed `toJSON(needs)`.
- * @returns {Record<string, {verdict: string, durationMs: number}>} Lane verdicts.
  */
-export function laneVerdicts(needs) {
-  /** @type {Record<string, {verdict: string, durationMs: number}>} */
-  const out = {};
-  if (!needs || typeof needs !== "object") return out;
-  for (const [lane, value] of Object.entries(
-    /** @type {Record<string, {result?: string}>} */ (needs)
-  )) {
+export function laneVerdicts(needs: unknown): Record<string, LaneVerdict> {
+  const out: Record<string, LaneVerdict> = {};
+  if (!isRecord(needs)) return out;
+  for (const [lane, value] of Object.entries(needs)) {
     if (lane === "promote") continue;
-    const result = value?.result ?? "unknown";
+    const result = isRecord(value)
+      ? String(value.result ?? "unknown")
+      : "unknown";
     out[lane] = {
       verdict:
         result === "success"
@@ -58,12 +83,7 @@ export function laneVerdicts(needs) {
   return out;
 }
 
-/**
- * The candidate record.
- *
- * @param {{sha: string, previousSha: string|null, runId: string, runUrl: string, promotedAt: string, lanes: Record<string, unknown>}} input Fields.
- * @returns {Record<string, unknown>} The C1-shaped record.
- */
+/** The candidate record. */
 export function buildCandidate({
   sha,
   previousSha,
@@ -71,7 +91,14 @@ export function buildCandidate({
   runUrl,
   promotedAt,
   lanes,
-}) {
+}: {
+  sha: string;
+  previousSha: string | null;
+  runId: string;
+  runUrl: string;
+  promotedAt: string;
+  lanes: Record<string, unknown>;
+}): CandidateRecord {
   if (!/^[0-9a-f]{40}$/u.test(sha ?? "")) {
     throw new Error(
       `write-candidate: --sha must be a 40-hex SHA, got \`${sha}\``
@@ -93,34 +120,56 @@ export function buildCandidate({
   };
 }
 
+function asHistoryEntry(value: unknown): HistoryEntry | null {
+  if (!isRecord(value) || typeof value.sha !== "string") return null;
+  return {
+    sha: value.sha,
+    promotedAt: typeof value.promotedAt === "string" ? value.promotedAt : "",
+  };
+}
+
 /**
  * Append a promotion to the durable history, newest first, bounded.
  *
  * Bounded because gh-pages is a git tree and an unbounded array becomes a diff
  * nobody can read; 200 promotions is well past any window the rules ask about
  * (the longest is trailing 30) while still covering a slow month.
- *
- * @param {unknown} existing Parsed candidates.json, or anything unparseable.
- * @param {{sha: string, promotedAt: string}} entry The new promotion.
- * @returns {{schema: number, candidates: {sha: string, promotedAt: string}[]}} The new history.
  */
-export function appendHistory(existing, entry) {
-  const previous = Array.isArray(
-    /** @type {{candidates?: unknown}} */ (existing)?.candidates
-  )
-    ? /** @type {{candidates: {sha: string, promotedAt: string}[]}} */ (
-        existing
-      ).candidates
+export function appendHistory(
+  existing: unknown,
+  entry: HistoryEntry
+): CandidateHistory {
+  const raw = isRecord(existing) ? existing.candidates : undefined;
+  const previous = Array.isArray(raw)
+    ? raw
+        .map(asHistoryEntry)
+        .filter((item): item is HistoryEntry => item !== null)
     : [];
-  const deduped = previous.filter((item) => item?.sha !== entry.sha);
+  const deduped = previous.filter((item) => item.sha !== entry.sha);
   return {
     schema: 1,
     candidates: [entry, ...deduped].slice(0, HISTORY_LIMIT),
   };
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): {
+  sha: string;
+  previous: string;
+  runId: string;
+  runUrl: string;
+  needs: string | null;
+  out: string;
+  history: string | null;
+} {
+  const out: {
+    sha: string;
+    previous: string;
+    runId: string;
+    runUrl: string;
+    needs: string | null;
+    out: string;
+    history: string | null;
+  } = {
     sha: process.env.GITHUB_SHA ?? "",
     previous: "",
     runId: process.env.GITHUB_RUN_ID ?? "",
@@ -130,20 +179,37 @@ function parseArgs(argv) {
     history: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--sha" && argv[i + 1]) out.sha = argv[++i];
-    else if (argv[i] === "--previous" && argv[i + 1]) out.previous = argv[++i];
-    else if (argv[i] === "--run-id" && argv[i + 1]) out.runId = argv[++i];
-    else if (argv[i] === "--run-url" && argv[i + 1]) out.runUrl = argv[++i];
-    else if (argv[i] === "--needs" && argv[i + 1]) out.needs = argv[++i];
-    else if (argv[i] === "--out" && argv[i + 1]) out.out = argv[++i];
-    else if (argv[i] === "--history" && argv[i + 1]) out.history = argv[++i];
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (current === "--sha" && next !== undefined) {
+      out.sha = next;
+      i += 1;
+    } else if (current === "--previous" && next !== undefined) {
+      out.previous = next;
+      i += 1;
+    } else if (current === "--run-id" && next !== undefined) {
+      out.runId = next;
+      i += 1;
+    } else if (current === "--run-url" && next !== undefined) {
+      out.runUrl = next;
+      i += 1;
+    } else if (current === "--needs" && next !== undefined) {
+      out.needs = next;
+      i += 1;
+    } else if (current === "--out" && next !== undefined) {
+      out.out = next;
+      i += 1;
+    } else if (current === "--history" && next !== undefined) {
+      out.history = next;
+      i += 1;
+    }
   }
   return out;
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
-  const needs = args.needs
+  const needsRaw: unknown = args.needs
     ? JSON.parse(readFileSync(path.resolve(root, args.needs), "utf8"))
     : {};
   const candidate = buildCandidate({
@@ -152,7 +218,7 @@ function main() {
     runId: args.runId,
     runUrl: args.runUrl,
     promotedAt: new Date().toISOString(),
-    lanes: laneVerdicts(needs),
+    lanes: laneVerdicts(needsRaw),
   });
   const outPath = path.resolve(root, args.out);
   mkdirSync(path.dirname(outPath), { recursive: true });
@@ -161,7 +227,7 @@ function main() {
 
   if (args.history) {
     const historyPath = path.resolve(root, args.history);
-    const existing = existsSync(historyPath)
+    const existing: unknown = existsSync(historyPath)
       ? JSON.parse(readFileSync(historyPath, "utf8"))
       : null;
     mkdirSync(path.dirname(historyPath), { recursive: true });

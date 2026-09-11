@@ -815,12 +815,12 @@ jobs:
       # ONE comment (rewritten in place) saying which rung now owns the answer,
       # and `candidate.yml`'s `mutation-full` re-runs every seed with floors on
       # the merge commit. Nothing is skipped; only the moment the answer arrives
-      # moves. See scripts/ci/mutation-cap.mjs.
+      # moves. See scripts/ci/mutation-cap.ts.
       - name: Per-PR mutation (affected seeds + floors, 8-minute cap)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CENTRAID_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: node scripts/ci/mutation-cap.mjs
+        run: node scripts/ci/mutation-cap.ts
 
       # #915 Wave 1 — `mutation-canary` MOVED TO `candidate.yml` as `mutation-full`.
       # It was already outside `check`'s needs (the merge had happened, so a red
@@ -1765,7 +1765,7 @@ jobs:
       # dependency-review fails *new* high-severity deps on the PR diff; this job
       # scans the whole `bun.lock` for known advisories so latent inventory debt
       # cannot hide. Fail closed on CRITICAL only (HIGH reported, non-blocking) —
-      # see scripts/ci/osv-lockfile-scan.mjs + SECURITY.md. Cheap; no bun install.
+      # see scripts/ci/osv-lockfile-scan.ts + SECURITY.md. Cheap; no bun install.
       - name: Write lane evidence
         if: always()
         env:
@@ -1798,7 +1798,7 @@ jobs:
           chmod +x /usr/local/bin/osv-scanner
           osv-scanner --version
       - name: Scan bun.lock (fail on CRITICAL)
-        run: node scripts/ci/osv-lockfile-scan.mjs
+        run: node scripts/ci/osv-lockfile-scan.ts
 
       # The one required status check (`check`, matching the main-protection
       # ruleset). Every gate above is in `needs:`, so a lane that goes red turns

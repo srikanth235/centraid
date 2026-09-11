@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,7 +8,7 @@ import {
   appendHistory,
   buildCandidate,
   laneVerdicts,
-} from "./write-candidate.mjs";
+} from "./write-candidate.ts";
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);

@@ -18,8 +18,8 @@
  * nine times carries one comment rather than nine.
  *
  * Usage:
- *   node scripts/ci/mutation-cap.mjs [--cap-ms 480000] [--script test:mutation:pr]
- *   MUTATION_PR_CAP_MS=600000 node scripts/ci/mutation-cap.mjs
+ *   node scripts/ci/mutation-cap.ts [--cap-ms 480000] [--script test:mutation:pr]
+ *   MUTATION_PR_CAP_MS=600000 node scripts/ci/mutation-cap.ts
  */
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -33,6 +33,13 @@ export const DEFER_MARKER = "<!-- mutation-pr-deferred -->";
 /** The cap, in milliseconds, when nothing overrides it: 8 minutes (#915 Wave 1). */
 export const DEFAULT_CAP_MS = 480_000;
 
+export interface MutationCase {
+  id: string;
+  verdict: string;
+  durationMs: number;
+  attempts: number;
+}
+
 /**
  * Resolve the cap from flags and the environment.
  *
@@ -40,13 +47,12 @@ export const DEFAULT_CAP_MS = 480_000;
  * `MUTATION_PR_CAP_MS=0` almost certainly means "somebody meant to disable this"
  * and a lane that quietly ran uncapped for a month is the failure this exists to
  * prevent.
- *
- * @param {{cap?: string|null}} flags Parsed CLI flags.
- * @param {Record<string, string|undefined>} env Process environment.
- * @returns {number} Cap in milliseconds.
  */
-export function resolveCapMs(flags, env) {
-  const raw = flags?.cap ?? env.MUTATION_PR_CAP_MS ?? null;
+export function resolveCapMs(
+  flags: { cap?: string | null },
+  env: NodeJS.ProcessEnv
+): number {
+  const raw = flags.cap ?? env.MUTATION_PR_CAP_MS ?? null;
   if (raw == null || raw === "") return DEFAULT_CAP_MS;
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) {
@@ -57,13 +63,17 @@ export function resolveCapMs(flags, env) {
   return value;
 }
 
-/**
- * The evidence cases for one run.
- *
- * @param {{capped: boolean, exitCode: number, durationMs: number}} outcome What happened.
- * @returns {{id: string, verdict: string, durationMs: number, attempts: number}[]} Cases for `write-evidence.mjs --cases`.
- */
-export function casesFor({ capped, exitCode, durationMs }) {
+/** The evidence cases for one run. */
+export function casesFor({
+  capped,
+  exitCode,
+  durationMs,
+}: {
+  capped: boolean;
+  exitCode: number;
+  durationMs: number;
+  capMs?: number;
+}): MutationCase[] {
   if (capped) {
     return [
       {
@@ -84,13 +94,16 @@ export function casesFor({ capped, exitCode, durationMs }) {
   ];
 }
 
-/**
- * The PR comment body for a deferred run.
- *
- * @param {{capMs: number, durationMs: number, runUrl: string}} context Numbers to state.
- * @returns {string} Markdown, marker first so the updater can find it.
- */
-export function deferComment({ capMs, durationMs, runUrl }) {
+/** The PR comment body for a deferred run. */
+export function deferComment({
+  capMs,
+  durationMs,
+  runUrl,
+}: {
+  capMs: number;
+  durationMs: number;
+  runUrl: string;
+}): string {
   return [
     DEFER_MARKER,
     "### Per-PR mutation deferred to the candidate",
@@ -105,30 +118,37 @@ export function deferComment({ capMs, durationMs, runUrl }) {
   ].join("\n");
 }
 
-/**
- * The id of the existing marked comment in a `gh api` listing, or null.
- *
- * @param {string} stdout Raw stdout of the comments listing (`--jq` reduced to ids, one per line, or full JSON).
- * @returns {string|null} Comment id.
- */
-export function findMarkedCommentId(stdout) {
+/** The id of the existing marked comment in a `gh api` listing, or null. */
+export function findMarkedCommentId(
+  stdout: string | null | undefined
+): string | null {
   const trimmed = (stdout ?? "").trim();
   if (!trimmed) return null;
-  const first = trimmed.split("\n")[0].trim();
+  const first = (trimmed.split("\n")[0] ?? "").trim();
   return /^\d+$/u.test(first) ? first : null;
 }
 
-function parseArgs(argv) {
-  const out = { cap: null, script: "test:mutation:pr" };
+function parseArgs(argv: string[]): { cap: string | null; script: string } {
+  const out: { cap: string | null; script: string } = {
+    cap: null,
+    script: "test:mutation:pr",
+  };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--cap-ms" && argv[i + 1]) out.cap = argv[++i];
-    else if (argv[i] === "--script" && argv[i + 1]) out.script = argv[++i];
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (current === "--cap-ms" && next !== undefined) {
+      out.cap = next;
+      i += 1;
+    } else if (current === "--script" && next !== undefined) {
+      out.script = next;
+      i += 1;
+    }
   }
   return out;
 }
 
 /** Post or rewrite the single deferral comment. Best-effort: never reds the lane. */
-function commentOnPr(body) {
+function commentOnPr(body: string): void {
   const repo = process.env.GITHUB_REPOSITORY;
   const prNumber = process.env.CENTRAID_PR_NUMBER;
   if (process.env.GITHUB_EVENT_NAME !== "pull_request" || !repo || !prNumber) {
@@ -137,7 +157,8 @@ function commentOnPr(body) {
     );
     return;
   }
-  const gh = (args) => spawnSync("gh", args, { encoding: "utf8", cwd: root });
+  const gh = (args: string[]) =>
+    spawnSync("gh", args, { encoding: "utf8", cwd: root });
   const listed = gh([
     "api",
     `repos/${repo}/issues/${prNumber}/comments`,
@@ -169,7 +190,7 @@ function commentOnPr(body) {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const capMs = resolveCapMs(args, process.env);
   const startedAt = Date.now();
@@ -187,7 +208,7 @@ async function main() {
     setTimeout(() => child.kill("SIGKILL"), 15_000).unref();
   }, capMs);
 
-  const exitCode = await new Promise((resolve) => {
+  const exitCode = await new Promise<number>((resolve) => {
     child.on("exit", (code) => resolve(code ?? 1));
     child.on("error", (error) => {
       console.error(`::error title=mutation-cap::${error.message}`);

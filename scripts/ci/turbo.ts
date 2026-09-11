@@ -16,7 +16,7 @@
 // set one (CI sets none and gets the same default), then
 // `CENTRAID_TURBO_CACHE_DIR`, then `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo`.
 // `docs/toolchain.md` names it. Run summaries still land in `.turbo/runs` per
-// checkout, which is what `turbo-cache-report.mjs` reads.
+// checkout, which is what `turbo-cache-report.ts` reads.
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";

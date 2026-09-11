@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,7 +8,7 @@ import {
   parseLastGreenRun,
   parseLsRemote,
   resolveCandidate,
-} from "./resolve-candidate.mjs";
+} from "./resolve-candidate.ts";
 
 const SHA = "a".repeat(40);
 const GREEN = "b".repeat(40);
@@ -29,7 +31,7 @@ test("parseLastGreenRun takes the newest success, skipping reds", () => {
   assert.equal(parseLastGreenRun("nope"), null);
 });
 
-const resolve = (overrides) =>
+const resolve = (overrides: Partial<Parameters<typeof resolveCandidate>[0]>) =>
   resolveCandidate({
     ref: "",
     fallbackSha: "c".repeat(40),

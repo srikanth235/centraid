@@ -6,7 +6,7 @@
  *
  * Usage:
  *   osv-scanner must be on PATH (CI installs a pinned release).
- *   node scripts/ci/osv-lockfile-scan.mjs
+ *   node scripts/ci/osv-lockfile-scan.ts
  *
  * Exit codes:
  *   0 — no CRITICAL (table printed)
@@ -29,12 +29,18 @@ const HIGH_SCORE = 7;
 const MEDIUM_SCORE = 4;
 const LOW_SCORE = 1;
 
-/**
- * Map a severity label or numeric score to a comparable number.
- * @param {unknown} value Severity string or number from OSV JSON.
- * @returns {number} Numeric score used for thresholding.
- */
-function severityScore(value) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface OsvSummary {
+  critical: string[];
+  high: string[];
+  totalPackages: number;
+}
+
+/** Map a severity label or numeric score to a comparable number. */
+function severityScore(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
     const n = Number(value);
@@ -48,28 +54,25 @@ function severityScore(value) {
   return 0;
 }
 
-/**
- * Best-effort score for one vulnerability object.
- * @param {unknown} vuln OSV vulnerability entry.
- * @returns {number} Highest score found on the entry.
- */
-function vulnScore(vuln) {
-  if (!vuln || typeof vuln !== "object") return 0;
-  const v = /** @type {Record<string, unknown>} */ (vuln);
-  const db = v.database_specific;
-  if (db && typeof db === "object") {
-    const d = /** @type {Record<string, unknown>} */ (db);
-    const fromLabel = severityScore(d.severity);
+/** Best-effort score for one vulnerability object. */
+function vulnScore(vuln: unknown): number {
+  if (!isRecord(vuln)) return 0;
+  const db = vuln.database_specific;
+  if (isRecord(db)) {
+    const fromLabel = severityScore(db.severity);
     if (fromLabel >= CRITICAL_SCORE) return fromLabel;
-    if (typeof d.cvss_score === "number") return d.cvss_score;
+    if (typeof db.cvss_score === "number") return db.cvss_score;
   }
-  const severity = v.severity;
+  const severity = vuln.severity;
   if (Array.isArray(severity)) {
     let max = 0;
     for (const entry of severity) {
-      if (entry && typeof entry === "object") {
-        const e = /** @type {Record<string, unknown>} */ (entry);
-        max = Math.max(max, severityScore(e.score), severityScore(e.type));
+      if (isRecord(entry)) {
+        max = Math.max(
+          max,
+          severityScore(entry.score),
+          severityScore(entry.type)
+        );
       }
     }
     if (max > 0) return max;
@@ -77,56 +80,40 @@ function vulnScore(vuln) {
   return 0;
 }
 
-/**
- * Score for an OSV package group (`max_severity`).
- * @param {unknown} group OSV group object.
- * @returns {number} Group max severity as a number.
- */
-function groupScore(group) {
-  if (!group || typeof group !== "object") return 0;
-  const g = /** @type {Record<string, unknown>} */ (group);
-  return severityScore(g.max_severity);
+/** Score for an OSV package group (`max_severity`). */
+function groupScore(group: unknown): number {
+  if (!isRecord(group)) return 0;
+  return severityScore(group.max_severity);
 }
 
-/**
- * Parse OSV-Scanner JSON and collect CRITICAL package findings.
- * @param {unknown} report Parsed OSV-Scanner JSON report.
- * @returns {{ critical: string[], high: string[], totalPackages: number }} Package lines by severity.
- */
-export function summarizeOsvReport(report) {
-  const critical = [];
-  const high = [];
+/** Parse OSV-Scanner JSON and collect CRITICAL package findings. */
+export function summarizeOsvReport(report: unknown): OsvSummary {
+  const critical: string[] = [];
+  const high: string[] = [];
   let totalPackages = 0;
-  if (!report || typeof report !== "object") {
+  if (!isRecord(report)) {
     return { critical, high, totalPackages };
   }
-  const results = /** @type {Record<string, unknown>} */ (report).results;
+  const results = report.results;
   if (!Array.isArray(results)) return { critical, high, totalPackages };
 
   for (const result of results) {
-    if (!result || typeof result !== "object") continue;
-    const packages = /** @type {Record<string, unknown>} */ (result).packages;
+    if (!isRecord(result)) continue;
+    const packages = result.packages;
     if (!Array.isArray(packages)) continue;
     for (const pkg of packages) {
-      if (!pkg || typeof pkg !== "object") continue;
+      if (!isRecord(pkg)) continue;
       totalPackages += 1;
-      const p = /** @type {Record<string, unknown>} */ (pkg);
-      const meta = p.package;
-      const name =
-        meta && typeof meta === "object"
-          ? String(/** @type {Record<string, unknown>} */ (meta).name ?? "?")
-          : "?";
-      const version =
-        meta && typeof meta === "object"
-          ? String(/** @type {Record<string, unknown>} */ (meta).version ?? "?")
-          : "?";
+      const meta = pkg.package;
+      const name = isRecord(meta) ? String(meta.name ?? "?") : "?";
+      const version = isRecord(meta) ? String(meta.version ?? "?") : "?";
 
       let max = 0;
-      const groups = p.groups;
+      const groups = pkg.groups;
       if (Array.isArray(groups)) {
         for (const g of groups) max = Math.max(max, groupScore(g));
       }
-      const vulns = p.vulnerabilities;
+      const vulns = pkg.vulnerabilities;
       if (Array.isArray(vulns)) {
         for (const v of vulns) max = Math.max(max, vulnScore(v));
       }
@@ -139,12 +126,14 @@ export function summarizeOsvReport(report) {
   return { critical, high, totalPackages };
 }
 
-/**
- * Invoke osv-scanner on bun.lock and classify findings.
- * @param {string} [osvBin] Path or name of the osv-scanner binary.
- * @returns {{ code: number, table: string, summary: ReturnType<typeof summarizeOsvReport> }} Scan result for CI.
- */
-export function runOsvLockfileScan(osvBin = "osv-scanner") {
+export interface OsvScanResult {
+  code: number;
+  table: string;
+  summary: OsvSummary;
+}
+
+/** Invoke osv-scanner on bun.lock and classify findings. */
+export function runOsvLockfileScan(osvBin = "osv-scanner"): OsvScanResult {
   if (!existsSync(lockfile)) {
     return {
       code: 1,
@@ -187,7 +176,7 @@ export function runOsvLockfileScan(osvBin = "osv-scanner") {
       },
     };
   }
-  let report;
+  let report: unknown;
   try {
     report = JSON.parse(raw);
   } catch (error) {
@@ -206,7 +195,7 @@ export function runOsvLockfileScan(osvBin = "osv-scanner") {
   return { code, table, summary };
 }
 
-function main() {
+function main(): void {
   const result = runOsvLockfileScan(
     process.env.OSV_SCANNER_BIN || "osv-scanner"
   );
@@ -235,7 +224,7 @@ function main() {
 
 const isMain =
   Boolean(process.argv[1]) &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1] ?? "")).href;
 if (isMain) {
   main();
 }

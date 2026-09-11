@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -7,7 +9,7 @@ import {
   globalHashInputsIn,
   parseDiffOutput,
   renderFloorDecision,
-} from "./turbo-floor.mjs";
+} from "./turbo-floor.ts";
 
 test("the lockfile, root manifest, turbo config and toolchain move the global hash", () => {
   for (const input of GLOBAL_HASH_INPUTS) {

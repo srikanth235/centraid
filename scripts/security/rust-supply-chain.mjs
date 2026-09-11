@@ -5,7 +5,7 @@
  * unknown-registry sources, run over every first-party crate lockfile.
  *
  * The TypeScript side already has OSV over `bun.lock` (scripts/ci/
- * osv-lockfile-scan.mjs) and dependency-review on the PR diff. The Rust side
+ * osv-lockfile-scan.ts) and dependency-review on the PR diff. The Rust side
  * had neither, while shipping the code that terminates a QUIC connection from
  * an unauthenticated peer. This closes that asymmetry.
  *

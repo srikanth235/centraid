@@ -93,8 +93,8 @@ export function checkHygieneGates(): { ok: boolean; errors: string[] } {
   if (!/osv-scanner_linux_amd64|google\/osv-scanner-action/u.test(ci)) {
     errors.push("ci.yml must install or invoke OSV-Scanner");
   }
-  if (!/osv-lockfile-scan\.mjs/u.test(ci)) {
-    errors.push("ci.yml must run scripts/ci/osv-lockfile-scan.mjs");
+  if (!/osv-lockfile-scan\.ts/u.test(ci)) {
+    errors.push("ci.yml must run scripts/ci/osv-lockfile-scan.ts");
   }
   if (!/\bosv-scanner\b/u.test(checkJob)) {
     errors.push("ci.yml `check` needs: list must include osv-scanner");
