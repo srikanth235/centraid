@@ -1,9 +1,9 @@
-// What the Notifications place SAYS (#765, spec §2). Pure — no React, gateway
-// or renderer — so the copy contract is under test without mounting anything.
-// Three standing rules: kind badges are WORDS, never coloured pills (the one
-// chromatic ink means "this leaves the device"); notices fold into the queue by
-// what they NEED, never behind a source-type filter; and a busy control loses
-// its verb entirely, so a second tap cannot stage a second decision.
+// What Needs you SAYS (#765, spec §2). Pure — no React, gateway or renderer —
+// so the copy contract is under test without mounting anything. Three standing
+// rules: kind badges are WORDS, never coloured pills (the one chromatic ink
+// means "this leaves the device"); the queue holds DECISIONS only — a notice is
+// news, and lives in Activity's alerts tab (#1015 R-NY-2); and a busy control
+// loses its verb entirely, so a second tap cannot stage a second decision.
 
 import {
   APPROVALS_CANNOT_EDIT_KEY as CANNOT_EDIT_KEY,
@@ -24,7 +24,6 @@ import type { RowsBlockAction } from "../../kit/components/RowsBlock";
 import { formatRelative } from "../../kit/format";
 import { describeScopes } from "../../lib/decision-detail";
 import type {
-  MobileNotice,
   MobileNotifications,
   MobileOutboxRow,
   ParkedInvocation,
@@ -42,13 +41,10 @@ export {
   APPROVALS_DENY_TITLE as DENY_TITLE,
   APPROVALS_EDIT_SUB as EDIT_SUB,
   APPROVALS_EDIT_TITLE as EDIT_TITLE,
-  APPROVALS_EMPTY_ACTION as EMPTY_ACTION,
   APPROVALS_EMPTY_BODY as EMPTY_BODY,
   APPROVALS_EMPTY_TITLE as EMPTY_TITLE,
   APPROVALS_ERROR_BODY as ERROR_BODY,
   APPROVALS_ERROR_TITLE as ERROR_TITLE,
-  APPROVALS_GRANTS_NOTE as GRANTS_NOTE,
-  APPROVALS_NO_GRANTS_NOTE as NO_GRANTS_NOTE,
   APPROVALS_SENDING_FACT_KEY as SENDING_FACT_KEY,
   APPROVALS_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
 } from "@centraid/client/approvals-copy";
@@ -84,14 +80,6 @@ export function matchesFilter(
 }
 
 // ─── phrasing ───────
-
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-
-export function countWord(count: number, singular: string): string {
-  return `${String(count)} ${singular}${count === 1 ? "" : "s"}`;
-}
 
 export function join(parts: readonly (string | null | undefined)[]): string {
   return parts.filter((part): part is string => Boolean(part)).join(" · ");
@@ -157,64 +145,18 @@ export function outboundLabel(row: {
   return "Outbound write";
 }
 
-export function noticeSeverityLabel(
-  kind: string,
-  severity: MobileNotice["severity"]
-): string {
-  if (severity === "info") return "";
-  if (kind === "gateway-health")
-    return severity === "high" ? "Down" : "Degraded";
-  return severity === "high" ? "Failed" : "Warning";
-}
-
-function spanWords(ms: number): string {
-  if (ms >= DAY) return countWord(Math.round(ms / DAY), "day");
-  if (ms >= HOUR) return countWord(Math.round(ms / HOUR), "hour");
-  return countWord(Math.max(1, Math.round(ms / MINUTE)), "minute");
-}
-
-/** `undefined` for an uncollapsed notice, which has no span to tell. */
-export function noticeSpanPhrase(
-  row: Pick<MobileNotice, "count" | "firstAt" | "lastAt" | "severity">
-): string | undefined {
-  if (row.count <= 1) return undefined;
-  const first = parsed(row.firstAt);
-  const last = parsed(row.lastAt);
-  if (first === undefined || last === undefined || last <= first)
-    return `×${String(row.count)}`;
-  if (row.severity !== "info" && last - first >= DAY)
-    return `failing for ${spanWords(last - first)}`;
-  return `×${String(row.count)} over ${spanWords(last - first)}`;
-}
-
-export function noticeSub(notice: MobileNotice, now: number): string {
-  return join([
-    notice.kind.replaceAll("-", " "),
-    stampPhrase(notice.lastAt, now, "last"),
-    noticeSpanPhrase(notice),
-  ]);
-}
-
 // ─── the queue ───────
 
-export function isAttention(notice: MobileNotice): boolean {
-  return notice.archivedAt === null && notice.severity !== "info";
-}
-
-export function activeNotices(
-  notices: readonly MobileNotice[]
-): MobileNotice[] {
-  return notices.filter((notice) => notice.archivedAt === null);
-}
-
+/** Decisions only (#1015 R-NY-2). `data.notices` is read and never counted: a
+ *  failed rule or a degraded gateway is news the member cannot decide on here,
+ *  and Activity's alerts tab is where it stands. */
 export function waitingTotal(data: MobileNotifications): number {
   const { decisions } = data;
   return (
     decisions.outbox.length +
     decisions.needsAuth.length +
     decisions.parked.length +
-    decisions.scopeRequests.length +
-    data.notices.filter(isAttention).length
+    decisions.scopeRequests.length
   );
 }
 
@@ -236,13 +178,15 @@ export function waitingMeta(shown: number, total: number): string {
     : `${String(total)} waiting`;
 }
 
-/** No inline verb, ever: the page's content IS the thing to act on. */
-export function approvalsHealth(waiting: number): HealthCopy {
+/** One true thing, and no count: the "Waiting on you" section already states
+ *  how many, so a foot line that says it again is the page repeating itself.
+ *  No inline verb, ever: the page's content IS the thing to act on. */
+export function approvalsHealth(): HealthCopy {
   return {
     detail: HEALTH_DETAIL,
     emptyText: EMPTY_HEALTH,
     errorText: ERROR_HEALTH,
-    label: `${countWord(waiting, "item")} waiting on you`,
+    label: "",
     loadingText: READING_HEALTH,
   };
 }
@@ -428,42 +372,5 @@ export function scopeRowCopy(
       stampPhrase(row.requestedAt, now, "asked"),
     ]),
     title: `${row.appId} is asking for wider access`,
-  };
-}
-
-export function noticeRowCopy(
-  notice: MobileNotice,
-  now: number
-): WaitingRowCopy {
-  return {
-    action: "Open",
-    key: notice.noticeId,
-    kind: "risk",
-    meta: noticeSeverityLabel(notice.kind, notice.severity),
-    net: notice.severity === "high",
-    sub: noticeSub(notice, now),
-    title: notice.headline,
-  };
-}
-
-export interface OutboxGrant {
-  grantId: string;
-  actor: string | null;
-  actorId: string;
-  verb: string;
-  target: string;
-  createdAt: string;
-  revokedAt: string | null;
-}
-
-export function grantRowCopy(
-  grant: OutboxGrant,
-  now: number
-): { key: string; title: string; sub: string; meta: string } {
-  return {
-    key: grant.grantId,
-    meta: stampPhrase(grant.createdAt, now, "granted") ?? "",
-    sub: `${grant.verb} → ${grant.target}`,
-    title: `${grant.actor ?? grant.actorId} may always ${grant.verb}`,
   };
 }

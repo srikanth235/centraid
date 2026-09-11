@@ -18,6 +18,16 @@ export const styles = StyleSheet.create({
   // The per-row escape hatch (an outbox editor, an expansion) sits UNDER the
   // row line inside the same cell, so the divider still separates records.
   expansion: { paddingBottom: spacing[3], paddingHorizontal: spacing[3] },
+  // A tappable row's text and meta, as one press target beside the verb: the
+  // same row geometry as `line`, so a row reads identically tappable or not.
+  face: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing[3],
+    minWidth: 0,
+  },
   line: {
     alignItems: "center",
     flexDirection: "row",

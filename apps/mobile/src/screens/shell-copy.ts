@@ -46,11 +46,11 @@ export function desktopLinkStatus(status: TunnelStatus | undefined): string {
  */
 export const SHELL_ERROR = {
   access: "Your standing permissions could not be read",
-  alerts: "Your alerts could not be loaded",
   connectors: "Your connectors could not be loaded",
   copies: "The copies of your vault could not be read",
   desktopLink: "This phone could not link to your desktop",
   enrichment: "Your enrichment settings could not be read",
+  needsYou: "Your decision did not go through",
   scan: "This code could not be read",
   sharing: "Your sharing links could not be read",
   vault: "Your vault's contents could not be read",

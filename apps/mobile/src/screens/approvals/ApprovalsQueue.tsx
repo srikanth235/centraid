@@ -1,5 +1,8 @@
 // WAITING ON YOU — the head of the queue as a panel, its two controls, and
-// everything else that is waiting as rows (#765, spec §2 blocks 1-5).
+// everything else that is waiting as rows (#765, spec §2 blocks 1-5). Every row
+// is one tap target with at most one visible verb, and the row and its verb do
+// the same thing (#1015 R-NY-2). Notices are not rows here: they are news, and
+// Activity's alerts tab holds them.
 
 import React from "react";
 
@@ -17,10 +20,8 @@ import {
   EDIT_SUB,
   EDIT_TITLE,
   WAITING_CHIPS,
-  isAttention,
   matchesFilter,
   needsAuthRowCopy,
-  noticeRowCopy,
   outboxRowCopy,
   parkedRowCopy,
   rowVerb,
@@ -31,7 +32,7 @@ import {
   stagedTitle,
   waitingMeta,
 } from "./approvals-model";
-import { Detail, NoticeVerbs } from "./RowParts";
+import { Detail } from "./RowParts";
 import { AlwaysAllow, StagedEditForm } from "./StagedWrite";
 import type { BodyProps } from "./view-types";
 
@@ -51,83 +52,99 @@ export default function Queue(props: BodyProps): React.JSX.Element | null {
   const showStaged = staged !== undefined && matchesFilter(filter, "staged");
 
   const rows: RowsBlockRow[] = [];
+  // The row and its verb are ONE control said twice: the whole row answers the
+  // press the verb names, so a member never has to find the small target.
+  const tappable = (
+    row: Omit<RowsBlockRow, "onPress">,
+    press: () => void
+  ): RowsBlockRow => ({ ...row, onPress: press });
   for (const row of decisions.outbox) {
     if (staged && row.itemId === staged.itemId) continue;
     const copy = outboxRowCopy(row, page.now);
     if (!matchesFilter(filter, copy.kind)) continue;
-    rows.push({
-      ...copy,
-      action: rowVerb(copy, () =>
-        patch({ editing: false, selectedItemId: row.itemId })
-      ),
-      off: page.busyId === row.itemId,
-    });
+    const press = (): void =>
+      patch({ editing: false, selectedItemId: row.itemId });
+    rows.push(
+      tappable(
+        {
+          ...copy,
+          action: rowVerb(copy, press),
+          off: page.busyId === row.itemId,
+        },
+        press
+      )
+    );
   }
   for (const row of decisions.needsAuth) {
     const copy = needsAuthRowCopy(row);
     if (!matchesFilter(filter, copy.kind)) continue;
-    rows.push({
-      ...copy,
-      action: rowVerb(
-        copy,
-        () => page.reconnect(row.connectionId),
-        page.busyId === row.connectionId ? "Opening…" : copy.action
-      ),
-      off: page.busyId === row.connectionId,
-    });
+    const press = (): void => page.reconnect(row.connectionId);
+    rows.push(
+      tappable(
+        {
+          ...copy,
+          action: rowVerb(
+            copy,
+            press,
+            page.busyId === row.connectionId ? "Opening…" : copy.action
+          ),
+          off: page.busyId === row.connectionId,
+        },
+        press
+      )
+    );
   }
   for (const row of decisions.parked) {
     const open = focus.expandedId === row.invocationId;
     const copy = parkedRowCopy(row, page.now, open);
     if (!matchesFilter(filter, copy.kind)) continue;
-    rows.push({
-      ...copy,
-      children: open ? (
-        <Detail
-          busy={page.busyId === row.invocationId}
-          onApprove={() => page.confirmParkedInvocation(row.invocationId, true)}
-          onDeny={() => page.confirmParkedInvocation(row.invocationId, false)}
-          text={describeInvocationInput(row.input)}
-        />
-      ) : undefined,
-      action: rowVerb(copy, () =>
-        patch({ expandedId: open ? undefined : row.invocationId })
-      ),
-    });
+    const press = (): void =>
+      patch({ expandedId: open ? undefined : row.invocationId });
+    rows.push(
+      tappable(
+        {
+          ...copy,
+          children: open ? (
+            <Detail
+              busy={page.busyId === row.invocationId}
+              onApprove={() =>
+                page.confirmParkedInvocation(row.invocationId, true)
+              }
+              onDeny={() =>
+                page.confirmParkedInvocation(row.invocationId, false)
+              }
+              text={describeInvocationInput(row.input)}
+            />
+          ) : undefined,
+          action: rowVerb(copy, press),
+        },
+        press
+      )
+    );
   }
   for (const row of decisions.scopeRequests) {
     const open = focus.expandedId === row.requestId;
     const copy = scopeRowCopy(row, page.now, open);
     if (!matchesFilter(filter, copy.kind)) continue;
-    rows.push({
-      ...copy,
-      children: open ? (
-        <Detail
-          busy={page.busyId === row.requestId}
-          onApprove={() => page.decideScope(row.requestId, true)}
-          onDeny={() => page.decideScope(row.requestId, false)}
-          text={row.purpose}
-        />
-      ) : undefined,
-      action: rowVerb(copy, () =>
-        patch({ expandedId: open ? undefined : row.requestId })
-      ),
-    });
-  }
-  for (const notice of data.notices.filter(isAttention)) {
-    const copy = noticeRowCopy(notice, page.now);
-    if (!matchesFilter(filter, copy.kind)) continue;
-    rows.push({
-      ...copy,
-      children: (
-        <NoticeVerbs
-          busy={page.busyId === notice.noticeId}
-          notice={notice}
-          page={page}
-        />
-      ),
-      action: rowVerb(copy, () => props.onOpenNotice(notice)),
-    });
+    const press = (): void =>
+      patch({ expandedId: open ? undefined : row.requestId });
+    rows.push(
+      tappable(
+        {
+          ...copy,
+          children: open ? (
+            <Detail
+              busy={page.busyId === row.requestId}
+              onApprove={() => page.decideScope(row.requestId, true)}
+              onDeny={() => page.decideScope(row.requestId, false)}
+              text={row.purpose}
+            />
+          ) : undefined,
+          action: rowVerb(copy, press),
+        },
+        press
+      )
+    );
   }
 
   const shown = rows.length + (showStaged ? 1 : 0);

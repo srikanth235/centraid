@@ -452,9 +452,7 @@ describe("what the frame says about Notifications", () => {
   it("says nothing has happened yet, and offers no inline verb", () => {
     const health = approvalsHealth({ grants: 0, waiting: 3 });
     expect(health.label).toBe("3 waiting on you");
-    expect(health.detail).toBe(
-      "Nothing here has happened yet — approving is the act."
-    );
+    expect(health.detail).toBe("Nothing here happens until you decide.");
     expect(health).not.toHaveProperty("action");
   });
 });

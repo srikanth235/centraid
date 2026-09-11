@@ -1,4 +1,4 @@
-// The Notifications place, rendered (#765, spec §2). Five states, one screen.
+// Needs you, rendered (#765, spec §2). Five states, one screen.
 //
 // What this pins is what a future edit is likeliest to undo quietly:
 //
@@ -9,10 +9,11 @@
 //  - approve, edit-and-approve and deny reach the real mutations, with the
 //    always-allow flag carried through
 //  - a decision in flight WITHDRAWS its verbs rather than dimming them
-//  - the queue's reference tail (standing grants, updates, the archive) is
-//    present even when nothing is waiting
-//  - empty and error are the reference's verbatim copy, and an unpaired phone
-//    is the error state with a way forward, not a sixth visual
+//  - the page holds DECISIONS only (#1015 R-NY-2): no notice, no standing
+//    grant, no header verb — a failing rule is Activity's, not a decision
+//  - a waiting row is one tap target, and the row does what its verb says
+//  - empty and error are the shared copy verbatim, and an unpaired phone is
+//    the error state with a way forward, not a sixth visual
 
 // @vitest-environment jsdom
 import React from "react";
@@ -219,12 +220,9 @@ describe(ApprovalsScreen, () => {
       "A row knows its shape before its content arrives, so nothing reflows when it does."
     );
     expect(textOf(container)).toContain("Reading from the gateway");
-    // Both bar verbs are withheld while loading.
-    expect(buttonLabelled(container, "Review all")).toBeNull();
-    expect(buttonLabelled(container, "History")).toBeNull();
   });
 
-  it("says an empty consent surface is the healthy state, and still shows the record", async () => {
+  it("says an empty queue is the healthy state, with no verb and no grants tail", async () => {
     const container = await render();
     const spans = textOf(container);
     expect(spans).toContain("Nothing is waiting on you");
@@ -232,12 +230,43 @@ describe(ApprovalsScreen, () => {
       "Staged writes, lapsed connections and access requests land here."
     );
     expect(spans).toContain("Nothing to attend to");
-    // The reference tail renders in every state — a consent surface that hides
-    // what it already consented to is not a record.
-    expect(spans).toContain("Standing grants");
-    expect(spans).toContain(
-      "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
+    // Standing grants are Settings → Access's record (#1015 R-NY-2); this
+    // page does not restate them, and its empty points nowhere.
+    expect(spans).not.toContain("Standing grants");
+    expect(buttonLabelled(container, "Review standing grants")).toBeNull();
+    // Every button left is the room's own chrome, never a page verb.
+    expect(
+      nodesOf(container, "button").map((node) => node.textContent ?? "")
+    ).not.toContain("Review all");
+  });
+
+  it("keeps every notice out of the queue, a failing rule included", async () => {
+    wire.notifications.mockResolvedValue(
+      payload({
+        notices: [
+          {
+            archivedAt: null,
+            count: 3,
+            detail: { outcome: "failure", sourceType: "automation" },
+            firstAt: "2026-08-13T06:00:00.000Z",
+            headline: "Nightly digest did not finish",
+            kind: "automation",
+            lastAt: "2026-08-13T08:00:00.000Z",
+            noticeId: "n-1",
+            readAt: null,
+            severity: "high",
+            sourceRef: "mail/nightly-digest",
+          },
+        ],
+      })
     );
+    const container = await render();
+    const spans = textOf(container);
+    // A notice is news, not a decision: the queue is still empty.
+    expect(spans).toContain("Nothing is waiting on you");
+    expect(spans.join(" ")).not.toContain("Nightly digest");
+    expect(buttonLabelled(container, "Mark read")).toBeNull();
+    expect(buttonLabelled(container, "Archive")).toBeNull();
   });
 
   it("promotes the head of the queue to a quoted panel that says what approving does", async () => {
@@ -266,9 +295,12 @@ describe(ApprovalsScreen, () => {
     expect(spans).toContain(
       "Nothing is sent. The rule is told it was refused, and remembers."
     );
-    expect(spans).toContain(
-      "1 item waiting on you · Nothing here has happened yet — approving is the act."
-    );
+    // One true thing: the section above already says how many.
+    expect(spans).toContain("Nothing here happens until you decide.");
+    // No header verbs: the page has no single commit, and Activity is on the
+    // band (#1015 R-NY-2).
+    expect(buttonLabelled(container, "Review all")).toBeNull();
+    expect(buttonLabelled(container, "History")).toBeNull();
   });
 
   it("approves, denies and edits through the real mutations", async () => {
@@ -397,47 +429,50 @@ describe(ApprovalsScreen, () => {
     expect(wire.confirmParked).toHaveBeenCalledWith("i-1", true);
   });
 
-  it("lists standing grants and revokes one against the gateway", async () => {
-    wire.fetchJson.mockResolvedValue({
-      grants: [
-        {
-          actor: "Photos",
-          actorId: "app:photos",
-          createdAt: "2026-08-13T08:00:00.000Z",
-          grantId: "g-1",
-          revokedAt: null,
-          target: "ana@pemberton.example",
-          verb: "share",
+  it("opens a waiting row from anywhere on the row, not only its verb", async () => {
+    wire.notifications.mockResolvedValue(
+      payload({
+        decisions: {
+          count: 1,
+          needsAuth: [],
+          outbox: [],
+          parked: [
+            {
+              caller: "Tidy downloads",
+              callerKind: "agent",
+              command: "delete_files",
+              input: { older_than: "1y" },
+              invocationId: "i-1",
+              parkedAt: "2026-08-13T08:00:00.000Z",
+            },
+          ],
+          scopeRequests: [],
         },
-      ],
-    } as never);
-    const container = await render();
-    expect(textOf(container)).toContain("Photos may always share");
-    press(buttonLabelled(container, "Revoke"));
-    await settle();
-    // The revoke, then the re-read behind it — the row is the gateway's to
-    // report, so the screen never patches it away locally.
-    const deletes = wire.fetchJson.mock.calls.filter(
-      (call) => call[1]?.method === "DELETE"
+      })
     );
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]?.[0]).toContain("/centraid/_vault/outbox-grants/g-1");
+    const container = await render();
+    // The row's face — title, sub and state word — is the press target.
+    const face = nodesOf(container, "button").find((node) =>
+      (node.textContent ?? "").startsWith("delete_files")
+    );
+    expect(face).toBeDefined();
+    press(face);
+    await settle();
+    expect(textOf(container).join(" ")).toContain("older_than");
+    // Exactly one visible verb per row: the row's own, now "Hide".
+    expect(buttonLabelled(container, "Hide")).not.toBeNull();
+    expect(buttonLabelled(container, "Review")).toBeNull();
   });
 
   it("treats an unpaired phone as the error state, with the one way forward", async () => {
     wire.resolveBase.mockResolvedValue(undefined);
     const container = await render();
     const spans = textOf(container);
-    expect(spans).toContain("Could not reach the consent store");
-    expect(spans).toContain(
-      "The gateway answered; the queue that holds staged writes did not."
-    );
+    expect(spans).toContain("Could not read what is waiting on you");
+    expect(spans).toContain("Nothing waiting was sent or changed.");
     expect(spans).toContain("This phone is not paired with a gateway yet.");
     expect(spans).toContain("This page could not load");
     press(buttonLabelled(container, "Open Settings"));
     expect(navigation.popTo).toHaveBeenCalledWith("SettingsHome");
-    // The filled commit is withheld on error; the quiet verb is not.
-    expect(buttonLabelled(container, "Review all")).toBeNull();
-    expect(buttonLabelled(container, "History")).not.toBeNull();
   });
 });

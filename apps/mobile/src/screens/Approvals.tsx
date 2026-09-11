@@ -1,12 +1,13 @@
-// NOTIFICATIONS — consent surface (#765, spec §2): staged writes, lapsed
-// connections, parked high-risk acts, scope requests, automation notices —
-// the one place an owner sees all of it and decides. V9 shape = single BLOCK
-// LIST; nothing behind a filter, nothing dropped:
-//   • chips narrow by what a thing NEEDS; non-demands sit in always-present
-//     `Updates`/`Archived` sections
+// NEEDS YOU — the decision queue (#765 spec §2; #1015 R-NY-2): staged writes,
+// lapsed connections, parked high-risk acts and scope requests — the things a
+// member can decide on the phone, and nothing else. Notices are news, not
+// decisions: they stand in Activity's alerts tab. Standing grants are the
+// record in Settings → Access. V9 shape = single BLOCK LIST:
+//   • chips narrow by what a thing NEEDS, only once the queue outgrows them
 //   • staged write = panel + edit row + always-allow row (`StagedWrite.tsx`)
 //   • lapsed connection = `Also waiting` row running the OAuth ceremony
 //   • `no-gateway` = error panel + pairing sentence + `Open Settings`
+// No header verb: the page has no single commit, and Activity is on the band.
 // Data half `useApprovals.ts`; words `approvals-model.ts`.
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -18,11 +19,8 @@ import HealthLine from "../kit/components/HealthLine";
 import { Text } from "../kit/components/NativeText";
 import { SystemPlace } from "../kit/rooms";
 import { useTheme } from "../kit/theme";
-import type { MobileNotice } from "../lib/gateway";
-import { mobileNotificationsDestination } from "../lib/notifications-navigation";
 import type { SettingsScreenProps } from "../navigation";
 import {
-  EMPTY_ACTION,
   EMPTY_BODY,
   EMPTY_TITLE,
   ERROR_BODY,
@@ -33,7 +31,6 @@ import {
 } from "./approvals/approvals-model";
 import { styles } from "./approvals/Approvals.styles";
 import Queue from "./approvals/ApprovalsQueue";
-import Tail from "./approvals/ApprovalsTail";
 import { useApprovals } from "./approvals/useApprovals";
 import type { BodyProps, Focus } from "./approvals/view-types";
 import { SHELL_TITLES } from "./shell-copy";
@@ -51,7 +48,6 @@ export default function ApprovalsScreen({
     selectedItemId: undefined,
   });
   const scroller = useRef<ScrollView | null>(null);
-  const grantsY = useRef(0);
 
   const ink = useMemo(
     () => ({
@@ -66,54 +62,7 @@ export default function ApprovalsScreen({
     []
   );
 
-  /** Not navigation: drops the active filter and re-promotes the queue head. */
-  const reviewAll = useCallback(() => {
-    setFocus({
-      alwaysAllow: false,
-      editing: false,
-      expandedId: undefined,
-      filter: "all",
-      selectedItemId: undefined,
-    });
-    scroller.current?.scrollTo({ animated: true, y: 0 });
-  }, []);
-
-  const scrollToGrants = useCallback(() => {
-    scroller.current?.scrollTo({ animated: true, y: grantsY.current });
-  }, []);
-
-  /** Alert history is the Gateway page's Alerts tab — one implementation, two entries. */
-  const openNotice = useCallback(
-    (notice: MobileNotice): void => {
-      const parent = navigation.getParent();
-      const destination = mobileNotificationsDestination(notice);
-      switch (destination.kind) {
-        case "automation-thread":
-          parent?.navigate("Automations", {
-            automationRef: destination.automationRef,
-          });
-          break;
-        case "gateway-alerts":
-          parent?.navigate("Insights", { initialTab: "alerts" });
-          break;
-        case "outbox":
-          patch({
-            editing: false,
-            filter: "all",
-            selectedItemId: destination.itemId,
-          });
-          break;
-        case "notifications":
-          patch({ filter: "all" });
-          break;
-      }
-    },
-    [navigation, patch]
-  );
-
-  const health = healthLineFor(page.state, approvalsHealth(page.waiting));
-  const showBar = page.state !== "loading";
-  const showCommit = showBar && page.state !== "error";
+  const health = healthLineFor(page.state, approvalsHealth());
 
   return (
     <SystemPlace
@@ -150,60 +99,25 @@ export default function ApprovalsScreen({
       onHome={() => navigation.goBack()}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
-      // Filled commit hidden while loading AND errored; quiet verb only while
-      // loading.
-      {...(showCommit
-        ? { action: { label: "Review all", onPress: reviewAll } }
-        : {})}
-      {...(showBar
-        ? {
-            secondary: {
-              label: "History",
-              onPress: () =>
-                navigation
-                  .getParent()
-                  ?.navigate("Insights", { initialTab: "alerts" }),
-            },
-          }
-        : {})}
       title={SHELL_TITLES.alerts}
     >
       {page.actionError ? (
         <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>
       ) : null}
-      <ApprovalsBody
-        focus={focus}
-        reviewGrants={scrollToGrants}
-        onGrantsLayout={(y) => {
-          grantsY.current = y;
-        }}
-        onOpenNotice={openNotice}
-        page={page}
-        patch={patch}
-      />
+      <ApprovalsBody focus={focus} page={page} patch={patch} />
     </SystemPlace>
   );
 }
 
-/** The queue and its tail. Loading and error are the ROOM's states now (#1015,
- *  Wave 2) — a body that drew them could paint an empty state over a read that
- *  failed, which is what `RoomBody`'s fixed order stops. The EMPTY stays here:
- *  it is the queue that is empty, and the standing grants below it are still
- *  the record this page exists to show. */
+/** The queue, or the queue's empty. Loading and error are the ROOM's states
+ *  (#1015, Wave 2) — a body that drew them could paint an empty state over a
+ *  read that failed, which is what `RoomBody`'s fixed order stops. The empty
+ *  carries no verb: the one it had scrolled to a standing-grants tail that
+ *  left this page for Settings → Access (R-NY-2). */
 function ApprovalsBody(props: BodyProps): React.JSX.Element {
-  return (
-    <>
-      {props.page.state === "empty" ? (
-        <EmptyBlock
-          action={{ label: EMPTY_ACTION, onPress: props.reviewGrants }}
-          body={EMPTY_BODY}
-          routine
-          title={EMPTY_TITLE}
-        />
-      ) : (
-        <Queue {...props} />
-      )}
-      <Tail {...props} />
-    </>
+  return props.page.state === "empty" ? (
+    <EmptyBlock body={EMPTY_BODY} routine title={EMPTY_TITLE} />
+  ) : (
+    <Queue {...props} />
   );
 }
