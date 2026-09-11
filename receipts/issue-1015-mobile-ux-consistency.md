@@ -1552,3 +1552,14 @@ Every one of them lowers vocabulary in a string the seat RECEIVED — from the t
 5. `bun run format` then `bun run check:push:static`, `bun run lint:product`, `node .governance/law/run.mjs --brief-digest 514cb2fed327` → see the report.
 
 STOPPED here per the owner: no `check:push`, no push, no PR, no simulator.
+
+## Simulator re-audit of Alerts — two kit layout defects fixed, the rest scoped (#1015)
+
+The owner opened Alerts on the simulator after the draft PR and reported it broken. The re-audit the Verification section listed as not run found 16 gaps on that one screen; two were kit defects that every `SystemPlace` and `PushedPage` inherits, and no Wave 4 rule could see them, because `lint-mobile-rooms` reads structure, not rendered geometry.
+
+- **`PlaceHeader` had no gutter.** Neither room that draws it pads it, so the title sat on the screen edge and the trailing verb ran off it. The bar now owns `paddingHorizontal: pageMargin`, like the back row above and the body below (`PlaceHeader.styles.ts`).
+- **`Button` top-aligned its label.** The plate is a column held to the 44pt floor with a one-line label inside, and had no `justifyContent`, so every button in the app drew its word against the top edge. It is now `center` (`Button.tsx`).
+
+`PlaceHeader.test.tsx` holds both: the bar's gutter equals `pageMargin` and a verb's plate centres. Seen on the simulator (dev client, cleared Metro cache): title and verbs on the 20pt gutter, labels centred in History, Review all, Open and Mark read.
+
+The other 14 gaps (raw engine errors as notice headlines, background failures filed under "Waiting on you", the always-on empty grants section, the contradicting health line, a "Review all" that only scrolls, the band vanishing on a band destination, and the rest) are copy, model and navigation work, scoped on the umbrella issue as a follow-up round rather than fixed here.

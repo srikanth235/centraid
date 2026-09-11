@@ -86,6 +86,9 @@ const makeStyles = (recipeStyle: NativeButtonStyle) =>
       borderColor: recipeStyle.borderColor,
       borderRadius: recipeStyle.borderRadius,
       borderWidth: 1,
+      // The plate is a column taller than its one line of label (the 44pt
+      // floor), so without this the label rides the top edge (#1015 re-audit).
+      justifyContent: "center",
       minHeight: recipeStyle.minHeight,
       paddingHorizontal: recipeStyle.paddingHorizontal,
     },
