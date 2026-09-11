@@ -117,9 +117,9 @@ Documented exceptions live in the config's `allowlist`, one non-empty `reason` s
 
 ## TypeScript programs
 
-Root `typecheck` and `typecheck:affected` run the turbo workspace programs, then `tsc -p tests`, then the repository scripts programs. Scripts is not a turbo workspace.
+Root `typecheck` and `typecheck:affected` run the turbo workspace programs, then `tsc -p tests`, then `tsc -p tests/tsconfig.agent-e2e.json`, then the repository scripts programs. Scripts is not a turbo workspace.
 
-Directly executed Node tooling under `scripts/` uses `tsconfig.node.json`: `module` / `moduleResolution` NodeNext, `erasableSyntaxOnly`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, and `.ts` import specifiers. Node runs those files with native type stripping (`node path/to/script.ts`). Compiled package runtime keeps NodeNext `.js` specifiers. `tsconfig.base.json` stays the application/bundler default (`module: Preserve`, `moduleResolution: bundler`).
+Directly executed Node tooling under `scripts/` and the agent-e2e harnesses use `tsconfig.node.json`: `module` / `moduleResolution` NodeNext, `erasableSyntaxOnly`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, and `.ts` import specifiers. Node runs those files with native type stripping (`node path/to/script.ts`). Compiled package runtime keeps NodeNext `.js` specifiers. `tsconfig.base.json` stays the application/bundler default (`module: Preserve`, `moduleResolution: bundler`). The agent-e2e program includes only the four `tests/agent-e2e-*` trees so it does not typecheck `packages/*/src`.
 
 Scripts that import package source (`scripts/refresh-pricing-snapshot.ts`) have a separate bundler/Preserve program (`scripts/tsconfig.pricing.json`) so the Node tooling program does not typecheck `packages/*/src`. `scripts/perf/app-waterfall.run.ts` is excluded from the NodeNext program for the same reason: it imports `@centraid/test-kit` source and compiled package specifiers.
 
