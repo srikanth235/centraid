@@ -109,7 +109,7 @@
     "lockfile:lint": "node scripts/ci/lockfile-lint.ts",
     "perf:app-weight": "node scripts/perf/app-weight.mjs",
     "perf:gateway": "node scripts/ci/turbo.ts run build --filter=@centraid/server && bun run --cwd packages/server perf:low-end",
-    "perf:runtime-probe": "node packages/server/scripts/probe-runtime-sqlite.mjs",
+    "perf:runtime-probe": "node packages/server/scripts/probe-runtime-sqlite.ts",
     "perf:send-to-first-token": "node scripts/perf/send-to-first-token.mjs",
     "perf:waterfall": "node node_modules/vitest/vitest.mjs run --config vitest.waterfall.config.ts",
     "perf:waterfall:save": "CENTRAID_WATERFALL_SAVE=1 node node_modules/vitest/vitest.mjs run --config vitest.waterfall.config.ts",

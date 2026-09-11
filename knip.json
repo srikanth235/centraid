@@ -55,7 +55,7 @@
         "src/engine/worker/runner.ts",
         "src/engine/worker/ts-loader-hooks.ts",
         "src/automation/worker/runner.ts",
-        "scripts/*.mjs"
+        "scripts/*.{mjs,ts}"
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/*.{mjs,ts}"],
       "ignoreUnresolved": ["/usr/bin/security", "/sbin/mount"],
@@ -120,12 +120,12 @@
       ]
     },
     "apps/mobile": {
-      "entry": ["index.ts", "App.tsx", "navigators.tsx", "scripts/*.mjs"],
+      "entry": ["index.ts", "App.tsx", "navigators.tsx", "scripts/*.{mjs,ts}"],
       "project": [
         "src/**/*.{ts,tsx}",
         "lazy-screens.tsx",
         "lazy-navigators.tsx",
-        "scripts/*.mjs"
+        "scripts/*.{mjs,ts}"
       ],
       "ignoreDependencies": [
         "@babel/core",
@@ -143,9 +143,9 @@
         "src/content.ts",
         "src/popup.ts",
         "src/pair.ts",
-        "scripts/*.{js,mjs}"
+        "scripts/*.{js,mjs,ts}"
       ],
-      "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs}"]
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs,ts}"]
     },
     "packages/model-runtime": {
       "entry": [

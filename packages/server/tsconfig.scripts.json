@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["scripts/live-harness-smoke.ts", "scripts/probe-all-harnesses.ts"]
+}

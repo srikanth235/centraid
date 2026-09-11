@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-const root = path.resolve(import.meta.dir, "..", "src");
+const root = path.resolve(import.meta.dirname, "..", "src");
 const sourceExtensions = new Set([".ts", ".tsx"]);
 
 async function filesUnder(dir: string): Promise<string[]> {

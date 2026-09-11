@@ -251,7 +251,7 @@ function runOnce(
   const result = spawnSync(
     process.execPath,
     [
-      "packages/server/scripts/bench-journeys.mjs",
+      "packages/server/scripts/bench-journeys.ts",
       "--output",
       output,
       "--intents",

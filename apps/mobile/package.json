@@ -7,9 +7,9 @@
     "android": "expo run:android",
     "ci:android-native": "expo prebuild --no-install --platform android && cd android && ./gradlew :app:compileDebugKotlin --no-daemon",
     "ci:bundle": "expo export --platform ios --output-dir ../../dist/mobile-bundle-smoke/ios --clear && expo export --platform android --output-dir ../../dist/mobile-bundle-smoke/android --clear",
-    "ci:native-state": "node scripts/verify-native-state.mjs",
+    "ci:native-state": "node scripts/verify-native-state.ts",
     "ci:versions": "expo install --check",
-    "ci:xcode": "node scripts/check-xcode-minimum.mjs",
+    "ci:xcode": "node scripts/check-xcode-minimum.ts",
     "dev": "expo start",
     "eas-build-post-install": "if [ \"$EAS_BUILD_PLATFORM\" = ios ]; then bash scripts/build-sqlite-vec-ios.sh; else echo 'sqlite-vec: iOS-only build step, skipped'; fi",
     "eas:build:android": "eas build --platform android --profile preview --non-interactive",
@@ -21,7 +21,7 @@
     "native:prebuild": "expo prebuild --no-install && bun run native:sqlite-vec",
     "native:sqlite-vec": "if [ \"$(uname -s)\" = Darwin ]; then bash scripts/build-sqlite-vec-ios.sh; else echo 'sqlite-vec: macOS-only build step, skipped'; fi",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "web": "expo start --web"
   },
   "dependencies": {

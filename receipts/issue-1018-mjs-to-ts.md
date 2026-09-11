@@ -206,6 +206,29 @@ Remaining `scripts/ci/*.mjs`: 33.
 ## Slice 2c — gate-stamp / run-gates cluster
 
 Converted `gate-stamp` (+ test), `run-gates` (+ test), `work-counter-gate` (+ test), `collection-tripwire` (+ test). `governance-run` now imports `./gate-stamp.ts`. `gate-classes.test.mjs` stays `.mjs` and imports `./gate-stamp.ts`. Direct-run usage strings match `.ts`. `package.json` (`check:push`, `check:push:static`, `test:collection-tripwire`, `scripts:test`), `tests/perf/work-counters.perf.test.ts`, `work-counters.expected.json`, `docs/toolchain.md`, `docs/dev-environment.md`, `TESTING.md`, `QUALITY.md`, and `docs/decisions.md` **G-product-bundle** follow.
+## Slice pkg-apps — workspace `apps/*/scripts` and `packages/*/scripts`
+
+Converted maintained `.mjs` under `apps/{desktop,extension,web,mobile}/scripts` (including mobile `*.test.mjs`) and `packages/{server,blueprints,tunnel,backup}/scripts`. Did not convert `packages/server/src/**/*.mjs`, root `scripts/**`, e2e, law, or stryker configs. Relative first-party imports use `.ts`. `JSON.parse` is `unknown` and narrowed. No `any` / `@ts-nocheck` / `.mts`.
+
+Each migrated file is in that workspace's typecheck program, not in root `tsc -p scripts`. Package `src` is not in those NodeNext scripts programs. Scripts that import `@centraid/design` use a bundler program with paths (desktop `tsconfig.copy-fonts.json`, extension `tsconfig.scripts.json`), same shape as `scripts/tsconfig.pricing.json`. Mobile scripts use ESNext/bundler because the app `package.json` is not `"type": "module"`. `bench-wal.ts` types live in `bench-wal-mods.ts` so the bench stays under the 625-line ceiling.
+
+Workspace `package.json` invocations, knip `scripts/*.mjs` globs (`.ts` added, `.mjs` kept), `apps/mobile/vitest.projects.ts`, mobile `*.sh` `node …mjs` wrappers, root `perf:runtime-probe`, and `scripts/ci/paired-journeys.mjs` spawn path follow. Ledger `_comment` / `tests/journeys.json` identities left as `.mjs`.
+
+### Compiler programs
+
+| Program | Role |
+| --- | --- |
+| `apps/web/tsconfig.scripts.json` | NodeNext; web build/dev scripts |
+| `apps/extension/tsconfig.scripts.json` | bundler + design src paths; Bun build/package |
+| `apps/desktop/tsconfig.scripts.json` | NodeNext + DOM; screenshot scripts |
+| `apps/desktop/tsconfig.copy-fonts.json` | bundler; `copy-fonts.ts` → design src |
+| `apps/mobile/tsconfig.scripts.json` | ESNext/bundler; mobile scripts + tests |
+| `packages/server/tsconfig.scripts.json` | NodeNext; excludes live-harness / probe-all-harnesses (already `.ts`, import `src`) |
+| `packages/blueprints/tsconfig.scripts.json` | NodeNext |
+| `packages/tunnel/tsconfig.scripts.json` | NodeNext |
+| `packages/backup/tsconfig.scripts.json` | NodeNext |
+
+`tsc -p scripts --listFiles` has 0 `apps/*/scripts` and 0 `packages/*/scripts` hits. `tsc -p packages/server/tsconfig.scripts.json --listFiles` has 0 `packages/server/src` hits.
 
 ### Verification
 
@@ -264,3 +287,57 @@ node --test scripts/ci/gate-classes.test.ts scripts/ci/paired-journeys.test.ts s
 Remaining `scripts/ci/*.mjs`: 0.
 
 
+tsc -p apps/web/tsconfig.scripts.json --noEmit
+tsc -p apps/extension/tsconfig.scripts.json --noEmit
+tsc -p apps/desktop/tsconfig.scripts.json --noEmit
+tsc -p apps/desktop/tsconfig.copy-fonts.json --noEmit
+tsc -p apps/mobile/tsconfig.scripts.json --noEmit
+tsc -p packages/server/tsconfig.scripts.json --noEmit
+tsc -p packages/blueprints/tsconfig.scripts.json --noEmit
+tsc -p packages/tunnel/tsconfig.scripts.json --noEmit
+tsc -p packages/backup/tsconfig.scripts.json --noEmit
+```
+
+All exit 0.
+
+```sh
+cd apps/mobile && bunx vitest run --project @centraid/mobile \
+  scripts/ios-shell-cache.test.ts \
+  scripts/js-bundle-fingerprint.test.ts \
+  scripts/resolve-ios-simulator.test.ts \
+  scripts/sqlite-vec-version.test.ts
+```
+
+31 pass, 0 fail.
+
+```sh
+bunx vitest run --project @centraid/server \
+  packages/server/scripts/check-import-boundary.test.ts \
+  packages/server/scripts/bench-support.test.ts
+```
+
+11 pass, 0 fail.
+
+`verify-native-state.test.ts` unit cases other than the live L1 index sweep ran in the full scripts project (52 pass). The live L1 test (`trackedGeneratedNativeFiles()` empty) is red in this worktree because `git ls-files apps/mobile/{ios,android}` lists 60 paths; that is this checkout's index, not a conversion defect.
+
+```sh
+bun run format:check
+bun run lint -- apps/desktop/scripts apps/extension/scripts apps/web/scripts apps/mobile/scripts packages/server/scripts packages/blueprints/scripts packages/tunnel/scripts packages/backup/scripts apps/mobile/vitest.projects.ts
+```
+
+Format matched. Lint 0 warnings, 0 errors.
+
+Remaining `.mjs` in the owned trees: 0.
+
+### Paths this slice
+
+- `apps/desktop/scripts/*.ts` (from `.mjs`) + `tsconfig.scripts.json` + `tsconfig.copy-fonts.json`
+- `apps/extension/scripts/*.ts` + `tsconfig.scripts.json`
+- `apps/web/scripts/*.ts` + `tsconfig.scripts.json`
+- `apps/mobile/scripts/*.{ts,sh}` + `tsconfig.scripts.json` + `vitest.projects.ts`
+- `packages/server/scripts/*.ts` + `tsconfig.scripts.json`
+- `packages/blueprints/scripts/*.ts` + `tsconfig.scripts.json`
+- `packages/tunnel/scripts/*.ts` + `tsconfig.scripts.json`
+- `packages/backup/scripts/bench-wal.ts` + `bench-wal-mods.ts` + `tsconfig.scripts.json`
+- workspace `package.json` files, root `package.json` (`perf:runtime-probe` only), `knip.json`, `scripts/ci/paired-journeys.mjs`
+- `CHANGELOG.md`, `receipts/issue-1018-mjs-to-ts.md`

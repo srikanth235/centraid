@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": [
+    "scripts/screenshot-automations.ts",
+    "scripts/screenshot-standing-orders.ts"
+  ]
+}

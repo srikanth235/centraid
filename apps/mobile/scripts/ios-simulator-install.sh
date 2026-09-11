@@ -80,7 +80,7 @@ js_stamp="$cache_dir/js-bundle.hash"
 hermesc="$cache_dir/hermesc"
 expected_bundle_id="dev.centraid.mobile"
 
-js_bundle_hash="$(node apps/mobile/scripts/js-bundle-fingerprint.mjs)"
+js_bundle_hash="$(node apps/mobile/scripts/js-bundle-fingerprint.ts)"
 test -n "$js_bundle_hash" || {
   echo "::error::empty JS bundle fingerprint; refusing to install an unverifiable app"
   exit 1
@@ -91,7 +91,7 @@ test -n "$js_bundle_hash" || {
 # a lane that rebuilt is a lane that spent thirty minutes, and the log should
 # say which of the three reasons bought them.
 decision_json="$(node -e '
-  const { decideShellPath } = await import("./apps/mobile/scripts/ios-shell-cache.mjs");
+  const { decideShellPath } = await import("./apps/mobile/scripts/ios-shell-cache.ts");
   const { existsSync, readFileSync } = await import("node:fs");
   const dir = process.argv[1];
   const stamp = `${dir}/js-bundle.hash`;
