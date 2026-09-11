@@ -36,6 +36,7 @@ import Queue from "./approvals/ApprovalsQueue";
 import Tail from "./approvals/ApprovalsTail";
 import { useApprovals } from "./approvals/useApprovals";
 import type { BodyProps, Focus } from "./approvals/view-types";
+import PlaceBand from "./home/PlaceBand";
 import { SHELL_TITLES } from "./shell-copy";
 
 export default function ApprovalsScreen({
@@ -117,6 +118,7 @@ export default function ApprovalsScreen({
 
   return (
     <SystemPlace
+      band={<PlaceBand place="notifs" />}
       bodyRef={scroller}
       error={
         page.state === "error"

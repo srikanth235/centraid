@@ -3,6 +3,11 @@
 // apps. Bare ink, no tinted chip. No active bar: `band`→`control` + full ink
 // is the state; inactive icon is `textFaint`. Native-stack chrome, never
 // bottom-tabs: apps are covers pushed from Home.
+//
+// Drawn on Home and at the foot of every frame place root (R-NY-1, through
+// `PlaceBand`), never inside an app, which keeps its own band. Where a tab
+// goes is `usePlaceNavigation`'s, not this component's: a press here only
+// names the target.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";

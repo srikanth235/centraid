@@ -50,6 +50,7 @@ import { ACTIVITY_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
+import { usePlaceFrame } from "../../screens/home/usePlaceFrame";
 import GatewayAlerts from "./GatewayAlerts";
 import {
   failedLegendKey,
@@ -242,6 +243,7 @@ function AnalyticsBody({
 }
 
 function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("stats");
   const { colors } = useTheme();
   const page = useInsights();
   const ink = useMemo(
@@ -274,7 +276,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
           ? { label: "Reading the run log", note: LOADING_NOTE }
           : undefined
       }
-      onHome={() => navigation.goBack()}
+      {...frame}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
       // No filled verb at all — this page writes nothing. The quiet verb is

@@ -51,6 +51,7 @@ import { postStatus } from "../../kit/components/status-line";
 import { VAULT_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { SystemPlace } from "../../kit/rooms";
 import type { DataScreenProps } from "../../navigation";
+import { usePlaceFrame } from "../home/usePlaceFrame";
 import {
   FULL_AT,
   KIND_FILTERS,
@@ -122,6 +123,7 @@ export default function DataScreen({
   navigation,
   route,
 }: DataScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("data");
   const { state, refreshing, refresh, browseKind } = useData(
     route.params?.kind
   );
@@ -233,7 +235,7 @@ export default function DataScreen({
             }
           : undefined
       }
-      onHome={() => navigation.goBack()}
+      {...frame}
       onRefresh={() => void refresh()}
       refreshing={refreshing}
       // No verbs at all: see the file header.

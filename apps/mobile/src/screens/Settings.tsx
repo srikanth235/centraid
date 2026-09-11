@@ -35,6 +35,7 @@ import {
 } from "../lib/phone-link";
 import type { TunnelStatus } from "../lib/phone-link";
 import type { SettingsScreenProps } from "../navigation";
+import { usePlaceFrame } from "./home/usePlaceFrame";
 import AccessSection from "./settings/AccessSection";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
@@ -120,6 +121,7 @@ function defaultDeviceName(): string {
 export default function SettingsScreen({
   navigation,
 }: SettingsScreenProps<"SettingsHome">): React.JSX.Element {
+  const frame = usePlaceFrame("settings");
   const { colors } = useTheme();
   // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
   // title, and a status line it can host - none of which `Alert.alert` can
@@ -221,7 +223,7 @@ export default function SettingsScreen({
 
   return (
     <SystemPlace
-      onHome={() => navigation.getParent()?.goBack()}
+      {...frame}
       overlay={
         <>
           {confirmSheet}

@@ -29,8 +29,8 @@ import {
 } from "../lib/replica/thumbnail-pack";
 import { UPLOAD_DB_NAME, UploadQueue } from "../lib/upload/native-queue";
 import type { SettingsScreenProps } from "../navigation";
+import { usePlaceFrame } from "./home/usePlaceFrame";
 import { SHELL_TITLES } from "./shell-copy";
-import { useShellParent } from "./shell-places";
 
 interface ScopeStorage {
   vaultId: string;
@@ -48,7 +48,6 @@ const NO_OTHER_STORAGE: OtherPhoneStorage = {
 };
 
 export default function PhoneStorage({
-  navigation,
   route,
 }: SettingsScreenProps<"PhoneStorage">): React.JSX.Element {
   const { colors } = useTheme();
@@ -56,7 +55,7 @@ export default function PhoneStorage({
   // title, and a status line it can host - none of which `Alert.alert` can
   // draw.
   const { confirmDestructive, confirmSheet } = useConfirmDestructive();
-  const backTo = useShellParent();
+  const frame = usePlaceFrame("storage");
 
   const { scopes = [], session, refresh: refreshReplica } = useReplica();
   const [background, setBackground] =
@@ -145,8 +144,9 @@ export default function PhoneStorage({
   const thumbnailTotal = rows.reduce((sum, row) => sum + row.thumbnailBytes, 0);
   return (
     <SystemPlace
-      backTo={backTo}
-      onBack={() => navigation.goBack()}
+      // Draws only when this is the bottom of Settings' stack (reached from
+      // the band or Home's status line); pushed from Settings, the back key.
+      {...frame}
       overlay={confirmSheet}
       title="On this phone"
     >

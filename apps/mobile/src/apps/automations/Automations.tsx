@@ -27,6 +27,7 @@ import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { SystemPlace, featureOffEmpty } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { AutomationsScreenProps } from "../../navigation";
+import { usePlaceFrame } from "../../screens/home/usePlaceFrame";
 import {
   automationRowCopy,
   automationsHealth,
@@ -61,14 +62,15 @@ export default function AutomationsScreen({
   navigation,
   route,
 }: AutomationsScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("autos");
   const focusedRef = route.params?.automationRef;
   // Gate above both branches so a switched-off gateway never mounts those hooks.
   const { features } = useReplica();
   if (features && !features.automations)
     return (
       <SystemPlace
+        {...frame}
         empty={featureOffEmpty("automations")}
-        onHome={() => navigation.goBack()}
         title="Rules"
       />
     );
@@ -273,6 +275,7 @@ function AutomationsBody({
 function AutomationsPlace({
   navigation,
 }: AutomationsScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("autos");
   const { colors } = useTheme();
   const page = useAutomations();
   const scroll = useRef<ScrollView>(null);
@@ -325,7 +328,7 @@ function AutomationsPlace({
             : {})}
         />
       }
-      onHome={() => navigation.goBack()}
+      {...frame}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
       // No filled commit. Templates withheld while loading/error.

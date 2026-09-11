@@ -169,7 +169,9 @@ export type SettingsStackParamList = {
 };
 
 export type RootStackParamList = {
-  Home: undefined;
+  // `sheet` is More pressed on a place's band: the ONE Home opens its
+  // all-apps sheet on arrival and clears the param (R-NY-1, `band-navigation.ts`).
+  Home: { sheet?: "all-apps" } | undefined;
   Capture: { text?: string } | undefined;
   Scan:
     | {

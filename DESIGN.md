@@ -506,7 +506,7 @@ A mobile screen is one of six rooms, and nothing else ([apps/mobile/src/kit/room
 | `PushedPage` | `PlaceHeader`, back to the **named parent** (a computed `PlaceRef`, never a string), ≤1 trailing action | album, contact, document, settings sub-page |
 | `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, ≤1 ink button, status line hosted inside | confirm delete, pick date, add to album |
-| `SystemPlace` | `PlaceHeader` + `SectionBlock` / `RowsBlock` only, `HomeKey` in the header's leading slot | Settings, Vault, Copies, Backup health |
+| `SystemPlace` | `PlaceHeader` + `SectionBlock` / `RowsBlock` only; a place root draws the Home band at its foot and no `HomeKey`, a sub-page keeps `HomeKey` or its back key in the header's leading slot | Settings, Vault, Copies, Backup health |
 
 The room owns the header, the back control, search, the empty/loading/error states, the status host, selection and the gutter; the app supplies content and copy. A screen that hand-rolls any of those is a finding, not a variant.
 

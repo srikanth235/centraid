@@ -47,6 +47,11 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The Home band on this place (R-NY-1) is `usePlaceFrame`'s claim, held in
+// `place-frame.test.ts`; this file makes none about it.
+vi.mock(import("../../screens/home/usePlaceFrame"), () => ({
+  usePlaceFrame: () => ({}),
+}));
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");

@@ -581,6 +581,29 @@ describe(SystemPlace, () => {
     expect(labels).toContain("Back to your apps");
   });
 
+  it("draws the band at its foot and then no Home key (R-NY-1)", () => {
+    // A place root carries the frame's band; its Home tab is the way home, so
+    // a grid plate in the header as well would be two ways home on one page.
+    const container = render(
+      <SystemPlace
+        band={<div data-slot="band" />}
+        footer={<div data-slot="footer" />}
+        onHome={noop}
+        title="Activity"
+      >
+        <div data-slot="body" />
+      </SystemPlace>
+    );
+    const labels = nodesOf(container, "button").map((node) =>
+      node.getAttribute("aria-label")
+    );
+    expect(labels).not.toContain("Back to your apps");
+    const order = [...container.querySelectorAll("[data-slot]")].map(
+      (node) => (node as HTMLElement).dataset.slot
+    );
+    expect(order).toStrictEqual(["body", "footer", "band"]);
+  });
+
   it("hangs the place's own modals outside the scrolling body", () => {
     // Settings owns a confirm sheet and a full-screen pairing camera. Nested
     // in the scroller's content they would measure against the scroller;

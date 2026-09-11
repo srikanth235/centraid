@@ -13,8 +13,11 @@
 
 import { useNavigationState } from "@react-navigation/native";
 
-import { parentPlace, place } from "../kit/rooms";
-import type { PlaceRef } from "../kit/rooms";
+// `place.ts` directly, not the rooms barrel: the barrel draws the rooms, and
+// the band's frame rule (`home/place-frame.ts`) reads this table in tests that
+// never load a room.
+import { parentPlace, place } from "../kit/rooms/place";
+import type { PlaceRef } from "../kit/rooms/place";
 import { SHELL_TITLES } from "./shell-copy";
 
 /** Route name → the words on a back control; the nouns are `shell-copy`'s. */
