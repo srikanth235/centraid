@@ -5,7 +5,25 @@ import sharp from "sharp";
 
 import { toCss } from "@centraid/design";
 
-const root = path.resolve(import.meta.dir, "..");
+type BunBuildResult = { success: boolean; logs: unknown[] };
+type BunSpawnHandle = { exited: Promise<number> };
+declare const Bun: {
+  build: (options: {
+    entrypoints: string[];
+    outdir: string;
+    target: string;
+    format: string;
+    minify: boolean;
+    sourcemap: string;
+    naming: string;
+  }) => Promise<BunBuildResult>;
+  spawn: (
+    cmd: string[],
+    options: { cwd: string; stdout: "inherit"; stderr: "inherit" }
+  ) => BunSpawnHandle;
+};
+
+const root = path.resolve(import.meta.dirname, "..");
 const repo = path.resolve(root, "../..");
 const out = path.join(root, "dist");
 await rm(out, { recursive: true, force: true });

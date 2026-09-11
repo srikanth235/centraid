@@ -2,9 +2,6 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
-import os from "node:os";
-import path from "node:path";
-
 /**
  * One-off visual capture of the redesigned Automations surfaces, driven
  * through the real Electron renderer via Playwright's `_electron` driver
@@ -15,9 +12,15 @@ import path from "node:path";
  * primary; also grabs the overview in light to prove token theming.
  *
  * Not part of CI — a visual aid. Run with:
- *   bun run apps/desktop/scripts/screenshot-automations.mjs
+ *   bun run apps/desktop/scripts/screenshot-automations.ts
  */
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
+
 import { _electron } from "playwright";
+import type { Page, Route } from "playwright";
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
@@ -27,7 +30,21 @@ const OUT_DIR = path.join(__dirname, "out");
 const now = Date.now();
 const MIN = 60_000;
 
-const manifest = (over) => ({
+interface AutomationSeed {
+  id: string;
+  ref: string;
+  ownerApp: string;
+  name: string;
+  enabled: boolean;
+  triggers: { kind: string; expr?: string; id?: string }[];
+  prompt: string;
+  desc: string;
+  mcps?: string[];
+  apps?: string[];
+  onFailure?: unknown;
+}
+
+const manifest = (over: AutomationSeed) => ({
   name: over.name,
   version: "1.0.0",
   description: over.desc ?? "",
@@ -80,7 +97,7 @@ const AUTOS = [
   },
 ];
 
-const rowFor = (a) => ({
+const rowFor = (a: AutomationSeed) => ({
   id: a.id,
   dir: `/tmp/${a.id}`,
   name: a.name,
@@ -299,7 +316,7 @@ const TEMPLATES = [
 // that sets `access-control-allow-origin: *` (mirroring the in-process
 // gateway) and rewrite just the automation/template requests to it via
 // `route.continue({ url })`. Boot-time calls keep hitting the real gateway.
-function json(res, body, status = 200) {
+function json(res: ServerResponse, body: unknown, status = 200): void {
   res.statusCode = status;
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("content-type", "application/json");
@@ -307,63 +324,79 @@ function json(res, body, status = 200) {
 }
 
 /** Fixture run → native turn record (the ledger's `turnId` naming). */
-const asTurn = (run) => ({ ...run, turnId: run.runId });
+const asTurn = (run: (typeof RUNS)[number]) => ({ ...run, turnId: run.runId });
 /** Fixture node → native turn item. */
-const itemsFor = (turnId) =>
-  (NODES[turnId] ?? []).map((node) => ({
+const NODES_BY_ID: Record<string, (typeof NODES)[keyof typeof NODES]> = NODES;
+const itemsFor = (turnId: string | null) =>
+  (turnId === null ? [] : (NODES_BY_ID[turnId] ?? [])).map((node) => ({
     ...node,
     itemId: node.nodeId,
     turnId: node.runId,
   }));
 
 async function startSeedServer() {
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    const p = url.pathname;
-    if (p.endsWith("/centraid/_automations")) return json(res, { rows: ROWS });
-    if (p.endsWith("/_automations/read")) {
-      const ref = url.searchParams.get("ref");
-      return json(res, { row: ROWS.find((r) => r.ref === ref) ?? null });
-    }
-    // The client speaks the native turn ledger (`turns` / `turn` /
-    // `turn/items` / `turn/events`); the fixtures above still use the older
-    // `runId`/`nodeId` field names, so map them here rather than rewriting
-    // every literal (#541).
-    if (p.endsWith("/_automations/turns")) {
-      const ref = url.searchParams.get("ref");
-      const rows = ref ? RUNS.filter((r) => r.automationId === ref) : RUNS;
-      return json(res, { turns: rows.map(asTurn) });
-    }
-    if (p.endsWith("/_automations/turn/items")) {
-      return json(res, { items: itemsFor(url.searchParams.get("turnId")) });
-    }
-    // SSE — return a non-event 404 so the renderer falls back to a one-shot
-    // ledger read. Every fixture turn is settled, so nothing rejoins.
-    if (p.endsWith("/_automations/turn/events"))
-      return json(res, { error: "no stream" }, 404);
-    if (p.endsWith("/_automations/turn")) {
-      const ref = url.searchParams.get("ref");
-      const turnId = url.searchParams.get("turnId");
-      const found = turnId
-        ? RUNS.find((r) => r.runId === turnId)
-        : RUNS.filter((r) => r.automationId === ref).sort(
-            (a, b) => b.startedAt - a.startedAt
-          )[0];
-      const body = { turn: found ? asTurn(found) : null };
-      if (url.searchParams.get("expand") === "items") {
-        body.items = found ? itemsFor(found.runId) : [];
+  const server = http.createServer(
+    (req: IncomingMessage, res: ServerResponse) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      const p = url.pathname;
+      if (p.endsWith("/centraid/_automations"))
+        return json(res, { rows: ROWS });
+      if (p.endsWith("/_automations/read")) {
+        const ref = url.searchParams.get("ref");
+        return json(res, { row: ROWS.find((r) => r.ref === ref) ?? null });
       }
-      return json(res, body);
+      // The client speaks the native turn ledger (`turns` / `turn` /
+      // `turn/items` / `turn/events`); the fixtures above still use the older
+      // `runId`/`nodeId` field names, so map them here rather than rewriting
+      // every literal (#541).
+      if (p.endsWith("/_automations/turns")) {
+        const ref = url.searchParams.get("ref");
+        const rows = ref ? RUNS.filter((r) => r.automationId === ref) : RUNS;
+        return json(res, { turns: rows.map(asTurn) });
+      }
+      if (p.endsWith("/_automations/turn/items")) {
+        return json(res, { items: itemsFor(url.searchParams.get("turnId")) });
+      }
+      // SSE — return a non-event 404 so the renderer falls back to a one-shot
+      // ledger read. Every fixture turn is settled, so nothing rejoins.
+      if (p.endsWith("/_automations/turn/events"))
+        return json(res, { error: "no stream" }, 404);
+      if (p.endsWith("/_automations/turn")) {
+        const ref = url.searchParams.get("ref");
+        const turnId = url.searchParams.get("turnId");
+        const found = turnId
+          ? RUNS.find((r) => r.runId === turnId)
+          : RUNS.filter((r) => r.automationId === ref).sort(
+              (a, b) => b.startedAt - a.startedAt
+            )[0];
+        const body: {
+          turn: ReturnType<typeof asTurn> | null;
+          items?: unknown;
+        } = { turn: found ? asTurn(found) : null };
+        if (url.searchParams.get("expand") === "items") {
+          body.items = found ? itemsFor(found.runId) : [];
+        }
+        return json(res, body);
+      }
+      if (p.endsWith("/_automations/turn-now")) {
+        const first = RUNS[0];
+        if (first === undefined) return json(res, { turnId: null });
+        return json(res, { turnId: first.runId });
+      }
+      if (p.endsWith("/_templates")) return json(res, TEMPLATES);
+      return json(res, {});
     }
-    if (p.endsWith("/_automations/turn-now"))
-      return json(res, { turnId: RUNS[0].runId });
-    if (p.endsWith("/_templates")) return json(res, TEMPLATES);
-    return json(res, {});
+  );
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      resolve();
+    });
   });
-  await new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const { port } = server.address();
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("seed server did not bind a TCP port");
+  }
+  const { port } = address satisfies AddressInfo;
   return {
     base: `http://127.0.0.1:${port}`,
     close: () =>
@@ -373,8 +406,8 @@ async function startSeedServer() {
   };
 }
 
-async function routeGateway(page, base) {
-  const redirect = (route) => {
+async function routeGateway(page: Page, base: string): Promise<void> {
+  const redirect = (route: Route): void => {
     const u = new URL(route.request().url());
     route.continue({ url: base + u.pathname + u.search });
   };
@@ -382,7 +415,7 @@ async function routeGateway(page, base) {
   await page.route("**/centraid/_templates**", redirect);
 }
 
-async function shot(page, name) {
+async function shot(page: Page, name: string): Promise<void> {
   await page.waitForTimeout(450);
   const file = path.join(OUT_DIR, `${name}.png`);
   await page.screenshot({ path: file });

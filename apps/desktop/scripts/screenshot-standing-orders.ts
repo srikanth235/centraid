@@ -20,7 +20,7 @@ import { DatabaseSync } from "node:sqlite";
  * caller can read it back.
  *
  * Not part of CI — pure visual-regression aid. Run with:
- *   bun run scripts/screenshot-standing-orders.mjs
+ *   bun run scripts/screenshot-standing-orders.ts
  */
 import { _electron } from "playwright";
 
@@ -123,7 +123,7 @@ async function main() {
   console.log(`wrote ${OUT_FILE}`);
 }
 
-function seedAutomations(dbFile) {
+function seedAutomations(dbFile: string): void {
   const db = new DatabaseSync(dbFile);
   db.exec("PRAGMA foreign_keys=ON");
   // Bring the DB to migration v2 the same way the runtime does on first
@@ -227,7 +227,7 @@ function seedAutomations(dbFile) {
   db.close();
 }
 
-async function seedAppDir(appsDir, id) {
+async function seedAppDir(appsDir: string, id: string): Promise<void> {
   const dir = path.join(appsDir, id);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(

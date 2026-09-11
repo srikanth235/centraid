@@ -16,7 +16,13 @@ if (!m) {
   );
   process.exit(1);
 }
-const version = m.groups.version;
+const version = m.groups?.version;
+if (version === undefined) {
+  console.error(
+    "stamp-sw-version: could not parse SERVICE_WORKER_VERSION from sw-version.ts"
+  );
+  process.exit(1);
+}
 const swPath = path.join(root, "public/sw.js");
 const sw = readFileSync(swPath, "utf8");
 // Single-quoted assignment so oxfmt --check stays clean after stamp (CI static).

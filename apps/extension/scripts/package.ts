@@ -1,12 +1,23 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
-const root = path.resolve(import.meta.dir, "..");
+declare const Bun: {
+  spawn: (
+    cmd: string[],
+    options: { cwd: string; stdout: "inherit"; stderr: "inherit" }
+  ) => { exited: Promise<number> };
+};
+
+const root = path.resolve(import.meta.dirname, "..");
 const artifacts = path.join(root, "artifacts");
 await rm(artifacts, { recursive: true, force: true });
 await mkdir(artifacts, { recursive: true });
 
-async function zip(name, cwd, entries) {
+async function zip(
+  name: string,
+  cwd: string,
+  entries: string[]
+): Promise<void> {
   const output = path.join(artifacts, name);
   const process = Bun.spawn(["zip", "-q", "-r", output, ...entries], {
     cwd,

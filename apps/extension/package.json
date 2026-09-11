@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun run scripts/build.mjs",
-    "package": "bun run build && bun run scripts/package.mjs",
+    "build": "bun run scripts/build.ts",
+    "package": "bun run build && bun run scripts/package.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
     "@centraid/core": "workspace:*",

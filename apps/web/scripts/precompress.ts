@@ -17,7 +17,7 @@ const COMPRESSIBLE = new Set([
 ]);
 const MIN_BYTES = 1024;
 
-async function filesUnder(dir) {
+async function filesUnder(dir: string): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   return (
     await Promise.all(
@@ -54,6 +54,6 @@ const emitted = (
       return 2;
     })
   )
-).reduce((sum, count) => sum + count, 0);
+).reduce((sum: number, count: number) => sum + count, 0);
 
 process.stdout.write(`[precompress] emitted ${emitted} static sidecars\n`);
