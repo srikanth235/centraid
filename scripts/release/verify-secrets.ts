@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+/**
+ * Report which release secret *names* are present in the environment.
+ * Never prints secret values (issue #501 / #512 / docs/enrollment.md).
+ *
+ *   node scripts/release/verify-secrets.ts [--strict]
+ */
+
+const DESKTOP_APPLE = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"];
+const DESKTOP_AZURE = [
+  "AZURE_TENANT_ID",
+  "AZURE_CLIENT_ID",
+  "AZURE_CLIENT_SECRET",
+  "AZURE_CODE_SIGNING_ACCOUNT",
+  "AZURE_CERT_PROFILE",
+];
+const MOBILE = [
+  "EXPO_TOKEN",
+  "EAS_PROJECT_ID",
+  "CENTRAID_UPLOAD_STORE_FILE",
+  "CENTRAID_UPLOAD_STORE_PASSWORD",
+  "CENTRAID_UPLOAD_KEY_ALIAS",
+  "CENTRAID_UPLOAD_KEY_PASSWORD",
+];
+const WEB = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"];
+const GATEWAY_NPM = ["NPM_TOKEN"];
+/** GHCR uses GITHUB_TOKEN + packages:write in Actions; local probe is informational. */
+const GATEWAY_IMAGE = ["GITHUB_TOKEN"];
+
+const groups = {
+  "desktop-apple": DESKTOP_APPLE,
+  "desktop-azure": DESKTOP_AZURE,
+  mobile: MOBILE,
+  web: WEB,
+  "gateway-npm": GATEWAY_NPM,
+  "gateway-image": GATEWAY_IMAGE,
+};
+
+const strict = process.argv.includes("--strict");
+const report: Record<
+  string,
+  {
+    present: number;
+    total: number;
+    ready: boolean;
+    secrets: Record<string, string>;
+  }
+> = {};
+let missingRequired = 0;
+
+for (const [group, names] of Object.entries(groups)) {
+  const rows: Record<string, string> = {};
+  let present = 0;
+  for (const name of names) {
+    const ok = Boolean(
+      process.env[name] && String(process.env[name]).length > 0
+    );
+    rows[name] = ok ? "present" : "absent";
+    if (ok) present++;
+  }
+  report[group] = {
+    present,
+    total: names.length,
+    ready: present === names.length,
+    secrets: rows,
+  };
+}
+
+console.log(
+  JSON.stringify({ note: "values never printed", groups: report }, null, 2)
+);
+
+if (strict) {
+  for (const g of Object.values(report)) {
+    if (!g.ready) missingRequired++;
+  }
+  if (missingRequired > 0) {
+    console.error(
+      `${missingRequired} secret group(s) incomplete — enrollment residual (docs/enrollment.md)`
+    );
+    process.exit(1);
+  }
+}
+
+process.exit(0);

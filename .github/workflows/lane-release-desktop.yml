@@ -197,18 +197,18 @@ jobs:
       - name: SBOM + provenance (deterministic — the timestamp is the commit's)
         run: |
           set -euo pipefail
-          node scripts/security/supply-chain.mjs sbom --out release-artifacts/sbom.cdx.json
-          node scripts/security/supply-chain.mjs verify-sbom --sbom release-artifacts/sbom.cdx.json
-          node scripts/security/supply-chain.mjs provenance \
+          node scripts/security/supply-chain.ts sbom --out release-artifacts/sbom.cdx.json
+          node scripts/security/supply-chain.ts verify-sbom --sbom release-artifacts/sbom.cdx.json
+          node scripts/security/supply-chain.ts provenance \
             --artifacts release-artifacts --out release-artifacts/provenance.intoto.json
-          node scripts/security/supply-chain.mjs verify-provenance \
+          node scripts/security/supply-chain.ts verify-provenance \
             --artifacts release-artifacts --statement release-artifacts/provenance.intoto.json
       - name: Signed release manifest (guarded skip until a release key is enrolled)
         env:
           CENTRAID_RELEASE_SIGNING_KEY: ${{ secrets.CENTRAID_RELEASE_SIGNING_KEY }}
         run: |
           VER="${GITHUB_REF_NAME#v}"
-          node scripts/security/supply-chain.mjs manifest --artifacts release-artifacts --version "$VER"
+          node scripts/security/supply-chain.ts manifest --artifacts release-artifacts --version "$VER"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: supply-chain
@@ -228,7 +228,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
-          # Runs `node scripts/release/changelog-to-github.mjs` only — no
+          # Runs `node scripts/release/changelog-to-github.ts` only — no
           # node_modules needed, and this job had no install before #557.
           install: "false"
       - name: Detect signing enrollment
@@ -247,7 +247,7 @@ jobs:
         run: |
           VER="${GITHUB_REF_NAME#v}"
           VER="${VER%-beta.*}"
-          node scripts/release/changelog-to-github.mjs --version "$VER" --out /tmp/release-body.md || \
+          node scripts/release/changelog-to-github.ts --version "$VER" --out /tmp/release-body.md || \
             echo "Centraid $GITHUB_REF_NAME" > /tmp/release-body.md
           if [ "${{ steps.sign.outputs.enrolled }}" != "true" ]; then
             {
@@ -280,7 +280,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
-          # `node scripts/release/restamp-rollout.mjs` + gh only.
+          # `node scripts/release/restamp-rollout.ts` + gh only.
           install: "false"
       - name: I8 re-stamp latest*.yml on release
         env:
@@ -301,7 +301,7 @@ jobs:
           }
           for f in /tmp/restamp/latest*.yml; do
             [ -f "$f" ] || continue
-            node scripts/release/restamp-rollout.mjs --hours "$HOURS" --yml "$f"
+            node scripts/release/restamp-rollout.ts --hours "$HOURS" --yml "$f"
             gh release upload "$TAG" "$f" --clobber
           done
           echo "Re-stamped rollout window to ${HOURS}h on $TAG (releaseDate adjusted; D5 stable names preserved)"

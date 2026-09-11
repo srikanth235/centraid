@@ -114,7 +114,7 @@ export function deriveJourneys(roster, suites = readSuiteRunners(roster)) {
 /** The mutation seed catalog, as `{id, label, cwd, config}` rows. */
 export async function deriveSeeds() {
   const { MUTATION_SEEDS } = await import(
-    path.join(ROOT, "scripts/mutation/seeds.mjs")
+    path.join(ROOT, "scripts/mutation/seeds.ts")
   );
   return MUTATION_SEEDS.map((seed) => ({
     id: seed.id,
@@ -127,7 +127,7 @@ export async function deriveSeeds() {
 /** The fuzz target catalog, as `{id, corpus}` rows. */
 export async function deriveFuzzTargets() {
   const { FUZZ_TARGETS } = await import(
-    path.join(ROOT, "scripts/fuzz/targets.mjs")
+    path.join(ROOT, "scripts/fuzz/targets.ts")
   );
   return FUZZ_TARGETS.map((target) => ({
     id: target.id,

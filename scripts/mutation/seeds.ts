@@ -1,0 +1,477 @@
+/**
+ * Mutation seed catalog (#532). Shared by the nightly/per-PR runner.
+ */
+
+export interface MutationSeed {
+  id: string;
+  label: string;
+  cwd: string;
+  config: string;
+  report: string;
+  watch: string[];
+}
+
+/**
+ * Paths that force every seed to re-run on the per-PR affected lane.
+ *
+ * WATCH THE MUTATION CONFIGURATION, NOT THE WORLD (#892 Phase 1). This list held
+ * `package.json` and `bun.lock`, which meant any dependency bump — and any
+ * script edit — ran all sixteen Stryker seeds inside the PR loop, at 19m27s. That
+ * is what made `mutation-pr` bimodal: 4m30s of build and zero mutation, or the
+ * whole catalog, with nothing in between and no relation to what the diff
+ * actually endangered.
+ *
+ * The three entries left are the ones that change what mutation MEANS: the
+ * runner, the catalog, and the floors. A lockfile change can of course move a
+ * score — that is what `mutation-canary` (per merge) and the nightly full run
+ * are for, neither of which has a human waiting on it.
+ */
+export const MUTATION_GLOBAL_WATCH = [
+  "scripts/mutation/run.ts",
+  "scripts/mutation/seeds.ts",
+  // A SECTION, not a file (#915 Wave 4). The floors moved into the merged
+  // `tests/floors.json`, which also holds the coverage floors and the
+  // minimumTests mirror — watching that PATH would have run all 24 seeds on
+  // every coverage-floor edit, which is exactly the over-triggering the list
+  // above was trimmed to avoid. `selectAffectedSeeds` is handed
+  // `tests/floors.json#<section>` tokens for the sections that actually
+  // differ from the merge base, so only a mutation-floor edit is global.
+  "tests/floors.json#mutation",
+];
+
+export const MUTATION_SEEDS: MutationSeed[] = [
+  {
+    id: "packages/vault",
+    label: "vault",
+    cwd: "packages/vault",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/vault-report.json",
+    watch: [
+      "packages/vault/src/blob/custody-proven.ts",
+      "packages/vault/src/blob/custody-properties.test.ts",
+      "packages/vault/stryker.config.mjs",
+      "packages/vault/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/client/src/replica",
+    label: "client-replica",
+    cwd: "packages/client",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/client-replica-report.json",
+    watch: [
+      "packages/client/src/replica/intents.ts",
+      "packages/client/src/replica/payload-hash.ts",
+      "packages/client/src/replica/intent-idempotency-properties.test.ts",
+      "packages/client/src/replica/intents.contract.test.ts",
+      "packages/client/src/replica/payload-hash-identity.test.ts",
+      "packages/client/src/replica/payload-hash-properties.test.ts",
+      "packages/client/src/replica/payload-hash.test.ts",
+      "packages/client/stryker.config.mjs",
+      "packages/client/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/server/src/automation",
+    label: "automation",
+    cwd: "packages/server",
+    config: "stryker.automation.config.mjs",
+    report: "artifacts/mutation/automation-report.json",
+    watch: [
+      "packages/server/src/automation/fire/scheduler-ledger.ts",
+      "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts",
+      "packages/server/stryker.automation.config.mjs",
+      "packages/server/vitest.automation.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/backup",
+    label: "backup",
+    cwd: "packages/backup",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/backup-report.json",
+    watch: [
+      "packages/backup/src/crypto.ts",
+      "packages/backup/src/wal-format.ts",
+      "packages/backup/src/crypto-properties.test.ts",
+      "packages/backup/src/wal-address-properties.test.ts",
+      "packages/backup/stryker.config.mjs",
+      "packages/backup/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/core/src/blob",
+    label: "blob-format",
+    cwd: "packages/core",
+    config: "stryker.blob.config.mjs",
+    report: "artifacts/mutation/blob-format-report.json",
+    watch: [
+      "packages/core/src/blob/cbsf.ts",
+      "packages/core/src/blob/cbsf-properties.test.ts",
+      "packages/core/src/blob/cbsf.test.ts",
+      "packages/core/stryker.blob.config.mjs",
+      "packages/core/vitest.blob.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/core/src/protocol",
+    label: "protocol",
+    cwd: "packages/core",
+    config: "stryker.protocol.config.mjs",
+    report: "artifacts/mutation/protocol-report.json",
+    watch: [
+      "packages/core/src/protocol/handshake.ts",
+      "packages/core/src/protocol/handshake-properties.test.ts",
+      "packages/core/src/protocol/handshake.test.ts",
+      "packages/core/stryker.protocol.config.mjs",
+      "packages/core/vitest.protocol.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/tunnel",
+    label: "tunnel",
+    cwd: "packages/tunnel",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/tunnel-report.json",
+    watch: [
+      "packages/tunnel/src/protocol.ts",
+      "packages/tunnel/src/wire-properties.test.ts",
+      "packages/tunnel/stryker.config.mjs",
+      "packages/tunnel/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/server/src/engine",
+    label: "app-engine",
+    cwd: "packages/server",
+    config: "stryker.engine.config.mjs",
+    report: "artifacts/mutation/app-engine-report.json",
+    watch: [
+      "packages/server/src/engine/pricing/cost.ts",
+      "packages/server/src/engine/pricing/cost-properties.test.ts",
+      "packages/server/stryker.engine.config.mjs",
+      "packages/server/vitest.engine.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/server",
+    label: "gateway",
+    cwd: "packages/server",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/gateway-report.json",
+    watch: [
+      "packages/server/src/cli/allowed-hosts.ts",
+      "packages/server/src/cli/allowed-hosts.test.ts",
+      "packages/server/src/cli/allowed-hosts-properties.test.ts",
+      "packages/server/stryker.config.mjs",
+      "packages/server/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/server/src/acp",
+    label: "agent-runtime",
+    cwd: "packages/server",
+    config: "stryker.acp.config.mjs",
+    report: "artifacts/mutation/agent-runtime-report.json",
+    watch: [
+      "packages/server/src/acp/low-priority.ts",
+      "packages/server/src/acp/low-priority.test.ts",
+      "packages/server/src/acp/low-priority-properties.test.ts",
+      "packages/server/stryker.acp.config.mjs",
+      "packages/server/vitest.acp.mutation.config.ts",
+    ],
+  },
+  // #656 Layer 3 — the remaining deeply-gated engine packages. Same rule as
+  // above: each mutate set is pure logic a property or contract test already
+  // defends (see each package's stryker.config.mjs for why those paths, and
+  // what was deliberately left out).
+  {
+    id: "packages/blueprints",
+    label: "blueprints",
+    cwd: "packages/blueprints",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/blueprints-report.json",
+    watch: [
+      "packages/blueprints/src/app-meta.ts",
+      "packages/blueprints/src/app-rewrites.ts",
+      "packages/blueprints/src/app-meta.test.ts",
+      "packages/blueprints/src/app-meta-properties.test.ts",
+      "packages/blueprints/src/app-rewrites.test.ts",
+      "packages/blueprints/stryker.config.mjs",
+      "packages/blueprints/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/core/src/time",
+    label: "time-engine",
+    cwd: "packages/core",
+    config: "stryker.time.config.mjs",
+    report: "artifacts/mutation/time-engine-report.json",
+    watch: [
+      "packages/core/src/time/recurrence.ts",
+      "packages/core/src/time/rrule-support.ts",
+      "packages/core/src/time/timezone.ts",
+      "packages/core/src/time/recurrence.test.ts",
+      "packages/core/src/time/rrule-support.test.ts",
+      "packages/core/src/time/recurrence-properties.test.ts",
+      "packages/core/src/time/recurrence-lifecycle-properties.test.ts",
+      "packages/core/src/time/timezone-properties.test.ts",
+      "packages/core/stryker.time.config.mjs",
+      "packages/core/vitest.time.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/cli",
+    label: "cli",
+    cwd: "packages/cli",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/cli-report.json",
+    watch: [
+      "packages/cli/src/auth.ts",
+      "packages/cli/src/cli.ts",
+      "packages/cli/src/auth.test.ts",
+      "packages/cli/src/auth.precedence.test.ts",
+      "packages/cli/src/cli.branches.test.ts",
+      "packages/cli/src/cli.contract.test.ts",
+      "packages/cli/stryker.config.mjs",
+      "packages/cli/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/design",
+    label: "design",
+    cwd: "packages/design",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/design-report.json",
+    watch: [
+      "packages/design/src/css.ts",
+      "packages/design/src/typography.ts",
+      "packages/design/src/tile.ts",
+      "packages/design/src/css-properties.test.ts",
+      "packages/design/src/tile-properties.test.ts",
+      "packages/design/stryker.config.mjs",
+      "packages/design/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "apps/oauth-worker",
+    label: "oauth-worker",
+    cwd: "apps/oauth-worker",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/oauth-worker-report.json",
+    watch: [
+      "apps/oauth-worker/src/worker.ts",
+      "apps/oauth-worker/src/index.test.ts",
+      "apps/oauth-worker/src/worker-guards.test.ts",
+      "apps/oauth-worker/src/mutation-range.test.ts",
+      "apps/oauth-worker/stryker.config.mjs",
+      "apps/oauth-worker/vitest.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/model-runtime",
+    label: "model-runtime",
+    cwd: "packages/model-runtime",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/model-runtime-report.json",
+    watch: [
+      "packages/model-runtime/src/tokenizer.ts",
+      "packages/model-runtime/src/ctc.ts",
+      "packages/model-runtime/src/nms.ts",
+      "packages/model-runtime/src/tokenizer.test.ts",
+      "packages/model-runtime/src/ctc.test.ts",
+      "packages/model-runtime/src/nms.test.ts",
+      "packages/model-runtime/stryker.config.mjs",
+      "packages/model-runtime/vitest.mutation.config.ts",
+    ],
+  },
+  // #839 W2-1 — the blueprint APP layer and the phone. Everything above this
+  // line is an engine package; nothing below the shell's own boundary was
+  // measured at all, which meant the room a member actually stands in (which
+  // rows a route paints, which of three outcomes a write is narrated as, what
+  // a pending row says while the vault is quiet) had no adversary.
+  //
+  // Every mutate set here is browser-side TypeScript with NO DOM in it, run
+  // under a plain node vitest project on purpose: Stryker's vitest runner
+  // dry-runs a jsdom project as "No tests were executed", so a suite carrying
+  // the `@vitest-environment jsdom` docblock defends nothing in this lane.
+  // Each seed's stryker config says what it leaves out and why.
+  {
+    id: "packages/blueprints/apps/tasks",
+    label: "tasks",
+    cwd: "packages/blueprints",
+    config: "stryker.tasks.config.mjs",
+    report: "artifacts/mutation/tasks-report.json",
+    watch: [
+      "packages/blueprints/apps/tasks/logic.ts",
+      "packages/blueprints/apps/tasks/when.ts",
+      "packages/blueprints/apps/tasks/format.ts",
+      "packages/blueprints/apps/tasks/shelves.ts",
+      "packages/blueprints/apps/tasks/logic.test.ts",
+      "packages/blueprints/apps/tasks/format.test.ts",
+      "packages/blueprints/apps/tasks/routes.test.ts",
+      "packages/blueprints/apps/tasks/view-copy.test.ts",
+      "packages/blueprints/stryker.tasks.config.mjs",
+      "packages/blueprints/vitest.tasks.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/blueprints/apps/notes",
+    label: "notes",
+    cwd: "packages/blueprints",
+    config: "stryker.notes.config.mjs",
+    report: "artifacts/mutation/notes-report.json",
+    watch: [
+      "packages/blueprints/apps/notes/logic.ts",
+      "packages/blueprints/apps/notes/format.ts",
+      "packages/blueprints/apps/notes/shelves.ts",
+      "packages/blueprints/apps/notes/send-to-tasks.ts",
+      "packages/blueprints/apps/notes/powerbox.ts",
+      "packages/blueprints/apps/notes/commonmark.ts",
+      "packages/blueprints/apps/notes/logic.test.ts",
+      "packages/blueprints/apps/notes/logic-commands.test.ts",
+      "packages/blueprints/apps/notes/logic-panes.test.ts",
+      "packages/blueprints/apps/notes/logic.test-fixtures.ts",
+      "packages/blueprints/apps/notes/format.test.ts",
+      "packages/blueprints/apps/notes/shelves.test.ts",
+      "packages/blueprints/apps/notes/send-to-tasks.test.ts",
+      "packages/blueprints/apps/notes/powerbox.test.ts",
+      "packages/blueprints/apps/notes/commonmark.test.ts",
+      "packages/blueprints/stryker.notes.config.mjs",
+      "packages/blueprints/vitest.notes.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/blueprints/apps/agenda",
+    label: "agenda",
+    cwd: "packages/blueprints",
+    config: "stryker.agenda.config.mjs",
+    report: "artifacts/mutation/agenda-report.json",
+    watch: [
+      "packages/blueprints/apps/agenda/logic.ts",
+      "packages/blueprints/apps/agenda/edits.ts",
+      "packages/blueprints/apps/agenda/views.ts",
+      "packages/blueprints/apps/agenda/day-context.ts",
+      "packages/blueprints/apps/agenda/format.ts",
+      "packages/blueprints/apps/agenda/format-locale.test.ts",
+      "packages/blueprints/apps/agenda/logic.test.ts",
+      "packages/blueprints/apps/agenda/logic-search.test.ts",
+      "packages/blueprints/apps/agenda/logic.test-fixtures.ts",
+      "packages/blueprints/apps/agenda/edits.test.ts",
+      "packages/blueprints/apps/agenda/views.test.ts",
+      "packages/blueprints/apps/agenda/day-context.test.ts",
+      "packages/blueprints/apps/agenda/view-copy.test.ts",
+      "packages/blueprints/stryker.agenda.config.mjs",
+      "packages/blueprints/vitest.agenda.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/blueprints/apps/_shared/pending-overlay",
+    label: "pending-overlay",
+    cwd: "packages/blueprints",
+    config: "stryker.pending-overlay.config.mjs",
+    report: "artifacts/mutation/pending-overlay-report.json",
+    watch: [
+      "packages/blueprints/apps/_shared/pending-overlay.ts",
+      "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "packages/blueprints/apps/_shared/pending-overlay-law.test.ts",
+      "packages/blueprints/apps/_shared/pending-overlay-presentation.test.ts",
+      "packages/blueprints/stryker.pending-overlay.config.mjs",
+      "packages/blueprints/vitest.pending-overlay.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/blueprints/apps/_shared/selection",
+    label: "selection",
+    cwd: "packages/blueprints",
+    config: "stryker.selection.config.mjs",
+    report: "artifacts/mutation/selection-report.json",
+    watch: [
+      "packages/blueprints/apps/_shared/selection-engine.ts",
+      "packages/blueprints/apps/_shared/selection-engine.test.ts",
+      "packages/blueprints/stryker.selection.config.mjs",
+      "packages/blueprints/vitest.selection.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/blueprints/apps/_shared/triage",
+    label: "triage",
+    cwd: "packages/blueprints",
+    config: "stryker.triage.config.mjs",
+    report: "artifacts/mutation/triage-report.json",
+    watch: [
+      "packages/blueprints/apps/_shared/triage-session.ts",
+      "packages/blueprints/apps/_shared/triage-session.test.ts",
+      "packages/blueprints/stryker.triage.config.mjs",
+      "packages/blueprints/vitest.triage.mutation.config.ts",
+    ],
+  },
+  {
+    id: "packages/blueprints/apps/_shared/search-scaffold",
+    label: "search-scaffold",
+    cwd: "packages/blueprints",
+    config: "stryker.search-scaffold.config.mjs",
+    report: "artifacts/mutation/search-scaffold-report.json",
+    watch: [
+      "packages/blueprints/apps/_shared/search-scaffold.ts",
+      "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "packages/blueprints/stryker.search-scaffold.config.mjs",
+      "packages/blueprints/vitest.search-scaffold.mutation.config.ts",
+    ],
+  },
+  // #864 W2 — the render boundary the whole shell trusts. `untrusted.ts` is
+  // the display-text scrubber and the four dynamic URL sinks; its only prior
+  // suite runs under jsdom, which Stryker's vitest runner cannot measure (it
+  // dry-runs a jsdom project as "No tests were executed"), so a node-side
+  // property suite is what lets this seed exist at all. The config says what it
+  // mutates and why.
+  {
+    id: "packages/blueprints/apps/_shared/untrusted",
+    label: "untrusted",
+    cwd: "packages/blueprints",
+    config: "stryker.untrusted.config.mjs",
+    report: "artifacts/mutation/untrusted-report.json",
+    watch: [
+      "packages/blueprints/apps/_shared/untrusted.ts",
+      "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "packages/blueprints/stryker.untrusted.config.mjs",
+      "packages/blueprints/vitest.untrusted.mutation.config.ts",
+    ],
+  },
+  {
+    id: "apps/mobile",
+    label: "mobile",
+    cwd: "apps/mobile",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/mobile-report.json",
+    watch: [
+      "apps/mobile/src/lib/backoff.ts",
+      "apps/mobile/src/lib/coalesce.ts",
+      "apps/mobile/src/lib/conditional-fetch.ts",
+      "apps/mobile/src/lib/notifications-plan.ts",
+      "apps/mobile/src/lib/phone-link-core.ts",
+      "apps/mobile/src/lib/backoff.test.ts",
+      "apps/mobile/src/lib/coalesce.test.ts",
+      "apps/mobile/src/lib/conditional-fetch.test.ts",
+      "apps/mobile/src/lib/notification-model.test.ts",
+      "apps/mobile/src/lib/notifications-plan.test.ts",
+      "apps/mobile/src/lib/phone-link.test.ts",
+      // #892 Phase 2 — the two trees the #890 audit found undefended. The
+      // watch list is what makes a seed AFFECTED by a diff, so widening the
+      // mutate set without widening this would leave the new modules measured
+      // only by the nightly and the per-merge canary — which is precisely the
+      // gap that let the `transfer-policy` scope loop and the replica orphan
+      // check ship as tests that could not fail.
+      "apps/mobile/src/lib/upload/transfer-policy.ts",
+      "apps/mobile/src/lib/upload/transfer-policy.test.ts",
+      "apps/mobile/src/lib/upload/reconcile-gate.ts",
+      "apps/mobile/src/lib/upload/reconcile-gate.test.ts",
+      "apps/mobile/src/lib/replica/background-scopes.ts",
+      "apps/mobile/src/lib/replica/background-scopes.test.ts",
+      "apps/mobile/src/lib/replica/mobile-intent-id.ts",
+      "apps/mobile/src/lib/replica/mobile-intent-id.test.ts",
+      "apps/mobile/stryker.config.mjs",
+      "apps/mobile/vitest.mutation.config.ts",
+    ],
+  },
+];

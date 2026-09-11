@@ -200,9 +200,9 @@ if (dastJobIdx === -1) {
   errors.push("e2e.yml missing dast-scan job");
 } else {
   const dastChunk = e2eCode.slice(dastJobIdx, dastJobIdx + 1_800);
-  if (!dastChunk.includes("node scripts/security/dast-scan.mjs")) {
+  if (!dastChunk.includes("node scripts/security/dast-scan.ts")) {
     errors.push(
-      "dast-scan job must run the lane via node scripts/security/dast-scan.mjs"
+      "dast-scan job must run the lane via node scripts/security/dast-scan.ts"
     );
   }
   if (/path:\s*artifacts\/dast\/?/u.test(dastChunk)) {

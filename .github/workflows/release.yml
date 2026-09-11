@@ -105,7 +105,7 @@ jobs:
   # newest" would refuse it.
   #
   # The same rule is enforced BEFORE the tag exists, by
-  # `scripts/release/prepare.mjs` (and `release:classify --require-candidate`),
+  # `scripts/release/prepare.ts` (and `release:classify --require-candidate`),
   # so the normal way to meet it is to be told at prepare time rather than to
   # discover it from a red release run. See docs/release.md.
   require-candidate:

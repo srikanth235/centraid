@@ -5,6 +5,12 @@
   "exclude": [
     "fixtures/**",
     "refresh-pricing-snapshot.ts",
-    "perf/app-waterfall.run.ts"
+    "perf/app-waterfall.run.ts",
+    "perf/app-waterfall.ts",
+    "perf/app-waterfall.test.ts",
+    "perf/send-to-first-token.ts",
+    "release/classify.test.ts",
+    "release/publish-guards.test.ts",
+    "release/sync-versions.test.ts"
   ]
 }
