@@ -161,6 +161,19 @@ describe(PlaceBand, () => {
     expect(band()).toBeNull();
   });
 
+  it("draws nothing on a place pushed from a place (Vault → Copies)", () => {
+    mount(
+      "devices",
+      navigator([
+        home,
+        { key: "data", name: "Data" },
+        { key: "dev", name: "Devices" },
+      ]),
+      "dev"
+    );
+    expect(band()).toBeNull();
+  });
+
   it("draws nothing outside a navigator, where no tab could go", () => {
     mount("stats");
     expect(band()).toBeNull();
@@ -184,11 +197,7 @@ describe(PlaceBand, () => {
   });
 
   it("pops to Home for the Home tab", () => {
-    const rootStack = navigator([
-      home,
-      { key: "data", name: "Data" },
-      { key: "dev", name: "Devices" },
-    ]);
+    const rootStack = navigator([home, { key: "dev", name: "Devices" }]);
     mount("devices", rootStack, "dev");
     press("home");
     expect(rootStack.dispatched).toStrictEqual([
@@ -219,10 +228,11 @@ describe(PlaceBand, () => {
   });
 });
 
-// Every place root hands its room its own band. Keyed by place id, so a new
+// Every place root takes its frame chrome from `usePlaceFrame`: the band when
+// it stands on Home, a back key when pushed. Keyed by place id, so a new
 // place is a typecheck failure here until its root file is named. A text
 // sweep, as `rooms.test.tsx` reads `SheetRoom.tsx`: the screens' own tests
-// stand `PlaceBand` down, so this is where the wiring is held.
+// stand the frame down, so this is where the wiring is held.
 const PLACE_ROOTS: Readonly<Record<Exclude<PlaceId, "home">, string>> = {
   autos: "../../apps/automations/Automations.tsx",
   conn: "../connectors/Connectors.tsx",
@@ -237,13 +247,18 @@ const PLACE_ROOTS: Readonly<Record<Exclude<PlaceId, "home">, string>> = {
 
 describe("the place roots", () => {
   it.each(Object.entries(PLACE_ROOTS))(
-    "%s's root draws the Home band with its own tab",
+    "%s's root takes its band or its back key from its own frame",
     (id, file) => {
       const source = fs.readFileSync(
         path.resolve(import.meta.dirname, file),
         "utf8"
       );
-      expect(source).toContain(`band={<PlaceBand place="${id}" />}`);
+      // Needs you hands its room the band directly; its back key is lane A's.
+      expect(source).toContain(
+        id === "notifs"
+          ? `band={<PlaceBand place="${id}" />}`
+          : `usePlaceFrame("${id}")`
+      );
     }
   );
 });
