@@ -15,16 +15,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 
 /** Strip YAML comments so prose cannot satisfy or trip a structural check. */

@@ -14,15 +14,6 @@ import {
 } from "./model/lanes.ts";
 import { laneSeverity } from "./model/severity.ts";
 import { computeVerdict } from "./read-model.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
 /**
  * The verdict is the one number a reader acts on, and every way it could lie
@@ -63,7 +54,7 @@ function row(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("computeVerdict", () => {
+describe(computeVerdict, () => {
   const today = "2026-09-02";
 
   test("SHIPPABLE when every unparked lane passed", () => {
@@ -162,7 +153,7 @@ describe("computeVerdict", () => {
   });
 });
 
-describe("buildLaneBoard", () => {
+describe(buildLaneBoard, () => {
   const claims = { claims: [] };
   const lane = {
     id: "web-e2e",
@@ -287,7 +278,7 @@ describe("the three questions", () => {
       ],
       today,
     });
-    expect(blockers.map((entry) => entry.lane)).toEqual(["ios"]);
+    expect(blockers.map((entry) => entry.lane)).toStrictEqual(["ios"]);
     expect(blockers[0]!.firstRed).toBe("aaa");
     expect(blockers[0]!.lastGreen).toBe("bbb");
   });
@@ -306,7 +297,7 @@ describe("the three questions", () => {
       ],
       today,
     });
-    expect(queue.map((entry) => entry.lane)).toEqual(["android", "ios"]);
+    expect(queue.map((entry) => entry.lane)).toStrictEqual(["android", "ios"]);
     expect(queue[0]!.deadline).toBe("expires 2026-09-16");
     expect(queue[1]!.deadline).toContain("owned by");
   });
@@ -328,8 +319,10 @@ describe("the three questions", () => {
       ]),
       today,
     });
-    expect(since.newRed.map((entry) => entry.lane)).toEqual(["new-red"]);
-    expect(since.newGreen.map((entry) => entry.lane)).toEqual(["new-green"]);
+    expect(since.newRed.map((entry) => entry.lane)).toStrictEqual(["new-red"]);
+    expect(since.newGreen.map((entry) => entry.lane)).toStrictEqual([
+      "new-green",
+    ]);
     expect(since.expiring[0]!.why).toContain("3d");
   });
 });

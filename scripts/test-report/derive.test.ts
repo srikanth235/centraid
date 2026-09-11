@@ -10,15 +10,8 @@ import {
   flowId,
   readSuiteRunners,
 } from "./derive.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict, items } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 /**
  * #915 split the report's inputs in two: what a machine cannot derive lives in
@@ -31,7 +24,7 @@ import {
 describe("the claims file", () => {
   test("the committed file validates", () => {
     const { claims, errors } = loadClaims();
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(claims).not.toBeNull();
     expect(items(dict(claims).claims).length).toBeGreaterThan(0);
     expect(items(dict(claims).lanes).length).toBeGreaterThan(0);
@@ -144,7 +137,7 @@ describe("derivations", () => {
     expect(flows.some((flow: Loose) => flow.id === "ghost")).toBe(true);
     const view = await flowOwnerView();
     expect(view.flows.length).toBeGreaterThan(100);
-    for (const flow of view.flows) expect(typeof flow.owner).toBe("string");
+    for (const flow of view.flows) expect(flow.owner).toBeTypeOf("string");
   });
 
   test("the Stryker and Vitest inventories are read off disk, not typed", async () => {

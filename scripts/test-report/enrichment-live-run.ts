@@ -2,16 +2,6 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-
 const root = path.resolve(import.meta.dirname, "../..");
 const started = Date.now();
 const result = spawnSync(

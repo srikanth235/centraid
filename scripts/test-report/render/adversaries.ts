@@ -10,14 +10,8 @@
  * gone: a series with too few points is a number in §10, not an empty chart.
  */
 
-import {
-  bags,
-  dict,
-  finite,
-  items,
-  type Loose,
-  type ReportModel,
-} from "../record.ts";
+import { bags, dict, finite, items } from "../record.ts";
+import type { ReportModel } from "../record.ts";
 import { escapeHtml, pill, section, table } from "./util.ts";
 
 /** The minimum candidates a series needs before it earns a chart. */

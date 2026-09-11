@@ -10,19 +10,10 @@ import {
   isBudgetFloorKey,
   ratchetFloors,
 } from "./ratchet-floors.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
-describe("diffCoverageFloors", () => {
+describe(diffCoverageFloors, () => {
   test("flags a top-level line floor decrease", () => {
-    expect(diffCoverageFloors({ lines: 30 }, { lines: 25 })).toEqual([
+    expect(diffCoverageFloors({ lines: 30 }, { lines: 25 })).toStrictEqual([
       'coverage floor "lines" decreased 30 → 25',
     ]);
   });
@@ -30,7 +21,7 @@ describe("diffCoverageFloors", () => {
   test("flags a package metric decrease", () => {
     const base = { "packages/vault/src/**": { lines: 90, branches: 78 } };
     const head = { "packages/vault/src/**": { lines: 88, branches: 78 } };
-    expect(diffCoverageFloors(base, head)).toEqual([
+    expect(diffCoverageFloors(base, head)).toStrictEqual([
       'coverage floor "packages/vault/src/**.lines" decreased 90 → 88',
     ]);
   });
@@ -38,7 +29,7 @@ describe("diffCoverageFloors", () => {
   test("flags removal of a package scope", () => {
     const base = { "packages/vault/src/**": { lines: 90 } };
     const head = { lines: 30 };
-    expect(diffCoverageFloors(base, head)).toEqual([
+    expect(diffCoverageFloors(base, head)).toStrictEqual([
       'coverage floor scope "packages/vault/src/**" removed',
     ]);
   });
@@ -46,7 +37,7 @@ describe("diffCoverageFloors", () => {
   test("flags removal of a single metric key", () => {
     const base = { "packages/vault/src/**": { lines: 90, branches: 78 } };
     const head = { "packages/vault/src/**": { lines: 90 } };
-    expect(diffCoverageFloors(base, head)).toEqual([
+    expect(diffCoverageFloors(base, head)).toStrictEqual([
       'coverage floor "packages/vault/src/**.branches" removed (was 78)',
     ]);
   });
@@ -54,27 +45,27 @@ describe("diffCoverageFloors", () => {
   test("flags removal of a top-level number floor", () => {
     expect(
       diffCoverageFloors({ lines: 30, branches: 20 }, { lines: 30 })
-    ).toEqual(['coverage floor "branches" removed (was 20)']);
+    ).toStrictEqual(['coverage floor "branches" removed (was 20)']);
   });
 
   test("allows increases and equal floors", () => {
-    expect(diffCoverageFloors({ lines: 30 }, { lines: 31 })).toEqual([]);
-    expect(diffCoverageFloors({ lines: 30 }, { lines: 30 })).toEqual([]);
+    expect(diffCoverageFloors({ lines: 30 }, { lines: 31 })).toStrictEqual([]);
+    expect(diffCoverageFloors({ lines: 30 }, { lines: 30 })).toStrictEqual([]);
   });
 });
 
-describe("diffMutationFloors", () => {
+describe(diffMutationFloors, () => {
   test("flags a package mutation score decrease", () => {
     expect(
       diffMutationFloors(
         { "packages/vault": 80, "packages/server/src/automation": 70 },
         { "packages/vault": 75, "packages/server/src/automation": 70 }
       )
-    ).toEqual(['mutation floor "packages/vault" decreased 80 → 75']);
+    ).toStrictEqual(['mutation floor "packages/vault" decreased 80 → 75']);
   });
 
   test("flags removal of a mutation floor", () => {
-    expect(diffMutationFloors({ "packages/vault": 80 }, {})).toEqual([
+    expect(diffMutationFloors({ "packages/vault": 80 }, {})).toStrictEqual([
       'mutation floor "packages/vault" removed (was 80)',
     ]);
   });
@@ -82,10 +73,10 @@ describe("diffMutationFloors", () => {
   test("allows increase and equal", () => {
     expect(
       diffMutationFloors({ "packages/vault": 80 }, { "packages/vault": 85 })
-    ).toEqual([]);
+    ).toStrictEqual([]);
     expect(
       diffMutationFloors({ "packages/vault": 80 }, { "packages/vault": 80 })
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 });
 
@@ -101,7 +92,7 @@ describe("diffMinimumTests — approved outright retirement (#927)", () => {
 
   test("a marked deletion passes: the floor is gone, and named", () => {
     const head = { flows: [], removedMinimumTestsFlows: { a: marker } };
-    expect(diffMinimumTests(base, head)).toEqual([]);
+    expect(diffMinimumTests(base, head)).toStrictEqual([]);
   });
 
   test("an UNMARKED deletion is still refused", () => {
@@ -113,7 +104,7 @@ describe("diffMinimumTests — approved outright retirement (#927)", () => {
       flows: [{ id: "a", owner, minimumTests: 2 }],
       removedMinimumTestsFlows: { a: marker },
     };
-    expect(diffMinimumTests(base, head)).toEqual([
+    expect(diffMinimumTests(base, head)).toStrictEqual([
       expect.stringContaining("the head still declares"),
     ]);
   });
@@ -121,7 +112,7 @@ describe("diffMinimumTests — approved outright retirement (#927)", () => {
   test("a marker naming a flow the base never declared is refused", () => {
     const head = { flows: [], removedMinimumTestsFlows: { b: marker } };
     // Two errors: the unknown marker, and "a" still deleted unauthorized.
-    expect(diffMinimumTests(base, head)).toEqual([
+    expect(diffMinimumTests(base, head)).toStrictEqual([
       expect.stringContaining("which the base does not declare"),
       expect.stringContaining('flow "a" removed'),
     ]);
@@ -167,11 +158,11 @@ describe("diffMinimumTests — approved outright retirement (#927)", () => {
   test("a SPENT marker is inert: carried on both sides, it re-litigates nothing", () => {
     // What main looks like after the retirement landed — no flow either side.
     const landed = { flows: [], removedMinimumTestsFlows: { a: marker } };
-    expect(diffMinimumTests(landed, landed)).toEqual([]);
+    expect(diffMinimumTests(landed, landed)).toStrictEqual([]);
   });
 });
 
-describe("diffMinimumTests", () => {
+describe(diffMinimumTests, () => {
   test("flags a minimumTests decrease without waiver", () => {
     const base = { flows: [{ id: "a", minimumTests: 10 }] };
     const head = { flows: [{ id: "a", minimumTests: 8 }] };
@@ -203,7 +194,7 @@ describe("diffMinimumTests", () => {
         },
       ],
     };
-    expect(diffMinimumTests(base, head)).toEqual([]);
+    expect(diffMinimumTests(base, head)).toStrictEqual([]);
   });
 
   // #988 — a marker that already landed is not a claim about THIS diff.
@@ -220,7 +211,7 @@ describe("diffMinimumTests", () => {
     // `old-name` is gone from both sides: the rename landed several PRs ago.
     expect(
       diffMinimumTests({ flows: [spentFlow] }, { flows: [spentFlow] })
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   test("refuses a rename marker this diff introduces against an unknown predecessor", () => {
@@ -291,7 +282,7 @@ describe("diffMinimumTests", () => {
         },
       ],
     };
-    expect(diffMinimumTests(base, head)).toEqual([]);
+    expect(diffMinimumTests(base, head)).toStrictEqual([]);
   });
 
   test("rejects a prose-approved ID rename without an explicit predecessor", () => {
@@ -353,7 +344,7 @@ describe("diffMinimumTests", () => {
         },
       ],
     };
-    expect(diffMinimumTests(base, head)).toEqual([
+    expect(diffMinimumTests(base, head)).toStrictEqual([
       'flow "old-b" removed (had minimumTests 10); add one approved replacement with replacesMinimumTestsFlow: "old-b" or restore the flow',
     ]);
   });
@@ -389,7 +380,7 @@ describe("diffMinimumTests", () => {
   test("allows increase", () => {
     const base = { flows: [{ id: "a", minimumTests: 10 }] };
     const head = { flows: [{ id: "a", minimumTests: 12 }] };
-    expect(diffMinimumTests(base, head)).toEqual([]);
+    expect(diffMinimumTests(base, head)).toStrictEqual([]);
   });
 });
 
@@ -406,7 +397,7 @@ describe("perf budget ratchet", () => {
         shell: { maxRequests: 10, nested: { maxTransferBytes: 100 } },
         minStreamsForProof: 3,
       })
-    ).toEqual({
+    ).toStrictEqual({
       "shell.maxRequests": 10,
       "shell.nested.maxTransferBytes": 100,
       minStreamsForProof: 3,
@@ -419,7 +410,7 @@ describe("perf budget ratchet", () => {
         { "shell.maxRequests": 10, minStreamsForProof: 3 },
         { "shell.maxRequests": 12, minStreamsForProof: 3 }
       )
-    ).toEqual([
+    ).toStrictEqual([
       'perf budget "shell.maxRequests" widened 10 → 12 (ceilings may only tighten)',
     ]);
 
@@ -428,7 +419,7 @@ describe("perf budget ratchet", () => {
         { minStreamsForProof: 3 },
         { minStreamsForProof: 2 }
       )
-    ).toEqual([
+    ).toStrictEqual([
       'perf budget "minStreamsForProof" loosened 3 → 2 (min floors may only rise)',
     ]);
   });
@@ -439,8 +430,8 @@ describe("perf budget ratchet", () => {
         { "shell.maxRequests": 10, minStreamsForProof: 3 },
         { "shell.maxRequests": 8, minStreamsForProof: 4 }
       )
-    ).toEqual([]);
-    expect(diffPerfBudgetNumbers({ a: 1 }, { a: 1 })).toEqual([]);
+    ).toStrictEqual([]);
+    expect(diffPerfBudgetNumbers({ a: 1 }, { a: 1 })).toStrictEqual([]);
   });
 
   test("extractBudgetNumbersFromSource parses nested TS export", () => {
@@ -458,15 +449,17 @@ export const perfBudgets: PerfBudgets = {
 };
 export const enforceTiming = true;
 `;
-    expect(extractBudgetNumbersFromSource(source, "perfBudgets")).toEqual({
-      "shell.maxRequests": 10,
-      "shell.maxTransferBytes": 1_250_000,
-      "irohPool.minStreamsForProof": 3,
-    });
+    expect(extractBudgetNumbersFromSource(source, "perfBudgets")).toStrictEqual(
+      {
+        "shell.maxRequests": 10,
+        "shell.maxTransferBytes": 1_250_000,
+        "irohPool.minStreamsForProof": 3,
+      }
+    );
   });
 });
 
-describe("ratchetFloors", () => {
+describe(ratchetFloors, () => {
   test("waives floor decreases when approvedDeviation is set", () => {
     const { errors, waived } = ratchetFloors({
       baseFloors: { lines: 30 },
@@ -478,7 +471,7 @@ describe("ratchetFloors", () => {
       headMatrix: { flows: [] },
     });
     expect(waived).toBe(true);
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 
   test("an UNCHANGED approvedDeviation does not waive a floor decrease (#781)", () => {
@@ -573,7 +566,7 @@ describe("ratchetFloors", () => {
       },
     });
     expect(waived).toBe(true);
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 
   test("fails mutation floor decrease without waiver", () => {
@@ -621,6 +614,6 @@ describe("ratchetFloors", () => {
         },
       ],
     });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 });

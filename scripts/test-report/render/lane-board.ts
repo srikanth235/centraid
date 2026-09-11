@@ -1,4 +1,5 @@
-import { bags, dict, finite, items, type ReportModel } from "../record.ts";
+import { bags, dict, finite, items } from "../record.ts";
+import type { ReportModel } from "../record.ts";
 /**
  * §4 lane health board and §5 journeys (#915 Wave 3).
  *

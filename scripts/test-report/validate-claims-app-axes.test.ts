@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { baseMatrix, REAL_FILE } from "./claims-fixture.ts";
-import { bags, dict, type Loose } from "./record.ts";
+import { bags, dict } from "./record.ts";
 import { validateAppAxes } from "./validate-app-axes.ts";
 
 /**
@@ -30,7 +30,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
       checkWorkspaceCompleteness: false,
       checkReportRegistries: false,
     });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 
   test("SABOTAGE: rejects a seat registry that is not the three seats", async () => {

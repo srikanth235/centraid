@@ -19,7 +19,8 @@ import {
 import { buildCoverageGrid, buildPromises } from "./model/grids.ts";
 import { buildLaneBoard } from "./model/lanes.ts";
 import { SEVERITY_RANK } from "./model/severity.ts";
-import { dict, bags, type Loose, type ReportModel } from "./record.ts";
+import { dict, bags } from "./record.ts";
+import type { Loose, ReportModel } from "./record.ts";
 
 export const VERDICTS = Object.freeze(["HOLD", "DEGRADED", "SHIPPABLE"]);
 

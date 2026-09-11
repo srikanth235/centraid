@@ -30,15 +30,7 @@ import {
   evidenceFileName,
   validateEvidence,
 } from "./evidence-schema.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict, errorMessage } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 

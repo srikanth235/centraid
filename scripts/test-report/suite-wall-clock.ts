@@ -23,15 +23,7 @@ import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
 import { writeLedgerSection } from "../check-ledgers.mjs";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { isRecord } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 // The wall-clock ceilings are `tests/budgets.json#suiteWallClock` (#915 Wave 4).

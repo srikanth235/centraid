@@ -34,7 +34,8 @@ import {
 import { deriveAll } from "./derive.ts";
 import { evidenceAgeMs, readEvidenceDir } from "./read-evidence.ts";
 import { buildModel } from "./read-model.ts";
-import { dict, items, type Loose, type ReportModel } from "./record.ts";
+import { dict, items } from "./record.ts";
+import type { Loose, ReportModel } from "./record.ts";
 import { renderReport } from "./render/index.ts";
 import { writeSummarySidecars } from "./summary-markdown.ts";
 

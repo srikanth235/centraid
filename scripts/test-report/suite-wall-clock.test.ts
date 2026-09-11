@@ -1,14 +1,5 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 import { compareToBudget, measureWallClock } from "./suite-wall-clock.ts";
 
 const file = (runtime: number, start = 0) => ({
@@ -26,7 +17,7 @@ describe("suite wall-clock measurement", () => {
       measureWallClock({
         testResults: [file(1000, 0), file(500, 200)],
       })
-    ).toEqual({ totalMs: 1500, files: 2 });
+    ).toStrictEqual({ totalMs: 1500, files: 2 });
   });
 
   test("falls back to start/end when a runner omits perfStats", () => {
@@ -34,14 +25,14 @@ describe("suite wall-clock measurement", () => {
       measureWallClock({
         testResults: [{ startTime: 100, endTime: 400 }],
       })
-    ).toEqual({ totalMs: 300, files: 1 });
+    ).toStrictEqual({ totalMs: 300, files: 1 });
   });
 
   test("a file with no usable timing contributes zero, never NaN", () => {
     const measured = measureWallClock({
       testResults: [{ startTime: 400, endTime: 100 }, {}, file(250)],
     });
-    expect(measured).toEqual({ totalMs: 250, files: 3 });
+    expect(measured).toStrictEqual({ totalMs: 250, files: 3 });
   });
 
   test("an unreadable report is null, so the caller can say 'not measured'", () => {

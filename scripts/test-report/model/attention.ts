@@ -6,15 +6,8 @@
  * issue body and §3 cannot disagree about who owes what by when.
  */
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "../record.ts";
+import { dict } from "../record.ts";
+import type { Loose } from "../record.ts";
 import { SEVERITY_RANK } from "./severity.ts";
 
 /** Add whole days to a YYYY-MM-DD date. */

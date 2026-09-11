@@ -7,7 +7,8 @@
  * the delta against last night, and the single change that would flip it.
  */
 
-import { dict, finite, items, text, type ReportModel } from "../record.ts";
+import { dict, finite, items, text } from "../record.ts";
+import type { ReportModel } from "../record.ts";
 import { escapeHtml } from "./util.ts";
 
 /** `2h 14m`, or `unknown` when nothing dated the evidence. */

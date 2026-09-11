@@ -1,12 +1,3 @@
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 /**
  * The reserved keys of `tests/journeys.json#rigs` (#927).
  *

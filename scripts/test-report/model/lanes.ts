@@ -11,7 +11,8 @@
  * reds) are computed here once rather than in the renderer.
  */
 
-import { bags, dict, finite, type Loose } from "../record.ts";
+import { bags, dict, finite } from "../record.ts";
+import type { Loose } from "../record.ts";
 import { laneSeverity } from "./severity.ts";
 
 /** The 30-run history codes the sparkline draws. */

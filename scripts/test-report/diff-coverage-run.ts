@@ -30,15 +30,6 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { isInstrumentableSource } from "./diff-coverage.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -215,7 +206,7 @@ function main() {
     return 0;
   }
 
-  const projects: Set<string> = new Set();
+  const projects = new Set<string>();
   for (const file of instrumentable) {
     const dir = workspaceDirOf(file);
     if (!dir) continue;

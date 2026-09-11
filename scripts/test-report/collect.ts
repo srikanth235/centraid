@@ -210,7 +210,9 @@ export function readTrends(history: unknown[]) {
       const numeric = Number(value.value ?? raw);
       if (!Number.isFinite(numeric)) continue;
       const current = series.get(name);
-      if (!current) {
+      if (current) {
+        current.points.push(numeric);
+      } else {
         series.set(name, {
           name,
           unit: value.unit ?? "",
@@ -218,8 +220,6 @@ export function readTrends(history: unknown[]) {
           budget: value.budget ?? null,
           lowerIsBetter: value.lowerIsBetter !== false,
         });
-      } else {
-        current.points.push(numeric);
       }
     }
   }

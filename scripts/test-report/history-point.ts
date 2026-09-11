@@ -1,12 +1,6 @@
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict, isRecord } from "./record.ts";
+import type { Loose } from "./record.ts";
+
 /**
  * The durable-history whitelist (#535, extended #839 Wave 5).
  *

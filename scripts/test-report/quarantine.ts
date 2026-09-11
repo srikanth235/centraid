@@ -21,15 +21,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict, isRecord } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const QUARANTINE_PATH = path.join(root, "tests/quarantine.json");

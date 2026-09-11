@@ -1,4 +1,5 @@
-import { bags, dict, finite, items, type ReportModel } from "../record.ts";
+import { bags, dict, finite, items } from "../record.ts";
+import type { ReportModel } from "../record.ts";
 /**
  * §10 evidence (collapsed) and §11 how to read this (#915 Wave 3).
  *

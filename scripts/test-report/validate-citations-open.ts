@@ -39,15 +39,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict, errorMessage, isRecord } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -89,7 +82,7 @@ function addCitation(
 export function collectCitations(
   node: unknown,
   where: string,
-  citations: Map<number, string[]> = new Map()
+  citations: Map<number, string[]> = new Map<number, string[]>()
 ): Map<number, string[]> {
   if (typeof node === "string") {
     for (const match of node.matchAll(TRACKING_PHRASE))

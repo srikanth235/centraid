@@ -36,7 +36,8 @@ import {
   readLedgerSection,
   writeLedgerSection,
 } from "../check-ledgers.mjs";
-import { dict, fromAsync, type Loose } from "./record.ts";
+import { dict, fromAsync } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 

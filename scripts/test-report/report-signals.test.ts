@@ -1,14 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict } from "./record.ts";
 import {
   agedInfraMismatches,
   applyExpectedGrey,
@@ -32,7 +24,7 @@ import {
   renderSummaryMarkdown,
 } from "./summary-markdown.ts";
 
-describe("extractUnhandledErrors", () => {
+describe(extractUnhandledErrors, () => {
   test("reads explicit unhandledErrors array from vitest JSON", () => {
     const messages = extractUnhandledErrors({
       success: false,
@@ -90,7 +82,7 @@ describe("durable floor and infrastructure ratchets", () => {
         { "coverage:repo-wide:lines": 71 },
         { sustainedRuns: 3, marginPoints: 2 }
       )
-    ).toEqual([
+    ).toStrictEqual([
       {
         key: "coverage:repo-wide:lines",
         floor: 71,
@@ -105,7 +97,7 @@ describe("durable floor and infrastructure ratchets", () => {
         { "coverage:repo-wide:lines": 71 },
         { sustainedRuns: 3, marginPoints: 2 }
       )
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   test("alarms when the same infra mismatch occupies three consecutive runs", () => {
@@ -118,11 +110,11 @@ describe("durable floor and infrastructure ratchets", () => {
         ],
         { maxConsecutiveRuns: 3 }
       )
-    ).toEqual(["mobile:journey"]);
+    ).toStrictEqual(["mobile:journey"]);
   });
 });
 
-describe("summarizeCellStates", () => {
+describe(summarizeCellStates, () => {
   test("separates failed from missing (lane ran vs not run)", () => {
     const counts = summarizeCellStates([
       { state: "passed" },
@@ -195,14 +187,14 @@ describe("Playwright evidence", () => {
   });
 });
 
-describe("detectDefaultCiEnvGate", () => {
+describe(detectDefaultCiEnvGate, () => {
   test('detects describe.skipIf(process.env.X !== "1") whole-file gates', () => {
     const src = `import { describe } from 'vitest';
 describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway relay', () => {
   test('x', () => {});
 });
 `;
-    expect(detectDefaultCiEnvGate(src)).toEqual({
+    expect(detectDefaultCiEnvGate(src)).toStrictEqual({
       env: "CENTRAID_RUN_NATIVE_TUNNEL",
       kind: "skipIf-env-not-1",
     });
@@ -222,7 +214,7 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
   expect(true).toBe(true);
 });
 `;
-    expect(detectDefaultCiEnvGate(src)).toEqual({
+    expect(detectDefaultCiEnvGate(src)).toStrictEqual({
       env: "CENTRAID_DISKFULL_E2E",
       kind: "early-env-return",
     });
@@ -240,14 +232,14 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
         const gate = process.env.CENTRAID_ODD_GATE;
         describe.skipIf(Boolean(gate))("x", () => {});
       `)
-    ).toEqual({
+    ).toStrictEqual({
       env: "CENTRAID_ODD_GATE",
       kind: "unparseable-env-gate",
     });
   });
 });
 
-describe("renderSummaryMarkdown", () => {
+describe(renderSummaryMarkdown, () => {
   test("renders the verdict, the blockers and the report marker", () => {
     const md = renderSummaryMarkdown(
       {
@@ -306,7 +298,7 @@ describe("renderSummaryMarkdown", () => {
   });
 });
 
-describe("coverageScopesBelowFloor", () => {
+describe(coverageScopesBelowFloor, () => {
   test("lists scopes under line floor only", () => {
     expect(
       coverageScopesBelowFloor([
@@ -314,11 +306,11 @@ describe("coverageScopesBelowFloor", () => {
         { scope: "b", lines: 90, lineFloor: 80 },
         { scope: "c", lines: null, lineFloor: 70 },
       ])
-    ).toEqual(["a"]);
+    ).toStrictEqual(["a"]);
   });
 });
 
-describe("publicReportUrl", () => {
+describe(publicReportUrl, () => {
   test("builds project pages URL", () => {
     expect(
       publicReportUrl({ owner: "srikanth235", repo: "centraid", slot: "main" })
@@ -326,7 +318,7 @@ describe("publicReportUrl", () => {
   });
 });
 
-describe("findUnmappedEvidence", () => {
+describe(findUnmappedEvidence, () => {
   test("counts orphaned e2e results and separates failed unmapped", () => {
     const matrix = {
       cellOwners: {
@@ -350,7 +342,7 @@ describe("findUnmappedEvidence", () => {
     ];
     const found = findUnmappedEvidence(results, matrix);
     expect(found.unmappedEvidence).toBe(2);
-    expect(found.failedUnmapped.map((r) => r.owner)).toEqual([
+    expect(found.failedUnmapped.map((r) => r.owner)).toStrictEqual([
       "tests/agent-e2e-mobile/flows/template-gate.mjs",
     ]);
   });
@@ -375,11 +367,11 @@ describe("findUnmappedEvidence", () => {
       matrix
     );
     expect(found.unmappedEvidence).toBe(0);
-    expect(found.failedUnmapped).toEqual([]);
+    expect(found.failedUnmapped).toStrictEqual([]);
   });
 });
 
-describe("findUnmatchedOwners", () => {
+describe(findUnmatchedOwners, () => {
   test("names declared owners that produced no evidence key", () => {
     expect(
       findUnmatchedOwners([{ owner: "tests/a.test.ts", status: "passed" }], {
@@ -389,11 +381,11 @@ describe("findUnmatchedOwners", () => {
         },
         flows: [{ owner: "tests/c.test.ts" }],
       })
-    ).toEqual(["tests/b.test.ts", "tests/c.test.ts"]);
+    ).toStrictEqual(["tests/b.test.ts", "tests/c.test.ts"]);
   });
 });
 
-describe("reconcileJobConclusions", () => {
+describe(reconcileJobConclusions, () => {
   test("flags silent all-clear when needs jobs failed but summary.failed is 0", () => {
     const recon = reconcileJobConclusions(
       {
@@ -404,7 +396,10 @@ describe("reconcileJobConclusions", () => {
       { failed: 0 }
     );
     expect(recon.silentAllClear).toBe(true);
-    expect(recon.failedJobs).toEqual(["mobile-e2e", "mobile-e2e-android"]);
+    expect(recon.failedJobs).toStrictEqual([
+      "mobile-e2e",
+      "mobile-e2e-android",
+    ]);
     expect(recon.message).toMatch(/mobile-e2e/u);
   });
 
@@ -418,7 +413,7 @@ describe("reconcileJobConclusions", () => {
   });
 });
 
-describe("cellsMissingRatchet", () => {
+describe(cellsMissingRatchet, () => {
   test("detects grey creep vs prior durable history point", () => {
     const ratchet = cellsMissingRatchet(18, [
       { label: "2026-07-20", cellsMissing: 12 },
@@ -436,7 +431,7 @@ describe("cellsMissingRatchet", () => {
   });
 });
 
-describe("cellIdentityRegressions", () => {
+describe(cellIdentityRegressions, () => {
   test("detects replacement grey/red cells even when aggregate counts are flat", () => {
     expect(
       cellIdentityRegressions(
@@ -451,14 +446,14 @@ describe("cellIdentityRegressions", () => {
           },
         ]
       )
-    ).toEqual({
+    ).toStrictEqual({
       newMissing: ["fixed-replacement"],
       newFailed: ["new-red"],
     });
   });
 });
 
-describe("worstEvidenceByOwner", () => {
+describe(worstEvidenceByOwner, () => {
   test("keeps the worst status when platform files share one owner", () => {
     const map = worstEvidenceByOwner([
       { owner: "flows/home.mjs", status: "passed", platform: "android" },
@@ -495,7 +490,7 @@ describe("worstEvidenceByOwner", () => {
   });
 });
 
-describe("applyExpectedGrey", () => {
+describe(applyExpectedGrey, () => {
   const registration = {
     lane: "accessibility",
     issue: "https://github.com/srikanth235/centraid/issues/781",

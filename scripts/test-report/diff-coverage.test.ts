@@ -8,15 +8,6 @@ import {
   parseUnifiedDiffAddedLines,
   scoreDiffCoverage,
 } from "./diff-coverage.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
 const sampleDiff = `diff --git a/packages/vault/src/foo.ts b/packages/vault/src/foo.ts
 --- a/packages/vault/src/foo.ts
@@ -37,17 +28,19 @@ diff --git a/README.md b/README.md
 +hello
 `;
 
-describe("parseUnifiedDiffAddedLines", () => {
+describe(parseUnifiedDiffAddedLines, () => {
   test("extracts added line numbers for new-file side", () => {
     const map = parseUnifiedDiffAddedLines(sampleDiff);
     expect(
       [...(map.get("packages/vault/src/foo.ts") ?? [])].sort((a, b) => a - b)
-    ).toEqual([11, 12, 13]);
-    expect([...(map.get("packages/vault/src/foo.test.ts") ?? [])]).toEqual([2]);
+    ).toStrictEqual([11, 12, 13]);
+    expect([
+      ...(map.get("packages/vault/src/foo.test.ts") ?? []),
+    ]).toStrictEqual([2]);
   });
 });
 
-describe("isInstrumentableSource", () => {
+describe(isInstrumentableSource, () => {
   test("accepts package/app/tool and blueprint runtime source, rejects tests and docs", () => {
     expect(isInstrumentableSource("packages/vault/src/foo.ts")).toBe(true);
     expect(isInstrumentableSource("apps/web/src/main.tsx")).toBe(true);
@@ -110,7 +103,7 @@ describe("lineHits + scoreDiffCoverage", () => {
     // Only packages/vault/src/foo.ts counts (test file + README filtered).
     expect(score.total).toBe(3);
     expect(score.covered).toBe(2);
-    expect(score.uncovered).toEqual([
+    expect(score.uncovered).toStrictEqual([
       { file: "packages/vault/src/foo.ts", line: 12, hits: 0 },
     ]);
     expect(score.percent).toBeCloseTo((2 / 3) * 100, 5);
@@ -133,12 +126,12 @@ describe("lineHits + scoreDiffCoverage", () => {
     // Lines 99–100 are comments / outside the statement map → not in total.
     expect(score.total).toBe(1);
     expect(score.covered).toBe(1);
-    expect(score.uncovered).toEqual([]);
+    expect(score.uncovered).toStrictEqual([]);
     expect(score.percent).toBe(100);
   });
 });
 
-describe("evaluateDiffCoverage", () => {
+describe(evaluateDiffCoverage, () => {
   test("fails below threshold and names hunks", () => {
     const score = {
       total: 10,
@@ -191,14 +184,14 @@ describe("evaluateDiffCoverage", () => {
   });
 });
 
-describe("groupUncoveredHunks", () => {
+describe(groupUncoveredHunks, () => {
   test("collapses consecutive lines", () => {
     const hunks = groupUncoveredHunks([
       { file: "a.ts", line: 1 },
       { file: "a.ts", line: 2 },
       { file: "a.ts", line: 4 },
     ]);
-    expect(hunks).toEqual([
+    expect(hunks).toStrictEqual([
       { file: "a.ts", start: 1, end: 2, count: 2 },
       { file: "a.ts", start: 4, end: 4, count: 1 },
     ]);

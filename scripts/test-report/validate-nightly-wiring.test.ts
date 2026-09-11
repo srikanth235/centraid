@@ -4,15 +4,6 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { RESERVED_RIG_KEYS, rigPaths } from "./journey-rigs.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const e2ePath = path.join(root, ".github/workflows/e2e.yml");
@@ -113,7 +104,9 @@ describe("tests/journeys.json#rigs reserved keys (#927)", () => {
       _comment: "why this section exists",
       "tests/perf/gateway-request.perf.test.ts": { lane: "perf" },
     };
-    expect(rigPaths(rigs)).toEqual(["tests/perf/gateway-request.perf.test.ts"]);
+    expect(rigPaths(rigs)).toStrictEqual([
+      "tests/perf/gateway-request.perf.test.ts",
+    ]);
   });
 
   test("real rig paths are still returned, in declaration order", () => {
@@ -122,19 +115,19 @@ describe("tests/journeys.json#rigs reserved keys (#927)", () => {
       approvedDeviation: "x",
       "tests/perf/work-counters.perf.test.ts": {},
     };
-    expect(rigPaths(rigs)).toEqual([
+    expect(rigPaths(rigs)).toStrictEqual([
       "tests/scale/large-vault.scale.test.ts",
       "tests/perf/work-counters.perf.test.ts",
     ]);
   });
 
   test("an absent or empty map yields no rigs", () => {
-    expect(rigPaths(undefined)).toEqual([]);
-    expect(rigPaths({})).toEqual([]);
+    expect(rigPaths(undefined)).toStrictEqual([]);
+    expect(rigPaths({})).toStrictEqual([]);
   });
 
   test("the reserved set is exactly the two metadata keys", () => {
-    expect([...RESERVED_RIG_KEYS].sort()).toEqual([
+    expect([...RESERVED_RIG_KEYS].sort()).toStrictEqual([
       "_comment",
       "approvedDeviation",
     ]);

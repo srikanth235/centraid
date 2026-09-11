@@ -23,7 +23,8 @@ import path from "node:path";
 
 import { validateClaims } from "./claims-schema.ts";
 import { deriveFlows, loadRoster } from "./derive.ts";
-import { bags, dict, fromAsync, items, type Loose } from "./record.ts";
+import { bags, dict, fromAsync, items } from "./record.ts";
+import type { Loose } from "./record.ts";
 import { validateAppAxes } from "./validate-app-axes.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");

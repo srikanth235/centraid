@@ -2,15 +2,7 @@ import { access, glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { MUTATION_SEEDS } from "../mutation/seeds.mjs";
-import {
-  bags,
-  dict,
-  fromAsync,
-  isRecord,
-  items,
-  text,
-  type Loose,
-} from "./record.ts";
+import { bags, dict, isRecord, items, text } from "./record.ts";
 import { validateAppScenarios } from "./validate-app-scenarios.ts";
 import { validateReportRegistries } from "./validate-report-registries.ts";
 
@@ -455,9 +447,7 @@ export async function validateAppAxes(
           `${label} refusal grammar points at a file that does not exist`
         );
       const adversary = layer.adversary;
-      if (!isRecord(adversary)) {
-        errors.push(`${label} has no adversary record`);
-      } else {
+      if (isRecord(adversary)) {
         if (adversary.owner != null) {
           const ownerPath = String(adversary.owner);
           if (path.isAbsolute(ownerPath) || ownerPath.includes(".."))
@@ -479,6 +469,8 @@ export async function validateAppAxes(
           errors.push(
             `${label} has no adversary and cites no open tracking issue (#${adversary.trackingIssue ?? "none"})`
           );
+      } else {
+        errors.push(`${label} has no adversary record`);
       }
       const layerSeats = items(layer.seats).map(String);
       if (!Array.isArray(layer.seats) || !layerSeats.length)

@@ -14,17 +14,8 @@ import {
   vitestProjectNames,
   workspaceDirOf,
 } from "./diff-coverage-run.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
-describe("parseArgs", () => {
+describe(parseArgs, () => {
   test("defaults: no base, no dependents", () => {
     expect(parseArgs([])).toStrictEqual({ base: null, dependents: false });
   });
@@ -44,7 +35,7 @@ describe("parseArgs", () => {
   });
 });
 
-describe("resolveBase", () => {
+describe(resolveBase, () => {
   test("an explicit base short-circuits ref probing entirely", () => {
     // 'definitely-not-a-ref' would fail rev-parse; returning it proves the
     // explicit path never consults git.
@@ -52,7 +43,7 @@ describe("resolveBase", () => {
   });
 });
 
-describe("changedFiles", () => {
+describe(changedFiles, () => {
   test("HEAD-vs-HEAD plus the working tree is deduped, trimmed, and never throws", () => {
     // Committed range is empty by construction; anything present comes from the
     // working tree unions. The contract under test is shape, not content.
@@ -67,14 +58,14 @@ describe("changedFiles", () => {
   });
 });
 
-describe("run", () => {
+describe(run, () => {
   test("propagates the child exit status in both directions", () => {
     expect(run("node", ["-e", ""])).toBe(0);
     expect(run("node", ["-e", "process.exit(3)"])).toBe(3);
   });
 });
 
-describe("workspaceDirOf", () => {
+describe(workspaceDirOf, () => {
   test("maps packages/ and apps/ sources to their workspace dir", () => {
     expect(workspaceDirOf("packages/server/src/serve/build-gateway.ts")).toBe(
       "packages/server"
@@ -97,7 +88,7 @@ describe("workspaceDirOf", () => {
   });
 });
 
-describe("projectNameOf", () => {
+describe(projectNameOf, () => {
   // Fixture workspaces under a temp root, addressed via a path RELATIVE to the
   // repo root (the function resolves against the repo), so the test controls
   // exactly which files exist.
@@ -152,7 +143,7 @@ describe("projectNameOf", () => {
   });
 });
 
-describe("vitestProjectNames", () => {
+describe(vitestProjectNames, () => {
   test("adds the React Native transform companion to the mobile package", () => {
     expect(
       vitestProjectNames(["@centraid/server", "@centraid/mobile"])

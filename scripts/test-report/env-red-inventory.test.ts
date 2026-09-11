@@ -13,15 +13,6 @@ import {
   scanEnvGuardSites,
   validateEnvRedInventory,
 } from "./env-red-inventory.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
 const trackingIssues = {
   781: { url: "https://example.test/781", state: "open" },
@@ -65,7 +56,7 @@ const doc = (sites: Record<string, unknown>) => ({
   sites,
 });
 
-describe("scanEnvGuardSites", () => {
+describe(scanEnvGuardSites, () => {
   test("finds platform, arch, and uid comparison guards, keyed by ordinal", () => {
     const source = [
       "test.skipIf(process.platform !== 'darwin')('a', () => {});",
@@ -74,13 +65,13 @@ describe("scanEnvGuardSites", () => {
       "if (0 === process.geteuid()) t.skip('reversed operands');",
     ].join("\n");
     const sites = scanEnvGuardSites("packages/x/src/a.test.ts", source);
-    expect(sites.map((found) => found.kind)).toEqual([
+    expect(sites.map((found) => found.kind)).toStrictEqual([
       "platform-guard",
       "arch-guard",
       "uid-guard",
       "uid-guard",
     ]);
-    expect(sites.map((found) => found.key)).toEqual([
+    expect(sites.map((found) => found.key)).toStrictEqual([
       "packages/x/src/a.test.ts#1",
       "packages/x/src/a.test.ts#2",
       "packages/x/src/a.test.ts#3",
@@ -98,7 +89,7 @@ describe("scanEnvGuardSites", () => {
       "process.geteuid = () => 0; // pretend we are root",
       "const originalGeteuid = process.geteuid;",
     ].join("\n");
-    expect(scanEnvGuardSites("a.test.ts", source)).toEqual([]);
+    expect(scanEnvGuardSites("a.test.ts", source)).toStrictEqual([]);
   });
 
   test("detector metadata is well-formed", () => {
@@ -110,7 +101,7 @@ describe("scanEnvGuardSites", () => {
   });
 });
 
-describe("discoverEnvGuardSites", () => {
+describe(discoverEnvGuardSites, () => {
   function writeFixture(root: string, file: string, source: string) {
     const target = path.join(root, file);
     mkdirSync(path.dirname(target), { recursive: true });
@@ -127,11 +118,11 @@ describe("discoverEnvGuardSites", () => {
       "if (process.platform !== 'darwin') t.skip('darwin only');"
     );
     const { sites, sources } = await discoverEnvGuardSites({ root });
-    expect(sites.map((found) => found.key)).toEqual([
+    expect(sites.map((found) => found.key)).toStrictEqual([
       "packages/x/src/a.test.ts#1",
       "scripts/gateway-package/nested.test.mjs#1",
     ]);
-    expect(Object.keys(sources)).toEqual([
+    expect(Object.keys(sources)).toStrictEqual([
       "packages/x/src/a.test.ts",
       "scripts/gateway-package/nested.test.mjs",
     ]);
@@ -141,11 +132,11 @@ describe("discoverEnvGuardSites", () => {
     const root = tempDirSync("env-red-");
     writeFixture(root, "scripts/test-report/detector.test.mjs", GUARDED_SOURCE);
     const { sites } = await discoverEnvGuardSites({ root });
-    expect(sites).toEqual([]);
+    expect(sites).toStrictEqual([]);
   });
 });
 
-describe("validateEnvRedInventory", () => {
+describe(validateEnvRedInventory, () => {
   const key = "a.test.ts#1";
   const sources = { "a.test.ts": GUARDED_SOURCE };
 
@@ -155,7 +146,7 @@ describe("validateEnvRedInventory", () => {
       [site(key)],
       { trackingIssues, sources, nowMs: NOW }
     );
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(count).toBe(1);
   });
 
@@ -263,7 +254,7 @@ describe("validateEnvRedInventory", () => {
       [site(key)],
       { trackingIssues, sources, nowMs: NOW }
     );
-    expect(future.errors).toEqual([]);
+    expect(future.errors).toStrictEqual([]);
     const garbled = validateEnvRedInventory(
       doc({ [key]: entry({ expiresAt: "someday" }) }),
       [site(key)],
@@ -305,12 +296,12 @@ describe("validateEnvRedInventory", () => {
       [site(key)],
       { trackingIssues, sources, nowMs: NOW }
     );
-    expect(drift.errors).toEqual([]);
+    expect(drift.errors).toStrictEqual([]);
     expect(drift.warnings.join("\n")).toContain("moved from line 7 to 1");
   });
 });
 
-describe("reconcileInventory", () => {
+describe(reconcileInventory, () => {
   test("keeps documentation, drops vanished sites, and never raises the budget", () => {
     const next = reconcileInventory(
       {
@@ -319,7 +310,10 @@ describe("reconcileInventory", () => {
       },
       [site("a.test.ts#1"), site("b.test.ts#1")]
     );
-    expect(Object.keys(next.sites)).toEqual(["a.test.ts#1", "b.test.ts#1"]);
+    expect(Object.keys(next.sites)).toStrictEqual([
+      "a.test.ts#1",
+      "b.test.ts#1",
+    ]);
     expect(next.sites["a.test.ts#1"].issue).toBe(781);
     expect(next.sites["a.test.ts#1"].line).toBe(1);
     // A brand-new site is stubbed undocumented, so validation still fails

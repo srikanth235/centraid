@@ -1,4 +1,6 @@
-import { bags, dict, items, type Loose } from "../record.ts";
+import { bags, dict, items } from "../record.ts";
+import type { Loose } from "../record.ts";
+
 /**
  * The two grids (#915 Wave 3, §6 coverage and §7 promises × surfaces).
  *

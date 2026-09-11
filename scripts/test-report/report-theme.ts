@@ -17,16 +17,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-
 const SHEET = path.join(import.meta.dirname, "report-tokens.css");
 
 /**

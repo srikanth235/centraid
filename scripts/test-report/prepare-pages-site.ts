@@ -28,16 +28,8 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  bags,
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { bags, dict, items } from "./record.ts";
+import type { Loose } from "./record.ts";
 import { designSystemCss } from "./report-theme.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -48,8 +40,8 @@ const reportDir = path.resolve(
 const siteDir = path.resolve(flags.site ?? path.join(root, "site"));
 const slot = String(flags.slot ?? "latest").replace(/^\/+|\/+$/gu, "");
 const runDate = normalizeDate(flags.date);
-const runId = sanitizeSegment(flags["run-id"] ?? "");
-const runUrl = String(flags["run-url"] ?? "");
+const thisRunId = sanitizeSegment(flags["run-id"] ?? "");
+const thisRunUrl = String(flags["run-url"] ?? "");
 const keep = Math.max(1, Number(flags.keep ?? 30) || 30);
 // #915 C1 — the immutable copy carries the evidence directory that produced
 // it. Tonight's report needs LAST night's evidence to compute a
@@ -69,7 +61,11 @@ if (flags.date && !runDate) {
   process.exit(1);
 }
 
-const runSlug = runDate ? (runId ? `${runDate}-${runId}` : runDate) : null;
+const runSlug = runDate
+  ? thisRunId
+    ? `${runDate}-${thisRunId}`
+    : runDate
+  : null;
 const dest = path.join(siteDir, "test-report", slot);
 await mkdir(dest, { recursive: true });
 await cp(reportDir, dest, { recursive: true });
@@ -97,8 +93,8 @@ if (runSlug) {
     summary: await readJson(path.join(reportDir, "summary.json"), null),
     slug: runSlug,
     date: runDate,
-    runId,
-    runUrl,
+    runId: thisRunId,
+    runUrl: thisRunUrl,
     reportPath: `test-report/${slot}/runs/${runSlug}/`,
   });
   const pruned = await pruneRuns(path.join(dest, "runs"), keep);
@@ -285,7 +281,7 @@ function renderLanding(
     repo,
     generatedAt,
     highlight,
-    series,
+    series: historyPoints,
     retained,
   }: {
     repo?: unknown;
@@ -341,7 +337,7 @@ ${designSystemCss()}
   <ul>
 ${list || "    <li><em>No reports published yet.</em></li>"}
   </ul>
-${renderHistory(series, retained)}
+${renderHistory(historyPoints, retained)}
 </body>
 </html>
 `;

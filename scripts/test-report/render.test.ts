@@ -8,7 +8,7 @@ import {
   resolveLanes,
   stepsIn,
 } from "./lint-evidence-mapping.ts";
-import { bags, dict, type Loose } from "./record.ts";
+import { bags, dict } from "./record.ts";
 import { renderTrends, TREND_MINIMUM_POINTS } from "./render/adversaries.ts";
 import { renderRollingIssueBody } from "./rolling-issue-body.ts";
 import { REQUIRED_SECTIONS, renderFixture, smokeFailures } from "./smoke.ts";
@@ -24,7 +24,7 @@ import { REQUIRED_SECTIONS, renderFixture, smokeFailures } from "./smoke.ts";
 
 describe("the rendered page", () => {
   test("renders every section from the fixture root with no validation errors", async () => {
-    expect(await smokeFailures()).toEqual([]);
+    await expect(smokeFailures()).resolves.toStrictEqual([]);
   });
 
   test("names every section the reader is promised", async () => {
@@ -190,20 +190,20 @@ describe("lint:evidence-mapping", () => {
 
   test("a registered lane nobody writes yet is a warning, not a failure", () => {
     const { errors, warnings } = checkEvidenceMapping({ workflows: {}, lanes });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(warnings.join(" ")).toContain("renders as no evidence");
   });
 
   test("resolves a matrix leg and a loop over reusable-workflow results", () => {
-    expect(resolveLanes(`coverage-shard-\${{ matrix.shard }}`, "")).toEqual([
-      "coverage-shard",
-    ]);
+    expect(
+      resolveLanes(`coverage-shard-\${{ matrix.shard }}`, "")
+    ).toStrictEqual(["coverage-shard"]);
     expect(
       resolveLanes(
         "$lane",
         `for pair in "web-e2e-linux:\${{ needs.a.result }}" "desktop-e2e-linux:\${{ needs.b.result }}"`
       )
-    ).toEqual(["web-e2e-linux", "desktop-e2e-linux"]);
+    ).toStrictEqual(["web-e2e-linux", "desktop-e2e-linux"]);
   });
 
   test("reads the flags off a wrapped step", () => {
@@ -232,6 +232,6 @@ describe("the real workflows", () => {
     const { claims } = loadClaims();
     expect(
       checkEvidenceMapping({ workflows, lanes: claims?.lanes }).errors
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 });

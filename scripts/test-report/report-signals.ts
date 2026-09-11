@@ -1,4 +1,6 @@
-import { bags, dict, entries, isRecord, items, type Loose } from "./record.ts";
+import { bags, dict, entries, isRecord, items } from "./record.ts";
+import type { Loose } from "./record.ts";
+
 /**
  * Pure helpers for the test-health report inventory signals (#464 backlog).
  * Kept free of I/O so unit tests drive the real logic without regenerating HTML.

@@ -1,15 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict } from "./record.ts";
 
 const floorsPath = path.resolve("tests/floors.json");
 const floors = JSON.parse(await readFile(floorsPath, "utf8")).coverage;

@@ -1,15 +1,6 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-import {
   calculateFlakeRates,
   collectLaneSeries,
   filterFloorConfigEntries,
@@ -31,7 +22,7 @@ describe("durable depth signals", () => {
           ],
         },
       ])
-    ).toEqual({
+    ).toStrictEqual({
       "tests/perf/x.test.ts::p95": {
         owner: "tests/perf/x.test.ts",
         name: "p95",
@@ -62,7 +53,7 @@ describe("durable depth signals", () => {
           },
         ]
       )
-    ).toEqual([{ owner: "a.spec.ts", runs: 2, flaky: 1, rate: 50 }]);
+    ).toStrictEqual([{ owner: "a.spec.ts", runs: 2, flaky: 1, rate: 50 }]);
   });
 
   test("flags weak mutation and floors far below measured coverage", () => {
@@ -71,7 +62,7 @@ describe("durable depth signals", () => {
         [{ scope: "client", lines: 76, lineFloor: 45 }],
         [{ scope: "backup", score: 44.5, floor: 40 }]
       )
-    ).toEqual([
+    ).toStrictEqual([
       {
         kind: "coverage-floor-lag",
         scope: "client",
@@ -102,7 +93,7 @@ describe("durable depth signals", () => {
         [{ scope: "gateway", score: 58, floor: 55 }],
         { coverageHeadroom: 15, mutationMinimum: 60 }
       )
-    ).toEqual([
+    ).toStrictEqual([
       {
         kind: "coverage-floor-lag",
         scope: "oauth-worker (branches)",
@@ -119,7 +110,7 @@ describe("durable depth signals", () => {
   });
 });
 
-describe("filterFloorConfigEntries", () => {
+describe(filterFloorConfigEntries, () => {
   test("drops _comment and non-scope meta keys", () => {
     const entries = filterFloorConfigEntries({
       _comment: "seed floors",
@@ -127,14 +118,14 @@ describe("filterFloorConfigEntries", () => {
       lines: 70,
       "packages/server/**": { lines: 80 },
     });
-    expect(entries.map(([k]) => k).sort()).toEqual([
+    expect(entries.map(([k]) => k).sort()).toStrictEqual([
       "lines",
       "packages/server/**",
     ]);
   });
 });
 
-describe("scopeMatcher", () => {
+describe(scopeMatcher, () => {
   test("`*` stays inside one path segment so sibling trees keep their own floor", () => {
     const match = scopeMatcher("packages/client/src/*.{ts,tsx}");
     expect(match("packages/client/src/gateway-client-atlas.ts")).toBe(true);
@@ -165,7 +156,7 @@ describe("scopeMatcher", () => {
   });
 });
 
-describe("mergeLaneMarkers", () => {
+describe(mergeLaneMarkers, () => {
   test("merges per-lane shards without last-write-win loss", () => {
     expect(
       mergeLaneMarkers([
@@ -173,7 +164,7 @@ describe("mergeLaneMarkers", () => {
         { "web-playwright": "2026-07-24T02:00:00.000Z" },
         { "desktop-playwright": "2026-07-24T03:00:00.000Z" },
       ])
-    ).toEqual({
+    ).toStrictEqual({
       "desktop-playwright": "2026-07-24T03:00:00.000Z",
       "web-playwright": "2026-07-24T02:00:00.000Z",
     });

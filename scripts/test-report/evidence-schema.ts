@@ -1,4 +1,5 @@
-import { dict, has, isRecord } from "./record.ts";
+import { has, isRecord } from "./record.ts";
+
 /**
  * The lane evidence contract (#915 Wave 3, contract C2).
  *

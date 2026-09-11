@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import { baseMatrix, REAL_FILE } from "./claims-fixture.ts";
-import { bags, dict, type Loose } from "./record.ts";
+import { bags } from "./record.ts";
+import type { Loose } from "./record.ts";
 import { validateAppAxes } from "./validate-app-axes.ts";
 
 /**
@@ -26,7 +27,7 @@ describe("appScenarios ledger", () => {
       checkWorkspaceCompleteness: false,
       checkReportRegistries: false,
     });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 
   test("SABOTAGE: rejects a missing ledger", async () => {
@@ -103,6 +104,6 @@ describe("appScenarios ledger", () => {
       checkWorkspaceCompleteness: false,
       checkReportRegistries: false,
     });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 });

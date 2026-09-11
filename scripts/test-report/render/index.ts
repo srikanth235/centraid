@@ -9,16 +9,7 @@
  * everything it said tonight.
  */
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-  type ReportModel,
-} from "../record.ts";
+import type { ReportModel } from "../record.ts";
 import { designSystemCss, REPORT_CSS } from "../report-theme.ts";
 import { renderAdversaries, renderTrends } from "./adversaries.ts";
 import { renderEvidence, renderHowToRead } from "./evidence.ts";

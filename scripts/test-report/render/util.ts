@@ -1,4 +1,5 @@
 import { finite } from "../record.ts";
+
 /**
  * Shared rendering primitives (#915 Wave 3).
  *

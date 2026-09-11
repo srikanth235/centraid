@@ -6,15 +6,6 @@ import { describe, expect, test } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-import {
   SCAN_EXCLUDE,
   SCAN_INCLUDE,
   SKIP_PATTERNS,
@@ -47,7 +38,7 @@ const entry = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-describe("scanSkipSites", () => {
+describe(scanSkipSites, () => {
   test("finds every skip shape and keys them by ordinal, not line", () => {
     const source = [
       "test.skip('a', () => {});",
@@ -57,14 +48,14 @@ describe("scanSkipSites", () => {
       'if (process.env.CENTRAID_DISKFULL_E2E !== "1") {',
     ].join("\n");
     const sites = scanSkipSites("packages/x/src/a.test.ts", source);
-    expect(sites.map((found) => found.kind)).toEqual([
+    expect(sites.map((found) => found.kind)).toStrictEqual([
       "static-skip",
       "conditional-skip",
       "todo",
       "runtime-skip",
       "env-gate",
     ]);
-    expect(sites.map((found) => found.key)).toEqual([
+    expect(sites.map((found) => found.key)).toStrictEqual([
       "packages/x/src/a.test.ts#1",
       "packages/x/src/a.test.ts#2",
       "packages/x/src/a.test.ts#3",
@@ -93,7 +84,7 @@ describe("scanSkipSites", () => {
   });
 });
 
-describe("discoverSkipSites", () => {
+describe(discoverSkipSites, () => {
   /**
    * Write one file (creating parents) under a scratch root.
    * @param {string} root Scratch root.
@@ -123,7 +114,7 @@ describe("discoverSkipSites", () => {
       "it.todo('mobile script');"
     );
     const sites = await discoverSkipSites({ root });
-    expect(sites.map((found) => found.key).sort()).toEqual([
+    expect(sites.map((found) => found.key).sort()).toStrictEqual([
       "apps/mobile/scripts/nested.test.mjs#1",
       "scripts/gateway-package/nested.test.mjs#1",
       "scripts/top.test.mjs#1",
@@ -137,18 +128,18 @@ describe("discoverSkipSites", () => {
       "scripts/test-report/detector.test.mjs",
       "test.skip('quoted fixture', () => {});"
     );
-    expect(await discoverSkipSites({ root })).toEqual([]);
+    await expect(discoverSkipSites({ root })).resolves.toStrictEqual([]);
   });
 });
 
-describe("validateSkipInventory", () => {
+describe(validateSkipInventory, () => {
   test("accepts a fully inventoried population at budget", () => {
     const { errors, count } = validateSkipInventory(
       { _budget: 1, sites: { "a.test.ts#1": entry() } },
       [site("a.test.ts#1")],
       { trackingIssues }
     );
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(count).toBe(1);
   });
 
@@ -218,12 +209,12 @@ describe("validateSkipInventory", () => {
       [site("a.test.ts#1")],
       { trackingIssues }
     );
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(warnings.join("\n")).toContain("moved from line 3 to 10");
   });
 });
 
-describe("reconcileInventory", () => {
+describe(reconcileInventory, () => {
   test("keeps citations, drops vanished sites, and never raises the budget", () => {
     const next = reconcileInventory(
       {
@@ -232,7 +223,10 @@ describe("reconcileInventory", () => {
       },
       [site("a.test.ts#1"), site("b.test.ts#1")]
     );
-    expect(Object.keys(next.sites)).toEqual(["a.test.ts#1", "b.test.ts#1"]);
+    expect(Object.keys(next.sites)).toStrictEqual([
+      "a.test.ts#1",
+      "b.test.ts#1",
+    ]);
     expect(next.sites["a.test.ts#1"].issue).toBe(656);
     expect(next.sites["a.test.ts#1"].line).toBe(10);
     // A brand-new site is stubbed with no issue, so validation still fails

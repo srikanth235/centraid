@@ -23,7 +23,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { loadClaims } from "./claims-schema.ts";
-import { bags, dict, entries, items, type Loose } from "./record.ts";
+import { bags, entries, items } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const WORKFLOWS = path.join(ROOT, ".github/workflows");

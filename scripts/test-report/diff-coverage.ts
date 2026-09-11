@@ -19,15 +19,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict, isRecord } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -43,7 +35,7 @@ export const DEVIATION_PATH = "tests/diff-coverage-deviation.json";
 export function parseUnifiedDiffAddedLines(
   diffText: string
 ): Map<string, Set<number>> {
-  const files: Map<string, Set<number>> = new Map();
+  const files = new Map<string, Set<number>>();
   let current = null;
   let newLine = 0;
   for (const raw of diffText.split("\n")) {
@@ -259,7 +251,7 @@ export function evaluateDiffCoverage(
 export function groupUncoveredHunks(
   uncovered: Array<{ file: string; line: number }>
 ): Array<{ file: string; start: number; end: number; count: number }> {
-  const byFile: Map<string, number[]> = new Map();
+  const byFile = new Map<string, number[]>();
   for (const u of uncovered) {
     const bucket = byFile.get(u.file);
     if (bucket) bucket.push(u.line);

@@ -1,7 +1,8 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 
-import { bags, dict, isRecord, items, text, type Loose } from "./record.ts";
+import { bags, dict, isRecord, text } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const LAYER_IDS = ["unit", "component", "journey"];
 const STATUSES = new Set(["owned", "gap", "product-bug", "held", "skip"]);

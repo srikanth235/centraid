@@ -15,19 +15,11 @@ import {
   topOffenders,
   validateHygieneBudgets,
 } from "./hygiene-ratchet.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const discovered = (totals: Loose, files: string[] = []) => ({ totals, files });
 
-describe("countHygieneSites", () => {
+describe(countHygieneSites, () => {
   test("counts both truthiness matchers", () => {
     const source = [
       "expect(a).toBeTruthy();",
@@ -54,7 +46,9 @@ describe("countHygieneSites", () => {
     // There is no toHaveBeenCalledWith equivalent of "never called", so naming
     // arguments in the negated-bare shape would WEAKEN the assertion — it would
     // start permitting a call with different arguments (QUALITY.md #496).
-    expect(countHygieneSites("expect(fn).not.toHaveBeenCalled();")).toEqual({
+    expect(
+      countHygieneSites("expect(fn).not.toHaveBeenCalled();")
+    ).toStrictEqual({
       toBeTruthyFalsy: 0,
       toHaveBeenCalled: 0,
     });
@@ -76,7 +70,7 @@ describe("countHygieneSites", () => {
   });
 
   test("empty or non-string input counts zero rather than throwing", () => {
-    expect(countHygieneSites("")).toEqual({
+    expect(countHygieneSites("")).toStrictEqual({
       toBeTruthyFalsy: 0,
       toHaveBeenCalled: 0,
     });
@@ -84,14 +78,14 @@ describe("countHygieneSites", () => {
   });
 
   test("scan configuration covers test files and excludes the detectors", () => {
-    expect(SCAN_INCLUDE).toEqual(["**/*.test.ts", "**/*.test.tsx"]);
+    expect(SCAN_INCLUDE).toStrictEqual(["**/*.test.ts", "**/*.test.tsx"]);
     expect(SCAN_EXCLUDE).toContain("node_modules/");
     expect(SCAN_EXCLUDE).toContain("scripts/test-report/");
-    expect(METRIC_KEYS).toEqual(["toBeTruthyFalsy", "toHaveBeenCalled"]);
+    expect(METRIC_KEYS).toStrictEqual(["toBeTruthyFalsy", "toHaveBeenCalled"]);
   });
 });
 
-describe("discoverHygieneCounts", () => {
+describe(discoverHygieneCounts, () => {
   /**
    * Write one file (creating parents) under a scratch root.
    * @param {string} root Scratch root.
@@ -125,11 +119,11 @@ describe("discoverHygieneCounts", () => {
     );
 
     const result = await discoverHygieneCounts({ root });
-    expect(result.totals).toEqual({
+    expect(result.totals).toStrictEqual({
       toBeTruthyFalsy: 2,
       toHaveBeenCalled: 2,
     });
-    expect(result.files.map((entry) => entry.file)).toEqual([
+    expect(result.files.map((entry) => entry.file)).toStrictEqual([
       "apps/mobile/src/screens/Screen.test.tsx",
       "packages/vault/src/deep/nested/thing.test.ts",
       "top.test.ts",
@@ -145,12 +139,15 @@ describe("discoverHygieneCounts", () => {
       "expect(a).toBeTruthy();"
     );
     const result = await discoverHygieneCounts({ root });
-    expect(result.totals).toEqual({ toBeTruthyFalsy: 0, toHaveBeenCalled: 0 });
-    expect(result.files).toEqual([]);
+    expect(result.totals).toStrictEqual({
+      toBeTruthyFalsy: 0,
+      toHaveBeenCalled: 0,
+    });
+    expect(result.files).toStrictEqual([]);
   });
 });
 
-describe("topOffenders", () => {
+describe(topOffenders, () => {
   test("names the worst files first, ties broken by path", () => {
     const files = [
       { file: "b.test.ts", toBeTruthyFalsy: 3, toHaveBeenCalled: 0 },
@@ -158,20 +155,20 @@ describe("topOffenders", () => {
       { file: "c.test.ts", toBeTruthyFalsy: 9, toHaveBeenCalled: 0 },
       { file: "d.test.ts", toBeTruthyFalsy: 0, toHaveBeenCalled: 4 },
     ];
-    expect(topOffenders(files, "toBeTruthyFalsy", 2)).toEqual([
+    expect(topOffenders(files, "toBeTruthyFalsy", 2)).toStrictEqual([
       "c.test.ts (9)",
       "a.test.ts (3)",
     ]);
   });
 });
 
-describe("validateHygieneBudgets", () => {
+describe(validateHygieneBudgets, () => {
   test("accepts a population exactly at budget", () => {
     const { errors, totals } = validateHygieneBudgets(
       { budgets: { toBeTruthyFalsy: 2, toHaveBeenCalled: 5 } },
       discovered({ toBeTruthyFalsy: 2, toHaveBeenCalled: 5 })
     );
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(totals.toHaveBeenCalled).toBe(5);
   });
 
@@ -231,7 +228,7 @@ describe("validateHygieneBudgets", () => {
   });
 });
 
-describe("reconcileBudgets", () => {
+describe(reconcileBudgets, () => {
   test("lowers to the measurement and never raises it", () => {
     const next = reconcileBudgets(
       {
@@ -242,13 +239,16 @@ describe("reconcileBudgets", () => {
     );
     // Slack is taken up; a REGRESSION is not laundered — toHaveBeenCalled stays
     // at 2, so the gate keeps failing until someone raises it by hand.
-    expect(next.budgets).toEqual({ toBeTruthyFalsy: 4, toHaveBeenCalled: 2 });
+    expect(next.budgets).toStrictEqual({
+      toBeTruthyFalsy: 4,
+      toHaveBeenCalled: 2,
+    });
     expect(next._comment).toBe("kept");
   });
 
   test("seeds a missing budget from the measurement", () => {
     expect(
       reconcileBudgets({}, { toBeTruthyFalsy: 3, toHaveBeenCalled: 8 }).budgets
-    ).toEqual({ toBeTruthyFalsy: 3, toHaveBeenCalled: 8 });
+    ).toStrictEqual({ toBeTruthyFalsy: 3, toHaveBeenCalled: 8 });
   });
 });

@@ -17,7 +17,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { bags, dict, type Loose } from "./record.ts";
+import { bags, dict } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 export const ROOT = path.resolve(import.meta.dirname, "../..");
 
@@ -208,8 +209,8 @@ export function deriveExperienceBudgets() {
   for (const [key, raw] of Object.entries(dict(ledger.entries))) {
     const entry = dict(raw);
     const surface = String(entry.surface ?? "");
-    const bucket = out[surface] ?? (out[surface] = {});
-    bucket[key] = entry;
+    out[surface] ??= {};
+    dict(out[surface])[key] = entry;
   }
   return out;
 }

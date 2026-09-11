@@ -2,14 +2,8 @@ import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { loadRoster, readSuiteRunners } from "./derive.ts";
-import {
-  bags,
-  dict,
-  fromAsync,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { bags, dict, fromAsync, isRecord, items } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 /**
  * Derivation locks for the two registry blocks report v2 renders from

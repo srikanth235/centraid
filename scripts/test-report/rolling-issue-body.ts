@@ -18,16 +18,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { readEvidenceDir } from "./read-evidence.ts";
-import {
-  bags,
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { bags } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 

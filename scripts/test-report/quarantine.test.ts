@@ -1,15 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import { parseDay, readQuarantine, validateQuarantine } from "./quarantine.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { items } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const NOW = Date.parse("2026-07-31T12:00:00Z");
 
@@ -30,7 +23,7 @@ const doc = (entries: unknown, policy: Loose = {}) => ({
 
 describe("flake quarantine protocol", () => {
   test("accepts an entry that cites an issue, a reason, and a live expiry", () => {
-    expect(validateQuarantine(doc([entry()]), NOW).errors).toEqual([]);
+    expect(validateQuarantine(doc([entry()]), NOW).errors).toStrictEqual([]);
   });
 
   test("an expired entry is a hard failure, so debt cannot be parked forever", () => {
@@ -111,6 +104,6 @@ describe("flake quarantine protocol", () => {
   });
 
   test("the committed quarantine file satisfies its own protocol", () => {
-    expect(validateQuarantine(readQuarantine(), NOW).errors).toEqual([]);
+    expect(validateQuarantine(readQuarantine(), NOW).errors).toStrictEqual([]);
   });
 });

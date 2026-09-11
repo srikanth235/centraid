@@ -12,15 +12,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { validateEvidence } from "./evidence-schema.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { errorMessage } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 /**
  * Read a directory of `<lane>.json` evidence files.
@@ -41,7 +34,7 @@ export function readEvidenceDir(
   const readFile =
     io.readFile ?? ((target: string) => readFileSync(target, "utf8"));
 
-  const lanes: Map<string, Loose> = new Map();
+  const lanes = new Map<string, Loose>();
   const errors: string[] = [];
 
   let entries;

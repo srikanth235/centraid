@@ -1,4 +1,5 @@
-import { bags, dict, isRecord, items, type Loose } from "./record.ts";
+import { bags, dict, isRecord, items } from "./record.ts";
+
 /** Persist every perf/scale measurement in the durable run summary. */
 export function collectLaneSeries(results: unknown) {
   const series: Record<string, unknown> = {};

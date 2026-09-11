@@ -14,15 +14,6 @@ import {
 } from "./evidence-schema.ts";
 import { readEvidenceDir } from "./read-evidence.ts";
 import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-import {
   buildEvidence,
   lookupPark,
   parseArgs,
@@ -58,7 +49,7 @@ function sample(overrides: Record<string, unknown> = {}) {
 
 describe("the evidence vocabulary", () => {
   it("is exactly four words", () => {
-    expect([...VERDICTS]).toEqual([
+    expect([...VERDICTS]).toStrictEqual([
       "passed",
       "failed",
       "parked",
@@ -72,9 +63,9 @@ describe("the evidence vocabulary", () => {
   });
 });
 
-describe("validateEvidence", () => {
+describe(validateEvidence, () => {
   it("accepts a well-formed lane file", () => {
-    expect(validateEvidence(sample())).toEqual({ ok: true, errors: [] });
+    expect(validateEvidence(sample())).toStrictEqual({ ok: true, errors: [] });
   });
 
   it("collects every problem rather than the first", () => {
@@ -150,7 +141,7 @@ describe("the writer CLI", () => {
     });
     const read = (name: string) =>
       name === "tests/quarantine.json" ? ledger : null;
-    expect(lookupPark("mobile-e2e-ios", read, "2026-09-02")).toEqual({
+    expect(lookupPark("mobile-e2e-ios", read, "2026-09-02")).toStrictEqual({
       until: "2026-09-16",
       issue: 870,
     });
@@ -164,7 +155,7 @@ describe("the writer CLI", () => {
             lanes: { soak: { issue: "#901", until: "2026-10-01" } },
           })
         : null;
-    expect(lookupPark("soak", read, "2026-09-02")).toEqual({
+    expect(lookupPark("soak", read, "2026-09-02")).toStrictEqual({
       until: "2026-10-01",
       issue: 901,
     });
@@ -207,11 +198,11 @@ describe("the writer CLI", () => {
       { now: new Date("2026-09-02T06:05:00Z"), park: null, cases: [] }
     );
     expect(evidence.durationMs).toBe(300_000);
-    expect(evidence.tags.qualities).toEqual(["correctness", "contracts"]);
+    expect(evidence.tags.qualities).toStrictEqual(["correctness", "contracts"]);
   });
 });
 
-describe("readEvidenceDir", () => {
+describe(readEvidenceDir, () => {
   it("reads valid files and reports malformed ones instead of dropping them", () => {
     const dir = tempDirSync("centraid-evidence-");
     mkdirSync(dir, { recursive: true });
@@ -226,7 +217,7 @@ describe("readEvidenceDir", () => {
     );
 
     const { lanes, errors } = readEvidenceDir(dir);
-    expect([...lanes.keys()]).toEqual(["static"]);
+    expect([...lanes.keys()]).toStrictEqual(["static"]);
     expect(errors).toHaveLength(2);
     expect(errors.join("\n")).toMatch(/broken\.json/u);
     expect(errors.join("\n")).toMatch(/should be named static2\.json/u);
@@ -237,6 +228,6 @@ describe("readEvidenceDir", () => {
       path.join(tmpdir(), "centraid-no-such-dir-915")
     );
     expect(lanes.size).toBe(0);
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 });

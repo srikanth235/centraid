@@ -1,4 +1,5 @@
-import { dict, has, type Loose } from "../record.ts";
+import { dict, has } from "../record.ts";
+
 /**
  * Severity, declared rather than computed (#915 Wave 3).
  *

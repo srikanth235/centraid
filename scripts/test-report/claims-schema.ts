@@ -18,14 +18,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { PLATFORMS, RUNGS } from "./evidence-schema.ts";
-import {
-  dict,
-  entries,
-  errorMessage,
-  has,
-  isRecord,
-  type Loose,
-} from "./record.ts";
+import { dict, entries, errorMessage, has, isRecord } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 export const CLAIMS_SCHEMA_VERSION = 1;
 

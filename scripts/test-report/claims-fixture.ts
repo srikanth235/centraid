@@ -1,12 +1,5 @@
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import type { Loose } from "./record.ts";
+
 /**
  * The shared synthetic claims file the app-axis unit suites sabotage (#915).
  *

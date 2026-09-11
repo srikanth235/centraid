@@ -1,14 +1,5 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 import { designSystemCss, REPORT_CSS, verifySheet } from "./report-theme.ts";
 import { renderFixture } from "./smoke.ts";
 
@@ -399,7 +390,7 @@ describe("the layers the report authors", () => {
     const unresolved = [...referenced(live(AUTHORED))].filter(
       (name) => !resolvable.has(name)
     );
-    expect(unresolved).toEqual([]);
+    expect(unresolved).toStrictEqual([]);
   });
 
   test("paints one tint per meaning, across every grid on the page", () => {
@@ -428,7 +419,7 @@ describe("the layers the report authors", () => {
     // the collapse #864 had to name — `infra-mismatch` riding the consequence
     // tint with `failed` — went with the state itself. Six states, six
     // families, no doubling at all.
-    expect(doubled).toEqual([]);
+    expect(doubled).toStrictEqual([]);
     // And the converse: a meaning may not be spoken in two tints either, which
     // is how "no test exists" came to be red in §8 and grey in §2.
     const tints = new Map();
@@ -440,7 +431,7 @@ describe("the layers the report authors", () => {
     }
     expect(
       [...tints].filter(([, values]) => values.size > 1).map(([name]) => name)
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   test("separates two states inside a family, or says why it does not", () => {
@@ -483,7 +474,7 @@ describe("the layers the report authors", () => {
         (hit) => `.cell${hit.groups?.mods ?? ""}`
       )
     );
-    expect([...painted].sort()).toEqual(Object.keys(REGISTER).sort());
+    expect([...painted].sort()).toStrictEqual(Object.keys(REGISTER).sort());
   });
 });
 
@@ -553,9 +544,9 @@ describe("the Night Watch palette", () => {
         ).toContain(states.join(" · "));
       }
       // The whitelist may not outlive what it excuses either.
-      expect(shared.map(([, states]) => states.join(" · ")).sort()).toEqual(
-        [...allowed].sort()
-      );
+      expect(
+        shared.map(([, states]) => states.join(" · ")).sort()
+      ).toStrictEqual([...allowed].sort());
     }
   });
 
@@ -584,7 +575,7 @@ describe("the rendered page", () => {
     const unresolved = [...referenced(live(style))].filter(
       (name) => !resolvable.has(name)
     );
-    expect(unresolved).toEqual([]);
+    expect(unresolved).toStrictEqual([]);
     expect(style).not.toMatch(/\bInter\b\s*,/u);
     // Self-contained, at both depths it is published to and years after the
     // run that produced it: no sibling asset, no network.

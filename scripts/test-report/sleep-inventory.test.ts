@@ -6,15 +6,6 @@ import { describe, expect, test } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-import {
   SCAN_EXCLUDE,
   SCAN_INCLUDE,
   countSleepSites,
@@ -26,7 +17,7 @@ import {
   validateSleepInventory,
 } from "./sleep-inventory.ts";
 
-describe("countSleepSites", () => {
+describe(countSleepSites, () => {
   test("counts every fixed-sleep shape once", () => {
     const source = [
       // Promise-wrapped, one line.
@@ -82,7 +73,7 @@ describe("countSleepSites", () => {
   });
 });
 
-describe("discoverSleepSites", () => {
+describe(discoverSleepSites, () => {
   /**
    * Write one file (creating parents) under a scratch root.
    * @param {string} root Scratch root.
@@ -113,7 +104,7 @@ describe("discoverSleepSites", () => {
       "await new Promise((resolve) => {\n  setTimeout(resolve, 500);\n});"
     );
     writeFixture(root, "packages/x/src/clean.test.ts", "expect(1).toBe(1);");
-    expect(await discoverSleepSites({ root })).toStrictEqual({
+    await expect(discoverSleepSites({ root })).resolves.toStrictEqual({
       "packages/x/src/a.test.ts": 2,
       "scripts/gateway-package/nested.test.mjs": 1,
       "tests/agent-e2e-pairing/flows/flow.mjs": 1,
@@ -139,11 +130,11 @@ describe("discoverSleepSites", () => {
     expect(SCAN_INCLUDE.some((pattern) => pattern.startsWith("tests/"))).toBe(
       true
     );
-    expect(await discoverSleepSites({ root })).toStrictEqual({});
+    await expect(discoverSleepSites({ root })).resolves.toStrictEqual({});
   });
 });
 
-describe("validateSleepInventory", () => {
+describe(validateSleepInventory, () => {
   test("accepts a fully inventoried population at budget", () => {
     const { errors, count } = validateSleepInventory(
       { _budget: 3, sites: { "a.test.ts": 2, "b.test.ts": 1 } },
@@ -203,7 +194,7 @@ describe("validateSleepInventory", () => {
   });
 });
 
-describe("reconcileInventory", () => {
+describe(reconcileInventory, () => {
   test("refreshes counts, drops vanished files, and never raises the budget", () => {
     const next = reconcileInventory(
       { _budget: 9, sites: { "a.test.ts": 2, "gone.test.ts": 3 } },
@@ -217,7 +208,7 @@ describe("reconcileInventory", () => {
   });
 });
 
-describe("topOffenders", () => {
+describe(topOffenders, () => {
   test("orders by count then path and formats hygiene-ratchet style", () => {
     const offenders = topOffenders(
       { "b.test.ts": 2, "a.test.ts": 2, "c.test.ts": 5 },

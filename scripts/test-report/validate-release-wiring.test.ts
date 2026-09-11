@@ -5,15 +5,6 @@ import { describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 import { lintReleaseWiring } from "./validate-release-wiring.ts";
 
 /**

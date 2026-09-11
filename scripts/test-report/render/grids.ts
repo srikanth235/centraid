@@ -10,7 +10,8 @@
  * lanes behind it, and a cell with no lane is `no evidence`, never blank.
  */
 
-import { bags, dict, items, type ReportModel } from "../record.ts";
+import { bags, dict, items } from "../record.ts";
+import type { ReportModel } from "../record.ts";
 import { escapeHtml, section } from "./util.ts";
 
 const STATE_LETTERS: Record<string, string> = Object.freeze({

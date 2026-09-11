@@ -1,15 +1,6 @@
 import { describe, expect, test } from "vitest";
 
 import { historyPoint } from "./history-point.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 
 /**
  * #535 / #839 Wave 5 — the durable-history read boundary.
@@ -20,7 +11,7 @@ import {
  * field NOT on the whitelist never reaches the report, and a field that is on
  * it but absent reads as null/empty rather than as a flattering zero.
  */
-describe("historyPoint", () => {
+describe(historyPoint, () => {
   test("an unknown field never crosses the boundary", () => {
     const point = historyPoint({ label: "n", cellsMissing: 3, smuggled: 99 });
     expect(point).not.toHaveProperty("smuggled");

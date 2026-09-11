@@ -1,14 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict } from "./record.ts";
+import type { Loose } from "./record.ts";
 import {
   declaredTestTitles,
   runnerBudgetMinutes,
@@ -149,7 +142,7 @@ function run(
   });
 }
 
-describe("declaredTestTitles", () => {
+describe(declaredTestTitles, () => {
   test("reads one-line and wrapped declarations, in file order", () => {
     expect(declaredTestTitles(JOIN_SOURCE)).toStrictEqual([
       "law one holds",
@@ -184,9 +177,9 @@ describe("runner readers", () => {
   });
 });
 
-describe("validateReportRegistries", () => {
+describe(validateReportRegistries, () => {
   test("accepts well-formed registries", async () => {
-    expect(await run(baseMatrix())).toStrictEqual([]);
+    await expect(run(baseMatrix())).resolves.toStrictEqual([]);
   });
 
   test("SABOTAGE: a join law deleted from its suite fails the count lock", async () => {

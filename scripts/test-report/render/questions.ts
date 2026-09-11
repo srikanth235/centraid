@@ -1,11 +1,5 @@
-import {
-  bags,
-  dict,
-  items,
-  text,
-  type Loose,
-  type ReportModel,
-} from "../record.ts";
+import { bags, text } from "../record.ts";
+import type { ReportModel } from "../record.ts";
 /**
  * §1 blockers, §2 since yesterday, §3 attention queue (#915 Wave 3).
  *

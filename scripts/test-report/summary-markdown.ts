@@ -6,15 +6,8 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { dict } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 export const REPORT_COMMENT_MARKER = "<!-- centraid-test-health-report -->";
 /**

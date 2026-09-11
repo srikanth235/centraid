@@ -38,13 +38,11 @@ import path from "node:path";
 import {
   PERF_BUDGET_SOURCES,
   diffPerfBudgetNumbers,
-  extractBudgetNumbersFromSource,
-  flattenBudgetNumbers,
   deviationChanged,
-  hasApprovedDeviation,
   loadBudgetSource,
 } from "./ratchet-budget.ts";
-import { bags, dict, isRecord, items, type Loose } from "./record.ts";
+import { bags, dict, isRecord, items } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 export {
   PERF_BUDGET_SOURCES,

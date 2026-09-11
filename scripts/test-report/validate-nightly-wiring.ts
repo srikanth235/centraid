@@ -3,23 +3,14 @@
  * inside `.github/workflows/e2e.yml` and no longer depend on a standalone
  * pairing-relay workflow or a cross-run `gh run download`.
  *
- * This is the real shipped wiring (the YAML GHA executes), not a reimplementation
- * of the flows themselves.
+ * This is the real shipped wiring, not a reimplementation of the flows.
  */
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { rigPaths } from "./journey-rigs.ts";
-import {
-  bags,
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
+import { bags } from "./record.ts";
+import type { Loose } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const e2ePath = path.join(root, ".github/workflows/e2e.yml");
@@ -629,9 +620,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `nightly-wiring: ${mobileLanes.length} mobile device lane(s) discovered, all pinned to one Maestro version and none starting Metro`
-  );
-  console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, dast-scan, and protocol-join; weekly enrichment-live and soak lanes wired; standalone pairing-relay-e2e removed"
+    `nightly-wiring: ${mobileLanes.length} mobile lanes; e2e.yml owns pairing, ticket-hygiene, relay, mutation, fuzz, dast, join; weekly enrichment-live and soak wired`
   );
 }

@@ -15,15 +15,6 @@
 import path from "node:path";
 
 import { collectModel, parseFlags } from "./generate.ts";
-import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
 import { renderReport } from "./render/index.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");

@@ -1,15 +1,6 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  dict,
-  errorMessage,
-  fromAsync,
-  has,
-  isRecord,
-  items,
-  type Loose,
-} from "./record.ts";
-import {
   collectCitations,
   declaredOpenIssues,
   reportCitationErrors,
@@ -48,7 +39,7 @@ const matrixWith = (issue: unknown, state: unknown) => ({
   },
 });
 
-describe("collectCitations", () => {
+describe(collectCitations, () => {
   test("collects structural trackingIssue and issue fields with their paths", () => {
     const citations = collectCitations(
       {
@@ -57,8 +48,8 @@ describe("collectCitations", () => {
       },
       "tests/fixture.json"
     );
-    expect([...citations.keys()]).toEqual([864]);
-    expect(citations.get(864)).toEqual([
+    expect([...citations.keys()]).toStrictEqual([864]);
+    expect(citations.get(864)).toStrictEqual([
       "tests/fixture.json.gaps.extension.offline.trackingIssue",
       "tests/fixture.json.sites.a.test.ts#1.issue",
     ]);
@@ -76,7 +67,7 @@ describe("collectCitations", () => {
       },
       "m"
     );
-    expect([...citations.keys()]).toEqual([864]);
+    expect([...citations.keys()]).toStrictEqual([864]);
     expect(citations.get(864)).toHaveLength(3);
   });
 
@@ -87,11 +78,11 @@ describe("collectCitations", () => {
       },
       "m"
     );
-    expect([...citations.keys()]).toEqual([]);
+    expect([...citations.keys()]).toStrictEqual([]);
   });
 });
 
-describe("declaredOpenIssues", () => {
+describe(declaredOpenIssues, () => {
   test("returns only the entries that claim to be open", () => {
     expect(
       declaredOpenIssues({
@@ -101,11 +92,11 @@ describe("declaredOpenIssues", () => {
           781: { state: "open" },
         },
       })
-    ).toEqual([781, 864]);
+    ).toStrictEqual([781, 864]);
   });
 });
 
-describe("validateOpenCitations", () => {
+describe(validateOpenCitations, () => {
   const sources = {
     "tests/claims.json": {
       gaps: { "extension.offline": { trackingIssue: 42 } },
@@ -119,7 +110,7 @@ describe("validateOpenCitations", () => {
       token: "t",
       fetchImpl: fakeFetch({ 42: "open" }),
     });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
     expect(checked).toBe(1);
   });
 
@@ -207,7 +198,7 @@ describe("validateOpenCitations", () => {
   });
 });
 
-describe("reportCitationErrors", () => {
+describe(reportCitationErrors, () => {
   test("lists every stale citation, sorted, one error each", () => {
     const errors = reportCitationErrors({
       citations: new Map([
