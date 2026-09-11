@@ -34,16 +34,12 @@ import Queue from "./approvals/ApprovalsQueue";
 import { useApprovals } from "./approvals/useApprovals";
 import type { BodyProps, Focus } from "./approvals/view-types";
 import { SHELL_TITLES } from "./shell-copy";
-import { useShellParent } from "./shell-places";
 
 export default function ApprovalsScreen({
   navigation,
 }: SettingsScreenProps<"Approvals">): React.JSX.Element {
   const { colors } = useTheme();
   const page = useApprovals();
-  // Pushed inside Settings (its row, or a push notification): back names the
-  // real parent, as PhoneStorage's does. Undefined at a stack root.
-  const backTo = useShellParent();
   const [focus, setFocus] = useState<Focus>({
     alwaysAllow: false,
     editing: false,
@@ -70,7 +66,6 @@ export default function ApprovalsScreen({
 
   return (
     <SystemPlace
-      backTo={backTo}
       bodyRef={scroller}
       error={
         page.state === "error"
@@ -99,7 +94,6 @@ export default function ApprovalsScreen({
           ? { label: "Reading what is waiting on you", note: LOADING_NOTE }
           : undefined
       }
-      onBack={() => navigation.goBack()}
       // Not pop-to-Settings: also reached from push notifications, where
       // Settings is not beneath.
       onHome={() => navigation.goBack()}

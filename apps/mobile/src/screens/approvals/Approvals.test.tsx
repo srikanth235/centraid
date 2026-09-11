@@ -24,20 +24,6 @@ import type { SettingsScreenProps } from "../../navigation";
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
 import ApprovalsScreen from "../Approvals";
 
-// The room reads its back destination off the navigator (`shell-places.ts`).
-// Pushed from Settings' row, so Settings is the named parent.
-vi.mock(
-  import("@react-navigation/native"),
-  () =>
-    ({
-      useNavigationState: (selector: (state: unknown) => unknown) =>
-        selector({
-          index: 1,
-          routes: [{ name: "SettingsHome" }, { name: "Approvals" }],
-        }),
-    }) as never
-);
-
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
   return {
@@ -252,16 +238,6 @@ describe(ApprovalsScreen, () => {
     expect(
       nodesOf(container, "button").map((node) => node.textContent ?? "")
     ).not.toContain("Review all");
-  });
-
-  it("draws a back key to Settings when pushed from it, and goes back", async () => {
-    const container = await render();
-    const back = nodesOf(container, "button").find(
-      (node) => node.getAttribute("aria-label") === "Back to Settings"
-    );
-    expect(back).toBeDefined();
-    press(back);
-    expect(navigation.goBack).toHaveBeenCalledOnce();
   });
 
   it("keeps every notice out of the queue, a failing rule included", async () => {
