@@ -1,14 +1,16 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parkFor, renderFallbackBody } from "./rolling-issue-fallback-body.mjs";
+import { parkFor, renderFallbackBody } from "./rolling-issue-fallback-body.ts";
 
 test("parkFor reads the first ledger that names the lane", () => {
   const lanes = [
     { lanes: { "mobile-e2e-ios": { issue: 870, expires: "2026-09-16" } } },
     { lanes: { "mobile-e2e-ios": { issue: 1, expires: "2030-01-01" } } },
   ];
-  assert.equal(parkFor(lanes, "mobile-e2e-ios").issue, 870);
+  assert.equal(parkFor(lanes, "mobile-e2e-ios")?.issue, 870);
   assert.equal(parkFor(lanes, "web-e2e"), null);
   assert.equal(parkFor([], "web-e2e"), null);
   assert.equal(parkFor([{}], "web-e2e"), null);

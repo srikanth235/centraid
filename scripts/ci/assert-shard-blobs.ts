@@ -18,7 +18,7 @@
  * the blobs say 6" as different, nameable errors instead of one arithmetic
  * coincidence.
  *
- * Usage: node scripts/ci/assert-shard-blobs.mjs --expect 8 [--dir .vitest-reports]
+ * Usage: node scripts/ci/assert-shard-blobs.ts --expect 8 [--dir .vitest-reports]
  */
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -30,21 +30,23 @@ const BLOB_NAME = /^blob-(?<index>\d+)-(?<total>\d+)\.json$/u;
 /**
  * Compare the blobs on disk against the shard count that was dispatched.
  *
- * @param {string[]} files directory listing
- * @param {number} expected shard count the lane dispatched
- * @returns {string[]} human-readable errors; empty means the world is whole
+ * @param files directory listing
+ * @param expected shard count the lane dispatched
+ * @returns human-readable errors; empty means the world is whole
  */
-export function checkShardBlobs(files, expected) {
-  const errors = [];
+export function checkShardBlobs(files: string[], expected: number): string[] {
+  const errors: string[] = [];
   if (!Number.isInteger(expected) || expected < 1) {
     return [`--expect must be a positive integer, got ${expected}`];
   }
-  const seen = new Map();
+  const seen = new Map<number, string>();
   for (const file of files) {
     const match = BLOB_NAME.exec(file);
     if (!match) continue;
-    const index = Number(match.groups.index);
-    const total = Number(match.groups.total);
+    const groups = match.groups;
+    if (!groups) continue;
+    const index = Number(groups["index"]);
+    const total = Number(groups["total"]);
     if (total !== expected) {
       errors.push(
         `${file} was produced by a ${total}-way split but this lane dispatched ${expected}. ` +
@@ -62,7 +64,7 @@ export function checkShardBlobs(files, expected) {
     }
     seen.set(index, file);
   }
-  const missing = [];
+  const missing: number[] = [];
   for (let index = 1; index <= expected; index += 1) {
     if (!seen.has(index)) missing.push(index);
   }
@@ -77,16 +79,23 @@ export function checkShardBlobs(files, expected) {
   return errors;
 }
 
-function parseArgs(argv) {
-  const out = { expect: null, dir: ".vitest-reports" };
+function parseArgs(argv: string[]): { expect: number; dir: string } {
+  const out = { expect: Number.NaN, dir: ".vitest-reports" };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--expect" && argv[i + 1]) out.expect = Number(argv[++i]);
-    else if (argv[i] === "--dir" && argv[i + 1]) out.dir = argv[++i];
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (current === "--expect" && next !== undefined) {
+      out.expect = Number(next);
+      i += 1;
+    } else if (current === "--dir" && next !== undefined) {
+      out.dir = next;
+      i += 1;
+    }
   }
   return out;
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const dir = path.resolve(root, args.dir);
   if (!existsSync(dir)) {

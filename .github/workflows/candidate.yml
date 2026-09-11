@@ -815,7 +815,7 @@ jobs:
           path: .gh-pages-candidates
       - name: Bisect the candidate list
         run: |
-          node scripts/ci/bisect-journeys.mjs \
+          node scripts/ci/bisect-journeys.ts \
             --journey '${{ inputs.bisect_journey }}' \
             --history .gh-pages-candidates/test-report/candidate-journeys \
             --output artifacts/perf/bisect.json
@@ -1174,7 +1174,7 @@ jobs:
           jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key' /tmp/needs.json > /tmp/red-lanes.txt
           while read -r lane; do
             [ -n "$lane" ] || continue
-            node scripts/ci/rolling-issue-fallback-body.mjs \
+            node scripts/ci/rolling-issue-fallback-body.ts \
               --lane "$lane" --rung 3 --result failure \
               --run-url "$RUN_URL" --out /tmp/rolling-body.md
             node scripts/ci/file-tracking-issue.mjs --update \

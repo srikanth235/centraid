@@ -1,9 +1,11 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { checkShardBlobs } from "./assert-shard-blobs.mjs";
+import { checkShardBlobs } from "./assert-shard-blobs.ts";
 
-const blobs = (n) =>
+const blobs = (n: number): string[] =>
   Array.from({ length: n }, (_, i) => `blob-${i + 1}-${n}.json`);
 
 test("a complete set of blobs passes", () => {
@@ -14,8 +16,8 @@ test("a missing shard is refused and named", () => {
   const files = blobs(8).filter((f) => f !== "blob-5-8.json");
   const errors = checkShardBlobs(files, 8);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /shard\(s\) 5 of 8/u);
-  assert.match(errors[0], /SMALLER test universe/u);
+  assert.match(errors[0] ?? "", /shard\(s\) 5 of 8/u);
+  assert.match(errors[0] ?? "", /SMALLER test universe/u);
 });
 
 test("a shard-count mismatch is a different, nameable error", () => {
@@ -43,7 +45,7 @@ test("a duplicated shard is caught even when the count happens to match", () => 
 test("an empty directory is refused rather than merging nothing", () => {
   const errors = checkShardBlobs([], 4);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /shard\(s\) 1, 2, 3, 4 of 4/u);
+  assert.match(errors[0] ?? "", /shard\(s\) 1, 2, 3, 4 of 4/u);
 });
 
 test("unrelated files in the directory are ignored", () => {
@@ -54,6 +56,9 @@ test("unrelated files in the directory are ignored", () => {
 });
 
 test("a nonsensical --expect fails rather than passing vacuously", () => {
-  assert.match(checkShardBlobs(blobs(4), 0)[0], /positive integer/u);
-  assert.match(checkShardBlobs(blobs(4), Number.NaN)[0], /positive integer/u);
+  assert.match(checkShardBlobs(blobs(4), 0)[0] ?? "", /positive integer/u);
+  assert.match(
+    checkShardBlobs(blobs(4), Number.NaN)[0] ?? "",
+    /positive integer/u
+  );
 });

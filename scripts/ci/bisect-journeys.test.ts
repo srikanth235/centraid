@@ -1,9 +1,20 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { firstSustainedStep } from "./bisect-journeys.mjs";
+import { firstSustainedStep } from "./bisect-journeys.ts";
 
-const point = (sha, deltaMs) => ({
+const point = (
+  sha: string,
+  deltaMs: number
+): {
+  sha: string;
+  at: string;
+  deltaMs: number;
+  toleranceMs: number;
+  verdict: string;
+} => ({
   sha,
   at: `2026-09-0${sha}T00:00:00Z`,
   deltaMs,
@@ -19,7 +30,7 @@ test("the first promotion that cleared the tolerance and stayed is the culprit",
     point("4", 41),
     point("5", 39),
   ]);
-  assert.equal(culprit.sha, "3");
+  assert.equal(culprit?.sha, "3");
 });
 
 test("a spike that reverts is a blip, not a culprit", () => {
@@ -39,7 +50,7 @@ test("a spike that reverts is a blip, not a culprit", () => {
 
 test("a step at the very end is reported rather than swallowed for want of a window", () => {
   const { culprit } = firstSustainedStep([point("1", 2), point("2", 44)]);
-  assert.equal(culprit.sha, "2");
+  assert.equal(culprit?.sha, "2");
 });
 
 test("an all-clean series blames nobody", () => {

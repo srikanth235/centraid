@@ -17,27 +17,64 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+export interface JourneyPoint {
+  sha: string;
+  at: unknown;
+  deltaMs: number;
+  verdict: unknown;
+  toleranceMs: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asPoint(
+  sha: string,
+  generatedAt: unknown,
+  row: unknown
+): JourneyPoint | null {
+  if (!isRecord(row)) return null;
+  if (typeof row.deltaMs !== "number" || typeof row.toleranceMs !== "number") {
+    return null;
+  }
+  return {
+    sha,
+    at: generatedAt,
+    deltaMs: row.deltaMs,
+    verdict: row.verdict,
+    toleranceMs: row.toleranceMs,
+  };
+}
+
 /** Promotions must be walked in order; the record carries its own timestamp. */
-export function readSeries(historyDir, journeyKey) {
+export function readSeries(
+  historyDir: string,
+  journeyKey: string
+): JourneyPoint[] {
   const files = readdirSync(historyDir).filter(
     (name) => name.endsWith(".json") && name !== "latest.json"
   );
-  const points = [];
+  const points: JourneyPoint[] = [];
   for (const name of files) {
-    const report = JSON.parse(
+    const report: unknown = JSON.parse(
       readFileSync(path.join(historyDir, name), "utf8")
     );
-    const row = (report.rows ?? []).find(
-      (candidate) => `${candidate.key}#${candidate.metric}` === journeyKey
-    );
-    if (!row) continue;
-    points.push({
-      sha: path.basename(name, ".json"),
-      at: report.generatedAt,
-      deltaMs: row.deltaMs,
-      verdict: row.verdict,
-      toleranceMs: row.toleranceMs,
+    if (!isRecord(report)) continue;
+    const rows = Array.isArray(report.rows) ? report.rows : [];
+    const row = rows.find((candidate) => {
+      if (!isRecord(candidate)) return false;
+      return (
+        `${String(candidate.key)}#${String(candidate.metric)}` === journeyKey
+      );
     });
+    if (!row) continue;
+    const point = asPoint(
+      path.basename(name, ".json"),
+      report.generatedAt,
+      row
+    );
+    if (point) points.push(point);
   }
   return points.sort((left, right) =>
     String(left.at).localeCompare(String(right.at))
@@ -47,14 +84,15 @@ export function readSeries(historyDir, journeyKey) {
 /**
  * The first promotion whose paired delta cleared the tolerance and STAYED
  * cleared for `confirm` further promotions.
- * @param {ReturnType<typeof readSeries>} series Ordered promotions.
- * @param {number} [confirm] How many later promotions must agree.
- * @returns {{ culprit: object | null, blips: object[] }} The verdict.
  */
-export function firstSustainedStep(series, confirm = 2) {
-  const blips = [];
+export function firstSustainedStep(
+  series: readonly JourneyPoint[],
+  confirm = 2
+): { culprit: JourneyPoint | null; blips: JourneyPoint[] } {
+  const blips: JourneyPoint[] = [];
   for (let index = 0; index < series.length; index += 1) {
     const point = series[index];
+    if (point === undefined) continue;
     if (point.deltaMs <= point.toleranceMs) continue;
     const window = series.slice(index + 1, index + 1 + confirm);
     if (
@@ -68,10 +106,16 @@ export function firstSustainedStep(series, confirm = 2) {
   return { culprit: null, blips };
 }
 
-function parseArgs(argv) {
-  const read = (flag, fallback) => {
+function parseArgs(argv: string[]): {
+  journey: string;
+  history: string;
+  output: string;
+  confirm: number;
+} {
+  const read = (flag: string, fallback: string): string => {
     const index = argv.indexOf(flag);
-    return index === -1 ? fallback : argv[index + 1];
+    if (index === -1) return fallback;
+    return argv[index + 1] ?? fallback;
   };
   return {
     journey: read("--journey", ""),
@@ -81,11 +125,11 @@ function parseArgs(argv) {
   };
 }
 
-function main(argv) {
+function main(argv: string[]): number {
   const args = parseArgs(argv);
   if (!args.journey || !args.history) {
     console.error(
-      "usage: bisect-journeys.mjs --journey 'key#metric' --history <dir> [--output FILE] [--confirm N]"
+      "usage: bisect-journeys.ts --journey 'key#metric' --history <dir> [--output FILE] [--confirm N]"
     );
     return 2;
   }
@@ -99,7 +143,7 @@ function main(argv) {
   const { culprit, blips } = firstSustainedStep(series, args.confirm);
   for (const point of series)
     console.log(
-      `${point.sha.slice(0, 9)}  ${String(point.at).slice(0, 19)}  ${point.deltaMs.toFixed(1)}ms  (tol ${point.toleranceMs.toFixed(1)}ms)  ${point.verdict}`
+      `${point.sha.slice(0, 9)}  ${String(point.at).slice(0, 19)}  ${point.deltaMs.toFixed(1)}ms  (tol ${point.toleranceMs.toFixed(1)}ms)  ${String(point.verdict)}`
     );
   if (culprit)
     console.log(

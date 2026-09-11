@@ -538,7 +538,7 @@ jobs:
       # The hazard that introduces is #556's: a merge assembled from fewer blobs than
       # were dispatched measures a smaller world and passes more easily. Two things
       # close it — this job is an ordinary (not `always()`) dependency of `coverage`,
-      # so a dead shard fails the merge, and `assert-shard-blobs.mjs` requires the
+      # so a dead shard fails the merge, and `assert-shard-blobs.ts` requires the
       # exact set {1..N} on disk before vitest is allowed to merge anything.
       - name: Write lane evidence
         if: always()

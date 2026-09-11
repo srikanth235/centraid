@@ -16,7 +16,7 @@
  * information; a body that fabricates cell-level detail is not.
  *
  * Usage:
- *   node scripts/ci/rolling-issue-fallback-body.mjs \
+ *   node scripts/ci/rolling-issue-fallback-body.ts \
  *     --lane mobile-e2e-ios --rung 4 --result failure \
  *     --run-url https://github.com/o/r/actions/runs/1 [--out /tmp/body.md]
  */
@@ -27,6 +27,28 @@ const root = path.resolve(import.meta.dirname, "../..");
 /** Lane parks, merged into the quarantine ledger by #915 Wave 4. */
 const QUARANTINE_PATHS = [path.join(root, "tests/quarantine.json")];
 
+export interface LanePark {
+  issue?: number;
+  expires?: string;
+  why?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asPark(value: unknown): LanePark | null {
+  if (!isRecord(value)) return null;
+  const issue = value.issue;
+  const expires = value.expires;
+  const why = value.why;
+  const park: LanePark = {};
+  if (typeof issue === "number") park.issue = issue;
+  if (typeof expires === "string") park.expires = expires;
+  if (typeof why === "string") park.why = why;
+  return park;
+}
+
 /**
  * The park entry covering a lane, or null.
  *
@@ -34,31 +56,20 @@ const QUARANTINE_PATHS = [path.join(root, "tests/quarantine.json")];
  * second edit; today there is one. An entry whose `expires` has passed is
  * deliberately still returned: an expired park is the loudest thing this body
  * can say, and hiding it would turn a missed deadline into silence.
- *
- * @param {Record<string, unknown>} ledgers Parsed `{lanes: {...}}` objects, in priority order.
- * @param {string} lane The lane (GitHub job id) to look up.
- * @returns {{issue?: number, expires?: string, why?: string} | null} The park, or null.
  */
-export function parkFor(ledgers, lane) {
+export function parkFor(
+  ledgers: readonly unknown[],
+  lane: string
+): LanePark | null {
   for (const ledger of ledgers) {
-    const lanes = /** @type {Record<string, unknown>} */ (
-      /** @type {Record<string, unknown>} */ (ledger ?? {}).lanes ?? {}
-    );
-    const entry = lanes[lane];
-    if (entry && typeof entry === "object")
-      return /** @type {{issue?: number, expires?: string, why?: string}} */ (
-        entry
-      );
+    const lanes =
+      isRecord(ledger) && isRecord(ledger.lanes) ? ledger.lanes : {};
+    const entry = asPark(lanes[lane]);
+    if (entry) return entry;
   }
   return null;
 }
 
-/**
- * Render the rolling issue body.
- *
- * @param {{lane: string, rung: string|number, result: string, runUrl: string, today: string, park: {issue?: number, expires?: string, why?: string}|null}} input What is known about tonight.
- * @returns {string} Markdown.
- */
 export function renderFallbackBody({
   lane,
   rung,
@@ -66,7 +77,14 @@ export function renderFallbackBody({
   runUrl,
   today,
   park,
-}) {
+}: {
+  lane: string;
+  rung: string | number;
+  result: string;
+  runUrl: string;
+  today: string;
+  park: LanePark | null;
+}): string {
   const expired = !!(park?.expires && park.expires < today);
   const state = park
     ? expired
@@ -107,34 +125,55 @@ export function renderFallbackBody({
   return `${lines.join("\n")}\n`;
 }
 
-function parseArgs(argv) {
+function parseArgs(argv: string[]): {
+  lane: string | null;
+  rung: string;
+  result: string;
+  runUrl: string;
+  out: string | null;
+} {
   const out = {
-    lane: null,
+    lane: null as string | null,
     rung: "?",
     result: "failure",
     runUrl: "",
-    out: null,
+    out: null as string | null,
   };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--lane" && argv[i + 1]) out.lane = argv[++i];
-    else if (argv[i] === "--rung" && argv[i + 1]) out.rung = argv[++i];
-    else if (argv[i] === "--result" && argv[i + 1]) out.result = argv[++i];
-    else if (argv[i] === "--run-url" && argv[i + 1]) out.runUrl = argv[++i];
-    else if (argv[i] === "--out" && argv[i + 1]) out.out = argv[++i];
+    const current = argv[i];
+    const next = argv[i + 1];
+    if (next === undefined) continue;
+    if (current === "--lane") {
+      out.lane = next;
+      i += 1;
+    } else if (current === "--rung") {
+      out.rung = next;
+      i += 1;
+    } else if (current === "--result") {
+      out.result = next;
+      i += 1;
+    } else if (current === "--run-url") {
+      out.runUrl = next;
+      i += 1;
+    } else if (current === "--out") {
+      out.out = next;
+      i += 1;
+    }
   }
   return out;
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   if (!args.lane) {
     console.error("rolling-issue-fallback-body: --lane <job-id> is required");
     process.exitCode = 2;
     return;
   }
-  const ledgers = QUARANTINE_PATHS.filter((p) => existsSync(p)).map((p) =>
-    JSON.parse(readFileSync(p, "utf8"))
-  );
+  const ledgers = QUARANTINE_PATHS.filter((p) => existsSync(p)).map((p) => {
+    const parsed: unknown = JSON.parse(readFileSync(p, "utf8"));
+    return parsed;
+  });
   const body = renderFallbackBody({
     lane: args.lane,
     rung: args.rung,

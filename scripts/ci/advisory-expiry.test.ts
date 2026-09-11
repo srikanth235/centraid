@@ -1,7 +1,9 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { advisorySteps, checkAdvisories } from "./advisory-expiry.mjs";
+import { advisorySteps, checkAdvisories } from "./advisory-expiry.ts";
 
 const WORKFLOW = `
 jobs:
@@ -42,7 +44,7 @@ test("an unregistered advisory fails", () => {
     "2026-08-31"
   );
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /no entry in tests\/inventory\.json#advisory/u);
+  assert.match(errors[0] ?? "", /no entry in tests\/inventory\.json#advisory/u);
 });
 
 test("a registered, unexpired advisory passes", () => {
@@ -63,7 +65,7 @@ test("a PAST revisitBy fails — that is the whole point", () => {
     "2026-08-31"
   );
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /due for a decision on 2026-01-01/u);
+  assert.match(errors[0] ?? "", /due for a decision on 2026-01-01/u);
 });
 
 test("a missing field is named individually", () => {
@@ -87,7 +89,7 @@ test("a non-ISO revisitBy is refused rather than string-compared", () => {
       [{ id: "ci.yml: Advisory X" }],
       { "ci.yml: Advisory X": { ...ENTRY, revisitBy: "soon" } },
       "2026-08-31"
-    )[0],
+    )[0] ?? "",
     /not an ISO date/u
   );
 });
@@ -99,7 +101,7 @@ test("a ledger entry for a step that no longer exists fails as stale", () => {
     "2026-08-31"
   );
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /no longer exists/u);
+  assert.match(errors[0] ?? "", /no longer exists/u);
 });
 
 test("the `_comment` key is not mistaken for a stale entry", () => {

@@ -176,3 +176,29 @@ node scripts/ci/node-version.ts
 `node-version: 24.4.1`
 
 Remaining `scripts/ci/*.mjs`: 42.
+
+## Slice 2b — blob / advisory / bisect cluster
+
+Converted `report-cell-delta`, `assert-shard-blobs` (+ test), `advisory-expiry` (+ test), `rolling-issue-fallback-body` (+ test), `bisect-journeys` (+ test). `advisory-expiry` still imports leftover `../check-ledgers.mjs`. Direct-run usage strings match `.ts`. `package.json` (`coverage:merge`, `test:advisory-expiry`, `scripts:test`), `candidate.yml`, `e2e.yml`, `ci.yml` comments, `vitest.shard.config.ts`, and `docs/decisions.md` **G-split** follow. Inventory/quarantine `_comment` paths left as `.mjs` (ledger estate).
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0. `tsc -p scripts --listFiles` includes the nine converted cluster files. `packages/*/src` count: 0. Program size: 322 files.
+
+```sh
+node --test scripts/ci/assert-shard-blobs.test.ts scripts/ci/advisory-expiry.test.ts scripts/ci/rolling-issue-fallback-body.test.ts scripts/ci/bisect-journeys.test.ts
+```
+
+23 pass, 0 fail.
+
+```sh
+node scripts/ci/advisory-expiry.ts
+```
+
+`advisory-expiry: 2 advisory step(s) owned, dated and unexpired as of 2026-09-11`
+
+Remaining `scripts/ci/*.mjs`: 33.

@@ -2342,10 +2342,10 @@ jobs:
             if [ -f scripts/test-report/rolling-issue-body.mjs ] && [ -f dist/test-report/summary.json ]; then
               node scripts/test-report/rolling-issue-body.mjs \
                 --lane "$lane" --summary dist/test-report/summary.json > /tmp/rolling-body.md || \
-              node scripts/ci/rolling-issue-fallback-body.mjs \
+              node scripts/ci/rolling-issue-fallback-body.ts \
                 --lane "$lane" --rung 4 --result "$result" --run-url "$RUN_URL" --out /tmp/rolling-body.md
             else
-              node scripts/ci/rolling-issue-fallback-body.mjs \
+              node scripts/ci/rolling-issue-fallback-body.ts \
                 --lane "$lane" --rung 4 --result "$result" --run-url "$RUN_URL" --out /tmp/rolling-body.md
             fi
             {
