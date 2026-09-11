@@ -29,6 +29,7 @@ import {
 } from "../lib/replica/thumbnail-pack";
 import { UPLOAD_DB_NAME, UploadQueue } from "../lib/upload/native-queue";
 import type { SettingsScreenProps } from "../navigation";
+import PlaceBand from "./home/PlaceBand";
 import { SHELL_TITLES } from "./shell-copy";
 import { useShellParent } from "./shell-places";
 
@@ -146,6 +147,9 @@ export default function PhoneStorage({
   return (
     <SystemPlace
       backTo={backTo}
+      // Draws only when this is the bottom of Settings' stack (reached from
+      // the band or Home's status line); pushed from Settings, the back key.
+      band={<PlaceBand place="storage" />}
       onBack={() => navigation.goBack()}
       overlay={confirmSheet}
       title="On this phone"

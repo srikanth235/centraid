@@ -27,6 +27,7 @@ import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { SystemPlace, featureOffEmpty } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { AutomationsScreenProps } from "../../navigation";
+import PlaceBand from "../../screens/home/PlaceBand";
 import {
   automationRowCopy,
   automationsHealth,
@@ -67,8 +68,8 @@ export default function AutomationsScreen({
   if (features && !features.automations)
     return (
       <SystemPlace
+        band={<PlaceBand place="autos" />}
         empty={featureOffEmpty("automations")}
-        onHome={() => navigation.goBack()}
         title="Rules"
       />
     );
@@ -325,7 +326,7 @@ function AutomationsPlace({
             : {})}
         />
       }
-      onHome={() => navigation.goBack()}
+      band={<PlaceBand place="autos" />}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
       // No filled commit. Templates withheld while loading/error.

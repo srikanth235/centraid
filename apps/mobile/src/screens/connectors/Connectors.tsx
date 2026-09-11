@@ -26,6 +26,7 @@ import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { SystemPlace, featureOffEmpty } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { ConnectorsScreenProps } from "../../navigation";
+import PlaceBand from "../home/PlaceBand";
 import {
   connectorRow,
   connectorsHealth,
@@ -146,17 +147,15 @@ export default function ConnectorsScreen(
   if (features && !features.connectors)
     return (
       <SystemPlace
+        band={<PlaceBand place="conn" />}
         empty={featureOffEmpty("connectors")}
-        onHome={() => props.navigation.goBack()}
         title="Connectors"
       />
     );
   return <ConnectorsPlace {...props} />;
 }
 
-function ConnectorsPlace({
-  navigation,
-}: ConnectorsScreenProps): React.JSX.Element {
+function ConnectorsPlace(_props: ConnectorsScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const page = useConnectors();
   const ink = useMemo(() => ({ error: { color: colors.net } }), [colors]);
@@ -180,7 +179,7 @@ function ConnectorsPlace({
           text={health.text}
         />
       }
-      onHome={() => navigation.goBack()}
+      band={<PlaceBand place="conn" />}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
       // No verbs — see the file header.

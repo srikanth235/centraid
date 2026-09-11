@@ -35,6 +35,7 @@ import {
 } from "../lib/phone-link";
 import type { TunnelStatus } from "../lib/phone-link";
 import type { SettingsScreenProps } from "../navigation";
+import PlaceBand from "./home/PlaceBand";
 import AccessSection from "./settings/AccessSection";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
@@ -221,7 +222,7 @@ export default function SettingsScreen({
 
   return (
     <SystemPlace
-      onHome={() => navigation.getParent()?.goBack()}
+      band={<PlaceBand place="settings" />}
       overlay={
         <>
           {confirmSheet}

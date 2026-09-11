@@ -1,13 +1,16 @@
-import {
-  NavigationContext,
-  NavigationRouteContext,
-} from "@react-navigation/native";
 // @vitest-environment jsdom
 // R-NY-1 (#1015): the Home band on a place root. It draws with the place's own
 // tab active, draws nothing on a sub-page pushed inside a place, and a tab
 // press resets the ROOT stack to Home + one place — never deeper, never a
 // second Home. `band-navigation.test.ts` holds the arithmetic; this holds the
 // wiring from a press to the root navigator.
+import fs from "node:fs";
+import path from "node:path";
+
+import {
+  NavigationContext,
+  NavigationRouteContext,
+} from "@react-navigation/native";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -214,4 +217,33 @@ describe(PlaceBand, () => {
     press("stats");
     expect(rootStack.dispatched).toStrictEqual([]);
   });
+});
+
+// Every place root hands its room its own band. Keyed by place id, so a new
+// place is a typecheck failure here until its root file is named. A text
+// sweep, as `rooms.test.tsx` reads `SheetRoom.tsx`: the screens' own tests
+// stand `PlaceBand` down, so this is where the wiring is held.
+const PLACE_ROOTS: Readonly<Record<Exclude<PlaceId, "home">, string>> = {
+  autos: "../../apps/automations/Automations.tsx",
+  conn: "../connectors/Connectors.tsx",
+  data: "../data/Data.tsx",
+  devices: "../devices/Devices.tsx",
+  gateway: "../SystemOnPhone.tsx",
+  notifs: "../Approvals.tsx",
+  settings: "../Settings.tsx",
+  stats: "../../apps/insights/Insights.tsx",
+  storage: "../PhoneStorage.tsx",
+};
+
+describe("the place roots", () => {
+  it.each(Object.entries(PLACE_ROOTS))(
+    "%s's root draws the Home band with its own tab",
+    (id, file) => {
+      const source = fs.readFileSync(
+        path.resolve(import.meta.dirname, file),
+        "utf8"
+      );
+      expect(source).toContain(`band={<PlaceBand place="${id}" />}`);
+    }
+  );
 });

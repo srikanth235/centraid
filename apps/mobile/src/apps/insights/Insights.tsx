@@ -50,6 +50,7 @@ import { ACTIVITY_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
+import PlaceBand from "../../screens/home/PlaceBand";
 import GatewayAlerts from "./GatewayAlerts";
 import {
   failedLegendKey,
@@ -274,7 +275,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
           ? { label: "Reading the run log", note: LOADING_NOTE }
           : undefined
       }
-      onHome={() => navigation.goBack()}
+      band={<PlaceBand place="stats" />}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
       // No filled verb at all — this page writes nothing. The quiet verb is

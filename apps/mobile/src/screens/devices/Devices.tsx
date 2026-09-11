@@ -25,6 +25,7 @@ import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { DeviceRow } from "../../lib/devices";
 import type { DevicesScreenProps } from "../../navigation";
+import PlaceBand from "../home/PlaceBand";
 import DeviceActions from "./DeviceActions";
 import {
   devicesHealthCopy,
@@ -55,9 +56,9 @@ const UNPAIRED_BODY =
 
 const PAIR_VERB = "Pair a device";
 
-export default function DevicesScreen({
-  navigation,
-}: DevicesScreenProps): React.JSX.Element {
+export default function DevicesScreen(
+  _props: DevicesScreenProps
+): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const devices = useDevices();
@@ -146,10 +147,9 @@ export default function DevicesScreen({
           ? { label: "Reading the paired devices", note: LOADING_NOTE }
           : undefined
       }
-      // The leave key is a header control, never a floating plate: the bottom
-      // edge here already carries the docked health line (#1015, S6 —
-      // audit B14).
-      onHome={() => navigation.goBack()}
+      // The way home is the Home band's Home tab (R-NY-1), under the docked
+      // health line — never a floating plate over it (#1015, S6 — audit B14).
+      band={<PlaceBand place="devices" />}
       title="Copies"
     >
       {ticket ? (

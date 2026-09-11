@@ -51,6 +51,7 @@ import { postStatus } from "../../kit/components/status-line";
 import { VAULT_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { SystemPlace } from "../../kit/rooms";
 import type { DataScreenProps } from "../../navigation";
+import PlaceBand from "../home/PlaceBand";
 import {
   FULL_AT,
   KIND_FILTERS,
@@ -233,7 +234,7 @@ export default function DataScreen({
             }
           : undefined
       }
-      onHome={() => navigation.goBack()}
+      band={<PlaceBand place="data" />}
       onRefresh={() => void refresh()}
       refreshing={refreshing}
       // No verbs at all: see the file header.
