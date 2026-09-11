@@ -17,7 +17,7 @@
     "dist:dir": "electron-builder --config electron-builder.yml --dir --publish never",
     "start": "electron .",
     "test": "vitest run",
-    "test:e2e": "node ../../scripts/test-report/prepare.mjs --lane desktop-playwright && bun run build && playwright test -c tests/e2e/playwright.config.ts",
+    "test:e2e": "node ../../scripts/test-report/prepare.ts --lane desktop-playwright && bun run build && playwright test -c tests/e2e/playwright.config.ts",
     "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.react.json --noEmit && tsc -p tsconfig.scripts.json --noEmit && tsc -p tsconfig.copy-fonts.json --noEmit"
   },
   "dependencies": {

@@ -534,3 +534,31 @@ Isolated `tsc` emit of `vault-mcp-stdio-proxy.ts` keeps the shebang and writes J
 - `scripts/perf/send-to-first-token.mjs`
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Slice 3 — `scripts/test-report` to TypeScript
+
+Converted the whole `scripts/test-report` tree (76 `.mjs` → `.ts`, plus `record.ts` and the `ratchet-floors` split `ratchet-budget.ts`). `derive-flows.mjs` remains as a thin CLI shim so the constitution's `coverage-scope-reachability` directive (`node scripts/test-report/derive-flows.mjs --json`) still has a file. NodeNext types by hand: `JSON.parse` stays `unknown`, then `dict` / `bags` / `items` / `finite` from `record.ts`. No `type Loose = any`. `match.groups` is optional. `ratchet-floors.ts` stays under the 625-line ceiling.
+
+`scripts/tsconfig.json` excludes the test-report files that import `@centraid/test-kit` (same reason as `app-waterfall.run.ts`) so `tsc -p scripts --listFiles` does not pull `packages/test-kit/src`. Vitest still runs those files. Root `package.json` test-report scripts, the workflows that invoke them, `apps/web` / `apps/desktop` prepare steps, `scripts/check-ledgers.mjs`, and `scripts/lint-e2e-wiring.mjs` now name `.ts` paths. Vitest include is `**/*.test.ts`.
+
+Lane branch: `issue-1018-lane-test-report`. Merged into `issue-1018-mjs-to-ts`.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0.
+
+```sh
+tsc -p scripts --listFiles --pretty false
+```
+
+403 files. `packages/*/src` count: 0. `scripts/test-report/**/*.mjs` count: 0.
+
+```sh
+node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts
+```
+
+37 files, 518 tests, 0 fail.

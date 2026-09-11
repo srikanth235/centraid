@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     name: "test-report-scripts",
     include: [
-      "scripts/test-report/**/*.test.mjs",
+      "scripts/test-report/**/*.test.ts",
       "scripts/mutation/**/*.test.ts",
       "tests/agent-e2e-shared/**/*.test.ts",
       "tests/agent-e2e-mobile/lib/**/*.test.ts",
@@ -25,7 +25,7 @@ export default defineConfig({
       include: [
         "scripts/test-report/**/*.{mjs,js,ts}",
         "scripts/mutation/**/*.{mjs,js,ts}",
-        "tests/agent-e2e-shared/**/*.{mjs,js}",
+        "tests/agent-e2e-shared/**/*.{mjs,js,ts}",
       ],
       exclude: ["**/*.test.mjs", "**/*.test.ts", "**/vitest.config.ts"],
       // Conservative seed under realistic unit coverage of pure helpers

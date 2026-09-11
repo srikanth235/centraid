@@ -42,7 +42,7 @@ import {
   diffMutationFloors,
   diffPerfBudgetNumbers,
   flattenBudgetNumbers,
-} from "./test-report/ratchet-floors.mjs";
+} from "./test-report/ratchet-floors.ts";
 
 export const ROOT = path.resolve(import.meta.dirname, "..");
 

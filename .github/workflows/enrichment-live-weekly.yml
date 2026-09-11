@@ -100,7 +100,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane real-model-goldens --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,correctness --surfaces model-runtime
+          node scripts/test-report/write-evidence.ts --lane real-model-goldens --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,correctness --surfaces model-runtime
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

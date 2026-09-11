@@ -11,6 +11,13 @@
     "perf/send-to-first-token.ts",
     "release/classify.test.ts",
     "release/publish-guards.test.ts",
-    "release/sync-versions.test.ts"
+    "release/sync-versions.test.ts",
+    "test-report/diff-coverage-run.test.ts",
+    "test-report/env-red-inventory.test.ts",
+    "test-report/evidence-contract.test.ts",
+    "test-report/hygiene-ratchet.test.ts",
+    "test-report/skip-inventory.test.ts",
+    "test-report/sleep-inventory.test.ts",
+    "test-report/validate-release-wiring.test.ts"
   ]
 }

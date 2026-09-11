@@ -207,7 +207,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane alarm --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities journey --surfaces mobile-native
+          node scripts/test-report/write-evidence.ts --lane alarm --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities journey --surfaces mobile-native
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

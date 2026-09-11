@@ -1,0 +1,456 @@
+/**
+ * Merge a generated test-health report into a Pages site tree.
+ *
+ * Usage:
+ *   node scripts/test-report/prepare-pages-site.mjs \
+ *     --report dist/test-report \
+ *     --site site \
+ *     --slot main
+ *
+ * Copies report files to site/test-report/<slot>/ and writes a small landing
+ * page at site/index.html that links known slots (main + nightly).
+ *
+ * With --date (and optionally --run-id), the report is ALSO archived into a
+ * dated run slot at site/test-report/<slot>/runs/<date>-<runId>/ and this
+ * run's summary.json is appended to an append-only JSON series under
+ * site/test-report/history/. The plain <slot>/ path keeps serving the newest
+ * report so already-published URLs never break. Dated slots are pruned to
+ * --keep (default 30) most recent; the JSON series is never pruned.
+ */
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import path from "node:path";
+
+import { bags, dict, items } from "./record.ts";
+import type { Loose } from "./record.ts";
+import { designSystemCss } from "./report-theme.ts";
+
+const root = path.resolve(import.meta.dirname, "../..");
+const flags = parseFlags(process.argv.slice(2));
+const reportDir = path.resolve(
+  flags.report ?? path.join(root, "dist/test-report")
+);
+const siteDir = path.resolve(flags.site ?? path.join(root, "site"));
+const slot = String(flags.slot ?? "latest").replace(/^\/+|\/+$/gu, "");
+const runDate = normalizeDate(flags.date);
+const thisRunId = sanitizeSegment(flags["run-id"] ?? "");
+const thisRunUrl = String(flags["run-url"] ?? "");
+const keep = Math.max(1, Number(flags.keep ?? 30) || 30);
+// #915 C1 — the immutable copy carries the evidence directory that produced
+// it. Tonight's report needs LAST night's evidence to compute a
+// candidate-to-candidate delta, and the only durable place to read it from is
+// the dated slot the nightly already publishes. Without this the delta would
+// have to be recomputed from the HTML, which is not a data source.
+const evidenceDir = flags.evidence
+  ? path.resolve(flags.evidence)
+  : path.join(root, "artifacts/evidence");
+
+if (!slot || slot.includes("..")) {
+  console.error(`invalid --slot: ${flags.slot}`);
+  process.exit(1);
+}
+if (flags.date && !runDate) {
+  console.error(`invalid --date (want YYYY-MM-DD): ${flags.date}`);
+  process.exit(1);
+}
+
+const runSlug = runDate
+  ? thisRunId
+    ? `${runDate}-${thisRunId}`
+    : runDate
+  : null;
+const dest = path.join(siteDir, "test-report", slot);
+await mkdir(dest, { recursive: true });
+await cp(reportDir, dest, { recursive: true });
+
+// Main slot clarity (#535 F7): ensure the per-push page states its scope and
+// links to nightly even when the HTML was generated without --scope main.
+if (slot === "main") {
+  await ensureMainScopeBanner(path.join(dest, "index.html"));
+}
+
+let archived = null;
+let series = [];
+if (runSlug) {
+  archived = path.join(dest, "runs", runSlug);
+  await rm(archived, { recursive: true, force: true });
+  await mkdir(archived, { recursive: true });
+  await cp(reportDir, archived, { recursive: true });
+  // Best-effort: a run with no evidence directory (a PR-scoped report, say)
+  // publishes without one, and the next night reads it as no previous evidence.
+  await cp(evidenceDir, path.join(archived, "evidence"), {
+    recursive: true,
+  }).catch(() => {});
+  series = await appendSeries({
+    historyDir: path.join(siteDir, "test-report", "history"),
+    summary: await readJson(path.join(reportDir, "summary.json"), null),
+    slug: runSlug,
+    date: runDate,
+    runId: thisRunId,
+    runUrl: thisRunUrl,
+    reportPath: `test-report/${slot}/runs/${runSlug}/`,
+  });
+  const pruned = await pruneRuns(path.join(dest, "runs"), keep);
+  if (pruned.length)
+    console.log(
+      `pages site: pruned ${pruned.length} dated slot(s) beyond ${keep}`
+    );
+} else {
+  const index = await readJson(
+    path.join(siteDir, "test-report", "history", "index.json"),
+    {}
+  );
+  series = items(dict(index).entries);
+}
+
+// Pages must not run Jekyll (underscored dirs / raw HTML).
+await writeFile(path.join(siteDir, ".nojekyll"), "", "utf8");
+
+const slots = await listSlots(path.join(siteDir, "test-report"));
+const landing = renderLanding(slots, {
+  repo: process.env.GITHUB_REPOSITORY ?? "centraid",
+  generatedAt: new Date().toISOString(),
+  highlight: slot,
+  series,
+  // Link only the dated slots whose HTML actually survives pruning.
+  retained: await retainedSlugs(series),
+});
+await writeFile(path.join(siteDir, "index.html"), landing, "utf8");
+
+console.log(
+  `pages site: slot=test-report/${slot} → ${path.relative(root, dest)}`
+);
+if (archived)
+  console.log(`pages site: archived run → ${path.relative(root, archived)}`);
+console.log(
+  `pages site: landing lists ${slots.length} slot(s), ${series.length} history entr(ies)`
+);
+
+/** Append this run to the durable JSON series; never drops earlier entries. */
+async function appendSeries({
+  historyDir,
+  summary,
+  slug,
+  date,
+  runId,
+  runUrl,
+  reportPath,
+}: {
+  historyDir: string;
+  summary: unknown;
+  slug: string;
+  date: string | null;
+  runId: string;
+  runUrl: string;
+  reportPath: string;
+}) {
+  await mkdir(historyDir, { recursive: true });
+  const entryPath = path.join(historyDir, `${slug}.json`);
+  const record = {
+    slug,
+    date,
+    runId: runId || null,
+    runUrl: runUrl || null,
+    reportPath,
+    summary: summary ?? null,
+  };
+  await writeFile(entryPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+  const files = (await readdir(historyDir).catch(() => []))
+    .filter((file) => file.endsWith(".json") && file !== "index.json")
+    .sort();
+  const entries = (
+    await Promise.all(
+      files.map((file) => readJson(path.join(historyDir, file), null))
+    )
+  )
+    .filter((loaded) => dict(loaded).slug)
+    .map((loaded) => summarizeEntry(dict(loaded)));
+  entries.sort((a, b) =>
+    String(a.slug) < String(b.slug)
+      ? 1
+      : String(a.slug) > String(b.slug)
+        ? -1
+        : 0
+  );
+  await writeFile(
+    path.join(historyDir, "index.json"),
+    `${JSON.stringify({ updatedAt: new Date().toISOString(), entries }, null, 2)}\n`,
+    "utf8"
+  );
+  return entries;
+}
+
+function summarizeEntry(record: unknown) {
+  const row = dict(record);
+  const s = dict(row.summary);
+  return {
+    slug: row.slug,
+    date: row.date ?? String(row.slug).slice(0, 10),
+    runId: row.runId ?? null,
+    runUrl: row.runUrl ?? null,
+    reportPath: row.reportPath ?? null,
+    generatedAt: s.generatedAt ?? null,
+    passed: numberOrNull(s.passed),
+    failed: numberOrNull(s.failed),
+    skipped: numberOrNull(s.skipped),
+    stale: numberOrNull(s.stale),
+    cellsFailed: numberOrNull(s.cellsFailed),
+    cellsMissing: numberOrNull(s.cellsMissing),
+    unhandledErrors: numberOrNull(s.unhandledErrors),
+  };
+}
+
+/** Series entries whose archived HTML is still on disk (the rest were pruned). */
+async function retainedSlugs(seriesLocal: unknown) {
+  const kept = new Set();
+  await Promise.all(
+    (Array.isArray(seriesLocal) ? seriesLocal : []).map(async (entry) => {
+      if (!entry?.reportPath) return;
+      try {
+        await stat(path.join(siteDir, entry.reportPath, "index.html"));
+        kept.add(entry.slug);
+      } catch {
+        // pruned
+      }
+    })
+  );
+  return kept;
+}
+
+/** Keep the `keep` newest dated slots; older HTML is dropped (JSON series stays). */
+async function pruneRuns(runsDir: string, keepLocal: number) {
+  const entries = (
+    await readdir(runsDir, { withFileTypes: true }).catch(
+      () => [] as import("node:fs").Dirent[]
+    )
+  )
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+    .toReversed();
+  const stale = entries.slice(keepLocal);
+  await Promise.all(
+    stale.map((name) =>
+      rm(path.join(runsDir, name), { recursive: true, force: true })
+    )
+  );
+  return stale;
+}
+
+async function listSlots(base: string) {
+  const found: string[] = [];
+  async function walk(dir: string, prefix: string) {
+    let entries = [];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isDirectory()) return;
+        // Dated archives and the JSON series are listed from the history index.
+        if (!prefix && entry.name === "history") return;
+        if (entry.name === "runs") return;
+        const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const indexPath = path.join(dir, entry.name, "index.html");
+        try {
+          await stat(indexPath);
+          found.push(rel);
+        } catch {
+          await walk(path.join(dir, entry.name), rel);
+        }
+      })
+    );
+  }
+  await walk(base, "");
+  return found.sort();
+}
+
+function renderLanding(
+  slotsLocal: string[],
+  {
+    repo,
+    generatedAt,
+    highlight,
+    series: historyPoints,
+    retained,
+  }: {
+    repo?: unknown;
+    generatedAt?: unknown;
+    highlight?: unknown;
+    series?: unknown;
+    retained?: unknown;
+  }
+) {
+  const list = slotsLocal
+    .map((s) => {
+      const href = `test-report/${s}/`;
+      const label = s === highlight ? `${s} (this deploy)` : s;
+      return `<li><a href="${href}">${escapeHtml(label)}</a></li>`;
+    })
+    .join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Centraid test health reports</title>
+  <style>
+${designSystemCss()}
+    body { font: var(--t-reading); max-width: 44rem; margin: var(--sp-6) auto; padding: 0 var(--page-margin); background: var(--bg); color: var(--text); }
+    h1 { font: var(--t-title); letter-spacing: var(--t-title-tracking); }
+    h2 { font: var(--t-small-strong); margin: var(--sp-5) 0 var(--sp-1); }
+    h3 { font: var(--t-eyebrow); text-transform: var(--t-eyebrow-transform); letter-spacing: var(--t-eyebrow-tracking); color: var(--text-soft); margin: var(--sp-4) 0 var(--sp-1); }
+    a { color: var(--link); }
+    .meta { color: var(--text-soft); font: var(--t-annot-label); }
+    ul { margin: var(--sp-1) 0; padding-left: var(--sp-5); }
+    li { margin: 2px 0; }
+    /* A run's outcome. The --st-* rung names the state; the tag is a chip, so
+       the tone is a border and a label rather than the filled ground a status
+       colour is never allowed to become. */
+    .tag { font: var(--t-control); border-radius: var(--r-pill); border: 1px solid currentcolor; padding: 0 var(--sp-2); margin-left: var(--sp-1); }
+    .ok { color: var(--st-solid-text); }
+    .bad { color: var(--st-failed-text); }
+  </style>
+</head>
+<body>
+  <h1>Centraid test health reports</h1>
+  <p class="meta">${escapeHtml(repo)} · updated ${escapeHtml(generatedAt)}</p>
+  <p>Public reports publish from <code>main</code> (per-merge CI) and the <strong>nightly</strong> e2e workflow only — <strong>no PR slots</strong>.</p>
+  <h2>What “solid” means</h2>
+  <p class="meta">A matrix cell is <strong>solid</strong> only when an owning test exists, runs in the intended lane (per-PR or nightly), and is not whole-file env-gated off default CI. Grey / missing cells are intentional: absence of proof must stay visible. See TESTING.md (Nightly SLA, floors ratchet, confidence map) and issue #496.</p>
+  <h2>Slots</h2>
+  <ul>
+    <li><code>main</code> — last green merge on main (CI verify report)</li>
+    <li><code>nightly</code> — full product lanes (desktop/web/mobile/pairing + perf/scale)</li>
+  </ul>
+  <h2>Latest</h2>
+  <ul>
+${list || "    <li><em>No reports published yet.</em></li>"}
+  </ul>
+${renderHistory(historyPoints, retained)}
+</body>
+</html>
+`;
+}
+
+function renderHistory(seriesLocal: unknown, retained: unknown) {
+  const kept = retained instanceof Set ? retained : new Set();
+  const rows = bags(seriesLocal);
+  if (!rows.length) return "";
+  const groups = new Map<string, Loose[]>();
+  for (const entry of rows) {
+    const month =
+      String(entry.date ?? entry.slug ?? "").slice(0, 7) || "unknown";
+    const bucket = groups.get(month);
+    if (bucket) bucket.push(entry);
+    else groups.set(month, [entry]);
+  }
+  const blocks = [...groups.entries()].map(([month, monthRows]) => {
+    const list = monthRows
+      .map((entry) => {
+        const failed =
+          Number(entry.failed ?? 0) + Number(entry.cellsFailed ?? 0);
+        const badge = Number.isFinite(failed)
+          ? failed > 0
+            ? `<span class="tag bad">${failed} failing</span>`
+            : '<span class="tag ok">green</span>'
+          : "";
+        const label = escapeHtml(entry.slug ?? entry.date ?? "run");
+        const body =
+          entry.reportPath && kept.has(entry.slug)
+            ? `<a href="${escapeHtml(entry.reportPath)}">${label}</a>`
+            : `${label} <span class="meta">(HTML pruned)</span>`;
+        const run = entry.runUrl
+          ? ` <a class="meta" href="${escapeHtml(entry.runUrl)}">run</a>`
+          : "";
+        return `      <li>${body}${badge}${run}</li>`;
+      })
+      .join("\n");
+    return `    <h3>${escapeHtml(month)}</h3>\n    <ul>\n${list}\n    </ul>`;
+  });
+  return `  <h2>Nightly history</h2>
+  <p class="meta">Newest first · HTML kept for the most recent runs only (${rows.filter((entry) => kept.has(entry.slug)).length} of ${rows.length}) · full series: <a href="test-report/history/index.json">history/index.json</a></p>
+${blocks.join("\n")}`;
+}
+
+function numberOrNull(value: unknown) {
+  if (value == null || value === "" || !Number.isFinite(Number(value)))
+    return null;
+  return Number(value);
+}
+
+function normalizeDate(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const match = /^(?<date>\d{4}-\d{2}-\d{2})/u.exec(text);
+  return match?.groups?.date ?? null;
+}
+
+function sanitizeSegment(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[^A-Za-z0-9._-]/gu, "");
+}
+
+async function readJson(file: string, fallback: unknown): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(file, "utf8")) as unknown;
+  } catch {
+    return fallback;
+  }
+}
+
+function escapeHtml(value: unknown) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function parseFlags(args: string[]) {
+  const result: Record<string, string | undefined> = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (!current?.startsWith("--")) continue;
+    result[current.slice(2)] = args[index + 1];
+    index += 1;
+  }
+  return result;
+}
+
+/**
+ * Inject a per-push scope banner + nightly link into main-slot HTML when the
+ * generator did not already render one (ci.yml can also pass TEST_REPORT_SCOPE=main).
+ */
+async function ensureMainScopeBanner(indexPath: string) {
+  let html;
+  try {
+    html = await readFile(indexPath, "utf8");
+  } catch {
+    return;
+  }
+  if (html.includes("/test-report/nightly/") && html.includes("per-push"))
+    return;
+  const banner = `<p class="lede scope">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/">/test-report/nightly/</a>.</p>`;
+  // Land it where the generator itself renders this banner (#862): inside
+  // `main`, after the verdict bar's honesty banners and above the section
+  // index. Splicing on `<body>` would put it OUTSIDE `main.page`, where the
+  // page has no column and the banner renders full-bleed against the ground.
+  const next = html.includes('<nav class="toc"')
+    ? html.replace('<nav class="toc"', `${banner}<nav class="toc"`)
+    : html.includes('<main class="page">')
+      ? html.replace('<main class="page">', `<main class="page">${banner}`)
+      : html.replace("<body>", `<body>${banner}`);
+  if (next !== html) await writeFile(indexPath, next, "utf8");
+}

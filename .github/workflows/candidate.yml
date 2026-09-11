@@ -295,7 +295,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-canary-android --rung 3 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane mobile-canary-android --rung 3 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -487,7 +487,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-ios-smoke --rung 3 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --candidate ${{ github.sha }} --qualities journey,correctness --surfaces mobile,replica-sync,tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane mobile-ios-smoke --rung 3 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --candidate ${{ github.sha }} --qualities journey,correctness --surfaces mobile,replica-sync,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -569,7 +569,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane desktop-e2e-macos --rung 3 --platform macos --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ github.sha }} --qualities journey,compat --surfaces desktop
+          node scripts/test-report/write-evidence.ts --lane desktop-e2e-macos --rung 3 --platform macos --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ github.sha }} --qualities journey,compat --surfaces desktop
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -625,7 +625,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mutation-full --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts --surfaces vault-core,gateway,app-engine
+          node scripts/test-report/write-evidence.ts --lane mutation-full --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts --surfaces vault-core,gateway,app-engine
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -689,7 +689,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane suite --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane suite --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -781,7 +781,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane paired-journeys --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities performance --surfaces gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane paired-journeys --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities performance --surfaces gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -917,7 +917,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane rust-supply-chain --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities security,compat --surfaces tunnel-pairing,gateway
+          node scripts/test-report/write-evidence.ts --lane rust-supply-chain --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities security,compat --surfaces tunnel-pairing,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -975,7 +975,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane rung1-on-main --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities contracts --surfaces vault-core,gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane rung1-on-main --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities contracts --surfaces vault-core,gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1061,7 +1061,7 @@ jobs:
             platform="${rest%%:*}"; surfaces="${rest#*:}"
             verdict=passed
             [ "$result" = "success" ] || verdict=failed
-            node scripts/test-report/write-evidence.mjs \
+            node scripts/test-report/write-evidence.ts \
               --lane "$lane" --rung 3 --platform "$platform" \
               --verdict "$verdict" --started-at "$started" \
               --budget-ms 2700000 --candidate "$GITHUB_SHA" \
