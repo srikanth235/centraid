@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "_comment": "The claims file (#915 Wave 3). It replaces tests/claims.json and holds ONLY what a machine cannot derive: the qualities x surfaces vocabulary, the lane registry, the 45 claim rows with their severity and the date each was last demonstrated red, the law registry, the consent ledger, the join laws, the deliberate n/a cells with their reasons, and the flow ownership + minimumTests floors. Owners, journeys, budgets, seeds, engines, fuzz targets and Vitest projects are DERIVED at read time by scripts/test-report/derive.mjs from the roster, the Stryker configs, scripts/mutation/seeds.mjs, scripts/fuzz/targets.mjs and vitest.config.ts — see TESTING.md.",
+  "_comment": "The claims file (#915 Wave 3). It replaces tests/claims.json and holds ONLY what a machine cannot derive: the qualities x surfaces vocabulary, the lane registry, the 45 claim rows with their severity and the date each was last demonstrated red, the law registry, the consent ledger, the join laws, the deliberate n/a cells with their reasons, and the flow ownership + minimumTests floors. Owners, journeys, budgets, seeds, engines, fuzz targets and Vitest projects are DERIVED at read time by scripts/test-report/derive.mjs from the roster, the Stryker configs, scripts/mutation/seeds.ts, scripts/fuzz/targets.ts and vitest.config.ts — see TESTING.md.",
   "_why": "tests/claims.json was 252 KB of hand-typed grid whose per-cell assessments duplicated what the lanes already proved. #915 keeps the declarations (a claim, a law, a reason for an absence) and derives the observations.",
   "vocabulary": {
     "qualities": [
@@ -674,7 +674,7 @@
       "name": "booted-gateway HTTP posture (DAST)",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/dast-scan.mjs",
+      "owner": "scripts/security/dast-scan.ts",
       "evidence": "boot the real gateway → header/CORS/method/Host judges over the ROUTES table",
       "lane": "dast",
       "wallClockCost": "low",
@@ -682,7 +682,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node scripts/security/dast-scan.mjs",
+        "command": "node scripts/security/dast-scan.ts",
         "seed": "point the scanner at a gateway with no Host check, a silent 200 on every verb, and a foreign origin reflected with credentials",
         "failure": "177 host/header/cors/method findings, exit 1"
       }
@@ -746,7 +746,7 @@
       "name": "rust supply-chain gate",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/rust-supply-chain.test.mjs",
+      "owner": "scripts/security/rust-supply-chain.test.ts",
       "evidence": "cargo-audit and cargo-deny per crate; the guarded skip is loud and --require turns a missing binary red",
       "lane": "vitest",
       "wallClockCost": "low",
@@ -754,7 +754,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node --test scripts/security/rust-supply-chain.test.mjs",
+        "command": "node --test scripts/security/rust-supply-chain.test.ts",
         "seed": "disable the available-but-did-not-run check in decideExit",
         "failure": "'AVAILABLE BUT DID NOT RUN fails' goes red — an unrun lane reads as a pass"
       }
@@ -764,7 +764,7 @@
       "name": "rust unsafe-edge ratchet",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/unsafe-edge-audit.test.mjs",
+      "owner": "scripts/security/unsafe-edge-audit.test.ts",
       "evidence": "an unjustified or unledgered unsafe site fails; the count is tighten-only in both directions",
       "lane": "vitest",
       "wallClockCost": "low",
@@ -772,7 +772,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node scripts/security/unsafe-edge-audit.mjs",
+        "command": "node scripts/security/unsafe-edge-audit.ts",
         "seed": "plant an unjustified `unsafe` block in packages/tunnel/data-plane/src",
         "failure": "exit 1 naming the unjustified site and the ledger overrun"
       }
@@ -800,7 +800,7 @@
       "name": "dependency behaviour and CI egress ratchets",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/dependency-behaviour.test.mjs",
+      "owner": "scripts/security/dependency-behaviour.test.ts",
       "evidence": "install-time code digested over the command AND the script bytes, so a republished tarball at the same version fails; CI egress debt shrinks only",
       "lane": "vitest",
       "wallClockCost": "low",
@@ -808,7 +808,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node --test scripts/security/dependency-behaviour.test.mjs",
+        "command": "node --test scripts/security/dependency-behaviour.test.ts",
         "seed": "drop the unledgered-package push and the stale-entry push from lifecycle-audit.mjs",
         "failure": "an unledgered dependency declaring postinstall passes, and a ledger entry for a dependency that no longer runs install-time code is never noticed"
       }
@@ -818,11 +818,11 @@
       "name": "nightly red blocks release",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/release/publish-guards.test.mjs",
+      "owner": "scripts/release/publish-guards.test.ts",
       "evidence": "blocks release preparation when a nightly red issue is open",
       "lane": "vitest",
       "wallClockCost": "low",
-      "knob": "scripts/release/nightly-quality-blockers.mjs",
+      "knob": "scripts/release/nightly-quality-blockers.ts",
       "governance": "waiver-gated",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -4552,7 +4552,7 @@
       "surface": "tunnel-pairing",
       "dimension": "security",
       "tier": "unit",
-      "owner": "scripts/security/rust-supply-chain.test.mjs",
+      "owner": "scripts/security/rust-supply-chain.test.ts",
       "minimumTests": 15
     },
     {
@@ -4561,7 +4561,7 @@
       "surface": "tunnel-pairing",
       "dimension": "security",
       "tier": "unit",
-      "owner": "scripts/security/unsafe-edge-audit.test.mjs",
+      "owner": "scripts/security/unsafe-edge-audit.test.ts",
       "minimumTests": 15
     },
     {
@@ -4588,7 +4588,7 @@
       "surface": "desktop",
       "dimension": "security",
       "tier": "contract",
-      "owner": "scripts/security/supply-chain-core.test.mjs",
+      "owner": "scripts/security/supply-chain-core.test.ts",
       "minimumTests": 16
     },
     {
@@ -4597,7 +4597,7 @@
       "surface": "desktop",
       "dimension": "security",
       "tier": "contract",
-      "owner": "scripts/security/dependency-behaviour.test.mjs",
+      "owner": "scripts/security/dependency-behaviour.test.ts",
       "minimumTests": 24
     },
     {
@@ -4967,7 +4967,7 @@
       "surface": "desktop",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "scripts/perf/app-weight.mjs"
+      "owner": "scripts/perf/app-weight.ts"
     },
     {
       "id": "web-app-weight",
@@ -4975,7 +4975,7 @@
       "surface": "web",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "scripts/perf/app-weight.mjs"
+      "owner": "scripts/perf/app-weight.ts"
     },
     {
       "id": "mobile-app-weight",
@@ -4983,7 +4983,7 @@
       "surface": "mobile",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "scripts/perf/app-weight.mjs"
+      "owner": "scripts/perf/app-weight.ts"
     },
     {
       "id": "web-accessibility-axe",
