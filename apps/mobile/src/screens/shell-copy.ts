@@ -3,9 +3,10 @@
  *
  * Two rules, and this file is where both are checkable:
  *
- * ONE NOUN PER DESTINATION. The audit found the Alerts place wearing four
- * names at once — "Alerts" in the band, "Notifications" in More, a clipped
- * "Notificati…" in its own bar, and a Settings section headed NOTIFICATIONS
+ * ONE NOUN PER DESTINATION. The audit found the place now named Needs you
+ * (R-NY-4) wearing four names at once — "Alerts" in the band,
+ * "Notifications" in More, a clipped "Notificati…" in its own bar, and a
+ * Settings section headed NOTIFICATIONS
  * over a row that said "Decisions and updates" — while VoiceOver read a fifth
  * thing, because the band spoke `name` and painted `short`. A member cannot
  * learn a place they are never told the name of twice.
@@ -59,8 +60,8 @@ export const SHELL_ERROR = {
 
 /** The shell's own destinations, one noun each; `places.ts` holds the rest. */
 export const SHELL_TITLES = {
-  alerts: "Alerts",
   backupHealth: "Backup health",
+  needsYou: "Needs you",
   onThisPhone: "On this phone",
   settings: "Settings",
   sharing: "Sharing",

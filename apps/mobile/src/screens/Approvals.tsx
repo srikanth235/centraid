@@ -99,7 +99,7 @@ export default function ApprovalsScreen({
       onHome={() => navigation.goBack()}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
-      title={SHELL_TITLES.alerts}
+      title={SHELL_TITLES.needsYou}
     >
       {page.actionError ? (
         <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>

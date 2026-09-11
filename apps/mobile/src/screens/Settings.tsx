@@ -343,15 +343,18 @@ export default function SettingsScreen({
         )}
       </SettingsSection>
 
-      <SettingsSection label="Alerts">
+      {/* R-NY-4 (#1015): the place's one noun, the way Sharing below names
+          its row — the section and the spoken name carry it, and the row line
+          says what is there. Updates are Activity's, not this row's. */}
+      <SettingsSection label="Needs you">
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate("Approvals")}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-          accessibilityLabel="Alerts"
+          accessibilityLabel="Needs you"
         >
           <Icon name="CheckCircle" size={18} color={colors.textSoft} />
-          <Text style={styles.rowLabel}>Decisions and updates</Text>
+          <Text style={styles.rowLabel}>Decisions waiting on you</Text>
           <Icon name="ChevronRight" size={16} color={colors.textFaint} />
         </Pressable>
       </SettingsSection>

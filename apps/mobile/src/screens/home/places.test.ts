@@ -51,10 +51,11 @@ describe("the ten places", () => {
   });
 
   it("uses the exact short labels a 61px band tab needs", () => {
-    // One name does not fit a 61px tab (:3480): Notifications reads Alerts.
-    // Every other place's short label is its own name — Rules and Connectors
-    // are both short enough to stand as both.
-    expect(getPlace("notifs").short).toBe("Alerts");
+    // Every short label that is not the place's whole name only DROPS words
+    // from it (On this phone → On phone). Needs you, Rules and Connectors are
+    // short enough to stand as both (#1015 R-NY-4, R-SH-8).
+    expect(getPlace("notifs").short).toBe("Needs you");
+    expect(getPlace("notifs").name).toBe("Needs you");
     expect(getPlace("autos").short).toBe("Rules");
     expect(getPlace("autos").name).toBe("Rules");
     expect(getPlace("conn").short).toBe("Connectors");
@@ -63,7 +64,7 @@ describe("the ten places", () => {
     expect(getPlace("storage").name).toBe("On this phone");
   });
 
-  it("defaults to Alerts, Activity and Vault", () => {
+  it("defaults to Needs you, Activity and Vault", () => {
     expect(DEFAULT_PLACE_PINS).toStrictEqual(["notifs", "stats", "data"]);
   });
 

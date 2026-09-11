@@ -158,7 +158,7 @@ export default function PhoneStorage({
       </Text>
       {route.params?.signalCause ? (
         <View
-          accessibilityLabel={`Arrived from ${SHELL_TITLES.alerts}`}
+          accessibilityLabel={`Arrived from ${SHELL_TITLES.needsYou}`}
           accessibilityLiveRegion="polite"
           accessibilityRole="alert"
           style={[
@@ -171,7 +171,7 @@ export default function PhoneStorage({
           ]}
         >
           <Text style={[styles.attentionTitle, { color: colors.text }]}>
-            {`From ${SHELL_TITLES.alerts}`}
+            {`From ${SHELL_TITLES.needsYou}`}
           </Text>
           <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
             {route.params.signalCause}

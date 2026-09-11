@@ -43,9 +43,9 @@ describe(PlaceHeader, () => {
   });
 
   it("is a title and nothing else when the page has no verbs", () => {
-    const container = render(<PlaceHeader title="Notifications" />);
+    const container = render(<PlaceHeader title="Needs you" />);
     const [title] = nodesOf(container, "span");
-    expect(title?.textContent).toBe("Notifications");
+    expect(title?.textContent).toBe("Needs you");
     expect(title?.dataset.role).toBe("header");
     expect(nodesOf(container, "button")).toHaveLength(0);
     expect(
@@ -58,7 +58,7 @@ describe(PlaceHeader, () => {
       <PlaceHeader
         primary={{ label: "Review all", onPress: noop }}
         secondary={{ label: "History", onPress: noop }}
-        title="Notifications"
+        title="Needs you"
       />
     );
     const [quiet, commit] = nodesOf(container, "button");
@@ -72,7 +72,7 @@ describe(PlaceHeader, () => {
     const container = render(
       <PlaceHeader
         primary={{ label: "Review all", onPress: noop }}
-        title="Notifications"
+        title="Needs you"
       />
     );
     expect(
