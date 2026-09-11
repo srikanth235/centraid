@@ -185,7 +185,7 @@ vi.mock(
       pageMargin: 18,
       radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 16, xs: 0 },
       spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
-      subBase: { gutter: 2, hair: 1 },
+      subBase: { chip: 3, gutter: 2, hair: 1 },
       t: () => ({}),
       useTheme: () => ({
         colors: {

@@ -148,7 +148,7 @@ export function toCss(): string {
     staticProps[`--r-${key}`] = `${value}px`;
   for (const [key, value] of Object.entries(spacing))
     staticProps[`--sp-${key}`] = `${value}px`;
-  // These two names are the whole allowlist for reaching under the base.
+  // These three names are the whole allowlist for reaching under the base.
   for (const [key, value] of Object.entries(subBase))
     staticProps[`--sp-${key}`] = `${value}px`;
 

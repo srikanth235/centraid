@@ -16,6 +16,7 @@ describe("direct native design adapter", () => {
     expect(subBase).toStrictEqual(canonicalSubBase);
     expect(subBase.gutter).toBe(2);
     expect(subBase.hair).toBe(1);
+    expect(subBase.chip).toBe(3);
   });
 
   it("maps every type role without changing its metrics", () => {
