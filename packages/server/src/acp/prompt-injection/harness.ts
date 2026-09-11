@@ -1,7 +1,7 @@
 /*
  * Prompt-injection corpus harness (#842). Boundary is the owner's standing
  * answer in the gateway, not
- * model compliance: real ACP turn (`runAcpTurn` / `fake-acp-harness.mjs` via
+ * model compliance: real ACP turn (`runAcpTurn` / `fake-acp-harness.ts` via
  * `test-fixtures.ts`) against a one-answer vault; fake harness plays the duped
  * agent. Assert structural enums only — never id, timestamp, or order;
  * `vi.useFakeTimers()` would wedge the real subprocess I/O.

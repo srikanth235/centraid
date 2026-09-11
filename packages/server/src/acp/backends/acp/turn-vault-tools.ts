@@ -4,10 +4,11 @@
  * Prefer HTTP MCP when the harness advertises `mcpCapabilities.http` (the path
  * first-party adapters support). When it does not, still stand up the
  * loopback HTTP endpoint and advertise a **stdio MCP** entry that runs
- * `vault-mcp-stdio-proxy.mjs` — agents MUST support stdio MCP per ACP, so
+ * `vault-mcp-stdio-proxy.js` — agents MUST support stdio MCP per ACP, so
  * vault tools reach them without silent loss.
  */
 
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
@@ -20,9 +21,27 @@ import {
 } from "./vault-mcp-server.js";
 import type { VaultMcpHandle } from "./vault-mcp-server.js";
 
-const STDIO_PROXY = fileURLToPath(
-  new URL("vault-mcp-stdio-proxy.mjs", import.meta.url).href
-);
+export function vaultMcpStdioProxyPath(): string {
+  const js = fileURLToPath(
+    new URL("vault-mcp-stdio-proxy.js", import.meta.url).href
+  );
+  if (existsSync(js)) return js;
+  const fromNodeModules =
+    import.meta.url.includes("/node_modules/") ||
+    import.meta.url.includes("\\node_modules\\");
+  if (fromNodeModules) {
+    throw new Error(
+      "vault-mcp-stdio-proxy.js missing from the published package"
+    );
+  }
+  const ts = fileURLToPath(
+    new URL("vault-mcp-stdio-proxy.ts", import.meta.url).href
+  );
+  if (existsSync(ts)) return ts;
+  throw new Error("vault-mcp-stdio-proxy is missing next to this module");
+}
+
+const STDIO_PROXY = vaultMcpStdioProxyPath();
 
 export interface TurnVaultTools {
   /** What to name in `session/new` / `session/load` / `session/resume`'s `mcpServers`. */

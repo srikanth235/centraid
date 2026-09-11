@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
 
-import { startTurnVaultTools } from "./turn-vault-tools.ts";
+import {
+  startTurnVaultTools,
+  vaultMcpStdioProxyPath,
+} from "./turn-vault-tools.ts";
 import {
   startVaultMcpServer,
   VAULT_MCP_SERVER_NAME,
@@ -99,7 +102,7 @@ describe("turn-vault-tools", () => {
     };
     expect(stdio.name).toBe(VAULT_MCP_SERVER_NAME);
     expect(stdio.command).toBe(process.execPath);
-    expect(stdio.args[0]).toMatch(/vault-mcp-stdio-proxy\.mjs$/u);
+    expect(stdio.args[0]).toBe(vaultMcpStdioProxyPath());
     expect(stdio.env.some((e) => e.name === "CENTRAID_VAULT_MCP_URL")).toBe(
       true
     );

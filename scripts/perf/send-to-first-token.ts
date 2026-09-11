@@ -14,7 +14,7 @@
  * Between them sit harness process spawn, the ACP `initialize` handshake,
  * `session/new`, `session/prompt` dispatch, and the stream translation in
  * `packages/server/src/acp/backends/acp/backend.ts`. The provider is held
- * CONSTANT by driving the scripted `fake-acp-harness.mjs` in `--mode=normal`,
+ * CONSTANT by driving the scripted `fake-acp-harness.ts` in `--mode=normal`,
  * which streams its first chunk with no artificial think time — so the
  * measurement is dead time the repo owns and nothing else.
  *
@@ -49,7 +49,7 @@ import { journeyMetric } from "../lib/journey-ledger.ts";
 const root = path.resolve(import.meta.dirname, "../..");
 const HARNESS_PATH = path.join(
   root,
-  "packages/server/src/acp/backends/acp/fake-acp-harness.mjs"
+  "packages/server/src/acp/backends/acp/fake-acp-harness.ts"
 );
 
 /**

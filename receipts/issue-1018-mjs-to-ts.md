@@ -483,3 +483,54 @@ node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.conf
 - `scripts/test-report/{derive,skip-inventory,validate-app-axes,validate-nightly-wiring}.mjs`, `scripts/test-report/vitest.config.ts`
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Lane MCP — vault stdio proxy + fake ACP harness
+
+Converted the shipped vault MCP stdio proxy to TypeScript so `tsc -p packages/server/tsconfig.json` emits `dist/acp/backends/acp/vault-mcp-stdio-proxy.js`. Removed the verbatim `cp …vault-mcp-stdio-proxy.mjs` from the server build. `vaultMcpStdioProxyPath()` prefers the sibling `.js` emit, refuses raw TypeScript under `node_modules`, and falls back to the `.ts` sibling only for in-repo `node` type stripping.
+
+Converted `fake-acp-harness.mjs` to TypeScript and split vault MCP client/parity into `fake-acp-harness-vault.ts` (562 + 286 lines, both under the 625 ceiling). The fixture is excluded from the emit program (not shipped) and spawned as `.ts`. `tests/inventory.json#fileSize` still names the old `.mjs` path (ledger estate, not this lane).
+
+### Verification
+
+```sh
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node packages/server/src/acp/backends/acp/fake-acp-harness.ts --mode=normal
+```
+
+JSON-RPC initialize result from `fake-acp`.
+
+```sh
+cd packages/server && bunx vitest run \
+  src/acp/backends/acp/turn-vault-tools.test.ts \
+  src/acp/backends/acp/backend.test.ts \
+  src/acp/backends/acp/backend.vault-tools.test.ts \
+  src/acp/backends/acp/backend.attachments.test.ts \
+  src/acp/backends/acp/backend.model-usage.test.ts \
+  src/acp/backends/acp/enumerate-models.test.ts \
+  src/acp/backends/acp/capabilities-cache.test.ts \
+  src/acp/backends/acp/journey.integration.test.ts \
+  src/acp/backends/acp/blueprint-harness-parity.integration.test.ts \
+  src/acp/preflight.test.ts
+```
+
+10 files, 102 pass, 0 fail.
+
+Isolated `tsc` emit of `vault-mcp-stdio-proxy.ts` keeps the shebang and writes JS. After workspace `dist/` is present, `tsc -p packages/server/tsconfig.test.json --noEmit` has no diagnostics on the proxy, harness, or `turn-vault-tools` files. The server build emits `dist/acp/backends/acp/vault-mcp-stdio-proxy.js` and does not emit the fake harness.
+
+### Paths this slice
+
+- `packages/server/src/acp/backends/acp/vault-mcp-stdio-proxy.ts` (from `.mjs`)
+- `packages/server/src/acp/backends/acp/fake-acp-harness.ts` (from `.mjs`)
+- `packages/server/src/acp/backends/acp/fake-acp-harness-vault.ts`
+- `packages/server/src/acp/backends/acp/turn-vault-tools.ts`
+- `packages/server/src/acp/backends/acp/turn-vault-tools.test.ts`
+- `packages/server/src/acp/backends/acp/test-fixtures.ts`
+- `packages/server/src/acp/backends/acp/enumerate-models.test.ts`
+- `packages/server/src/acp/backends/acp/journey.integration.test.ts`
+- `packages/server/src/acp/prompt-injection/harness.ts`
+- `packages/server/package.json`
+- `packages/server/tsconfig.json`
+- `vitest.config.ts`
+- `knip.json`
+- `scripts/perf/send-to-first-token.mjs`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

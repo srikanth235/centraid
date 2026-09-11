@@ -1,35 +1,43 @@
 #!/usr/bin/env node
 /*
- * Stdio MCP proxy for harnesses that only support stdio MCP transports.
- *
- * Centraid's vault tools live as a loopback HTTP MCP server (per-turn bearer).
- * Agents that lack `mcpCapabilities.http` can still spawn this process via
- * ACP's default stdio MCP shape; we forward initialize / tools/list /
- * tools/call / ping to the HTTP endpoint named in env:
- *
- *   CENTRAID_VAULT_MCP_URL   — e.g. http://127.0.0.1:PORT/mcp
- *   CENTRAID_VAULT_MCP_TOKEN — bearer token for Authorization
- *
- * Not a public API — launched only by the ACP turn backend.
+ * Stdio MCP proxy: forward initialize / tools/list / tools/call / ping to
+ * CENTRAID_VAULT_MCP_URL with CENTRAID_VAULT_MCP_TOKEN. Not a public API.
  */
 
 import { createInterface } from "node:readline";
 
-const url = process.env.CENTRAID_VAULT_MCP_URL;
-const token = process.env.CENTRAID_VAULT_MCP_TOKEN;
+interface JsonRpcMessage {
+  jsonrpc?: string;
+  id?: string | number | null;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: unknown;
+}
 
-if (!url || !token) {
+const configuredUrl = process.env.CENTRAID_VAULT_MCP_URL;
+const configuredToken = process.env.CENTRAID_VAULT_MCP_TOKEN;
+
+if (!configuredUrl || !configuredToken) {
   process.stderr.write(
     "vault-mcp-stdio-proxy: CENTRAID_VAULT_MCP_URL and TOKEN required\n"
   );
   process.exit(2);
 }
 
-const send = (msg) => {
-  process.stdout.write(JSON.stringify(msg) + "\n");
+const url: string = configuredUrl;
+const token: string = configuredToken;
+
+const send = (msg: unknown): void => {
+  process.stdout.write(`${JSON.stringify(msg)}\n`);
 };
 
-async function forward(body) {
+function asMessage(value: unknown): JsonRpcMessage | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  return value as JsonRpcMessage;
+}
+
+async function forward(body: JsonRpcMessage): Promise<unknown> {
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -41,7 +49,7 @@ async function forward(body) {
   });
   const text = await res.text();
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as unknown;
   } catch {
     return {
       jsonrpc: "2.0",
@@ -58,12 +66,14 @@ const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on("line", (line) => {
   const trimmed = line.trim();
   if (!trimmed) return;
-  let msg;
+  let parsed: unknown;
   try {
-    msg = JSON.parse(trimmed);
+    parsed = JSON.parse(trimmed) as unknown;
   } catch {
     return;
   }
+  const msg = asMessage(parsed);
+  if (!msg) return;
   // Notifications: forward fire-and-forget (no response expected).
   if (msg.method && msg.id === undefined) {
     void forward(msg).catch(() => undefined);
@@ -74,7 +84,7 @@ rl.on("line", (line) => {
       .then((out) => {
         if (out && typeof out === "object") send(out);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         send({
           jsonrpc: "2.0",
           id: msg.id,
