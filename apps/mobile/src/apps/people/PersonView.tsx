@@ -48,7 +48,6 @@ import type { ContactChannel } from "@centraid/blueprints/apps/people/types";
 import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import { Text } from "../../kit/components/NativeText";
-import SkeletonRows from "../../kit/components/SkeletonRows";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
@@ -155,350 +154,346 @@ export default function PersonView({
       setComposer(null);
   };
 
-  const body = (): React.JSX.Element => {
-    if (loading && !person) {
-      return <SkeletonRows accessibilityLabel="Reading this person" />;
-    }
-    // Past the loading gate an absent person is a fact — trashed or merged
-    // away in another window — so this screen says so and offers the way back.
-    if (!person) return <EmptyLine text={EMPTY.noMatch} />;
+  // The first read is the ROOM's loading state (`loading` below), not a
+  // skeleton this screen draws as its body (#1015, R-NY-7).
+  const reading = loading && !person;
+  const vaults = person?.vaults ?? null;
+  const linksAvailable = vaults !== null;
+  const linked = (vaults?.length ?? 0) > 0;
+  const sharedOpen = "shared" in collapsed ? !collapsed.shared : linked;
+  const overdue = person ? isOverdue(person) : false;
+  const writable = person?.canWrite === true;
+  const sources = person ? person.scopeLabels.join(" · ") : "";
+  const pending = person
+    ? readPendingOverlay(person.raw, pendingSidecarOf(person.raw))
+    : null;
 
-    const vaults = person.vaults;
-    const linksAvailable = vaults !== null;
-    const linked = (vaults?.length ?? 0) > 0;
-    const sharedOpen = "shared" in collapsed ? !collapsed.shared : linked;
-    const overdue = isOverdue(person);
-    const writable = person.canWrite;
-    const sources = person.scopeLabels.join(" · ");
-    const pending = readPendingOverlay(
-      person.raw,
-      pendingSidecarOf(person.raw)
+  const composerCommits = (
+    <>
+      <Verb label={VERBS.save} onPress={() => void saveComposer()} />
+      <Verb label={VERBS.cancel} quiet onPress={() => setComposer(null)} />
+    </>
+  );
+  // WITHHELD, not disabled: there is no writable target to copy into.
+  const addVerb = (key: ComposerKey): React.ReactNode =>
+    composing(key) || !writable ? null : (
+      <Verb label={VERBS.add} onPress={() => openComposer(key)} />
     );
 
-    const composerCommits = (
-      <>
-        <Verb label={VERBS.save} onPress={() => void saveComposer()} />
-        <Verb label={VERBS.cancel} quiet onPress={() => setComposer(null)} />
-      </>
-    );
-    // WITHHELD, not disabled: there is no writable target to copy into.
-    const addVerb = (key: ComposerKey): React.ReactNode =>
-      composing(key) || !writable ? null : (
-        <Verb label={VERBS.add} onPress={() => openComposer(key)} />
-      );
-
-    return (
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Stated once, above everything this person's screen offers. */}
-        {writable ? null : (
-          <Text style={[t("annotLabel"), { color: colors.net }]}>
-            {READ_ONLY_SOURCE_REASON}
+  // Past the loading gate an absent person is a fact — trashed or merged
+  // away in another window — so this screen says so and offers the way back.
+  // An expression, not a render function: the frame below is this screen's
+  // root, and a `return (<…` ahead of it reads as the root to the rooms gate
+  // (`scripts/lint-mobile-rooms.mjs`, R-NY-7).
+  const record = person ? (
+    <ScrollView contentContainerStyle={styles.scroll}>
+      {/* Stated once, above everything this person's screen offers. */}
+      {writable ? null : (
+        <Text style={[t("annotLabel"), { color: colors.net }]}>
+          {READ_ONLY_SOURCE_REASON}
+        </Text>
+      )}
+      {/* Hero: avatar with the 2px link ring, name, role, star. */}
+      <View style={styles.hero}>
+        <PersonAvatar
+          person={person}
+          hero
+          link={linksAvailable ? (linked ? "linked" : "unlinked") : "unknown"}
+        />
+        <View style={styles.heroText}>
+          <Text style={[t("title"), { color: colors.text }]} numberOfLines={1}>
+            {person.name}
           </Text>
-        )}
-        {/* Hero: avatar with the 2px link ring, name, role, star. */}
-        <View style={styles.hero}>
-          <PersonAvatar
-            person={person}
-            hero
-            link={linksAvailable ? (linked ? "linked" : "unlinked") : "unknown"}
-          />
-          <View style={styles.heroText}>
-            <Text
-              style={[t("title"), { color: colors.text }]}
-              numberOfLines={1}
-            >
-              {person.name}
+          {person.role ? (
+            <Text style={[t("body"), { color: colors.textSoft }]}>
+              {person.role}
             </Text>
-            {person.role ? (
-              <Text style={[t("body"), { color: colors.textSoft }]}>
-                {person.role}
-              </Text>
-            ) : null}
-          </View>
-          <StarButton
-            name={person.name}
-            starred={person.starred}
-            disabled={!writable}
-            disabledHint={READ_ONLY_SOURCE_REASON}
-            onToggle={() => void writes.toggleStar(person)}
-          />
+          ) : null}
         </View>
+        <StarButton
+          name={person.name}
+          starred={person.starred}
+          disabled={!writable}
+          disabledHint={READ_ONLY_SOURCE_REASON}
+          onToggle={() => void writes.toggleStar(person)}
+        />
+      </View>
 
-        {/* The vault tags: `Linked vault` per binding (a binding carries only
+      {/* The vault tags: `Linked vault` per binding (a binding carries only
             an id, and an id is not a name); `Not linked` where there is none.
             Nothing at all while the plane is unreadable. */}
-        {linksAvailable ? (
-          <View style={styles.tags}>
-            {linked ? (
-              (vaults ?? []).map((binding) => (
-                <VaultTag key={binding.binding_id} label={LINK.vaultRow} />
-              ))
-            ) : (
-              <VaultTag label="Not linked" />
-            )}
-          </View>
-        ) : null}
+      {linksAvailable ? (
+        <View style={styles.tags}>
+          {linked ? (
+            (vaults ?? []).map((binding) => (
+              <VaultTag key={binding.binding_id} label={LINK.vaultRow} />
+            ))
+          ) : (
+            <VaultTag label="Not linked" />
+          )}
+        </View>
+      ) : null}
 
-        {/* `Every 30 days · last 41 days ago`, net exactly while overdue. */}
-        <Text
-          style={[
-            t("annotLabel"),
-            styles.numeric,
-            { color: overdue ? colors.net : colors.textSoft },
-          ]}
-        >
-          {cadenceLineLabel(person.cadence_days, person)}
+      {/* `Every 30 days · last 41 days ago`, net exactly while overdue. */}
+      <Text
+        style={[
+          t("annotLabel"),
+          styles.numeric,
+          { color: overdue ? colors.net : colors.textSoft },
+        ]}
+      >
+        {cadenceLineLabel(person.cadence_days, person)}
+      </Text>
+
+      {sources ? (
+        <Text style={[t("annotLabel"), { color: colors.textFaint }]}>
+          {`Source · ${sources}`}
         </Text>
+      ) : null}
 
-        {sources ? (
-          <Text style={[t("annotLabel"), { color: colors.textFaint }]}>
-            {`Source · ${sources}`}
-          </Text>
-        ) : null}
+      {/* A change still on this phone, steward wait included. */}
+      {pending ? (
+        <Text style={[t("annotLabel"), { color: colors.textSoft }]}>
+          {pendingOverlayCopy(pending)}
+        </Text>
+      ) : null}
 
-        {/* A change still on this phone, steward wait included. */}
-        {pending ? (
-          <Text style={[t("annotLabel"), { color: colors.textSoft }]}>
-            {pendingOverlayCopy(pending)}
-          </Text>
-        ) : null}
-
-        {/* AT MOST ONE FILLED CONTROL PER VIEW: Log is the act this screen
+      {/* AT MOST ONE FILLED CONTROL PER VIEW: Log is the act this screen
             exists for; Edit stands beside it outlined. (Share / Link vault
             are withheld — module head.) */}
-        <Commits>
-          <Button
-            label={VERBS.log}
-            variant="primary"
-            disabled={!writable}
-            onPress={() =>
-              navigation.navigate("PersonLog", { personId: partyId })
-            }
-          />
-          <Button
-            label={VERBS.edit}
-            variant="secondary"
-            disabled={!writable}
-            onPress={() =>
-              navigation.navigate("PersonEditor", { personId: partyId })
-            }
-          />
-        </Commits>
+      <Commits>
+        <Button
+          label={VERBS.log}
+          variant="primary"
+          disabled={!writable}
+          onPress={() =>
+            navigation.navigate("PersonLog", { personId: partyId })
+          }
+        />
+        <Button
+          label={VERBS.edit}
+          variant="secondary"
+          disabled={!writable}
+          onPress={() =>
+            navigation.navigate("PersonEditor", { personId: partyId })
+          }
+        />
+      </Commits>
 
-        {/* Vaults: always open, never collapses — the one fact this app is
+      {/* Vaults: always open, never collapses — the one fact this app is
             built around. The LINK alone; a share still on its way is said by
             the grant dashboard below, off the live plane (#929). */}
-        {linksAvailable ? (
-          <PeopleSection title={SECTIONS.vaults} count={vaults?.length ?? 0}>
-            {(vaults?.length ?? 0) === 0 ? (
-              <EmptyLine text={EMPTY.vaults} />
-            ) : (
-              (vaults ?? []).map((binding, index) => (
-                <PersonRow
-                  key={binding.binding_id}
-                  name={LINK.vaultRow}
-                  sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
-                  subNumeric
-                  last={index === (vaults?.length ?? 0) - 1}
-                />
-              ))
-            )}
-          </PeopleSection>
-        ) : null}
+      {linksAvailable ? (
+        <PeopleSection title={SECTIONS.vaults} count={vaults?.length ?? 0}>
+          {(vaults?.length ?? 0) === 0 ? (
+            <EmptyLine text={EMPTY.vaults} />
+          ) : (
+            (vaults ?? []).map((binding, index) => (
+              <PersonRow
+                key={binding.binding_id}
+                name={LINK.vaultRow}
+                sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
+                subNumeric
+                last={index === (vaults?.length ?? 0) - 1}
+              />
+            ))
+          )}
+        </PeopleSection>
+      ) : null}
 
-        {/* SHARED WITH THEM IS THE GRANT DASHBOARD (`PersonGrants.tsx`):
+      {/* SHARED WITH THEM IS THE GRANT DASHBOARD (`PersonGrants.tsx`):
             every live grant reaching this party, read from the plane itself
             (`?partyId=`), with `Share` and `Revoke` on it. Open by default
             exactly while the person is linked, as the handoff has it. */}
-        <PersonGrants
-          partyId={partyId}
-          personName={person.name}
-          roster={roster}
-          open={sharedOpen}
-          onToggle={() => toggle("shared", sharedOpen)}
-        />
+      <PersonGrants
+        partyId={partyId}
+        personName={person.name}
+        roster={roster}
+        open={sharedOpen}
+        onToggle={() => toggle("shared", sharedOpen)}
+      />
 
-        <PeopleSection
-          title={SECTIONS.channels}
-          count={person.contact.length}
-          collapsible
-          open={open("channels")}
-          onToggle={() => toggle("channels", open("channels"))}
-          add={addVerb("channels")}
-        >
-          {composing("channels") && composer ? (
-            <>
-              <ChipsBlock
-                accessibilityLabel={SECTIONS.channels}
-                chips={CHANNEL_KINDS.map((kind) => ({
-                  id: kind,
-                  label: channelKindLabel(kind),
-                  on: composer.kind === kind,
-                  onPress: () => setComposer({ ...composer, kind }),
-                }))}
-              />
-              <FieldRow
-                label={channelKindLabel(composer.kind)}
-                value={composer.value}
-                autoFocus
-                onChange={(value) => setComposer({ ...composer, value })}
-                trailing={composerCommits}
-              />
-            </>
-          ) : null}
-          {person.contact.length === 0 && !composing("channels") ? (
-            <EmptyLine text={EMPTY.channels} />
-          ) : (
-            person.contact.map((channel, index) => (
-              <PersonRow
-                key={channel.channel_id ?? `${channel.kind}:${channel.value}`}
-                name={channel.value}
-                sub={channelSub(channel)}
-                {...(channel.duplicate_names?.length
-                  ? { meta: channel.duplicate_names.join(" · "), metaNet: true }
-                  : {})}
-                trailing={
-                  channel.channel_id ? (
-                    /* The WORD, not `✕`: that glyph is the search field's
-                       clear control two screens away, and one mark meaning
-                       both "clear this text" and "destroy this record" is the
-                       mis-tap this row invited. Through the modal, like every
-                       other act no reverse write can undo (#1015). */
-                    <Verb
-                      label={VERBS.remove}
-                      quiet
-                      disabled={!writable}
-                      accessibilityLabel={LABELS.removeChannel(
-                        channelKindLabel(channel.kind).toLowerCase()
-                      )}
-                      onPress={() => setConfirmChannel(channel)}
-                    />
-                  ) : undefined
-                }
-                last={index === person.contact.length - 1}
-              />
-            ))
-          )}
-        </PeopleSection>
-
-        <PeopleSection
-          title={SECTIONS.dates}
-          count={person.dates.length}
-          collapsible
-          open={open("dates")}
-          onToggle={() => toggle("dates", open("dates"))}
-          add={addVerb("dates")}
-        >
-          {composing("dates") && composer ? (
-            <>
-              <FieldRow
-                label={FIELDS.dateLabel}
-                value={composer.label}
-                autoFocus
-                onChange={(label) => setComposer({ ...composer, label })}
-              />
-              <FieldRow
-                label={FIELDS.date}
-                value={composer.monthDay}
-                placeholder={FIELDS.datePlaceholder}
-                onChange={(monthDay) => setComposer({ ...composer, monthDay })}
-                trailing={composerCommits}
-              />
-            </>
-          ) : null}
-          {person.dates.length === 0 && !composing("dates") ? (
-            <EmptyLine text={EMPTY.dates} />
-          ) : (
-            person.dates.map((date, index) => (
-              <PersonRow
-                key={date.date_id}
-                name={`${date.label} · ${monthDayLabel(date.month_day)}`}
-                sub={
-                  date.reminder_on
-                    ? FRAGMENTS.reminderOn
-                    : FRAGMENTS.reminderOff
-                }
-                trailing={
-                  <Verb
-                    label={date.reminder_on ? VERBS.mute : VERBS.remind}
-                    disabled={!writable}
-                    onPress={() =>
-                      void writes.toggleReminder(
-                        date.date_id,
-                        date.label,
-                        date.reminder_on
-                      )
-                    }
-                  />
-                }
-                last={index === person.dates.length - 1}
-              />
-            ))
-          )}
-        </PeopleSection>
-
-        <PeopleSection
-          title={SECTIONS.notes}
-          count={person.notes.length}
-          collapsible
-          open={open("notes")}
-          onToggle={() => toggle("notes", open("notes"))}
-          add={addVerb("notes")}
-        >
-          {composing("notes") && composer ? (
+      <PeopleSection
+        title={SECTIONS.channels}
+        count={person.contact.length}
+        collapsible
+        open={open("channels")}
+        onToggle={() => toggle("channels", open("channels"))}
+        add={addVerb("channels")}
+      >
+        {composing("channels") && composer ? (
+          <>
+            <ChipsBlock
+              accessibilityLabel={SECTIONS.channels}
+              chips={CHANNEL_KINDS.map((kind) => ({
+                id: kind,
+                label: channelKindLabel(kind),
+                on: composer.kind === kind,
+                onPress: () => setComposer({ ...composer, kind }),
+              }))}
+            />
             <FieldRow
-              label={SECTIONS.notes}
+              label={channelKindLabel(composer.kind)}
               value={composer.value}
               autoFocus
               onChange={(value) => setComposer({ ...composer, value })}
               trailing={composerCommits}
             />
-          ) : null}
-          {person.notes.length === 0 && !composing("notes") ? (
-            <EmptyLine text={EMPTY.notes} />
-          ) : (
-            person.notes.map((note, index) => (
-              <PersonRow
-                key={note.annotation_id}
-                name={note.text}
-                wrap
-                sub={whenLabel(note.created_at)}
-                subNumeric
-                last={index === person.notes.length - 1}
-              />
-            ))
-          )}
-        </PeopleSection>
+          </>
+        ) : null}
+        {person.contact.length === 0 && !composing("channels") ? (
+          <EmptyLine text={EMPTY.channels} />
+        ) : (
+          person.contact.map((channel, index) => (
+            <PersonRow
+              key={channel.channel_id ?? `${channel.kind}:${channel.value}`}
+              name={channel.value}
+              sub={channelSub(channel)}
+              {...(channel.duplicate_names?.length
+                ? { meta: channel.duplicate_names.join(" · "), metaNet: true }
+                : {})}
+              trailing={
+                channel.channel_id ? (
+                  /* The WORD, not `✕`: that glyph is the search field's
+                       clear control two screens away, and one mark meaning
+                       both "clear this text" and "destroy this record" is the
+                       mis-tap this row invited. Through the modal, like every
+                       other act no reverse write can undo (#1015). */
+                  <Verb
+                    label={VERBS.remove}
+                    quiet
+                    disabled={!writable}
+                    accessibilityLabel={LABELS.removeChannel(
+                      channelKindLabel(channel.kind).toLowerCase()
+                    )}
+                    onPress={() => setConfirmChannel(channel)}
+                  />
+                ) : undefined
+              }
+              last={index === person.contact.length - 1}
+            />
+          ))
+        )}
+      </PeopleSection>
 
-        {/* The two acts that end a person. Trash is the outlined consequence
+      <PeopleSection
+        title={SECTIONS.dates}
+        count={person.dates.length}
+        collapsible
+        open={open("dates")}
+        onToggle={() => toggle("dates", open("dates"))}
+        add={addVerb("dates")}
+      >
+        {composing("dates") && composer ? (
+          <>
+            <FieldRow
+              label={FIELDS.dateLabel}
+              value={composer.label}
+              autoFocus
+              onChange={(label) => setComposer({ ...composer, label })}
+            />
+            <FieldRow
+              label={FIELDS.date}
+              value={composer.monthDay}
+              placeholder={FIELDS.datePlaceholder}
+              onChange={(monthDay) => setComposer({ ...composer, monthDay })}
+              trailing={composerCommits}
+            />
+          </>
+        ) : null}
+        {person.dates.length === 0 && !composing("dates") ? (
+          <EmptyLine text={EMPTY.dates} />
+        ) : (
+          person.dates.map((date, index) => (
+            <PersonRow
+              key={date.date_id}
+              name={`${date.label} · ${monthDayLabel(date.month_day)}`}
+              sub={
+                date.reminder_on ? FRAGMENTS.reminderOn : FRAGMENTS.reminderOff
+              }
+              trailing={
+                <Verb
+                  label={date.reminder_on ? VERBS.mute : VERBS.remind}
+                  disabled={!writable}
+                  onPress={() =>
+                    void writes.toggleReminder(
+                      date.date_id,
+                      date.label,
+                      date.reminder_on
+                    )
+                  }
+                />
+              }
+              last={index === person.dates.length - 1}
+            />
+          ))
+        )}
+      </PeopleSection>
+
+      <PeopleSection
+        title={SECTIONS.notes}
+        count={person.notes.length}
+        collapsible
+        open={open("notes")}
+        onToggle={() => toggle("notes", open("notes"))}
+        add={addVerb("notes")}
+      >
+        {composing("notes") && composer ? (
+          <FieldRow
+            label={SECTIONS.notes}
+            value={composer.value}
+            autoFocus
+            onChange={(value) => setComposer({ ...composer, value })}
+            trailing={composerCommits}
+          />
+        ) : null}
+        {person.notes.length === 0 && !composing("notes") ? (
+          <EmptyLine text={EMPTY.notes} />
+        ) : (
+          person.notes.map((note, index) => (
+            <PersonRow
+              key={note.annotation_id}
+              name={note.text}
+              wrap
+              sub={whenLabel(note.created_at)}
+              subNumeric
+              last={index === person.notes.length - 1}
+            />
+          ))
+        )}
+      </PeopleSection>
+
+      {/* The two acts that end a person. Trash is the outlined consequence
             recipe — destructive is never a fill. */}
-        <Commits>
-          <Button
-            label={VERBS.merge}
-            variant="secondary"
-            disabled={!writable}
-            onPress={() =>
-              navigation.navigate("PersonMerge", { personId: partyId })
-            }
-          />
-          <Button
-            label={VERBS.moveToTrash}
-            variant="destructive"
-            disabled={!writable}
-            onPress={() => setConfirmTrash(true)}
-          />
-        </Commits>
-      </ScrollView>
-    );
-  };
+      <Commits>
+        <Button
+          label={VERBS.merge}
+          variant="secondary"
+          disabled={!writable}
+          onPress={() =>
+            navigation.navigate("PersonMerge", { personId: partyId })
+          }
+        />
+        <Button
+          label={VERBS.moveToTrash}
+          variant="destructive"
+          disabled={!writable}
+          onPress={() => setConfirmTrash(true)}
+        />
+      </Commits>
+    </ScrollView>
+  ) : (
+    <EmptyLine text={EMPTY.noMatch} />
+  );
 
   return (
     <PeopleScreen
+      loading={reading ? { label: "Reading this person" } : undefined}
       onBack={() => navigation.popTo("PeopleHome", {})}
       route="person"
       subject={person?.name ?? APP_TITLE}
     >
-      <View style={styles.body}>{body()}</View>
+      <View style={styles.body}>{record}</View>
       <PeopleConfirm
         visible={confirmChannel !== null}
         title={CONFIRMS.removeChannel.title(confirmChannel?.kind ?? "")}
