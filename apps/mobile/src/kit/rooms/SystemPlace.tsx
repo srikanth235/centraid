@@ -2,10 +2,15 @@
 // rooms. `PlaceHeader` over `SectionBlock` / `RowsBlock`, and nothing else.
 //
 // A PLACE spends no colour on itself: there is no app mark here, because
-// Notifications is not an app with a hue, it is somewhere the frame goes.
-// The Home key is a header control (`HomeKey`), never a floating plate — the
+// Needs you is not an app with a hue, it is somewhere the frame goes.
+//
+// A place ROOT draws the frame's Home band at its foot (R-NY-1), and then no
+// Home key: the band's Home tab is the way home, and two ways home on one
+// screen is one too many. A place with no band — a pushed sub-page, a signal
+// detail — keeps the Home key as a header control, never a floating plate: the
 // floating variant sat on the standing health line on exactly these screens
-// (audit B14).
+// (audit B14). The band is a NODE the screen hands in, not an import: the
+// kit may not reach the launcher's pin model or the navigator.
 
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -27,8 +32,17 @@ import { styles } from "./rooms.styles";
 
 export interface SystemPlaceProps {
   title: string;
-  /** The grid plate, in the header's leading slot. */
+  /**
+   * The grid plate, in the header's leading slot. Ignored when `band` is
+   * present: a place that draws the band draws no Home key (R-NY-1).
+   */
   onHome?: () => void;
+  /**
+   * The frame's Home band, at the foot under the footer — where `PushedPage`
+   * draws an app's. Only a place ROOT passes one; the node decides for
+   * itself whether it draws (a pushed sub-page's band draws nothing).
+   */
+  band?: React.ReactNode;
   /** Computed from the stack; a stem root has no parent and draws no back. */
   backTo?: PlaceRef;
   onBack?: () => void;
@@ -60,6 +74,7 @@ export interface SystemPlaceProps {
 export default function SystemPlace({
   title,
   onHome,
+  band,
   backTo,
   onBack,
   action,
@@ -80,7 +95,7 @@ export default function SystemPlace({
   return (
     <TopSafeArea style={[styles.room, ink]} testID={testID}>
       <View style={styles.backRow}>
-        {onHome ? <HomeKey onPress={onHome} /> : null}
+        {onHome && !band ? <HomeKey onPress={onHome} /> : null}
         {backTo && onBack ? <BackKey backTo={backTo} onBack={onBack} /> : null}
       </View>
       <PlaceHeader
@@ -113,6 +128,7 @@ export default function SystemPlace({
         </ScrollView>
       </RoomBody>
       {footer}
+      {band ? <View>{band}</View> : null}
       {overlay}
     </TopSafeArea>
   );
