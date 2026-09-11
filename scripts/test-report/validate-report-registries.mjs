@@ -32,7 +32,7 @@ import { loadRoster, readSuiteRunners } from "./derive.mjs";
  */
 
 /** Journey flows live here; the completeness lock enumerates this directory. */
-const JOURNEY_FLOW_GLOB = "tests/agent-e2e-mobile/flows/*.mjs";
+const JOURNEY_FLOW_GLOB = "tests/agent-e2e-mobile/flows/*.{mjs,ts}";
 
 /**
  * Every `test(...)` / `test.each(...)(...)` / `it(...)` title declared in a

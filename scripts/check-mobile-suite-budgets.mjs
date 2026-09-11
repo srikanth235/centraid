@@ -39,7 +39,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
+import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_DIR = "tests/agent-e2e-mobile";

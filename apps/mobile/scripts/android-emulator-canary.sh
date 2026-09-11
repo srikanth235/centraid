@@ -25,5 +25,5 @@ export CENTRAID_MOBILE_LANE="${CENTRAID_MOBILE_LANE:-canary-android}"
 # Non-short-circuit across suites: every journey writes evidence even when an
 # earlier one fails, so one failure cannot grey the later cells (#535 F4). The
 # collection used to be `set +e; ec=0; … || ec=$?` here, one line per suite; it
-# moved into run-roster.mjs's `runPlan` when the suite list became roster data.
-node tests/agent-e2e-mobile/run-roster.mjs --rung 3 --platform android
+# moved into run-roster.ts's `runPlan` when the suite list became roster data.
+node tests/agent-e2e-mobile/run-roster.ts --rung 3 --platform android

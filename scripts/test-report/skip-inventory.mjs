@@ -71,7 +71,7 @@ export const SCAN_INCLUDE = [
   "apps/*/tests/**/*.test.ts",
   "tests/**/*.test.ts",
   "tests/**/*.test.mjs",
-  "tests/agent-e2e-*/flows/*.mjs",
+  "tests/agent-e2e-*/flows/*.{mjs,ts}",
   // Recursive: a script test one directory down (`scripts/gateway-package/`,
   // `apps/mobile/scripts/`) is a test like any other, and a single-segment glob
   // silently exempted it from the budget — an invisible skip is the exact

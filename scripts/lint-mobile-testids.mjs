@@ -45,7 +45,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 
-import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
+import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -77,7 +77,8 @@ export function discoverFlowFiles(root = ROOT) {
     for (const name of readdirSync(abs).sort()) {
       // `*.test.mjs` siblings assert harness behaviour with deliberately
       // violating fixtures — same carve-out as lint-e2e-flows.mjs.
-      if (!name.endsWith(".mjs") || name.endsWith(".test.mjs")) continue;
+      if (!/\.(?:mjs|ts)$/u.test(name) || /\.test\.(?:mjs|ts)$/u.test(name))
+        continue;
       files.push(`${dir}/${name}`);
     }
   }

@@ -31,14 +31,14 @@ export function readJson(relative, fallback = null) {
 /**
  * The mobile roster.
  *
- * SHIM (#915): the roster reader `tests/agent-e2e-mobile/lib/roster.mjs` is
+ * SHIM (#915): the roster reader `tests/agent-e2e-mobile/lib/roster.ts` is
  * being written by the MOBILE slice in the same wave. Until it exists this
  * reads `roster.json` directly and normalises the fields the report needs;
  * once the module lands, `loadRoster()` from it is used instead and this
  * fallback can be deleted.
  */
 export async function loadRoster() {
-  const modulePath = path.join(ROOT, "tests/agent-e2e-mobile/lib/roster.mjs");
+  const modulePath = path.join(ROOT, "tests/agent-e2e-mobile/lib/roster.ts");
   if (existsSync(modulePath)) {
     const module = await import(modulePath);
     if (typeof module.loadRoster === "function") return module.loadRoster();
@@ -49,9 +49,9 @@ export async function loadRoster() {
   });
 }
 
-/** The flow id a roster path denotes: `flows/pairing-canary.mjs` → `pairing-canary`. */
+/** The flow id a roster path denotes: `flows/pairing-canary.ts` → `pairing-canary`. */
 export function flowId(flowPath) {
-  return path.basename(String(flowPath), ".mjs");
+  return path.basename(String(flowPath)).replace(/\.(?:mjs|ts)$/u, "");
 }
 
 /**

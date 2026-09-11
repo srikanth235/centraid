@@ -103,7 +103,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { validateRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
+import { validateRoster } from "../tests/agent-e2e-mobile/lib/roster.ts";
 import { wiringSelfTestCases } from "./lint-e2e-wiring.cases.mjs";
 import {
   discoverFlows,
@@ -165,9 +165,8 @@ export function matrixMobileOwners(matrix) {
       ) {
         // `command` carries a shell line (`node tests/…/x.mjs`); owner/runner
         // carry a bare path. Normalise both to the path.
-        const match = /(?<flow>tests\/agent-e2e-mobile\/[\w./-]+\.mjs)/u.exec(
-          value
-        );
+        const match =
+          /(?<flow>tests\/agent-e2e-mobile\/[\w./-]+\.(?:mjs|ts))/u.exec(value);
         if (match) {
           const flow = match.groups.target ?? match.groups.flow;
           if (!owners.has(flow)) owners.set(flow, []);

@@ -996,7 +996,7 @@ export async function launchApp(
   // A test-only entry applies e2e main-process setup (Linux keyring switch)
   // and then loads the real app, keeping production main.ts free of test
   // branches. Electron still resolves the app root from apps/desktop.
-  const entry = path.join(__dirname, "electron-entry.mjs");
+  const entry = path.join(__dirname, "electron-entry.ts");
   const app = await _electron.launch({
     args: [entry, `--user-data-dir=${env.userData}`],
     env: {

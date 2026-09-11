@@ -219,7 +219,7 @@ node scripts/test-report/prepare.mjs
 # correctly. That is #870, and it is the same defect on either platform, so the
 # same seeding sits at the same place in both preambles. `scripts/lint-e2e-wiring.mjs`
 # RULE corpus enforces the ordering on the Android preamble; this one mirrors it.
-node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+node tests/agent-e2e-mobile/seed-demo-corpus.ts
 
 export MAESTRO_PLATFORM=ios
 # Read by lib/harness.mjs: on `release` it skips the Metro reachability wait and

@@ -95,7 +95,7 @@ async function recordInfraMismatch(message: string): Promise<void> {
     `${JSON.stringify(
       {
         lane: "e2e",
-        owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+        owner: "tests/agent-e2e-mobile/flows/home-loads.ts",
         name: "mobile Xcode compatibility",
         status: "infra-mismatch",
         capturedAt: new Date().toISOString(),

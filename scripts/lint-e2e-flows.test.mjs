@@ -117,7 +117,7 @@ test("the roster IS the flows directory — a file dropped there is linted", () 
   // journey. Recomputed here from `readdirSync`, independently of the linter, so
   // a future roster that starts filtering journeys out fails this.
   const onDisk = readdirSync(repoFile(FLOW_DIR))
-    .filter((name) => name.endsWith(".mjs"))
+    .filter((name) => /\.(?:mjs|ts)$/u.test(name) && !name.endsWith(".md"))
     .map((name) => `${FLOW_DIR}/${name}`)
     .sort();
   assert.deepEqual(
@@ -131,7 +131,7 @@ test("SABOTAGE: the linter names no flow file, so none can be forgotten", () => 
   // A hand-written roster leaves every journey missing from it unlinted
   // (#842 W0.4). Re-introducing ANY hardcoded journey path fails here.
   const source = readFileSync(repoFile("scripts/lint-e2e-flows.mjs"), "utf8");
-  const hardcoded = [...source.matchAll(/flows\/[\w.-]+\.mjs/gu)].map(
+  const hardcoded = [...source.matchAll(/flows\/[\w.-]+\.(?:mjs|ts)/gu)].map(
     (m) => m[0]
   );
   assert.deepEqual(hardcoded, []);
@@ -147,13 +147,13 @@ test("every discovered journey reaches the step grammar", () => {
   }
 });
 
-test("discovery excludes `*.test.mjs` fixtures and non-.mjs neighbours", () => {
+test("discovery excludes `*.test.*` fixtures and non-flow neighbours", () => {
   const files = discoverFiles();
   // Real neighbours of both kinds live in these directories today.
-  assert.ok(readdirSync(repoFile(LIB_DIR)).includes("frame-report.test.mjs"));
+  assert.ok(readdirSync(repoFile(LIB_DIR)).includes("frame-report.test.ts"));
   assert.ok(readdirSync(repoFile(FLOW_DIR)).includes("photos-permissions.md"));
-  assert.ok(!files.some((f) => f.endsWith(".test.mjs")));
-  assert.ok(files.every((f) => f.endsWith(".mjs")));
+  assert.ok(!files.some((f) => /\.test\.(?:mjs|ts)$/u.test(f)));
+  assert.ok(files.every((f) => /\.(?:mjs|ts)$/u.test(f)));
 });
 
 test("SABOTAGE: a newly discovered flow's vacuous assertion is still caught", () => {

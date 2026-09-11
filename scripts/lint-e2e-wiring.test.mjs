@@ -202,13 +202,13 @@ test("matrixMobileOwners walks structurally and reports every citing path", () =
 test("discovery finds the real roster and excludes sibling test files", () => {
   const flows = discoverFlows();
   assert.ok(flows.length > 10, "the committed roster should not be near-empty");
-  assert.ok(flows.every((rel) => !rel.endsWith(".test.mjs")));
-  assert.ok(flows.includes("tests/agent-e2e-mobile/flows/home-loads.mjs"));
+  assert.ok(flows.every((rel) => !/\.test\.(?:mjs|ts)$/u.test(rel)));
+  assert.ok(flows.includes("tests/agent-e2e-mobile/flows/home-loads.ts"));
   const runners = discoverRunners();
   assert.ok(runners.every(isRunnerPath));
   // One runner since #915 Wave 2: the six compatibility shims went with the
   // last workflow that spelled their paths.
-  assert.ok(runners.includes("tests/agent-e2e-mobile/run-roster.mjs"));
+  assert.ok(runners.includes("tests/agent-e2e-mobile/run-roster.ts"));
 });
 
 test("every lane the committed roster declares names a job that exists", () => {

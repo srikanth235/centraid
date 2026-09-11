@@ -66,7 +66,8 @@ const SCAN_DIRS = [
 // Vitest/node:test siblings are excluded by rule: `*.test.mjs` files assert the
 // linter's and the harness's behaviour with deliberately-violating FIXTURES, so
 // linting them would flag strings that exist precisely to be flagged.
-const isTestFile = (name) => name.endsWith(".test.mjs");
+const FLOW_EXT = /\.(?:mjs|ts)$/u;
+const isTestFile = (name) => /\.test\.(?:mjs|ts)$/u.test(name);
 
 // Individually excluded files, each with the reason it cannot be linted. EMPTY
 // today, and it should stay that way: the honest fix for a file this linter
@@ -82,7 +83,7 @@ export function discoverFiles(root = ROOT) {
   for (const dir of SCAN_DIRS) {
     const names = readdirSync(path.resolve(root, dir)).sort();
     for (const name of names) {
-      if (!name.endsWith(".mjs") || isTestFile(name)) continue;
+      if (!FLOW_EXT.test(name) || isTestFile(name)) continue;
       const rel = `${dir}/${name}`;
       if (EXCLUDED.has(rel)) continue;
       files.push(rel);

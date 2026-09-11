@@ -21,7 +21,7 @@ const APPS_DIR = "packages/blueprints/apps";
 /** Sourced by every Android device lane script, so the seeding it carries is
  *  the one place that covers the PR gate, the canary and the nightly. */
 export const LANE_PREAMBLE = "apps/mobile/scripts/android-emulator-install.sh";
-export const SEEDER = `${MOBILE_DIR}/seed-demo-corpus.mjs`;
+export const SEEDER = `${MOBILE_DIR}/seed-demo-corpus.ts`;
 /** The handoff. Everything after this export is Maestro's, so the corpus has
  *  to be in the gateway before it. */
 const LANE_HANDOFF = "export MAESTRO_PLATFORM";

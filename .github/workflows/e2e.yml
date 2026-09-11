@@ -419,7 +419,7 @@ jobs:
         run: bun run native:prebuild
       - name: Build and start the tokenless mobile test gateway
         # Scoped to the gateway's dependency subgraph instead of a full
-        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
+        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.ts imports only
         # packages/server/dist, and turbo pulls every workspace dependency
         # (vault, app-engine, agent-runtime, automation, backup, blueprints,
         # tunnel, client, web, design) in transitively — nothing
@@ -429,11 +429,11 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -557,7 +557,7 @@ jobs:
           MAESTRO_PLATFORM: ios
           CENTRAID_MOBILE_BUILD: release
           CENTRAID_MOBILE_LANE: nightly-ios
-        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform ios
+        run: node tests/agent-e2e-mobile/run-roster.ts --rung 4 --platform ios
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -700,11 +700,11 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -1048,10 +1048,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -1066,7 +1066,7 @@ jobs:
       # every number this rung produces is at demo volume and its ledger row
       # says so.
       - name: Seed the lane's demo corpus
-        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.ts
       - name: Lease a low-end Android from the farm
         id: lease
         env:
@@ -1078,7 +1078,7 @@ jobs:
         env:
           CENTRAID_MOBILE_BUILD: release
           MAESTRO_PLATFORM: android
-        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform android
+        run: node tests/agent-e2e-mobile/run-roster.ts --rung 5 --platform android
       - name: Release the leased device
         if: always()
         env:
@@ -1126,17 +1126,17 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
           exit 1
       # Demo volume, for the reason the Android cell states above.
       - name: Seed the lane's demo corpus
-        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.ts
       - name: Lease an iPhone from the farm
         id: lease
         env:
@@ -1148,7 +1148,7 @@ jobs:
         env:
           CENTRAID_MOBILE_BUILD: release
           MAESTRO_PLATFORM: ios
-        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform ios
+        run: node tests/agent-e2e-mobile/run-roster.ts --rung 5 --platform ios
       - name: Release the leased device
         if: always()
         env:
@@ -1228,7 +1228,7 @@ jobs:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1274,7 +1274,7 @@ jobs:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1323,7 +1323,7 @@ jobs:
       - run: node scripts/test-report/prepare.mjs
       # Production must never silently fall back to the JS byte pump.
       - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
-      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1493,7 +1493,7 @@ jobs:
 
       # #892 Phase 2 — DATA SAFETY OVER TIME FINALLY HAS A LANE.
       #
-      # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs` has existed since
+      # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.ts` has existed since
       # #842 W5.4. It asserts, in as many words, "upgrade did not preserve the old
       # vault's data" — the #1 risk for a local-first sovereign vault — and it was
       # referenced by NO WORKFLOW. Its sibling `released-binary-skew.mjs` was in the
@@ -1570,7 +1570,7 @@ jobs:
       - name: Install → upgrade → the vault is still there
         env:
           CENTRAID_UPGRADE_PREV_INSTALLER: ${{ steps.prev.outputs.installer }}
-        run: node tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs
+        run: node tests/agent-e2e-compat/flows/install-upgrade-lifecycle.ts
       # N−1 binary skew: the last published client against tonight's gateway.
       # Shares "the previous release, runnable" with the lane above, which is why
       # they are one job rather than two.
@@ -1578,7 +1578,7 @@ jobs:
         env:
           CENTRAID_SKEW_RELEASE_TAG: ${{ steps.prev.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node tests/agent-e2e-compat/flows/released-binary-skew.mjs
+        run: node tests/agent-e2e-compat/flows/released-binary-skew.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

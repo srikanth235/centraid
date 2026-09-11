@@ -218,7 +218,7 @@ export function validateUiReceipt({ changed, readText, readBase }) {
     for (const screenshot of text.match(SCREENSHOT_RE) ?? []) {
       const filename = path.basename(screenshot);
       const emitter = changed.find((candidate) => {
-        if (!/(?:e2e|agent-e2e).*(?:spec\.ts|\.mjs)$/u.test(candidate))
+        if (!/(?:e2e|agent-e2e).*(?:spec\.ts|\.(?:mjs|ts))$/u.test(candidate))
           return false;
         const source = readText(candidate);
         return (

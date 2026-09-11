@@ -27,11 +27,20 @@ const ROOT_TOOLING_PROGRAMS = [
     extendsNeedle: "tsconfig.base.json",
     typecheckNeedles: ["tsc -p scripts/tsconfig.pricing.json"],
   },
+  {
+    rel: "tests/tsconfig.agent-e2e.json",
+    requiredWhen: "tests/agent-e2e-shared/harness.ts",
+    extendsNeedle: NODE_TOOLING_PROFILE,
+    typecheckNeedles: ["tsc -p tests/tsconfig.agent-e2e.json"],
+  },
 ];
 
 function typecheckMentions(script, needle) {
-  if (needle === "tsc -p scripts") {
-    return /(?:^|[\s;&])tsc -p scripts(?:\s|$|&|;)/u.test(script);
+  if (needle === "tsc -p scripts" || needle === "tsc -p tests") {
+    return new RegExp(
+      `(?:^|[\\s;&])${needle.replaceAll(" ", "\\s+")}(?:\\s|$|&|;)`,
+      "u"
+    ).test(script);
   }
   return script.includes(needle);
 }

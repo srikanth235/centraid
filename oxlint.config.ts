@@ -113,7 +113,7 @@ const VITEST_TEST_FILES = [
   // #781 — the agent-e2e harness/flow sources drive the nightly journeys and
   // had the same seam exposure (Math.random ports in the pairing harness);
   // they are test infrastructure, so the seam rules apply.
-  "tests/agent-e2e-*/**/*.mjs",
+  "tests/agent-e2e-*/**/*.{mjs,ts}",
 ];
 
 // Hermes compatibility, kept separate so the mobile/time-engine *test* files
@@ -400,7 +400,7 @@ export default defineConfig({
       // files are all Node ESM scripts, so the environment below is the whole
       // configuration the rule needs to be right here without being enabled
       // repo-wide (where TypeScript's own checker already answers it).
-      files: ["tests/agent-e2e-*/**/*.mjs"],
+      files: ["tests/agent-e2e-*/**/*.{mjs,ts}"],
       env: {
         browser: false,
         es2024: true,
@@ -419,7 +419,7 @@ export default defineConfig({
       // rule above meaningful — turning on the whole `browser` env would let a
       // genuine `document` typo in a Node-side flow pass unnoticed, which is
       // the class of defect the rule was enabled for.
-      files: ["tests/agent-e2e-pairing/flows/extension-companion.mjs"],
+      files: ["tests/agent-e2e-pairing/flows/extension-companion.ts"],
       globals: {
         chrome: "readonly",
         document: "readonly",

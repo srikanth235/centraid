@@ -16,7 +16,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
-import { flowsFor, suiteSpec } from "../tests/agent-e2e-mobile/lib/roster.mjs";
+import { flowsFor, suiteSpec } from "../tests/agent-e2e-mobile/lib/roster.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_DIR = "tests/agent-e2e-mobile";
@@ -40,7 +40,10 @@ export function stripComments(text) {
 /** Every `.mjs` flow file on disk, repo-relative. Discovered, never listed. */
 export function discoverFlows(root = ROOT) {
   return readdirSync(path.resolve(root, FLOWS_DIR))
-    .filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
+    .filter(
+      (name) =>
+        /\.(?:mjs|ts)$/u.test(name) && !/\.test\.(?:mjs|ts)$/u.test(name)
+    )
     .sort()
     .map((name) => `${FLOWS_DIR}/${name}`);
 }
@@ -51,14 +54,15 @@ export function discoverFlows(root = ROOT) {
  * legitimately `node`-run (the CI gateway and its readiness probe) and owes no
  * roster. */
 export function isRunnerPath(rel) {
-  return /^tests\/agent-e2e-mobile\/run-[\w.-]+\.mjs$/u.test(rel);
+  return /^tests\/agent-e2e-mobile\/run-[\w.-]+\.(?:mjs|ts)$/u.test(rel);
 }
 
 /** Every `run-*-suite.mjs` runner on disk, repo-relative. */
 export function discoverRunners(root = ROOT) {
   return readdirSync(path.resolve(root, MOBILE_DIR))
     .filter(
-      (name) => /^run-.*\.mjs$/u.test(name) && !name.endsWith(".test.mjs")
+      (name) =>
+        /^run-.*\.(?:mjs|ts)$/u.test(name) && !/\.test\.(?:mjs|ts)$/u.test(name)
     )
     .sort()
     .map((name) => `${MOBILE_DIR}/${name}`);
@@ -82,7 +86,7 @@ export function jobBlock(yaml, job) {
 }
 
 const INVOKE_RE =
-  /\bnode\s+(?:--[\w-]+(?:=\S+)?\s+)*(?<target>tests\/agent-e2e-mobile\/[\w./-]+\.mjs)/gu;
+  /\bnode\s+(?:--[\w-]+(?:=\S+)?\s+)*(?<target>tests\/agent-e2e-mobile\/[\w./-]+\.(?:mjs|ts))/gu;
 
 /** Direct `node tests/agent-e2e-mobile/*.mjs` invocations in a source chunk,
  * each with THE WHOLE LINE it appeared on. The line is what carries
@@ -151,7 +155,8 @@ export function shimSelector(source) {
  */
 export function runnerMembers(source, runnerRel, line, roster) {
   const selector =
-    (runnerRel.endsWith("/run-roster.mjs")
+    (runnerRel.endsWith("/run-roster.mjs") ||
+    runnerRel.endsWith("/run-roster.ts")
       ? invocationSelector(line ?? "")
       : shimSelector(source)) ?? shimSelector(source);
   if (!selector) {

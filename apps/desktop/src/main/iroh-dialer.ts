@@ -38,7 +38,7 @@ let testProxyResolver:
  * E2E transport seam. The Electron test entry installs this before importing
  * main.js so a loopback mock can stand in for iroh without persisting a URL
  * or token in the production connection registry. It is loaded dynamically
- * by tests/e2e/electron-entry.mjs.
+ * by tests/e2e/electron-entry.ts.
  * @public
  */
 export function setIrohProxyResolverForTests(

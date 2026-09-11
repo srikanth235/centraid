@@ -21,17 +21,17 @@ const enrichmentLivePath = path.join(
 const soakWeeklyPath = path.join(root, ".github/workflows/soak-weekly.yml");
 
 const requiredFlowScripts = [
-  "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
-  "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
-  "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
+  "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts",
+  "tests/agent-e2e-pairing/flows/cross-network-relay.ts",
+  "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.ts",
   // #890 W4 / #915 Wave 2 — the iOS lane's roster-runner invocation is in
-  // this YAML (`run-roster.mjs --rung 4 --platform ios`). The Android lanes
+  // this YAML (`run-roster.ts --rung 4 --platform ios`). The Android lanes
   // invoke the same runner from the committed emulator script rather than
   // from this YAML (the action executes `script:`), so they are checked by
   // scripts/lint-e2e-wiring.mjs against the shipped roster instead; that
   // linter reads the script the lane hands off to and is the general form of
   // the rule this list encodes for the pairing lanes.
-  "tests/agent-e2e-mobile/run-roster.mjs",
+  "tests/agent-e2e-mobile/run-roster.ts",
 ];
 
 const requiredJobs = [
