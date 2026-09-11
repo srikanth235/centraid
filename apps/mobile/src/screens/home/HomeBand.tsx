@@ -115,8 +115,9 @@ function Tab({
   return (
     <Pressable
       accessibilityRole="button"
-      // SPEAK WHAT IS PAINTED (#1015, shell/findings 6): the band said
-      // "Notifications" and drew "Alerts", so two members got two nouns.
+      // SPEAK WHAT IS PAINTED (#1015, shell/findings 6): the band once spoke
+      // one noun for Needs you and painted another, so two members got two
+      // nouns.
       accessibilityLabel={tab.short + (active ? ", current place" : "")}
       accessibilityState={{ selected: active }}
       onPress={onPress}
