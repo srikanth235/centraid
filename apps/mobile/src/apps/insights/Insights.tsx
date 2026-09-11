@@ -51,6 +51,7 @@ import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
 import { usePlaceFrame } from "../../screens/home/usePlaceFrame";
+import { alertsEntryCopy } from "./alerts-model";
 import GatewayAlerts from "./GatewayAlerts";
 import {
   failedLegendKey,
@@ -63,6 +64,7 @@ import {
   windowChips,
 } from "./insights-model";
 import { styles } from "./Insights.styles";
+import { useAlertCount } from "./useAlertCount";
 import { useInsights } from "./useInsights";
 import type { InsightsController } from "./useInsights";
 
@@ -124,9 +126,13 @@ export default function InsightsScreen({
 
 function AnalyticsBody({
   page,
+  alertCount,
+  onOpenAlerts,
   onOpenAutomation,
 }: {
   page: InsightsController;
+  alertCount: number | undefined;
+  onOpenAlerts: () => void;
   onOpenAutomation: (automationRef: string) => void;
 }): React.JSX.Element | null {
   const { load, state, windowDays } = page;
@@ -136,6 +142,25 @@ function AnalyticsBody({
   if (load.kind !== "ready") return null;
 
   const { summary } = load;
+  // The standing way into the alerts view (R-NY-2): drawn in the empty
+  // window too, because a gateway can be down on a day nothing ran.
+  const alerts = (
+    <RowsBlock
+      accessibilityLabel="Alerts"
+      rows={[
+        {
+          ...alertsEntryCopy(alertCount),
+          action: {
+            hint: "Open the alerts",
+            label: "Open",
+            onPress: onOpenAlerts,
+          },
+          key: "alerts",
+          onPress: onOpenAlerts,
+        },
+      ]}
+    />
+  );
   const chips = (
     <ChipsBlock
       accessibilityLabel="Time window"
@@ -153,6 +178,7 @@ function AnalyticsBody({
     return (
       <>
         {chips}
+        {alerts}
         <EmptyBlock body={EMPTY_BODY} routine title={EMPTY_TITLE} />
       </>
     );
@@ -164,6 +190,7 @@ function AnalyticsBody({
   return (
     <>
       {chips}
+      {alerts}
       <PanelBlock
         body={INSIGHTS_SPEND_NOTE}
         facts={insightSpendFacts(summary, PHONE_INSIGHT_WORDS)}
@@ -246,6 +273,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
   const frame = usePlaceFrame("stats");
   const { colors } = useTheme();
   const page = useInsights();
+  const alertCount = useAlertCount();
   const ink = useMemo(
     () => ({
       error: { color: colors.net },
@@ -294,6 +322,13 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
         </Text>
       ) : null}
       <AnalyticsBody
+        alertCount={alertCount}
+        // PUSHED, not navigated: navigating to this same route name would
+        // swap the overview's own params and leave no Activity to go back to.
+        // Pushed over Activity, the alerts view draws a back key (R-NY-1).
+        onOpenAlerts={() =>
+          navigation.push("Insights", { initialTab: "alerts" })
+        }
         onOpenAutomation={(automationRef) =>
           navigation.navigate("Automations", { automationRef })
         }

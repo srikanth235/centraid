@@ -9,7 +9,37 @@ import {
   alertRetryRef,
   alertStateWord,
   alertWhen,
+  alertsEntryCopy,
+  needsALookCount,
 } from "./alerts-model";
+
+describe("the overview's way into the alerts", () => {
+  it("is always there, and says zero in words rather than hiding", () => {
+    expect(alertsEntryCopy(0)).toStrictEqual({
+      net: false,
+      sub: "Nothing needs a look",
+      title: "Alerts",
+    });
+    expect(alertsEntryCopy(1).sub).toBe("1 needs a look");
+    expect(alertsEntryCopy(3)).toMatchObject({
+      net: true,
+      sub: "3 need a look",
+    });
+    // Not read yet: no invented zero.
+    expect(alertsEntryCopy(undefined).sub).toBe("");
+  });
+
+  it("counts active problems only", () => {
+    expect(
+      needsALookCount([
+        { archivedAt: null, severity: "high" },
+        { archivedAt: null, severity: "warning" },
+        { archivedAt: null, severity: "info" },
+        { archivedAt: "2026-08-13T08:00:00.000Z", severity: "high" },
+      ])
+    ).toBe(2);
+  });
+});
 
 const NOW = Date.parse("2026-08-13T09:00:00.000Z");
 

@@ -65,6 +65,36 @@ export function alertRetryRef(notice: MobileNotice): string | undefined {
     : notice.sourceRef;
 }
 
+/** How many standing lines need a look: every active notice that is not
+ *  news. The count the overview's way in states (#1015 R-NY-2). */
+export function needsALookCount(
+  notices: readonly Pick<MobileNotice, "archivedAt" | "severity">[]
+): number {
+  return notices.filter(
+    (notice) => notice.archivedAt === null && notice.severity !== "info"
+  ).length;
+}
+
+/**
+ * Activity overview's standing way into the alerts view. It is ALWAYS drawn,
+ * zero included: a view reachable only when something is wrong is a view the
+ * member never learns exists, and Needs you no longer leads here. `undefined`
+ * is "not read yet", which says nothing rather than an invented zero.
+ */
+export function alertsEntryCopy(count: number | undefined): {
+  title: string;
+  sub: string;
+  net: boolean;
+} {
+  const sub =
+    count === undefined
+      ? ""
+      : count === 0
+        ? "Nothing needs a look"
+        : `${String(count)} ${count === 1 ? "needs" : "need"} a look`;
+  return { net: (count ?? 0) > 0, sub, title: "Alerts" };
+}
+
 /** The standing lines: every notice not filed away, one per source. */
 export function alertLines(
   notices: readonly MobileNotice[],
