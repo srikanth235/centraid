@@ -263,7 +263,7 @@ describe("the standing line", () => {
       "Nothing is sent. The rule is told it was refused, and remembers."
     );
     expect(EMPTY_BODY).toBe(
-      "Staged writes, lapsed connections and access requests land here."
+      "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here."
     );
     expect(LOADING_NOTE).toBe(
       "A row knows its shape before its content arrives, so nothing reflows when it does."

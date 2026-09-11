@@ -235,7 +235,7 @@ describe("screens/ApprovalsScreen", () => {
       const el = mount(makeProps());
       expect(el.textContent).toContain("Nothing is waiting on you");
       expect(el.textContent).toContain(
-        "Staged writes, lapsed connections and access requests land here."
+        "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here."
       );
       // The empty state's one verb has somewhere real to land: the grants
       // section renders in every state, because a consent surface that hides

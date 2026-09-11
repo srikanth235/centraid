@@ -232,7 +232,7 @@ describe(ApprovalsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("Nothing is waiting on you");
     expect(spans).toContain(
-      "Staged writes, lapsed connections and access requests land here."
+      "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here."
     );
     expect(spans).toContain("Nothing to attend to");
     // Standing grants are Settings → Access's record (#1015 R-NY-2); this

@@ -5,7 +5,7 @@
 export const APPROVALS_EMPTY_TITLE = "Nothing is waiting on you";
 
 export const APPROVALS_EMPTY_BODY =
-  "Staged writes, lapsed connections and access requests land here.";
+  "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here.";
 
 export const APPROVALS_EMPTY_ACTION = "Review standing grants";
 
