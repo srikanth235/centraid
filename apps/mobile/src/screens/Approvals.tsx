@@ -10,8 +10,7 @@
 // No header verb: the page has no single commit, and Activity is on the band.
 // Data half `useApprovals.ts`; words `approvals-model.ts`.
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import type { ScrollView } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
 
 import EmptyBlock from "../kit/components/EmptyBlock";
 import { healthLineFor } from "../kit/components/health-line";
@@ -33,13 +32,16 @@ import { styles } from "./approvals/Approvals.styles";
 import Queue from "./approvals/ApprovalsQueue";
 import { useApprovals } from "./approvals/useApprovals";
 import type { BodyProps, Focus } from "./approvals/view-types";
-import PlaceBand from "./home/PlaceBand";
+import { usePlaceFrame } from "./home/usePlaceFrame";
 import { SHELL_TITLES } from "./shell-copy";
 
 export default function ApprovalsScreen({
   navigation,
 }: SettingsScreenProps<"Approvals">): React.JSX.Element {
   const { colors } = useTheme();
+  // The band when Needs you stands on Home; a back key when it was opened
+  // from Settings, an app, or an alert (R-NY-1).
+  const frame = usePlaceFrame("notifs");
   const page = useApprovals();
   const [focus, setFocus] = useState<Focus>({
     alwaysAllow: false,
@@ -48,7 +50,6 @@ export default function ApprovalsScreen({
     filter: "all",
     selectedItemId: undefined,
   });
-  const scroller = useRef<ScrollView | null>(null);
 
   const ink = useMemo(
     () => ({
@@ -67,8 +68,7 @@ export default function ApprovalsScreen({
 
   return (
     <SystemPlace
-      band={<PlaceBand place="notifs" />}
-      bodyRef={scroller}
+      {...frame}
       error={
         page.state === "error"
           ? {
@@ -96,9 +96,6 @@ export default function ApprovalsScreen({
           ? { label: "Reading what is waiting on you", note: LOADING_NOTE }
           : undefined
       }
-      // Not pop-to-Settings: also reached from push notifications, where
-      // Settings is not beneath.
-      onHome={() => navigation.goBack()}
       onRefresh={() => void page.refresh()}
       refreshing={page.refreshing}
       title={SHELL_TITLES.needsYou}
