@@ -55,6 +55,8 @@
         "src/engine/worker/runner.ts",
         "src/engine/worker/ts-loader-hooks.ts",
         "src/automation/worker/runner.ts",
+        "src/acp/backends/acp/vault-mcp-stdio-proxy.ts",
+        "src/acp/backends/acp/fake-acp-harness.ts",
         "scripts/*.{mjs,ts}"
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/*.{mjs,ts}"],

@@ -1,5 +1,5 @@
 // The generic ACP model probe (#484). Driven against the scripted
-// `fake-acp-harness.mjs`, the same fixture the turn backend uses — so happy
+// `fake-acp-harness.ts`, the same fixture the turn backend uses — so happy
 // path, no-model-option, AUTH_REQUIRED, and missing-binary are all exercised
 // against a real launch → initialize → session/new exchange, not a mock.
 
@@ -15,7 +15,7 @@ import { enumerateAcpModels, mapOfferedModels } from "./enumerate-models.js";
 import type { AcpTurnConfig } from "./types.js";
 
 const FAKE_HARNESS = fileURLToPath(
-  new URL("fake-acp-harness.mjs", import.meta.url)
+  new URL("fake-acp-harness.ts", import.meta.url)
 );
 
 /** An `AcpTurnConfig` that launches the fake harness (native path, no adapter). */
