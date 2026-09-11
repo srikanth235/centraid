@@ -23,7 +23,7 @@ import {
 import { subscribeVaultLinks } from "../lib/vault-links";
 import type { HomeScreenProps } from "../navigation";
 import AllAppsSheet from "./home/AllAppsSheet";
-import type { BandTarget } from "./home/band";
+import { ALL_APPS_SHEET } from "./home/band-navigation";
 import {
   buildLauncherItems,
   orderByPins,
@@ -45,6 +45,7 @@ import {
   springboardState,
 } from "./home/springboard-policy";
 import { useOriginHealth } from "./home/useOriginHealth";
+import { usePlaceNavigation } from "./home/usePlaceNavigation";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultBar from "./home/VaultBar";
 
@@ -89,6 +90,7 @@ async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
 
 export default function HomeScreen({
   navigation,
+  route: homeRoute,
 }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -96,7 +98,9 @@ export default function HomeScreen({
   // setter is what `loadHome` needs to drive its retries.
   const [, setState] = useState<HomeState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
-  const [allAppsOpen, setAllAppsOpen] = useState(false);
+  // More pressed on a place's band lands HERE with `sheet` set (R-NY-1).
+  const sheet = homeRoute.params?.sheet;
+  const [allAppsOpen, setAllAppsOpen] = useState(sheet === ALL_APPS_SHEET);
   const pins = usePins();
   const replica = useReplica();
   const healthSignal = useOriginHealth();
@@ -239,51 +243,14 @@ export default function HomeScreen({
   }, [replica]);
 
   /**
-   * Band and All-apps share this map. Every id here GOES somewhere: Starred
-   * was a stated no-op that a member could still pin into a band slot, and a
-   * tab onto nothing is worse than a missing one (#1015 B15), so the place is
-   * gone rather than dimmed. `default` is `never` so a new place is a
-   * typecheck failure.
+   * Band and All-apps go through the one band navigation every place root
+   * uses (`usePlaceNavigation`, R-NY-1): Home + the place, never deeper. On
+   * Home, More opens the sheet in place.
    */
-  const goToPlace = useCallback(
-    (id: PlaceId): void => {
-      switch (id) {
-        case "home":
-          break;
-        case "notifs":
-          navigation.navigate("Settings", { screen: "Approvals" });
-          break;
-        case "autos":
-          navigation.navigate("Automations");
-          break;
-        case "conn":
-          navigation.navigate("Connectors");
-          break;
-        case "settings":
-          openSettings();
-          break;
-        case "stats":
-          navigation.navigate("Insights");
-          break;
-        case "gateway":
-          navigation.navigate("SystemOnPhone");
-          break;
-        case "storage":
-          navigation.navigate("Settings", { screen: "PhoneStorage" });
-          break;
-        case "data":
-          navigation.navigate("Data");
-          break;
-        case "devices":
-          navigation.navigate("Devices");
-          break;
-        default: {
-          const exhaustive: never = id;
-          throw new Error(`Unhandled place: ${String(exhaustive)}`);
-        }
-      }
-    },
-    [navigation, openSettings]
+  const openAllApps = useCallback(() => setAllAppsOpen(true), []);
+  const { goToPlace, selectBandTab } = usePlaceNavigation(
+    navigation,
+    openAllApps
   );
 
   const openPlace = useCallback(
@@ -291,16 +258,18 @@ export default function HomeScreen({
     [goToPlace]
   );
 
-  const selectBandTab = useCallback(
-    (target: BandTarget): void => {
-      if (target === "more") {
-        setAllAppsOpen(true);
-        return;
-      }
-      goToPlace(target);
-    },
-    [goToPlace]
-  );
+  // A `sheet` param arriving on the mounted Home opens the sheet while
+  // rendering: the param is a prop, so this is state adjusted to a prop, not
+  // an effect. The effect only clears the param on the navigator, so a later
+  // arrival does not open the sheet again.
+  const [seenSheet, setSeenSheet] = useState(sheet);
+  if (sheet !== seenSheet) {
+    setSeenSheet(sheet);
+    if (sheet === ALL_APPS_SHEET) setAllAppsOpen(true);
+  }
+  useEffect(() => {
+    if (sheet === ALL_APPS_SHEET) navigation.setParams({ sheet: undefined });
+  }, [navigation, sheet]);
 
   // #890 W6 — the alarm test's mutation site. In every ordinary build this
   // branch is statically false and eliminated: `EXPO_PUBLIC_CENTRAID_E2E_ALARM`

@@ -219,28 +219,46 @@ vi.mock(import("./home/VaultHeader"), blank);
 vi.mock(import("./home/HomeTitleRow"), blank);
 vi.mock(import("./home/HomeStatusLine"), blank);
 vi.mock(import("./home/HomeBand"), blank);
-vi.mock(import("./home/AllAppsSheet"), blank);
+// Publishes whether it is open: More pressed on a place's band arrives here
+// as a route param, and the sheet must open on the ONE Home (R-NY-1).
+vi.mock(import("./home/AllAppsSheet"), async () => {
+  const ReactModule = await import("react");
+  return {
+    default: ({ visible }: { visible: boolean }) =>
+      ReactModule.createElement("div", {
+        "data-testid": "all-apps",
+        "data-visible": String(visible),
+      }),
+  } as never;
+});
 vi.mock(import("./home/VaultsSwitcher"), blank);
 vi.mock(import("./home/SearchOverlay"), blank);
 
 interface MountedHome {
   container: HTMLElement;
   routed: unknown[][];
+  paramsSet: unknown[];
 }
 
-function mountHome(): MountedHome {
+function mountHome(params?: { sheet?: "all-apps" }): MountedHome {
   const routed: unknown[][] = [];
+  const paramsSet: unknown[] = [];
   const { container } = mountBlock(
     React.createElement(
-      HomeScreen as unknown as React.ComponentType<{ navigation: unknown }>,
+      HomeScreen as unknown as React.ComponentType<{
+        navigation: unknown;
+        route: unknown;
+      }>,
       {
         navigation: {
           navigate: (...args: unknown[]) => routed.push(args),
+          setParams: (next: unknown) => paramsSet.push(next),
         },
+        route: { key: "home-1", name: "Home", params },
       }
     )
   );
-  return { container, routed };
+  return { container, paramsSet, routed };
 }
 
 function renderHome(): HTMLElement {
@@ -293,6 +311,23 @@ describe("Home springboard composition", () => {
 
     expect(gridItems(container)).toStrictEqual(everyLauncherId);
     expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(0);
+  });
+});
+
+describe("More, pressed on a place's band", () => {
+  const sheetOpen = (container: HTMLElement): string | undefined =>
+    nodesOf(container, '[data-testid="all-apps"]')[0]?.dataset.visible;
+
+  it("opens the all-apps sheet on the one Home and clears the param", () => {
+    const { container, paramsSet } = mountHome({ sheet: "all-apps" });
+    expect(sheetOpen(container)).toBe("true");
+    expect(paramsSet).toStrictEqual([{ sheet: undefined }]);
+  });
+
+  it("leaves the sheet shut on an ordinary arrival", () => {
+    const { container, paramsSet } = mountHome();
+    expect(sheetOpen(container)).toBe("false");
+    expect(paramsSet).toStrictEqual([]);
   });
 });
 
