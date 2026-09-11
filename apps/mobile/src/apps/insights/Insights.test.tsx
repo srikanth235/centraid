@@ -314,9 +314,12 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("This page could not load");
     expect(spans).toContain("The run log is unavailable");
     expect(spans).toContain(
-      "The rollup rebuilds every ten minutes; this rebuild has not finished."
+      "Activity is counted up every ten minutes, and this count has not finished yet."
     );
-    expect(spans).toContain("connect ECONNREFUSED");
+    // S14: the transport's own words never reach the member — one noun and
+    // Try again, no "what happened" fact carrying the gateway's string.
+    expect(spans).not.toContain("connect ECONNREFUSED");
+    expect(spans.join(" ")).not.toContain("ECONNREFUSED");
     expect(
       nodesOf(container, "div").some(
         (node) => styleOf(node).borderColor === colors.net

@@ -261,10 +261,10 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
       error={
         page.state === "error"
           ? {
+              // No `detail`: the reason is the gateway's own words ("vault
+              // host returned HTTP 404"), and S14 gives the member one noun
+              // and Try again, never the transport.
               body: ERROR_BODY,
-              ...(page.load.kind === "error"
-                ? { detail: memberFacingError(page.load.reason) }
-                : {}),
               retry: { label: ERROR_RETRY, onPress: page.retry },
               title: ERROR_TITLE,
             }
