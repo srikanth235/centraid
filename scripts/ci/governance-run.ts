@@ -12,7 +12,7 @@
 // directive's verdict cannot be promoted into that claim.
 import { spawnSync } from "node:child_process";
 
-import { isFresh, record, repoRoot, stampKey } from "./gate-stamp.mjs";
+import { isFresh, record, repoRoot, stampKey } from "./gate-stamp.ts";
 
 const TIER = "governance";
 const args = process.argv.slice(2);

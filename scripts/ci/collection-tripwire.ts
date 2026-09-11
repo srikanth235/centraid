@@ -24,15 +24,30 @@
  * that already produced the report.
  *
  * Usage:
- *   node scripts/ci/collection-tripwire.mjs                   # enforce
- *   node scripts/ci/collection-tripwire.mjs --require-report  # also fail when absent
- *   node scripts/ci/collection-tripwire.mjs --report <path>   # score another report
+ *   node scripts/ci/collection-tripwire.ts                   # enforce
+ *   node scripts/ci/collection-tripwire.ts --require-report  # also fail when absent
+ *   node scripts/ci/collection-tripwire.ts --report <path>   # score another report
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const DEFAULT_REPORT = path.join(root, "artifacts/test-results/vitest.json");
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface CollectionOffender {
+  file: string;
+  message: string;
+}
+
+export interface CollectionVerdict {
+  ok: boolean;
+  errors: string[];
+  offenders: CollectionOffender[];
+}
 
 /**
  * Files that errored before collecting any test.
@@ -42,19 +57,15 @@ const DEFAULT_REPORT = path.join(root, "artifacts/test-results/vitest.json");
  * failed assertion in it, and a wholly skipped file yields skipped assertions —
  * both stay out of this list, so the gate cannot be satisfied by making real
  * failures quieter.
- *
- * @param {unknown} report Parsed vitest JSON report.
- * @returns {{ ok: boolean, errors: string[], offenders: { file: string, message: string }[] }}
- *   `ok` false when the report is unreadable or any file failed to collect.
  */
-export function findCollectionErrors(report) {
+export function findCollectionErrors(report: unknown): CollectionVerdict {
   if (!report || typeof report !== "object")
     return {
       ok: false,
       errors: ["collection-tripwire: report is not an object"],
       offenders: [],
     };
-  const results = /** @type {{ testResults?: unknown }} */ (report).testResults;
+  const results = "testResults" in report ? report.testResults : undefined;
   if (!Array.isArray(results))
     return {
       ok: false,
@@ -62,9 +73,9 @@ export function findCollectionErrors(report) {
       offenders: [],
     };
 
-  const offenders = [];
+  const offenders: CollectionOffender[] = [];
   for (const entry of results) {
-    const file = /** @type {Record<string, unknown>} */ (entry ?? {});
+    const file = isRecord(entry) ? entry : {};
     const assertions = file.assertionResults;
     if (file.status !== "failed") continue;
     if (Array.isArray(assertions) && assertions.length > 0) continue;
@@ -85,24 +96,25 @@ export function findCollectionErrors(report) {
 }
 
 /** Repo-relative path when the report used an absolute one. */
-function relative(name) {
+function relative(name: string): string {
   return name.startsWith(root) ? path.relative(root, name) : name;
 }
 
 /** First non-empty line of a failure message, for a one-line gate error. */
-function firstLine(message) {
+function firstLine(message: unknown): string {
   if (typeof message !== "string" || message.trim() === "")
     return "no message recorded";
-  return message
-    .split("\n")
-    .find((line) => line.trim() !== "")
-    .trim();
+  const line = message.split("\n").find((candidate) => candidate.trim() !== "");
+  if (line === undefined) return "no message recorded";
+  return line.trim();
 }
 
 if (process.argv[1] === import.meta.filename) {
   const flagged = process.argv.indexOf("--report");
   const reportPath =
-    flagged === -1 ? DEFAULT_REPORT : path.resolve(process.argv[flagged + 1]);
+    flagged === -1
+      ? DEFAULT_REPORT
+      : path.resolve(process.argv[flagged + 1] ?? "");
 
   if (!existsSync(reportPath)) {
     // A laptop run that never produced a report has nothing to say; a LANE
@@ -120,9 +132,8 @@ if (process.argv[1] === import.meta.filename) {
     process.exit(0);
   }
 
-  const verdict = findCollectionErrors(
-    JSON.parse(readFileSync(reportPath, "utf8"))
-  );
+  const parsed: unknown = JSON.parse(readFileSync(reportPath, "utf8"));
+  const verdict = findCollectionErrors(parsed);
   if (verdict.ok) {
     console.log(
       "collection-tripwire: every reported file collected at least one test"

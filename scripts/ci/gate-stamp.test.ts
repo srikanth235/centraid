@@ -1,4 +1,6 @@
 // A stamp may only ever spare a re-run, never change a verdict (#988).
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 // oxlint-disable-next-line no-restricted-imports -- (#988) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; every directory below is removed in its own finally. Same pattern as scripts/check-ledgers.test.mjs.
@@ -16,12 +18,20 @@ import {
   STATIC_TIER,
   tierIsComplete,
   workingTreeOid,
-} from "./gate-stamp.mjs";
+} from "./gate-stamp.ts";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /** A throwaway repo so nothing here reads or writes the real one. */
-function scratchRepo() {
+function scratchRepo(): {
+  dir: string;
+  git: (...args: string[]) => Buffer;
+} {
   const dir = mkdtempSync(path.join(tmpdir(), "gate-stamp-"));
-  const git = (...args) => execFileSync("git", args, { cwd: dir });
+  const git = (...args: string[]): Buffer =>
+    execFileSync("git", args, { cwd: dir });
   git("init", "-q", "-b", "main");
   git("config", "user.email", "t@example.com");
   git("config", "user.name", "t");
@@ -31,14 +41,14 @@ function scratchRepo() {
   return { dir, git };
 }
 
-function withEnv(overrides, body) {
+function withEnv(overrides: NodeJS.ProcessEnv, body: () => void): void {
   const saved = { ...process.env };
   Object.assign(process.env, overrides);
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete process.env[k];
   }
   try {
-    return body();
+    body();
   } finally {
     for (const k of Object.keys(process.env)) delete process.env[k];
     Object.assign(process.env, saved);
@@ -187,7 +197,7 @@ test("only a run of the whole tier earns the stamp", () => {
   assert.equal(
     tierIsComplete(green.slice(0, 1)),
     false,
-    "`run-gates.mjs --stamp format:check` names one member and must stamp nothing"
+    "`run-gates.ts --stamp format:check` names one member and must stamp nothing"
   );
   assert.equal(
     tierIsComplete(green.map((r, i) => (i === 2 ? { ...r, code: 1 } : r))),
@@ -202,13 +212,20 @@ test("only a run of the whole tier earns the stamp", () => {
 });
 
 test("the static tier holds only tree-determined gates named by check:push", () => {
-  const pkg = JSON.parse(
+  const pkg: unknown = JSON.parse(
     readFileSync(
       path.resolve(import.meta.dirname, "../../package.json"),
       "utf8"
     )
   );
-  const checkPush = pkg.scripts["check:push"].split(/\s+/u);
+  if (!isRecord(pkg) || !isRecord(pkg.scripts)) {
+    throw new Error("package.json scripts missing");
+  }
+  const checkPushRaw = pkg.scripts["check:push"];
+  if (typeof checkPushRaw !== "string") {
+    throw new Error("check:push missing");
+  }
+  const checkPush = checkPushRaw.split(/\s+/u);
   assert.ok(
     checkPush.includes("--stamp"),
     "check:push must opt into the stamp"

@@ -28,7 +28,15 @@ import {
   stampKey,
   STATIC_TIER,
   tierIsComplete,
-} from "./gate-stamp.mjs";
+} from "./gate-stamp.ts";
+import type { StampKey } from "./gate-stamp.ts";
+
+interface RunResult {
+  name: string;
+  code: number;
+  ms: number;
+  out: string;
+}
 
 const args = process.argv.slice(2);
 const gates = args.filter((a) => !a.startsWith("--"));
@@ -46,30 +54,35 @@ if (gates.length === 0) {
 // members of STATIC_TIER named here are skipped when the same tree, against the
 // same `origin/main`, already passed them, and re-stamped only when every one
 // of them runs green in this invocation. Without the flag nothing is read or
-// written, which is what CI and any ad-hoc `run-gates.mjs` call get.
+// written, which is what CI and any ad-hoc `run-gates.ts` call get.
 const stamping = args.includes("--stamp");
 const tierGates = stamping ? gates.filter((g) => STATIC_TIER.includes(g)) : [];
-const stampedKey = tierGates.length > 0 ? stampKey(repoRoot()) : null;
+const stampedKey: StampKey | null =
+  tierGates.length > 0 ? stampKey(repoRoot()) : null;
 const skipTier = stampedKey !== null && isFresh("static", stampedKey);
 const queued = skipTier ? gates.filter((g) => !tierGates.includes(g)) : gates;
 
 const started = Date.now();
-const results = [];
+const results: RunResult[] = [];
 let cursor = 0;
 let running = 0;
 
-const secs = (ms) => (ms / 1000).toFixed(1);
+const secs = (ms: number): string => (ms / 1000).toFixed(1);
 
-function runOne(name) {
+function runOne(name: string): Promise<RunResult> {
   return new Promise((resolve) => {
     const t0 = Date.now();
     const child = spawn("bun", ["run", name], {
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     });
-    const chunks = [];
-    child.stdout.on("data", (c) => chunks.push(c));
-    child.stderr.on("data", (c) => chunks.push(c));
+    const chunks: Buffer[] = [];
+    child.stdout?.on("data", (c: Buffer) => {
+      chunks.push(c);
+    });
+    child.stderr?.on("data", (c: Buffer) => {
+      chunks.push(c);
+    });
     child.on("error", (err) => {
       resolve({ name, code: 1, ms: Date.now() - t0, out: String(err) });
     });
@@ -84,9 +97,10 @@ function runOne(name) {
   });
 }
 
-function pump(resolveAll) {
+function pump(resolveAll: () => void): void {
   while (running < jobs && cursor < queued.length) {
     const name = queued[cursor++];
+    if (name === undefined) break;
     running += 1;
     runOne(name).then((res) => {
       running -= 1;
@@ -102,7 +116,7 @@ function pump(resolveAll) {
   }
 }
 
-if (skipTier) {
+if (skipTier && stampedKey !== null) {
   process.stderr.write(
     `⊘ static tier stamped for tree ${stampedKey.tree.slice(0, 9)} ` +
       `(base ${stampedKey.base.slice(0, 9)}): ${tierGates.join(", ")} skipped ` +
@@ -111,7 +125,7 @@ if (skipTier) {
 }
 process.stderr.write(`▶ ${queued.length} gates, ${jobs} at a time\n`);
 if (queued.length > 0) {
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     pump(resolve);
   });
 }
@@ -120,7 +134,7 @@ const failed = results.filter((r) => r.code !== 0);
 
 // The tier is stamped only when EVERY member of STATIC_TIER ran here and
 // passed — not merely every member this invocation happened to name. An
-// invocation that names a subset (`run-gates.mjs --stamp format:check`) stamps
+// invocation that names a subset (`run-gates.ts --stamp format:check`) stamps
 // nothing, because the stamp is read as a claim about the whole tier and the
 // next `check:push:static` would otherwise skip three gates nobody ran. Any
 // failure at all also leaves the previous stamp alone.

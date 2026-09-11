@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -9,9 +11,16 @@ import {
   explainFailures,
   renderRows,
   verdict,
-} from "./work-counter-gate.mjs";
+} from "./work-counter-gate.ts";
+import type { ScenarioExpectation } from "./work-counter-gate.ts";
 
-const counters = (over = {}) => ({
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const counters = (
+  over: Record<string, number> = {}
+): Record<string, number> => ({
   statements: 6,
   rowsScanned: 24,
   fsyncs: 1,
@@ -24,7 +33,7 @@ const counters = (over = {}) => ({
   ...over,
 });
 
-const expected = {
+const expected: ScenarioExpectation = {
   counters: {
     statements: { mode: "max", value: 6 },
     fsyncs: { mode: "exact", value: 1 },
@@ -112,22 +121,33 @@ test("the table marks failures rather than omitting them", () => {
 });
 
 test("the committed expectations file parses and names only known modes", () => {
-  const file = JSON.parse(
+  const file: unknown = JSON.parse(
     readFileSync(
       path.join(import.meta.dirname, "work-counters.expected.json"),
       "utf8"
     )
   );
+  if (!isRecord(file) || !isRecord(file.scenarios)) {
+    throw new Error("work-counters.expected.json missing scenarios");
+  }
   const scenarios = Object.entries(file.scenarios);
   assert.ok(scenarios.length > 0, "the gate must fence at least one path");
   for (const [name, scenario] of scenarios) {
+    if (!isRecord(scenario) || !isRecord(scenario.counters)) {
+      throw new Error(`${name} has no counters object`);
+    }
     for (const [counter, spec] of Object.entries(scenario.counters)) {
+      if (!isRecord(spec)) {
+        throw new Error(`${name}.${counter} is not an object`);
+      }
       assert.ok(
-        ["exact", "max"].includes(spec.mode),
-        `${name}.${counter} has mode ${spec.mode}`
+        spec.mode === "exact" || spec.mode === "max",
+        `${name}.${counter} has mode ${String(spec.mode)}`
       );
       assert.ok(
-        Number.isSafeInteger(spec.value) && spec.value >= 0,
+        Number.isSafeInteger(spec.value) &&
+          typeof spec.value === "number" &&
+          spec.value >= 0,
         `${name}.${counter} must be a non-negative integer`
       );
     }

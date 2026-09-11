@@ -35,7 +35,7 @@ import {
   explainFailures,
   renderRows,
   verdict,
-} from "../../scripts/ci/work-counter-gate.mjs";
+} from "../../scripts/ci/work-counter-gate";
 import { goldenYear3Vault } from "../helpers/factories.js";
 
 const EXPECTATIONS = path.resolve("scripts/ci/work-counters.expected.json");

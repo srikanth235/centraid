@@ -23,7 +23,7 @@
 // win this bundle exists for is the name count, not the clock. Each gate is
 // therefore spawned exactly as `check:push` used to spawn it (`bun run
 // <gate>`), with the same per-gate buffered output, so failure attribution is
-// bit-identical to what `scripts/ci/run-gates.mjs` reported before.
+// bit-identical to what `scripts/ci/run-gates.ts` reported before.
 //
 // The membership list is a contract: `scripts/ci/gate-classes.json` classifies
 // every gate, and `scripts/ci/gate-classes.test.mjs` fails if a member is
@@ -33,7 +33,7 @@ import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 
 /**
- * The bundle's membership. Ordered longest-first the way `run-gates.mjs`
+ * The bundle's membership. Ordered longest-first the way `run-gates.ts`
  * orders its own list, so the pool starts the slowest members while the
  * shorter ones fill in behind them.
  */

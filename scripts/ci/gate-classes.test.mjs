@@ -15,7 +15,7 @@ import test from "node:test";
 
 import { HYGIENE_GATES } from "../hygiene-lane.mjs";
 import { PRODUCT_GATES } from "../lint-product.mjs";
-import { STATIC_TIER } from "./gate-stamp.mjs";
+import { STATIC_TIER } from "./gate-stamp.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const read = (rel) => readFileSync(path.join(root, rel), "utf8");
@@ -54,7 +54,7 @@ test("the branch tier is a subset of the full tier, and every member is static",
     );
     assert.ok(
       STATIC_TIER.includes(gate),
-      `${gate} is in the branch tier but is not tree-determined (scripts/ci/gate-stamp.mjs STATIC_TIER)`
+      `${gate} is in the branch tier but is not tree-determined (scripts/ci/gate-stamp.ts STATIC_TIER)`
     );
   }
 });

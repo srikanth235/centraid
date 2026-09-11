@@ -202,3 +202,24 @@ node scripts/ci/advisory-expiry.ts
 `advisory-expiry: 2 advisory step(s) owned, dated and unexpired as of 2026-09-11`
 
 Remaining `scripts/ci/*.mjs`: 33.
+
+## Slice 2c — gate-stamp / run-gates cluster
+
+Converted `gate-stamp` (+ test), `run-gates` (+ test), `work-counter-gate` (+ test), `collection-tripwire` (+ test). `governance-run` now imports `./gate-stamp.ts`. `gate-classes.test.mjs` stays `.mjs` and imports `./gate-stamp.ts`. Direct-run usage strings match `.ts`. `package.json` (`check:push`, `check:push:static`, `test:collection-tripwire`, `scripts:test`), `tests/perf/work-counters.perf.test.ts`, `work-counters.expected.json`, `docs/toolchain.md`, `docs/dev-environment.md`, `TESTING.md`, `QUALITY.md`, and `docs/decisions.md` **G-product-bundle** follow.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0. `tsc -p scripts --listFiles` includes the eight converted cluster files. `packages/*/src` count: 0. Program size: 329 files.
+
+```sh
+node --test scripts/ci/gate-stamp.test.ts scripts/ci/run-gates.test.ts scripts/ci/work-counter-gate.test.ts scripts/ci/collection-tripwire.test.ts
+```
+
+29 pass, 0 fail.
+
+Remaining `scripts/ci/*.mjs`: 25.
+

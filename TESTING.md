@@ -509,7 +509,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** `bun install --frozen-lockfile`, then `check:push` — the 17-gate deterministic set (38 sub-second contract gates ride inside the one `lint:product` bundle) driven by [`scripts/ci/run-gates.mjs`](scripts/ci/run-gates.mjs), whose argument list in `package.json` is the authoritative enumeration — plus `typecheck`, `lint:types`, `lint:workflow-pins`, and `check:diff-coverage`. Do not restate the gate list here; read the script's arguments. Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** `bun install --frozen-lockfile`, then `check:push` — the 17-gate deterministic set (38 sub-second contract gates ride inside the one `lint:product` bundle) driven by [`scripts/ci/run-gates.ts`](scripts/ci/run-gates.ts), whose argument list in `package.json` is the authoritative enumeration — plus `typecheck`, `lint:types`, `lint:workflow-pins`, and `check:diff-coverage`. Do not restate the gate list here; read the script's arguments. Vitest alone is not a substitute. |
 | `bun run check:full` | `check:pr` plus affected dependents, unified coverage, affected mutation/perf, and desktop/web e2e. Required before requesting merge when shared infrastructure changed. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
