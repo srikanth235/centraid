@@ -132,23 +132,21 @@ describe("fuzz crasher replay", () => {
     expect(inputDigest(bytes)).toBe(record.inputDigest);
     const outcome = await replayOnce(record.target, bytes);
     const registered = known.classes[record.class];
-    if (registered) {
-      // Recorded defect: pin it exactly. Red here means the product moved.
-      expect({ class: outcome.className, message: outcome.message }).toEqual({
-        class: record.class,
-        message: record.message,
-      });
-    } else {
-      // Fixed defect: the input must now be uneventful, forever.
-      expect(outcome).toEqual({ ok: true });
-    }
+    // Recorded defects pin class+message; fixed defects must now be uneventful.
+    const observed = registered
+      ? { class: outcome.className, message: outcome.message }
+      : outcome;
+    const expected = registered
+      ? { class: record.class, message: record.message }
+      : { ok: true };
+    expect(observed).toStrictEqual(expected);
   });
 
   it("backs every registered finding with a committed crasher", () => {
     const withCrashers = new Set(crashers.map(({ record }) => record.class));
     expect(
       Object.keys(known.classes).filter((name) => !withCrashers.has(name))
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it("registers every committed crasher or proves it fixed", async () => {
@@ -158,7 +156,7 @@ describe("fuzz crasher replay", () => {
     const ids = new Set(FUZZ_TARGETS.map((target) => target.id));
     expect(
       crashers.map(({ record }) => record.target).filter((id) => !ids.has(id))
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 });
 
@@ -173,7 +171,7 @@ describe("fuzz seed corpus", () => {
         timeBudgetMs: 60_000,
       });
       const { fresh } = partitionFindings([row], known);
-      expect(fresh.map((finding) => finding.className)).toEqual([]);
+      expect(fresh.map((finding) => finding.className)).toStrictEqual([]);
     }
   );
 });
@@ -192,13 +190,13 @@ describe("fuzz determinism", () => {
       elapsedMs: 0,
       execPerSecond: 0,
     });
-    expect(stable(second)).toEqual(stable(first));
+    expect(stable(second)).toStrictEqual(stable(first));
     expect(second.executions).toBe(options.iterations);
   });
 
   it("keeps the artifact shape the report lane reads", async () => {
     const artifact = buildFuzzArtifact([], { seed: 1, mode: "smoke" });
-    expect(Object.keys(artifact).sort()).toEqual([
+    expect(Object.keys(artifact).sort()).toStrictEqual([
       "generatedAt",
       "lane",
       "mode",

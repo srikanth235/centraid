@@ -303,7 +303,7 @@ describe("release publish guards", () => {
       "--dry-run",
     ]);
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).surfaces).toEqual(["companion"]);
+    expect(JSON.parse(result.stdout).surfaces).toStrictEqual(["companion"]);
   });
 });
 
@@ -350,7 +350,7 @@ describe("release publish derivation", () => {
       "--dry-run",
     ]);
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).surfaces).toEqual([
+    expect(JSON.parse(result.stdout).surfaces).toStrictEqual([
       "desktop",
       "gateway-image",
       "gateway-npm",

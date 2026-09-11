@@ -23,7 +23,7 @@ const CHANGELOG = [
   "",
 ].join("\n");
 
-describe("changelogSectionBody", () => {
+describe(changelogSectionBody, () => {
   // The defect this file exists for: with `(?=^##\s+|$)` under the `m` flag,
   // every one of these bodies came back "".
   test("captures the whole section body, not the first line", () => {

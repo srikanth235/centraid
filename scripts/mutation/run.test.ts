@@ -11,7 +11,7 @@ import {
   selectAffectedSeeds,
 } from "./run.ts";
 
-describe("mutationScoreFromReport", () => {
+describe(mutationScoreFromReport, () => {
   test("reads top-level mutationScore", () => {
     expect(mutationScoreFromReport({ mutationScore: 82.5 })).toBe(82.5);
   });
@@ -29,8 +29,8 @@ describe("mutationScoreFromReport", () => {
   });
 
   test("returns null for empty report", () => {
-    expect(mutationScoreFromReport(null)).toBe(null);
-    expect(mutationScoreFromReport({})).toBe(null);
+    expect(mutationScoreFromReport(null)).toBeNull();
+    expect(mutationScoreFromReport({})).toBeNull();
   });
 
   test("derives score from Stryker 9 per-file mutants statuses", () => {
@@ -52,9 +52,11 @@ describe("mutationScoreFromReport", () => {
   });
 });
 
-describe("MUTATION_SEEDS", () => {
+// Titled in prose, not `describe(MUTATION_SEEDS)`: the catalog is an array,
+// and `describe` only accepts a string or a function.
+describe("the mutation seed catalog", () => {
   test("covers core property-defended packages with package-local configs", () => {
-    expect(MUTATION_SEEDS.map((s) => s.id).sort()).toEqual(
+    expect(MUTATION_SEEDS.map((s) => s.id).sort()).toStrictEqual(
       [
         "apps/oauth-worker",
         "packages/server/src/acp",
@@ -123,13 +125,13 @@ describe("MUTATION_SEEDS", () => {
     const floors = loadMutationFloors();
     expect(assertFloorsSubsetOfSeeds(floors)).toStrictEqual([]);
     for (const seed of MUTATION_SEEDS) {
-      expect(typeof floors[seed.id], seed.id).toBe("number");
+      expect(floors[seed.id], seed.id).toBeTypeOf("number");
     }
-    expect(typeof floors._absoluteWeaknessBelow).toBe("number");
+    expect(floors._absoluteWeaknessBelow).toBeTypeOf("number");
   });
 });
 
-describe("buildScoresArtifact", () => {
+describe(buildScoresArtifact, () => {
   test("wraps package rows for the test-health report path", () => {
     const artifact = buildScoresArtifact([
       { id: "packages/vault", label: "vault", score: 80, status: "ok" },
@@ -140,12 +142,12 @@ describe("buildScoresArtifact", () => {
   });
 });
 
-describe("selectAffectedSeeds", () => {
+describe(selectAffectedSeeds, () => {
   test("returns only seeds whose watch paths appear in the diff", () => {
     const hit = selectAffectedSeeds([
       "packages/core/src/protocol/handshake.ts",
     ]);
-    expect(hit.map((s) => s.label)).toEqual(["protocol"]);
+    expect(hit.map((s) => s.label)).toStrictEqual(["protocol"]);
   });
 
   test("global watch forces every seed", () => {
@@ -155,13 +157,13 @@ describe("selectAffectedSeeds", () => {
   });
 
   test("unrelated paths select nothing", () => {
-    expect(selectAffectedSeeds(["README.md", "apps/web/src/main.tsx"])).toEqual(
-      []
-    );
+    expect(
+      selectAffectedSeeds(["README.md", "apps/web/src/main.tsx"])
+    ).toStrictEqual([]);
   });
 });
 
-describe("enforceMutationFloors", () => {
+describe(enforceMutationFloors, () => {
   test("fails when measured score is below floor", () => {
     expect(
       enforceMutationFloors(
@@ -170,7 +172,7 @@ describe("enforceMutationFloors", () => {
         },
         { "packages/vault": 97 }
       )
-    ).toEqual([
+    ).toStrictEqual([
       'mutation floor "packages/vault" not met: measured 90.00 < floor 97',
     ]);
   });
@@ -183,7 +185,7 @@ describe("enforceMutationFloors", () => {
         },
         { "packages/vault": 97 }
       )
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   test("fails when a floored seed has no measured score (#545 A5)", () => {
@@ -197,7 +199,7 @@ describe("enforceMutationFloors", () => {
         },
         { "packages/vault": 97, "packages/backup": 42 }
       )
-    ).toEqual([
+    ).toStrictEqual([
       'mutation floor "packages/backup" has no measured score (seed missing, crashed, or skipped)',
     ]);
   });
@@ -211,13 +213,13 @@ describe("enforceMutationFloors", () => {
           "packages/ghost": 50,
         }
       )
-    ).toEqual([
+    ).toStrictEqual([
       'mutation floor "packages/ghost" has no measured score (seed missing, crashed, or skipped)',
     ]);
   });
 });
 
-describe("assertFloorsSubsetOfSeeds", () => {
+describe(assertFloorsSubsetOfSeeds, () => {
   test("fails when a floor id is not in MUTATION_SEEDS", () => {
     const errors = assertFloorsSubsetOfSeeds({
       "packages/vault": 97,
@@ -228,6 +230,6 @@ describe("assertFloorsSubsetOfSeeds", () => {
 
   test("passes when every numeric floor is a known seed id", () => {
     const floors = Object.fromEntries(MUTATION_SEEDS.map((s) => [s.id, 50]));
-    expect(assertFloorsSubsetOfSeeds(floors)).toEqual([]);
+    expect(assertFloorsSubsetOfSeeds(floors)).toStrictEqual([]);
   });
 });

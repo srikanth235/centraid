@@ -18,9 +18,8 @@ import {
   judgeHostVerdict,
   judgeJsonNosniff,
   judgeMethodVerdict,
-  loadPinRegister,
-  summarize,
-} from "./dast-scan.ts";
+} from "./dast-scan-judges.ts";
+import { loadPinRegister, summarize } from "./dast-scan.ts";
 
 test("judgeJsonNosniff: JSON with nosniff passes, without fails", () => {
   const good = judgeJsonNosniff({

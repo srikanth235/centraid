@@ -38,19 +38,14 @@ describe("D4 patch-vs-minor classification", () => {
     });
   });
 
-  for (const heading of [
-    "Added",
-    "Changed",
-    "Removed",
-    "Deprecated",
-    "Security",
-  ]) {
-    test(`${heading} forces a minor`, () => {
+  test.each(["Added", "Changed", "Removed", "Deprecated", "Security"] as const)(
+    "%s forces a minor",
+    (heading) => {
       expect(
         classify(unreleased(`### ${heading}`, "", "- a change"))
       ).toMatchObject({ bump: "minor", onlyFixed: false });
-    });
-  }
+    }
+  );
 
   test("Fixed mixed with a non-Fixed heading is a minor", () => {
     expect(

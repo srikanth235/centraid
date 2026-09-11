@@ -1,6 +1,5 @@
 /* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
 /* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
-/* oxlint-disable vitest/prefer-each -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import {
   existsSync,
