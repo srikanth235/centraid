@@ -17,6 +17,7 @@ export {
   subBase,
   t,
   targetMin,
+  tileChipInset,
   type,
 } from "./native";
 export type { NativeTextRole } from "./native";
