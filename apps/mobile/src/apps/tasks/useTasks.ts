@@ -182,7 +182,7 @@ export function useTasksWrite(
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>
-              navigation.navigate("Settings", { screen: "Approvals" }),
+              navigation.navigate("Settings", { screen: "NeedsYou" }),
             queuedMessage: "This change will sync automatically.",
           })
         )

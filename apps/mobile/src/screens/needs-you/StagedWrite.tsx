@@ -20,7 +20,7 @@ import {
   applyArtifactEdits,
   editableArtifactFields,
 } from "../../lib/notifications-artifact-editor";
-import { styles } from "./Approvals.styles";
+import { styles } from "./NeedsYou.styles";
 
 export interface StagedEditFormProps {
   row: MobileOutboxRow;

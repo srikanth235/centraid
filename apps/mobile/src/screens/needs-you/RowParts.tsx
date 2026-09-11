@@ -10,7 +10,7 @@ import type { ButtonVariant } from "@centraid/design";
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
-import { styles } from "./Approvals.styles";
+import { styles } from "./NeedsYou.styles";
 
 /** What was actually asked, plus the two verbs that answer it. Shown in the
  *  row's own cell so nothing is approved sight-unseen (#647). */

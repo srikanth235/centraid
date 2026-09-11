@@ -31,7 +31,7 @@ import {
   stagedFacts,
   stagedTitle,
   waitingMeta,
-} from "./approvals-model";
+} from "./needs-you-model";
 import { Detail } from "./RowParts";
 import { AlwaysAllow, StagedEditForm } from "./StagedWrite";
 import type { BodyProps } from "./view-types";

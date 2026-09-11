@@ -9,7 +9,7 @@ const CONFLICT_ROUTE = "Open Pending changes to retry or discard.";
 
 export interface SurfaceWriteOutcomeOptions {
   failureTitle?: string;
-  /** Replaces the default parked Alert (e.g. navigate to Approvals). */
+  /** Replaces the default parked Alert (e.g. navigate to Needs you). */
   onParked?: () => void;
   /** Replaces the default conflict status line (e.g. reopen the editor). */
   onConflict?: () => void;

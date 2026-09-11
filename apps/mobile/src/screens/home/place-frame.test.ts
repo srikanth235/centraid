@@ -75,7 +75,7 @@ describe(placeStanding, () => {
     const needsYou: FrameRoute = {
       key: "set",
       name: "Settings",
-      state: { index: 0, routes: [{ key: "ap", name: "Approvals" }] },
+      state: { index: 0, routes: [{ key: "ap", name: "NeedsYou" }] },
     };
     const stack = navigator([home, needsYou, { key: "ins", name: "Insights" }]);
     expect(placeStanding(stack, "ins")).toStrictEqual({
@@ -90,7 +90,7 @@ describe(placeStanding, () => {
     // An alert about a staged write opens the queue over Activity.
     const activity: FrameRoute = { key: "ins", name: "Insights" };
     const outer = navigator([home, activity, { key: "set", name: "Settings" }]);
-    const inner = navigator([{ key: "ap", name: "Approvals" }], outer);
+    const inner = navigator([{ key: "ap", name: "NeedsYou" }], outer);
     expect(placeStanding(inner, "ap")).toStrictEqual({
       beneath: activity,
       root: false,

@@ -54,6 +54,10 @@ const PROPER_NOUNS = new Set([
   "Today",
   "Now",
   "Tasks",
+  // "Needs" for the phone's Needs you (R-NY-4); "Approvals" for the web
+  // seat's screen, which the shared blueprint copy swept here still names —
+  // the desktop keeps its own noun this round.
+  "Needs",
   "Approvals",
   "Calendars",
   "Going",

@@ -63,7 +63,7 @@ export default function PersonEditor({
   const partyId = route.params?.personId ?? null;
   const data = usePeople();
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
 
   const existing = partyId

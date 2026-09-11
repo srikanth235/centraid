@@ -99,7 +99,7 @@ export default function PersonView({
   const partyId = route.params.personId;
   const { person, loading, roster } = usePerson(partyId);
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [composer, setComposer] = useState<Composer | null>(null);

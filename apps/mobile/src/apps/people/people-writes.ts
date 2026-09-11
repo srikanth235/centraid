@@ -5,7 +5,7 @@
 //
 // 1. ONE DOOR. Every write is `session.write("people", {action, input})`, and
 //    every outcome lands on the frame's one status line (`postStatus`) —
-//    no toast, no badge, no second line. Parked writes route to Approvals;
+//    no toast, no badge, no second line. Parked writes route to Needs you;
 //    queued writes say so in People's own sentence.
 // 2. AN OUTCOME IS NOT A THROW. `surfaceWriteOutcome` narrates parked, queued
 //    and denied; only a transport failure reaches `surfaceWriteFailure`.
@@ -70,7 +70,7 @@ export interface PeopleWrites {
 }
 
 export function usePeopleWrites(
-  /** Where a PARKED write sends the member: the frame's Approvals screen —
+  /** Where a PARKED write sends the member: the frame's Needs you screen —
    *  the caller navigates, this module only says when. */
   onParked: () => void
 ): PeopleWrites {

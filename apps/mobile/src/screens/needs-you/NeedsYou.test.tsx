@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobileNotifications, MobileOutboxRow } from "../../lib/gateway";
 import type { SettingsScreenProps } from "../../navigation";
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
-import ApprovalsScreen from "../Approvals";
+import NeedsYouScreen from "../NeedsYou";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
@@ -149,7 +149,7 @@ const navigation = {
   getParent: () => ({ navigate: vi.fn<(name: string) => void>() }),
   goBack: vi.fn<() => void>(),
   popTo: vi.fn<(name: string) => void>(),
-} as unknown as SettingsScreenProps<"Approvals">["navigation"];
+} as unknown as SettingsScreenProps<"NeedsYou">["navigation"];
 
 let dispose: (() => void) | undefined;
 
@@ -164,13 +164,13 @@ async function settle(): Promise<void> {
 
 async function render(): Promise<HTMLElement> {
   const mounted = mountBlock(
-    <ApprovalsScreen
+    <NeedsYouScreen
       navigation={navigation}
       route={
         {
           key: "approvals",
-          name: "Approvals",
-        } as SettingsScreenProps<"Approvals">["route"]
+          name: "NeedsYou",
+        } as SettingsScreenProps<"NeedsYou">["route"]
       }
     />
   );
@@ -191,7 +191,7 @@ function buttonLabelled(container: HTMLElement, label: string): Element | null {
   );
 }
 
-describe(ApprovalsScreen, () => {
+describe(NeedsYouScreen, () => {
   beforeEach(() => {
     vi.clearAllMocks();
     wire.resolveBase.mockResolvedValue("http://127.0.0.1:7777");

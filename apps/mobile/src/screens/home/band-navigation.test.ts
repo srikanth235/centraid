@@ -87,7 +87,7 @@ describe("selecting a Home band tab", () => {
 
   it("puts a fresh Home underneath when a deep link left none", () => {
     const next = bandStack(
-      [{ key: "set-1", name: "Settings", params: { screen: "Approvals" } }],
+      [{ key: "set-1", name: "Settings", params: { screen: "NeedsYou" } }],
       "data"
     );
     expect(next.routes).toStrictEqual([{ name: "Home" }, { name: "Data" }]);

@@ -102,7 +102,7 @@ export default function GatewayAlerts(props: {
               });
           case "outbox":
             return () =>
-              navigation.navigate("Settings", { screen: "Approvals" });
+              navigation.navigate("Settings", { screen: "NeedsYou" });
           case "gateway-alerts":
             return () => navigation.navigate("SystemOnPhone");
           case "notifications":

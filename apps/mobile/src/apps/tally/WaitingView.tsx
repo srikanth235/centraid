@@ -8,7 +8,7 @@
 // Approve and no Decline here, and the surface says whose rows it is showing
 // rather than implying it is showing everybody's. `contrib-model.ts` refuses
 // to invent an Accept for exactly this reason; its `approvals` verb is the
-// hand-over to the shell's own Approvals inbox, which this phone does have.
+// hand-over to the shell's own Needs you inbox, which this phone does have.
 //
 // EMPTY IS THE HEALTHY STATE (STATES.md). Three empty sections are the ordinary
 // Tuesday, so each says so in its own words rather than collapsing to one

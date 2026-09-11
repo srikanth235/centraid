@@ -1750,3 +1750,17 @@ On umbrella head `26ef7e962` the Activity alerts view had become unreachable. No
 1. `bun run --cwd apps/mobile typecheck` → 0.
 2. `cd apps/mobile && bunx vitest run src/apps/insights src/lib/notification src/lib/notifications` → 10 files, 82 passed.
 3. The "opens the automation a failed run belongs to" test now selects the run's verb by its own hint (`dataset.hint === "Open Tidy downloads"`). The new Alerts row carries an "Open" verb above the runs, so the first "Open" button on the page is no longer the run's. The test's claim is unchanged.
+
+## Round NY — slice H: the route and files say "Needs you" (R-NY-4, final half)
+
+This slice finishes R-NY-4 ([docs/decisions.md § Mobile UX consistency (#1015)](../docs/decisions.md#mobile-ux-consistency-1015)). The copy had already moved to "Needs you"; now the identifiers follow, in one commit, because a rename is only correct whole. It keeps no compatibility alias: this is v0.
+
+- **Route.** The route id `Approvals` becomes `NeedsYou` in `apps/mobile/src/navigation.ts`, in the Settings stack registration (`apps/mobile/navigators.tsx`), in `apps/mobile/lazy-screens.tsx` (`NeedsYouScreen`), in `apps/mobile/src/screens/shell-places.ts`, and at every call site. The call sites are the band, Settings, Capture, Scan, the push router, `GatewayAlerts`, and the parked-write hand-overs in Tasks, Docs, Notes, Tally, People, Agenda and Photos. The tests that name the route follow: `band-navigation.test.ts`, `place-frame.test.ts`, `PlaceBand.test.tsx` and `shell-rooms.test.ts`.
+- **Files.** `apps/mobile/src/screens/Approvals.tsx` becomes `apps/mobile/src/screens/NeedsYou.tsx`, and `apps/mobile/src/screens/approvals/` becomes `apps/mobile/src/screens/needs-you/`. Inside it, `NeedsYou.styles.ts`, `NeedsYou.test.tsx`, `NeedsYouQueue.tsx`, `needs-you-model.ts`, `needs-you-model.test.ts` and `useNeedsYou.ts` are renamed, while `RowParts.tsx`, `StagedWrite.tsx` and `view-types.ts` keep their names. The names in the code follow: `NeedsYouScreen`, `useNeedsYou`, `NeedsYouController`, `NeedsYouLoad` and `NeedsYouBody`.
+- **Copy the census found.** Three member strings still called this screen "Approvals": Docs' parked-write note and its "Show it in Needs you" button (`apps/mobile/src/apps/docs/editor-outcome.ts`), Tally's contribution line (`apps/mobile/src/apps/tally/tally-seat-copy.ts`), and Agenda's cancellation label (`apps/mobile/src/apps/agenda/AgendaEvent.tsx`). All three now say "Needs you", and Agenda's proper-noun list takes "Needs" in place of "Approvals". The comments that named this screen follow.
+- **Not in scope.** The desktop's `ApprovalsScreen`, `opsBar` and the shared `packages/client/src/approvals-copy.ts` keep their own noun this round, and mobile still imports that copy module. The Docs action id `approvals` and Tally's `approvals` verb are identifiers, not copy, so they are unchanged. `useAssistant.ts` uses "approvals" to mean consent grants, not this screen.
+- **Registries.** No JSON, `.mjs` or doc registry named the old paths (`grep -rn "screens/approvals\|screens/Approvals" --include='*.json' --include='*.mjs' --include='*.md' .` → receipts only, which are evidence). The R-NY-4 row in `docs/decisions.md` now names where the rename landed.
+
+### Verification
+
+H-x1: `grep -rn '"Approvals"\|screens/approvals\|screens/Approvals\|useApprovals\|ApprovalsQueue' apps/mobile --include='*.ts' --include='*.tsx' | grep -v node_modules` → nothing.

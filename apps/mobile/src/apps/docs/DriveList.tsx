@@ -9,7 +9,7 @@
 // restore — one implementation with one Undo grammar (`showUndoStatus` + the
 // reverse write, only where a reverse write exists), so five shelves cannot
 // drift on what a verb does. The Undo is BOUNDED (#903). Outcomes surface through the kit's
-// `surfaceWriteOutcome` (parked → Approvals; queued → the one queued
+// `surfaceWriteOutcome` (parked → Needs you; queued → the one queued
 // sentence).
 
 import { useNavigation } from "@react-navigation/native";

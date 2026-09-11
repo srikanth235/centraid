@@ -50,7 +50,7 @@ import { SHELL_ERROR, desktopLinkStatus } from "./shell-copy";
 // Home key, the title and the gutter, so this file is sections and nothing else.
 // It is reachable from Home's trailing control and from More (D6). Sections read
 // top-to-bottom as one designed surface: You (local profile) · Appearance (theme override) ·
-// Vault (the active vault) · Desktop link (pairing) · Approvals · Advanced.
+// Vault (the active vault) · Desktop link (pairing) · Needs you · Advanced.
 //
 // The desktop link is the primary connection path: scan a desktop "Connect phone"
 // QR, or a headless `centraid-gateway pair` / `pair --qr` terminal QR on a VPS,
@@ -351,7 +351,7 @@ export default function SettingsScreen({
       <SettingsSection label="Needs you">
         <Pressable
           accessibilityRole="button"
-          onPress={() => navigation.navigate("Approvals")}
+          onPress={() => navigation.navigate("NeedsYou")}
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
           accessibilityLabel="Needs you"
         >

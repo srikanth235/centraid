@@ -215,7 +215,7 @@ export default function AgendaHome({
 
   /**
    * Propose the event. The write is OPTIMISTIC and its outcome lands on the
-   * shared status line: `parked` sends the member to Approvals, `queued` says
+   * shared status line: `parked` sends the member to Needs you, `queued` says
    * the phone is holding it, and a refusal names itself.
    */
   const create = async (input: AgendaCreateInput): Promise<boolean> => {
@@ -226,8 +226,7 @@ export default function AgendaHome({
         input,
       });
       return surfaceWriteOutcome(result, {
-        onParked: () =>
-          navigation.navigate("Settings", { screen: "Approvals" }),
+        onParked: () => navigation.navigate("Settings", { screen: "NeedsYou" }),
         queuedMessage: "This event syncs when the gateway reconnects.",
         failureTitle: "Event not created",
       });

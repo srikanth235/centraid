@@ -48,7 +48,7 @@ interface PlaceRoute extends StackRoute {
 export function placeRoute(id: Exclude<PlaceId, "home">): PlaceRoute {
   switch (id) {
     case "notifs":
-      return { name: "Settings", params: { screen: "Approvals" } };
+      return { name: "Settings", params: { screen: "NeedsYou" } };
     case "autos":
       return { name: "Automations" };
     case "conn":

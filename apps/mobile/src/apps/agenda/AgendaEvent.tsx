@@ -3,7 +3,7 @@
 //
 // PARKED CANCEL IS A STATE, NOT AN ERROR. Cancelling is medium-risk, so the
 // vault HOLDS the ask for the owner rather than executing it. The event stays
-// on the agenda, this screen says what is held, and the way on is Approvals —
+// on the agenda, this screen says what is held, and the way on is Needs you —
 // the owner's own surface. There is deliberately no unpark control: the
 // vault's release door is the owner's, and a button that could not act would
 // be worse than the sentence naming who decides.
@@ -123,7 +123,7 @@ export default function AgendaEvent({
   ): boolean =>
     surfaceWriteOutcome(result, {
       failureTitle: `${verb} not applied`,
-      onParked: () => navigation.navigate("Settings", { screen: "Approvals" }),
+      onParked: () => navigation.navigate("Settings", { screen: "NeedsYou" }),
       queuedMessage: `${verb} saved on this device until the gateway answers.`,
     });
 
@@ -275,10 +275,10 @@ export default function AgendaEvent({
           {heldCancel ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Review this cancellation in Approvals"
+              accessibilityLabel="Review this cancellation in Needs you"
               style={[styles.parked, { borderStartColor: colors.seam }]}
               onPress={() =>
-                navigation.navigate("Settings", { screen: "Approvals" })
+                navigation.navigate("Settings", { screen: "NeedsYou" })
               }
             >
               <Text style={[styles.parkedTitle, { color: colors.text }]}>

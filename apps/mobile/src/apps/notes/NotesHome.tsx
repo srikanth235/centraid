@@ -338,7 +338,7 @@ export default function NotesHome({
       const ok = surfaceWriteOutcome(result, {
         onParked: () => {
           closeEditor();
-          navigation.navigate("Settings", { screen: "Approvals" });
+          navigation.navigate("Settings", { screen: "NeedsYou" });
         },
         queuedMessage: "This Notes change will sync automatically.",
         failureTitle: NOTES_WRITE_REFUSED,

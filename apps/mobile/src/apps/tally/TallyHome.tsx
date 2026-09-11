@@ -161,7 +161,7 @@ export default function TallyHome({
       // `approve` and `decline` cannot reach here: this seat's doors set
       // `decide: false`, so `contrib-model` never puts either on a row.
       if (verb === "approvals" || verb === "approve" || verb === "decline") {
-        navigation.navigate("Settings", { screen: "Approvals" });
+        navigation.navigate("Settings", { screen: "NeedsYou" });
         return;
       }
       // One vault, one outbox, so the intent id alone addresses the row — but

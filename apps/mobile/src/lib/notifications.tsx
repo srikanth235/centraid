@@ -94,7 +94,7 @@ async function handleNotificationResponse(
     }
     if (plan.kind === "open-notifications") {
       if (rootNavigationRef.isReady())
-        rootNavigationRef.navigate("Settings", { screen: "Approvals" });
+        rootNavigationRef.navigate("Settings", { screen: "NeedsYou" });
       return;
     }
     // A notice is news, not a decision (#1015 R-NY-2): it stands in

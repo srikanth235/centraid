@@ -326,7 +326,7 @@ export default function ScanScreen({
         if (
           !surfaceWriteOutcome(outcome, {
             onParked: () =>
-              navigation.navigate("Settings", { screen: "Approvals" }),
+              navigation.navigate("Settings", { screen: "NeedsYou" }),
           })
         )
           return;

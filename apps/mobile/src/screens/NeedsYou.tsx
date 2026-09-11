@@ -8,7 +8,7 @@
 //   • lapsed connection = `Also waiting` row running the OAuth ceremony
 //   • `no-gateway` = error panel + pairing sentence + `Open Settings`
 // No header verb: the page has no single commit, and Activity is on the band.
-// Data half `useApprovals.ts`; words `approvals-model.ts`.
+// Data half `useNeedsYou.ts`; words `needs-you-model.ts`.
 
 import React, { useCallback, useMemo, useState } from "react";
 
@@ -19,6 +19,7 @@ import { Text } from "../kit/components/NativeText";
 import { SystemPlace } from "../kit/rooms";
 import { useTheme } from "../kit/theme";
 import type { SettingsScreenProps } from "../navigation";
+import { usePlaceFrame } from "./home/usePlaceFrame";
 import {
   EMPTY_BODY,
   EMPTY_TITLE,
@@ -27,22 +28,21 @@ import {
   ERROR_TITLE,
   LOADING_NOTE,
   approvalsHealth,
-} from "./approvals/approvals-model";
-import { styles } from "./approvals/Approvals.styles";
-import Queue from "./approvals/ApprovalsQueue";
-import { useApprovals } from "./approvals/useApprovals";
-import type { BodyProps, Focus } from "./approvals/view-types";
-import { usePlaceFrame } from "./home/usePlaceFrame";
+} from "./needs-you/needs-you-model";
+import { styles } from "./needs-you/NeedsYou.styles";
+import Queue from "./needs-you/NeedsYouQueue";
+import { useNeedsYou } from "./needs-you/useNeedsYou";
+import type { BodyProps, Focus } from "./needs-you/view-types";
 import { SHELL_TITLES } from "./shell-copy";
 
-export default function ApprovalsScreen({
+export default function NeedsYouScreen({
   navigation,
-}: SettingsScreenProps<"Approvals">): React.JSX.Element {
+}: SettingsScreenProps<"NeedsYou">): React.JSX.Element {
   const { colors } = useTheme();
   // The band when Needs you stands on Home; a back key when it was opened
   // from Settings, an app, or an alert (R-NY-1).
   const frame = usePlaceFrame("notifs");
-  const page = useApprovals();
+  const page = useNeedsYou();
   const [focus, setFocus] = useState<Focus>({
     alwaysAllow: false,
     editing: false,
@@ -103,7 +103,7 @@ export default function ApprovalsScreen({
       {page.actionError ? (
         <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>
       ) : null}
-      <ApprovalsBody focus={focus} page={page} patch={patch} />
+      <NeedsYouBody focus={focus} page={page} patch={patch} />
     </SystemPlace>
   );
 }
@@ -113,7 +113,7 @@ export default function ApprovalsScreen({
  *  read that failed, which is what `RoomBody`'s fixed order stops. The empty
  *  carries no verb: the one it had scrolled to a standing-grants tail that
  *  left this page for Settings → Access (R-NY-2). */
-function ApprovalsBody(props: BodyProps): React.JSX.Element {
+function NeedsYouBody(props: BodyProps): React.JSX.Element {
   return props.page.state === "empty" ? (
     <EmptyBlock body={EMPTY_BODY} routine title={EMPTY_TITLE} />
   ) : (

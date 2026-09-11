@@ -206,8 +206,8 @@ export const TallySurface = lazyScreen(
   () => import("./src/apps/tally/TallySurfaceScreen")
 );
 export const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
-export const ApprovalsScreen = lazyScreen(
-  () => import("./src/screens/Approvals")
+export const NeedsYouScreen = lazyScreen(
+  () => import("./src/screens/NeedsYou")
 );
 export const BackupHealthScreen = lazyScreen(
   () => import("./src/screens/BackupHealth")

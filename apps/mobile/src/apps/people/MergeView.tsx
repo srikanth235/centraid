@@ -69,7 +69,7 @@ export default function MergeView({
   const data = usePeople();
   const { person: keep, loading } = usePerson(partyId);
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);

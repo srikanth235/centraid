@@ -149,7 +149,7 @@ export default function CaptureScreen({
       if (
         surfaceWriteOutcome(result, {
           onParked: () =>
-            navigation.navigate("Settings", { screen: "Approvals" }),
+            navigation.navigate("Settings", { screen: "NeedsYou" }),
         })
       ) {
         navigation.goBack();

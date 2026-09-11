@@ -71,12 +71,12 @@ export function windowFootNoTotal(shown: number): string {
  * commons intents: `session.pendingChanges()` answers with THIS phone's own
  * outbox and nothing else. So Waiting draws the rows it can honestly account
  * for — the member's own writes — and hands a steward-only act over to the
- * shell's own Approvals inbox rather than drawing a button with nothing behind
+ * shell's own Needs you inbox rather than drawing a button with nothing behind
  * it. `contrib-model.ts` already refuses to invent an Accept for exactly this
  * reason, and its `approvals` verb IS the hand-over.
  */
 export const WAITING_OWN_SCOPE =
-  "Your own writes, from this device · a contribution from another member is answered in Approvals.";
+  "Your own writes, from this device · a contribution from another member is answered in Needs you.";
 
 export function waitingCount(total: number): string {
   return `${total} ${total === 1 ? "contribution" : "contributions"}`;

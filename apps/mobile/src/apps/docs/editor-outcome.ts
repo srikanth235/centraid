@@ -116,7 +116,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "approval":
       return {
         line: "Waiting for the owner's approval · held, not refused",
-        note: "Held until the owner consents — it sits in Approvals and is not the same state as queued",
+        note: "Held until the owner consents — it sits in Needs you and is not the same state as queued",
         commit: "Save",
         net: false,
         action: "approvals",
@@ -153,6 +153,6 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
 
 export const EDITOR_ACTION_LABELS: Record<EditorActionId, string> = {
   receipt: "Open the version history",
-  approvals: "Show it in Approvals",
+  approvals: "Show it in Needs you",
   editable: "What can be edited?",
 };

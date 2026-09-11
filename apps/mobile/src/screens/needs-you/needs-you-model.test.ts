@@ -30,7 +30,7 @@ import {
   stagedTitle,
   waitingMeta,
   waitingTotal,
-} from "./approvals-model";
+} from "./needs-you-model";
 
 const NOW = Date.parse("2026-08-13T09:00:00.000Z");
 

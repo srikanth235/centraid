@@ -355,8 +355,7 @@ export default function PhotoLightbox({
       // `false` is exactly the set the member must read about (parked or
       // rejected). Queued and in-flight are not refusals.
       const proceed = surfaceWriteOutcome(result, {
-        onParked: () =>
-          navigation.navigate("Settings", { screen: "Approvals" }),
+        onParked: () => navigation.navigate("Settings", { screen: "NeedsYou" }),
       });
       return proceed
         ? undefined

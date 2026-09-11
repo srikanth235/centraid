@@ -10,7 +10,7 @@ import React from "react";
 import {
   AgendaEvent,
   AgendaHome,
-  ApprovalsScreen,
+  NeedsYouScreen,
   BackupHealthScreen,
   DocsHome,
   DocsFolder,
@@ -262,7 +262,7 @@ export function SettingsNavigator(): React.JSX.Element {
       }}
     >
       <SettingsStack.Screen name="SettingsHome" component={SettingsScreen} />
-      <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
+      <SettingsStack.Screen name="NeedsYou" component={NeedsYouScreen} />
       <SettingsStack.Screen name="Sharing" component={SharingScreen} />
       <SettingsStack.Screen
         name="PhoneStorage"

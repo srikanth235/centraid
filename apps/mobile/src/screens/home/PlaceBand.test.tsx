@@ -239,7 +239,7 @@ const PLACE_ROOTS: Readonly<Record<Exclude<PlaceId, "home">, string>> = {
   data: "../data/Data.tsx",
   devices: "../devices/Devices.tsx",
   gateway: "../SystemOnPhone.tsx",
-  notifs: "../Approvals.tsx",
+  notifs: "../NeedsYou.tsx",
   settings: "../Settings.tsx",
   stats: "../../apps/insights/Insights.tsx",
   storage: "../PhoneStorage.tsx",

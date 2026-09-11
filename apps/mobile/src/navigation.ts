@@ -161,7 +161,7 @@ export type AgendaStackParamList = {
 export type SettingsStackParamList = {
   /** Not `Settings` — the root stack owns that name for the navigator. */
   SettingsHome: undefined;
-  Approvals: undefined;
+  NeedsYou: undefined;
   Sharing: undefined;
   PhoneStorage: { signalCause?: string } | undefined;
   // Frame screen, never Photos stack (#712): policy also covers Docs scans and Notes attachments.

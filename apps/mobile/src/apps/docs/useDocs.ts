@@ -274,7 +274,7 @@ export function useDocsWrite(navigation: DocsShellNavigation): DocsWrite {
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>
-              navigation.navigate("Settings", { screen: "Approvals" }),
+              navigation.navigate("Settings", { screen: "NeedsYou" }),
             queuedMessage: "This Docs change will sync automatically.",
           })
         )

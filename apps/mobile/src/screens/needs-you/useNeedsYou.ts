@@ -27,20 +27,20 @@ import type { MobileNotifications } from "../../lib/gateway";
 import { requestNotificationPermission } from "../../lib/notifications-core";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { SHELL_ERROR } from "../shell-copy";
-import { NOT_PAIRED, opsStateFor, waitingTotal } from "./approvals-model";
+import { NOT_PAIRED, opsStateFor, waitingTotal } from "./needs-you-model";
 
 /** How often the page re-reads while it is open, between doorbells. */
 const POLL_MS = 60_000;
 
-export type ApprovalsLoad =
+export type NeedsYouLoad =
   | { kind: "loading" }
   /** `at` anchors every relative phrase — never a render-time clock read. */
   | { at: number; kind: "ready"; data: MobileNotifications }
   /** `reason` is the error panel's one fact; its body never changes. */
   | { kind: "error"; reason: string; unpaired: boolean };
 
-export interface ApprovalsController {
-  load: ApprovalsLoad;
+export interface NeedsYouController {
+  load: NeedsYouLoad;
   state: OpsState;
   data: MobileNotifications | undefined;
   now: number;
@@ -71,7 +71,7 @@ function describe(_error: unknown): string {
   return SHELL_ERROR.needsYou;
 }
 
-async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
+async function read(apply: (next: NeedsYouLoad) => void): Promise<void> {
   try {
     if (!(await resolveGatewayBase())) {
       apply({ kind: "error", reason: NOT_PAIRED, unpaired: true });
@@ -99,8 +99,8 @@ async function reauthorize(connectionId: string): Promise<void> {
   // `closed` needs nothing: BYO finishes at the gateway; caller re-reads.
 }
 
-export function useApprovals(): ApprovalsController {
-  const [load, setLoad] = useState<ApprovalsLoad>({ kind: "loading" });
+export function useNeedsYou(): NeedsYouController {
+  const [load, setLoad] = useState<NeedsYouLoad>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();

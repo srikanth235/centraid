@@ -30,7 +30,7 @@ export default function PeopleTrash({
 }: PeopleScreenProps<"PeopleTrash">): React.JSX.Element {
   const data = usePeople();
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
 
   return (

@@ -93,7 +93,7 @@ function parsed(iso: string | null | undefined): number | undefined {
 
 export function agoPhrase(at: number, now: number): string {
   // The seat's ONE relative register (`kit/format`, #1015 S8). This ladder
-  // was typed out twice, byte for byte, in `approvals-model` and
+  // was typed out twice, byte for byte, in `needs-you-model` and
   // `connectors-model`, and both said `10 September` where the rest of the
   // product says `10 Sep`.
   return formatRelative(new Date(at).toISOString(), now);

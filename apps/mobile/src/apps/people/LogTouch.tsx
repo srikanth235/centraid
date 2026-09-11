@@ -34,7 +34,7 @@ export default function LogTouch({
   const partyId = route.params.personId;
   const data = usePeople();
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
   // The chip's word IS the word the vault stores (`people-copy.ts`).
   const [kind, setKind] = useState<string>(LOG_KINDS[0]);

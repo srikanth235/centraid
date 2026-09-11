@@ -82,7 +82,7 @@ export default function PeopleHome({
 }: PeopleScreenProps<"PeopleHome">): React.JSX.Element {
   const data = usePeople();
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
 
   // The band on a pushed People screen navigates here with the destination it

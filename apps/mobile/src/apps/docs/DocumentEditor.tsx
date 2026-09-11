@@ -139,7 +139,7 @@ export default function DocumentEditor({
     if (copy.action === "receipt")
       navigation.navigate("DocumentVersions", { documentId });
     else if (copy.action === "approvals")
-      navigation.navigate("Settings", { screen: "Approvals" });
+      navigation.navigate("Settings", { screen: "NeedsYou" });
     else setShowRule((current) => !current);
   };
 
