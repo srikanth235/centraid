@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
-import { serve } from "../dist/index.js";
 import {
   argReader,
   directoryBytes,
@@ -19,7 +18,24 @@ import {
   readProcIo,
   resourceCounters,
   straceAvailable,
-} from "./bench-support.mjs";
+} from "./bench-support.ts";
+
+interface GatewayServeHandle {
+  url: string;
+  token: string;
+  close: () => Promise<void>;
+  health: { resetPerformanceMetrics: () => void };
+}
+
+const { serve } = (await import(
+  new URL("../dist/index.js", import.meta.url).href
+)) as {
+  serve: (options: {
+    paths: { vaultDir: string };
+    logger: ReturnType<typeof quietLogger>;
+    token: string;
+  }) => Promise<GatewayServeHandle>;
+};
 
 const here = import.meta.dirname;
 const packageRoot = path.dirname(here);
@@ -35,20 +51,22 @@ async function runInternal() {
   const root = await fs.mkdtemp(
     path.join(os.tmpdir(), "centraid-low-end-bench-")
   );
-  let handle;
+  const handle: GatewayServeHandle = await serve({
+    // A fresh vaultDir auto-founds Personal at construction (#603).
+    paths: { vaultDir: path.join(root, "vault") },
+    logger: quietLogger(),
+    token: "centraid-low-end-benchmark-token",
+  });
   try {
-    handle = await serve({
-      // A fresh vaultDir auto-founds Personal at construction (#603).
-      paths: { vaultDir: path.join(root, "vault") },
-      logger: quietLogger(),
-      token: "centraid-low-end-benchmark-token",
-    });
     const headers = {
       Authorization: `Bearer ${handle.token}`,
       "content-type": "application/json",
     };
 
-    const insert = async (shape, label) => {
+    const insert = async (
+      shape: "core.party" | "core.place",
+      label: string
+    ): Promise<void> => {
       const now = new Date().toISOString();
       const response = await fetch(
         `${handle.url}/centraid/_vault/atlas/browse/insert`,
@@ -108,11 +126,15 @@ async function runInternal() {
 
     const resourcesBeforeWrites = resourceCounters();
     const procBeforeWrites = await readProcIo();
-    const writeLatencies = [];
-    const readLatencies = [];
+    const writeLatencies: number[] = [];
+    const readLatencies: number[] = [];
     let maxRssBytes = process.memoryUsage().rss;
     let next = 0;
-    const workload = [];
+    const workload: {
+      kind: "write" | "read";
+      shape: "core.party" | "core.place" | "vault.status";
+      index: number;
+    }[] = [];
     for (let index = 0; index < writes; index += 1) {
       workload.push({
         kind: "write",
@@ -182,7 +204,8 @@ async function runInternal() {
     const procAfterWrites = await readProcIo();
     const diskWriteBytes =
       procBeforeWrites && procAfterWrites
-        ? procAfterWrites.write_bytes - procBeforeWrites.write_bytes
+        ? (procAfterWrites.write_bytes ?? 0) -
+          (procBeforeWrites.write_bytes ?? 0)
         : null;
 
     // Peak p99 is a completed rolling window. Wait one sample interval so the
@@ -198,7 +221,17 @@ async function runInternal() {
     );
     if (!healthResponse.ok)
       throw new Error(`health failed: ${healthResponse.status}`);
-    const health = await healthResponse.json();
+    const health = (await healthResponse.json()) as {
+      metrics: {
+        rssBytes: number;
+        eventLoopLagP50Ms?: number;
+        eventLoopLagP99Ms?: number;
+        eventLoopLagMaxMs?: number;
+        eventLoopLagPeakP99Ms?: number;
+        eventLoopLagSamples?: number;
+        storageFsyncMs?: number;
+      };
+    };
     maxRssBytes = Math.max(
       maxRssBytes,
       health.metrics.rssBytes,
@@ -257,8 +290,8 @@ async function runInternal() {
       },
       storage: {
         bootFsyncMs: health.metrics.storageFsyncMs ?? null,
-        fsyncCalls: null,
-        fsyncPerWrite: null,
+        fsyncCalls: null as number | null,
+        fsyncPerWrite: null as number | null,
         resourceFsWrites:
           resourcesAfterWrites.fsWrites - resourcesBeforeWrites.fsWrites,
         resourceFsWritesPerWrite:
@@ -282,7 +315,8 @@ async function runInternal() {
         diskWriteBytesPerHour:
           idleProcBefore && idleProcAfter
             ? ratePerHour(
-                idleProcAfter.write_bytes - idleProcBefore.write_bytes,
+                (idleProcAfter.write_bytes ?? 0) -
+                  (idleProcBefore.write_bytes ?? 0),
                 idleDurationMs
               )
             : null,
@@ -299,38 +333,46 @@ async function runInternal() {
   }
 }
 
-function checkBudgets(report, budgets, requireFsync) {
-  const checks = [
-    ["request.p99Ms", report.request.p99Ms, budgets.requestP99Ms],
-    ["memory.rssPeakBytes", report.memory.rssPeakBytes, budgets.rssPeakBytes],
+function checkBudgets(
+  report: Awaited<ReturnType<typeof runInternal>>,
+  budgets: Record<string, number>,
+  requireFsync: boolean
+) {
+  const checks: [string, number | null, number][] = [
+    ["request.p99Ms", report.request.p99Ms, budgets["requestP99Ms"] ?? 0],
+    [
+      "memory.rssPeakBytes",
+      report.memory.rssPeakBytes,
+      budgets["rssPeakBytes"] ?? 0,
+    ],
     [
       "eventLoop.peakP99Ms",
       report.eventLoop.peakP99Ms,
-      budgets.eventLoopLagPeakP99Ms,
+      budgets["eventLoopLagPeakP99Ms"] ?? 0,
     ],
     [
       "idle.contextSwitchesPerHour",
       report.idle.contextSwitchesPerHour,
-      budgets.idleContextSwitchesPerHour,
+      budgets["idleContextSwitchesPerHour"] ?? 0,
     ],
     [
       "idle.liveDataGrowthBytesPerHour",
       report.idle.liveDataGrowthBytesPerHour,
-      budgets.idleLiveDataGrowthBytesPerHour,
+      budgets["idleLiveDataGrowthBytesPerHour"] ?? 0,
     ],
   ];
   if (report.storage.diskWriteBytesPerWrite !== null) {
     checks.push([
       "storage.diskWriteBytesPerWrite",
       report.storage.diskWriteBytesPerWrite,
-      budgets.diskWriteBytesPerWrite,
+      budgets["diskWriteBytesPerWrite"] ?? 0,
     ]);
   }
   if (report.storage.fsyncPerWrite !== null) {
     checks.push([
       "storage.fsyncPerWrite",
       report.storage.fsyncPerWrite,
-      budgets.fsyncPerWrite,
+      budgets["fsyncPerWrite"] ?? 0,
     ]);
   } else if (requireFsync) {
     throw new Error("fsync metric required but strace is unavailable");
@@ -339,13 +381,13 @@ function checkBudgets(report, budgets, requireFsync) {
     checks.push([
       "idle.resourceFsWritesPerHour",
       report.idle.resourceFsWritesPerHour,
-      budgets.idleResourceFsWritesPerHour,
+      budgets["idleResourceFsWritesPerHour"] ?? 0,
     ]);
   } else {
     checks.push([
       "idle.diskWriteBytesPerHour",
       report.idle.diskWriteBytesPerHour,
-      budgets.idleDiskWriteBytesPerHour,
+      budgets["idleDiskWriteBytesPerHour"] ?? 0,
     ]);
   }
   const failures = checks.filter(
@@ -367,9 +409,10 @@ async function traceFsyncCalls() {
     os.tmpdir(),
     `centraid-bench-epoch-${process.pid}`
   );
-  const childArgs = [];
+  const childArgs: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === undefined) continue;
     if (arg === "--output" || arg === "--idle-ms") {
       index += 1;
       continue;
@@ -429,7 +472,9 @@ async function traceFsyncCalls() {
 }
 
 const underTrace = args.includes("--internal");
-const report = await runInternal();
+const report: Awaited<ReturnType<typeof runInternal>> & {
+  budgets?: ReturnType<typeof checkBudgets>;
+} = await runInternal();
 if (!underTrace && straceAvailable()) {
   const fsyncCalls = await traceFsyncCalls();
   report.storage.fsyncCalls = fsyncCalls;
@@ -441,7 +486,7 @@ const budgets = JSON.parse(
     path.join(packageRoot, "benchmarks", "low-end-budgets.json"),
     "utf8"
   )
-);
+) as Record<string, number>;
 const budgetResult = checkBudgets(
   report,
   budgets,

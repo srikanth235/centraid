@@ -9,62 +9,106 @@
 //
 // Build first: bun run --filter=@centraid/tunnel build
 import http from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import {
+interface PairQrPayload {
+  ticket: string;
+  code: string;
+}
+interface DesktopTunnelHandle {
+  endpointId: string;
+  beginPairing: (ttlMs: number) => { qrPayload: string };
+  activePairing: () => { qrPayload: string } | undefined;
+}
+interface TunnelConnection {
+  closeReason?: () => unknown;
+}
+interface TunnelClient {
+  pair: (
+    ticket: string,
+    input: { code: string; deviceName: string; platform: string }
+  ) => Promise<{ ok: boolean }>;
+  connect: (ticket: string) => Promise<TunnelConnection>;
+}
+
+const {
   createTunnelClient,
   DeviceStore,
   parsePairQrPayload,
   startDesktopTunnel,
   startLocalProxy,
-} from "../dist/index.js";
+} = (await import(new URL("../dist/index.js", import.meta.url).href)) as {
+  createTunnelClient: () => Promise<TunnelClient>;
+  DeviceStore: { open: (path: string) => unknown };
+  parsePairQrPayload: (raw: string) => PairQrPayload | null;
+  startDesktopTunnel: (options: {
+    upstream: () => { baseUrl: string; token: string };
+    deviceStore: unknown;
+    desktopName: string;
+    onPaired: (device: { name: string; endpointId: string }) => void;
+  }) => Promise<DesktopTunnelHandle>;
+  startLocalProxy: (
+    connect: () => Promise<TunnelConnection>,
+    options: { port: number }
+  ) => Promise<{ port: number }>;
+};
 
 // Spike CLI: stdout IS the interface (pair payloads, verdicts).
-const log = (...parts) =>
+const log = (...parts: unknown[]): void => {
   process.stdout.write(`${parts.map(String).join(" ")}\n`);
+};
 
 const args = process.argv.slice(2);
-const flag = (name) => {
+const flag = (name: string): string | undefined => {
   const index = args.indexOf(name);
   return index >= 0 ? (args[index + 1] ?? "") : undefined;
 };
 
 const DEMO_TOKEN = "spike-token";
 
-function startDemoGateway() {
-  const server = http.createServer((req, res) => {
-    if ((req.headers.authorization ?? "") !== `Bearer ${DEMO_TOKEN}`) {
-      res.statusCode = 401;
-      res.end("unauthorized");
-      return;
-    }
-    if (req.url === "/app.js") {
-      res.setHeader("content-type", "text/javascript");
-      res.end('import "./kit.js";');
-      return;
-    }
-    if (req.url === "/kit.js") {
-      res.setHeader("content-type", "text/javascript");
+function startDemoGateway(): Promise<Server> {
+  const server = http.createServer(
+    (req: IncomingMessage, res: ServerResponse) => {
+      if ((req.headers.authorization ?? "") !== `Bearer ${DEMO_TOKEN}`) {
+        res.statusCode = 401;
+        res.end("unauthorized");
+        return;
+      }
+      if (req.url === "/app.js") {
+        res.setHeader("content-type", "text/javascript");
+        res.end('import "./kit.js";');
+        return;
+      }
+      if (req.url === "/kit.js") {
+        res.setHeader("content-type", "text/javascript");
+        res.end(
+          'document.body.append(" — ES module chain loaded through the tunnel ✔");'
+        );
+        return;
+      }
+      if (req.url === "/changes") {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        let n = 0;
+        const timer = setInterval(
+          () => res.write(`data: tick ${++n}\n\n`),
+          1000
+        );
+        req.on("close", () => clearInterval(timer));
+        return;
+      }
+      res.setHeader("content-type", "text/html");
       res.end(
-        'document.body.append(" — ES module chain loaded through the tunnel ✔");'
+        '<html><body>hello from the desktop<script type="module" src="app.js"></script></body></html>'
       );
-      return;
     }
-    if (req.url === "/changes") {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      let n = 0;
-      const timer = setInterval(() => res.write(`data: tick ${++n}\n\n`), 1000);
-      req.on("close", () => clearInterval(timer));
-      return;
-    }
-    res.setHeader("content-type", "text/html");
-    res.end(
-      '<html><body>hello from the desktop<script type="module" src="app.js"></script></body></html>'
-    );
-  });
+  );
   return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve(server));
+    server.listen(0, "127.0.0.1", () => {
+      resolve(server);
+    });
   });
 }
 
@@ -76,7 +120,11 @@ async function serve() {
     upstream = () => ({ baseUrl: upstreamUrl, token });
   } else {
     const server = await startDemoGateway();
-    const { port } = server.address();
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("demo gateway did not bind a TCP port");
+    }
+    const { port } = address satisfies AddressInfo;
     log(`[serve] demo gateway on 127.0.0.1:${port}`);
     upstream = () => ({
       baseUrl: `http://127.0.0.1:${port}`,
@@ -102,7 +150,7 @@ async function serve() {
   return desktop;
 }
 
-async function dial(payloadRaw) {
+async function dial(payloadRaw: string): Promise<void> {
   const payload = parsePairQrPayload(payloadRaw);
   if (!payload) throw new Error("not a centraid pair payload");
   const client = await createTunnelClient();
@@ -131,6 +179,9 @@ async function local() {
   process.argv.push("--serve");
   const desktop = await serve();
   const pairing = desktop.activePairing();
+  if (pairing === undefined || pairing === null) {
+    throw new Error("spike-pipe: expected an active pairing");
+  }
   await dial(pairing.qrPayload);
   const response = await fetch("http://127.0.0.1:8787/");
   log("[local] GET / →", response.status, (await response.text()).slice(0, 60));
@@ -148,9 +199,16 @@ if (args.includes("--local")) await local();
 else if (args.includes("--serve")) await serve();
 else if (flag("--dial") === undefined) {
   log(
-    "usage: spike-pipe.mjs --local | --serve [--upstream URL --token T] | --dial <payload>"
+    "usage: spike-pipe.ts --local | --serve [--upstream URL --token T] | --dial <payload>"
   );
   process.exit(2);
 } else {
-  await dial(flag("--dial"));
+  const payload = flag("--dial");
+  if (payload === undefined) {
+    log(
+      "usage: spike-pipe.ts --local | --serve [--upstream URL --token T] | --dial <payload>"
+    );
+    process.exit(2);
+  }
+  await dial(payload);
 }

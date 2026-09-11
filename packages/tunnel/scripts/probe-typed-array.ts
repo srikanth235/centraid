@@ -3,9 +3,23 @@
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const iroh = require("@number0/iroh/index.js");
+const iroh = require("@number0/iroh/index.js") as {
+  SecretKey: {
+    fromBytes: (bytes: unknown) => {
+      toBytes: () => { constructor: { name: string } };
+    };
+  };
+};
 
-function attempt(label, bytes) {
+function attempt(
+  label: string,
+  bytes: unknown
+): {
+  label: string;
+  accepted: boolean;
+  returnedByteShape?: string;
+  error?: string;
+} {
   try {
     const secret = iroh.SecretKey.fromBytes(bytes);
     return {

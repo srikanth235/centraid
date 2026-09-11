@@ -4,8 +4,8 @@
  * the wire, local bytes written/day, restore wall-clock for a 1 GB and a
  * 10 GB vault").
  *
- *   node packages/backup/scripts/bench-wal.mjs --size-mb 1024  [--work-dir <dir>]
- *   node packages/backup/scripts/bench-wal.mjs --size-mb 10240 [--work-dir <dir>]
+ *   node packages/backup/scripts/bench-wal.ts --size-mb 1024  [--work-dir <dir>]
+ *   node packages/backup/scripts/bench-wal.ts --size-mb 10240 [--work-dir <dir>]
  *
  * Both sizes are MEASURED, not extrapolated. Nothing here scales a small run
  * up: run it at 10240 and every number below comes off a real 10 GiB file.
@@ -68,6 +68,15 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pipeline } from "node:stream/promises";
 
+import type {
+  CryptoMod,
+  ObjectStoreMod,
+  PartsMod,
+  VaultShipperMod,
+  WalFormatMod,
+  WalRestoreMod,
+} from "./bench-wal-mods.ts";
+
 const here = import.meta.dirname;
 const dist = path.join(here, "..", "dist");
 const vaultDist = path.join(here, "..", "..", "vault", "dist");
@@ -78,18 +87,29 @@ const {
   sealWalSegment,
   sealWalCloser,
   newWalGeneration,
-} = await import(path.join(dist, "wal-format.js"));
-const { replayWalSegments } = await import(path.join(dist, "wal-restore.js"));
-const { FsObjectStore } = await import(path.join(dist, "object-store.js"));
-const { PART_BYTES, partStream } = await import(path.join(dist, "parts.js"));
-const { chunkId, deriveNonce, encryptWithNonce, decrypt } = await import(
+} = (await import(path.join(dist, "wal-format.js"))) as WalFormatMod;
+const { replayWalSegments } = (await import(
+  path.join(dist, "wal-restore.js")
+)) as WalRestoreMod;
+const { FsObjectStore } = (await import(
+  path.join(dist, "object-store.js")
+)) as ObjectStoreMod;
+const { PART_BYTES, partStream } = (await import(
+  path.join(dist, "parts.js")
+)) as PartsMod;
+const { chunkId, deriveNonce, encryptWithNonce, decrypt } = (await import(
   path.join(dist, "crypto.js")
-);
+)) as CryptoMod;
 // THE production clone. Not a model of it.
-const { cloneDbFile } = await import(path.join(vaultDist, "wal-shipper.js"));
+const { cloneDbFile } = (await import(
+  path.join(vaultDist, "wal-shipper.js")
+)) as VaultShipperMod;
 
 const args = process.argv.slice(2);
-const flag = (name, fallback) => {
+const flag = (
+  name: string,
+  fallback?: string | null
+): string | null | undefined => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : fallback;
 };
@@ -105,8 +125,8 @@ const ROW_BYTES = 200; // 200 B of hex text per row => 1.44 MB/day of row payloa
 const THRESHOLD = 16 * 1024 * 1024; // shipper's WAL group-rollover threshold
 
 const MiB = 1024 * 1024;
-const fmtMB = (b) => `${(b / MiB).toFixed(1)} MiB`;
-const secs = (t0) => (performance.now() - t0) / 1000;
+const fmtMB = (b: number): string => `${(b / MiB).toFixed(1)} MiB`;
+const secs = (t0: number): number => (performance.now() - t0) / 1000;
 
 // ---- disk accounting -------------------------------------------------------
 // Physical blocks, from the container's free-space delta. On APFS a reflinked
@@ -115,19 +135,20 @@ const dfBytes = () => {
   const out = execFileSync("df", ["-k", WORK], { encoding: "utf8" })
     .trim()
     .split("\n")[1];
+  if (out === undefined) throw new Error("df did not report a data line");
   return Number(out.split(/\s+/u)[3]) * 1024; // available KiB -> bytes
 };
 const freeAtStart = dfBytes();
 let peakPhysical = 0;
-const marks = [];
-const mark = (label) => {
+const marks: { label: string; used: number }[] = [];
+const mark = (label: string): number => {
   const used = freeAtStart - dfBytes();
   peakPhysical = Math.max(peakPhysical, used);
   marks.push({ label, used });
   return used;
 };
 
-const sha256FileStreamed = async (file) => {
+const sha256FileStreamed = async (file: string): Promise<string> => {
   const h = createHash("sha256");
   await pipeline(
     createReadStream(file, { highWaterMark: 4 * MiB }),
@@ -227,18 +248,20 @@ const vaultId = "bench-vault";
 const storeDir = path.join(WORK, "store");
 const store = new FsObjectStore(storeDir);
 
-const readFileStreamOf = async function* (file) {
+const readFileStreamOf = async function* (
+  file: string
+): AsyncGenerator<Uint8Array> {
   const s = createReadStream(file, { highWaterMark: 256 * 1024 });
   for await (const c of s) yield new Uint8Array(c);
 };
-const sealPart = (plain) => {
+const sealPart = (plain: Uint8Array): { id: string; sealed: Uint8Array } => {
   const id = chunkId(dedupKey, plain);
   const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
   return { id, sealed: encryptWithNonce(dataKey, nonce, plain) };
 };
 
-const knownChunks = new Set();
-const baseAChunks = []; // ordered part ids — the manifest's entry.chunks
+const knownChunks = new Set<string>();
+const baseAChunks: string[] = []; // ordered part ids — the manifest's entry.chunks
 let baseAWire = 0;
 {
   const t0 = performance.now();
@@ -273,7 +296,7 @@ const walPath = `${dbPath}-wal`;
 const freeBeforeDay = dfBytes();
 let group = 0;
 let offset = 0;
-let pageSize = null;
+let pageSize: number | null = null;
 let tickMs = Date.now();
 let localBytes = 0;
 let wireBytes = 0;
@@ -281,7 +304,7 @@ let segments = 0;
 let rowBytes = 0;
 const stmt = db.prepare("INSERT INTO day (v) VALUES (?)");
 const tDay = performance.now();
-const captureNextTick = async (tick) => {
+const captureNextTick = async (tick: number): Promise<void> => {
   if (tick >= DAY_TICKS) return;
   db.exec("BEGIN");
   for (let r = 0; r < ROWS_PER_TICK; r++) {
@@ -388,10 +411,13 @@ const destDb = path.join(restoreDir, "vault.db");
 const tMaterialize = performance.now();
 {
   const out = createWriteStream(destDb);
-  const materializeNextChunk = async (index) => {
+  const materializeNextChunk = async (index: number): Promise<void> => {
     const id = baseAChunks[index];
     if (id === undefined) return;
     const sealed = await store.get(`chunks/${id}`);
+    if (sealed === undefined || sealed === null) {
+      throw new Error(`missing sealed chunk ${id}`);
+    }
     const plain = decrypt(dataKey, sealed);
     if (!out.write(Buffer.from(plain)))
       await new Promise((resolve) => {
@@ -435,8 +461,10 @@ console.log(
 {
   // Prove the restore actually contains the day.
   const r = new DatabaseSync(destDb, { readOnly: true });
-  const n = r.prepare("SELECT count(*) AS n FROM day").get().n;
-  const b = r.prepare("SELECT count(*) AS n FROM bulk").get().n;
+  const n = (r.prepare("SELECT count(*) AS n FROM day").get() as { n: number })
+    .n;
+  const b = (r.prepare("SELECT count(*) AS n FROM bulk").get() as { n: number })
+    .n;
   r.close();
   console.log(
     `   restored rows: day=${n} (expected ${DAY_TICKS * ROWS_PER_TICK}), bulk=${b}`

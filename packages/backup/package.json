@@ -26,7 +26,7 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:interop": "CLAWGNITION_INTEROP=1 vitest run src/interop-clawgnition.test.ts",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

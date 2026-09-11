@@ -18,7 +18,7 @@ const PACKAGE_ROOT = path.resolve(here, "..");
 const SOURCE_INDEX = path.join(PACKAGE_ROOT, "index.json");
 const OUTPUT = path.join(PACKAGE_ROOT, "manifest.json");
 
-async function walk(dir, base = dir) {
+async function walk(dir: string, base = dir): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const names = new Set(entries.map((e) => e.name));
   return (
@@ -28,7 +28,7 @@ async function walk(dir, base = dir) {
         if (e.isDirectory()) {
           return walk(full, base);
         }
-        // A `.js` with a `.ts` sibling is build-handlers.mjs output (#922 B2),
+        // A `.js` with a `.ts` sibling is build-handlers.ts output (#922 B2),
         // not a template file: the catalog lists handler SOURCES, and a clone
         // recompiles from them rather than inheriting someone else's bundle.
         if (e.name.endsWith(".js") && names.has(`${e.name.slice(0, -3)}.ts`)) {
@@ -45,9 +45,26 @@ async function walk(dir, base = dir) {
 }
 
 const raw = await fs.readFile(SOURCE_INDEX, "utf8");
-const src = JSON.parse(raw);
+const parsedIndex: unknown = JSON.parse(raw);
+if (
+  typeof parsedIndex !== "object" ||
+  parsedIndex === null ||
+  !("templates" in parsedIndex) ||
+  !Array.isArray(parsedIndex.templates)
+) {
+  throw new Error(
+    "[build-manifest] index.json must be an object with templates"
+  );
+}
+const src = parsedIndex as {
+  manifestVersion?: unknown;
+  templates: Record<string, unknown>[];
+};
 
-const enriched = {
+const enriched: {
+  manifestVersion: unknown;
+  templates: Record<string, unknown>[];
+} = {
   manifestVersion: src.manifestVersion,
   templates: [],
 };
@@ -57,14 +74,18 @@ const templates = await Promise.all(
     // Kind-segment directory: automation apps live under `automations/`, every
     // other app under `apps/`. Derived from `kind` so the manifest, the disk
     // resolver, and the remote fetcher all agree on the prefix.
-    const kindDir = tmpl.kind === "automation" ? "automations" : "apps";
-    const dir = path.join(PACKAGE_ROOT, kindDir, tmpl.id);
+    const kindDir = tmpl["kind"] === "automation" ? "automations" : "apps";
+    const id = tmpl["id"];
+    if (typeof id !== "string") {
+      throw new Error("[build-manifest] template is missing a string id");
+    }
+    const dir = path.join(PACKAGE_ROOT, kindDir, id);
     let files = [];
     try {
       files = await walk(dir);
     } catch {
       console.warn(
-        `[build-manifest] missing template dir for "${tmpl.id}", skipping`
+        `[build-manifest] missing template dir for "${id}", skipping`
       );
       return undefined;
     }
@@ -84,19 +105,22 @@ const templates = await Promise.all(
     let states;
     try {
       const rawLocal = await fs.readFile(path.join(dir, "app.json"), "utf8");
-      const parsed = JSON.parse(rawLocal);
-      if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
-      if (parsed?.seats && typeof parsed.seats === "object")
-        seats = parsed.seats;
-      if (parsed?.states && typeof parsed.states === "object")
-        states = parsed.states;
+      const parsed: unknown = JSON.parse(rawLocal);
+      if (typeof parsed === "object" && parsed !== null) {
+        const record = parsed as Record<string, unknown>;
+        if (Array.isArray(record["knobs"])) appKnobs = record["knobs"];
+        if (record["seats"] && typeof record["seats"] === "object")
+          seats = record["seats"];
+        if (record["states"] && typeof record["states"] === "object")
+          states = record["states"];
+      }
     } catch {
       /* template has no parseable app.json or no knobs/seats/states — fine,
        the popover just shows manage actions and the app mounts unrestricted */
     }
     // `kind` is declared explicitly in index.json (`'automation'` for an
     // automation app); a normal UI app omits it and defaults to `'app'`.
-    const kind = tmpl.kind ?? "app";
+    const kind = tmpl["kind"] ?? "app";
     return {
       ...tmpl,
       kind,
@@ -107,7 +131,9 @@ const templates = await Promise.all(
     };
   })
 );
-enriched.templates.push(...templates.filter(Boolean));
+for (const tmpl of templates) {
+  if (tmpl) enriched.templates.push(tmpl);
+}
 
 await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + "\n");
 process.stdout.write(

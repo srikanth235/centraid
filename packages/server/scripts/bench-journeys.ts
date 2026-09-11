@@ -16,8 +16,6 @@ import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
-import { serve } from "../dist/index.js";
-import { expectedPayloadHash } from "../dist/routes/replica-intent-shape.js";
 import {
   argReader,
   fsyncCallsIn,
@@ -27,7 +25,33 @@ import {
   quietLogger,
   resolvedProfileFrom,
   straceAvailable,
-} from "./bench-support.mjs";
+} from "./bench-support.ts";
+
+interface GatewayServeHandle {
+  url: string;
+  token: string;
+  close: () => Promise<void>;
+}
+
+const { serve } = (await import(
+  new URL("../dist/index.js", import.meta.url).href
+)) as {
+  serve: (options: {
+    paths: { vaultDir: string };
+    logger: ReturnType<typeof quietLogger>;
+    token: string;
+  }) => Promise<GatewayServeHandle>;
+};
+const { expectedPayloadHash } = (await import(
+  new URL("../dist/routes/replica-intent-shape.js", import.meta.url).href
+)) as {
+  expectedPayloadHash: (
+    appId: string,
+    action: string,
+    input: unknown,
+    baseVersions: readonly unknown[]
+  ) => string;
+};
 
 const args = process.argv.slice(2);
 const { option, positiveInteger } = argReader(args);
@@ -53,14 +77,14 @@ const subscriberLevels = String(option("--subscribers", "1,10,40"))
   .map(Number);
 const deliveryTimeoutMs = positiveInteger("--delivery-timeout-ms", 20_000);
 
-function jsonHeaders(handle) {
+function jsonHeaders(handle: GatewayServeHandle): Record<string, string> {
   return {
     Authorization: `Bearer ${handle.token}`,
     "content-type": "application/json",
   };
 }
 
-async function expectOk(response, what) {
+async function expectOk(response: Response, what: string): Promise<Response> {
   if (!response.ok)
     throw new Error(
       `${what} failed: ${response.status} ${await response.text()}`
@@ -68,7 +92,11 @@ async function expectOk(response, what) {
   return response;
 }
 
-async function insertPlace(handle, headers, label) {
+async function insertPlace(
+  handle: GatewayServeHandle,
+  headers: Record<string, string>,
+  label: string
+): Promise<number> {
   const started = performance.now();
   await expectOk(
     await fetch(`${handle.url}/centraid/_vault/atlas/browse/insert`, {
@@ -93,16 +121,23 @@ async function insertPlace(handle, headers, label) {
  * demo seed, then `--fill` plain rows. A direct SQLite insert would skip the
  * journal sequence the replica cursor is derived from, so it cannot stand in.
  */
-async function seedVolume(handle, headers) {
+async function seedVolume(
+  handle: GatewayServeHandle,
+  headers: Record<string, string>
+): Promise<{
+  demoApps: { appId: string; rows: unknown }[];
+  filledRows: number;
+  seedDurationMs: number;
+}> {
   const started = performance.now();
-  const listed = await (
+  const listed = (await (
     await expectOk(
       await fetch(`${handle.url}/centraid/_vault/demo`, { headers }),
       "demo list"
     )
-  ).json();
-  const seeded = [];
-  for (const app of listed.apps.filter((entry) => entry.seedable)) {
+  ).json()) as { apps?: { appId: string; seedable?: boolean }[] };
+  const seeded: { appId: string; rows: unknown }[] = [];
+  for (const app of (listed.apps ?? []).filter((entry) => entry.seedable)) {
     // oxlint-disable-next-line no-await-in-loop -- one demo seed per app, in order
     const response = await expectOk(
       // oxlint-disable-next-line no-await-in-loop -- one demo seed per app, in order
@@ -114,7 +149,7 @@ async function seedVolume(handle, headers) {
       `demo seed ${app.appId}`
     );
     // oxlint-disable-next-line no-await-in-loop -- the fill rate is the gateway's own serial write path
-    const body = await response.json();
+    const body = (await response.json()) as { rows?: unknown };
     seeded.push({ appId: app.appId, rows: body.rows ?? null });
   }
   let filled = 0;
@@ -127,6 +162,7 @@ async function seedVolume(handle, headers) {
     const worker = async () => {
       while (next < labels.length) {
         const label = labels[next++];
+        if (label === undefined) break;
         // oxlint-disable-next-line no-await-in-loop -- the fill rate is the gateway's own serial write path
         await insertPlace(handle, headers, label);
         filled += 1;
@@ -141,7 +177,18 @@ async function seedVolume(handle, headers) {
   };
 }
 
-async function bootstrapPage(handle, headers) {
+async function bootstrapPage(
+  handle: GatewayServeHandle,
+  headers: Record<string, string>
+): Promise<{
+  durationMs: number;
+  rows: number;
+  shapes: number;
+  bytes: number;
+  msPerRow: number | null;
+  cursor: unknown;
+  hasMore: boolean;
+}> {
   const started = performance.now();
   const response = await expectOk(
     await fetch(
@@ -152,7 +199,12 @@ async function bootstrapPage(handle, headers) {
   );
   const text = await response.text();
   const elapsed = performance.now() - started;
-  const body = JSON.parse(text);
+  const body = JSON.parse(text) as {
+    rows?: unknown[];
+    shapes?: unknown[];
+    cursor?: unknown;
+    hasMore?: boolean;
+  };
   return {
     durationMs: elapsed,
     rows: body.rows?.length ?? 0,
@@ -169,8 +221,12 @@ async function bootstrapPage(handle, headers) {
  * (#922 A6 batches it in wave 3 — the batched path does not exist yet, so
  * only the single path is measured here).
  */
-async function runIntents(handle, headers, count) {
-  const samples = [];
+async function runIntents(
+  handle: GatewayServeHandle,
+  headers: Record<string, string>,
+  count: number
+): Promise<number[]> {
+  const samples: number[] = [];
   for (let index = 0; index < count; index += 1) {
     const input = { title: `Journey benchmark task ${index}` };
     const body = {
@@ -193,7 +249,9 @@ async function runIntents(handle, headers, count) {
     );
     const elapsed = performance.now() - started;
     // oxlint-disable-next-line no-await-in-loop -- the fill rate is the gateway's own serial write path
-    const outcome = await response.json();
+    const outcome = (await response.json()) as {
+      outcome?: { status?: string };
+    };
     if (outcome.outcome?.status !== "executed")
       throw new Error(`intent ${index} was ${outcome.outcome?.status}`);
     samples.push(elapsed);
@@ -208,23 +266,33 @@ async function runIntents(handle, headers, count) {
  * household above the cap is a number this instrument must publish, not an
  * error that ends the run.
  */
-async function openSubscriber(handle, headers, since) {
+async function openSubscriber(
+  handle: GatewayServeHandle,
+  headers: Record<string, string>,
+  since: string
+): Promise<
+  | { refused: unknown }
+  | { nextChange: () => Promise<number>; close: () => void }
+> {
   const controller = new AbortController();
   const response = await fetch(
     `${handle.url}/centraid/_vault/changes?since=${encodeURIComponent(since)}&stream=1`,
     { headers, signal: controller.signal }
   );
   if (response.status === 503) {
-    const body = await response.json().catch(() => ({}));
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: unknown;
+    };
     controller.abort();
     return { refused: body.error ?? "sse_capacity" };
   }
   await expectOk(response, "sse subscribe");
+  if (response.body === null) throw new Error("sse subscribe returned no body");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let pending = null;
-  const deliver = (at) => {
+  let pending: ((at: number) => void) | null = null;
+  const deliver = (at: number): void => {
     const resolve = pending;
     pending = null;
     resolve?.(at);
@@ -263,14 +331,20 @@ async function openSubscriber(handle, headers, since) {
  * today (the hub memo keys on `deviceId`), so the levels mirror the golden
  * household replica counts: one device, ten, forty.
  */
-async function fanOutLevel(handle, headers, subscribers, cursor) {
+async function fanOutLevel(
+  handle: GatewayServeHandle,
+  headers: Record<string, string>,
+  subscribers: number,
+  cursor: { epoch: unknown; seq: unknown }
+) {
   const since = `${cursor.epoch}:${cursor.seq}`;
-  const streams = [];
-  let refusal = null;
+  const streams: { nextChange: () => Promise<number>; close: () => void }[] =
+    [];
+  let refusal: unknown = null;
   for (let index = 0; index < subscribers; index += 1) {
     // oxlint-disable-next-line no-await-in-loop -- a subscriber is admitted or refused in order, so the cap's boundary is observable
     const stream = await openSubscriber(handle, headers, since);
-    if (stream.refused) {
+    if ("refused" in stream) {
       refusal ??= stream.refused;
       continue;
     }
@@ -280,8 +354,8 @@ async function fanOutLevel(handle, headers, subscribers, cursor) {
   await new Promise((resolve) => {
     setTimeout(resolve, 250);
   });
-  const commitMs = [];
-  const deliveryMs = [];
+  const commitMs: number[] = [];
+  const deliveryMs: number[] = [];
   try {
     for (let index = 0; index < commitsPerLevel; index += 1) {
       const waiters = streams.map((stream) => stream.nextChange());
@@ -290,12 +364,12 @@ async function fanOutLevel(handle, headers, subscribers, cursor) {
         // oxlint-disable-next-line no-await-in-loop -- a commit and its fan-out are one measured sample; overlapping them would hide the per-commit cost
         await insertPlace(handle, headers, `Fan-out ${subscribers} #${index}`)
       );
-      const timeout = new Promise((resolve) => {
+      const timeout = new Promise<"timeout">((resolve) => {
         setTimeout(() => {
           resolve("timeout");
         }, deliveryTimeoutMs);
       });
-      const settled =
+      const settled: number[] | "timeout" =
         waiters.length === 0
           ? []
           : // oxlint-disable-next-line no-await-in-loop -- a commit and its fan-out are one measured sample; overlapping them would hide the per-commit cost
@@ -322,20 +396,22 @@ async function fanOutLevel(handle, headers, subscribers, cursor) {
 
 async function runJourneys() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "centraid-journeys-"));
-  let handle;
+  const handle: GatewayServeHandle = await serve({
+    paths: { vaultDir: path.join(root, "vault") },
+    logger: quietLogger(),
+    token: "centraid-journey-benchmark-token",
+  });
   try {
-    handle = await serve({
-      paths: { vaultDir: path.join(root, "vault") },
-      logger: quietLogger(),
-      token: "centraid-journey-benchmark-token",
-    });
     const headers = jsonHeaders(handle);
-    const health = await (
+    const health = (await (
       await expectOk(
         await fetch(`${handle.url}/centraid/_gateway/health`, { headers }),
         "health"
       )
-    ).json();
+    ).json()) as {
+      metrics?: { storageFsyncMs?: number };
+      components?: { component: string; detail?: string }[];
+    };
     const resolvedProfile = resolvedProfileFrom(health);
     // B4: the boot fsync probe is an INPUT here, not a recorded curiosity —
     // #922 B7's adaptive commit window and the profile's sync choice are the
@@ -352,19 +428,20 @@ async function runJourneys() {
     const intentSamples = await runIntents(handle, headers, intentCount);
     await markTraceEpoch("end");
 
-    const fanOut = [];
+    const fanOut: Awaited<ReturnType<typeof fanOutLevel>>[] = [];
     if (!underTrace) {
-      const cursor = (
-        await (
-          await expectOk(
-            await fetch(
-              `${handle.url}/centraid/_vault/replica/bootstrap?window=1`,
-              { headers }
-            ),
-            "cursor bootstrap"
-          )
-        ).json()
-      ).cursor;
+      const cursorBody = (await (
+        await expectOk(
+          await fetch(
+            `${handle.url}/centraid/_vault/replica/bootstrap?window=1`,
+            { headers }
+          ),
+          "cursor bootstrap"
+        )
+      ).json()) as { cursor?: { epoch: unknown; seq: unknown } };
+      const cursor = cursorBody.cursor;
+      if (cursor === undefined)
+        throw new Error("cursor bootstrap missing cursor");
       for (const subscribers of subscriberLevels)
         // oxlint-disable-next-line no-await-in-loop -- each fan-out level runs alone so its subscribers are the only ones on the stream
         fanOut.push(await fanOutLevel(handle, headers, subscribers, cursor));
@@ -402,7 +479,11 @@ async function runJourneys() {
         },
         sseProjection: fanOut,
       },
-      storage: { fsyncCalls: null, fsyncPerIntent: null },
+      storage: {
+        fsyncCalls: null as number | null,
+        fsyncPerIntent: null as number | null,
+        method: null as string | null,
+      },
     };
   } finally {
     await handle?.close().catch(() => undefined);

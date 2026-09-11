@@ -5,9 +5,26 @@ import { performance } from "node:perf_hooks";
 
 const script = import.meta.filename;
 
-async function probeCurrentRuntime() {
-  const runtime = typeof Bun === "undefined" ? "node" : "bun";
-  const version = typeof Bun === "undefined" ? process.version : Bun.version;
+const bunRuntime = (globalThis as { Bun?: { version: string } }).Bun;
+
+interface RuntimeProbe {
+  schema: "centraid-runtime-sqlite-probe/1";
+  runtime: string;
+  version: string;
+  compatible: boolean;
+  sqliteImportAndOpenMs?: number;
+  transactionWrites?: number;
+  transactionWriteMs?: number;
+  pointReads?: number;
+  pointReadMs?: number;
+  rssBytes?: number;
+  error?: string;
+}
+
+async function probeCurrentRuntime(): Promise<RuntimeProbe> {
+  const runtime = bunRuntime === undefined ? "node" : "bun";
+  const version =
+    bunRuntime === undefined ? process.version : bunRuntime.version;
   try {
     const started = performance.now();
     const { DatabaseSync } = await import("node:sqlite");
@@ -58,7 +75,7 @@ async function probeCurrentRuntime() {
   }
 }
 
-function runProbe(executable) {
+function runProbe(executable: string): RuntimeProbe {
   const result = spawnSync(executable, [script, "--runtime-only"], {
     encoding: "utf8",
     env: process.env,
@@ -73,7 +90,7 @@ function runProbe(executable) {
     };
   }
   try {
-    return JSON.parse(result.stdout);
+    return JSON.parse(result.stdout) as RuntimeProbe;
   } catch {
     return {
       schema: "centraid-runtime-sqlite-probe/1",
@@ -87,7 +104,7 @@ function runProbe(executable) {
   }
 }
 
-function comparisonEntry(probe) {
+function comparisonEntry(probe: RuntimeProbe): Record<string, unknown> {
   if (!probe.compatible) {
     return { version: probe.version, compatible: false, error: probe.error };
   }

@@ -36,7 +36,7 @@ const AUTOMATION_FORBIDDEN = [
 
 const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".mjs"]);
 
-export function normalizeSpecifier(fromDir, specifier) {
+export function normalizeSpecifier(fromDir: string, specifier: string): string {
   if (specifier.startsWith(".")) {
     return path.posix.normalize(
       path.posix.join(fromDir.split(path.sep).join("/"), specifier)
@@ -45,12 +45,17 @@ export function normalizeSpecifier(fromDir, specifier) {
   return specifier;
 }
 
-export function isForbiddenImport(tree, specifier) {
+export type BoundaryTree = "engine" | "automation";
+
+export function isForbiddenImport(
+  tree: BoundaryTree,
+  specifier: string
+): boolean {
   const rules = tree === "engine" ? ENGINE_FORBIDDEN : AUTOMATION_FORBIDDEN;
   return rules.some((re) => re.test(specifier));
 }
 
-function walkTs(dir, acc = []) {
+function walkTs(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -64,11 +69,16 @@ function walkTs(dir, acc = []) {
   return acc;
 }
 
-export function checkImportBoundary(opts = {}) {
+export function checkImportBoundary(
+  opts: {
+    root?: string;
+    extraFiles?: { tree: BoundaryTree; file: string; source: string }[];
+  } = {}
+): { ok: boolean; violations: string[] } {
   const root = opts.root ?? DEFAULT_ROOT;
-  const violations = [];
+  const violations: string[] = [];
 
-  function scan(tree, file, source) {
+  function scan(tree: BoundaryTree, file: string, source: string): void {
     const fromDir = path.dirname(file);
     for (const match of source.matchAll(IMPORT_RE)) {
       const raw = match.groups?.spec;
@@ -80,7 +90,7 @@ export function checkImportBoundary(opts = {}) {
     }
   }
 
-  for (const tree of /** @type {const} */ (["engine", "automation"])) {
+  for (const tree of ["engine", "automation"] as const) {
     const treeRoot = path.join(root, "src", tree);
     for (const file of walkTs(treeRoot)) {
       scan(tree, file, readFileSync(file, "utf8"));
