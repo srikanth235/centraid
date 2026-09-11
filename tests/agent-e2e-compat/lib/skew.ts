@@ -49,7 +49,13 @@ export const SKEW_BLOCKERS = Object.freeze({
  *          | {available: false, reason: string}} the resolved client, or a
  *          blocked-external skip with its citation.
  */
-export function resolveReleasedClient(env = {}) {
+export type ReleasedClient =
+  | { available: true; kind: "dir" | "tag"; source: string }
+  | { available: false; reason: string };
+
+export function resolveReleasedClient(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = {}
+): ReleasedClient {
   const dir = nonEmpty(env.CENTRAID_SKEW_CLIENT_DIR);
   if (dir) return { available: true, kind: "dir", source: dir };
 
@@ -75,7 +81,18 @@ export function resolveReleasedClient(env = {}) {
  * @returns {{ verdict: "skip"|"pass"|"fail", reason: string }} the verdict and
  *          a human-readable reason.
  */
-export function judgeSkewJourney(result) {
+export function judgeSkewJourney(
+  result: {
+    available?: boolean;
+    reason?: string;
+    ran?: boolean;
+    paired?: boolean;
+    replicaConverged?: boolean;
+    clientVersion?: string;
+    gatewayVersion?: string;
+    notes?: string[];
+  } | null
+) {
   if (!result || typeof result !== "object") {
     return { verdict: "fail", reason: "no result object produced" };
   }
@@ -127,7 +144,7 @@ export function judgeSkewJourney(result) {
   };
 }
 
-function nonEmpty(value) {
+function nonEmpty(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;

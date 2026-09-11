@@ -22,7 +22,7 @@ import {
   STUB_CHUNKS,
   handleMessage,
   resolveDelayMs,
-} from "./fixed-delay-agent.mjs";
+} from "./fixed-delay-agent.ts";
 
 const AGENT = path.resolve(import.meta.dirname, "fixed-delay-agent.mjs");
 
@@ -36,7 +36,7 @@ async function collect(
   return sent;
 }
 
-describe("resolveDelayMs", () => {
+describe(resolveDelayMs, () => {
   it("defaults when unset", () => {
     expect(resolveDelayMs({})).toBe(DEFAULT_FIRST_TOKEN_DELAY_MS);
   });
@@ -122,9 +122,9 @@ describe("the ACP subset the gateway drives", () => {
   it("swallows a cancel notification instead of answering it", async () => {
     // No `id` on a notification. Replying would be a protocol violation; the
     // fallback branch below must not catch it.
-    expect(
-      await collect({ jsonrpc: "2.0", method: "session/cancel", params: {} })
-    ).toStrictEqual([]);
+    await expect(
+      collect({ jsonrpc: "2.0", method: "session/cancel", params: {} })
+    ).resolves.toStrictEqual([]);
   });
 
   it("returns method-not-found for anything else that carries an id", async () => {

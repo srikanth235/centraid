@@ -30,14 +30,14 @@
 // publishes (issue #483's non-vacuous rules; this file is discovered by
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
-import { screenshot } from "../lib/ui-impact.mjs";
+} from "../lib/harness.ts";
+import { screenshot } from "../lib/ui-impact.ts";
 
 /** The drive as `SeatList` draws it, published to
  *  `artifacts/e2e/ui-impact/issue-922-mobile-drive.png` — the UI-impact
@@ -219,7 +219,9 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Docs.*")}
   try {
     await screenshot(ctx, "docs-all-shelf", DRIVE_FRAME);
   } catch (error) {
-    ctx.note(`drive frame not published: ${error.message}`);
+    ctx.note(
+      `drive frame not published: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   return {

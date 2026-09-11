@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 // W5.4 (#842) — unit pins for the install/upgrade lifecycle judge. `node --test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -7,7 +9,7 @@ import {
   assertUpgradePreservedData,
   judgeUpgradeJourney,
   resolvePreviousInstaller,
-} from "./upgrade.mjs";
+} from "./upgrade.ts";
 
 test("resolvePreviousInstaller: no env → #790 blocked-external skip", () => {
   const r = resolvePreviousInstaller({});

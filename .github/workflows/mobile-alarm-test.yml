@@ -77,10 +77,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log

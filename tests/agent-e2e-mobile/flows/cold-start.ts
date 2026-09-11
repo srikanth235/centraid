@@ -1,7 +1,7 @@
 import path from "node:path";
 
-import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
-import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
+import { recordQualityResult } from "../../agent-e2e-shared/harness.ts";
+import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.ts";
 
 /**
  * PER-LAUNCH mobile cold start (issue #659 R3c).
@@ -26,16 +26,16 @@ import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
  * cost and CANNOT catch a launch that degrades with replica size. Closing that
  * needs the CI gateway to seed a year-3 replica before pairing.
  */
-const OWNER = "tests/agent-e2e-mobile/flows/cold-start.mjs";
+const OWNER = "tests/agent-e2e-mobile/flows/cold-start.ts";
 const LAUNCHES = 8;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
-function percentile(sorted, fraction) {
+function percentile(sorted: number[], fraction: number) {
   const index = Math.min(
     sorted.length - 1,
     Math.floor(sorted.length * fraction)
   );
-  return sorted[index];
+  return sorted[index] ?? 0;
 }
 
 await runFlow("mobile-cold-start", async (ctx) => {
@@ -54,8 +54,8 @@ await runFlow("mobile-cold-start", async (ctx) => {
   // idle device, so these cannot be parallelised. Recursion rather than a loop
   // keeps that explicit (and satisfies no-await-in-loop, which is right to be
   // suspicious of every other shape).
-  const launchMs = [];
-  const measureNext = async (index) => {
+  const launchMs: number[] = [];
+  const measureNext = async (index: number): Promise<void> => {
     if (index >= LAUNCHES) return;
     const started = performance.now();
     await ctx.run(
@@ -79,7 +79,7 @@ ${AWAIT_LAUNCHER}`,
   const sorted = [...launchMs].sort((left, right) => left - right);
   const medianMs = percentile(sorted, 0.5);
   const p95Ms = percentile(sorted, 0.95);
-  const slowestMs = sorted.at(-1);
+  const slowestMs = sorted.at(-1) ?? 0;
 
   // The recorded history keys off measurements[0], so the MEDIAN is the series
   // Published, not gated (#927). Eight launches on a shared CI simulator is a

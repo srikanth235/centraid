@@ -4,13 +4,13 @@ import path from "node:path";
 import {
   DISMISS_KEYBOARD_ONBOARDING,
   retryableTapCommands,
-} from "../lib/first-run.mjs";
+} from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 // ─── The strings the rebuilt Tally cover actually publishes ─────────────────
 //

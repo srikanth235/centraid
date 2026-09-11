@@ -1,9 +1,9 @@
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 const now = new Date();
 const currentYear = String(now.getFullYear());

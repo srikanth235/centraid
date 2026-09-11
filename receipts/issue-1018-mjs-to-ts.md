@@ -202,3 +202,81 @@ node scripts/ci/advisory-expiry.ts
 `advisory-expiry: 2 advisory step(s) owned, dated and unexpired as of 2026-09-11`
 
 Remaining `scripts/ci/*.mjs`: 33.
+
+## Slice e2e — agent-e2e harnesses and fixtures
+
+Converted every `.mjs` under `tests/agent-e2e-mobile`, `tests/agent-e2e-pairing`, `tests/agent-e2e-compat`, `tests/agent-e2e-shared`, plus `apps/desktop/tests/e2e/electron-entry.ts`, `tests/perf/fixtures/gateway-idle-server.ts`, and the quality crash-child loader. `packages/server/src/acp/backends/acp/fake-acp-harness.mjs` is not in this lane. Remaining owned e2e `.mjs`: 0.
+
+Oversized splits (under 625):
+
+- `tests/agent-e2e-mobile/lib/harness.mjs` (1182) → `harness-surface.ts` (244), `harness-setup.ts` (241), `harness-maestro.ts` (322), `harness.ts` (555)
+- `tests/agent-e2e-pairing/lib/docker-harness.mjs` (1181) → `docker-exec.ts` (380), `docker-isolation.ts` (358), `docker-harness.ts` (560)
+
+`tests/inventory.json#fileSize` dropped the two split `.mjs` rows and lowered `_budget` 131 → 129 (the section's own split rule). `sleeps` renamed `pairing-ticket-hygiene.mjs` → `.ts` at the same count.
+
+`kill-mid-write-child.mjs` was a type-stripping loader around `kill-mid-write-child.ts` (package-src `.js` specifiers). The body is `kill-mid-write-child-run.ts`; the loader is `kill-mid-write-child.ts`. Spawn still runs the loader.
+
+Compiler: `tests/tsconfig.agent-e2e.json` extends `tsconfig.node.json` (NodeNext, `allowImportingTsExtensions`, `erasableSyntaxOnly`). Include is the four `tests/agent-e2e-*` globs. Exclude: `ci-gateway.ts` (package `dist/` imports), pairing `harness.ts` / `device-redeem.ts` / `docker-harness.ts` / pairing flows / `released-binary-skew.ts` (package `dist/` / `@centraid/tunnel`), and `**/*.test.ts` (vitest + `@centraid/test-kit`). Root `typecheck` and `typecheck:affected` run `tsc -p tests/tsconfig.agent-e2e.json`. `lint-tsconfigs` ROOT_TOOLING_PROGRAMS requires that needle when `tests/agent-e2e-shared/harness.ts` exists.
+
+### Verification
+
+```sh
+tsc -p tests/tsconfig.agent-e2e.json --noEmit
+```
+
+Exit 0.
+
+```sh
+tsc -p tests/tsconfig.agent-e2e.json --listFiles --pretty false
+```
+
+Non-lib members: 48. `packages/*/src` count: 0. `packages/server/src` count: 0.
+
+```sh
+node --test tests/agent-e2e-compat/lib/skew.test.ts tests/agent-e2e-compat/lib/upgrade.test.ts
+```
+
+22 pass, 0 fail.
+
+```sh
+node --test scripts/lint-e2e-flows.test.mjs scripts/lint-e2e-wiring.test.mjs scripts/lint-tsconfigs.test.mjs
+```
+
+51 pass, 0 fail.
+
+```sh
+node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts tests/agent-e2e-shared/harness.test.ts tests/agent-e2e-mobile/lib/harness-prefix.test.ts tests/agent-e2e-mobile/lib/sh-quote.test.ts tests/agent-e2e-mobile/lib/roster.test.ts tests/agent-e2e-mobile/lib/spawn-redaction.test.ts tests/agent-e2e-mobile/lib/failure-class.test.ts tests/agent-e2e-mobile/lib/run-ledger.test.ts tests/agent-e2e-mobile/lib/metro.test.ts
+```
+
+85 pass, 0 fail. Full device e2e farm not run.
+
+### Paths this slice
+
+- `tests/tsconfig.agent-e2e.json`
+- `tests/agent-e2e-mobile/**/*.ts` (from `.mjs`; harness split)
+- `tests/agent-e2e-pairing/**/*.ts` (from `.mjs`; docker-harness split)
+- `tests/agent-e2e-compat/**/*.ts`
+- `tests/agent-e2e-shared/**/*.ts`
+- `apps/desktop/tests/e2e/electron-entry.ts`
+- `tests/perf/fixtures/gateway-idle-server.ts`
+- `tests/quality/fixtures/kill-mid-write-child.ts` (loader) + `kill-mid-write-child-run.ts` (body)
+- `tests/agent-e2e-mobile/roster.json`
+- `tests/claims.json` (owner paths)
+- `package.json` (`typecheck`, `typecheck:affected`, `scripts:test` two entries)
+- `scripts/test-report/vitest.config.ts` (include lines)
+- e2e suffix matchers: `scripts/lint-e2e-flows.mjs`, `scripts/lint-e2e-wiring*.mjs`, `scripts/lint-e2e-claims.mjs`, `scripts/lint-mobile-testids.mjs`, `scripts/lint-tsconfigs.mjs`
+- spawn: `apps/desktop/tests/e2e/fixtures.ts`, `tests/quality/kill-mid-write.integration.test.ts`, `tests/perf/gateway-request.perf.test.ts`, `apps/mobile/scripts/*.sh`, `.github/workflows/{e2e,candidate,ci,extension-e2e,mobile-alarm-test}.yml`
+- `scripts/test-report/derive.mjs` (`roster.ts` + dual-suffix `flowId`), `validate-nightly-wiring.mjs`, `validate-report-registries.mjs`, `sleep-inventory.mjs`, `skip-inventory.mjs`
+- `tests/inventory.json` (fileSize split rows + sleeps path)
+- `oxlint.config.ts`, `TESTING.md`, `docs/toolchain.md`, `CHANGELOG.md`, `receipts/issue-1018-mjs-to-ts.md`
+
+### Audit
+
+| Check | Verdict | Notes |
+| --- | --- | --- |
+| Owned e2e `.mjs` remaining | PASS | 0 |
+| Oversized split under 625 | PASS | fileSize `_budget` 131 → 129; no new exemption rows |
+| NodeNext program does not typecheck package src | PASS | listFiles `packages/*/src` = 0 |
+| Extra program reached by typecheck | PASS | both root typecheck scripts |
+| Gates not weakened | PASS | dual `.mjs`/`.ts` suffix matchers; no allowlist/budget cuts |
+

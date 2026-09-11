@@ -1,6 +1,6 @@
 // The full pairing ceremony, every component in its real process — see the
 // .md next to this file for intent.
-import { runFlow } from "../lib/harness.mjs";
+import { runFlow } from "../lib/harness.ts";
 
 await runFlow("device-pairing-lifecycle", async (ctx) => {
   // 1. A fresh daemon auto-founds Personal (#603); tickets default to it.

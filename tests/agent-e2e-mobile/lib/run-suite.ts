@@ -44,7 +44,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
-import { shouldRetry } from "./retry-policy.mjs";
+import { shouldRetry } from "./retry-policy.ts";
 
 const FLOWS_DIR = path.join(import.meta.dirname, "..", "flows");
 
@@ -60,11 +60,11 @@ const FLOWS_DIR = path.join(import.meta.dirname, "..", "flows");
  *   attempt's own elapsed time is the only honest estimate available)
  * @returns {boolean} true when the attempt fits
  */
-export function fitsInBudget(remainingMs, costMs) {
+export function fitsInBudget(remainingMs: number, costMs: number): boolean {
   return remainingMs > 0 && remainingMs >= costMs;
 }
 
-function spawnFlow(file, env) {
+function spawnFlow(file: string, env: NodeJS.ProcessEnv): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [path.join(FLOWS_DIR, file)], {
       env: { ...process.env, ...env },
@@ -83,7 +83,20 @@ function spawnFlow(file, env) {
  * somebody asks whether it was just flaky — without it, the absence of a retry
  * is indistinguishable from a policy that forgot to consider one.
  */
-async function runFlowWithPolicy(file, { label, env, platform, remainingMs }) {
+async function runFlowWithPolicy(
+  file: string,
+  {
+    label,
+    env,
+    platform,
+    remainingMs,
+  }: {
+    label: string;
+    env: NodeJS.ProcessEnv;
+    platform?: string;
+    remainingMs?: () => number;
+  }
+): Promise<number> {
   const attemptStartedAt = Date.now();
   const code = await spawnFlow(file, env);
   if (code === 0) return 0;
@@ -152,7 +165,16 @@ export async function runSuite({
   canaryCount = 0,
   reuseAfter = null,
   onBudgetBreach = "",
-}) {
+}: {
+  name: string;
+  flows: string[];
+  budgetMs: number;
+  lane?: string;
+  platform?: string;
+  canaryCount?: number;
+  reuseAfter?: number | null;
+  onBudgetBreach?: string;
+}): Promise<number> {
   const baseEnv = {
     CENTRAID_MOBILE_LANE: process.env.CENTRAID_MOBILE_LANE ?? lane,
     ...(platform ? { MAESTRO_PLATFORM: platform } : {}),
@@ -171,7 +193,7 @@ export async function runSuite({
   // strictly sequential and `Promise.all` would be wrong rather than faster. The
   // recursion is what the four runners this replaces already used, for the same
   // reason: it says "one at a time" in a shape the linter reads as intentional.
-  async function runFrom(index, exitCode) {
+  async function runFrom(index: number, exitCode: number): Promise<number> {
     const file = flows[index];
     if (!file) return exitCode;
     // Stop AT the deadline rather than discovering it afterwards. The members

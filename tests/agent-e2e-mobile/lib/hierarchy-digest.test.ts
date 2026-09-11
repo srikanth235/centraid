@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { digestHierarchy, digestLines } from "./hierarchy-digest.mjs";
+import { digestHierarchy, digestLines } from "./hierarchy-digest.ts";
 
 const node = (attributes, children = []) => ({ attributes, children });
 

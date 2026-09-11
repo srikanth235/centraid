@@ -8,10 +8,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { maestroChunkTimeoutMs } from "./harness.mjs";
-import { fitsInBudget } from "./run-suite.mjs";
+import { maestroChunkTimeoutMs } from "./harness.ts";
+import { fitsInBudget } from "./run-suite.ts";
 
-describe("fitsInBudget", () => {
+describe(fitsInBudget, () => {
   it("refuses an attempt when the budget is already spent", () => {
     expect(fitsInBudget(0, 1_000)).toBe(false);
     expect(fitsInBudget(-5_000, 1_000)).toBe(false);
@@ -29,7 +29,7 @@ describe("fitsInBudget", () => {
   });
 });
 
-describe("maestroChunkTimeoutMs", () => {
+describe(maestroChunkTimeoutMs, () => {
   const withDeadline = (value, body) => {
     const previous = process.env.CENTRAID_MOBILE_DEADLINE_MS;
     if (value == null) delete process.env.CENTRAID_MOBILE_DEADLINE_MS;

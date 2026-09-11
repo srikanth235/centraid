@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // THE ONE MOBILE SUITE RUNNER (#915 Wave 2).
 //
-//   node tests/agent-e2e-mobile/run-roster.mjs --rung <2|3|4|5> --platform <android|ios> \
+//   node tests/agent-e2e-mobile/run-roster.ts --rung <2|3|4|5> --platform <android|ios> \
 //        [--suite <id>] [--dry-run]
 //
 // It replaces seven `run-*-suite.mjs` files that differed only in three
@@ -26,12 +26,21 @@
 // the roster shell used to carry, moved here so a mid-roster failure still
 // cannot grey the suites behind it (#535 F4).
 
-import { plan, PLATFORMS, RUNGS, validateRoster } from "./lib/roster.mjs";
-import { runSuite } from "./lib/run-suite.mjs";
+import { plan, PLATFORMS, RUNGS, validateRoster } from "./lib/roster.ts";
+import { runSuite } from "./lib/run-suite.ts";
 
 /** Minimal flag parsing — no dependency, and every flag is `--name value`. */
-export function parseArgs(argv) {
-  const out = { dryRun: false };
+export interface RosterArgs {
+  dryRun: boolean;
+  rung?: number;
+  platform?: string;
+  suite?: string;
+}
+
+export function parseArgs(
+  argv: string[]
+): RosterArgs & { rung: number; platform: string } {
+  const out: RosterArgs = { dryRun: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--dry-run") {
@@ -58,15 +67,18 @@ export function parseArgs(argv) {
       `run-roster: unrecognised argument "${arg}". Usage: --rung <n> --platform <android|ios> [--suite <id>] [--dry-run]`
     );
   }
-  if (!RUNGS.includes(out.rung))
+  if (out.rung == null || !(RUNGS as readonly number[]).includes(out.rung))
     throw new Error(
       `run-roster: --rung must be one of ${RUNGS.join(", ")}, got "${out.rung}"`
     );
-  if (!PLATFORMS.includes(out.platform))
+  if (
+    out.platform == null ||
+    !(PLATFORMS as readonly string[]).includes(out.platform)
+  )
     throw new Error(
       `run-roster: --platform must be one of ${PLATFORMS.join(", ")}, got "${out.platform}"`
     );
-  return out;
+  return { ...out, rung: out.rung, platform: out.platform };
 }
 
 /**
@@ -77,7 +89,10 @@ export function parseArgs(argv) {
  * and `--suite` naming a suite that does not sit on this rung is the way that
  * happens by accident.
  */
-export function resolvePlan({ rung, platform, suite }, roster) {
+export function resolvePlan(
+  { rung, platform, suite }: { rung: number; platform: string; suite?: string },
+  roster?: import("./lib/roster.ts").Roster
+) {
   const entries = plan({ rung, platform, suite, roster });
   if (entries.length === 0) {
     throw new Error(
@@ -96,7 +111,10 @@ export function resolvePlan({ rung, platform, suite }, roster) {
  * re-deriving the plan, and so the unit suite can drive the collection rule
  * with a stub in place of `runSuite`.
  */
-export async function runPlan(entries, run = runSuite) {
+export async function runPlan(
+  entries: ReturnType<typeof plan>,
+  run: typeof runSuite = runSuite
+): Promise<number> {
   let exitCode = 0;
   for (const entry of entries) {
     // Sequential on purpose: the suites share ONE device and ONE gateway, so
@@ -118,7 +136,7 @@ export async function runPlan(entries, run = runSuite) {
   return exitCode;
 }
 
-async function main(argv) {
+async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
   // The roster is the only input, so a roster that contradicts itself is a
   // runner that lies about what it ran. Checked before anything boots.

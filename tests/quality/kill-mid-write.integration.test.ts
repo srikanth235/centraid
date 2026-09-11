@@ -52,7 +52,7 @@ const EXPECTED_OBSERVATION: Record<CrashBoundaryId, Record<string, unknown>> = {
 
 const CHILD = path.join(
   import.meta.dirname,
-  "fixtures/kill-mid-write-child.mjs"
+  "fixtures/kill-mid-write-child.ts"
 );
 
 function waitForFaultReady(

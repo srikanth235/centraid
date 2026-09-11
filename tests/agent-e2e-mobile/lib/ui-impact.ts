@@ -23,7 +23,11 @@ export const UI_IMPACT_DIR = "artifacts/e2e/ui-impact";
  * a missing frame means the chunk that was supposed to draw it did not run,
  * which the caller notes rather than swallows silently.
  */
-export async function screenshot(ctx, captured, published) {
+export async function screenshot(
+  ctx: { state: { screenshotsDir: string } },
+  captured: string,
+  published: string
+): Promise<void> {
   const frames = await readdir(ctx.state.screenshotsDir);
   const frame = frames.find((candidate) => candidate === `${captured}.png`);
   if (frame === undefined)

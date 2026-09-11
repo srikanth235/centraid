@@ -9,13 +9,13 @@ import {
   defaultRunId,
   recordQualityResult,
   writeFlowVerdict,
-} from "./harness.mjs";
+} from "./harness.ts";
 
 function makeRunDir() {
   return tempDir("centraid-harness-");
 }
 
-describe("defaultRunId", () => {
+describe(defaultRunId, () => {
   test("returns an ISO-stamp plus hex suffix without colons/dots/Z", () => {
     const id = defaultRunId();
     expect(id).toMatch(
@@ -33,11 +33,11 @@ describe("defaultRunId", () => {
   });
 });
 
-describe("writeFlowVerdict", () => {
+describe(writeFlowVerdict, () => {
   test("writes PASS verdict.md and optional evidence JSON", async () => {
     const runDir = await makeRunDir();
     const repoRoot = runDir;
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined);
     try {
       const pass = await writeFlowVerdict({
         repoRoot,
@@ -84,7 +84,7 @@ describe("writeFlowVerdict", () => {
 
   test("FAIL when error is set, including stack and debug sections", async () => {
     const runDir = await makeRunDir();
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined);
     try {
       const err = new Error("timeout waiting for pair");
       const pass = await writeFlowVerdict({
@@ -112,7 +112,7 @@ describe("writeFlowVerdict", () => {
 
   test("FAIL when result.pass is explicitly false", async () => {
     const runDir = await makeRunDir();
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined);
     try {
       const pass = await writeFlowVerdict({
         repoRoot: runDir,
@@ -136,7 +136,7 @@ describe("writeFlowVerdict", () => {
 describe("platform-keyed evidence (#781)", () => {
   test("writeFlowVerdict suffixes the evidence file with MAESTRO_PLATFORM and stamps it", async () => {
     const runDir = await makeRunDir();
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined);
     vi.stubEnv("MAESTRO_PLATFORM", "ios");
     try {
       await writeFlowVerdict({
@@ -147,7 +147,7 @@ describe("platform-keyed evidence (#781)", () => {
         error: null,
         notes: [],
         result: { pass: true },
-        owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+        owner: "tests/agent-e2e-mobile/flows/home-loads.ts",
       });
       const evidence = JSON.parse(
         await readFile(
@@ -159,7 +159,7 @@ describe("platform-keyed evidence (#781)", () => {
       // the platform stamp change — that is what stops iOS and Android from
       // last-write-winning over each other in the merged evidence tree.
       expect(evidence).toMatchObject({
-        owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+        owner: "tests/agent-e2e-mobile/flows/home-loads.ts",
         name: "home-loads",
         platform: "ios",
         status: "passed",
@@ -172,7 +172,7 @@ describe("platform-keyed evidence (#781)", () => {
 
   test("writeFlowVerdict keeps the unsuffixed path when no platform is set", async () => {
     const runDir = await makeRunDir();
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined);
     try {
       await writeFlowVerdict({
         repoRoot: runDir,
@@ -182,7 +182,7 @@ describe("platform-keyed evidence (#781)", () => {
         error: null,
         notes: [],
         result: { pass: true },
-        owner: "tests/agent-e2e-pairing/flows/pairing-smoke.mjs",
+        owner: "tests/agent-e2e-pairing/flows/pairing-smoke.ts",
       });
       const evidence = JSON.parse(
         await readFile(
@@ -202,7 +202,7 @@ describe("platform-keyed evidence (#781)", () => {
     try {
       await recordQualityResult(repoRoot, {
         lane: "scale",
-        owner: "tests/agent-e2e-mobile/flows/cold-start.mjs",
+        owner: "tests/agent-e2e-mobile/flows/cold-start.ts",
         name: "cold start",
         status: "passed",
         measurements: [{ name: "median cold start", value: 1200, unit: "ms" }],
@@ -213,7 +213,7 @@ describe("platform-keyed evidence (#781)", () => {
             repoRoot,
             "artifacts",
             "scale",
-            "tests-agent-e2e-mobile-flows-cold-start-mjs-ios.json"
+            "tests-agent-e2e-mobile-flows-cold-start-ts-ios.json"
           ),
           "utf8"
         )
@@ -224,7 +224,7 @@ describe("platform-keyed evidence (#781)", () => {
       vi.stubEnv("MAESTRO_PLATFORM", "android");
       await recordQualityResult(repoRoot, {
         lane: "scale",
-        owner: "tests/agent-e2e-mobile/flows/cold-start.mjs",
+        owner: "tests/agent-e2e-mobile/flows/cold-start.ts",
         name: "cold start",
         status: "passed",
         measurements: [{ name: "median cold start", value: 3400, unit: "ms" }],
@@ -235,7 +235,7 @@ describe("platform-keyed evidence (#781)", () => {
             repoRoot,
             "artifacts",
             "scale",
-            "tests-agent-e2e-mobile-flows-cold-start-mjs-android.json"
+            "tests-agent-e2e-mobile-flows-cold-start-ts-android.json"
           ),
           "utf8"
         )
@@ -288,7 +288,7 @@ describe("platform-keyed evidence (#781)", () => {
           ),
           "utf8"
         )
-      ).rejects.toThrow();
+      ).rejects.toThrow(/ENOENT|no such file/iu);
     } finally {
       vi.unstubAllEnvs();
     }

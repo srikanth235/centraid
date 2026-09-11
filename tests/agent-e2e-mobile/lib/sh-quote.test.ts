@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { shQuote } from "./harness.mjs";
+import { shQuote } from "./harness.ts";
 
 /** What `sh` would produce for a single-quoted word: the literal characters. */
 function unquote(quoted) {
@@ -28,7 +28,7 @@ function unquote(quoted) {
   return quoted.slice(1, -1).replaceAll(`'\\''`, "'");
 }
 
-describe("shQuote", () => {
+describe(shQuote, () => {
   it.each([
     ["a bare word", "capture"],
     ["spaces, which would otherwise split into separate argv words", "a b c"],

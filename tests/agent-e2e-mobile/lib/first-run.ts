@@ -75,7 +75,10 @@ export const DENY_MEDIA_PERMISSION = `# Android's runtime media grant — see DE
  * marker after this snippet; these retries never turn a missing navigation
  * into a pass.
  */
-export function retryableTapCommands(selector, sourceSelector = selector) {
+export function retryableTapCommands(
+  selector: string,
+  sourceSelector = selector
+): string {
   const conditionalRetry = `- runFlow:
     when:
       visible: "${sourceSelector}"

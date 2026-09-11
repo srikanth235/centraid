@@ -31,14 +31,14 @@
 // publishes (issue #483's non-vacuous rules; this file is discovered by
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
-import { screenshot } from "../lib/ui-impact.mjs";
+} from "../lib/harness.ts";
+import { screenshot } from "../lib/ui-impact.ts";
 
 /** `artifacts/e2e/ui-impact/issue-922-mobile-notes-library.png` — the Notes
  *  library, published as UI-impact evidence for #922 E.4 — the seat
@@ -181,7 +181,9 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
   try {
     await screenshot(ctx, "notes-library", LIBRARY_FRAME);
   } catch (error) {
-    ctx.note(`notes library frame not published: ${error.message}`);
+    ctx.note(
+      `notes library frame not published: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   return {

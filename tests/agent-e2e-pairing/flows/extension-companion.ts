@@ -5,12 +5,12 @@ import path from "node:path";
 
 import { chromium } from "@playwright/test";
 
-import { runFlow } from "../lib/harness.mjs";
+import { runFlow } from "../lib/harness.ts";
 
 const repo = path.resolve(import.meta.dirname, "../../..");
 const extensionDir = path.join(repo, "apps/extension/dist");
 
-async function run(command, args) {
+async function run(command: string, args: string[]) {
   const child = spawn(command, args, { cwd: repo, stdio: "inherit" });
   const [code] = await once(child, "exit");
   if (code !== 0) throw new Error(`${command} exited ${code}`);
@@ -97,7 +97,7 @@ try {
       // only other trace is a 7-day artifact, and #675 accumulated 13
       // untriaged failures because the actual pairing error never reached
       // stdout (the timeout below only said "resolved to hidden").
-      const popupConsole = [];
+      const popupConsole: string[] = [];
       page.on("console", (message) =>
         popupConsole.push(`[popup:${message.type()}] ${message.text()}`)
       );

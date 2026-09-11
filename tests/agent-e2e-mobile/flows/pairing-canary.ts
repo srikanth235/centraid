@@ -17,8 +17,8 @@
 // two reasons to fail no longer answers the question it was asked. Everything
 // below the Home marker belongs to the journey that claims it.
 
-import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
-import { screenshot } from "../lib/ui-impact.mjs";
+import { HOME_READY_MARKER, runFlow } from "../lib/harness.ts";
+import { screenshot } from "../lib/ui-impact.ts";
 
 /** The one mobile frame that survives a red suite (#905), published under
  *  `artifacts/e2e/ui-impact/` beside every other seat's. */
@@ -75,7 +75,9 @@ await runFlow("pairing-canary", async (ctx) => {
     // published (#905).
     await screenshot(ctx, "paired-home", HOME_FRAME);
   } catch (error) {
-    ctx.note(`paired-home frame not published: ${error.message}`);
+    ctx.note(
+      `paired-home frame not published: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   const elapsedMs = Date.now() - startedAt;

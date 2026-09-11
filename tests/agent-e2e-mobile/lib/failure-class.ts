@@ -24,16 +24,22 @@
 const ASSERTION_DIRECTIVE_RE =
   /^\s*-\s+(?:assertVisible|assertNotVisible|extendedWaitUntil)\b/gmu;
 
-export function countMaestroAssertions(yaml) {
+export function countMaestroAssertions(yaml: string | undefined): number {
   return String(yaml ?? "").match(ASSERTION_DIRECTIVE_RE)?.length ?? 0;
 }
 
 /** A signal matched on the failure text alone, whatever the assertion count. */
-const onText = (id, pattern, reason, example) => ({
+const onText = (
+  id: string,
+  pattern: RegExp,
+  reason: string,
+  example: string
+) => ({
   id,
   reason,
   example: { text: example, assertionsRun: 3 },
-  matches: ({ text }) => pattern.test(text),
+  matches: ({ text }: { text: string; assertionsRun?: number }) =>
+    pattern.test(text),
 });
 
 /**
@@ -124,7 +130,13 @@ export const INFRASTRUCTURE_SIGNALS = [
       text: "Error: maestro --udid X test flow.yaml exceeded the 720000ms process timeout",
       assertionsRun: 0,
     },
-    matches: ({ text, assertionsRun }) =>
+    matches: ({
+      text,
+      assertionsRun,
+    }: {
+      text: string;
+      assertionsRun: number;
+    }) =>
       assertionsRun === 0 && /exceeded the \d+ms process timeout/u.test(text),
   },
   {
@@ -132,7 +144,13 @@ export const INFRASTRUCTURE_SIGNALS = [
     reason:
       "the Maestro process died at the OS layer before any assertion could run",
     example: { text: "Error: spawn maestro ENOENT", assertionsRun: 0 },
-    matches: ({ text, assertionsRun }) =>
+    matches: ({
+      text,
+      assertionsRun,
+    }: {
+      text: string;
+      assertionsRun: number;
+    }) =>
       assertionsRun === 0 && /\b(?:ENOENT|EACCES|EPERM|ENOMEM)\b/u.test(text),
   },
 ];
@@ -164,7 +182,7 @@ const FLOW_CRASH_RE = /^(?:ReferenceError|TypeError|SyntaxError|RangeError):/mu;
 // errors whose stacks name the spec file, and matching those would make the
 // classifier agree with itself for the wrong reason.
 const FLOW_FRAME_RE =
-  /tests\/agent-e2e-mobile\/(?:flows|lib)\/[\w.-]+(?<!\.test)\.mjs/u;
+  /tests\/agent-e2e-mobile\/(?:flows|lib)\/[\w.-]+(?<!\.test)\.(?:mjs|ts)/u;
 
 /** Maestro's vocabulary for "I looked and the product disagreed". Naming it
  * buys a readable `signal` in the ledger; it changes no verdict, because
@@ -187,14 +205,14 @@ export function classifyFailure({
   stderr = "",
   stdout = "",
   assertionsRun = 0,
-} = {}) {
-  const text = [
-    error?.message,
-    error?.stack,
-    String(error ?? ""),
-    stderr,
-    stdout,
-  ]
+}: {
+  error?: unknown;
+  stderr?: string;
+  stdout?: string;
+  assertionsRun?: number;
+} = {}): { class: string; reason: string; signal: string } {
+  const err = error instanceof Error ? error : undefined;
+  const text = [err?.message, err?.stack, String(error ?? ""), stderr, stdout]
     .filter(Boolean)
     .join("\n");
   const completed = Number.isFinite(assertionsRun) ? Number(assertionsRun) : 0;
@@ -210,7 +228,7 @@ export function classifyFailure({
   }
 
   if (FLOW_CRASH_RE.test(text) && FLOW_FRAME_RE.test(text)) {
-    const named = FLOW_CRASH_RE.exec(text)[0].replace(/:$/u, "");
+    const named = FLOW_CRASH_RE.exec(text)?.[0]?.replace(/:$/u, "") ?? "Error";
     return {
       class: "harness",
       reason:

@@ -19,7 +19,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { judgeSkewJourney, resolveReleasedClient } from "../lib/skew.mjs";
+import { judgeSkewJourney, resolveReleasedClient } from "../lib/skew.ts";
 
 const client = resolveReleasedClient(process.env);
 
@@ -40,7 +40,7 @@ if (!client.available) {
 // tests/agent-e2e-compat/fixtures/skew-client provides one for plumbing proof.
 let source = client.source;
 if (client.kind === "tag") {
-  source = await downloadReleasedClient(client.source);
+  source = await downloadReleasedClient(source);
 }
 
 const driverPath = path.join(source, "skew-driver.mjs");
@@ -58,9 +58,16 @@ const { default: drive } = await import(pathToFileURL(driverPath).href);
 // runFlow boots tonight's source gateway and mints a ticket against it; the
 // released client redeems that ticket. Imported lazily so the blocked-external
 // skip above never pays the harness build cost.
-const { runFlow } = await import("../../agent-e2e-pairing/lib/harness.mjs");
+const { runFlow } = await import("../../agent-e2e-pairing/lib/harness.ts");
 
-let result = { available: true, ran: false };
+let result: {
+  available: boolean;
+  ran: boolean;
+  paired?: boolean;
+  replicaConverged?: boolean;
+  clientVersion?: string;
+  gatewayVersion?: string;
+} = { available: true, ran: false };
 await runFlow("released-binary-skew", async (ctx) => {
   const { payload } = await ctx.mintTicket({ vault: "Personal" });
   const journey = await drive({
@@ -74,7 +81,8 @@ await runFlow("released-binary-skew", async (ctx) => {
     paired: Boolean(journey?.paired),
     replicaConverged: Boolean(journey?.replicaConverged),
     clientVersion: journey?.clientVersion,
-    gatewayVersion: payload?.version ?? "source",
+    gatewayVersion:
+      typeof payload.version === "string" ? payload.version : "source",
   };
 });
 
@@ -84,7 +92,7 @@ process.exit(verdict === "fail" ? 1 : 0);
 
 // ---------------------------------------------------------------------------
 
-async function downloadReleasedClient(tag) {
+async function downloadReleasedClient(tag: string) {
   // `gh release download` into a temp dir. Guarded: a missing gh or a
   // non-existent tag fails loudly rather than proceeding on an empty dir.
   const dest = path.join(process.env.RUNNER_TEMP || "/tmp", `skew-${tag}`);
@@ -100,7 +108,7 @@ async function downloadReleasedClient(tag) {
   return dest;
 }
 
-function report(outcome, detail) {
+function report(outcome: string, detail: string) {
   console.log(`[released-binary-skew] ${outcome.toUpperCase()}: ${detail}`);
   if (outcome === "skip") {
     console.log(`::warning::released-binary-skew skipped — ${detail}`);

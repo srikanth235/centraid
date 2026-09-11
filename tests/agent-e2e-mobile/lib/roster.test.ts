@@ -23,7 +23,7 @@ import {
   suiteBudgetMs,
   suitesFor,
   validateRoster,
-} from "./roster.mjs";
+} from "./roster.ts";
 
 const FLOWS_DIR = "tests/agent-e2e-mobile/flows";
 
@@ -67,9 +67,9 @@ function fixture(overrides = {}) {
   };
 }
 
-describe("validateRoster", () => {
+describe(validateRoster, () => {
   it("passes a well-formed roster", () => {
-    expect(validateRoster(fixture())).toEqual([]);
+    expect(validateRoster(fixture())).toStrictEqual([]);
   });
 
   it("refuses a suite that prices nothing", () => {
@@ -135,7 +135,7 @@ describe("selection", () => {
   it("keeps roster order, which is a lane's execution order", () => {
     const roster = fixture();
     roster.suites.later = { ...roster.suites.gate, rungs: [2] };
-    expect(suitesFor({ rung: 2, platform: "android", roster })).toEqual([
+    expect(suitesFor({ rung: 2, platform: "android", roster })).toStrictEqual([
       "gate",
       "later",
     ]);
@@ -143,22 +143,22 @@ describe("selection", () => {
 
   it("filters by platform as well as rung", () => {
     const roster = fixture();
-    expect(suitesFor({ rung: 2, platform: "ios", roster })).toEqual([]);
+    expect(suitesFor({ rung: 2, platform: "ios", roster })).toStrictEqual([]);
   });
 
   it("narrows to one suite when asked, and to none when it is on another rung", () => {
     const roster = fixture();
     expect(
       suitesFor({ rung: 2, platform: "android", suite: "gate", roster })
-    ).toEqual(["gate"]);
+    ).toStrictEqual(["gate"]);
     expect(
       suitesFor({ rung: 4, platform: "android", suite: "gate", roster })
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it("plan() carries the members in suite order with their rows attached", () => {
     const [entry] = plan({ rung: 2, platform: "android", roster: fixture() });
-    expect(entry.flows.map((flow) => flow.path)).toEqual([
+    expect(entry.flows.map((flow) => flow.path)).toStrictEqual([
       `${FLOWS_DIR}/a.mjs`,
     ]);
     expect(entry.flows[0].claim).toMatch(/long enough/u);
@@ -169,13 +169,15 @@ describe("selection", () => {
     const roster = fixture();
     roster.suites.second = { ...roster.suites.gate, rungs: [2] };
     const [flow] = flowsFor({ rung: 2, platform: "android", roster });
-    expect(flow.suites).toEqual(["gate", "second"]);
+    expect(flow.suites).toStrictEqual(["gate", "second"]);
   });
 
   it("lanesFor() selects by rung", () => {
     const roster = fixture();
-    expect(Object.keys(lanesFor({ rung: 2, roster }))).toEqual(["pr-gate"]);
-    expect(Object.keys(lanesFor({ rung: 4, roster }))).toEqual([]);
+    expect(Object.keys(lanesFor({ rung: 2, roster }))).toStrictEqual([
+      "pr-gate",
+    ]);
+    expect(Object.keys(lanesFor({ rung: 4, roster }))).toStrictEqual([]);
   });
 });
 
@@ -183,15 +185,15 @@ describe("the shipped roster", () => {
   const roster = loadRoster();
 
   it("agrees with itself", () => {
-    expect(validateRoster(roster)).toEqual([]);
+    expect(validateRoster(roster)).toStrictEqual([]);
   });
 
   it("spends ZERO iOS minutes on rung 2", () => {
     // A #915 non-goal in as many words: "No iOS on PRs". Rung 2 is the only
     // rung that blocks a merge, so this is the one selection whose emptiness is
     // a product decision rather than an accident of the table.
-    expect(suitesFor({ rung: 2, platform: "ios", roster })).toEqual([]);
-    expect(suitesFor({ rung: 2, platform: "android", roster }).length).toBe(1);
+    expect(suitesFor({ rung: 2, platform: "ios", roster })).toStrictEqual([]);
+    expect(suitesFor({ rung: 2, platform: "android", roster })).toHaveLength(1);
   });
 
   it("carries an iOS verdict on every candidate", () => {

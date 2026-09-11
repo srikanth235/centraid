@@ -55,7 +55,7 @@ export async function metroReachable() {
   }
 }
 
-const pause = (delayMs) =>
+const pause = (delayMs: number) =>
   new Promise((resolve) => {
     setTimeout(resolve, delayMs);
   });
@@ -74,7 +74,12 @@ export async function waitForMetroReachable({
   intervalMs = 1_000,
   probe = metroReachable,
   sleep = pause,
-} = {}) {
+}: {
+  attempts?: number;
+  intervalMs?: number;
+  probe?: () => Promise<boolean>;
+  sleep?: (delayMs: number) => Promise<unknown>;
+} = {}): Promise<boolean> {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     // oxlint-disable-next-line no-await-in-loop -- readiness probes must be sequential
     if (await probe()) return true;
@@ -105,7 +110,7 @@ export async function waitForMetroReachable({
  * graph measured 52s), so the old value left ~35s of bundling *inside* the
  * first `extendedWaitUntil` — precisely the cost the prewarm exists to remove.
  */
-function devClientBundleQuery(platform, appId) {
+function devClientBundleQuery(platform: string, appId: string): string {
   return [
     `platform=${platform}`,
     "dev=true",
@@ -134,7 +139,10 @@ function devClientBundleQuery(platform, appId) {
 //
 // Best-effort by design: a failure here is not a flow failure. If the bundle is
 // genuinely broken the flow's own assertions will say so, with a screenshot.
-export async function prewarmMetroBundle(platform, appId) {
+export async function prewarmMetroBundle(
+  platform: string,
+  appId: string
+): Promise<void> {
   // Metro's project root is the monorepo root (Expo runs from the workspace
   // bin), so the app's entry is served at `apps/mobile/index.ts` — plain
   // `/index.bundle` 404s here. `/.expo/.virtual-metro-entry.bundle` answers 200
@@ -148,7 +156,7 @@ export async function prewarmMetroBundle(platform, appId) {
   const MIN_REAL_BUNDLE_BYTES = 1_000_000;
   // Fallback URLs must be tried in priority order; the first complete bundle
   // establishes the Metro warmup result.
-  const prewarmNext = async (index) => {
+  const prewarmNext = async (index: number): Promise<boolean> => {
     const url = candidates[index];
     if (!url) return false;
     const t0 = Date.now();
@@ -165,7 +173,7 @@ export async function prewarmMetroBundle(platform, appId) {
       return true;
     } catch (error) {
       console.log(
-        `  prewarm : ${url.split("?")[0]} failed (${error.message ?? error})`
+        `  prewarm : ${url.split("?")[0]} failed (${error instanceof Error ? error.message : String(error)})`
       );
       return prewarmNext(index + 1);
     }

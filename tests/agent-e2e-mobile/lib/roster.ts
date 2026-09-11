@@ -31,10 +31,54 @@ const ROOT = path.resolve(import.meta.dirname, "..", "..", "..");
 /** The rungs of the ladder a mobile suite may sit on (#915). Rung 0 and 1 are
  *  hooks and rung 5 is weekly; no device suite belongs to either today, and the
  *  closed set is what stops a typo inventing a rung nothing runs. */
-export const RUNGS = [2, 3, 4, 5];
-export const PLATFORMS = ["android", "ios"];
+export const RUNGS = [2, 3, 4, 5] as const;
+export const PLATFORMS = ["android", "ios"] as const;
+export type RosterRung = (typeof RUNGS)[number];
+export type RosterPlatform = (typeof PLATFORMS)[number];
 
-let cached;
+export interface RosterSuiteSpec {
+  budgetMs: number;
+  rungs: number[];
+  platform: string[];
+  lane?: string;
+  canaryCount?: number;
+  reuseAfter?: number | null;
+  flows: string[];
+  doc?: string;
+  onBudgetBreach?: string;
+  [field: string]: unknown;
+}
+
+export interface RosterFlowRow {
+  budgetMs?: number;
+  status?: string;
+  suite?: string[];
+  rungs?: number[];
+  platform?: string[];
+  [field: string]: unknown;
+}
+
+export interface RosterLane {
+  rung: number;
+  blocking?: boolean;
+  [field: string]: unknown;
+}
+
+export interface Roster {
+  suites: Record<string, RosterSuiteSpec>;
+  flows: Record<string, RosterFlowRow>;
+  lanes: Record<string, RosterLane>;
+  [field: string]: unknown;
+}
+
+export interface RosterFilter {
+  rung?: number;
+  platform?: string;
+  suite?: string;
+  roster?: Roster;
+}
+
+let cached: Roster | undefined;
 
 /**
  * The parsed roster. Cached per process: every consumer reads the same tree, and
@@ -42,26 +86,29 @@ let cached;
  *
  * @param {string} [root] repo root, for tests driving a fixture tree
  */
-export function loadRoster(root = ROOT) {
+export function loadRoster(root = ROOT): Roster {
   if (root === ROOT && cached) return cached;
   const parsed = JSON.parse(
     readFileSync(path.resolve(root, ROSTER_PATH), "utf8")
-  );
+  ) as Roster;
   if (root === ROOT) cached = parsed;
   return parsed;
 }
 
 /** Repo-relative flow path from a bare `foo.mjs` member name. */
-export function flowPath(file) {
+export function flowPath(file: string): string {
   return `${FLOWS_DIR}/${file}`;
 }
 
 /** Bare member name from a repo-relative flow path. */
-export function flowFile(rel) {
+export function flowFile(rel: string): string {
   return rel.slice(rel.lastIndexOf("/") + 1);
 }
 
-function matches(spec, { rung, platform }) {
+function matches(
+  spec: RosterSuiteSpec,
+  { rung, platform }: { rung?: number; platform?: string }
+): boolean {
   if (rung != null && !spec.rungs.includes(rung)) return false;
   if (platform != null && !spec.platform.includes(platform)) return false;
   return true;
@@ -74,22 +121,34 @@ function matches(spec, { rung, platform }) {
  * which is why this returns an array rather than a set: `probes-suite` runs
  * before `photos` on the nightly because the probes must not inherit a pairing.
  */
-export function suitesFor({ rung, platform, suite, roster } = {}) {
+export function suitesFor({
+  rung,
+  platform,
+  suite,
+  roster,
+}: RosterFilter = {}): string[] {
   const table = (roster ?? loadRoster()).suites;
-  const ids = Object.keys(table).filter((id) =>
-    matches(table[id], { rung, platform })
-  );
+  const ids = Object.keys(table).filter((id) => {
+    const spec = table[id];
+    return spec ? matches(spec, { rung, platform }) : false;
+  });
   if (suite == null) return ids;
   return ids.filter((id) => id === suite);
 }
 
 /** One suite's spec, or `undefined`. */
-export function suiteSpec(suite, roster) {
+export function suiteSpec(
+  suite: string,
+  roster?: Roster
+): RosterSuiteSpec | undefined {
   return (roster ?? loadRoster()).suites[suite];
 }
 
 /** A suite's AGGREGATE wall-clock ceiling in ms — the deadline, not a verdict. */
-export function suiteBudgetMs(suite, roster) {
+export function suiteBudgetMs(
+  suite: string,
+  roster?: Roster
+): number | undefined {
   return suiteSpec(suite, roster)?.budgetMs;
 }
 
@@ -101,10 +160,11 @@ export function suiteBudgetMs(suite, roster) {
  * `scripts/lint-e2e-wiring.mjs` folds into lane reachability, so the two can
  * never disagree about what an invocation schedules.
  */
-export function plan({ rung, platform, suite, roster } = {}) {
+export function plan({ rung, platform, suite, roster }: RosterFilter = {}) {
   const tree = roster ?? loadRoster();
   return suitesFor({ rung, platform, suite, roster: tree }).map((id) => {
     const spec = tree.suites[id];
+    if (!spec) throw new Error(`roster suite "${id}" is missing`);
     return {
       suite: id,
       budgetMs: spec.budgetMs,
@@ -133,7 +193,7 @@ export function plan({ rung, platform, suite, roster } = {}) {
  * 2" would otherwise have to dedupe identically in four places. Callers that
  * need execution order want `plan()` instead.
  */
-export function flowsFor({ rung, platform, suite, roster } = {}) {
+export function flowsFor({ rung, platform, suite, roster }: RosterFilter = {}) {
   const tree = roster ?? loadRoster();
   const byPath = new Map();
   for (const entry of plan({ rung, platform, suite, roster: tree })) {
@@ -150,7 +210,10 @@ export function flowsFor({ rung, platform, suite, roster } = {}) {
 }
 
 /** The declared lanes at a rung (all of them when `rung` is omitted). */
-export function lanesFor({ rung, roster } = {}) {
+export function lanesFor({
+  rung,
+  roster,
+}: { rung?: number; roster?: Roster } = {}) {
   const lanes = (roster ?? loadRoster()).lanes;
   return Object.fromEntries(
     Object.entries(lanes).filter(
@@ -169,8 +232,8 @@ export function lanesFor({ rung, roster } = {}) {
  * called from `scripts/lint-e2e-wiring.mjs` (which owns the wiring half) and
  * from this module's own unit suite.
  */
-export function validateRoster(roster = loadRoster()) {
-  const findings = [];
+export function validateRoster(roster: Roster = loadRoster()): string[] {
+  const findings: string[] = [];
   const suites = roster.suites ?? {};
   const flows = roster.flows ?? {};
   const lanes = roster.lanes ?? {};
@@ -184,17 +247,17 @@ export function validateRoster(roster = loadRoster()) {
     if (!Array.isArray(spec.rungs) || spec.rungs.length === 0)
       findings.push(`${at} declares no rungs; it can never be selected.`);
     for (const rung of spec.rungs ?? [])
-      if (!RUNGS.includes(rung))
+      if (!(RUNGS as readonly number[]).includes(rung))
         findings.push(
           `${at} claims rung ${rung}; the ladder's device rungs are ${RUNGS.join(", ")}.`
         );
     for (const platform of spec.platform ?? [])
-      if (!PLATFORMS.includes(platform))
+      if (!(PLATFORMS as readonly string[]).includes(platform))
         findings.push(`${at} claims platform "${platform}".`);
     if (!Array.isArray(spec.flows) || spec.flows.length === 0)
       findings.push(`${at} declares an empty member list.`);
     if (!spec.doc) findings.push(`${at} names no budget doc.`);
-    if (spec.canaryCount > 0 && spec.reuseAfter === 0)
+    if ((spec.canaryCount ?? 0) > 0 && spec.reuseAfter === 0)
       findings.push(
         `${at} short-circuits on a canary it also lets later members reuse from index 0; reuseAfter must be at least canaryCount.`
       );
@@ -212,7 +275,7 @@ export function validateRoster(roster = loadRoster()) {
         );
         continue;
       }
-      if (!(row.budgetMs > 0))
+      if (!(typeof row.budgetMs === "number" && row.budgetMs > 0))
         findings.push(`flows.${flowPath(file)} declares no positive budgetMs.`);
       else if (row.budgetMs > spec.budgetMs)
         findings.push(
@@ -225,21 +288,25 @@ export function validateRoster(roster = loadRoster()) {
   // suite table. They are DERIVED and stored, because the report and the
   // linters read a flow row directly; storing them means they can drift, so
   // they are checked here rather than trusted.
-  const membership = new Map();
+  const membership = new Map<string, string[]>();
   for (const [id, spec] of Object.entries(suites))
     for (const file of spec.flows ?? []) {
       const key = flowPath(file);
-      if (!membership.has(key)) membership.set(key, []);
-      membership.get(key).push(id);
+      const members = membership.get(key) ?? [];
+      members.push(id);
+      membership.set(key, members);
     }
   for (const [rel, row] of Object.entries(flows)) {
     const mine = membership.get(rel) ?? [];
     const want = {
       suite: mine,
-      rungs: [...new Set(mine.flatMap((id) => suites[id].rungs))].sort(),
-      platform: [...new Set(mine.flatMap((id) => suites[id].platform))].sort(),
+      rungs: [...new Set(mine.flatMap((id) => suites[id]?.rungs ?? []))].sort(),
+      platform: [
+        ...new Set(mine.flatMap((id) => suites[id]?.platform ?? [])),
+      ].sort(),
     };
-    for (const key of ["suite", "rungs", "platform"])
+    const derivedKeys = ["suite", "rungs", "platform"] as const;
+    for (const key of derivedKeys)
       if (JSON.stringify(row[key]) !== JSON.stringify(want[key]))
         findings.push(
           `flows.${rel}.${key} is ${JSON.stringify(row[key])} but its suite membership derives ${JSON.stringify(want[key])}. These fields are derived from suites[]; fix the membership or the field, not the reader.`
@@ -251,7 +318,7 @@ export function validateRoster(roster = loadRoster()) {
   }
 
   for (const [id, lane] of Object.entries(lanes)) {
-    if (!RUNGS.includes(lane.rung))
+    if (!(RUNGS as readonly number[]).includes(lane.rung))
       findings.push(
         `lanes.${id} declares rung ${lane.rung}; the ladder's device rungs are ${RUNGS.join(", ")}.`
       );

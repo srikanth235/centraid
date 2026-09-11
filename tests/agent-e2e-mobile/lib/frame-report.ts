@@ -29,7 +29,10 @@ const TARGET_HZ_ONLY = /targetHz=(?<targetHz>\d+)/u;
 const PEOPLE_ROW_INDEX = /people-directory-row-(?<index>\d+)/gu;
 
 /** Every file under `dir` modified since `sinceMs`, oldest first. */
-async function filesNewerThan(dir, sinceMs) {
+async function filesNewerThan(
+  dir: string,
+  sinceMs: number
+): Promise<Array<{ file: string; mtimeMs: number }>> {
   const entries = await fs
     .readdir(dir, { withFileTypes: true })
     .catch(() => []);
@@ -51,7 +54,7 @@ async function filesNewerThan(dir, sinceMs) {
  * zero, which the caller would be entitled to read as "no drops".
  * Consumed by tests/agent-e2e-mobile/flows/scroll-frames.mjs.
  */
-export async function readFrameEvidence(runDir, sinceMs) {
+export async function readFrameEvidence(runDir: string, sinceMs: number) {
   const debugRoot = path.join(runDir, "maestro-debug");
   const files = await filesNewerThan(debugRoot, sinceMs);
   const texts = await Promise.all(
@@ -65,7 +68,7 @@ export async function readFrameEvidence(runDir, sinceMs) {
  * oldest-first order. Exported so the contract can be tested without a device.
  * Consumed by frame-report.test.mjs.
  */
-export function parseFrameEvidence(texts) {
+export function parseFrameEvidence(texts: string[]) {
   let report = null;
   let maxRowIndex = -1;
   for (const text of texts) {

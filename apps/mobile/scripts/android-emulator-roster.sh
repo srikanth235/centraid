@@ -27,11 +27,11 @@ set -euo pipefail
 # the one lane that breaks this rule, and only for its pairing canary, because
 # there the later cells would be greyed by a prerequisite and would name it
 # wrongly. The per-suite exit-code collection this file used to spell as
-# `set +e; ec=0; … || ec=$?` now lives in run-roster.mjs's `runPlan`, so the
+# `set +e; ec=0; … || ec=$?` now lives in run-roster.ts's `runPlan`, so the
 # semantics are the same and there is one copy of them.
 #
 # The D3 promotion pipeline runs here and only here: both non-blocking Android
 # lanes may carry a `promoting` flow, the PR gate never does, and that asymmetry
 # is the rule `scripts/lint-e2e-wiring.mjs` enforces.
 export CENTRAID_MOBILE_LANE="${CENTRAID_MOBILE_LANE:-nightly-android}"
-node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform android
+node tests/agent-e2e-mobile/run-roster.ts --rung 4 --platform android

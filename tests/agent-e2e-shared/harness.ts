@@ -19,28 +19,84 @@ export function defaultRunId() {
  * job's `merge-multiple` download. Platform-less lanes (pairing, desktop,
  * web) see an empty segment and keep their exact current paths.
  */
-export function evidencePlatform(env = process.env) {
+export interface FlowResult {
+  pass?: boolean;
+  notes?: string;
+}
+
+export interface FlowVerdictInput {
+  repoRoot: string;
+  slug: string;
+  runDir: string;
+  elapsedMs: number;
+  error?: unknown;
+  notes: readonly string[];
+  result?: FlowResult | null;
+  metadata?: Record<string, unknown>;
+  debug?: string;
+  owner?: string;
+}
+
+export function evidencePlatform(env: NodeJS.ProcessEnv = process.env): string {
   return String(env.MAESTRO_PLATFORM ?? "")
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/gu, "");
 }
 
 /** `<owner-slug>` filename stem, platform-suffixed when MAESTRO_PLATFORM is set. */
-function evidenceSlug(owner) {
+function evidenceSlug(owner: string): string {
   const slug = owner.replaceAll(/[^a-z0-9]+/giu, "-").replace(/^-|-$/gu, "");
   const platform = evidencePlatform();
   return platform ? `${slug}-${platform}` : slug;
 }
 
+export interface QualityMeasurement {
+  name: string;
+  value: number;
+  unit?: string;
+  budget?: number;
+}
+
+export interface QualityResult {
+  lane: string;
+  owner: string;
+  measurements: QualityMeasurement[];
+  [field: string]: unknown;
+}
+
+export interface QualityHistoryPoint {
+  at: string;
+  value: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function historyFromFile(raw: string): QualityHistoryPoint[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed) || !Array.isArray(parsed.history)) return [];
+  return parsed.history.filter((entry): entry is QualityHistoryPoint => {
+    return (
+      isRecord(entry) &&
+      typeof entry.at === "string" &&
+      typeof entry.value === "number"
+    );
+  });
+}
+
 /** JavaScript-lane counterpart of @centraid/test-kit's recordQualityResult. */
-export async function recordQualityResult(repoRoot, result) {
+export async function recordQualityResult(
+  repoRoot: string,
+  result: QualityResult
+): Promise<void> {
   const directory = path.join(repoRoot, "artifacts", result.lane);
   await fs.mkdir(directory, { recursive: true });
   const platform = evidencePlatform();
   const file = path.join(directory, `${evidenceSlug(result.owner)}.json`);
-  let history = [];
+  let history: QualityHistoryPoint[] = [];
   try {
-    history = JSON.parse(await fs.readFile(file, "utf8")).history ?? [];
+    history = historyFromFile(await fs.readFile(file, "utf8"));
   } catch {
     history = [];
   }
@@ -82,7 +138,7 @@ export async function writeFlowVerdict({
   metadata = {},
   debug,
   owner,
-}) {
+}: FlowVerdictInput): Promise<boolean> {
   const pass = !error && result?.pass !== false;
   const lines = [
     `# ${slug}`,
@@ -98,7 +154,9 @@ export async function writeFlowVerdict({
   }
   lines.push("");
   if (error) {
-    lines.push("## Error", "```", error.stack ?? String(error), "```", "");
+    const stack =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
+    lines.push("## Error", "```", stack, "```", "");
     if (debug) lines.push("## Debug", "", debug, "");
   }
   if (notes.length) {

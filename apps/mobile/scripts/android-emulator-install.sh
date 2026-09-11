@@ -367,7 +367,7 @@ node scripts/test-report/prepare.mjs
 # Seeding here, before the emulator script hands off to Maestro, is what makes
 # the corpus precede the clone. It is idempotent, so the per-flow calls that
 # document each journey's fixture stay and cost nothing.
-node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+node tests/agent-e2e-mobile/seed-demo-corpus.ts
 
 export MAESTRO_PLATFORM=android
 # Read by lib/harness.mjs: it selects the installed applicationId for this build

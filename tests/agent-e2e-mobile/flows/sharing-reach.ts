@@ -34,14 +34,14 @@
 // #483's non-vacuous rules; this file is discovered by
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
-import { screenshot } from "../lib/ui-impact.mjs";
+} from "../lib/harness.ts";
+import { screenshot } from "../lib/ui-impact.ts";
 
 // Maestro reads a text selector as a regex anchored to the WHOLE node text,
 // and `·` is not a character it matches reliably — so the shared sentences are
@@ -246,7 +246,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
   // UI-impact evidence for #929: parked-intent waitingOn copy rides the
   // sharing seat. Same captured frame as the link surface; distinct filename
   // so the receipt can name this issue without reusing #825/#880 shots.
-  await screenshot("sharing-link-surface", "issue-929-share-reach.png");
+  await screenshot(ctx, "sharing-link-surface", "issue-929-share-reach.png");
 
   if (ctx.state.platform === "android") {
     try {

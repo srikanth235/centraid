@@ -50,8 +50,8 @@ If you are reviewing agent-authored test work, spend your attention here and let
 | Desktop journey | `apps/desktop/tests/e2e/*.spec.ts` | real Electron-only assertions | **PR path-filtered** + full nightly |
 | Web journey | `apps/web/tests/e2e/*.spec.ts` | real Chromium/PWA/network assertions | **PR path-filtered** + full nightly |
 | Mobile boot-condition | `tests/integration-mobile/*.integration.test.ts` | the app × state matrix (`dayone`/`pending`/`offline`/`stale`/`conflict`/`parked`) produced by a **real replica session against a real gateway process**, on Linux with no device | per PR |
-| Mobile journey | `tests/agent-e2e-mobile/flows/*.mjs` | native **release-artifact** assertions — OS state, gestures, process boundaries | **PR-gated (Android, the critical five)** + per-merge canary + nightly |
-| Pairing journey | `tests/agent-e2e-pairing/flows/*.mjs` | daemon/CLI/device and relay ceremony | nightly + exploratory |
+| Mobile journey | `tests/agent-e2e-mobile/flows/*.ts` | native **release-artifact** assertions — OS state, gestures, process boundaries | **PR-gated (Android, the critical five)** + per-merge canary + nightly |
+| Pairing journey | `tests/agent-e2e-pairing/flows/*.ts` | daemon/CLI/device and relay ceremony | nightly + exploratory |
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
 | Mutation | StrykerJS on 24 seeded packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
@@ -255,7 +255,7 @@ Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 
 `TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
-Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step). There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
+Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.ts`](tests/agent-e2e-mobile/lib/harness.ts) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step). There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
 
 Since [#890](https://github.com/srikanth235/centraid/issues/890) the mobile layer holds six properties the rest of this document assumes:
 
@@ -341,7 +341,7 @@ The aggregate ceiling is twelve minutes across the seven, in [`flows/home-apps-b
 
 ### The mobile roster and its rungs (#915 Wave 2)
 
-**One document, one runner.** [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json) is the single source for the device layer, and [`tests/agent-e2e-mobile/lib/roster.mjs`](tests/agent-e2e-mobile/lib/roster.mjs) is its only reader:
+**One document, one runner.** [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json) is the single source for the device layer, and [`tests/agent-e2e-mobile/lib/roster.ts`](tests/agent-e2e-mobile/lib/roster.ts) is its only reader:
 
 - `suites` — the ordered member list, the aggregate `budgetMs`, the `rungs`, the `platform`, the canary/reuse rules and the budget doc.
 - `flows` — the claim, the `status` (`scheduled` / `promoting` / `exploratory`), the suites it belongs to and a per-journey marginal `budgetMs`.
@@ -350,10 +350,10 @@ The aggregate ceiling is twelve minutes across the seven, in [`flows/home-apps-b
 One runner reads it:
 
 ```sh
-node tests/agent-e2e-mobile/run-roster.mjs --rung <2|3|4|5> --platform <android|ios> [--suite <id>] [--dry-run]
+node tests/agent-e2e-mobile/run-roster.ts --rung <2|3|4|5> --platform <android|ios> [--suite <id>] [--dry-run]
 ```
 
-It replaced seven `run-*-suite.mjs` files whose `const FLOWS` and `const BUDGET_MS` literals `lint:e2e-wiring`, `check:mobile-suite-budgets` and the report each parsed off disk in their own dialect, and none of which carried a rung. The six one-line shims that bridged the swap are gone with the last workflow that spelled their paths, so `run-roster.mjs` is the only runner on disk.
+It replaced seven `run-*-suite.mjs` files whose `const FLOWS` and `const BUDGET_MS` literals `lint:e2e-wiring`, `check:mobile-suite-budgets` and the report each parsed off disk in their own dialect, and none of which carried a rung. The six one-line shims that bridged the swap are gone with the last workflow that spelled their paths, so `run-roster.ts` is the only runner on disk.
 
 **The flags are the wiring, not a convenience.** `lint:e2e-wiring` derives what each lane schedules by reading the invocation the shipped workflow or shell script contains and resolving it through the roster. A runner selected by an environment variable would make every lane look identical to the gate whose whole job is telling a blocking lane from a nightly one — which is also why there is still one committed shell script per lane shape.
 
@@ -410,7 +410,7 @@ The weekly artifact has its own **eight-day freshness window** in the health rep
 
 ### Layer 4 — cost discipline
 
-Per-app journey budgets are tighten-only and sit beside the flows they own, so an overrun has an addressable app owner. Pairing/import/seeding is paid once per platform through the shared profile. Exclusive-state flows run first and restore the deterministic seed for the remaining apps. PR-time path filtering runs an app's journey only when its app surface changes. Parallelism is by SUITE, not by dynamic shard: `probes-suite`, `photos`, `home-apps`, `sharing` and `promoting-suite` are declared units with declared budgets in [`roster.json`](tests/agent-e2e-mobile/roster.json), and their partition is statically readable by `lint:e2e-wiring` through `tests/agent-e2e-mobile/lib/roster.mjs`. A shard list computed at dispatch time would be faster to bin-pack and would make the schedule underivable by the very linter that exists to prove a flow is scheduled, which is the wrong trade. Re-cut the partition from the observed p95 in `tests/agent-e2e-mobile/ledger/durations.json` once it holds three real runs.
+Per-app journey budgets are tighten-only and sit beside the flows they own, so an overrun has an addressable app owner. Pairing/import/seeding is paid once per platform through the shared profile. Exclusive-state flows run first and restore the deterministic seed for the remaining apps. PR-time path filtering runs an app's journey only when its app surface changes. Parallelism is by SUITE, not by dynamic shard: `probes-suite`, `photos`, `home-apps`, `sharing` and `promoting-suite` are declared units with declared budgets in [`roster.json`](tests/agent-e2e-mobile/roster.json), and their partition is statically readable by `lint:e2e-wiring` through `tests/agent-e2e-mobile/lib/roster.ts`. A shard list computed at dispatch time would be faster to bin-pack and would make the schedule underivable by the very linter that exists to prove a flow is scheduled, which is the wrong trade. Re-cut the partition from the observed p95 in `tests/agent-e2e-mobile/ledger/durations.json` once it holds three real runs.
 
 ### Layer 5 — honest floors per app
 

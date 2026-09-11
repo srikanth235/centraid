@@ -19,7 +19,8 @@ const ticket = await fetch(`${baseUrl}/centraid/_gateway/devices/ticket`, {
   }),
 });
 const result = await ticket.json().catch(() => ({}));
-if (!ticket.ok || result?.ok !== true || typeof result.ticket !== "string") {
+const payload = result as { ok?: unknown; ticket?: unknown };
+if (!ticket.ok || payload.ok !== true || typeof payload.ticket !== "string") {
   process.exit(1);
 }
 

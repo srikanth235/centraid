@@ -28,7 +28,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { ledgerPathFromEnv } from "./run-ledger.mjs";
+import { ledgerPathFromEnv } from "./run-ledger.ts";
 
 /**
  * The most recent ledger record for a flow on a platform, or null.
@@ -37,11 +37,21 @@ import { ledgerPathFromEnv } from "./run-ledger.mjs";
  * `runFlow` already wrote the classification, so the runner needs no second
  * classifier and the two can never disagree about why a run failed.
  */
+export interface LedgerRecord {
+  slug?: string;
+  flow?: string;
+  platform?: string;
+  failureClass?: string;
+  failureReason?: string;
+  signal?: string;
+  [field: string]: unknown;
+}
+
 export async function lastRecord(
-  flow,
-  platform,
+  flow: string,
+  platform: string | undefined,
   ledgerPath = ledgerPathFromEnv()
-) {
+): Promise<LedgerRecord | null> {
   const raw = await fs.readFile(ledgerPath, "utf8").catch(() => null);
   if (raw == null) return null;
   let ledger;
@@ -52,9 +62,10 @@ export async function lastRecord(
     // the flow's own verdict is still the authority on pass/fail.
     return null;
   }
-  const slug = path.posix.basename(flow, ".mjs");
-  const matching = (ledger.records ?? []).filter(
-    (record) =>
+  const slug = path.posix.basename(flow).replace(/\.(?:mjs|ts)$/u, "");
+  const records = Array.isArray(ledger.records) ? ledger.records : [];
+  const matching = records.filter(
+    (record: LedgerRecord) =>
       (record.slug === slug ||
         path.posix.basename(record.flow ?? "") === flow) &&
       (platform == null || record.platform === platform)
@@ -69,7 +80,13 @@ export async function lastRecord(
  *   way, because "not retried, and here is why" is the half a reader needs when
  *   a suite goes red and somebody asks whether it was flaky.
  */
-export function decideRetry({ record, alreadyRetried }) {
+export function decideRetry({
+  record,
+  alreadyRetried,
+}: {
+  record: LedgerRecord | null;
+  alreadyRetried: boolean;
+}): { retry: boolean; reason: string } {
   if (alreadyRetried) {
     return {
       retry: false,
@@ -104,7 +121,12 @@ export function decideRetry({ record, alreadyRetried }) {
  * @param platform `"ios"` | `"android"` | undefined
  * @param alreadyRetried whether this flow has spent its retry this run
  */
-export async function shouldRetry(flow, platform, alreadyRetried, ledgerPath) {
+export async function shouldRetry(
+  flow: string,
+  platform: string | undefined,
+  alreadyRetried: boolean,
+  ledgerPath?: string
+) {
   const record = await lastRecord(flow, platform, ledgerPath);
   return decideRetry({ record, alreadyRetried });
 }

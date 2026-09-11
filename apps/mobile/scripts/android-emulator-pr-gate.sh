@@ -14,7 +14,7 @@
 # THE RUNG AND THE SUITE ARE ON THE COMMAND LINE, not in an env var, and this
 # is still one script per lane shape. `scripts/lint-e2e-wiring.mjs` derives what
 # each lane schedules by reading the invocation the shipped script contains, and
-# resolves `--rung/--platform/--suite` through `tests/agent-e2e-mobile/lib/roster.mjs`.
+# resolves `--rung/--platform/--suite` through `tests/agent-e2e-mobile/lib/roster.ts`.
 # A script that branched on an environment variable would make a blocking lane
 # indistinguishable from a nightly one, which is exactly what its `promoting`
 # and `exploratory` rules depend on. See android-emulator-install.sh's header.
@@ -26,4 +26,4 @@ set -euo pipefail
 export CENTRAID_MOBILE_LANE=pr-gate
 # The rung-2 suite. Members, budget and the reason each member is in it:
 # tests/agent-e2e-mobile/roster.json plus flows/pr-gate-budget.md.
-node tests/agent-e2e-mobile/run-roster.mjs --rung 2 --platform android --suite pr-gate
+node tests/agent-e2e-mobile/run-roster.ts --rung 2 --platform android --suite pr-gate

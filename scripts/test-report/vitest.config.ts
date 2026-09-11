@@ -12,8 +12,8 @@ export default defineConfig({
     include: [
       "scripts/test-report/**/*.test.mjs",
       "scripts/mutation/**/*.test.mjs",
-      "tests/agent-e2e-shared/**/*.test.mjs",
-      "tests/agent-e2e-mobile/lib/**/*.test.mjs",
+      "tests/agent-e2e-shared/**/*.test.ts",
+      "tests/agent-e2e-mobile/lib/**/*.test.ts",
     ],
     environment: "node",
     pool: "forks",

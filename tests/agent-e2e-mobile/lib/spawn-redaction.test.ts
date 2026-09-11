@@ -17,9 +17,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { redactedSteps } from "./spawn.mjs";
+import { redactedSteps } from "./spawn.ts";
 
-describe("redactedSteps", () => {
+describe(redactedSteps, () => {
   const TICKET = "ctk_live_9f2a4c8e1b7d3a6f5e0c";
 
   it("keeps the step lines that name the failed directive", () => {
@@ -42,7 +42,7 @@ describe("redactedSteps", () => {
         "Launch app... COMPLETED",
       ].join("\n")
     );
-    expect(steps).toEqual(["Launch app... COMPLETED"]);
+    expect(steps).toStrictEqual(["Launch app... COMPLETED"]);
     expect(steps.join("\n")).not.toContain(TICKET);
   });
 
@@ -50,7 +50,7 @@ describe("redactedSteps", () => {
   // step-line filter cannot carry a secret through.
   it("redacts a secret that reaches a step line anyway", () => {
     const steps = redactedSteps(`Input text ${TICKET}... COMPLETED`, [TICKET]);
-    expect(steps).toEqual(["Input text «redacted»... COMPLETED"]);
+    expect(steps).toStrictEqual(["Input text «redacted»... COMPLETED"]);
     expect(steps.join("\n")).not.toContain(TICKET);
   });
 
@@ -73,7 +73,7 @@ describe("redactedSteps", () => {
       null,
       7,
     ]);
-    expect(steps).toEqual(["Launch app... COMPLETED"]);
+    expect(steps).toStrictEqual(["Launch app... COMPLETED"]);
   });
 
   it("bounds the output so a failure cannot become a dump", () => {
@@ -88,8 +88,8 @@ describe("redactedSteps", () => {
   });
 
   it("says nothing when no line is in step-line shape", () => {
-    expect(redactedSteps("java.lang.Exception: boom\n  at Foo.bar")).toEqual(
-      []
-    );
+    expect(
+      redactedSteps("java.lang.Exception: boom\n  at Foo.bar")
+    ).toStrictEqual([]);
   });
 });

@@ -21,7 +21,7 @@ import {
   assertUpgradePreservedData,
   judgeUpgradeJourney,
   resolvePreviousInstaller,
-} from "../lib/upgrade.mjs";
+} from "../lib/upgrade.ts";
 
 const installer = resolvePreviousInstaller(process.env);
 
@@ -49,7 +49,13 @@ if (!existsSync(rigPath)) {
 }
 
 const rig = await import(pathToFileURL(rigPath).href);
-const result = { available: true, installedPrev: false, upgraded: false };
+const result: {
+  available: boolean;
+  installedPrev: boolean;
+  upgraded: boolean;
+  preservation?: ReturnType<typeof assertUpgradePreservedData>;
+  journalPassed?: boolean;
+} = { available: true, installedPrev: false, upgraded: false };
 let home;
 try {
   const installed = await rig.installPrevious(installer.installer);
@@ -73,7 +79,7 @@ process.exit(verdict === "fail" ? 1 : 0);
 
 // ---------------------------------------------------------------------------
 
-function report(outcome, detail) {
+function report(outcome: string, detail: string) {
   console.log(
     `[install-upgrade-lifecycle] ${outcome.toUpperCase()}: ${detail}`
   );

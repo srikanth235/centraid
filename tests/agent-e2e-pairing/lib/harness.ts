@@ -28,7 +28,7 @@ import {
 import {
   defaultRunId,
   writeFlowVerdict,
-} from "../../agent-e2e-shared/harness.mjs";
+} from "../../agent-e2e-shared/harness.ts";
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -55,7 +55,7 @@ const RUNS_DIR = path.join(__dirname, "..", "runs");
 
 // Exported so lib/docker-harness.mjs (cross-network-relay flow) can reuse
 // the exact same scoped build instead of re-deriving the turbo filter set.
-export async function ensureBuilt() {
+export async function ensureBuilt(): Promise<void> {
   const checked = await Promise.all(
     [GATEWAY_CLI, TUNNEL_DIST].map(async (file) => {
       try {
@@ -90,13 +90,13 @@ export async function ensureBuilt() {
     );
     proc.on("error", reject);
     proc.on("exit", (code) => {
-      if (code === 0) resolve();
+      if (code === 0) resolve(undefined);
       else reject(new Error(`build exited ${code}`));
     });
   });
 }
 
-function pidAlive(pid) {
+function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -105,7 +105,10 @@ function pidAlive(pid) {
   }
 }
 
-async function killAndWait(pid, { timeoutMs = 8000 } = {}) {
+async function killAndWait(
+  pid: number | undefined,
+  { timeoutMs = 8000 }: { timeoutMs?: number } = {}
+): Promise<void> {
   if (!pid || !pidAlive(pid)) return;
   try {
     process.kill(pid, "SIGTERM");
@@ -135,7 +138,7 @@ async function reserveLoopbackPort() {
   const server = createServer();
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
+    server.listen(0, "127.0.0.1", () => resolve(undefined));
   });
   const address = server.address();
   if (!address || typeof address === "string") {
@@ -148,7 +151,7 @@ async function reserveLoopbackPort() {
         reject(error);
         return;
       }
-      resolve();
+      resolve(undefined);
     });
   });
   return address.port;
@@ -160,9 +163,13 @@ async function reserveLoopbackPort() {
  * stream to `logFile` so a failed run keeps the daemon's own story.
  */
 async function spawnDaemon(
-  dataDir,
-  logFile,
-  { timeoutMs = 60000, port, controlSecret } = {}
+  dataDir: string,
+  logFile: string,
+  {
+    timeoutMs = 60000,
+    port,
+    controlSecret,
+  }: { timeoutMs?: number; port?: number; controlSecret?: string } = {}
 ) {
   const log = createWriteStream(logFile, { flags: "a" });
   // No --init-vault: a fresh data dir auto-founds Personal (#603).
@@ -185,8 +192,8 @@ async function spawnDaemon(
     stdio: ["ignore", "pipe", "pipe"],
   });
   let buffer = "";
-  const wanted = { url: undefined, token: undefined, endpointId: undefined };
-  const scan = (chunk) => {
+  const wanted: { url?: string; token?: string; endpointId?: string } = {};
+  const scan = (chunk: Buffer | string) => {
     log.write(chunk);
     buffer += chunk.toString("utf8");
     wanted.url ??= buffer.match(
@@ -226,14 +233,18 @@ async function spawnDaemon(
           `gateway info returned ${response.status} before ready`
         );
       }
-      const info = await response.json();
-      if (
-        typeof info.endpointTicket !== "string" ||
-        info.endpointTicket.length === 0
-      ) {
+      const info: unknown = await response.json();
+      const endpointTicket =
+        info &&
+        typeof info === "object" &&
+        "endpointTicket" in info &&
+        typeof info.endpointTicket === "string"
+          ? info.endpointTicket
+          : "";
+      if (endpointTicket.length === 0) {
         throw new Error("gateway info did not publish an endpoint ticket");
       }
-      return { pid: child.pid, ...wanted, endpointTicket: info.endpointTicket };
+      return { pid: child.pid, ...wanted, endpointTicket };
     }
     if (Date.now() - start >= timeoutMs) {
       await killAndWait(child.pid);
@@ -250,7 +261,11 @@ async function spawnDaemon(
 }
 
 /** Run one admin CLI command against the run's data dir; returns stdout. */
-function cli(dataDir, args, { allowFailure = false } = {}) {
+function cli(
+  dataDir: string,
+  args: string[],
+  { allowFailure = false }: { allowFailure?: boolean } = {}
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
@@ -278,14 +293,21 @@ function cli(dataDir, args, { allowFailure = false } = {}) {
 }
 
 /** Decode the pasteable one-line token (mirror of pairing-store.ts). */
-export function parseTicket(raw) {
-  const payload = JSON.parse(
+export function parseTicket(raw: string): Record<string, unknown> {
+  const payload: unknown = JSON.parse(
     Buffer.from(raw.trim(), "base64url").toString("utf8")
   );
-  if (payload.v !== 1 || payload.kind !== "centraid-gw-pair") {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("v" in payload) ||
+    !("kind" in payload) ||
+    payload.v !== 1 ||
+    payload.kind !== "centraid-gw-pair"
+  ) {
     throw new Error(`not a centraid-gw-pair ticket: ${raw.slice(0, 40)}…`);
   }
-  return payload;
+  return payload as Record<string, unknown>;
 }
 
 /**
@@ -305,7 +327,53 @@ export function parseTicket(raw) {
  *
  * Throw on failure, return { pass: true, notes } on success.
  */
-export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
+export interface PairingDevice {
+  endpointId: { toString: () => string };
+  connect: (ticket: unknown) => Promise<{
+    close: (code: bigint, reason: unknown[]) => void;
+    closed?: Promise<unknown>;
+  }>;
+  close: () => Promise<void>;
+}
+
+export interface PairingFlowCtx {
+  gateway: {
+    url?: string;
+    token?: string;
+    endpointId?: string;
+    pid?: number;
+    [field: string]: unknown;
+  };
+  _gwTicket?: () => unknown;
+  dataDir: string;
+  cli: (
+    args: string[],
+    opts?: { allowFailure?: boolean }
+  ) => Promise<{ code: number | null; stdout: string; stderr: string }>;
+  mintTicket: (opts?: {
+    vault?: string;
+    ttlMinutes?: number;
+  }) => Promise<{ raw: string; payload: Record<string, unknown> }>;
+  newDevice: () => Promise<PairingDevice>;
+  request: (device: PairingDevice, target: string) => Promise<unknown>;
+  requestJson: (
+    device: PairingDevice,
+    method: string,
+    target: string,
+    body?: unknown
+  ) => Promise<{ response: unknown; json: unknown }>;
+  expectTunnelRefused: (device: PairingDevice) => Promise<void>;
+  restartGateway: () => Promise<void>;
+  note: (msg: string) => void;
+}
+
+export async function runFlow(
+  slug: string,
+  fn: (
+    ctx: PairingFlowCtx
+  ) => Promise<{ pass?: boolean; notes?: string } | void>,
+  { fresh: _fresh = false }: { fresh?: boolean } = {}
+): Promise<void> {
   await ensureBuilt();
   const runId = `${slug}-${defaultRunId()}`;
   const runDir = path.join(RUNS_DIR, runId);
@@ -319,21 +387,35 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
     "host-credentials"
   );
 
-  const state = {
+  const state: {
+    runId: string;
+    runDir: string;
+    workspace: string;
+    dataDir: string;
+    port: number;
+    controlSecret: string;
+    gateway?: {
+      pid?: number;
+      url?: string;
+      token?: string;
+      endpointId?: string;
+      endpointTicket?: string;
+    };
+  } = {
     runId,
     runDir,
     workspace,
     dataDir,
     port: await reserveLoopbackPort(),
     controlSecret: randomBytes(32).toString("hex"),
-    gateway: undefined,
   };
   console.log(`[runFlow] ${slug}`);
   console.log(`  run dir : ${path.relative(REPO_ROOT, runDir)}`);
 
-  const devices = [];
-  const notes = [];
-  let error, result;
+  const devices: PairingDevice[] = [];
+  const notes: string[] = [];
+  let error: unknown;
+  let result: { pass?: boolean; notes?: string } | void = undefined;
   const t0 = Date.now();
   try {
     state.gateway = await spawnDaemon(dataDir, logFile, {
@@ -350,13 +432,16 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
       get gateway() {
         return state.gateway;
       },
-      cli: (args, opts) =>
+      cli: (args: string[], opts?: { allowFailure?: boolean }) =>
         cli(
           dataDir,
           args[0] === "pair" ? [...args, "--port", String(state.port)] : args,
           opts
         ),
-      mintTicket: async ({ vault, ttlMinutes } = {}) => {
+      mintTicket: async ({
+        vault,
+        ttlMinutes,
+      }: { vault?: string; ttlMinutes?: number } = {}) => {
         const args = ["pair"];
         if (vault) args.push("--vault", vault);
         if (ttlMinutes !== undefined)
@@ -369,11 +454,13 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
         return { raw, payload: parseTicket(raw) };
       },
       newDevice: async () => {
-        const device = await createTunnelClient({ relays: "disabled" });
+        const device = (await createTunnelClient({
+          relays: "disabled",
+        })) as PairingDevice;
         devices.push(device);
         return device;
       },
-      request: async (device, target) => {
+      request: async (device: PairingDevice, target: string) => {
         const connection = await device.connect(ctx._gwTicket());
         try {
           return await tunnelRequest(connection, { method: "GET", target });
@@ -381,7 +468,12 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
           connection.close(0n, []);
         }
       },
-      requestJson: async (device, method, target, body) => {
+      requestJson: async (
+        device: PairingDevice,
+        method: string,
+        target: string,
+        body?: unknown
+      ) => {
         const connection = await device.connect(ctx._gwTicket());
         try {
           const response = await tunnelRequest(connection, {
@@ -403,7 +495,7 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
       // The live host is authoritative. Restart republishes a dial ticket for
       // the same durable EndpointId; no address cache participates in identity.
       _gwTicket: () => state.gateway.endpointTicket,
-      authorizeProbe: async (endpointId) => {
+      authorizeProbe: async (endpointId: string) => {
         const response = await fetch(
           `${state.gateway.url}/centraid/_gateway/tunnel/authorize?endpointId=${encodeURIComponent(endpointId)}`,
           {
@@ -415,7 +507,7 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
         );
         return { response, json: await response.json() };
       },
-      expectTunnelRefused: async (device) => {
+      expectTunnelRefused: async (device: PairingDevice) => {
         const connection = await device.connect(ctx._gwTicket());
         try {
           // Mirror packages/tunnel/src/gateway-endpoint.test.ts: the refusal
@@ -455,18 +547,21 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
           controlSecret: state.controlSecret,
         });
       },
-      note: (m) => {
+      note: (m: string) => {
         notes.push(m);
         console.log(`  note    : ${m}`);
       },
-    };
+    } as PairingFlowCtx;
 
     result = await fn(ctx);
   } catch (caughtError) {
     error = caughtError;
   } finally {
     await Promise.all(
-      devices.map(async (device) => device.close().catch(() => {}))
+      devices.map(async (device) => {
+        const closer = device as { close?: () => Promise<unknown> };
+        await closer.close?.().catch(() => undefined);
+      })
     );
     await killAndWait(state.gateway?.pid);
     if (previousCredentialRoot === undefined) {
@@ -485,12 +580,12 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
     elapsedMs,
     error,
     notes,
-    result,
+    result: result ?? undefined,
     metadata: {
       "gateway data dir": state.dataDir,
       "gateway endpoint": state.gateway?.endpointId ?? "never became ready",
     },
-    owner: `tests/agent-e2e-pairing/flows/${slug}.mjs`,
+    owner: `tests/agent-e2e-pairing/flows/${slug}.ts`,
   });
 
   // Keep the workspace on failure so gateway.db, vaults/, keys/, and

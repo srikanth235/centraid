@@ -21,12 +21,12 @@
 // Both assertions are on copy the asserted screen alone publishes (issue #483's
 // non-vacuous rules; this file is discovered by scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 /** Balances' own ambient sentence — `apps/tally/view-copy.ts` BALANCES_STATUS,
  *  drawn into the app bar by `TallyScreen.tsx` and published nowhere else. */

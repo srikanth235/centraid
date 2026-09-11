@@ -25,7 +25,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { flowPath, loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
+import { flowPath, loadRoster } from "../tests/agent-e2e-mobile/lib/roster.ts";
 
 const FLOWS_DIR = "tests/agent-e2e-mobile/flows";
 const PINS = "tests/agent-e2e-mobile/flows/claim-pins.json";
@@ -49,8 +49,11 @@ const MIN_CLAIM = 40;
  */
 export function discoverFlows(entries) {
   const flows = entries
-    .filter((name) => name.endsWith(".mjs"))
-    .map((name) => name.slice(0, -".mjs".length))
+    .filter(
+      (name) =>
+        /\.(?:mjs|ts)$/u.test(name) && !/\.test\.(?:mjs|ts)$/u.test(name)
+    )
+    .map((name) => name.replace(/\.(?:mjs|ts)$/u, ""))
     .sort();
   return flows.length > 0 ? flows : undefined;
 }
@@ -220,7 +223,11 @@ function main() {
   const roster = loadRoster();
   const rostered = Object.fromEntries(
     flows
-      .map((flow) => [flow, roster.flows?.[flowPath(`${flow}.mjs`)]?.claim])
+      .map((flow) => [
+        flow,
+        roster.flows?.[flowPath(`${flow}.ts`)]?.claim ??
+          roster.flows?.[flowPath(`${flow}.mjs`)]?.claim,
+      ])
       .filter(([, claim]) => claim !== undefined)
   );
   const errors = [

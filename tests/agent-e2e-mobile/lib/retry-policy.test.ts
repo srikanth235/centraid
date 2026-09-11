@@ -13,12 +13,12 @@ import { describe, expect, test } from "vitest";
 
 import { seededRandom } from "@centraid/test-kit/random";
 
-import { decideRetry, lastRecord, shouldRetry } from "./retry-policy.mjs";
+import { decideRetry, lastRecord, shouldRetry } from "./retry-policy.ts";
 
 const scratch = seededRandom(890);
 
 const record = (over = {}) => ({
-  flow: "tests/agent-e2e-mobile/flows/cold-start.mjs",
+  flow: "tests/agent-e2e-mobile/flows/cold-start.ts",
   slug: "cold-start",
   platform: "android",
   failureClass: "product",
@@ -26,7 +26,7 @@ const record = (over = {}) => ({
   ...over,
 });
 
-describe("decideRetry", () => {
+describe(decideRetry, () => {
   test("an infrastructure failure earns exactly one retry", () => {
     const verdict = decideRetry({
       record: record({
@@ -91,7 +91,7 @@ describe("decideRetry", () => {
   });
 });
 
-describe("lastRecord", () => {
+describe(lastRecord, () => {
   async function withLedger(records, run) {
     // Seeded, per docs/coding-standards.md's test seams: an unseeded draw makes
     // a failure unreproducible from the failing run's own output. The value only
@@ -125,22 +125,24 @@ describe("lastRecord", () => {
       [record({ slug: "notes-library", flow: "flows/notes-library.mjs" })],
       (file) => lastRecord("cold-start.mjs", "android", file)
     );
-    expect(found).toBe(null);
+    expect(found).toBeNull();
   });
 
   test("an absent or corrupt ledger yields null, and therefore no retry", async () => {
     // The ledger is instrumentation; it must never be able to fail a suite, and
     // it must never be able to buy one a retry it did not earn.
-    expect(await lastRecord("cold-start.mjs", "android", "/nonexistent")).toBe(
-      null
-    );
+    await expect(
+      lastRecord("cold-start.mjs", "android", "/nonexistent")
+    ).resolves.toBeNull();
     const file = path.join(
       tmpdir(),
       `centraid-retry-corrupt-${process.pid}.json`
     );
     await fs.writeFile(file, "{ not json");
     try {
-      expect(await lastRecord("cold-start.mjs", "android", file)).toBe(null);
+      await expect(
+        lastRecord("cold-start.mjs", "android", file)
+      ).resolves.toBeNull();
       expect(
         (await shouldRetry("cold-start.mjs", "android", false, file)).retry
       ).toBe(false);

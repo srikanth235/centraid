@@ -3,7 +3,7 @@
 // reach it (they run gateway + device on the same host with device relays
 // explicitly disabled) and how this one forces it (two Docker containers on
 // two non-interconnected bridge networks).
-import { runFlow } from "../lib/docker-harness.mjs";
+import { runFlow } from "../lib/docker-harness.ts";
 
 await runFlow("cross-network-relay", async (ctx) => {
   // 1. Mint for the auto-founded Personal vault (#603);
@@ -84,13 +84,13 @@ await runFlow("cross-network-relay", async (ctx) => {
   // @number0/iroh's native Connection exposes `paths()` with an `isRelay`
   // flag per candidate path (packages/tunnel/src/iroh.ts, extended in this
   // change to declare it — it was already present on the native binding,
-  // just not in the repo's hand-written TS surface). device-redeem.mjs
+  // just not in the repo's hand-written TS surface). device-redeem.ts
   // reads it right after the tunneled probe, once a path has actually been
   // selected, and reports it as `device.path` (null if none was selected).
   if (!device.path) {
     throw new Error(
       "device reported no selected path — cannot confirm relay traversal; check " +
-        "device-redeem.mjs's paths() call and its stdout JSON contract"
+        "device-redeem.ts's paths() call and its stdout JSON contract"
     );
   }
   if (!device.path.isRelay) {

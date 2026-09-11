@@ -45,7 +45,9 @@ export const DEFAULT_LEDGER_PATH = path.join(
 );
 
 /** `CENTRAID_MOBILE_LEDGER` exists so a test never writes the committed file. */
-export function ledgerPathFromEnv(env = process.env) {
+export function ledgerPathFromEnv(
+  env: NodeJS.ProcessEnv = process.env
+): string {
   const override = String(env.CENTRAID_MOBILE_LEDGER ?? "").trim();
   return override || DEFAULT_LEDGER_PATH;
 }
@@ -69,34 +71,55 @@ const REQUIRED_FIELDS = [
 ];
 
 /** The grouping key for every window, summary and sort in this module. */
-export function ledgerKey(record) {
+export function ledgerKey(record: { flow: string; platform: string }): string {
   return `${record.flow}::${record.platform}`;
 }
 
-function validateRecord(record) {
+export interface RunLedgerRecord {
+  flow: string;
+  slug: string;
+  platform: string;
+  device: string;
+  startedAt: string;
+  durationMs: number;
+  pass: boolean;
+  failureClass: string | null;
+  failureReason: string;
+  lane: string;
+  runId: string;
+  commit: string;
+}
+
+function validateRecord(record: unknown): RunLedgerRecord {
   if (record == null || typeof record !== "object") {
     throw new TypeError("run ledger record must be an object");
   }
+  const rec = record as Record<string, unknown>;
   for (const field of REQUIRED_FIELDS) {
-    if (!Object.hasOwn(record, field)) {
+    if (!Object.hasOwn(rec, field)) {
       throw new TypeError(`run ledger record is missing "${field}"`);
     }
   }
-  if (!record.flow || !record.platform) {
+  if (!rec.flow || !rec.platform) {
     throw new TypeError(
       'run ledger record needs a non-empty "flow" and "platform" — they are the window key'
     );
   }
-  if (!Number.isFinite(record.durationMs)) {
+  if (!Number.isFinite(rec.durationMs)) {
     throw new TypeError('run ledger record needs a numeric "durationMs"');
   }
   // Field order is fixed here, not taken from the caller's object: a stable
   // key order is what keeps a re-serialized ledger byte-identical to one an
   // earlier run wrote, so an unrelated append is not a whole-file diff.
-  return Object.fromEntries(REQUIRED_FIELDS.map((f) => [f, record[f]]));
+  return Object.fromEntries(
+    REQUIRED_FIELDS.map((f) => [f, rec[f]])
+  ) as unknown as RunLedgerRecord;
 }
 
-async function readLedger(ledgerPath) {
+async function readLedger(ledgerPath: string): Promise<{
+  version: number;
+  records: RunLedgerRecord[];
+}> {
   try {
     const parsed = JSON.parse(await fs.readFile(ledgerPath, "utf8"));
     return { version: LEDGER_VERSION, records: parsed.records ?? [] };
@@ -109,20 +132,27 @@ async function readLedger(ledgerPath) {
 }
 
 /** Append one record and re-window every key. Pure — exported for the test. */
-export function boundedAppend(ledger, record) {
-  const groups = new Map();
+export function boundedAppend(
+  ledger: { records?: RunLedgerRecord[] },
+  record: RunLedgerRecord
+): { version: number; records: RunLedgerRecord[] } {
+  const groups = new Map<string, RunLedgerRecord[]>();
   for (const existing of [...(ledger.records ?? []), record]) {
     const key = ledgerKey(existing);
     groups.set(key, [...(groups.get(key) ?? []), existing]);
   }
-  const records = [];
+  const records: RunLedgerRecord[] = [];
   for (const key of [...groups.keys()].sort()) {
-    records.push(...groups.get(key).slice(-MAX_RECORDS_PER_KEY));
+    records.push(...(groups.get(key) ?? []).slice(-MAX_RECORDS_PER_KEY));
   }
   return { version: LEDGER_VERSION, records };
 }
 
-async function writeWithRetry(ledgerPath, record, attemptsLeft) {
+async function writeWithRetry(
+  ledgerPath: string,
+  record: RunLedgerRecord,
+  attemptsLeft: number
+) {
   try {
     const next = boundedAppend(await readLedger(ledgerPath), record);
     await fs.mkdir(path.dirname(ledgerPath), { recursive: true });
@@ -147,7 +177,10 @@ async function writeWithRetry(ledgerPath, record, attemptsLeft) {
  * @param {object} record `{flow, slug, platform, device, startedAt, durationMs,
  *   pass, failureClass, failureReason, lane, runId, commit}`
  */
-export async function appendRunRecord(record, { ledgerPath } = {}) {
+export async function appendRunRecord(
+  record: unknown,
+  { ledgerPath }: { ledgerPath?: string } = {}
+) {
   return writeWithRetry(
     ledgerPath ?? ledgerPathFromEnv(),
     validateRecord(record),
@@ -161,13 +194,13 @@ export async function appendRunRecord(record, { ledgerPath } = {}) {
  * variant because every consumer here is a BUDGET — a ceiling has to be a value
  * the rig actually produced, not one averaged between two it did.
  */
-export function percentile(values, p) {
+export function percentile(values: number[], p: number): number | null {
   const sorted = [...values]
     .filter((value) => Number.isFinite(value))
     .sort((left, right) => left - right);
   if (sorted.length === 0) return null;
   const rank = Math.ceil((p / 100) * sorted.length);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, rank - 1))];
+  return sorted[Math.min(sorted.length - 1, Math.max(0, rank - 1))] ?? null;
 }
 
 /**
@@ -176,20 +209,24 @@ export function percentile(values, p) {
  * ratchet reads; a budget derived from it must cite `runs` (see
  * ledger/README.md) — a p95 over two samples is not a p95.
  */
-export function summarize(ledger) {
-  const groups = new Map();
+export function summarize(
+  ledger: { records?: RunLedgerRecord[] } | null | undefined
+) {
+  const groups = new Map<string, RunLedgerRecord[]>();
   for (const record of ledger?.records ?? []) {
     const key = ledgerKey(record);
     groups.set(key, [...(groups.get(key) ?? []), record]);
   }
-  const summary = {};
+  const summary: Record<string, unknown> = {};
   for (const key of [...groups.keys()].sort()) {
-    const records = groups.get(key);
+    const records = groups.get(key) ?? [];
     const durations = records.map((record) => record.durationMs);
     const failures = records.filter((record) => record.pass === false);
+    const first = records[0];
+    if (!first) continue;
     summary[key] = {
-      flow: records[0].flow,
-      platform: records[0].platform,
+      flow: first.flow,
+      platform: first.platform,
       runs: records.length,
       p50Ms: percentile(durations, 50),
       p95Ms: percentile(durations, 95),

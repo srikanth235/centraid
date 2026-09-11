@@ -1,3 +1,5 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
 // W5.3 (#842) — unit pins for the released-binary skew judge. `node --test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -6,7 +8,7 @@ import {
   SKEW_BLOCKERS,
   judgeSkewJourney,
   resolveReleasedClient,
-} from "./skew.mjs";
+} from "./skew.ts";
 
 test("resolveReleasedClient: no env → blocked-external skip with citation", () => {
   const r = resolveReleasedClient({});

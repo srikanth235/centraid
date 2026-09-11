@@ -14,7 +14,7 @@ const OWNER = "tests/perf/gateway-request.perf.test.ts";
 
 // --- Budgets ---------------------------------------------------------------
 // Both measured 2026-07-19 (darwin arm64) against the gateway running in a
-// FORKED CHILD (see gateway-idle-server.mjs), self-reporting its own CPU.
+// FORKED CHILD (see gateway-idle-server.ts), self-reporting its own CPU.
 //
 // Request p95 baseline ≈ 40 ms (60 GETs of /centraid/_apps). Budget = ~3× = 120.
 // Idle CPU baseline ≈ 1–3 ms of CPU per second of wall-clock over a 5 s idle
@@ -44,7 +44,7 @@ describe("gateway-request.perf", () => {
     const root = await tempDir("gateway-perf-");
     const coldStarted = performance.now();
     const child = fork(
-      path.resolve("tests/perf/fixtures/gateway-idle-server.mjs"),
+      path.resolve("tests/perf/fixtures/gateway-idle-server.ts"),
       [root],
       {
         stdio: ["ignore", "pipe", "pipe", "ipc"],

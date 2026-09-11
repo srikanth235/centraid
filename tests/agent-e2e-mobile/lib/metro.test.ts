@@ -1,15 +1,15 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { waitForMetroReachable } from "./metro.mjs";
+import { waitForMetroReachable } from "./metro.ts";
 
-describe("waitForMetroReachable", () => {
+describe(waitForMetroReachable, () => {
   test("waits through transient startup failures", async () => {
     const probe = vi
-      .fn()
+      .fn<() => Promise<boolean>>()
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
-    const sleep = vi.fn().mockResolvedValue(undefined);
+    const sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue();
 
     await expect(
       waitForMetroReachable({ attempts: 5, intervalMs: 25, probe, sleep })
@@ -21,8 +21,8 @@ describe("waitForMetroReachable", () => {
   });
 
   test("stops after the bounded attempt budget", async () => {
-    const probe = vi.fn().mockResolvedValue(false);
-    const sleep = vi.fn().mockResolvedValue(undefined);
+    const probe = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
+    const sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue();
 
     await expect(
       waitForMetroReachable({ attempts: 3, intervalMs: 10, probe, sleep })

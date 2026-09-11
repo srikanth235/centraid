@@ -10,12 +10,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { countMaestroAssertions } from "./failure-class.mjs";
+import { countMaestroAssertions } from "./failure-class.ts";
 import {
   prependPrefix,
   restartCommands,
   reusePairedCommands,
-} from "./harness.mjs";
+} from "./harness.ts";
 
 const CHUNK = `appId: dev.centraid.mobile
 ---
@@ -23,7 +23,7 @@ const CHUNK = `appId: dev.centraid.mobile
 - assertVisible: "New note"
 `;
 
-describe("prependPrefix", () => {
+describe(prependPrefix, () => {
   it("leaves a chunk untouched when nothing is staged", () => {
     expect(prependPrefix("", CHUNK)).toBe(CHUNK);
   });

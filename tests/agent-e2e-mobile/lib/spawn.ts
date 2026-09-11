@@ -1,15 +1,28 @@
 import { spawn } from "node:child_process";
+import type { SpawnOptions } from "node:child_process";
 
 const KILL_GRACE_MS = 5_000;
 
+interface SpawnTimeoutOptions extends SpawnOptions {
+  errorLabel: string;
+  onFailure?: (output: string) => void;
+  timeoutMs: number;
+}
+
 function spawnWithTimeout(
-  cmd,
-  args,
-  { errorLabel, onFailure, stdio, timeoutMs, ...spawnOptions }
-) {
+  cmd: string,
+  args: string[],
+  {
+    errorLabel,
+    onFailure,
+    stdio,
+    timeoutMs,
+    ...spawnOptions
+  }: SpawnTimeoutOptions
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { ...spawnOptions, stdio });
-    let forceKillTimer;
+    let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
     let timedOut = false;
     // Only ever populated when the caller asked for pipes. Held in memory
@@ -17,7 +30,7 @@ function spawnWithTimeout(
     // whatever Maestro echoed, and only `onFailure` decides what may be said.
     let captured = "";
     if (onFailure) {
-      const keep = (chunk) => {
+      const keep = (chunk: string) => {
         captured += chunk;
       };
       child.stdout?.setEncoding("utf8").on("data", keep);
@@ -28,7 +41,7 @@ function spawnWithTimeout(
       clearTimeout(timeout);
       if (forceKillTimer) clearTimeout(forceKillTimer);
     };
-    const finish = (callback) => {
+    const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
       cleanup();
@@ -66,7 +79,16 @@ function spawnWithTimeout(
   });
 }
 
-export function spawnLive(cmd, args, options) {
+type SpawnCallerOptions = Omit<
+  SpawnTimeoutOptions,
+  "errorLabel" | "onFailure" | "stdio"
+> & { secrets?: unknown[] };
+
+export function spawnLive(
+  cmd: string,
+  args: string[],
+  options: SpawnCallerOptions
+): Promise<void> {
   // `secrets` is dropped rather than forwarded: a non-sensitive chunk has none
   // to redact, and passing an unknown key through to `spawn()` is noise.
   const { secrets: _secrets, ...rest } = options;
@@ -101,17 +123,22 @@ const FAILURE_TAIL = 12;
  *   2. every secret is replaced by exact-string match anyway, so a value that
  *      somehow reached a step line still cannot be printed.
  */
-export function redactedSteps(output, secrets = []) {
-  const scrubbed = secrets
-    .filter((secret) => typeof secret === "string" && secret.length > 0)
-    .reduce(
-      (text, secret) => text.split(secret).join("«redacted»"),
-      String(output)
-    );
+export function redactedSteps(
+  output: string,
+  secrets: unknown[] = []
+): string[] {
+  const tokens = secrets.filter(
+    (secret): secret is string =>
+      typeof secret === "string" && secret.length > 0
+  );
+  const scrubbed = tokens.reduce(
+    (text, secret) => text.split(secret).join("«redacted»"),
+    String(output)
+  );
   return scrubbed
     .split("\n")
-    .map((line) => line.trimEnd())
-    .filter((line) => line !== "" && STEP_LINE.test(line))
+    .map((line: string) => line.trimEnd())
+    .filter((line: string) => line !== "" && STEP_LINE.test(line))
     .slice(-FAILURE_TAIL);
 }
 
@@ -130,7 +157,11 @@ export function redactedSteps(output, secrets = []) {
  * itself is no more printable than before; what changed is that a failure says
  * which directive it died on.
  */
-export function spawnQuiet(cmd, args, options) {
+export function spawnQuiet(
+  cmd: string,
+  args: string[],
+  options: SpawnCallerOptions
+): Promise<void> {
   const { secrets = [], ...rest } = options;
   return spawnWithTimeout(cmd, args, {
     ...rest,

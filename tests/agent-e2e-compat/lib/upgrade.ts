@@ -39,7 +39,13 @@ export const UPGRADE_BLOCKERS = Object.freeze({
  * @returns {{available: true, installer: string} | {available: false, reason: string}}
  *          the resolved installer, or a #790 blocked-external skip.
  */
-export function resolvePreviousInstaller(env = {}) {
+export type PreviousInstaller =
+  | { available: true; installer: string }
+  | { available: false; reason: string };
+
+export function resolvePreviousInstaller(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = {}
+): PreviousInstaller {
   const installer = nonEmpty(env.CENTRAID_UPGRADE_PREV_INSTALLER);
   if (installer) return { available: true, installer };
   return { available: false, reason: UPGRADE_BLOCKERS.noInstaller };
@@ -60,12 +66,12 @@ export function resolvePreviousInstaller(env = {}) {
  * @returns {{ ok: true } | { ok: false, dropped: string[], mutated: string[] }}
  *          ok, or the pre-existing keys that vanished or changed.
  */
-export function assertUpgradePreservedData(before, after) {
+export function assertUpgradePreservedData(before: unknown, after: unknown) {
   const beforeMap = asMap(before);
   const afterMap = asMap(after);
 
-  const dropped = [];
-  const mutated = [];
+  const dropped: string[] = [];
+  const mutated: string[] = [];
   for (const [key, digest] of beforeMap) {
     if (!afterMap.has(key)) {
       dropped.push(key);
@@ -93,7 +99,16 @@ export function assertUpgradePreservedData(before, after) {
  * @returns {{ verdict: "skip"|"pass"|"fail", reason: string }} the verdict and
  *          a human-readable reason.
  */
-export function judgeUpgradeJourney(result) {
+export function judgeUpgradeJourney(
+  result: {
+    available?: boolean;
+    reason?: string;
+    installedPrev?: boolean;
+    upgraded?: boolean;
+    preservation?: { ok?: boolean; dropped?: string[]; mutated?: string[] };
+    journalPassed?: boolean;
+  } | null
+) {
   if (!result || typeof result !== "object") {
     return { verdict: "fail", reason: "no result object produced" };
   }
@@ -135,12 +150,15 @@ export function judgeUpgradeJourney(result) {
   return { verdict: "pass", reason: "upgraded in place with data preserved" };
 }
 
-function asMap(obj) {
-  if (obj instanceof Map) return obj;
-  return new Map(Object.entries(obj ?? {}));
+function asMap(obj: unknown): Map<string, string> {
+  if (obj instanceof Map) return obj as Map<string, string>;
+  if (obj && typeof obj === "object") {
+    return new Map(Object.entries(obj as Record<string, string>));
+  }
+  return new Map();
 }
 
-function nonEmpty(value) {
+function nonEmpty(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;

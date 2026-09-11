@@ -100,10 +100,23 @@ export function resolveDelayMs(env = process.env) {
  * @param msg decoded request
  * @param io  `{ send, delayMs, sleep }`
  */
-export async function handleMessage(msg, io) {
+export async function handleMessage(
+  msg: {
+    id?: unknown;
+    method?: string;
+    jsonrpc?: string;
+    params?: { sessionId?: string };
+    [field: string]: unknown;
+  },
+  io: {
+    send: (message: unknown) => void;
+    delayMs: number;
+    sleep: (ms: number) => Promise<unknown>;
+  }
+) {
   const { id, method, params } = msg;
   const send = io.send;
-  const respond = (result) => send({ jsonrpc: "2.0", id, result });
+  const respond = (result: unknown) => send({ jsonrpc: "2.0", id, result });
 
   if (method === "initialize") {
     respond({
@@ -168,7 +181,7 @@ export async function handleMessage(msg, io) {
   }
 }
 
-const sleep = (ms) =>
+const sleep = (ms: number) =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
@@ -181,7 +194,8 @@ function main() {
   }
 
   const io = {
-    send: (message) => process.stdout.write(`${JSON.stringify(message)}\n`),
+    send: (message: unknown) =>
+      process.stdout.write(`${JSON.stringify(message)}\n`),
     delayMs: resolveDelayMs(),
     sleep,
   };

@@ -1,6 +1,6 @@
 // Does the CI gateway's Assistant provider wiring actually resolve? (#890)
 //
-// `tests/agent-e2e-mobile/lib/ci-gateway.mjs` configures a model provider by
+// `tests/agent-e2e-mobile/lib/ci-gateway.ts` configures a model provider by
 // writing three prefs, so that the mobile `sendToFirstToken` budget has a turn
 // to time at all. Those prefs are just strings in a database: nothing about
 // writing them proves the gateway will spawn what we meant, and the lane that
@@ -21,16 +21,16 @@ import { describe, expect, it } from "vitest";
 import { planLaunch } from "../../packages/server/src/acp/backends/acp/launch.js";
 import { acpConfigFor } from "../../packages/server/src/acp/registry.js";
 import { resolveGatewayHarnessPrefs } from "../../packages/server/src/serve/harness-prefs.js";
-import { stubHarnessPrefs } from "../agent-e2e-mobile/lib/fixed-delay-agent.mjs";
+import { stubHarnessPrefs } from "../agent-e2e-mobile/lib/fixed-delay-agent.ts";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 const AGENT_PATH = path.join(
   REPO_ROOT,
-  "tests/agent-e2e-mobile/lib/fixed-delay-agent.mjs"
+  "tests/agent-e2e-mobile/lib/fixed-delay-agent.ts"
 );
 
 // THE PREFS THE GATEWAY ACTUALLY WRITES, imported rather than restated. A local
-// copy here would keep passing after ci-gateway.mjs changed, which is the exact
+// copy here would keep passing after ci-gateway.ts changed, which is the exact
 // way a wiring test stops meaning anything.
 const CI_GATEWAY_PREFS: Record<string, unknown> = stubHarnessPrefs();
 
@@ -72,7 +72,7 @@ describe("the mobile CI gateway's Assistant provider", () => {
     // that: it would have passed identically if the real variable were renamed
     // or deleted, which is the whole failure it was written to prevent.
     const { FIRST_TOKEN_DELAY_ENV } =
-      await import("../agent-e2e-mobile/lib/fixed-delay-agent.mjs");
+      await import("../agent-e2e-mobile/lib/fixed-delay-agent.ts");
     const previous = process.env[FIRST_TOKEN_DELAY_ENV];
     process.env[FIRST_TOKEN_DELAY_ENV] = "42";
     try {

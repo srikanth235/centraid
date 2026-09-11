@@ -17,7 +17,7 @@
 // found`, which is a day of reading logs to reach a fact this script knows in
 // one line.
 
-import { demoStatus, seedDemo } from "./lib/demo-corpus.mjs";
+import { demoStatus, seedDemo } from "./lib/demo-corpus.ts";
 
 const gatewayUrl = process.env.MAESTRO_GATEWAY_URL;
 const gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "";
@@ -47,7 +47,7 @@ if (seedable.length === 0) {
 // `Promise.all` would be wrong rather than faster; the recursion says that in a
 // shape the linter reads as intentional instead of as an oversight to suppress.
 const ordered = seedable.sort();
-async function seedFrom(index) {
+async function seedFrom(index: number): Promise<void> {
   const appId = ordered[index];
   if (!appId) return;
   const result = await seedDemo(appId, gatewayUrl, gatewayToken);

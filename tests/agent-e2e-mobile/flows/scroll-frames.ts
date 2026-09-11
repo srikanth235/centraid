@@ -1,14 +1,14 @@
 import path from "node:path";
 
 import { journeyCeiling } from "../../../scripts/lib/journey-ledger.ts";
-import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
-import { readFrameEvidence } from "../lib/frame-report.mjs";
+import { recordQualityResult } from "../../agent-e2e-shared/harness.ts";
+import { readFrameEvidence } from "../lib/frame-report.ts";
 import {
   AWAIT_LAUNCHER,
   CONFIRM_SYSTEM_OPEN,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 /**
  * Frame-drop probe for the Photos grid (issue #659 R3c).
@@ -83,7 +83,7 @@ import {
  * means "the grid has drawn tiles", so the flings measure the timeline rather
  * than whatever was on screen when the window opened.
  */
-const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.mjs";
+const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.ts";
 const FLINGS = 8;
 const SAMPLE_WINDOW_MS = 6_000;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -104,7 +104,12 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 const PHOTOS_MARKER = "photos-tile-0";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
-function flingYaml(appId, marker, markerKind, surface) {
+function flingYaml(
+  appId: string,
+  marker: string,
+  markerKind: string,
+  surface: string
+) {
   const settle =
     markerKind === "id"
       ? `- extendedWaitUntil:

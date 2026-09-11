@@ -37,19 +37,24 @@ const DIGEST_LIMIT = 60;
  *  which branch rendered and it is the part most likely to carry member data. */
 const MAX_TEXT = 48;
 
-function attributesOf(node) {
+function attributesOf(node: unknown): Record<string, unknown> {
   if (!node || typeof node !== "object") return {};
-  const { attributes } = node;
-  return attributes && typeof attributes === "object" ? attributes : node;
+  if (!("attributes" in node)) return node as Record<string, unknown>;
+  const { attributes } = node as { attributes?: unknown };
+  return attributes &&
+    typeof attributes === "object" &&
+    !Array.isArray(attributes)
+    ? (attributes as Record<string, unknown>)
+    : (node as Record<string, unknown>);
 }
 
-function handleOf(attributes) {
+function handleOf(attributes: Record<string, unknown>): string | undefined {
   const raw = attributes["resource-id"] ?? attributes.resourceId;
   if (typeof raw !== "string" || raw === "") return undefined;
   return RESOURCE_ID.exec(raw)?.groups?.handle;
 }
 
-function labelOf(attributes) {
+function labelOf(attributes: Record<string, unknown>): string | undefined {
   for (const key of ["text", "accessibilityText", "hintText"]) {
     const value = attributes[key];
     if (typeof value === "string" && value !== "" && value.length <= MAX_TEXT)
@@ -58,9 +63,10 @@ function labelOf(attributes) {
   return undefined;
 }
 
-function childrenOf(node) {
+function childrenOf(node: unknown): unknown[] {
   if (Array.isArray(node)) return node;
-  const { children } = node ?? {};
+  if (!node || typeof node !== "object" || !("children" in node)) return [];
+  const { children } = node;
   return Array.isArray(children) ? children : [];
 }
 
@@ -72,11 +78,14 @@ function childrenOf(node) {
  * `Element not found: Text matching regex` failures name a LABEL, and the
  * commonest cause of one is that the handle is there under a different label.
  */
-export function digestHierarchy(root, { limit = DIGEST_LIMIT } = {}) {
-  const seen = new Set();
+export function digestHierarchy(
+  root: unknown,
+  { limit = DIGEST_LIMIT }: { limit?: number } = {}
+): string[] {
+  const seen = new Set<string>();
   // Explicit stack rather than recursion: a hierarchy from a scrollable screen
   // nests deep enough that this is a real stack-overflow risk, not a style one.
-  const stack = [root];
+  const stack: unknown[] = [root];
   while (stack.length > 0 && seen.size < limit) {
     const node = stack.pop();
     if (!node || typeof node !== "object") continue;
@@ -97,14 +106,17 @@ export function digestHierarchy(root, { limit = DIGEST_LIMIT } = {}) {
  * to say. Never throws: this runs on the failure path, and a diagnostic that can
  * itself fail replaces the real error with its own.
  */
-export function digestLines(json, { limit = DIGEST_LIMIT } = {}) {
+export function digestLines(
+  json: unknown,
+  { limit = DIGEST_LIMIT }: { limit?: number } = {}
+): string[] {
   let parsed;
   try {
     parsed = typeof json === "string" ? JSON.parse(sliceJson(json)) : json;
   } catch {
     return [];
   }
-  const entries = digestHierarchy(parsed, { limit });
+  const entries: string[] = digestHierarchy(parsed, { limit });
   return entries.length === 0 ? [] : entries;
 }
 
@@ -117,11 +129,14 @@ export function digestLines(json, { limit = DIGEST_LIMIT } = {}) {
  * brace/bracket and the last closing one — a tree is one value, so anything
  * outside that span is banner.
  */
-function sliceJson(text) {
-  const start = Math.min(
-    ...["{", "["].map((c) => text.indexOf(c)).filter((i) => i >= 0)
-  );
-  const end = Math.max(...["}", "]"].map((c) => text.lastIndexOf(c)));
+function sliceJson(text: string): string {
+  const opens = ["{", "["].map((c) => text.indexOf(c)).filter((i) => i >= 0);
+  const closes = ["}", "]"]
+    .map((c) => text.lastIndexOf(c))
+    .filter((i) => i >= 0);
+  const start =
+    opens.length === 0 ? Number.POSITIVE_INFINITY : Math.min(...opens);
+  const end = closes.length === 0 ? -1 : Math.max(...closes);
   return Number.isFinite(start) && end > start
     ? text.slice(start, end + 1)
     : text;

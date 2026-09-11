@@ -1,5 +1,5 @@
 // The failure half of the pairing ceremony — see the .md next to this file.
-import { runFlow, parseTicket } from "../lib/harness.mjs";
+import { runFlow, parseTicket } from "../lib/harness.ts";
 
 await runFlow("pairing-ticket-hygiene", async (ctx) => {
   const device = await ctx.newDevice();

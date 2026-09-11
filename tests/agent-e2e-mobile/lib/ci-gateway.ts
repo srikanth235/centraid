@@ -19,7 +19,7 @@ import {
   FIRST_TOKEN_DELAY_ENV,
   resolveDelayMs,
   stubHarnessPrefs,
-} from "./fixed-delay-agent.mjs";
+} from "./fixed-delay-agent.ts";
 
 const dataDir = path.resolve(process.argv[2] ?? "artifacts/mobile-ci-gateway");
 const port = Number(process.argv[3] ?? 18_789);
@@ -35,9 +35,9 @@ const hostEndpointId = kitlessHostIdentity(
   keyStore.loadOrCreate("endpoint-key.bin")
 );
 const logger = {
-  info: (message) => console.log(`[mobile-ci-gateway] ${message}`),
-  warn: (message) => console.warn(`[mobile-ci-gateway] ${message}`),
-  error: (message) => console.error(`[mobile-ci-gateway] ${message}`),
+  info: (message: string) => console.log(`[mobile-ci-gateway] ${message}`),
+  warn: (message: string) => console.warn(`[mobile-ci-gateway] ${message}`),
+  error: (message: string) => console.error(`[mobile-ci-gateway] ${message}`),
 };
 const runtime = {};
 const devicePlane = makeDaemonDevicePlane({

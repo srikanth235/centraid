@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { parseFrameEvidence, readFrameEvidence } from "./frame-report.mjs";
+import { parseFrameEvidence, readFrameEvidence } from "./frame-report.ts";
 
 /**
  * The frame-drop probe (`flows/scroll-frames.mjs`) needs a booted simulator, so
@@ -29,7 +29,7 @@ import { parseFrameEvidence, readFrameEvidence } from "./frame-report.mjs";
 const CONTRACT_LINE =
   "frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%";
 
-describe("parseFrameEvidence", () => {
+describe(parseFrameEvidence, () => {
   test("parses the contract line exactly as apps/mobile emits it", () => {
     const { report } = parseFrameEvidence([CONTRACT_LINE]);
     expect(report).toStrictEqual({
@@ -81,7 +81,7 @@ describe("parseFrameEvidence", () => {
     const { report } = parseFrameEvidence([
       "<hierarchy>nothing here</hierarchy>",
     ]);
-    expect(report).toBe(null);
+    expect(report).toBeNull();
   });
 
   test("takes the newest report when a run wrote several", () => {
@@ -118,7 +118,7 @@ describe("parseFrameEvidence", () => {
   });
 });
 
-describe("readFrameEvidence", () => {
+describe(readFrameEvidence, () => {
   test("reads only files written since the phase began", async () => {
     const root = await tempDir("frame-report-");
     const debugDir = path.join(root, "maestro-debug", "07-fling-photos");
@@ -147,7 +147,7 @@ describe("readFrameEvidence", () => {
       path.join(tmpdir(), "frame-report-absent-dir"),
       0
     );
-    expect(report).toBe(null);
+    expect(report).toBeNull();
     expect(peopleRowsObserved).toBe(0);
   });
 });

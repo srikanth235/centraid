@@ -62,13 +62,13 @@
 // to block a merge, and the first real runs are what earn it a promotion.
 // Recorded the same way in tests/agent-e2e-mobile/roster.json.
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 /** How many notes the contention burst writes. Small enough to stay inside the
  *  suite budget, large enough that losing or duplicating one is unmistakable in

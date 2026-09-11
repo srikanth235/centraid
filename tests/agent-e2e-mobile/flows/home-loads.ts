@@ -6,7 +6,7 @@ import {
   DEV_LAUNCHER_HANDOFF,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 await runFlow("home-loads", async (ctx) => {
   // Since #603 a cleared client cannot bypass enrollment: the gateway founds

@@ -49,7 +49,7 @@ import {
   // nothing at any tier evaluates the module body, and the reference sits two
   // thirds of the way down a file nobody executes.
   shQuote,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 await runFlow("share-intent-in", async (ctx) => {
   if (ctx.state.platform !== "android") {

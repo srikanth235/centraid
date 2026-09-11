@@ -29,13 +29,13 @@
 // publishes (issue #483's non-vacuous rules; this file is listed in
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { retryableTapCommands } from "../lib/first-run.ts";
 import {
   AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 /** The gate as Maestro sees it: the wall itself, the floor it states, and the
  *  control that refuses while the field is empty. Asserted twice — once on

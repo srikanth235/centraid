@@ -1,13 +1,13 @@
 import {
   DENY_MEDIA_PERMISSION,
   retryableTapCommands,
-} from "../lib/first-run.mjs";
+} from "../lib/first-run.ts";
 import {
   CONFIRM_SYSTEM_OPEN,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 await runFlow("photos-permissions", async (ctx) => {
   // This journey owns the suite's fresh pairing slot. Purging first proves the

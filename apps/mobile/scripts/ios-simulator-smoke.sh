@@ -22,4 +22,4 @@ set -euo pipefail
 . apps/mobile/scripts/ios-simulator-install.sh
 
 export CENTRAID_MOBILE_LANE=mobile-ios-smoke
-node tests/agent-e2e-mobile/run-roster.mjs --rung 3 --platform ios --suite ios-smoke
+node tests/agent-e2e-mobile/run-roster.ts --rung 3 --platform ios --suite ios-smoke
