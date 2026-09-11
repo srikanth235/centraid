@@ -118,12 +118,12 @@ export interface AtlasGraphNode {
   packKind: AtlasPackKind;
   packLabel: string;
   /**
-   * Curated human-friendly display name — always present. The client's
-   * Relations page shows this instead of the SQL name (People, not
-   * core_party). Curated ontology kinds get their `ATLAS_KIND_FRIENDLY` name;
-   * everything else falls back to the humanized `label`.
+   * The registry's declared name — always present, never the humanized
+   * `label` (People, not core_party or "Party"). The registry names every
+   * kind (#883 O-label), and `entity-labels.test.ts` fails a kind whose name
+   * is its identifier humanized (R-NY-13).
    */
-  friendly?: string;
+  friendly: string;
   /**
    * Curated one-line plain-English description — emitted ONLY for kinds with a
    * hand-written `ATLAS_KIND_FRIENDLY` entry (ontology). Absent otherwise; the
@@ -287,8 +287,8 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
     pack: entry.pack,
     packKind: entry.packKind,
     packLabel: entry.packLabel,
-    // `friendly` always emitted (curated name, else the humanized label);
-    // `blurb` only when the kind is curated — never fabricated.
+    // `friendly` always emitted (the registry's name, R-NY-13); `blurb` only
+    // when the kind is curated — never fabricated.
     friendly: entry.friendly,
     ...(entry.blurb === undefined ? {} : { blurb: entry.blurb }),
     hopDistance: hop.has(entry.physical) ? hop.get(entry.physical)! : null,

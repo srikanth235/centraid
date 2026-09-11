@@ -28,11 +28,14 @@ export const node = (
   over: Partial<AtlasGraphNode> = {}
 ): AtlasGraphNode => {
   const table = physical.slice(physical.indexOf("_") + 1);
+  const label = table.replace(/_/gu, " ");
   return {
     physical,
     logical: `${pack}.${table}`,
     table,
-    label: table.replace(/_/gu, " "),
+    label,
+    // The gateway always sends the registry's name (R-NY-13).
+    friendly: label,
     pack,
     packKind,
     packLabel: (pack[0]?.toUpperCase() ?? "") + pack.slice(1),

@@ -14,7 +14,10 @@ export interface AtlasCensusTable {
   logical: string;
   physical: string;
   table: string;
+  /** MECHANICAL — the table name humanized. Never member copy. */
   label: string;
+  /** The registry's declared name — what every seat shows (R-NY-13). */
+  friendly: string;
   rows: number;
   bytes: number | null;
   pages: number | null;
@@ -67,8 +70,9 @@ export interface AtlasGraphNode {
   pack: string;
   packKind: "ontology" | "machinery";
   packLabel: string;
-  /** Curated display name (People, not core_party); else humanized `label`. */
-  friendly?: string;
+  /** The registry's declared name (People, not core_party) — always sent,
+   *  never the humanized `label` (R-NY-13). */
+  friendly: string;
   /** Curated blurb — ONLY kinds with `ATLAS_KIND_FRIENDLY`. Never fabricated. */
   blurb?: string;
   hopDistance: number | null;

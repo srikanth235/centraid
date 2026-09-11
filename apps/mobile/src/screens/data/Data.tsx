@@ -273,11 +273,11 @@ export default function DataScreen({
           {browse && records.length > 0 ? (
             <>
               <SectionBlock
-                label={browse.table.label || browse.table.logical}
+                label={browse.table.friendly}
                 meta={recordCount(browse.table.rows)}
               />
               <DocTable
-                accessibilityLabel={`Records in ${browse.table.label || browse.table.logical}`}
+                accessibilityLabel={`Records in ${browse.table.friendly}`}
                 caption={tableCaption(
                   records.length,
                   browse.table.rows,
@@ -298,7 +298,7 @@ export default function DataScreen({
         }
       />
       <RecordSheet
-        kindLabel={browse ? browse.table.label || browse.table.logical : ""}
+        kindLabel={browse ? browse.table.friendly : ""}
         onClose={() => setOpened(undefined)}
         record={opened}
       />
