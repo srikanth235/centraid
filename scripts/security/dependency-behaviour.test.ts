@@ -1,6 +1,5 @@
 /* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
 /* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
-/* oxlint-disable vitest/prefer-each -- (#1018) node --test lane, not a vitest suite */
 /**
  * W6.3 unit tests (umbrella #842) — the dependency-behaviour and CI-egress
  * ratchets.
@@ -27,8 +26,8 @@ import {
   INSTALL_HOOKS,
   ledgerFor,
   referencedScripts,
-  type FingerprintedPackage,
 } from "./lifecycle-audit.ts";
+import type { FingerprintedPackage } from "./lifecycle-audit.ts";
 import {
   auditEgress,
   executesDependencyCode,
