@@ -97,6 +97,13 @@ async function handleNotificationResponse(
         rootNavigationRef.navigate("Settings", { screen: "Approvals" });
       return;
     }
+    // A notice is news, not a decision (#1015 R-NY-2): it stands in
+    // Activity's alerts view, never on an empty Needs you.
+    if (plan.kind === "open-alerts") {
+      if (rootNavigationRef.isReady())
+        rootNavigationRef.navigate("Insights", { initialTab: "alerts" });
+      return;
+    }
     if (plan.kind === "open-app") {
       if (!rootNavigationRef.isReady()) return;
       // Tally is a STACK now, so its cover is addressed by screen. Literal

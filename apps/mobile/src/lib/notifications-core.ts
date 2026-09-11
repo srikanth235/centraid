@@ -96,6 +96,17 @@ export async function installNotificationCategories(): Promise<void> {
         },
       ]
     ),
+    // A notice push's button names where it lands (#1015 R-NY-2).
+    Notifications.setNotificationCategoryAsync(
+      NotificationModel.ALERTS_CATEGORY,
+      [
+        {
+          identifier: NotificationModel.OPEN_ITEM,
+          buttonTitle: "Open alerts",
+          options: { opensAppToForeground: true },
+        },
+      ]
+    ),
   ]);
 }
 
@@ -151,11 +162,7 @@ export async function syncNotifications(
         content: {
           title: row.title,
           body: row.body,
-          categoryIdentifier: NotificationModel.NOTIFICATIONS_CATEGORY,
-          data: {
-            kind: "notifications",
-            url: "centraid://settings/notifications",
-          },
+          ...NotificationModel.notificationsPushRouting(row.about),
         },
         trigger: null,
       })
