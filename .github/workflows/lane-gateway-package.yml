@@ -35,19 +35,19 @@ jobs:
         run: bun run turbo run build --filter=@centraid/server
 
       - name: Probe unit tests
-        run: node --test scripts/gateway-package/probe.test.mjs
+        run: node --test scripts/gateway-package/probe.test.ts
 
       - name: Assemble symlink unit tests
         # Runs after turbo build so packages/*/dist exist for assembleRuntime.
-        run: node --test scripts/gateway-package/assemble-runtime.test.mjs
+        run: node --test scripts/gateway-package/assemble-runtime.test.ts
 
       - name: Trace install set
         run: |
           mkdir -p artifacts
-          node scripts/gateway-package/trace.mjs --out=artifacts/gateway-package-trace.json
+          node scripts/gateway-package/trace.ts --out=artifacts/gateway-package-trace.json
 
       - name: Host install smoke
-        run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/server/dist/cli/cli.js --port 18787
+        run: node scripts/gateway-package/smoke.ts --gateway-bin packages/server/dist/cli/cli.js --port 18787
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 

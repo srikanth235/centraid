@@ -158,7 +158,7 @@
         "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only (rig lane split to #790 by #781; originally #656).",
         "expires": "2026-12-01"
       },
-      "scripts/gateway-package/assemble-runtime.test.mjs#1": {
+      "scripts/gateway-package/assemble-runtime.test.ts#1": {
         "kind": "runtime-skip",
         "line": 64,
         "snippet": "t.skip(\"gateway package dist missing — build @centraid/server first\");",

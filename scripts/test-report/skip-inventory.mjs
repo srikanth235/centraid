@@ -77,6 +77,7 @@ export const SCAN_INCLUDE = [
   // silently exempted it from the budget — an invisible skip is the exact
   // failure this gate exists to prevent.
   "scripts/**/*.test.mjs",
+  "scripts/**/*.test.ts",
   "apps/*/scripts/**/*.test.mjs",
 ];
 

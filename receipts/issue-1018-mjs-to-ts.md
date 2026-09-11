@@ -424,4 +424,62 @@ node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.conf
 | NodeNext program does not typecheck package src | PASS | listFiles `packages/*/src` = 0 |
 | Extra program reached by typecheck | PASS | both root typecheck scripts |
 | Gates not weakened | PASS | dual `.mjs`/`.ts` suffix matchers; no allowlist/budget cuts |
+## Slice tooling — release / security / fuzz / mutation / perf / gateway / docs-site / golden-vault / web
 
+Converted the remaining owned tooling trees from `.mjs` to TypeScript (NodeNext, `JSON.parse` as `unknown`, `import type`, no `any` / `@ts-nocheck` / enums). `scripts/release/vitest.config.ts` includes `**/*.test.ts` and excludes `surfaces.test.ts` (still `node --test`). `scripts/fuzz/vitest.config.ts` includes `**/*.test.ts`. `scripts/perf/app-waterfall.run.ts` (and the other package-source importers: `app-waterfall.ts` / `.test.ts`, `send-to-first-token.ts`, release tests that import `@centraid/test-kit`) stay out of the NodeNext program so `tsc -p scripts --listFiles` has 0 `packages/*/src`.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0.
+
+```sh
+tsc -p scripts --listFiles --pretty false
+```
+
+397 files. `packages/server/src` count: 0. `packages/*/src` count: 0.
+
+```sh
+node node_modules/vitest/vitest.mjs run --config scripts/release/vitest.config.ts
+```
+
+6 files, 53 pass.
+
+```sh
+node --test scripts/release/surfaces.test.ts scripts/gateway-npm/*.test.ts scripts/gateway-package/*.test.ts scripts/security/*.test.ts
+```
+
+107 pass, 1 skip (`assemble-runtime` needs gateway dist), 1 inherited fail (`assemble-runtime` closure now sees `packages/server -> packages/model-runtime` — same assertion as HEAD). `scripts/perf/app-waterfall.test.ts` cannot import `@centraid/core/protocol` without package `dist/` (inherited; this worktree has no `packages/*/dist`).
+
+```sh
+node node_modules/vitest/vitest.mjs run --config scripts/fuzz/vitest.config.ts
+```
+
+4 pass, 10 fail: missing `packages/*/dist` (`bun run build` first). Inherited, same as HEAD.
+
+```sh
+node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts scripts/mutation/run.test.ts
+```
+
+18 pass.
+
+### Paths this slice
+
+- `scripts/release/**/*.ts` (from `.mjs`)
+- `scripts/security/**/*.ts` (from `.mjs`)
+- `scripts/fuzz/**/*.ts` (from `.mjs`)
+- `scripts/mutation/**/*.ts` (from `.mjs`)
+- `scripts/perf/{app-waterfall,app-weight,run-waterfall,send-to-first-token,summarize}.ts` (from `.mjs`)
+- `scripts/gateway-npm/**/*.ts` (from `.mjs`)
+- `scripts/gateway-package/**/*.ts` (from `.mjs`)
+- `scripts/docs-site/{assemble,build,smoke}.ts` (from `.mjs`)
+- `scripts/golden-vault/build.ts` (from `.mjs`)
+- `scripts/web/smoke.ts` (from `.mjs`)
+- `package.json`, workflows, Dockerfile, `scripts/tsconfig.json`
+- `tests/claims.json`, `tests/journeys.json`, `tests/inventory.json`
+- `scripts/test-report/{derive,skip-inventory,validate-app-axes,validate-nightly-wiring}.mjs`, `scripts/test-report/vitest.config.ts`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

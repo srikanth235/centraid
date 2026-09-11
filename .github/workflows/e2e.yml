@@ -1688,7 +1688,7 @@ jobs:
       # defects whose current behaviour is pinned by the unit judges — removing
       # an entry is how a fix gets locked in, never adding one to go green.
       - name: Dynamic scan of the booted gateway HTTP surface
-        run: node scripts/security/dast-scan.mjs --out artifacts/dast/summary.json
+        run: node scripts/security/dast-scan.ts --out artifacts/dast/summary.json
       # Upload `artifacts/` (not `artifacts/dast/`) so merge-multiple download
       # into the report job keeps `dast/summary.json` — same reason as fuzz.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

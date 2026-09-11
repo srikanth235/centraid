@@ -459,7 +459,7 @@ jobs:
       # superset of that closure, and this job is unfiltered, so the check now
       # costs nothing AND runs on PRs that never woke the `client` filter.
       - name: L2 boot-the-artifact structure smoke
-        run: node scripts/release/boot-smoke.mjs
+        run: node scripts/release/boot-smoke.ts
       # The normal @centraid/tunnel build above ships its target-specific napi
       # module. Prove both pairing ALPNs plus streamed request/response bytes.
       - run: bun run --cwd packages/tunnel test:native
@@ -782,7 +782,7 @@ jobs:
   # measured either 4m30s of build plus ZERO mutation (no affected seeds) or
   # 19m27s of full-seed run — and the second mode fired because `package.json`
   # and `bun.lock` were in `MUTATION_GLOBAL_WATCH`, so any dependency bump ran all
-  # sixteen seeds on the PR loop. `scripts/mutation/seeds.mjs` now watches the
+  # sixteen seeds on the PR loop. `scripts/mutation/seeds.ts` now watches the
   # mutation configuration itself and nothing else globally; the full-seed run
   # moved to `mutation-canary` below, where nobody is waiting on it.
   mutation-pr:

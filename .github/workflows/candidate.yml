@@ -910,8 +910,8 @@ jobs:
       # developer machine, wrong here, where this job installs both and so an
       # absent binary means the install step lied rather than that the tool is
       # unavailable. Under --require, "available but did not run" is red too.
-      - run: node scripts/security/rust-supply-chain.mjs --require
-      - run: node scripts/security/unsafe-edge-audit.mjs
+      - run: node scripts/security/rust-supply-chain.ts --require
+      - run: node scripts/security/unsafe-edge-audit.ts
       - name: Write lane evidence
         if: always()
         env:

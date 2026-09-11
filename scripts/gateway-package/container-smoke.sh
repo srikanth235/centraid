@@ -44,9 +44,9 @@ docker run -d --name "$NAME" \
   -v "${CREDENTIAL_VOL}:/config" \
   "$IMAGE"
 
-node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
+node scripts/gateway-package/smoke.ts --base-url "http://127.0.0.1:${PORT}"
 # Second probe for consistency (external observer).
-node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
+node scripts/gateway-package/smoke.ts --base-url "http://127.0.0.1:${PORT}"
 
 # Prove the durable mount: the volume has content after boot.
 FILES="$(docker run --rm -v "${VOL}:/data" busybox ls -A /data 2>/dev/null || true)"

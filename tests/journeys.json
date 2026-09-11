@@ -86,12 +86,12 @@
       "volume": "build-artifact",
       "hardware": "any",
       "spans": [],
-      "consumers": ["scripts/perf/app-weight.mjs --surface web"],
+      "consumers": ["scripts/perf/app-weight.ts --surface web"],
       "tolerancePercent": 20,
       "metrics": {
         "appWeight": {
           "status": "measured",
-          "probe": "scripts/perf/app-weight.mjs --surface web (weighs apps/web/dist produced by `bun run web:build`), run in CI after the web build",
+          "probe": "scripts/perf/app-weight.ts --surface web (weighs apps/web/dist produced by `bun run web:build`), run in CI after the web build",
           "maxTotalBytes": 8730000,
           "maxLargestChunkBytes": 2200000,
           "_provenance": {
@@ -101,7 +101,7 @@
             "observedShippedFiles": 86,
             "observedLargestChunkBytes": 1995618,
             "observedLargestChunk": "centraid-worker-iroh.wasm",
-            "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface web --report` (#781, closing the #587 D21 web gap; re-measured and TIGHTENED by #883 C5). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what the build ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (17.6 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. THE DOUBLE-SHIPPED IROH WASM IS FIXED: the 1,995,618 B binding had two inclusion paths — the page's wasm-bindgen ESM resolving new URL('centraid_web_iroh_bg.wasm', import.meta.url) into a hashed assets/ copy, and scripts/build-iroh-worker.mjs copying the same bytes to public/centraid-worker-iroh.wasm for the CLASSIC service worker, which cannot import ESM. The worker's copy has to keep its unhashed, _headers-pinned path, so the centraid-iroh-wasm-single-copy plugin in apps/web/vite.config.ts rewrites the bindings' default to that same ?v=-stamped URL and the assets/ copy stops being emitted; public/sw.js now treats that path as an immutable shell entry, so a visit that uses both the page transport and the worker pays the 2 MB once. Measured on this host the same day: 10,074,585 B across 87 files before, 8,083,152 B across 86 files after. maxTotalBytes ratcheted 11,010,048 -> 8,730,000 (observed + ~8%). maxLargestChunkBytes is UNCHANGED at 2,200,000 deliberately: the largest single file is still that same 1,995,618 B binary — de-duplication removed a COPY, not weight from the copy that remains — so the existing observed+10% ceiling is still the honest one, and tightening it here would claim a win that did not happen. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.10 MB, sqlite3.wasm 865 kB; pdf.worker is the next real cut.",
+            "note": "MEASURED by `node scripts/perf/app-weight.ts --surface web --report` (#781, closing the #587 D21 web gap; re-measured and TIGHTENED by #883 C5). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what the build ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (17.6 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. THE DOUBLE-SHIPPED IROH WASM IS FIXED: the 1,995,618 B binding had two inclusion paths — the page's wasm-bindgen ESM resolving new URL('centraid_web_iroh_bg.wasm', import.meta.url) into a hashed assets/ copy, and scripts/build-iroh-worker.mjs copying the same bytes to public/centraid-worker-iroh.wasm for the CLASSIC service worker, which cannot import ESM. The worker's copy has to keep its unhashed, _headers-pinned path, so the centraid-iroh-wasm-single-copy plugin in apps/web/vite.config.ts rewrites the bindings' default to that same ?v=-stamped URL and the assets/ copy stops being emitted; public/sw.js now treats that path as an immutable shell entry, so a visit that uses both the page transport and the worker pays the 2 MB once. Measured on this host the same day: 10,074,585 B across 87 files before, 8,083,152 B across 86 files after. maxTotalBytes ratcheted 11,010,048 -> 8,730,000 (observed + ~8%). maxLargestChunkBytes is UNCHANGED at 2,200,000 deliberately: the largest single file is still that same 1,995,618 B binary — de-duplication removed a COPY, not weight from the copy that remains — so the existing observed+10% ceiling is still the honest one, and tightening it here would claim a win that did not happen. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.10 MB, sqlite3.wasm 865 kB; pdf.worker is the next real cut.",
             "headroom": "observed + ~8% total; largest chunk + ~10% (mirrors the desktop/mobile seeds)"
           }
         }
@@ -161,12 +161,12 @@
       "volume": "build-artifact",
       "hardware": "any",
       "spans": [],
-      "consumers": ["scripts/perf/app-weight.mjs --surface desktop"],
+      "consumers": ["scripts/perf/app-weight.ts --surface desktop"],
       "tolerancePercent": 20,
       "metrics": {
         "appWeight": {
           "status": "measured",
-          "probe": "scripts/perf/app-weight.mjs --surface desktop (weighs apps/desktop/dist/renderer), run in CI after the desktop build",
+          "probe": "scripts/perf/app-weight.ts --surface desktop (weighs apps/desktop/dist/renderer), run in CI after the desktop build",
           "maxTotalBytes": 6291456,
           "maxLargestChunkBytes": 1500000,
           "_provenance": {
@@ -176,7 +176,7 @@
             "observedShippedFiles": 33,
             "observedLargestChunkBytes": 1333046,
             "observedLargestChunk": "react-boot.js",
-            "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
+            "note": "MEASURED by `node scripts/perf/app-weight.ts --surface desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
             "headroom": "observed + 8%"
           }
         }
@@ -269,12 +269,12 @@
       "volume": "build-artifact",
       "hardware": "any",
       "spans": [],
-      "consumers": ["scripts/perf/app-weight.mjs --surface mobile"],
+      "consumers": ["scripts/perf/app-weight.ts --surface mobile"],
       "tolerancePercent": 20,
       "metrics": {
         "appWeight": {
           "status": "measured",
-          "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
+          "probe": "scripts/perf/app-weight.ts --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
           "maxTotalBytes": 12582912,
           "maxLargestChunkBytes": 8220000,
           "_provenance": {
@@ -951,12 +951,12 @@
       "volume": "none",
       "hardware": "ci-linux-x64-4c",
       "spans": ["gateway.turn.dispatch"],
-      "consumers": ["scripts/perf/send-to-first-token.mjs"],
+      "consumers": ["scripts/perf/send-to-first-token.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "sendToFirstToken": {
           "status": "measured",
-          "probe": "scripts/perf/send-to-first-token.mjs — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
+          "probe": "scripts/perf/send-to-first-token.ts — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
           "ceilingP95Ms": 400,
           "_provenance": {
             "at": "2026-08-21",

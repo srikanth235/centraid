@@ -1,7 +1,7 @@
 import { access, glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { MUTATION_SEEDS } from "../mutation/seeds.mjs";
+import { MUTATION_SEEDS } from "../mutation/seeds.ts";
 import { validateAppScenarios } from "./validate-app-scenarios.mjs";
 import { validateReportRegistries } from "./validate-report-registries.mjs";
 

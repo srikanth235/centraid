@@ -190,7 +190,7 @@ test("each candidate is planned onto the runner that actually owns it", () => {
     config: "scripts/test-report/vitest.config.ts",
   });
   assert.equal(
-    planRun("scripts/release/candidate-guard.test.mjs", has).config,
+    planRun("scripts/release/candidate-guard.test.ts", has).config,
     "scripts/release/vitest.config.ts"
   );
   assert.equal(

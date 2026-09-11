@@ -26,7 +26,7 @@ import {
   renderWaterfall,
   saveBaseline,
   warmSwitchTolerance,
-} from "./app-waterfall.mjs";
+} from "./app-waterfall.ts";
 
 test("open all eight apps against a year-3-shaped vault", async () => {
   const startedAt = Date.now();
