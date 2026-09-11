@@ -40,7 +40,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { journeyLedger } from "../lib/journey-ledger.mjs";
+import { journeyLedger } from "../lib/journey-ledger.ts";
 
 const RESAMPLES = 2000;
 const DEFAULT_ROUNDS = 12;

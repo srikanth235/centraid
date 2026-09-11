@@ -9,7 +9,7 @@ import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 
-import { assertSafeConnectorSvg } from "./lib/sanitize-connector-svg.mjs";
+import { assertSafeConnectorSvg } from "./lib/sanitize-connector-svg.ts";
 
 const MAP = {
   gmail: "logos:google-gmail",

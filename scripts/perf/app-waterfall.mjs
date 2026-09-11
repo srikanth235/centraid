@@ -30,7 +30,7 @@ import path from "node:path";
 
 import { waterfall } from "@centraid/core/protocol";
 
-import { journeyLedger } from "../lib/journey-ledger.mjs";
+import { journeyLedger } from "../lib/journey-ledger.ts";
 
 /** The eight bundled apps and the query each one paints first. */
 export const FIRST_PAINT = Object.freeze([

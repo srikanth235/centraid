@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { journeyCeiling } from "../../../scripts/lib/journey-ledger.mjs";
+import { journeyCeiling } from "../../../scripts/lib/journey-ledger.ts";
 import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
 import {

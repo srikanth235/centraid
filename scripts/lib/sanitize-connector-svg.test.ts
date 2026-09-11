@@ -1,7 +1,10 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-each -- (#1018) node --test lane, not a vitest suite */
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { assertSafeConnectorSvg } from "./sanitize-connector-svg.mjs";
+import { assertSafeConnectorSvg } from "./sanitize-connector-svg.ts";
 
 test("accepts inert SVG paths and fragment-only paint references", () => {
   const svg =
@@ -9,7 +12,7 @@ test("accepts inert SVG paths and fragment-only paint references", () => {
   assert.equal(assertSafeConnectorSvg(svg, "safe"), svg);
 });
 
-for (const [name, svg] of [
+const rejections: Array<[string, string]> = [
   ["script", "<svg><script>alert(1)</script></svg>"],
   ["event handler", '<svg><path onload="alert(1)"/></svg>'],
   ["external link", '<svg><use href="https://evil.example/x.svg#p"/></svg>'],
@@ -18,7 +21,9 @@ for (const [name, svg] of [
     "inline CSS",
     '<svg><path style="background:url(https://evil.example)"/></svg>',
   ],
-]) {
+];
+
+for (const [name, svg] of rejections) {
   test(`rejects ${name}`, () => {
     assert.throws(
       () => assertSafeConnectorSvg(svg, name),

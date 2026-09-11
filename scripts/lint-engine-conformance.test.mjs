@@ -5,7 +5,7 @@ import {
   IN_FLIGHT_FLAGS,
   SELECTED_STATE_FLAGS,
   scanRefusalGrammar,
-} from "./lib/disabled-controls.mjs";
+} from "./lib/disabled-controls.ts";
 import {
   countBareTags,
   scanActionKitFiles,

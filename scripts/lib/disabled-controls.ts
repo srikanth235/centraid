@@ -26,9 +26,11 @@
 // scope it to a NAMED file list for that reason — see
 // `lint-engine-conformance.mjs`.
 
+type DisabledSite = { index: number; expr: string };
+
 /** Blank comments only. String bodies are LEFT INTACT: this scanner reads
  *  attribute values (`domain="photos"`) and reason text alike. */
-export function blankComments(source) {
+export function blankComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
     .replace(/\/\/[^\n]*/gu, (m) => " ".repeat(m.length));
@@ -86,16 +88,17 @@ const REASON_LOOKBACK = 16;
  *  preserved), so the object's own `disabled` key is never also counted as a
  *  bare attribute — and so the shorthand `{{ disabled }}` is read as the
  *  forwarded prop it is rather than as an unconditional refusal. */
-function disabledSites(code) {
-  const sites = [];
+function disabledSites(code: string): DisabledSite[] {
+  const sites: DisabledSite[] = [];
   let rest = code;
   const a11y = /accessibilityState\s*=\s*\{\{(?<body>[^}]*)\}\}/gu;
   let match = a11y.exec(code);
   while (match !== null) {
-    const body = match.groups.body;
+    const body = match.groups?.body ?? "";
     const keyed = body.match(/\bdisabled\s*:\s*(?<expr>[^,}]*)/u);
     const shorthand = /\bdisabled\s*(?:,|$)/u.test(body);
-    if (keyed) sites.push({ index: match.index, expr: keyed.groups.expr });
+    if (keyed)
+      sites.push({ index: match.index, expr: keyed.groups?.expr ?? "" });
     else if (shorthand) sites.push({ index: match.index, expr: "disabled" });
     rest =
       rest.slice(0, match.index) +
@@ -115,7 +118,7 @@ function disabledSites(code) {
 
 /** True when the whole disabling expression is in-flight flags and boolean
  *  punctuation — nothing structural in it. */
-function onlyInFlight(expr) {
+function onlyInFlight(expr: string): boolean {
   const identifiers = expr.match(/[A-Za-z_$][\w$]*/gu) ?? [];
   if (identifiers.length === 0) return false;
   const exempt = [...IN_FLIGHT_FLAGS, ...SELECTED_STATE_FLAGS];
@@ -125,7 +128,7 @@ function onlyInFlight(expr) {
 /** True when the component is FORWARDING a `disabled` it was handed. The
  *  reason belongs at the call site that computed the refusal, not inside a
  *  generic primitive (`kit/components/Button.tsx`) that only paints it. */
-function forwardedProp(expr) {
+function forwardedProp(expr: string): boolean {
   return /^(?:props\.)?disabled$/u.test(expr.trim());
 }
 
@@ -133,11 +136,14 @@ function forwardedProp(expr) {
  * Findings for one file's source. Exported so the test can drive it with
  * fixtures rather than real files.
  */
-export function scanRefusalGrammar(source, label = "<source>") {
+export function scanRefusalGrammar(
+  source: string,
+  label = "<source>"
+): string[] {
   const code = blankComments(source);
   const lines = code.split("\n");
-  const findings = [];
-  const seen = new Set();
+  const findings: string[] = [];
+  const seen = new Set<number>();
   for (const site of disabledSites(code)) {
     if (onlyInFlight(site.expr) || forwardedProp(site.expr)) continue;
     const line = code.slice(0, site.index).split("\n").length;

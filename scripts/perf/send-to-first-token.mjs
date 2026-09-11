@@ -44,7 +44,7 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { journeyMetric } from "../lib/journey-ledger.mjs";
+import { journeyMetric } from "../lib/journey-ledger.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const HARNESS_PATH = path.join(

@@ -36,7 +36,7 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { journeyMetric } from "../lib/journey-ledger.mjs";
+import { journeyMetric } from "../lib/journey-ledger.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 

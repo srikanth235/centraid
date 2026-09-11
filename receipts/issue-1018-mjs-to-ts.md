@@ -101,3 +101,52 @@ bun run lint
 | Gates not weakened | PASS | No allowlist/budget/strictness edits; law estate untouched. |
 
 Verdict: PASS
+
+## Slice 1 — `scripts/lib` to TypeScript
+
+Converted `disabled-controls`, `journey-ledger`, `sanitize-connector-svg` and its `node --test` file. Relative first-party imports use `.ts`. JSON from `tests/journeys.json` is parsed as `unknown` and narrowed at `journeyEntry`. Still-`.mjs` consumers import the `.ts` paths. `scripts:test` names `scripts/lib/sanitize-connector-svg.test.ts`.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+Exit 0. `tsc -p scripts --listFiles` includes all four `scripts/lib/*.ts` files. `packages/*/src` count: 0.
+
+```sh
+node --test scripts/lib/sanitize-connector-svg.test.ts
+```
+
+6 pass, 0 fail.
+
+```sh
+node --test scripts/lint-engine-conformance.test.mjs
+```
+
+38 pass, 0 fail (imports `./lib/disabled-controls.ts`).
+
+```sh
+bun run lint
+```
+
+0 warnings, 0 errors. `sanitize-connector-svg.test.ts` carries file-level `vitest/*` disables: oxlint's vitest glob matches `*.test.ts` but this file is a `node --test` lane.
+
+### Paths this slice
+
+- `scripts/lib/disabled-controls.ts` (from `.mjs`)
+- `scripts/lib/journey-ledger.ts` (from `.mjs`)
+- `scripts/lib/sanitize-connector-svg.ts` (from `.mjs`)
+- `scripts/lib/sanitize-connector-svg.test.ts` (from `.mjs`)
+- `scripts/lint-engine-conformance.mjs`
+- `scripts/lint-engine-conformance.test.mjs`
+- `scripts/fetch-connector-brand-icons.mjs`
+- `scripts/perf/app-waterfall.mjs`
+- `scripts/perf/app-weight.mjs`
+- `scripts/perf/send-to-first-token.mjs`
+- `scripts/ci/paired-journeys.mjs`
+- `tests/agent-e2e-mobile/flows/scroll-frames.mjs`
+- `tests/journeys.json` (`_comment` reader path)
+- `package.json`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

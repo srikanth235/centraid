@@ -31,7 +31,7 @@ import {
   UNSTYLED_BUTTON_LEDGER,
   UNSTYLED_PRESSABLE_LEDGER,
 } from "./component-existence-ledger.mjs";
-import { blankComments, scanRefusalGrammar } from "./lib/disabled-controls.mjs";
+import { blankComments, scanRefusalGrammar } from "./lib/disabled-controls.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo", ".next"]);
