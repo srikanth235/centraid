@@ -1,13 +1,9 @@
 {
-  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). It may only ever go DOWN: a rule above its max fails `bun run lint:product`, a rule under it prints the number to lower it to, and a rule absent here is at ZERO. Each entry names the wave that clears it. Re-measured on lane/1015-kit after merging APPS-A and APPS-B Wave 3; run `node scripts/lint-mobile-rooms.mjs` to re-measure. `back-literal`, `identity-tint`, `copy-title-case` and `error-detail` reached zero and are gone from this file, which makes them unconditional (`error-detail` by the R-A-15 sweep, #1015).",
+  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). It may only ever go DOWN: a rule above its max fails `bun run lint:product`, a rule under it prints the number to lower it to, and a rule absent here is at ZERO. Each entry names what clears it. Re-measured on lane/1015-apps-b in Round NY; run `node scripts/lint-mobile-rooms.mjs` to re-measure. `back-literal`, `identity-tint`, `copy-title-case`, `error-detail` and `page-margin` reached zero and are gone from this file, which makes them unconditional (`error-detail` by the R-A-15 sweep; `page-margin` by R-NY-6, which named PhotoTile's chip inset as the kit's `tileChipInset` where the geometry lives instead of allowlisting it here, #1015).",
   "rules": {
     "screen-root": {
-      "max": 33,
-      "clearedBy": "#1015 after Wave 4 — Locker (6), People (6), Photos (9) and Tally (12) screens that no lane migrated. The shell's trees, Agenda, Docs and Notes are at 0."
-    },
-    "page-margin": {
-      "max": 2,
-      "clearedBy": "NOBODY — both are `PhotoTile`'s `paddingHorizontal: 3`, the sub-base exceptions ruled at Wave 3. This entry is the allowlist; it does not go down."
+      "max": 1,
+      "clearedBy": "#1015 owner ruling — `PhotoLightbox`, the full-bleed viewer (stage ground, dismiss gesture, no header, band hidden), which none of the six rooms fits honestly. Round NY (R-NY-7) cleared the other 32: 22 by resolving one app-frame level, 10 by migration or by letting the frame read as the root."
     }
   }
 }

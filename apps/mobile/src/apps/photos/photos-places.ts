@@ -19,7 +19,9 @@ export type PhotosRouteKey =
   | "picker"
   | "people"
   | "places"
+  | "placesMap"
   | "placeDetail"
+  | "faceReview"
   | "memories"
   | "duplicates"
   | "duplicateReview"
@@ -70,6 +72,7 @@ export function photosParentPlace(route: PhotosRouteKey): PlaceRef {
     case "picker":
       return COLLECTIONS;
     case "placeDetail":
+    case "placesMap":
       return PLACES_SHELF;
     case "duplicateReview":
       return DUPLICATES;

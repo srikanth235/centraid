@@ -133,196 +133,191 @@ export default function TallyExpenseScreen({
   const groupName = vault.group?.group?.name;
   const revisions = vault.history?.revisions ?? null;
 
-  const body = ((): React.JSX.Element => {
-    if (!entry) {
-      return (
-        <View style={styles.absent}>
-          <Text style={styles.absentText}>{ABSENT}</Text>
-        </View>
-      );
-    }
-    const isMine =
-      me !== null &&
-      (entry.paid_by === me ||
-        (entry.payers ?? []).some((payer) => payer.party_id === me));
-    const foreign = entry.original_currency !== entry.settlement_currency;
-    return (
-      <ScrollView contentContainerStyle={styles.page}>
-        {entry.pending === true ? (
-          <Text style={styles.strip}>{PENDING_STRIP}</Text>
-        ) : null}
+  const isMine =
+    entry && me !== null
+      ? entry.paid_by === me ||
+        (entry.payers ?? []).some((payer) => payer.party_id === me)
+      : false;
+  const foreign = entry
+    ? entry.original_currency !== entry.settlement_currency
+    : false;
 
-        <View style={styles.head}>
-          <Text style={styles.figure}>
-            {money(entry.amount_minor, currency)}
-          </Text>
-          <Text style={styles.title}>
-            {displayText(entry.description ?? "")}
-          </Text>
-          <Text style={styles.lede}>
-            {metaSentence([
-              paidBy(entry.paid_by_name, isMine),
-              groupName,
-              formatDateShort(entry.spent_on, vault.now),
-            ])}
-          </Text>
-        </View>
+  // An expression, not a render function: the frame below is this screen's
+  // root, and a `return (<…` ahead of it reads as the root to the rooms gate
+  // (`scripts/lint-mobile-rooms.mjs`, R-NY-7).
+  const body = entry ? (
+    <ScrollView contentContainerStyle={styles.page}>
+      {entry.pending === true ? (
+        <Text style={styles.strip}>{PENDING_STRIP}</Text>
+      ) : null}
 
-        <FieldRow
-          label={FIELD_KEYS.paidBy}
-          value={paidValue(entry, currency)}
-          note={EXPENSE_NOTES.paidBy}
-        />
-        <FieldRow
-          label={FIELD_KEYS.divided}
-          value={metaSentence([
-            dividedText(entry),
-            dividedValue(entry.splits.length),
+      <View style={styles.head}>
+        <Text style={styles.figure}>{money(entry.amount_minor, currency)}</Text>
+        <Text style={styles.title}>{displayText(entry.description ?? "")}</Text>
+        <Text style={styles.lede}>
+          {metaSentence([
+            paidBy(entry.paid_by_name, isMine),
+            groupName,
+            formatDateShort(entry.spent_on, vault.now),
           ])}
-          note={EXPENSE_NOTES.divided}
-        />
+        </Text>
+      </View>
+
+      <FieldRow
+        label={FIELD_KEYS.paidBy}
+        value={paidValue(entry, currency)}
+        note={EXPENSE_NOTES.paidBy}
+      />
+      <FieldRow
+        label={FIELD_KEYS.divided}
+        value={metaSentence([
+          dividedText(entry),
+          dividedValue(entry.splits.length),
+        ])}
+        note={EXPENSE_NOTES.divided}
+      />
+      <FieldRow
+        label={FIELD_KEYS.yourShare}
+        value={`${money(entry.your_amount_minor, currency)} · ${roleSubLabel(entry.your_role)}`}
+        note={EXPENSE_NOTES.yourShare}
+      />
+      <FieldRow
+        label={FIELD_KEYS.category}
+        value={entry.category ? categoryLabel(entry.category) : ""}
+      />
+      <FieldRow
+        label={FIELD_KEYS.group}
+        value={groupName ?? ""}
+        note={EXPENSE_NOTES.group}
+      />
+      {foreign ? (
         <FieldRow
-          label={FIELD_KEYS.yourShare}
-          value={`${money(entry.your_amount_minor, currency)} · ${roleSubLabel(entry.your_role)}`}
-          note={EXPENSE_NOTES.yourShare}
+          label={FIELD_KEYS.currency}
+          value={currencyValue(entry)}
+          note={CURRENCY_NOTE}
         />
-        <FieldRow
-          label={FIELD_KEYS.category}
-          value={entry.category ? categoryLabel(entry.category) : ""}
-        />
-        <FieldRow
-          label={FIELD_KEYS.group}
-          value={groupName ?? ""}
-          note={EXPENSE_NOTES.group}
-        />
-        {foreign ? (
-          <FieldRow
-            label={FIELD_KEYS.currency}
-            value={currencyValue(entry)}
-            note={CURRENCY_NOTE}
-          />
-        ) : null}
-        {/* SURFACED, AND HONEST ABOUT ITS DOOR. The memo and the bank line are
+      ) : null}
+      {/* SURFACED, AND HONEST ABOUT ITS DOOR. The memo and the bank line are
             real capabilities only the assistant can write today; the row is
             where they belong, and the note says so. */}
-        <FieldRow
-          label={FIELD_KEYS.memo}
-          value={EXPENSE_ROWS.noMemo}
-          note={EXPENSE_NOTES.memo}
-        />
-        <FieldRow
-          label={FIELD_KEYS.bankLine}
-          value={EXPENSE_ROWS.noBankLine}
-          note={EXPENSE_NOTES.bankLine}
-        />
+      <FieldRow
+        label={FIELD_KEYS.memo}
+        value={EXPENSE_ROWS.noMemo}
+        note={EXPENSE_NOTES.memo}
+      />
+      <FieldRow
+        label={FIELD_KEYS.bankLine}
+        value={EXPENSE_ROWS.noBankLine}
+        note={EXPENSE_NOTES.bankLine}
+      />
 
+      <Section label={EXPENSE_ROWS.splitHead} filled={entry.splits.length > 0}>
+        {entry.splits.map((split) => (
+          <LedgerRow
+            key={split.party_id}
+            title={split.name}
+            meta={
+              (entry.payers ?? []).some(
+                (payer) => payer.party_id === split.party_id
+              ) || split.party_id === entry.paid_by
+                ? PAID_IT
+                : ""
+            }
+            figure={{
+              netMinor: split.share_minor,
+              text: money(split.share_minor, currency),
+              tone: "settled",
+            }}
+          />
+        ))}
+      </Section>
+      <Text style={styles.note}>
+        {splitFoot(money(entry.amount_minor, currency), entry.splits.length)}
+      </Text>
+
+      {entry.intentStatus === "conflict" ? (
+        <Text style={styles.note}>{CONFLICT_BOTH}</Text>
+      ) : null}
+
+      {revisions ? (
         <Section
-          label={EXPENSE_ROWS.splitHead}
-          filled={entry.splits.length > 0}
+          label={EXPENSE_ROWS.revisions}
+          meta={revisionCount(revisions.length)}
+          empty={EXPENSE_ROWS.noRevisions}
+          filled={revisions.length > 0}
         >
-          {entry.splits.map((split) => (
+          {revisions.map((revision) => (
             <LedgerRow
-              key={split.party_id}
-              title={split.name}
-              meta={
-                (entry.payers ?? []).some(
-                  (payer) => payer.party_id === split.party_id
-                ) || split.party_id === entry.paid_by
-                  ? PAID_IT
-                  : ""
-              }
-              figure={{
-                netMinor: split.share_minor,
-                text: money(split.share_minor, currency),
-                tone: "settled",
-              }}
+              key={revision.revision_id}
+              title={displayText(revision.operation)}
+              meta={revision.recorded_at.slice(0, 16).replace("T", " ")}
+              {...(undoIsLive(revision, vault.now)
+                ? {
+                    act: {
+                      label: UNDO_VERB,
+                      onPress: () =>
+                        void issueTallyWrite(
+                          replica.session,
+                          undoExpenseWrite(expenseId, revision.revision_id),
+                          { executed: COMPOSE_OUTCOMES.undone }
+                        ),
+                    },
+                  }
+                : {})}
+              {...(revision.undone_at ? { chip: UNDO_SPENT } : {})}
             />
           ))}
         </Section>
-        <Text style={styles.note}>
-          {splitFoot(money(entry.amount_minor, currency), entry.splits.length)}
+      ) : null}
+      {revisions ? (
+        <Text style={styles.note}>{EXPENSE_NOTES.history}</Text>
+      ) : null}
+
+      <View style={styles.foot}>
+        <Text
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("TallyAdd", { expenseId })}
+          style={styles.footAct}
+        >
+          {LIFE_ACTS.edit}
         </Text>
-
-        {entry.intentStatus === "conflict" ? (
-          <Text style={styles.note}>{CONFLICT_BOTH}</Text>
-        ) : null}
-
-        {revisions ? (
-          <Section
-            label={EXPENSE_ROWS.revisions}
-            meta={revisionCount(revisions.length)}
-            empty={EXPENSE_ROWS.noRevisions}
-            filled={revisions.length > 0}
-          >
-            {revisions.map((revision) => (
-              <LedgerRow
-                key={revision.revision_id}
-                title={displayText(revision.operation)}
-                meta={revision.recorded_at.slice(0, 16).replace("T", " ")}
-                {...(undoIsLive(revision, vault.now)
-                  ? {
-                      act: {
-                        label: UNDO_VERB,
-                        onPress: () =>
-                          void issueTallyWrite(
-                            replica.session,
-                            undoExpenseWrite(expenseId, revision.revision_id),
-                            { executed: COMPOSE_OUTCOMES.undone }
-                          ),
-                      },
-                    }
-                  : {})}
-                {...(revision.undone_at ? { chip: UNDO_SPENT } : {})}
-              />
-            ))}
-          </Section>
-        ) : null}
-        {revisions ? (
-          <Text style={styles.note}>{EXPENSE_NOTES.history}</Text>
-        ) : null}
-
-        <View style={styles.foot}>
-          <Text
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("TallyAdd", { expenseId })}
-            style={styles.footAct}
-          >
-            {LIFE_ACTS.edit}
-          </Text>
-          <Text
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("TallyReceipt", { expenseId })}
-            style={styles.footAct}
-          >
-            {LIFE_ACTS.itemise}
-          </Text>
-          {/* DESTRUCTIVE IS OUTLINED IN `--net`, never filled. */}
-          <Text
-            accessibilityRole="button"
-            onPress={() =>
-              setAsk({
-                body: [TRASH_BODY],
-                confirm: LIFE_ACTS.trash,
-                onConfirm: () => {
-                  void issueTallyWrite(
-                    replica.session,
-                    trashExpenseWrite(expenseId),
-                    { executed: COMPOSE_OUTCOMES.trashed }
-                  ).then((ok) => {
-                    if (ok) navigation.goBack();
-                  });
-                },
-                title: TRASH_TITLE,
-              })
-            }
-            style={[styles.footAct, styles.footDestructive]}
-          >
-            {LIFE_ACTS.trash}
-          </Text>
-        </View>
-      </ScrollView>
-    );
-  })();
+        <Text
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("TallyReceipt", { expenseId })}
+          style={styles.footAct}
+        >
+          {LIFE_ACTS.itemise}
+        </Text>
+        {/* DESTRUCTIVE IS OUTLINED IN `--net`, never filled. */}
+        <Text
+          accessibilityRole="button"
+          onPress={() =>
+            setAsk({
+              body: [TRASH_BODY],
+              confirm: LIFE_ACTS.trash,
+              onConfirm: () => {
+                void issueTallyWrite(
+                  replica.session,
+                  trashExpenseWrite(expenseId),
+                  { executed: COMPOSE_OUTCOMES.trashed }
+                ).then((ok) => {
+                  if (ok) navigation.goBack();
+                });
+              },
+              title: TRASH_TITLE,
+            })
+          }
+          style={[styles.footAct, styles.footDestructive]}
+        >
+          {LIFE_ACTS.trash}
+        </Text>
+      </View>
+    </ScrollView>
+  ) : (
+    <View style={styles.absent}>
+      <Text style={styles.absentText}>{ABSENT}</Text>
+    </View>
+  );
 
   return (
     <TallyScreen shelf={EXPENSE} hideBand onBack={() => navigation.goBack()}>

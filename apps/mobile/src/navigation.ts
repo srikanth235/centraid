@@ -24,7 +24,6 @@ export type PhotosStackParamList = {
     | undefined;
   PhotoLightbox: { assetId: string };
   PhotosLibrary: undefined;
-  PhotosSearch: undefined;
   // Cards first: More → `PlacesView`, shelf head → `PlacesMap`, card → `PlaceDetail`. Not a `PhotoStateView` mode.
   PlacesView: undefined;
   PlacesMap: undefined;

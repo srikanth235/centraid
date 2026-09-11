@@ -16,6 +16,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makePhotosFixture } from "./photos-fixtures";
+import type { PhotosRouteKey } from "./photos-places";
 import { DEFAULT_PLACES_MAP_MODE, setMapMode } from "./places-map-mode";
 import PlacesMap from "./PlacesMap";
 
@@ -135,6 +136,40 @@ vi.mock(
       useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
     }) as never
 );
+
+// The frame is the room's (#1015, R-NY-7). The stand-in draws what this suite
+// asserts through it: the back key, named for the parent the route table
+// computes, the title, and the toolbar that carries the count and the chip.
+vi.mock(import("./PhotosScreen"), async () => {
+  const { photosParentPlace } = await import("./photos-places");
+  return {
+    default: ({
+      children,
+      onBack,
+      route,
+      title,
+      toolbar,
+    }: {
+      children?: React.ReactNode;
+      onBack?: () => void;
+      route: PhotosRouteKey;
+      title: string;
+      toolbar?: React.ReactNode;
+    }) =>
+      React.createElement(
+        "div",
+        {},
+        React.createElement("button", {
+          "aria-label": `Back to ${photosParentPlace(route).title}`,
+          onClick: onBack,
+          type: "button",
+        }),
+        title,
+        toolbar,
+        children
+      ),
+  } as never;
+});
 
 vi.mock(
   import("../../kit/components/Icon"),

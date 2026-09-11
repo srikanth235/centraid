@@ -72,6 +72,9 @@ export interface PhotosScreenProps {
   /** Leaving. The room draws the control. */
   onBack?: () => void;
   action?: RoomAction;
+  /** The controls that pick what the body shows — the Places map's mode chip.
+   *  The room's slot, above the body and outside its state machine. */
+  toolbar?: React.ReactNode;
   children: React.ReactNode;
   selection?: PhotosSelectionProps;
 }
@@ -110,6 +113,7 @@ export default function PhotosScreen({
   title,
   onBack,
   action,
+  toolbar,
   children,
   selection,
 }: PhotosScreenProps): React.JSX.Element {
@@ -181,6 +185,7 @@ export default function PhotosScreen({
         lockup={lockup}
         onBack={leave}
         selection={room}
+        toolbar={toolbar}
       >
         {body}
       </AppPlace>
@@ -194,6 +199,7 @@ export default function PhotosScreen({
       lockup={lockup}
       onBack={leave}
       selection={room}
+      toolbar={toolbar}
       title={title}
     >
       {body}

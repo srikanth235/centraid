@@ -63,13 +63,17 @@ export default function TallyFriendScreen({
     vault.dashboard.groups.map((group) => [group.group_id, group.name])
   );
 
-  const body = ((): React.JSX.Element | null => {
-    if (!data?.friend) return null;
-    // A friend's position is a bag (#996, R22): one amount per currency.
-    const net = data.friend.balances;
-    const tone = bagTone(net);
-    const parts = data.friend.parts ?? [];
-    return (
+  // A friend's position is a bag (#996, R22): one amount per currency.
+  const friend = data?.friend;
+  const net = friend?.balances ?? [];
+  const tone = bagTone(net);
+  const parts = friend?.parts ?? [];
+
+  // An expression, not a render function: the frame below is this screen's
+  // root, and a `return (<…` ahead of it reads as the root to the rooms gate
+  // (`scripts/lint-mobile-rooms.mjs`, R-NY-7).
+  const body =
+    data && friend ? (
       <ScrollView contentContainerStyle={styles.page}>
         <Hero
           figure={bagFigure(net, "Settled")}
@@ -78,8 +82,8 @@ export default function TallyFriendScreen({
             tone === "settled"
               ? FRIEND_HERO_LEVEL
               : tone === "net"
-                ? friendHeroOwe(data.friend.name)
-                : friendHeroOwed(data.friend.name)
+                ? friendHeroOwe(friend.name)
+                : friendHeroOwed(friend.name)
           }
           sub={FRIEND_HERO_SUB}
           acts={[
@@ -143,8 +147,7 @@ export default function TallyFriendScreen({
           ))}
         </Section>
       </ScrollView>
-    );
-  })();
+    ) : null;
 
   return (
     <TallyScreen shelf={FRIEND} onBack={() => navigation.goBack()}>

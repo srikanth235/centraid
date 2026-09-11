@@ -273,65 +273,57 @@ export default function TallyHome({
       title: nudgeTitle(friend.name),
     });
 
-  const body = ((): React.JSX.Element => {
-    if (destination === "activity") {
-      return (
-        <ActivityView
-          data={
-            vault.activity ?? {
-              activity: [],
-              currency: vault.dashboard.currency,
-              me: vault.dashboard.me,
-            }
+  // An expression, not a render function: the frame below is this screen's
+  // root, and a `return (<…` ahead of it reads as the root to the rooms gate
+  // (`scripts/lint-mobile-rooms.mjs`, R-NY-7).
+  const body =
+    destination === "activity" ? (
+      <ActivityView
+        data={
+          vault.activity ?? {
+            activity: [],
+            currency: vault.dashboard.currency,
+            me: vault.dashboard.me,
           }
-          loaded={vault.activity !== null}
-          notice={notice}
-          now={vault.now}
-          onExpense={(expenseId) =>
-            navigation.navigate("TallyExpense", { expenseId })
-          }
-          onShowMore={showMoreTallyActivity}
-          window={vault.window}
-        />
-      );
-    }
-    if (destination === "groups") {
-      return (
-        <GroupsView
-          data={vault.dashboard}
-          notice={notice}
-          onArchive={(groupId, _name, archived) =>
-            askArchive(groupId, archived)
-          }
-          onLeave={(groupId) => askLeave(groupId)}
-          onNewGroup={askNewGroup}
-          onOpenGroup={(groupId, name) =>
-            navigation.navigate("TallyGroup", { groupId, name })
-          }
-        />
-      );
-    }
-    if (destination === "contrib") {
-      return (
-        <WaitingView
-          names={names}
-          notice={notice}
-          now={vault.now}
-          nudges={vault.dashboard.nudges ?? []}
-          onVerb={onVerb}
-          sections={tallyWaiting(
-            pending.map((change) => ({
-              id: change.id,
-              label: change.label,
-              status: change.status,
-              ...(change.reason ? { reason: change.reason } : {}),
-            })),
-            vault.dashboard.me
-          )}
-        />
-      );
-    }
-    return (
+        }
+        loaded={vault.activity !== null}
+        notice={notice}
+        now={vault.now}
+        onExpense={(expenseId) =>
+          navigation.navigate("TallyExpense", { expenseId })
+        }
+        onShowMore={showMoreTallyActivity}
+        window={vault.window}
+      />
+    ) : destination === "groups" ? (
+      <GroupsView
+        data={vault.dashboard}
+        notice={notice}
+        onArchive={(groupId, _name, archived) => askArchive(groupId, archived)}
+        onLeave={(groupId) => askLeave(groupId)}
+        onNewGroup={askNewGroup}
+        onOpenGroup={(groupId, name) =>
+          navigation.navigate("TallyGroup", { groupId, name })
+        }
+      />
+    ) : destination === "contrib" ? (
+      <WaitingView
+        names={names}
+        notice={notice}
+        now={vault.now}
+        nudges={vault.dashboard.nudges ?? []}
+        onVerb={onVerb}
+        sections={tallyWaiting(
+          pending.map((change) => ({
+            id: change.id,
+            label: change.label,
+            status: change.status,
+            ...(change.reason ? { reason: change.reason } : {}),
+          })),
+          vault.dashboard.me
+        )}
+      />
+    ) : (
       <BalancesView
         data={vault.dashboard}
         notice={notice}
@@ -349,7 +341,6 @@ export default function TallyHome({
         state={state}
       />
     );
-  })();
 
   return (
     <TallyScreen

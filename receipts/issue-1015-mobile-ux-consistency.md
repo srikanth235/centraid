@@ -1563,3 +1563,97 @@ The owner opened Alerts on the simulator after the draft PR and reported it brok
 `PlaceHeader.test.tsx` holds both: the bar's gutter equals `pageMargin` and a verb's plate centres. Seen on the simulator (dev client, cleared Metro cache): title and verbs on the 20pt gutter, labels centred in History, Review all, Open and Mark read.
 
 The other 14 gaps (raw engine errors as notice headlines, background failures filed under "Waiting on you", the always-on empty grants section, the contradicting health line, a "Review all" that only scrolls, the band vanishing on a band destination, and the rest) are copy, model and navigation work, scoped on the umbrella issue as a follow-up round rather than fixed here.
+
+## Round NY — Lane C: `screen-root` 33 → 1 and `page-margin` 2 → 0 (R-NY-6, R-NY-7)
+
+Commits `5e9be1078` (C1, the lint), `b7105c04b` (Tally), `f7e0932ac` (Locker), `d8d163493` (People), `642af3e48` (Photos), `747601ccd` (C3, the tile inset) and the C4 commit that carries this section (the baseline, the rooms README).
+
+### C1 — the four frames, and one level of resolution
+
+All four app frames root in a room: `LockerScreen`, `PeopleScreen`, `PhotosScreen` and `TallyScreen` each return `<AppPlace …>` for a place and `<PushedPage …>` for anything pushed over one. So the screens rooted in them are room screens (R-NY-7), and the lint now knows it: `lintFile` takes a `readSource`, resolves the root tag's relative default import (`frameModuleOf`), and passes the screen when that module's own root is one of the six — exactly one level. `selfTest` plants three cases on every run: a frame rooted in a room (no finding), a frame rooted in `<View>` (fires), and a frame rooted in another frame (fires, because two hops no longer prove which room the member stands in). `scripts/lint-mobile-rooms.test.mjs` proves the same both ways on the committed `LockerTrashScreen`. **33 → 11.**
+
+The suite's tree-walk test proved the reader alive by asserting that `screen-root` and `page-margin` still had findings. R-NY-6 and R-NY-7 take both to zero, which a dead reader would also report, so it now proves the reader by reading real roots instead: more than 40 registered screens answer a tag, and the four frames answer a room.
+
+### C2 — the eleven left, and what they actually were
+
+**Seven were not hand-rolled.** Each already rooted in its app's frame; `rootTagOf` reads the FIRST `return (<` after `export default`, and each had an earlier one.
+
+| Screen | Read as | Why | Fix |
+| --- | --- | --- | --- |
+| `TallyExpenseScreen`, `TallyFriendScreen`, `TallyGroupScreen`, `TallyHome` | `<View>`, `<ScrollView>`, `<ScrollView>` (then `<LedgerRow>`), `<ActivityView>` | a render IIFE; in `TallyGroupScreen` a member-row `map` callback too | the body is one expression, same branches and props |
+| `LockerHome` | `<LockerReviewView>` | the destination switch returned JSX inside `useMemo` | one expression, same memo and dependencies |
+| `PersonView` | `<SkeletonRows>` | a render function whose first branch drew the skeleton | the skeleton is the ROOM's `loading` state (`PeopleScreen` forwards it); the record is one expression |
+| `PhotosLibrary` | `<View>` | a comment between `return (` and `<PhotosScreen` | the comment sits above the `return` |
+
+**Four were hand-rolled.**
+
+- **`FaceReview`** roots in `PhotosScreen` as a pushed page, route `faceReview` (parent Photos). It gains the computed back key and the Photos band with More lit, like every surface opened from More; its "N of M" moves under the title, because the room's header carries no count.
+- **`PlacesMap`** roots in `PhotosScreen`, route `placesMap` (parent Places), titled "Map": it said "Places" beside a "Back to Places" chevron. The count and the map-mode chip ride the room's `toolbar`, which `PhotosScreen` now forwards; the chip keeps its anchor ref for `AnchoredMenu`.
+- **`PhotosSearch` — the route is DELETED, not migrated.** Nothing pushed it; `PhotosHome` renders `PhotosSearchView` in place, and the registration was kept only "so App.tsx does not dangle". Wrapping it in `PhotosScreen` made `PhotosHome.test.tsx` fail to LOAD, because the view's module then imported the frame and `@react-navigation/native` with it. Removed from `navigators.tsx`, `lazy-screens.tsx` and `PhotosStackParamList` (v0, no legacy); the view stays.
+- **`PhotoLightbox` — STOPPED.** It stays in the baseline; see the owner item below.
+
+### C3 — R-NY-6
+
+`tileChipInset` (3) is a named, commented constant in `apps/mobile/src/kit/theme/native.ts`, exported from the theme index; `PhotoTile` uses it for the custody and state chips' inline inset (proto:4019). It is mobile-kit only, not a third `subBase` seam: no other surface draws a chip on a tile. **`page-margin` 2 → 0.**
+
+### C4 — the ratchet
+
+`page-margin` is deleted from `scripts/lint-mobile-rooms.baseline.json`, which makes it unconditional. `screen-root` goes 33 → **1**, with `PhotoLightbox` named in `clearedBy`. `apps/mobile/src/kit/rooms/README.md` § Adoption now describes the rule as it stands: rooms directly or through one frame level, and the one exception.
+
+### Owner item — `PhotoLightbox` has no honest room
+
+It is a full-bleed `--stage` ground in both themes: a dismiss gesture over the whole screen, floating chrome that carries its own insets, and the band hidden. `AppPlace` and `PushedPage` draw a header and paint `colors.bg` inside `TopSafeArea`, which would letterbox the stage. `EditorRoom` draws a title bar with a Done key over the photograph. `SheetRoom` is a partial modal. Options:
+
+- **(a) A seventh room, `StageRoom` — recommended.** Full-bleed, no header, band hidden, status line hosted, dismiss gesture owned. The slideshow, video and edit-on-stage modes are the same shape.
+- **(b) A named exception in the lint**, one ruled entry, with the baseline entry deleted.
+- **(c) Force it into `EditorRoom`.** Not recommended: the bar covers the image.
+
+### Finding outside the slice
+
+The root reader's first-`return` heuristic misread seven of the eleven screens the census called hand-rolled. A depth-aware reader — the default function's own top-level `return` — would have seen through all seven without touching the code. That change is outside R-NY-7's one-level licence, so it is recorded here, not made.
+
+### Files
+
+- `scripts/lint-mobile-rooms.mjs`
+- `scripts/lint-mobile-rooms.test.mjs`
+- `scripts/lint-mobile-rooms.baseline.json`
+- `apps/mobile/src/apps/tally/TallyExpenseScreen.tsx`
+- `apps/mobile/src/apps/tally/TallyFriendScreen.tsx`
+- `apps/mobile/src/apps/tally/TallyGroupScreen.tsx`
+- `apps/mobile/src/apps/tally/TallyHome.tsx`
+- `apps/mobile/src/apps/locker/LockerHome.tsx`
+- `apps/mobile/src/apps/people/PeopleScreen.tsx`
+- `apps/mobile/src/apps/people/PersonView.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.styles.ts`
+- `apps/mobile/src/apps/photos/FaceReview.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosSearch.tsx`
+- `apps/mobile/src/apps/photos/PhotosLibrary.tsx`
+- `apps/mobile/src/apps/photos/PhotosScreen.tsx`
+- `apps/mobile/src/apps/photos/photos-places.ts`
+- `apps/mobile/src/apps/photos/PhotoTile.tsx`
+- `apps/mobile/navigators.tsx`
+- `apps/mobile/lazy-screens.tsx`
+- `apps/mobile/src/navigation.ts`
+- `apps/mobile/src/kit/theme/native.ts`
+- `apps/mobile/src/kit/theme/index.ts`
+- `apps/mobile/src/kit/rooms/README.md`
+- `receipts/issue-1015-mobile-ux-consistency.md`
+
+No file is deleted. The `PhotosSearch` route registration is removed; its module stays as the view.
+
+### Verification, from the lane worktree
+
+1. `node scripts/lint-mobile-rooms.mjs` → `screen-root 1 · back-literal 0 · page-margin 0 · identity-tint 0 · copy-title-case 0 · error-detail 0`, 1 finding over 594 files (`PhotoLightbox.tsx`). `--enforce` → **exit 0** with the new baseline.
+2. `node --test scripts/lint-mobile-rooms.test.mjs` → **11 passed, 0 failed**.
+3. `bun run --cwd apps/mobile typecheck` → **0**.
+4. `cd apps/mobile && bunx vitest run src/apps/locker src/apps/people src/apps/photos src/apps/tally` → the only failures are in `LockerHome.test.tsx`, `PeopleHome.test.tsx`, `PhotosHome.test.tsx` and `TallyHome.test.tsx`, every one `Unknown mobile icon name: NewChat`. **The failing test names are identical at `1919bd6ab`.**
+5. `cd apps/mobile && bunx vitest run src/screens src/apps src/kit` → **252 files, 2256 passed, 52 failed**, in 9 files: the four above plus `AgendaHome`, `DocsHome`, `NotesHome`, `TasksHome` and `kit/components/icon-resolver.sweep.test.ts`. Inherited: with `1919bd6ab`'s `apps/` and `scripts/` checked out in this worktree, the same nine files fail **52 of 70** — measured, then restored.
+6. `bun run format`, then `bun run check:push:static` and `node .governance/law/run.mjs --brief-digest bf847b5c4982` → see the report.
+
+### Falsification
+
+1. **Claim: the one-level resolution cannot be fooled into passing a frame that hand-rolls its root.** Throwaway check: `lintFile` on the committed `LockerTrashScreen.tsx`, with a `readSource` that serves `LockerScreen.tsx` with `<AppPlace` swapped for `<View>`. Result: `root is <LockerScreen>, not one of the six rooms`; the unmutated frame gives no finding. **Holds.**
+2. **Claim: the misread fixes and the migrations add no red beyond room chrome.** Throwaway check: failing test names in the four app suites, diffed between `1919bd6ab` (changes stashed) and this head. The first diff found one regression, `PhotosHome.test.tsx` failing to load after `PhotosSearch` imported the frame; deleting the dead route fixed it. The re-diff and the nine-file base run above match failure for failure. **Holds, after one fix the check itself found.**

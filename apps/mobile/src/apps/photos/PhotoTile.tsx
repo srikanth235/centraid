@@ -17,7 +17,7 @@ import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
-import { t, useTheme, radii, subBase } from "../../kit/theme";
+import { t, useTheme, radii, subBase, tileChipInset } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
 import {
@@ -280,8 +280,9 @@ const makeStyles = (colors: ThemeColors) =>
       insetInlineStart: 4,
       justifyContent: "center",
       // proto:4019's chip padding. A SEAM below the 4px base, like the
-      // `state` chip below; `subBase` names this exception (#1015, R-B-6).
-      paddingHorizontal: 3,
+      // `state` chip below: the inline inset is the kit's `tileChipInset`
+      // (#1015, R-NY-6) and the block inset is `subBase` (R-B-6).
+      paddingHorizontal: tileChipInset,
       paddingVertical: subBase.gutter,
       position: "absolute",
     },
@@ -292,7 +293,7 @@ const makeStyles = (colors: ThemeColors) =>
       bottom: 4,
       insetInlineEnd: 4,
       insetInlineStart: 4,
-      paddingHorizontal: 3,
+      paddingHorizontal: tileChipInset,
       paddingVertical: 1,
       position: "absolute",
     },

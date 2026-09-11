@@ -149,11 +149,17 @@ export default function TallyGroupScreen({
           }
     );
 
-  const body = ((): React.JSX.Element | null => {
-    if (!data?.group) return null;
-    const level = Math.abs(mine.amount_minor) < 1;
-    const archived = data.group.archived_at != null;
-    return (
+  const group = data?.group;
+  const heldOnLedger = (partyId: string): boolean =>
+    appearsOnLedger(data?.ledger ?? [], partyId);
+  const level = Math.abs(mine.amount_minor) < 1;
+  const archived = group?.archived_at != null;
+
+  // An expression, not a render function: the frame below is this screen's
+  // root, and a `return (<…` ahead of it reads as the root to the rooms gate
+  // (`scripts/lint-mobile-rooms.mjs`, R-NY-7).
+  const body =
+    data && group ? (
       <ScrollView contentContainerStyle={styles.page}>
         <Hero
           figure={moneyNetFigure(mine, "Settled")}
@@ -172,9 +178,7 @@ export default function TallyGroupScreen({
               onPress: () => navigation.navigate("TallySettle", { groupId }),
             },
             {
-              label: data.group.simplify_opt_in
-                ? SIMPLIFY_STOP
-                : VERBS.simplify,
+              label: group.simplify_opt_in ? SIMPLIFY_STOP : VERBS.simplify,
               onPress: () =>
                 write(
                   setSimplificationWrite(
@@ -249,43 +253,46 @@ export default function TallyGroupScreen({
               }),
           }}
         >
-          {data.members.map((member) => {
+          {data.members.map((member) => (
             // A CONTROL WHOSE ONLY OUTCOME IS NO IS NOT A CONTROL (#1015,
             // tally/findings #4). The row's meta already reads "on the ledger
             // · cannot be removed", so a `Remove` beside it could do nothing
             // but restate the sentence the member has just read. The refusal
             // sheet stays for the race where a member joins the ledger between
             // the draw and the tap — `askRemove` still checks `held`.
-            const held = appearsOnLedger(data.ledger, member.party_id);
-            return (
-              <LedgerRow
-                key={member.party_id}
-                initials={member.initials}
-                title={member.name}
-                meta={
-                  member.departed
-                    ? DEPARTED_META
-                    : held
-                      ? ON_THE_LEDGER
-                      : CO_CONTRIBUTES
-                }
-                figure={{
-                  netMinor: member.net.amount_minor,
-                  text: moneyNetFigure(member.net),
-                  sub: personSubLabel(member.net.amount_minor),
-                }}
-                {...(member.departed || member.is_me || held
-                  ? {}
-                  : {
-                      act: {
-                        label: VERBS.remove,
-                        onPress: () =>
-                          askRemove(member.party_id, member.name, held),
-                      },
-                    })}
-              />
-            );
-          })}
+            <LedgerRow
+              key={member.party_id}
+              initials={member.initials}
+              title={member.name}
+              meta={
+                member.departed
+                  ? DEPARTED_META
+                  : heldOnLedger(member.party_id)
+                    ? ON_THE_LEDGER
+                    : CO_CONTRIBUTES
+              }
+              figure={{
+                netMinor: member.net.amount_minor,
+                text: moneyNetFigure(member.net),
+                sub: personSubLabel(member.net.amount_minor),
+              }}
+              {...(member.departed ||
+              member.is_me ||
+              heldOnLedger(member.party_id)
+                ? {}
+                : {
+                    act: {
+                      label: VERBS.remove,
+                      onPress: () =>
+                        askRemove(
+                          member.party_id,
+                          member.name,
+                          heldOnLedger(member.party_id)
+                        ),
+                    },
+                  })}
+            />
+          ))}
         </Section>
 
         <Section
@@ -383,8 +390,7 @@ export default function TallyGroupScreen({
           />
         </Section>
       </ScrollView>
-    );
-  })();
+    ) : null;
 
   return (
     <TallyScreen

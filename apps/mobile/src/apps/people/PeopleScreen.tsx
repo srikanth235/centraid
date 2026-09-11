@@ -17,7 +17,7 @@ import React from "react";
 import { useBandOwner } from "../../kit/band/band-owner";
 import type { SearchFieldProps } from "../../kit/components/SearchField";
 import { AppPlace, PushedPage } from "../../kit/rooms";
-import type { PlaceRef, RoomAction } from "../../kit/rooms";
+import type { PlaceRef, RoomAction, RoomLoading } from "../../kit/rooms";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { PeopleShellNavigation } from "../../navigation";
 import VaultBar from "../../screens/home/VaultBar";
@@ -52,6 +52,9 @@ export interface PeopleScreenProps {
   action?: RoomAction;
   secondary?: RoomAction;
   search?: SearchFieldProps;
+  /** The room's own skeleton, while the surface's first read is in flight —
+   *  never a skeleton the screen draws as its body (#1015, R-NY-7). */
+  loading?: RoomLoading;
   children: React.ReactNode;
   /** Hidden while a modal sheet owns the foot. */
   bandHidden?: boolean;
@@ -65,6 +68,7 @@ export default function PeopleScreen({
   action,
   secondary,
   search,
+  loading,
   children,
   bandHidden,
 }: PeopleScreenProps): React.JSX.Element {
@@ -103,6 +107,7 @@ export default function PeopleScreen({
         band={band}
         lockup={lockup}
         onBack={leave}
+        loading={loading}
         search={search}
         secondary={secondary}
       >
@@ -117,6 +122,7 @@ export default function PeopleScreen({
       band={band}
       lockup={lockup}
       onBack={leave}
+      loading={loading}
       search={search}
       secondary={secondary}
       title={title}

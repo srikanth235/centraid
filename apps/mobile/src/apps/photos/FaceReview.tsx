@@ -26,10 +26,8 @@ import {
 import { photosFaceMatchedOn } from "@centraid/blueprints/apps/photos/shared-copy";
 import type { PageQuery } from "@centraid/core/page";
 
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
@@ -53,6 +51,7 @@ import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
 import { styles } from "./FaceReview.styles";
 import { usePhotoEntity } from "./photo-entity-reads";
+import PhotosScreen from "./PhotosScreen";
 import { usePhotoTimeline } from "./timeline-source";
 
 /*
@@ -236,24 +235,21 @@ export default function FaceReview({
     ? (names.get(current.partyId) ?? null)
     : null;
 
+  // The room draws the title and the back key, which names the place this
+  // queue descends from (`photosParentPlace`), and the band (#1015, R-NY-7).
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-          Face review
-        </Text>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="faceReview"
+      title="Face review"
+    >
+      {/* The queue position, under the title rather than beside it: the room's
+          header carries a title and a back key, never a count. */}
+      {current ? (
         <Text style={[styles.count, { color: colors.textSoft }]}>
-          {current ? `${position} of ${total}` : ""}
+          {`${position} of ${total}`}
         </Text>
-      </View>
+      ) : null}
       <ReplicaStatusBar />
       <FlatList
         data={current ? [current.regionId] : []}
@@ -572,6 +568,6 @@ export default function FaceReview({
           </Text>
         }
       />
-    </TopSafeArea>
+    </PhotosScreen>
   );
 }

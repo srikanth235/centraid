@@ -8,7 +8,7 @@
 // REAL committed sources.
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
@@ -16,6 +16,7 @@ import {
   ROOMS,
   RULES,
   countByRule,
+  frameModuleOf,
   isTitleCase,
   lintFile,
   lintTree,
@@ -26,6 +27,15 @@ import {
 } from "./lint-mobile-rooms.mjs";
 
 const REPO = path.resolve(import.meta.dirname, "..");
+
+/** A committed module by repo-relative path, or null. */
+const readSource = (relative) => {
+  try {
+    return readFileSync(path.join(REPO, relative), "utf8");
+  } catch {
+    return null;
+  }
+};
 
 test("every rule fires on its own fixture", () => {
   selfTest();
@@ -71,6 +81,25 @@ test("a room root is not a finding, and a hand-rolled one is", () => {
   // row component was one of 153 findings, ~96 of which were leaves; a rule
   // that cries that often does not get wired, it gets ignored.
   assert.deepEqual(lintFile("apps/mobile/src/apps/x/Row.tsx", rolled), []);
+});
+
+test("a screen rooted in its app's frame is resolved one level, on the real tree", () => {
+  // R-NY-7 (#1015). Proven against a committed screen and its committed
+  // frame, both ways: without the reader the frame is opaque and the screen
+  // is a finding; with it, the frame's own room is seen and it is not.
+  const relative = "apps/mobile/src/apps/locker/LockerTrashScreen.tsx";
+  const source = readSource(relative) ?? "";
+  assert.equal(rootTagOf(source), "LockerScreen");
+  assert.equal(
+    frameModuleOf(relative, source, "LockerScreen"),
+    "apps/mobile/src/apps/locker/LockerScreen.tsx"
+  );
+  const rooted = (reader) =>
+    lintFile(relative, source, new Set(), reader).filter(
+      (finding) => finding.rule === "screen-root"
+    ).length;
+  assert.equal(rooted(undefined), 1);
+  assert.equal(rooted(readSource), 0);
 });
 
 test("the screen registry names real, existing modules", () => {
@@ -130,12 +159,26 @@ test("Title Case is a label, never prose", () => {
 });
 
 test("the tree walk reads real screens rather than nothing", () => {
-  const { findings, scanned } = lintTree();
+  const { scanned } = lintTree();
   assert.ok(scanned > 300, `scanned only ${scanned} files`);
-  const counts = countByRule(findings);
-  // Not an assertion about the CURRENT numbers — those are the Wave 3 baseline
-  // and move every week. What is asserted is that the two rules with a known
-  // population still see it, which is what a dead reader would break.
-  assert.ok(counts["screen-root"] > 0);
-  assert.ok(counts["page-margin"] > 0);
+  // NOT a population of findings. That used to be the proof — `screen-root`
+  // and `page-margin` still saw theirs — and R-NY-6/R-NY-7 (#1015) took both
+  // to zero, which a dead reader would ALSO report. What a dead reader cannot
+  // fake is reading real roots: nearly every registered screen answers a tag,
+  // and the four app frames answer a room.
+  const read = [...registeredScreens()].filter(
+    (relative) => rootTagOf(readSource(relative) ?? "") !== null
+  );
+  assert.ok(read.length > 40, `the root reader read ${read.length} screens`);
+  for (const frame of [
+    "locker/LockerScreen",
+    "people/PeopleScreen",
+    "photos/PhotosScreen",
+    "tally/TallyScreen",
+  ]) {
+    const root = rootTagOf(
+      readSource(`apps/mobile/src/apps/${frame}.tsx`) ?? ""
+    );
+    assert.ok(ROOMS.includes(root ?? ""), `${frame} roots in <${root}>`);
+  }
 });

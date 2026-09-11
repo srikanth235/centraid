@@ -159,9 +159,6 @@ export const PhotosHome = lazyScreen(
 export const PhotosLibrary = lazyScreen(
   () => import("./src/apps/photos/PhotosLibrary")
 );
-export const PhotosSearch = lazyScreen(
-  () => import("./src/apps/photos/PhotosSearch")
-);
 export const PhotoStateView = lazyScreen(
   () => import("./src/apps/photos/PhotoStateView")
 );
