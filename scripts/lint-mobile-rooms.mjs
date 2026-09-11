@@ -37,6 +37,15 @@
  *   screen-root      A screen file's default export returns a root that is not
  *     one of the six rooms. This is the rule the other four exist to make
  *     unnecessary: a screen inside a room cannot hand-roll a header.
+ *     ONE LEVEL OF FRAME (R-NY-7, #1015). An app frame — `LockerScreen`,
+ *     `PeopleScreen`, `PhotosScreen`, `TallyScreen` — owns the band, the wall
+ *     and the lockup, and its own default export roots in a room. A screen
+ *     rooted in such a frame IS a room screen, so the rule resolves the root's
+ *     default import (a relative `import X from "./X"`) and passes the screen
+ *     when THAT file's root is one of the six. Exactly one level: a frame
+ *     rooted in another frame is a finding, because at two hops the text no
+ *     longer proves which room the member stands in. `selfTest` plants both
+ *     ways, and the two-hop case.
  *   back-literal     `backTo="…"` or `current="…"` written as a string. Audit
  *     B7: thirteen Docs screens said `backTo="All"`, twelve of them wrong, and
  *     the label and the VoiceOver word were wrong together. Inside a room the
@@ -225,6 +234,49 @@ export function rootTagOf(source) {
   return match?.groups?.tag ?? null;
 }
 
+/**
+ * Where a screen's root tag comes from, when it is a relative default import.
+ *
+ * `import LockerScreen from "./LockerScreen";` → `apps/…/locker/LockerScreen.tsx`.
+ * A named import, a package import or a tag defined in the same file answers
+ * `null`: the one level this rule resolves is an app's own frame, and a frame
+ * is always the default export of a sibling module.
+ *
+ * @param {string} relative Repo-relative path of the importing screen.
+ * @param {string} source Its text.
+ * @param {string} tag The root tag to resolve.
+ * @returns {string|null} Repo-relative `.tsx` path, or null.
+ */
+export function frameModuleOf(relative, source, tag) {
+  const escaped = tag.replace(/[.$]/gu, "\\$&");
+  const match = new RegExp(
+    `import\\s+${escaped}\\s+from\\s+["'](?<spec>\\.{1,2}/[^"']+)["']`,
+    "u"
+  ).exec(source);
+  const spec = match?.groups?.spec;
+  if (spec === undefined) return null;
+  return `${path.posix.join(path.posix.dirname(relative), spec)}.tsx`;
+}
+
+/**
+ * True when `tag` is a frame whose OWN root is one of the six rooms — one
+ * level, never recursive (see "ONE LEVEL OF FRAME" above).
+ *
+ * @param {string} relative Repo-relative path of the screen.
+ * @param {string} source The screen's text.
+ * @param {string} tag The screen's root tag.
+ * @param {(relative: string) => string|null} readSource Reads a module.
+ * @returns {boolean} True when the frame roots in a room.
+ */
+function frameIsRoom(relative, source, tag, readSource) {
+  const module = frameModuleOf(relative, source, tag);
+  if (module === null) return false;
+  const frame = readSource(module);
+  if (frame === null) return false;
+  const frameRoot = rootTagOf(frame);
+  return frameRoot !== null && ROOMS.includes(frameRoot);
+}
+
 /** Where an exception would become member copy. */
 const COPY_SINK =
   /(?:postStatus|showUndoStatus)\s*\(|\b(?:detail|message|reason|secondary|error|body|title|label)\s*:/u;
@@ -239,9 +291,17 @@ const RAW_EXCEPTION =
  * @param {string} relative Repo-relative path.
  * @param {string} source File text.
  * @param {Set<string>} [registry] Registered screen modules.
+ * @param {(relative: string) => string|null} [readSource] Reads a sibling
+ *   module by repo-relative path, for the one frame level `screen-root`
+ *   resolves; the default reads nothing, so a frame-rooted screen is a finding.
  * @returns {{rule: string, path: string, detail: string}[]} Findings.
  */
-export function lintFile(relative, source, registry = new Set()) {
+export function lintFile(
+  relative,
+  source,
+  registry = new Set(),
+  readSource = () => null
+) {
   const findings = [];
   const add = (rule, detail) => findings.push({ detail, path: relative, rule });
 
@@ -254,7 +314,11 @@ export function lintFile(relative, source, registry = new Set()) {
 
   if (isScreenFile(relative, registry)) {
     const root = rootTagOf(source);
-    if (root !== null && !ROOMS.includes(root))
+    if (
+      root !== null &&
+      !ROOMS.includes(root) &&
+      !frameIsRoom(relative, source, root, readSource)
+    )
       add("screen-root", `root is <${root}>, not one of the six rooms`);
   }
 
@@ -312,11 +376,20 @@ export function isTitleCase(label) {
 export function lintTree(root = ROOT) {
   const files = SCREEN_DIRS.flatMap((dir) => walk(path.join(root, dir)));
   const registry = registeredScreens(root);
+  const readSource = (relative) => {
+    try {
+      return readFileSync(path.join(root, relative), "utf8");
+    } catch {
+      return null;
+    }
+  };
   const findings = [];
   for (const file of files) {
     if (!/\.tsx?$/u.test(file) || file.includes(".test.")) continue;
     const relative = path.relative(root, file);
-    findings.push(...lintFile(relative, readFileSync(file, "utf8"), registry));
+    findings.push(
+      ...lintFile(relative, readFileSync(file, "utf8"), registry, readSource)
+    );
   }
   return { findings, registry, scanned: files.length };
 }
@@ -364,6 +437,36 @@ export function selfTest() {
   );
   if (!registered.some((finding) => finding.rule === "screen-root"))
     throw new Error("lint-mobile-rooms: the registry does not name a screen");
+
+  // ONE LEVEL OF FRAME (R-NY-7), both ways and the hop beyond. A screen rooted
+  // in its app's frame passes when the frame roots in a room, fails when the
+  // frame hand-rolls its root, and fails when the frame is itself a frame.
+  const frameScreen =
+    'import AppFrame from "./AppFrame";\nexport default function S() {\n return (\n <AppFrame>x</AppFrame>);}';
+  const frames = {
+    "apps/mobile/src/apps/x/AppFrame.tsx":
+      "export default function F() {\n return (\n <PushedPage>x</PushedPage>);}",
+    "apps/mobile/src/apps/y/AppFrame.tsx":
+      "export default function F() {\n return (\n <View>x</View>);}",
+    "apps/mobile/src/apps/z/AppFrame.tsx":
+      'import Inner from "./Inner";\nexport default function F() {\n return (\n <Inner>x</Inner>);}',
+    "apps/mobile/src/apps/z/Inner.tsx":
+      "export default function I() {\n return (\n <AppPlace>x</AppPlace>);}",
+  };
+  const readFrame = (relative) => frames[relative] ?? null;
+  const rootedIn = (app) =>
+    lintFile(
+      `apps/mobile/src/apps/${app}/SScreen.tsx`,
+      frameScreen,
+      new Set(),
+      readFrame
+    ).some((finding) => finding.rule === "screen-root");
+  if (rootedIn("x"))
+    throw new Error("lint-mobile-rooms: a frame rooted in a room is a finding");
+  if (!rootedIn("y"))
+    throw new Error("lint-mobile-rooms: a frame rooted in <View> passes");
+  if (!rootedIn("z"))
+    throw new Error("lint-mobile-rooms: a frame resolves more than one level");
 
   // Capturing an exception for a log is not rendering it.
   const captured = lintFile(
