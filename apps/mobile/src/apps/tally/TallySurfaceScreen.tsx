@@ -67,7 +67,7 @@ export default function TallySurfaceScreen({
     return (
       <TallyScreen shelf={EXPORT} hideBand onBack={() => navigation.goBack()}>
         <ScrollView contentContainerStyle={styles.page}>
-          <EmptyBlock {...EXPORT_NEEDS_GROUP} />
+          <EmptyBlock {...EXPORT_NEEDS_GROUP} inset />
         </ScrollView>
       </TallyScreen>
     );

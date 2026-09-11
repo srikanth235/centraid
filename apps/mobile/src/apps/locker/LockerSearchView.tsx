@@ -94,6 +94,7 @@ export default function LockerSearchView(
         results === null ? null : (
           <EmptyBlock
             body={SEARCH_NO_MATCH_BODY}
+            inset
             routine
             title={SEARCH_NO_MATCH}
           />

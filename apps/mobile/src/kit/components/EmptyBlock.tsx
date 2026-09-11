@@ -26,6 +26,12 @@ export interface EmptyBlockAction extends ActionData {
 export interface EmptyBlockProps extends EmptyCopy {
   action?: EmptyBlockAction;
   action2?: EmptyBlockAction;
+  /**
+   * The block carries no gutter: its container does (a room's state, a
+   * place's body). Set this only when the container is a full-bleed list
+   * whose rows carry their own inset, so the block brings the page gutter.
+   */
+  inset?: boolean;
 }
 
 export default function EmptyBlock({
@@ -34,6 +40,7 @@ export default function EmptyBlock({
   action,
   action2,
   routine,
+  inset = false,
 }: EmptyBlockProps): React.JSX.Element {
   const { colors } = useTheme();
   const firstRun = routine !== true;
@@ -42,7 +49,13 @@ export default function EmptyBlock({
     [colors]
   );
   return (
-    <View style={[styles.block, firstRun ? styles.blockFirstRun : undefined]}>
+    <View
+      style={[
+        styles.block,
+        firstRun ? styles.blockFirstRun : undefined,
+        inset ? styles.inset : undefined,
+      ]}
+    >
       <Text
         accessibilityRole="header"
         style={[firstRun ? styles.titleFirstRun : styles.title, ink.title]}

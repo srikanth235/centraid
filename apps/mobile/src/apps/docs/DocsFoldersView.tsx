@@ -135,7 +135,12 @@ export default function DocsFoldersView({
       {drive.loading && drive.folders.length === 0 ? (
         <SkeletonRows accessibilityLabel="Reading folders" />
       ) : emptyView.visible ? (
-        <EmptyBlock title={emptyView.title} body={emptyView.body} routine />
+        <EmptyBlock
+          title={emptyView.title}
+          body={emptyView.body}
+          inset
+          routine
+        />
       ) : (
         <View style={styles.container}>
           {drive.folders.map((folder, index) => (

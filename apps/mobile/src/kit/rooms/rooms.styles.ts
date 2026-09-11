@@ -35,6 +35,10 @@ export const styles = StyleSheet.create({
   },
   barTitle: { ...t("bodyStrong"), flex: 1, minWidth: 0 },
   body: { flex: 1 },
+  // The room's own states — error, loading, empty — sit OUTSIDE any screen's
+  // padded body, so they take the room gutter here, once. The block inside
+  // (`PanelBlock`, `EmptyBlock`) carries none of its own.
+  state: { flex: 1, paddingHorizontal: pageMargin },
   // The scrolling body of a system place. The gutter is the ROOM's — a place
   // whose header and list disagree by 4pt was the commonest audit finding.
   placeBody: {

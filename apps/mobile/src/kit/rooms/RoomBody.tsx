@@ -38,7 +38,7 @@ export default function RoomBody({
 }: RoomBodyProps): React.JSX.Element {
   if (error)
     return (
-      <View style={styles.body}>
+      <View style={styles.state}>
         <PanelBlock
           action={{ label: error.retry.label, onPress: error.retry.onPress }}
           action2={
@@ -63,14 +63,14 @@ export default function RoomBody({
     );
   if (loading)
     return (
-      <View style={styles.body}>
+      <View style={styles.state}>
         <SkeletonRows accessibilityLabel={loading.label} rows={loading.rows} />
         {loading.note ? <NoteBlock text={loading.note} /> : null}
       </View>
     );
   if (empty)
     return (
-      <View style={styles.body}>
+      <View style={styles.state}>
         <EmptyBlock {...empty} />
       </View>
     );

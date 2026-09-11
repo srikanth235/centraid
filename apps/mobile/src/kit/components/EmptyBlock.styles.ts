@@ -20,21 +20,22 @@ export const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing[2], paddingTop: spacing[1] },
   body: t("body"),
   bodyFirstRun: t("reading"),
-  // THE GUTTER IS THE BLOCK'S OWN (#1015, S5 — audit S5, docs/findings.md#3).
-  // It had vertical padding and no horizontal padding, so an empty rendered
-  // inside a full-bleed list — the common case, since a list's rows carry
-  // their own inset — put its title hard against the screen edge while every
-  // populated row beside it sat at `pageMargin`. Both registers take the same
-  // gutter, because the difference between them is rung and measure, never
-  // margin.
+  // NO GUTTER OF ITS OWN (#1015, Round NY). The gutter is the CONTAINER's:
+  // a room's empty state (`RoomBody`) and a system place's body
+  // (`placeBody`) already pad with `pageMargin`, and a block that padded too
+  // drew its title at twice the margin of the header above it. A caller that
+  // renders the block into a full-bleed list pads the list, as it does for
+  // the rows the list would otherwise hold.
   block: {
     alignItems: "flex-start",
     gap: spacing[2],
     maxWidth: ROUTINE_MEASURE,
-    paddingHorizontal: pageMargin,
     paddingVertical: spacing[6],
   },
   blockFirstRun: { gap: spacing[3], maxWidth: FIRST_RUN_MEASURE },
+  // `inset`: the caller's container is a full-bleed list, whose rows carry
+  // their own gutter, so the block brings the page gutter with it.
+  inset: { paddingHorizontal: pageMargin },
   title: t("title"),
   titleFirstRun: t("display"),
 });

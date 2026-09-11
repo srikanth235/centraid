@@ -132,7 +132,7 @@ export default function LockerAccessView(
       keyExtractor={(entry) => entry.receipt_id}
       ListEmptyComponent={
         listing ? (
-          <EmptyBlock body={ACCESS_EMPTY_BODY} title={ACCESS_EMPTY} />
+          <EmptyBlock body={ACCESS_EMPTY_BODY} inset title={ACCESS_EMPTY} />
         ) : null
       }
       ListFooterComponent={foot}

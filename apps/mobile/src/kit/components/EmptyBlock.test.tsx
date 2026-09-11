@@ -45,11 +45,11 @@ describe("the block's own gutter", () => {
     dispose = undefined;
   });
 
-  // THE BUG THIS PINS (#1015, S5 — audit S5, docs/findings.md#3). The block
-  // carried vertical padding and no horizontal padding, so an empty rendered
-  // inside a full-bleed list put its title hard against the screen edge while
-  // every populated row beside it sat at `pageMargin`.
-  it("insets both registers at the page margin", () => {
+  // THE GUTTER IS THE CONTAINER'S (#1015, Round NY). A block that padded
+  // itself drew its title at twice the header's margin inside every padded
+  // body (Needs you's empty queue); the room pads its own states instead
+  // (`rooms.test.tsx`, "the room gutter").
+  it("brings no gutter of its own, in either register", () => {
     const routine = render(
       <EmptyBlock
         body="Nothing is waiting on you."
@@ -57,17 +57,26 @@ describe("the block's own gutter", () => {
         title="Nothing waiting"
       />
     );
-    expect(styleOf(nodesOf(routine, "div")[0]).paddingHorizontal).toBe(
-      pageMargin
-    );
+    expect(
+      styleOf(nodesOf(routine, "div")[0]).paddingHorizontal
+    ).toBeUndefined();
     dispose?.();
     dispose = undefined;
     const firstRun = render(
       <EmptyBlock body="Nothing is waiting on you." title="Nothing waiting" />
     );
-    expect(styleOf(nodesOf(firstRun, "div")[0]).paddingHorizontal).toBe(
-      pageMargin
+    expect(
+      styleOf(nodesOf(firstRun, "div")[0]).paddingHorizontal
+    ).toBeUndefined();
+  });
+
+  // The complement (#1015, S5): inside a full-bleed list, whose rows carry
+  // their own inset, a bare block would put its title on the screen edge.
+  it("brings the page gutter when its container is full-bleed", () => {
+    const bled = render(
+      <EmptyBlock body="No match." inset routine title="Nothing found" />
     );
+    expect(styleOf(nodesOf(bled, "div")[0]).paddingHorizontal).toBe(pageMargin);
   });
 });
 

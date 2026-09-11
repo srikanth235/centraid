@@ -424,6 +424,7 @@ export default function DriveList({
       ) : emptyView.visible ? (
         <EmptyBlock
           title={emptyCopy?.title ?? emptyView.title}
+          inset
           body={emptyCopy?.body ?? emptyView.body}
           routine={!emptyView.display}
         />

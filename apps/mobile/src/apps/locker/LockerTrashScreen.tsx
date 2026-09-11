@@ -117,7 +117,12 @@ export default function LockerTrashScreen({
           vault.reading ? (
             <SkeletonRows accessibilityLabel="Reading the trash" />
           ) : (
-            <EmptyBlock body={TRASH_CONFIRM_BODY} routine title={TRASH_EMPTY} />
+            <EmptyBlock
+              body={TRASH_CONFIRM_BODY}
+              inset
+              routine
+              title={TRASH_EMPTY}
+            />
           )
         }
         ListFooterComponent={foot}
