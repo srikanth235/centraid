@@ -5,6 +5,13 @@
   "exclude": [
     "fixtures/**",
     "refresh-pricing-snapshot.ts",
-    "perf/app-waterfall.run.ts"
+    "perf/app-waterfall.run.ts",
+    "test-report/diff-coverage-run.test.ts",
+    "test-report/env-red-inventory.test.ts",
+    "test-report/evidence-contract.test.ts",
+    "test-report/hygiene-ratchet.test.ts",
+    "test-report/skip-inventory.test.ts",
+    "test-report/sleep-inventory.test.ts",
+    "test-report/validate-release-wiring.test.ts"
   ]
 }

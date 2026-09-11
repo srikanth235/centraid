@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     name: "test-report-scripts",
     include: [
-      "scripts/test-report/**/*.test.mjs",
+      "scripts/test-report/**/*.test.ts",
       "scripts/mutation/**/*.test.mjs",
       "tests/agent-e2e-shared/**/*.test.mjs",
       "tests/agent-e2e-mobile/lib/**/*.test.mjs",

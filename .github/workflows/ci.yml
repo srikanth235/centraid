@@ -327,7 +327,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane static --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,correctness --surfaces gateway,web,desktop,mobile
+          node scripts/test-report/write-evidence.ts --lane static --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,correctness --surfaces gateway,web,desktop,mobile
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -407,7 +407,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane gates --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane gates --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -545,7 +545,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane verify --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane verify --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -596,7 +596,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane coverage-shard-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.ts --lane coverage-shard-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -667,7 +667,7 @@ jobs:
         if: always()
         env:
           TEST_REPORT_PUBLIC_URL: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('https://{0}.github.io/{1}/test-report/main/', github.repository_owner, github.event.repository.name) || '' }}
-        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL"
+        run: node scripts/test-report/write-job-summary.ts --report-url "$TEST_REPORT_PUBLIC_URL"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -683,7 +683,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane coverage --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.ts --lane coverage --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -750,7 +750,7 @@ jobs:
       - name: Merge report into site tree
         if: steps.has_report.outputs.ok == 'true'
         run: |
-          node scripts/test-report/prepare-pages-site.mjs \
+          node scripts/test-report/prepare-pages-site.ts \
             --report dist/test-report \
             --site site \
             --slot "${{ steps.slot.outputs.slot }}"
@@ -846,7 +846,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mutation-pr --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness --surfaces vault-core,gateway --cases artifacts/mutation-cap/cases.json
+          node scripts/test-report/write-evidence.ts --lane mutation-pr --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness --surfaces vault-core,gateway --cases artifacts/mutation-cap/cases.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -914,7 +914,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane new-test-burn-in-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.ts --lane new-test-burn-in-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1056,7 +1056,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-smoke --rung 2 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,compat --surfaces mobile
+          node scripts/test-report/write-evidence.ts --lane mobile-smoke --rung 2 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,compat --surfaces mobile
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1152,7 +1152,7 @@ jobs:
         run: bun run native:prebuild
       - name: Install Maestro CLI
         # Pinned to the SAME version every other mobile lane installs;
-        # scripts/test-report/validate-nightly-wiring.mjs fails when the three
+        # scripts/test-report/validate-nightly-wiring.ts fails when the three
         # lanes disagree, because two device drivers on one roster is a
         # difference nobody chose.
         env:
@@ -1479,7 +1479,7 @@ jobs:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: |
           set -euo pipefail
-          node scripts/test-report/write-evidence.mjs \
+          node scripts/test-report/write-evidence.ts \
             --lane mobile-device-gate --rung 2 --platform android \
             --verdict auto --job-status "${{ job.status }}" \
             --started-at "$LANE_STARTED_AT" --budget-ms 480000 \
@@ -1520,7 +1520,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane docs --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces web
+          node scripts/test-report/write-evidence.ts --lane docs --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1554,7 +1554,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane web-build --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts --surfaces web
+          node scripts/test-report/write-evidence.ts --lane web-build --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1627,7 +1627,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane iroh-wasm --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities contracts --surfaces tunnel-pairing,web
+          node scripts/test-report/write-evidence.ts --lane iroh-wasm --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities contracts --surfaces tunnel-pairing,web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1661,7 +1661,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane companion-static --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces extension
+          node scripts/test-report/write-evidence.ts --lane companion-static --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces extension
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1692,7 +1692,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane oauth-worker --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts,security --surfaces oauth-worker
+          node scripts/test-report/write-evidence.ts --lane oauth-worker --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts,security --surfaces oauth-worker
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1731,7 +1731,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane dependency-review --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane dependency-review --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1771,7 +1771,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane gitleaks --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane gitleaks --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1836,7 +1836,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane osv-scanner --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane osv-scanner --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1904,7 +1904,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane design-gallery --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts,accessibility --surfaces web
+          node scripts/test-report/write-evidence.ts --lane design-gallery --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts,accessibility --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

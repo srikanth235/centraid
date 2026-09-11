@@ -130,7 +130,7 @@ const MATRIX_PATH = "tests/matrix.json";
 /** The derived `{flows:[{id,owner}]}` view slice REPORT ships when owners stop
  *  being hand-typed. Preferred over reading the claims file directly, because a
  *  derived view cannot disagree with what it was derived from. */
-const DERIVE_FLOWS = "scripts/test-report/derive-flows.mjs";
+const DERIVE_FLOWS = "scripts/test-report/derive-flows.ts";
 
 export {
   directInvocations,

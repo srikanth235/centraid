@@ -1,0 +1,626 @@
+import { describe, expect, test } from "vitest";
+
+import {
+  diffCoverageFloors,
+  diffMinimumTests,
+  diffMutationFloors,
+  diffPerfBudgetNumbers,
+  extractBudgetNumbersFromSource,
+  flattenBudgetNumbers,
+  isBudgetFloorKey,
+  ratchetFloors,
+} from "./ratchet-floors.ts";
+import {
+  dict,
+  errorMessage,
+  fromAsync,
+  has,
+  isRecord,
+  items,
+  type Loose,
+} from "./record.ts";
+
+describe("diffCoverageFloors", () => {
+  test("flags a top-level line floor decrease", () => {
+    expect(diffCoverageFloors({ lines: 30 }, { lines: 25 })).toEqual([
+      'coverage floor "lines" decreased 30 → 25',
+    ]);
+  });
+
+  test("flags a package metric decrease", () => {
+    const base = { "packages/vault/src/**": { lines: 90, branches: 78 } };
+    const head = { "packages/vault/src/**": { lines: 88, branches: 78 } };
+    expect(diffCoverageFloors(base, head)).toEqual([
+      'coverage floor "packages/vault/src/**.lines" decreased 90 → 88',
+    ]);
+  });
+
+  test("flags removal of a package scope", () => {
+    const base = { "packages/vault/src/**": { lines: 90 } };
+    const head = { lines: 30 };
+    expect(diffCoverageFloors(base, head)).toEqual([
+      'coverage floor scope "packages/vault/src/**" removed',
+    ]);
+  });
+
+  test("flags removal of a single metric key", () => {
+    const base = { "packages/vault/src/**": { lines: 90, branches: 78 } };
+    const head = { "packages/vault/src/**": { lines: 90 } };
+    expect(diffCoverageFloors(base, head)).toEqual([
+      'coverage floor "packages/vault/src/**.branches" removed (was 78)',
+    ]);
+  });
+
+  test("flags removal of a top-level number floor", () => {
+    expect(
+      diffCoverageFloors({ lines: 30, branches: 20 }, { lines: 30 })
+    ).toEqual(['coverage floor "branches" removed (was 20)']);
+  });
+
+  test("allows increases and equal floors", () => {
+    expect(diffCoverageFloors({ lines: 30 }, { lines: 31 })).toEqual([]);
+    expect(diffCoverageFloors({ lines: 30 }, { lines: 30 })).toEqual([]);
+  });
+});
+
+describe("diffMutationFloors", () => {
+  test("flags a package mutation score decrease", () => {
+    expect(
+      diffMutationFloors(
+        { "packages/vault": 80, "packages/server/src/automation": 70 },
+        { "packages/vault": 75, "packages/server/src/automation": 70 }
+      )
+    ).toEqual(['mutation floor "packages/vault" decreased 80 → 75']);
+  });
+
+  test("flags removal of a mutation floor", () => {
+    expect(diffMutationFloors({ "packages/vault": 80 }, {})).toEqual([
+      'mutation floor "packages/vault" removed (was 80)',
+    ]);
+  });
+
+  test("allows increase and equal", () => {
+    expect(
+      diffMutationFloors({ "packages/vault": 80 }, { "packages/vault": 85 })
+    ).toEqual([]);
+    expect(
+      diffMutationFloors({ "packages/vault": 80 }, { "packages/vault": 80 })
+    ).toEqual([]);
+  });
+});
+
+describe("diffMinimumTests — approved outright retirement (#927)", () => {
+  const owner = "tests/perf/vault-write.perf.test.ts";
+  const base = { flows: [{ id: "a", owner, minimumTests: 2 }] };
+  const marker = {
+    owner,
+    reason:
+      "Approved by the maintainer 2026-09-05 as part of the #927 rig diet",
+    issue: "#927",
+  };
+
+  test("a marked deletion passes: the floor is gone, and named", () => {
+    const head = { flows: [], removedMinimumTestsFlows: { a: marker } };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("an UNMARKED deletion is still refused", () => {
+    expect(diffMinimumTests(base, { flows: [] })).toHaveLength(1);
+  });
+
+  test("a marker with no matching removed row is refused", () => {
+    const head = {
+      flows: [{ id: "a", owner, minimumTests: 2 }],
+      removedMinimumTestsFlows: { a: marker },
+    };
+    expect(diffMinimumTests(base, head)).toEqual([
+      expect.stringContaining("the head still declares"),
+    ]);
+  });
+
+  test("a marker naming a flow the base never declared is refused", () => {
+    const head = { flows: [], removedMinimumTestsFlows: { b: marker } };
+    // Two errors: the unknown marker, and "a" still deleted unauthorized.
+    expect(diffMinimumTests(base, head)).toEqual([
+      expect.stringContaining("which the base does not declare"),
+      expect.stringContaining('flow "a" removed'),
+    ]);
+  });
+
+  test("a marker missing its reason or issue authorizes nothing", () => {
+    for (const bad of [
+      { owner, issue: "#927" },
+      { owner, reason: "because", issue: "927" },
+      { reason: "because", issue: "#927" },
+    ]) {
+      const head = { flows: [], removedMinimumTestsFlows: { a: bad } };
+      const errors = diffMinimumTests(base, head);
+      expect(errors.length).toBeGreaterThan(1);
+      expect(errors.at(-1)).toContain('flow "a" removed');
+    }
+  });
+
+  test("a marker naming the wrong owner is refused", () => {
+    const head = {
+      flows: [],
+      removedMinimumTestsFlows: { a: { ...marker, owner: "tests/perf/x.ts" } },
+    };
+    expect(diffMinimumTests(base, head).at(0)).toContain("was owned by");
+  });
+
+  test("two markers may not retire the same owner", () => {
+    const twoFlows = {
+      flows: [
+        { id: "a", owner, minimumTests: 2 },
+        { id: "b", owner, minimumTests: 1 },
+      ],
+    };
+    const head = {
+      flows: [],
+      removedMinimumTestsFlows: { a: marker, b: marker },
+    };
+    expect(diffMinimumTests(twoFlows, head).at(0)).toContain(
+      "one marker per deleted rig"
+    );
+  });
+
+  test("a SPENT marker is inert: carried on both sides, it re-litigates nothing", () => {
+    // What main looks like after the retirement landed — no flow either side.
+    const landed = { flows: [], removedMinimumTestsFlows: { a: marker } };
+    expect(diffMinimumTests(landed, landed)).toEqual([]);
+  });
+});
+
+describe("diffMinimumTests", () => {
+  test("flags a minimumTests decrease without waiver", () => {
+    const base = { flows: [{ id: "a", minimumTests: 10 }] };
+    const head = { flows: [{ id: "a", minimumTests: 8 }] };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
+  test("flags removal of minimumTests key", () => {
+    const base = { flows: [{ id: "a", minimumTests: 10 }] };
+    const head = { flows: [{ id: "a" }] };
+    expect(diffMinimumTests(base, head).join("")).toMatch(
+      /minimumTests removed/u
+    );
+  });
+
+  test("flags deletion of a flow that had minimumTests", () => {
+    const base = { flows: [{ id: "a", minimumTests: 10 }] };
+    const head = { flows: [] };
+    expect(diffMinimumTests(base, head).join("")).toMatch(/flow "a" removed/u);
+  });
+
+  test("allows decrease with approvedMinimumTestsDeviation", () => {
+    const base = { flows: [{ id: "a", minimumTests: 10 }] };
+    const head = {
+      flows: [
+        {
+          id: "a",
+          minimumTests: 8,
+          approvedMinimumTestsDeviation: "issue #999 consolidation",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  // #988 — a marker that already landed is not a claim about THIS diff.
+  test("tolerates a spent rename marker carried on the base", () => {
+    const spentFlow = {
+      id: "new-name",
+      surface: "runtime",
+      dimension: "compat",
+      tier: "unit",
+      minimumTests: 10,
+      replacesMinimumTestsFlow: "old-name",
+      approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+    };
+    // `old-name` is gone from both sides: the rename landed several PRs ago.
+    expect(
+      diffMinimumTests({ flows: [spentFlow] }, { flows: [spentFlow] })
+    ).toEqual([]);
+  });
+
+  test("refuses a rename marker this diff introduces against an unknown predecessor", () => {
+    const base = { flows: [{ id: "new-name", minimumTests: 10 }] };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "never-existed",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head).join("")).toMatch(
+      /names unknown predecessor "never-existed"/u
+    );
+  });
+
+  test("refuses re-spending a marker the base already carries", () => {
+    const spentFlow = {
+      id: "new-name",
+      surface: "runtime",
+      dimension: "compat",
+      tier: "unit",
+      minimumTests: 10,
+      replacesMinimumTestsFlow: "old-name",
+      approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+    };
+    const base = { flows: [spentFlow, { id: "other", minimumTests: 4 }] };
+    const head = {
+      flows: [
+        spentFlow,
+        // A second flow reaches for the same, already-spent predecessor.
+        {
+          id: "other",
+          minimumTests: 4,
+          replacesMinimumTestsFlow: "old-name",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head).join("\n")).toMatch(
+      /multiple replacements|unknown predecessor "old-name"/u
+    );
+  });
+
+  test("allows an explicitly approved ID rename without lowering the cell floor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "old-name",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("rejects a prose-approved ID rename without an explicit predecessor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
+  test("never lets one replacement satisfy two removed flow floors", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-a",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+        {
+          id: "old-b",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "old-a",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([
+      'flow "old-b" removed (had minimumTests 10); add one approved replacement with replacesMinimumTestsFlow: "old-b" or restore the flow',
+    ]);
+  });
+
+  test("rejects an approved ID rename that lowers the cell floor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 9,
+          replacesMinimumTestsFlow: "old-name",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
+  test("allows increase", () => {
+    const base = { flows: [{ id: "a", minimumTests: 10 }] };
+    const head = { flows: [{ id: "a", minimumTests: 12 }] };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+});
+
+describe("perf budget ratchet", () => {
+  test("isBudgetFloorKey recognizes min* keys", () => {
+    expect(isBudgetFloorKey("minStreamsForProof")).toBe(true);
+    expect(isBudgetFloorKey("maxRequests")).toBe(false);
+    expect(isBudgetFloorKey("requestP99Ms")).toBe(false);
+  });
+
+  test("flattenBudgetNumbers walks nested trees", () => {
+    expect(
+      flattenBudgetNumbers({
+        shell: { maxRequests: 10, nested: { maxTransferBytes: 100 } },
+        minStreamsForProof: 3,
+      })
+    ).toEqual({
+      "shell.maxRequests": 10,
+      "shell.nested.maxTransferBytes": 100,
+      minStreamsForProof: 3,
+    });
+  });
+
+  test("diffPerfBudgetNumbers flags ceiling widen and min loosen", () => {
+    expect(
+      diffPerfBudgetNumbers(
+        { "shell.maxRequests": 10, minStreamsForProof: 3 },
+        { "shell.maxRequests": 12, minStreamsForProof: 3 }
+      )
+    ).toEqual([
+      'perf budget "shell.maxRequests" widened 10 → 12 (ceilings may only tighten)',
+    ]);
+
+    expect(
+      diffPerfBudgetNumbers(
+        { minStreamsForProof: 3 },
+        { minStreamsForProof: 2 }
+      )
+    ).toEqual([
+      'perf budget "minStreamsForProof" loosened 3 → 2 (min floors may only rise)',
+    ]);
+  });
+
+  test("diffPerfBudgetNumbers allows tighten and equal", () => {
+    expect(
+      diffPerfBudgetNumbers(
+        { "shell.maxRequests": 10, minStreamsForProof: 3 },
+        { "shell.maxRequests": 8, minStreamsForProof: 4 }
+      )
+    ).toEqual([]);
+    expect(diffPerfBudgetNumbers({ a: 1 }, { a: 1 })).toEqual([]);
+  });
+
+  test("extractBudgetNumbersFromSource parses nested TS export", () => {
+    const source = `
+export interface PerfBudgets { shell: { maxRequests: number } }
+export const perfBudgets: PerfBudgets = {
+  shell: {
+    // comment
+    maxRequests: 10,
+    maxTransferBytes: 1_250_000,
+  },
+  irohPool: {
+    minStreamsForProof: 3,
+  },
+};
+export const enforceTiming = true;
+`;
+    expect(extractBudgetNumbersFromSource(source, "perfBudgets")).toEqual({
+      "shell.maxRequests": 10,
+      "shell.maxTransferBytes": 1_250_000,
+      "irohPool.minStreamsForProof": 3,
+    });
+  });
+});
+
+describe("ratchetFloors", () => {
+  test("waives floor decreases when approvedDeviation is set", () => {
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: {
+        lines: 20,
+        approvedDeviation: "constitutional exception for #1",
+      },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(waived).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("an UNCHANGED approvedDeviation does not waive a floor decrease (#781)", () => {
+    const ledger = "permanent provenance ledger text carried since #565";
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30, approvedDeviation: ledger },
+      headFloors: { lines: 20, approvedDeviation: ledger },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(waived).toBe(false);
+    expect(errors.some((e) => e.includes("decreased 30"))).toBe(true);
+  });
+
+  test("an UNCHANGED approvedDeviation does not waive a floor deletion (#781)", () => {
+    const ledger = "permanent provenance ledger text carried since #565";
+    const { errors } = ratchetFloors({
+      baseFloors: {
+        "packages/vault/src/**": { lines: 90 },
+        approvedDeviation: ledger,
+      },
+      headFloors: { approvedDeviation: ledger },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(errors.some((e) => e.includes("removed"))).toBe(true);
+  });
+
+  test("an UNCHANGED mutation approvedDeviation does not waive (#781)", () => {
+    const ledger = "mutation ledger";
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { "packages/vault": 80, approvedDeviation: ledger },
+      headMutation: { "packages/vault": 70, approvedDeviation: ledger },
+    });
+    expect(waived).toBe(false);
+    expect(errors.some((e) => e.includes("mutation floor"))).toBe(true);
+  });
+
+  test("an UNCHANGED perf approvedDeviation does not waive a widen (#781)", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: "tests/budgets.json#suiteWallClock",
+          base: { totalMs: 100 },
+          head: { totalMs: 999 },
+          approvedDeviation: "same ledger text",
+          baseApprovedDeviation: "same ledger text",
+        },
+      ],
+    });
+    expect(errors.some((e) => e.includes("widened"))).toBe(true);
+  });
+
+  test("fails floor decrease without waiver", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 20 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  test("deletion of a floor scope is not waived without approvedDeviation", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { "packages/vault/src/**": { lines: 90 } },
+      headFloors: {},
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(errors.some((e) => e.includes("removed"))).toBe(true);
+  });
+
+  test("waives mutation floor decrease with mutation approvedDeviation", () => {
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { "packages/vault": 80 },
+      headMutation: {
+        "packages/vault": 70,
+        approvedDeviation: "temporary #532 recalibration after suite split",
+      },
+    });
+    expect(waived).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("fails mutation floor decrease without waiver", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { "packages/vault": 80 },
+      headMutation: { "packages/vault": 70 },
+    });
+    expect(errors.some((e) => e.includes("mutation floor"))).toBe(true);
+  });
+
+  test("fails perf budget widen without approvedDeviation", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: "apps/web/tests/e2e/perf-budgets.ts",
+          base: { "shell.maxRequests": 10 },
+          head: { "shell.maxRequests": 99 },
+        },
+      ],
+    });
+    expect(errors.some((e) => e.includes("widened"))).toBe(true);
+  });
+
+  test("allows perf budget widen with approvedDeviation", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: "apps/web/tests/e2e/perf-budgets.ts",
+          base: { "shell.maxRequests": 10 },
+          head: { "shell.maxRequests": 99 },
+          approvedDeviation:
+            "measured regression after intentional fixture growth (#999)",
+        },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+});
