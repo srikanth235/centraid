@@ -28,4 +28,6 @@ Every mobile screen declares one of six surface classes, and gets header, back, 
 
 ## Adoption
 
-Wave 2 migrates the screens; `scripts/lint-mobile-rooms.mjs` measures what is left. The rooms are the only permitted screen roots once that lint is wired.
+The rooms are the only permitted screen roots, and `scripts/lint-mobile-rooms.mjs` enforces it under `bun run lint:product`. A screen roots in a room directly, or in its app's frame — `LockerScreen`, `PeopleScreen`, `PhotosScreen`, `TallyScreen` — when that frame's own root is a room: one level, never two (R-NY-7). A first read's skeleton is the room's `loading` state, never a screen's own root.
+
+The one screen outside a room is `PhotoLightbox`, the full-bleed viewer: no header, a dismiss gesture, the band hidden. None of the six fits it honestly, so it stands in the lint's baseline pending an owner ruling rather than being forced into one.
