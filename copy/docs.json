@@ -1,0 +1,128 @@
+{
+  "$generatedBy": "contracts/tools/export-copy.ts",
+  "app": "docs",
+  "strings": {
+    "CLEAR_FILTERS": "Clear filters",
+    "MORE_FOOTER": "Everything Docs can show — the vault mark goes back to the rest of Centraid.",
+    "MORE_TITLE": "More in Docs",
+    "OFFLINE_BANNER": "Gateway unreachable — filing works from this device, opening and search do not.",
+    "OFFLINE_BANNER_ACTION": "Retry",
+    "RECENT_RULE": "Ordered by last change · nothing records when a document was opened",
+    "SEARCH_CLEAR": "Clear",
+    "SEARCH_LABEL": "Search documents by title or contents",
+    "SEARCH_PLACEHOLDER": "Search titles and contents",
+    "SEARCH_SCOPE": "the live library",
+    "SHARED_SENDER_UNKNOWN": "Another vault",
+    "SHARED_WITH_KEY": "Shared with",
+    "TRASH_NOTE": "Documents in the trash purge on their own schedule; restoring one puts its folder and its star back.",
+    "VERSIONS_ACTIVITY_HEAD": "Activity",
+    "VERSIONS_ACTIVITY_META": "folded in here, deliberately",
+    "VERSIONS_CUT_NOTE": "The third column records whether a member, an app or a machine did it.",
+    "WINDOW_FAILED": "could not be fetched"
+  },
+  "functions": [
+    "shelfCopy",
+    "sharedFromLine",
+    "captionFor",
+    "folderCaption",
+    "folderEmpty",
+    "searchEmpty",
+    "emptyCopy",
+    "rowStateMark",
+    "actionStatus",
+    "SHELF_LABELS",
+    "SEARCH_CAPTION_SAMPLE",
+    "FILTER_EMPTY",
+    "MORE_ROWS",
+    "sharedWithNote",
+    "cannotRenderFact",
+    "RAIL_TABS",
+    "RAIL_NOTES",
+    "STAGE_ACTIONS",
+    "PRINT_REFUSALS",
+    "STAGE_PROPS",
+    "crumbsFor",
+    "sharedWithOption",
+    "foldersCaption",
+    "SORT_OPTIONS",
+    "PLACE_MENU",
+    "DFILTERS",
+    "SEARCH_EXAMPLES",
+    "SEARCH_COPY",
+    "EMPTY_TRASH_COPY"
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": [
+    {
+      "id": "balances",
+      "label": "All",
+      "segment": ""
+    },
+    {
+      "id": "folders",
+      "label": "Folders",
+      "segment": "folders"
+    },
+    {
+      "id": "recent",
+      "label": "Recently changed",
+      "segment": "recent"
+    },
+    {
+      "id": "starred",
+      "label": "Starred",
+      "segment": "starred"
+    },
+    {
+      "id": "shared",
+      "label": "Shared",
+      "segment": "shared"
+    },
+    {
+      "id": "trash",
+      "label": "Trash",
+      "segment": "trash"
+    },
+    {
+      "id": "search",
+      "label": "Search",
+      "segment": "search"
+    },
+    {
+      "id": "storage",
+      "label": "Storage",
+      "segment": "storage"
+    },
+    {
+      "id": "newdoc",
+      "label": "Add a document",
+      "segment": "newdoc"
+    },
+    {
+      "id": "scan",
+      "label": "Scan a document",
+      "segment": "scan"
+    },
+    {
+      "id": "capabilities",
+      "label": "What Docs may read",
+      "segment": "capabilities"
+    },
+    {
+      "id": "filing",
+      "label": "Proposed filing",
+      "segment": "filing"
+    },
+    {
+      "id": "names",
+      "label": "Who your documents name",
+      "segment": "names"
+    },
+    {
+      "id": "locker",
+      "label": "Docs and Locker",
+      "segment": "locker"
+    }
+  ]
+}

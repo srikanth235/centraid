@@ -86,10 +86,11 @@ fn a_leaf_carries_sentences_and_names_what_did_not_cross() {
     assert_eq!(tally.text("NO_SUCH_SENTENCE"), None);
 }
 
-/// The three leaves that came with wave 3's mobile shell still read.
+/// Every emitted leaf still reads — wave 3's mobile shell brought three and each
+/// wave 4 app lane adds its own (Docs' is the fourth).
 #[test]
 fn every_emitted_leaf_loads() {
-    for app in ["notes", "photos", "shared", "tally"] {
+    for app in ["docs", "notes", "photos", "shared", "tally"] {
         let loaded = leaf(app);
         assert_eq!(loaded.app, app);
         assert!(

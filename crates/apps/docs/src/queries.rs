@@ -40,7 +40,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages};
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages, read_window};
 use centraid_apps_kit::representations::{RepresentationIndex, read_representations};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
@@ -819,14 +819,28 @@ pub fn load_drive(
         .collect();
     // An `IN` filter with an empty array is a refusal in the kit's grammar: no
     // scheme means no filed documents, and asking is the error.
-    let tag_page = if folder_concept_ids.is_empty() {
+    // THE DECLARED WINDOW IS WALKED TO ITS STATED SIZE (D-1020-DC10, and the
+    // second half of D-1020-D3-12).
+    //
+    // `MAX_PAGE_ROWS` clamps a PAGE to 500, and v0 asks for its 2,000-row
+    // window as one page and takes `.rows` — so a drive declaring `limit: 2000`
+    // answers 500 documents and discards the cursor that says there are more.
+    // Measured at the year-3 profile: 500 of 7,600 live documents
+    // (`crates/apps/docs/tests/year3.rs`).
+    //
+    // The drive is a LIST, and a list is where a clamp is defensible — but the
+    // clamp has to be the one the caller ASKED for, not one the page contract
+    // imposed behind it. `core_tag.tagged_at` is `NOT NULL`, so the keyset walk
+    // is continuable and the stated window is reachable; Photos' library takes
+    // one page instead because its own sort column is nullable and a walk there
+    // would silently drop every NULL (D-1020-P11). `filled` is the same claim
+    // v0's `next !== undefined` makes, so `truncated` still comes from the read
+    // rather than from a row count.
+    let filed = if folder_concept_ids.is_empty() {
         None
     } else {
-        match door.page(
-            &filed_statement(&folder_concept_ids)?,
-            &PageRequest::first(window.min(MAX_PAGE_ROWS)),
-        ) {
-            Ok(page) => Some(page),
+        match read_window(door, &filed_statement(&folder_concept_ids)?, window) {
+            Ok(walked) => Some(walked),
             Err(KitError::Door(message)) => {
                 return Ok(denied_drive(
                     Denial {
@@ -840,9 +854,9 @@ pub fn load_drive(
             Err(other) => return Err(other),
         }
     };
-    let truncated = tag_page.as_ref().is_some_and(|page| page.next.is_some());
+    let truncated = filed.as_ref().is_some_and(|walked| walked.filled);
     let mut folder_by_document: BTreeMap<String, String> = BTreeMap::new();
-    for row in tag_page.iter().flat_map(|page| page.rows.iter()) {
+    for row in filed.iter().flat_map(|walked| walked.rows.iter()) {
         if let (Some(target_id), Some(concept_id)) =
             (text_of(row, "target_id"), text_of(row, "concept_id"))
         {

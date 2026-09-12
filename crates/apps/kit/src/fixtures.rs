@@ -1937,3 +1937,836 @@ pub fn owner_party_id(connection: &Connection) -> KitResult<Option<String>> {
         )
         .ok())
 }
+
+// ===========================================================================
+// THE DOCS DEMO SEED, AS A GENERATOR (#1020, D-1020-DC5).
+//
+// v0's `packages/blueprints/apps/docs/seed.js` is 82 lines and writes through
+// the real commands: two folders, three filed documents, a star, a label, and
+// one document with a SECOND version so the history walk has something to walk.
+// This is that scenario as a generator, and the two differences are the reason
+// it is a generator rather than a port of the script:
+//
+// * **it holds no bytes and no path.** A document's body arrives as a
+//   [`DemoDocument`] fact — a title, a folder and the markdown — so the sample
+//   bodies are a checkable input rather than a property of a file nobody
+//   measured. `contracts/apps/docs/sample/manifest.json` is where a caller
+//   keeps a larger roll.
+// * **it reads no clock.** `now` is a civil date the caller states, and every
+//   instant is derived from it, so two runs of the same date write the same
+//   rows.
+//
+// WHERE THE ROWS GO, TODAY AND LATER. Today the generator writes through the
+// connection it is handed, because a fixture that ran the command path would
+// need a founded vault and the command registry — which is `crates/vault`'s.
+// The row VALUES are the ones the commands produce: a wrapper over a
+// sha-deduped content item, one folders-scheme tag per document, a flags-scheme
+// star, an occurrence chain whose newest row the wrapper points at. So the same
+// generator re-points at `Vault::execute` without the fixture changing.
+// ===========================================================================
+
+/// One document of the demo drive: everything the seed knows that is not an id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DemoDocument {
+    pub title: &'static str,
+    /// The folder's `pref_label`, or `None` for the drive's top level.
+    pub folder: Option<&'static str>,
+    pub body: &'static str,
+    /// A SECOND body, for the one document whose history has two versions.
+    pub revised: Option<&'static str>,
+    pub starred: bool,
+    /// A free-form label, in the shared Tags scheme.
+    pub label: Option<&'static str>,
+}
+
+/// The folders the demo drive files into, in v0's own order.
+pub const DEMO_FOLDERS: [&str; 2] = ["Travel", "Home"];
+
+/// THE DRIVE, as v0's seed writes it.
+///
+/// The packing list carries the second version, the star and the label, because
+/// a corpus where those three facts sit on three different documents cannot show
+/// a row that is all three at once — which is the row a renderer gets wrong.
+pub const DEMO_DOCUMENTS: [DemoDocument; 3] = [
+    DemoDocument {
+        title: "Tahoe packing list",
+        folder: Some("Travel"),
+        body: "# Tahoe packing list\n\n- Rain shell\n- Hiking boots\n- Headlamp\n",
+        revised: Some(
+            "# Tahoe packing list\n\n- Rain shell\n- Hiking boots\n- Headlamp\n\
+             - Tire chains (I-80 requires them after a storm)\n",
+        ),
+        starred: true,
+        label: Some("tahoe"),
+    },
+    // "(sample)" in the title: a rental agreement and an insurance policy are
+    // exactly the records a member must never mistake for the real thing.
+    DemoDocument {
+        title: "Cabin rental agreement (sample)",
+        folder: Some("Travel"),
+        body: "# Cabin rental agreement (sample)\n\nThis is sample demo data, \
+               not a real agreement.\n",
+        revised: None,
+        starred: false,
+        label: None,
+    },
+    DemoDocument {
+        title: "Renters insurance policy (sample)",
+        folder: Some("Home"),
+        body: "# Renters insurance policy (sample)\n\nThis is sample demo data, \
+               not a real policy.\n",
+        revised: None,
+        starred: false,
+        label: None,
+    },
+];
+
+/// The media type the demo bodies are read as. `text/markdown` and not
+/// `text/plain`: it is what makes `core.edit_document` reachable at all, and it
+/// is what the drive's `media_type` field carries.
+pub const DEMO_MEDIA_TYPE: &str = "text/markdown";
+
+/// What one demo seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DocsDemoCounts {
+    pub folders: usize,
+    pub documents: usize,
+    pub content_items: usize,
+    pub revisions: usize,
+    pub tags: usize,
+}
+
+/// Seed the Docs demo drive into `connection`.
+///
+/// The whole run is one transaction, as v0's seeder is: a half-seeded drive is
+/// not a smaller fixture, it is a drive whose folder rail names folders that do
+/// not exist.
+pub fn docs_demo(
+    connection: &Connection,
+    now: &str,
+    owner_party_id: &str,
+) -> KitResult<DocsDemoCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_docs_demo(connection, now, owner_party_id) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+/// The folders scheme, the flags scheme and the tags scheme, created on first
+/// use — and the drive's `root` concept, which is the drive and not a folder.
+fn seed_docs_schemes(connection: &Connection, created: &str) -> KitResult<(String, String)> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    for (scheme_id, uri, title) in [
+        ("demo-scheme-folders", DOCS_FOLDER_SCHEME_URI, "Folders"),
+        ("demo-scheme-flags", DOCS_FLAGS_SCHEME_URI, "Flags"),
+        ("demo-scheme-tags", DOCS_TAGS_SCHEME_URI, "Tags"),
+    ] {
+        connection
+            .execute(
+                "INSERT INTO core_concept_scheme
+                   (scheme_id, uri, title, publisher, version, created_at)
+                 VALUES (?1, ?2, ?3, 'centraid', '1', ?4)",
+                rusqlite::params![scheme_id, uri, title, created],
+            )
+            .map_err(door)?;
+    }
+    connection
+        .execute(
+            "INSERT INTO core_concept
+               (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                broader_concept_id, definition, created_at, updated_at)
+             VALUES ('demo-folder-root', 'demo-scheme-folders', 'root', 'Documents',
+                     NULL, NULL, 'The drive top level', ?1, ?1)",
+            [created],
+        )
+        .map_err(door)?;
+    connection
+        .execute(
+            "INSERT INTO core_concept
+               (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                broader_concept_id, definition, created_at, updated_at)
+             VALUES ('demo-flag-starred', 'demo-scheme-flags', 'starred', 'Starred',
+                     '[\"Favorite\"]', NULL,
+                     'Owner attention: one star across every surface', ?1, ?1)",
+            [created],
+        )
+        .map_err(door)?;
+    Ok((
+        "demo-folder-root".to_owned(),
+        "demo-flag-starred".to_owned(),
+    ))
+}
+
+/// The three scheme URIs, restated here because the kit is the app plane's
+/// import-free floor. **The two `https` URIs are spelled differently from the
+/// tags one and that is deliberate**: a flag or folder URI is interpolated into
+/// condition SQL, where `:flags` reads as a NAMED PARAMETER (#258).
+pub const DOCS_FOLDER_SCHEME_URI: &str = "https://centraid.dev/schemes/folders";
+pub const DOCS_FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
+pub const DOCS_TAGS_SCHEME_URI: &str = "centraid:tags:v1";
+
+fn seed_docs_demo(
+    connection: &Connection,
+    now: &str,
+    owner_party_id: &str,
+) -> KitResult<DocsDemoCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let created = format!("{now}T00:00:00.000Z");
+    let mut counts = DocsDemoCounts::default();
+    let (root, starred_concept) = seed_docs_schemes(connection, &created)?;
+
+    // --- the folders. A folder's `notation` is its own id: the notation is
+    // unique within the scheme and a member-facing name is not.
+    for (index, name) in DEMO_FOLDERS.iter().enumerate() {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                    broader_concept_id, definition, created_at, updated_at)
+                 VALUES (?1, 'demo-scheme-folders', ?1, ?2, NULL, ?3, NULL, ?4, ?4)",
+                rusqlite::params![id("demo-folder", index), name, root, created],
+            )
+            .map_err(door)?;
+        counts.folders += 1;
+    }
+    let folder_of = |name: &str| -> String {
+        DEMO_FOLDERS
+            .iter()
+            .position(|folder| *folder == name)
+            .map_or_else(|| root.clone(), |index| id("demo-folder", index))
+    };
+
+    // --- one shared Tags concept, for the one labelled document.
+    connection
+        .execute(
+            "INSERT INTO core_concept
+               (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                broader_concept_id, definition, created_at, updated_at)
+             VALUES ('demo-tag-tahoe', 'demo-scheme-tags', 'tahoe', 'tahoe',
+                     NULL, NULL, NULL, ?1, ?1)",
+            [&created],
+        )
+        .map_err(door)?;
+
+    let mut tag_index = 0usize;
+    for (index, document) in DEMO_DOCUMENTS.iter().enumerate() {
+        let document_id = id("demo-document", index);
+        // --- the bytes. Text stays inline as its own `data:` URI, which is what
+        // the FTS feed decodes; the sha is over the DECODED bytes, never the URI.
+        let mut bodies = vec![document.body];
+        if let Some(revised) = document.revised {
+            bodies.push(revised);
+        }
+        let mut previous: Option<String> = None;
+        let mut previous_revision: Option<String> = None;
+        let mut head = String::new();
+        let mut head_revision = String::new();
+        for (version, body) in bodies.iter().enumerate() {
+            let content_id = format!("{document_id}-v{version}");
+            let uri = format!("data:{DEMO_MEDIA_TYPE};charset=utf-8,{}", encode_demo(body));
+            connection
+                .execute(
+                    "INSERT INTO core_content_item
+                       (content_id, content_uri, sha256, byte_size, language,
+                        creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+                     VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
+                    rusqlite::params![
+                        content_id,
+                        uri,
+                        demo_sha(&content_id),
+                        i64::try_from(body.len()).unwrap_or(i64::MAX),
+                        owner_party_id,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            connection
+                .execute(
+                    "INSERT INTO core_content_text
+                       (content_id, body_text, decoder, byte_size, created_at, updated_at)
+                     VALUES (?1, ?2, 'data-uri/v1', ?3, ?4, ?4)",
+                    rusqlite::params![
+                        content_id,
+                        body,
+                        i64::try_from(body.len()).unwrap_or(i64::MAX),
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            counts.content_items += 1;
+            // --- THE OCCURRENCE. Each names the content that became current at
+            // that moment and the occurrence before it (#996 R20(a)).
+            let revision_id = format!("{document_id}-r{version}");
+            let snapshot = previous.as_ref().map_or_else(
+                || "{\"previous_content_id\":null}".to_owned(),
+                |content| format!("{{\"previous_content_id\":\"{content}\"}}"),
+            );
+            if version == 0 {
+                // The wrapper has to exist before its occurrence can key to it.
+                connection
+                    .execute(
+                        "INSERT INTO core_document
+                           (document_id, title, current_content_id, current_revision_id,
+                            created_at, updated_at, deleted_at, purge_at)
+                         VALUES (?1, ?2, ?3, NULL, ?4, ?4, NULL, NULL)",
+                        rusqlite::params![document_id, document.title, content_id, created],
+                    )
+                    .map_err(door)?;
+                counts.documents += 1;
+            }
+            connection
+                .execute(
+                    "INSERT INTO core_entity_revision
+                       (revision_id, entity_type, entity_id, operation, snapshot_json,
+                        recorded_at, undo_until, undone_at, actor_party_id, invocation_id,
+                        content_id, parent_revision_id, updated_at)
+                     VALUES (?1, 'core.document', ?2, 'revise', ?3, ?4, ?4, NULL,
+                             ?5, NULL, ?6, ?7, ?4)",
+                    rusqlite::params![
+                        revision_id,
+                        document_id,
+                        snapshot,
+                        created,
+                        owner_party_id,
+                        content_id,
+                        previous_revision
+                    ],
+                )
+                .map_err(door)?;
+            counts.revisions += 1;
+            previous = Some(content_id.clone());
+            previous_revision = Some(revision_id.clone());
+            head = content_id;
+            head_revision = revision_id;
+        }
+        connection
+            .execute(
+                "UPDATE core_document
+                    SET current_content_id = ?1, current_revision_id = ?2
+                  WHERE document_id = ?3",
+                rusqlite::params![head, head_revision, document_id],
+            )
+            .map_err(door)?;
+        // --- THIS DOCUMENT'S READING OF ITS BYTES (#996 R20(b)).
+        connection
+            .execute(
+                "INSERT INTO core_content_representation
+                   (representation_id, content_id, owner_type, owner_id, media_type,
+                    charset, interpretation, created_at, updated_at)
+                 VALUES (?1, ?2, 'core.document', ?3, ?4, 'utf-8', 'body', ?5, ?5)",
+                rusqlite::params![
+                    format!("{document_id}-rep"),
+                    head,
+                    document_id,
+                    DEMO_MEDIA_TYPE,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        // --- filing: exactly ONE folders-scheme tag per document.
+        let filed_in = document.folder.map_or_else(|| root.clone(), folder_of);
+        connection
+            .execute(
+                "INSERT INTO core_tag
+                   (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                    confidence, tagged_at, updated_at)
+                 VALUES (?1, 'core.document', ?2, ?3, ?4, NULL, ?5, ?5)",
+                rusqlite::params![
+                    id("demo-tag", tag_index),
+                    document_id,
+                    filed_in,
+                    owner_party_id,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        tag_index += 1;
+        counts.tags += 1;
+        // --- the star, which is a flags-scheme tag on the WRAPPER.
+        if document.starred {
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, tagged_at, updated_at)
+                     VALUES (?1, 'core.document', ?2, ?3, ?4, NULL, ?5, ?5)",
+                    rusqlite::params![
+                        id("demo-tag", tag_index),
+                        document_id,
+                        starred_concept,
+                        owner_party_id,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            tag_index += 1;
+            counts.tags += 1;
+        }
+        // --- a free-form label, in the shared Tags scheme.
+        if document.label.is_some() {
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, tagged_at, updated_at)
+                     VALUES (?1, 'core.document', ?2, 'demo-tag-tahoe', ?3, NULL, ?4, ?4)",
+                    rusqlite::params![
+                        id("demo-tag", tag_index),
+                        document_id,
+                        owner_party_id,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            tag_index += 1;
+            counts.tags += 1;
+        }
+    }
+    Ok(counts)
+}
+
+/// `encodeURIComponent` over a demo body, so the stored URI is the one a
+/// command would have written — which is also what its sha would be taken over.
+fn encode_demo(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.as_bytes() {
+        let keep = byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
+            );
+        if keep {
+            out.push(*byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// A DETERMINISTIC 64-hex sha for a fixture's bytes.
+///
+/// **Not the real sha256, and it says so.** `core_content_item.sha256`'s CHECK
+/// pins the SHAPE (64 lowercase hex characters) and the column is `UNIQUE`; what
+/// a fixture needs is a distinct, reproducible value of that shape per content
+/// item, and a hash function in the kit would be a second implementation of a
+/// format decision that belongs to `crates/media`. A caller that needs the true
+/// digest of real bytes takes it from there.
+fn demo_sha(key: &str) -> String {
+    // A tiny FNV-1a over the key, widened to 64 hex characters by repetition of
+    // four independently seeded rounds. Stable by construction; a dependency
+    // that changed its algorithm in a patch release would move the bytes.
+    let round = |seed: u64| -> u64 {
+        let mut hash = seed;
+        for byte in key.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+        hash
+    };
+    format!(
+        "{:016x}{:016x}{:016x}{:016x}",
+        round(0xcbf2_9ce4_8422_2325),
+        round(0x0000_0000_0000_0001),
+        round(0xffff_ffff_ffff_ffff),
+        round(0x5bf0_3635_ca62_3a4d)
+    )
+}
+
+/// The declared shape of year-3 Docs volume.
+///
+/// **A count is not a distribution.** Every field is DECLARED, and changing one
+/// changes what year-3 Docs volume means repo-wide — so it moves with the
+/// journey ledger's year-3 table and a version bump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3DocsShape {
+    /// Documents, live and trashed together.
+    pub documents: usize,
+    /// How many of them are in the trash.
+    pub trashed: usize,
+    /// How many carry a star.
+    pub starred: usize,
+    /// Folders, spread over `folder_depth` levels.
+    pub folders: usize,
+    pub folder_depth: usize,
+    /// Free-form labels, and how many documents carry one.
+    pub labels: usize,
+    pub labelled: usize,
+    /// Occurrences beyond the first, spread over the documents.
+    pub extra_versions: usize,
+    /// Standing share answers, and how many of them name a FOLDER.
+    pub shares: usize,
+    pub folder_shares: usize,
+}
+
+/// THE YEAR-3 DOCS PROFILE: 8,000 documents over 400 folders four levels deep,
+/// with 2,000 standing share answers — half of them on folders.
+///
+/// The numbers a ceiling is stated at, and each one is the reason it is here:
+///
+/// * **8,000 documents against a 2,000-row window.** The drive's declared
+///   maximum is 2,000 (`drive.limit`), so a year-3 drive is four windows deep
+///   and `truncated` has to be the page's own cursor rather than a row count.
+/// * **1,000 folder shares over a four-level tree.** Every drive row's share
+///   decoration walks the chain above it, so the fold's cost is the window
+///   times the depth — and `SHARE_FAN_OUT`'s 4,000-row cap is what that walk
+///   runs into first.
+/// * **2,000 labels over 4,000 documents.** `docs.labels.tags` is a
+///   `(document, concept)` pair read over the window, which is why its bound is
+///   `DOC_PAIR_BOUND` (500 × 32) and not the join bound.
+pub const YEAR3_DOCS: Year3DocsShape = Year3DocsShape {
+    documents: 8_000,
+    trashed: 400,
+    starred: 600,
+    folders: 400,
+    folder_depth: 4,
+    labels: 2_000,
+    labelled: 4_000,
+    extra_versions: 2_000,
+    shares: 2_000,
+    folder_shares: 1_000,
+};
+
+/// What one year-3 Docs seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3DocsCounts {
+    pub documents: usize,
+    pub live_documents: usize,
+    pub trashed: usize,
+    pub starred: usize,
+    pub folders: usize,
+    pub content_items: usize,
+    pub revisions: usize,
+    pub tags: usize,
+    pub shares: usize,
+}
+
+/// Seed the Docs axis of year-3 volume.
+///
+/// **Filing instants repeat on purpose.** Documents share a `tagged_at` in
+/// pairs, because the keyset page's whole reason for carrying the pk is that the
+/// sort key is not unique (#1020 apps seam 3) — an 8,000-document fixture with
+/// distinct filing instants cannot trip the page boundary the cursor exists for.
+pub fn year3_docs(
+    connection: &Connection,
+    shape: Year3DocsShape,
+    seed: u64,
+) -> KitResult<Year3DocsCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_year3_docs(connection, shape, seed) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "one generator, one reading order; see `seed_ledger`"
+)]
+fn seed_year3_docs(
+    connection: &Connection,
+    shape: Year3DocsShape,
+    seed: u64,
+) -> KitResult<Year3DocsCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let mut stream = Seeded::new(seed);
+    let mut counts = Year3DocsCounts::default();
+    let start = "2097-01-01";
+    let created = format!("{start}T00:00:00.000Z");
+    let (root, starred_concept) = seed_docs_schemes(connection, &created)?;
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+             VALUES (?1, 'person', 'Year Three', ?2, ?2)",
+            rusqlite::params![YEAR3_OWNER_PARTY, created],
+        )
+        .map_err(door)?;
+
+    // --- the folder tree. A folder's parent is one of the previous LEVEL's, so
+    // the depth is a property of the arithmetic rather than of a random pick.
+    let per_level = shape.folders / shape.folder_depth.max(1);
+    for index in 0..shape.folders {
+        let level = index / per_level.max(1);
+        let parent = if level == 0 {
+            root.clone()
+        } else {
+            id("y3-folder", (index - per_level).min(shape.folders - 1))
+        };
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                    broader_concept_id, definition, created_at, updated_at)
+                 VALUES (?1, 'demo-scheme-folders', ?1, ?2, NULL, ?3, NULL, ?4, ?4)",
+                rusqlite::params![
+                    id("y3-folder", index),
+                    format!("Folder {index:06}"),
+                    parent,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.folders += 1;
+    }
+    for index in 0..shape.labels {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                    broader_concept_id, definition, created_at, updated_at)
+                 VALUES (?1, 'demo-scheme-tags', ?2, ?2, NULL, NULL, NULL, ?3, ?3)",
+                rusqlite::params![id("y3-label", index), format!("label-{index:06}"), created],
+            )
+            .map_err(door)?;
+    }
+
+    let mut tag_index = 0usize;
+    for index in 0..shape.documents {
+        let document_id = id("y3-document", index);
+        let content_id = format!("{document_id}-v0");
+        // TWO DOCUMENTS PER FILING INSTANT, so the keyset's pk tiebreak is
+        // exercised at every page boundary.
+        let filed = day(start, index / 2);
+        let stamped = format!("{filed}T09:00:00.000Z");
+        let body = format!("# Document {index:06}\n\nFiled on {filed}.\n");
+        connection
+            .execute(
+                "INSERT INTO core_content_item
+                   (content_id, content_uri, sha256, byte_size, language,
+                    creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
+                rusqlite::params![
+                    content_id,
+                    format!(
+                        "data:{DEMO_MEDIA_TYPE};charset=utf-8,{}",
+                        encode_demo(&body)
+                    ),
+                    demo_sha(&content_id),
+                    i64::try_from(body.len()).unwrap_or(i64::MAX),
+                    YEAR3_OWNER_PARTY,
+                    stamped
+                ],
+            )
+            .map_err(door)?;
+        counts.content_items += 1;
+        let trashed = index < shape.trashed;
+        connection
+            .execute(
+                "INSERT INTO core_document
+                   (document_id, title, current_content_id, current_revision_id,
+                    created_at, updated_at, deleted_at, purge_at)
+                 VALUES (?1, ?2, ?3, NULL, ?4, ?4, ?5, ?6)",
+                rusqlite::params![
+                    document_id,
+                    format!("Document {index:06}"),
+                    content_id,
+                    stamped,
+                    if trashed { Some(&stamped) } else { None },
+                    if trashed {
+                        Some(format!("{}T09:00:00.000Z", day(start, index / 2 + 30)))
+                    } else {
+                        None
+                    }
+                ],
+            )
+            .map_err(door)?;
+        counts.documents += 1;
+        if trashed {
+            counts.trashed += 1;
+        } else {
+            counts.live_documents += 1;
+        }
+        // --- the occurrence chain: one always, a second for the first
+        // `extra_versions` documents.
+        let mut parent: Option<String> = None;
+        let mut head = content_id.clone();
+        let mut head_revision = String::new();
+        let versions = 1 + usize::from(index < shape.extra_versions);
+        for version in 0..versions {
+            let revision_content = if version == 0 {
+                content_id.clone()
+            } else {
+                let second = format!("{document_id}-v{version}");
+                let revised = format!("# Document {index:06}\n\nRevised.\n");
+                connection
+                    .execute(
+                        "INSERT INTO core_content_item
+                           (content_id, content_uri, sha256, byte_size, language,
+                            creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+                         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
+                        rusqlite::params![
+                            second,
+                            format!(
+                                "data:{DEMO_MEDIA_TYPE};charset=utf-8,{}",
+                                encode_demo(&revised)
+                            ),
+                            demo_sha(&second),
+                            i64::try_from(revised.len()).unwrap_or(i64::MAX),
+                            YEAR3_OWNER_PARTY,
+                            stamped
+                        ],
+                    )
+                    .map_err(door)?;
+                counts.content_items += 1;
+                second
+            };
+            let revision_id = format!("{document_id}-r{version}");
+            connection
+                .execute(
+                    "INSERT INTO core_entity_revision
+                       (revision_id, entity_type, entity_id, operation, snapshot_json,
+                        recorded_at, undo_until, undone_at, actor_party_id, invocation_id,
+                        content_id, parent_revision_id, updated_at)
+                     VALUES (?1, 'core.document', ?2, 'revise', '{}', ?3, ?3, NULL,
+                             ?4, NULL, ?5, ?6, ?3)",
+                    rusqlite::params![
+                        revision_id,
+                        document_id,
+                        stamped,
+                        YEAR3_OWNER_PARTY,
+                        revision_content,
+                        parent
+                    ],
+                )
+                .map_err(door)?;
+            counts.revisions += 1;
+            parent = Some(revision_id.clone());
+            head = revision_content;
+            head_revision = revision_id;
+        }
+        connection
+            .execute(
+                "UPDATE core_document
+                    SET current_content_id = ?1, current_revision_id = ?2
+                  WHERE document_id = ?3",
+                rusqlite::params![head, head_revision, document_id],
+            )
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO core_content_representation
+                   (representation_id, content_id, owner_type, owner_id, media_type,
+                    charset, interpretation, created_at, updated_at)
+                 VALUES (?1, ?2, 'core.document', ?3, ?4, 'utf-8', 'body', ?5, ?5)",
+                rusqlite::params![
+                    format!("{document_id}-rep"),
+                    head,
+                    document_id,
+                    DEMO_MEDIA_TYPE,
+                    stamped
+                ],
+            )
+            .map_err(door)?;
+        // --- filing, the star and a label. One folders-scheme tag each.
+        let folder = id("y3-folder", stream.upto(shape.folders.max(1)));
+        for concept_id in [
+            Some(folder),
+            (index < shape.starred).then(|| starred_concept.clone()),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(
+            (index < shape.labelled)
+                .then(|| id("y3-label", stream.upto(shape.labels.max(1))))
+                .into_iter(),
+        ) {
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, tagged_at, updated_at)
+                     VALUES (?1, 'core.document', ?2, ?3, ?4, NULL, ?5, ?5)",
+                    rusqlite::params![
+                        id("y3-tag", tag_index),
+                        document_id,
+                        concept_id,
+                        YEAR3_OWNER_PARTY,
+                        stamped
+                    ],
+                )
+                .map_err(door)?;
+            tag_index += 1;
+            counts.tags += 1;
+        }
+        if index < shape.starred {
+            counts.starred += 1;
+        }
+    }
+
+    // --- the share plane: half the answers on documents, half on folders.
+    for index in 0..shape.shares {
+        let on_folder = index < shape.folder_shares;
+        let party_id = format!("y3-party-{index:06}");
+        connection
+            .execute(
+                "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+                 VALUES (?1, 'person', ?2, ?3, ?3)",
+                rusqlite::params![party_id, format!("Peer {index:06}"), created],
+            )
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO share_authority
+                   (authority_id, principal_kind, principal_id, subject_type, subject_id,
+                    verb, duration, expires_at, decision, granted_at, granted_by, revoked_at)
+                 VALUES (?1, 'person', ?2, ?3, ?4, 'view', 'standing', NULL, 'granted',
+                         ?5, ?6, NULL)",
+                rusqlite::params![
+                    id("y3-grant", index),
+                    party_id,
+                    if on_folder {
+                        "docs.folder"
+                    } else {
+                        "core.document"
+                    },
+                    if on_folder {
+                        id("y3-folder", index % shape.folders.max(1))
+                    } else {
+                        id("y3-document", index % shape.documents.max(1))
+                    },
+                    created,
+                    YEAR3_OWNER_PARTY
+                ],
+            )
+            .map_err(door)?;
+        counts.shares += 1;
+    }
+    Ok(counts)
+}
+
+/// The owner party every seeded row attributes to.
+///
+/// A fixture vault built from `[]` rows carries the model and nothing else, and
+/// `core_content_item.creator_party_id` and `core_tag.tagged_by_party_id` both
+/// key into `core_party` — so a generator that skipped this would be writing
+/// rows whose attribution names nobody.
+pub fn seed_owner_party(
+    connection: &Connection,
+    party_id: &str,
+    display_name: &str,
+    now: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+             VALUES (?1, 'person', ?2, ?3, ?3)",
+            rusqlite::params![party_id, display_name, format!("{now}T00:00:00.000Z")],
+        )
+        .map_err(|error| KitError::Door(error.to_string()))?;
+    Ok(())
+}

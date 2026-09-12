@@ -16,6 +16,26 @@ package dev.centraid.design
  * implementation that drifts.
  */
 public object CentraidCopy {
+    public object Docs {
+        public const val MORE_FOOTER: String = "Everything Docs can show — the vault mark goes back to the rest of Centraid."
+        public const val MORE_TITLE: String = "More in Docs"
+        public const val OFFLINE_BANNER: String = "Gateway unreachable — filing works from this device, opening and search do not."
+        public const val OFFLINE_BANNER_ACTION: String = "Retry"
+        public const val RECENT_RULE: String = "Ordered by last change · nothing records when a document was opened"
+        public const val SHARED_SENDER_UNKNOWN: String = "Another vault"
+        public const val SHARED_WITH_KEY: String = "Shared with"
+        public const val VERSIONS_ACTIVITY_HEAD: String = "Activity"
+        public const val VERSIONS_ACTIVITY_META: String = "folded in here, deliberately"
+        public const val VERSIONS_CUT_NOTE: String = "The third column records whether a member, an app or a machine did it."
+        public const val CLEAR_FILTERS: String = "Clear filters"
+        public const val SEARCH_CLEAR: String = "Clear"
+        public const val SEARCH_LABEL: String = "Search documents by title or contents"
+        public const val SEARCH_PLACEHOLDER: String = "Search titles and contents"
+        public const val SEARCH_SCOPE: String = "the live library"
+        public const val TRASH_NOTE: String = "Documents in the trash purge on their own schedule; restoring one puts its folder and its star back."
+        public const val WINDOW_FAILED: String = "could not be fetched"
+    }
+
     public object Notes {
         public const val ANCHOR_DEGRADED: String = "the passage was edited · this anchor now points at the note"
         public const val BACKLINKS_NOTE: String = "The reverse query is not built yet · these two are the link rows read forwards"

@@ -43,6 +43,14 @@ import path from "node:path";
  * An app lane adds its own entry here and nowhere else.
  */
 export const COPY_LEAVES: Record<string, readonly string[]> = {
+  // Docs' three leaves: the shell's own chrome, a document's detail pane, and
+  // the drive. All three ship with the screens they belong to (census §A0): a
+  // route id in one and not the other is a silent empty string.
+  docs: [
+    "packages/blueprints/apps/docs/view-copy.ts",
+    "packages/blueprints/apps/docs/document-copy.ts",
+    "packages/blueprints/apps/docs/drive-copy.ts",
+  ],
   notes: ["packages/blueprints/apps/notes/view-copy.ts"],
   photos: ["packages/blueprints/apps/photos/shared-copy.ts"],
   shared: ["packages/blueprints/apps/_shared/shared-copy.ts"],
@@ -58,6 +66,7 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
  * claim the copy table makes.
  */
 export const SHELF_TABLES: Record<string, string> = {
+  docs: "packages/blueprints/apps/docs/shelves.ts",
   tally: "packages/blueprints/apps/tally/shelves.ts",
 };
 

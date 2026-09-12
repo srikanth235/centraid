@@ -27,7 +27,9 @@ Every one is an answer to a way the port could have been wrong, and every one ha
 
 ## The four queries, and the three reads that discover rows
 
-The drive's window is a **page** of `core_tag`, newest `tagged_at` first. Everything else — the wrappers, the stars, the labels, the content rows, the custody states, the representations and the whole share fold — is `IN`-bounded by ids that page returned. `truncated` is that page's own cursor: `rows.length >= window` cannot tell a window that filled exactly from one that ran out.
+**D-1020-DC10 — the declared window is walked to its stated size.** `MAX_PAGE_ROWS` clamps a page to 500, and v0 asks for its 2,000-row window as one page and takes the rows — so a drive declaring `limit: 2000` answers 500 documents and discards the cursor that says there are more. Measured at the year-3 profile: **500 of 7,600 live documents**. A list is where a clamp is defensible, but the clamp has to be the one the caller asked for and not one the page contract imposed behind it; `core_tag.tagged_at` is `NOT NULL`, so the keyset walk is continuable and the stated window is reachable. Photos' library takes one page instead, because its own sort column is nullable and a walk there would silently drop every NULL (D-1020-P11). The port answers 2,000 in 480 ms at that profile, and `truncated` is still the read's own claim rather than a row count.
+
+The drive's window is a **walked page set** over `core_tag`, newest `tagged_at` first. Everything else — the wrappers, the stars, the labels, the content rows, the custody states, the representations and the whole share fold — is `IN`-bounded by ids that page returned. `truncated` is that page's own cursor: `rows.length >= window` cannot tell a window that filled exactly from one that ran out.
 
 The second discovery read is the origin plane, and it runs **before** the folders-scheme gate — because the scheme is created on first use, and returning early there told a member who had _received_ a document that nothing had arrived. The third is `search`'s FTS read, which belongs to `crates/search`; the hits arrive here in **rank order** and the fold keeps it.
 
