@@ -1461,3 +1461,578 @@ The two riskiest claims in this diff, and the throwaway check run against each.
 ### Doctrine digest
 
 Law `53be88c22ab5`. `bash .governance/run.sh` all directives pass; `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` no findings. No waiver spent. No law file touched — `.governance/**`, `CONSTITUTION.md`, `scripts/ci/gate-classes.json`, `tests/{floors,budgets,inventory,quarantine,claims}.json`, `oxlint.config.ts`, `oxfmt.config.ts` and `.github/CODEOWNERS` are all unmodified (`tests/journeys.json` is not law estate and took a non-numeric `lane` field on twelve entries). `.github/workflows/**` and `scripts/ci/**`-adjacent territory is cited to [#the-pr-gate-loop-892](../docs/decisions.md#the-pr-gate-loop-892) in every commit that touches it. No v0 file under `packages/**` was edited and no fixture adapter was needed, so this lane lists none. No model identifier appears in any file or commit message.
+
+## Wave 2 — lane D2: the seat, the core, the five-symbol ABI, and the simulation that found two bugs
+
+`crates/seat`, `crates/core`, `crates/core-ffi`, `crates/sim`, the failure
+matrix, the `call` budget and the host half of the binding spike.
+
+The headline is not the code. It is that **the deterministic simulation found
+two real bugs on its first run**, one of which no other test in this repository
+could have found — a liveness bug that left every optimistic overlay painted on
+every screen for the life of a seat while *convergence passed throughout*. The
+issue calls deterministic simulation the primary sync proof. It earned the
+title on day one.
+
+### What landed, by commit
+
+**`be809629` — `feat(seat): the seat replica — applier, state, outbox, intent grammar`**
+
+- `crates/seat/Cargo.toml`, `crates/seat/README.md`
+- `crates/seat/src/lib.rs` — the crate's own docs on the three vocabularies and
+  the two numbers that look alike
+- `crates/seat/src/applier.rs` — the gateway's four rules plus **rule 5**,
+  idempotent-by-seq; the two hooks; one transaction per commit with the cursor
+  in it
+- `crates/seat/src/state.rs` — `seat_state`'s DDL, `SeatPosition`, the
+  watermark arithmetic
+- `crates/seat/src/outbox.rs` — `seat_outbox` / `seat_outbox_settled`, the
+  queue, the bounded journal
+- `crates/seat/src/intent.rs` — ten `IntentState`s, nine `OVERLAY_STATES`, seven
+  `GatewayStatus`es, five `OutcomeStatus`es, as **three types**
+- `crates/seat/src/payload.rs` — the canonical hash, re-exported from the vault,
+  with the astral-plane tests
+- `crates/seat/src/chain.rs` — minted rows, synthetic ids, holds, the backoff,
+  the six-step cutover as data
+- `crates/seat/src/settlement.rs` — an answer is the gateway's fact, an overlay
+  is this seat's
+- `crates/seat/src/occ.rs` — `row_version`, and what `actual_version == 0` means
+- `crates/seat/src/identity.rs`, `crates/seat/src/error.rs`
+- `crates/seat/tests/common/mod.rs`, `crates/seat/tests/convergence.rs`,
+  `crates/seat/tests/properties.rs`
+
+**`21611cb5` — `feat(vault): list intent outcomes by status, for core's parked door`**
+
+- `crates/vault/src/intents.rs` (`list_outcomes_with_status`),
+  `crates/vault/tests/doors.rs`
+
+The one edit to lane D1's crate, and it is here rather than in `crates/core`
+because `sql-confinement` names five crates and `core` is not one of them. The
+rule is right: a door that read the ledger itself would be a second reader of a
+table this crate owns the shape of.
+
+**`07046485` — `feat(core): the message loop — open, call, next_event, close`**
+
+- `crates/core/Cargo.toml`, `crates/core/README.md`, `crates/core/src/lib.rs`
+- `crates/core/src/handle.rs` — the four entry points, the three roles, the
+  request-id and `Cancel` semantics, the poison
+- `crates/core/src/events.rs` — the bounded queue, coalescing, the never-drop
+  stall
+- `crates/core/src/config.rs`, `crates/core/src/error.rs`,
+  `crates/core/src/convert.rs` (the proto boundary), `crates/core/src/api.rs`
+  (the `VaultApi` v1 twin)
+- `crates/core/tests/call_budget.rs`, `contracts/ledgers/call-budget.json`
+
+**`019bd020` — `feat(core-ffi): the C ABI — five symbols, ten clauses, each one tested`**
+
+- `crates/core-ffi/{Cargo.toml,README.md,CONTRACT.md,cbindgen.toml,build.rs}`
+- `crates/core-ffi/src/lib.rs` — the five entry points
+- `crates/core-ffi/src/marshal.rs` — the unsafe surface, **confined** so miri
+  can run over it
+- `crates/core-ffi/src/bin/spike-fixture.rs`
+- `crates/core-ffi/include/centraid.h` — generated, committed
+- `crates/core-ffi/tests/{contract.rs,symbols.rs,marshal_miri.rs,spike.rs}`
+- `crates/core-ffi/spike/spike.c`,
+  `crates/core-ffi/spike/jna/{settings.gradle.kts,build.gradle.kts,src/main/kotlin/Main.kt}`
+
+**`4cb1577f` — `fix(api-proto): CommandOutcome carries the commit its effect landed in`**
+
+- `crates/api-proto/proto/centraid/core/v1/command.proto` (field 7)
+- `crates/core/src/api.rs`, `crates/core/src/config.rs`,
+  `crates/core/src/handle.rs` (`CoreConfig::with_clock`)
+- `crates/seat/src/settlement.rs`, `crates/seat/src/sync.rs` (new)
+
+**`2f13d7c3` — `test(sim): the deterministic simulation, and the seeds it found bugs on`**
+
+- `crates/sim/{Cargo.toml,README.md}`, `crates/sim/src/lib.rs`
+- `crates/sim/src/world.rs` — the turmoil hosts, the faults, the quiescence
+  barrier
+- `crates/sim/src/schedule.rs` — the seeded generator
+- `crates/sim/src/invariants.rs` — the seven claims
+- `crates/sim/src/protocol.rs` — the datagram framing
+- `crates/sim/tests/{seeds.rs,recorded_seeds.rs}`
+- `contracts/sim/failing-seeds.json`
+- `crates/xtask/src/gate.rs` — the `sim` and `call-budget` steps in `pr`,
+  `sim-nightly` in `nightly`, and `process_with_env` / `report_failure`
+- `Cargo.toml` (`rand_chacha`, `turmoil`)
+
+**`4807deab` — `test(seat): the wave 2 failure matrix, red-first`**
+
+- `crates/seat/tests/failure_matrix.rs`, `crates/seat/tests/common/mod.rs`,
+  `crates/seat/Cargo.toml`
+
+**`00ffbff9` — `test(seat): the tests cargo-mutants asked for — 0 survivors`**
+
+- `crates/seat/src/{applier,error,identity,intent,outbox,payload,settlement,sync}.rs`
+  — thirty-three tests, every one for a gap a mutant found
+
+**`6bd6b8de` — `refactor(vault): the keyset page and the convergence comparator move here`**
+
+- `crates/vault/src/page.rs` (`KeysetPage`, `KeysetAnswer`, `Vault::keyset_page`)
+- `crates/vault/src/converge.rs` (new) — the CONVERGENCE comparator and the
+  readers a convergence check needs, plus `Vault::self_party_id`
+- `crates/vault/src/lib.rs`, `crates/core/src/api.rs`,
+  `crates/core/src/handle.rs`, `crates/core/tests/call_budget.rs`,
+  `crates/core-ffi/{Cargo.toml,src/bin/spike-fixture.rs,tests/spike.rs}`,
+  `crates/sim/{Cargo.toml,src/invariants.rs,src/world.rs,tests/seeds.rs}`
+
+The `sql-confinement` rule's own finding, and the most useful thing it did all
+lane — see the findings below.
+
+**`2d6ff752` — `chore(deps): the lockfile after the simulation's dependencies`** ·
+**`0722a7eb` — `fix(core-ffi): the open configuration after CoreConfig grew a clock`**
+
+### The two bugs the simulation found
+
+Both are in `contracts/sim/failing-seeds.json` with the schedule, the
+presentation and the fix, and `crates/sim/tests/recorded_seeds.rs` replays them
+for ever.
+
+**1. A liveness bug in settlement — seed 0, and every other seed.**
+`centraid.core.v1.CommandOutcome` carried no `commit_seq`, while
+`crates/vault`'s own Rust `CommandOutcome` had carried one all along. So an
+`executed` answer reached the seat with neither a commit seq nor an
+`answered_versions` set: `settle_at_commit_seq` could not match it (its
+`commit_seq` was NULL) and `settle_answered_intents` skipped it (its version set
+was empty). The intent parked at `awaiting-change` **for ever** and the
+optimistic overlay stayed painted on every screen for the life of the seat.
+
+What makes this the case for the simulation: **convergence passed throughout**.
+The rows arrived, every table matched, and every unit test in `crates/seat`
+was green. Only a run that asserted "the outbox is drained or terminal *at
+rest*" over a whole scheduled workload could see it, and only a harness with a
+real gateway answering real commands could produce the answer that triggered it.
+
+Fixed in three places, because the bug had three halves: the field was added
+(`optional uint64 commit_seq = 7` — a fresh number, so `buf breaking` is
+unaffected); `core`'s `api::invoke` populates it; and `seat`'s settlement now
+**refuses** an `executed` answer carrying neither, rather than parking it where
+nothing can reach it. That third part is the one that matters most — the state
+was representable and unreachable-from, and a type that can hold an impossible
+value will hold one again.
+
+**2. The gateway was not reproducible — seed 3.** `Core::open` had no way to be
+given a clock, so it used the system clock. Two runs of one seed produced
+byte-identical rows — same ids, same values, same counts — and different
+`created_at` / `updated_at` / `occurred_at` / `executed_at` stamps; and
+`access_receipt.hash` covers those stamps, so the receipt chain differed too.
+A seed that cannot be replayed byte for byte cannot be *recorded*, so this bug
+was blocking `contracts/sim/failing-seeds.json` itself. `CoreConfig::with_clock`
+is the fix, and `Core::open` now decides create-versus-open by the file's
+existence so the boxed clock moves exactly once.
+
+**And two findings that were the harness's**, recorded because each taught the
+product something now written into it:
+
+- The seats quiesced **independently**, so a seat gave up just before another
+  seat's last write landed, and three seeds reported a convergence failure while
+  the product was correct. The harness fix is a shared quiescence barrier. The
+  product lesson is that `PassReport::behind` is a **display number** meaning
+  "as of the last page fetched" — it is derived from the watermark the last
+  served page carried, so a gateway that commits afterwards leaves it at zero
+  while the seat is genuinely behind. Any caller treating `behind == 0` as
+  terminal stops early and stays stale. That is now said in those words on the
+  field, and `reached_the_end` is the honest termination signal beside it.
+- Faults were repaired only *after* the clients finished, which quietly made the
+  convergence claim "converges unless partitioned". Every fault is now repaired
+  while the seats still have catch-up budget left.
+
+### Exit list
+
+| # | Command | Outcome |
+|---|---|---|
+| 1 | `cargo fmt --all --check` | clean |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | clean. Three findings were real and fixed rather than allowed: a `RefCell` borrow held across an `await` in `crates/sim` (the two channels share one connection, so it was a deadlock waiting for the day the driver interleaved them — the socket needs no interior mutability at all), an index-by-loop-variable, and `too_many_arguments` on `init_seat_state`, which became `SeatPosition` because two adjacent positional `i64`s that mean `applied_seq` and `applied_commit_seq` is exactly the shape in which census seam 5's two numbers get swapped |
+| 3 | `cargo test --workspace` | **708 passed, 0 failed** across 30 binaries |
+| 4 | `cargo xtask gate --profile local` | **PASS** — 170.5 s, scored against lane B2's new *cold* ceiling (`coldLocalProfileSeconds` 3200 s) because 14 of 14 workspace members had no linked artifact. `sccache` was not needed: the warm 120 s budget was not the number scored |
+| 5 | `cargo xtask gate --profile pr` | **green except three**, and none of the three is this lane's. `secrets` reports 2 findings — `packages/model-runtime/LICENSES.md` (the named inherited red) and `contracts/golden/format-golden.json` (lane R's deliberate test key, new since the brief was written; named below). `osv` reports `astro@7.1.5` (the second named inherited red). `ts-static` refuses an unprovisioned tree rather than a type error, and says so in its own message — after `bun run build` it is 4/4. **The two steps this lane added both pass**: `sim` 28.7 s, `call-budget` 4.0 s. Total 363.2 s of a 1500 s budget, cold |
+| 6 | `nm -D --defined-only …/libcentraid_core_ffi.so \| grep ' T centraid_' \| wc -l` | **5** — `centraid_call`, `centraid_close`, `centraid_free`, `centraid_next_event`, `centraid_open` |
+| 7 | `cargo miri test -p centraid-core-ffi --test marshal_miri` | **7 passed**, on `RUSTUP_TOOLCHAIN=nightly` (the pinned 1.94.1 toolchain has no miri component; `rustup component add --toolchain nightly miri rust-src` was needed). What miri covered: the slice reconstruction and its bounds, the two out-pointer writes, the `Vec` → raw → `Vec` round trip `centraid_free` inverts (a capacity mismatch there is undefined behaviour that happens to work), the null-pointer refusals *before* any dereference, the empty-buffer corner, and a thousand round trips against miri's leak check. What it did **not** cover is everything that opens a vault: SQLite is a C library and miri does not execute foreign code, which is precisely why the unsafe surface is confined to `src/marshal.rs` |
+| 8 | `SIM_SEEDS=100 cargo test -p centraid-sim` | **100 seed(s) in 95.0 s, 0 failing.** Wall clock for the whole test binary: 1 m 38 s |
+| 9 | the failure matrix | 10 tests, 4 reds demonstrated — below |
+| 10 | `cargo mutants -p centraid-seat` | **0 survivors.** 244 mutants: 204 caught, 1 missed, 39 unviable on the first full run; the 33 survivors of the run before it were every one a real gap, and all 33 are now killed by tests rather than excluded. `mutants.toml` was not created and `exclude_re` holds nothing: no survivor turned out to be a genuinely equivalent mutant. `--file crates/seat/src/sync.rs` re-run after the last fix: 39 mutants, 37 caught, 2 unviable, 0 survivors |
+| 11 | the spike numbers | below |
+| 12 | format / governance / law / static / push | `bun run format` + `format:check` clean; `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` → 10 rules, no findings; `bash .governance/run.sh` → all 10 directives pass; `bun run check:push:static` → **4/4** |
+
+### The `call` budget and the spike numbers
+
+All `ci-linux-x64-4c`, 4 vCPU / 15 GB. **Floor measurements**, and the receipt
+says so: the fixture is small, so what they catch is a regression in the call
+path — a lock held too long, a statement re-prepared per call, a page probe gone
+quadratic — not the cost of a year-three table.
+
+**`call` budget** (`cargo test -p centraid-core --test call_budget`), a page of
+100 rows over a 200-row vault, 200 samples after 20 unmeasured warm-ups:
+
+```
+p50 0.35ms · p95 0.47ms · p99 4.45ms · ceiling 50ms
+```
+
+`contracts/ledgers/call-budget.json` records the **ceiling**, not the
+observation, and `_provenance.seededFrom` says why: a ceiling set to the current
+measurement fails on the next runner that is one percent slower, which teaches a
+team to raise budgets. The ledger and the test's constant are asserted equal by
+`the_ledger_and_this_test_state_the_same_ceiling` — two copies of a budget is
+two budgets, and the one nobody reads is the one that drifts.
+
+**Binding spike, host half** (D-1020-D2-7). Ten thousand bounded reads across
+the ABI, 100/500 unmeasured warm-ups:
+
+| Harness | open | p50 | p95 | p99 | calls/s | answer |
+|---|---|---|---|---|---|---|
+| C (`cc -O2`, `-Wall -Wextra` clean) | 49.8 ms | 431 µs | 494 µs | 753 µs | 2,272 | 4,143 B |
+| JNA 5.14 on JDK 21.0.10 | 125.7 ms | 480 µs | 894 µs | 1,152 µs | 1,772 | 4,143 B |
+
+Event path, through `centraid_next_event`: **1,024 events in 4.3 ms, 235,817
+events/s**. Neither out-of-process harness can measure this — nothing in them
+produces an event, so both report `events: 0`, which is a real measurement of
+the *timeout* path (clause 6: a timeout allocates nothing, and both harnesses
+would crash if it did) rather than of a drain.
+
+**The one number worth reading**: the JVM binding costs about **1.8×** the C
+one at p95 (894 µs against 494 µs) for an identical 4 KB answer. That is the
+marshalling — JNA's method dispatch plus the copy of the answer into a
+`ByteArray` — and it is the number an Android shell budgets against.
+
+Gradle **did** reach Maven Central through this machine's proxy, so the JNA
+harness is a measured number and not only shipped source. `gradle --offline`
+fails (no plugin cache); plain `gradle build` succeeds.
+
+The spike's purpose is the ABI's **shape**, and the shape held: a shell needs
+exactly five declarations, the answer comes back as a pointer *and* a length as
+separate out-parameters (so JNA needs no hand-maintained `Structure` layout),
+and the C harness compiles `-Wall -Wextra` clean. The *device* half — cinterop
+on iOS, JNA on Android, the Swift wrapper — is wave 3 lane E's and there is no
+device here.
+
+### Demonstrated reds
+
+The failure matrix was written red-first. Each red was produced by breaking the
+product deliberately, recorded, and reverted; each test's own doc comment names
+its red so a future reader can reproduce it.
+
+| Red | Break | Result |
+|---|---|---|
+| A | rule 5 disabled (`if false && row.seq <= state.applied_seq`) | `the_same_page_twice_changes_nothing_at_the_seat` **FAILED**, `left: 6 right: 0` — the redelivered span's delete replayed and removed the live row |
+| B | the overlay cleared from `on_commit_durable` instead of the in-transaction hook | `an_intent_executed_this_pass_has_its_overlay_cleared_this_pass` **FAILED**, `left: [] right: ["i-1"]` |
+| C | the per-row epoch gate disabled | `an_epoch_bump_tells_an_old_seat_to_rebootstrap_and_says_why` **FAILED** — a row from another epoch landed |
+| D | `SQLITE_FULL` classified as a generic SQLite error | `a_full_seat_file_rolls_back_whole_and_resumes_from_the_same_cursor` **FAILED**: `SQLITE_FULL must be its own typed answer, or the shell says 'sync failed' and the member never learns that clearing space would fix it: database or disk is full` |
+
+And the two bugs above are themselves reds, found rather than planted: the
+simulation's first run was the red, and `contracts/sim/failing-seeds.json` is
+where they are recorded.
+
+One further red is recorded in `crates/core/src/events.rs`'s own history: the
+test `the_health_event_carries_the_seats_distance_behind` failed on the first
+implementation because a stall that happened with the queue **full of change
+events** had no health slot to replace and was therefore never reported — the
+shell would learn a stall had ended without ever learning it began. The fix is
+the deferred `stall_unreported` report, which takes the first slot a drain
+frees rather than dropping a change event to make room.
+
+### Decisions — lane D2
+
+Each cites [#1020](https://github.com/srikanth235/centraid/issues/1020) and was
+adopted under **R-1020-34** (options, recommendation, adopt, record).
+
+**D-1020-D2-1 — the seat is the same crate family as the gateway.** `crates/seat`
+holds the applier, `seat_state`/`seat_outbox`/`seat_outbox_settled`, the
+watermark arithmetic, the `(gateway_id, vault_id)` digest, the intent grammar as
+three distinct types, the offline chain, settlement, `row_version` OCC and the
+online-only refusal. SQL string literals are allowed here, as the
+`sql-confinement` rule already names. **The applier's SQL is the gateway's**:
+`centraid_vault::log::apply::{apply_row_sql, delete_row_sql}` render the
+statements and this crate calls them. v0 had two hand-transcribed copies of the
+same four rules and they drifted; one renderer with two callers cannot.
+
+**D-1020-D2-2 — `core` is the message loop.** Four entry points and nothing
+else. `open` opens the file, runs migrations and **returns**; the endpoint is a
+separate call. `call` is synchronous from the caller's view with a debug
+assertion against the shell's named UI thread. `next_event` is bounded at 1024
+and drops nothing. `close` unblocks every waiter and later calls are typed
+errors. Three roles over one `Request` surface.
+
+**D-1020-D2-3 — `core-ffi` is five symbols and a contract.** Exactly five
+`#[unsafe(no_mangle)] pub extern "C"`, ten clauses in `CONTRACT.md`, one test per
+clause through the C entry points, `nm` over the built `cdylib` as a second and
+different question, a committed cbindgen header whose regeneration is asserted
+to be a no-op, `#![deny(unsafe_op_in_unsafe_fn)]`, every `unsafe` block
+commented with the invariant it relies on, and the marshalling confined to one
+module so miri can run over it.
+
+**D-1020-D2-4 — the simulation is the sync proof.** One gateway host, N seat
+hosts, a seeded schedule, seven invariants after every run, 25 seeds in `pr` and
+250 in `nightly`, and every seed that ever failed replayed for ever. Every host
+is real except the network: real vault, real doors, real applier, real outbox,
+real sync driver, real on-disk SQLite. The alternative — mocks — proves the
+mocks agree.
+
+**D-1020-D2-5 — the failure matrix, red-first.** Five modes, ten tests, four
+demonstrated reds. The seat side is `crates/seat/tests/failure_matrix.rs`, where
+a connection can be dropped and reopened and a file can be made full on purpose;
+the gateway side of process death and duplicate delivery is `crates/sim`'s,
+where a real host crashes and restarts over a real file.
+
+**D-1020-D2-6 — the `call` budget.** p95 over 200 calls of one bounded read,
+against a ceiling in a down-only ledger, run by `pr`'s `call-budget` step.
+`--nocapture`, so a number trending towards its ceiling is visible in the gate's
+log rather than only pass-or-fail.
+
+**D-1020-D2-7 — the binding spike, host half.** A C harness and a JNA harness,
+both measured. JNA and **not** the Foreign Function & Memory API: FFM is final
+in JDK 22 and Android's minimum is nowhere near it, so an Android shell will use
+JNA or JNI for years, and measuring the binding the product will ship is the
+point of a spike.
+
+**D-1020-D2-8 — the status codes are prefixed on both sides.** `CENTRAID_OK`,
+not `status::OK` with a bare `#define OK` in the header. Options: (a) bare Rust
+names and a cbindgen rename annotation — *tried, and cbindgen 0.29 does not
+honour `cbindgen:rename` on constants*; (b) two spellings, one per language —
+refused, because two names for one constant is a thing that drifts; (c) one
+prefixed name on both sides — **adopted**. A C preprocessor has a single
+namespace and a header that `#define`d bare `OK` would collide with somebody's
+enum on the first project that included both.
+
+**D-1020-D2-9 — one mutex over the vault, in wave 2.** `Vault` keeps its
+commit-guard depth in a `Cell` and is `!Sync` by construction. The issue's
+"reads run concurrently under SQLite's own rules" needs a pool of read
+connections, which needs `PRAGMA` statements, which is SQL — and
+`sql-confinement` confines SQL to five crates `core` is not one of. Options:
+(a) a reader pool in `crates/core` — **refused**, it puts SQL where the rule
+does not allow it and weakening a rule to go green is exactly what this
+repository forbids; (b) a reader pool inside `crates/vault` — the right answer,
+and lane D1's file, so it is an owner hand-off rather than a reach across a lane
+boundary; (c) one mutex, every call serialised — **adopted for wave 2**. What it
+costs is bounded and measured: `call` is p95-budgeted on a *single* bounded read,
+which serialisation does not change, and p95 is 0.47 ms against a 50 ms ceiling.
+What it does not cost is correctness. `CONTRACT.md` clause 3 states the honest
+version — the FFI adds no lock of its own, and it never promised the vault was
+concurrent.
+
+**D-1020-D2-10 — the sync driver is production code, not the simulation's.**
+`crates/seat/src/sync.rs` holds the loop, written over `LogSource` and
+`IntentSink`; `crates/sim` implements them over turmoil and a real seat will
+implement them over `crates/net`. A driver in the test crate would have made
+every simulation bug a bug in code no phone runs. The two traits are **separate**
+because they fail independently and the remedies differ: a seat whose log source
+is down is *stale* (it shows what it has and says how far behind), and a seat
+whose intent sink is down is *blocked* (its writes are queued and the badge says
+so). Those are the two most different states a seat has, and one "connection"
+trait would make them the same one.
+
+**D-1020-D2-11 — the simulation speaks UDP, not TCP.** Options: (a) turmoil's
+TCP — refused twice over. First because **it is not what the product speaks**:
+production is iroh, which is QUIC over UDP, and a TCP simulation would prove
+convergence for a transport no seat has, hiding reordering, datagram loss and
+the absence of head-of-line blocking, which are exactly the three things a sync
+loop must survive. Second because the product **may not open a listening TCP
+socket** and the xtask `no-listening-socket` rule says so on every gate run: a
+simulated listener is not a real one, but a crate whose source reads
+`TcpListener::bind` is a crate somebody copies from. (b) An in-process channel —
+refused, turmoil's partitions and latency would not apply and the schedule would
+be decoration. (c) **turmoil UDP — adopted.** The rule stands unweakened and was
+never asked to bend. The cost is this crate's own datagram framing, which keeps
+the protocol's `u32BE(len)` prefix even though a datagram already has a length,
+because a truncated datagram must be refused for the same reason a truncated
+stream frame is.
+
+**D-1020-D2-12 — the sync driver is async; `Handle::call` is not.** These two
+were briefly conflated, and the first attempt called `Handle::block_on` from
+inside a turmoil host — which panics, correctly. A sync *pass* is network I/O, so
+`pass` is `async` and the two traits return boxed futures. `call` is synchronous
+because a *shell* asking one question wants one answer and should not need a
+runtime in Swift. The SQLite work between the awaits stays synchronous, which
+is right: an apply is one transaction per commit and there is nothing to await
+inside one — so the applier never holds a transaction across an await point,
+which is the rule that keeps a cancelled future from leaving one open.
+
+### Findings outside the slice
+
+1. **`crates/vault`'s gateway-side applier does not persist its cursor.**
+   `log::apply::apply_log_page` documents rule 2 as "one transaction per commit,
+   **with the cursor in it**", and the statement it runs inside that transaction
+   is `UPDATE replica_meta SET floor_seq = MAX(floor_seq, 0), updated_at =
+   updated_at WHERE singleton = 1` — a no-op in both columns. The cursor is
+   returned in `ApplyOutcome.cursor` and never written. Not a bug for its two
+   current callers (the CONVERGENCE and ATOMICITY fixtures both pass the cursor
+   back in), and a real one for anything that crashes mid-replay and reopens —
+   which is exactly what lane R's restore drill does through
+   `backup::drill::SeatReplica`. `crates/seat`'s applier writes `seat_state` in
+   the same transaction, so the seat side is sound; this is the gateway-side
+   twin. **For lane D1 or the owner.**
+2. **`SeededIds` restarts its sequence when a process restarts.** The
+   simulation's gateway host reopens its file on a bounce and mints ids from the
+   same seed again. It did not collide in any of the 100 seeds run — each id is
+   consumed once per command and the command count is the same — but a restart
+   that re-issued an id a previous run had already committed would be an id
+   collision in the audit band, which is append-only. Worth a deliberate answer
+   before anything ships on `SeededIds` outside a test. **For lane D1.**
+3. **`crates/vault`'s `RebootstrapReason` has five values; the wire has eleven.**
+   `contracts/protocol`'s `RebootstrapReason` carries v0's full ten plus
+   `UNSPECIFIED`, and `convert::rebootstrap_to_wire` can only ever produce four
+   of them. The other six (`epoch-changed`, `snapshot-retention`,
+   `shape-changed`, `checkpoint-incompatible`, `device-access-changed`) are v0
+   verdicts nothing in v1 raises yet. Not a defect — a seat normalises what it
+   does not know to `invalid-cursor`, as v0's door does — but the asymmetry is
+   worth a look when the snapshot door lands in wave 3. **For lane C / wave 3.**
+4. **`sql-confinement` found eight violations I had written, and fixing them
+   found a triplicated comparator.** Worth writing down as a finding about the
+   *rule* rather than about my code. `crates/vault::page::RawPage` takes SQL the
+   **caller** wrote, which means the first consumer outside `crates/vault` that
+   wants a page has to write a `SELECT` — so the violation was not carelessness,
+   it was the interface. `KeysetPage` is the fix: the shape crosses the boundary
+   and the syntax does not. And in chasing the other seven I found the
+   CONVERGENCE comparator written **three times** — in `crates/vault`'s
+   `tests/gates.rs`, in lane R's restore drill, and a third time in
+   `crates/sim` because the first two were `#[test]`-private. Three copies of a
+   comparison is three comparisons, and the one that is wrong is the one nobody
+   re-reads. `crates/vault::converge` is now the single one.
+
+   **The lesson for the umbrella**: the right answer to "the rule will not let
+   me put a query here" was never an exemption, and twice out of eight it was
+   "there should only have been one query". Worth saying because the tempting
+   fix — adding `crates/sim` to `SQL_ALLOWED_ROOTS`, since it is test-only and
+   `publish = false` — would have looked entirely reasonable and would have lost
+   both improvements.
+5. **The `secrets` step now has a second cause, and it is not the one the brief
+   named.** `contracts/golden/format-golden.json` trips gitleaks'
+   `generic-api-key` on lane R's deliberate cross-language test key, alongside
+   the inherited `packages/model-runtime/LICENSES.md`. So `pr`'s red is two
+   findings rather than one, and a future lane reading "the two inherited reds"
+   will find three causes for two steps. Not mine to resolve — a fixture key is
+   supposed to be in the fixture — but the allowlist or the ignore file wants a
+   deliberate entry rather than a standing red that everybody learns to skip
+   past. **For lane R or the owner.**
+6. **`crates/xtask`'s `report_failure` now reads stdout as well as stderr.** The
+   simulation prints its diagnosis — the failing seed and its schedule — through
+   `println!`, so a gate step whose reason was looked for in stderr alone
+   reported `(no stderr)` for the most diagnosable failure in the profile. Fixed
+   in `2f13d7c3`, and mentioned because lane B2 is editing the same file.
+
+### Owner hand-offs
+
+1. **The reader pool belongs in `crates/vault`** (D-1020-D2-9). Until it exists,
+   `crates/core` serialises every call through one mutex. The budget says the
+   cost is not currently felt (p95 0.47 ms against 50 ms), so this is a
+   correctness-neutral scheduling question rather than an urgent one — but the
+   issue's own words are "reads run concurrently under SQLite's own rules", and
+   they are not yet true.
+2. **Lane R's restore drill still re-pairs through D1's applier, and the swap
+   is not cheap.** `backup::drill::SeatReplica` lives in `crates/vault`, and
+   `crates/seat` depends on `crates/vault` — so swapping it for the seat applier
+   would be a **circular dependency**. The swap therefore needs the drill to
+   *move*, out of `crates/vault` and into `crates/seat` or a crate above both.
+   That is a wave 3 change with a design decision in it, not the cheap
+   substitution lane R's note hoped for. Recorded here rather than attempted.
+   Finding 1 above is why it matters: the applier the drill currently uses is
+   the one whose cursor is not persisted.
+3. **`centraid_close` twice on one pointer is undefined**, and `CONTRACT.md`
+   says so in those words rather than defending against it. A shell must null
+   its own copy. Naming it because it is the one clause a shell author can get
+   wrong without a compiler or a test noticing, and a wave 3 shell review should
+   confirm all three shells do.
+4. **The device half of the binding spike is wave 3 lane E's.** The numbers here
+   are `ci-linux-x64-4c` numbers. The shape is fixed and the ABI is unlikely to
+   need a sixth symbol; the p95 an iPhone sees is unknown and is the number that
+   decides whether the prebuilt-core lane's size budget matters.
+
+### Doctrine digest
+
+Law `53be88c22ab5`. `amendment-pairing`, `commit-message-format`,
+`constitution-coverage`, `doc-integrity`, `doctrine-citation`,
+`estate-separation`, `managed-tree-integrity`, `receipt-per-issue`,
+`registry-completeness`, `waiver-docket` — no findings, no waivers spent. No law
+file touched. No model identifier in any file or commit.
+
+### Falsification — the two riskiest claims, and the throwaway check against each
+
+**1. "The C ABI exports exactly five symbols."** The risk is that the count is
+met by something other than the claim: a test counting *declarations* in source
+rather than exports in the artifact, a `grep` that matches a comment, or an
+artifact so stale that it predates the symbol under test.
+
+**(a) A sixth symbol.** A `#[unsafe(no_mangle)] pub extern "C" fn
+centraid_invoke()` was added to `src/lib.rs`. `cargo xtask gate --profile local`
+**failed** at the `rules` step: `crates/core-ffi exports 6 extern "C" symbol(s),
+not 5: [centraid_call, centraid_close, centraid_free, centraid_invoke,
+centraid_next_event, centraid_open]`, and after a rebuild
+`exactly_five_symbols_are_exported` **failed** too, from `nm`. Both halves can
+fail, and they fail for different reasons — which is the point of asking the
+question twice.
+
+**(b) The artifact, not the source.** `the_exported_names_are_what_a_shell_links`
+resolves each of the five through `libloading` on the built `cdylib`.
+`#[unsafe(no_mangle)]` was removed from `centraid_free` alone; the Rust-level
+contract tests **still passed** (they link the `rlib` and resolve at compile
+time), and the `libloading` test **failed**: `` `centraid_free` is in CONTRACT.md
+and not in …/libcentraid_core_ffi.so ``. So the two tests are not redundant, and
+the one that would have been dropped as duplicative is the one that catches a
+missing export.
+
+**(c) A stale artifact is caught, and this was not a hypothetical.** After
+check (a) the source was restored and the `cdylib` was **not** rebuilt. The
+next run of `exactly_five_symbols_are_exported` **failed** with
+`exports 6 'centraid_*' text symbol(s)` and printed both lists — so the test
+reads the artifact on disk rather than anything derived from the source it was
+compiled against. `touch` plus a rebuild put it back to five.
+
+The residual hole is the other direction: both symbol tests print
+`SKIPPED: no built cdylib found` and return rather than asserting, so a
+`cargo test -p centraid-core-ffi` with no prior build reports green having
+checked nothing. Recorded rather than hidden — the gate's `test` step runs
+`cargo test --workspace`, which builds the `cdylib`, and the skip line is
+printed loudly. A test that *failed* on an absent artifact would fail for every
+developer running one test file, which is worse.
+
+**Result: the claim held, and both halves of it are now known to be able to
+fail.**
+
+**2. "Every seat's replicated tables equal the gateway's after every schedule."**
+The risk is the classic one for a convergence check: that it compares an empty
+set, or walks a list shorter than it looks, or compares a file with itself.
+
+**(a) Two empty files must not pass.** `comparing_two_empty_files_is_a_finding_and_not_a_pass`
+is a permanent test, and the `assert!(compared < 100)` guard inside
+`seat_converges` is what it exercises. The invariant reports **109 tables
+compared** on a real run, not the handful a workload touches.
+
+**(b) The comparator can see a single row.** One row was deleted from
+`seat-0`'s `core_party` after a clean run, before the invariant check. The check
+**failed**: `` [1/convergence] seat-0: `core_party`: 9 row(s) on the gateway, 8
+here `` — with both row lists printed, so the missing row is identifiable from
+the output alone.
+
+**(c) The applier was broken to skip deletes while still advancing its cursor** —
+the classic insert-only mirror. Three things were then run, and the result is
+more interesting than a pass:
+
+- **The simulation did not catch it.** Seed 1 reported 0 findings over 109
+  tables. Honest, and a gap: the generated workload is `core.add_party` only, so
+  **the simulation does not currently exercise deletes at all**.
+- **The duplicate-delivery test did not catch it either**, which surprised me
+  and is worth writing down. `the_same_page_twice_changes_nothing_at_the_seat`
+  compares the first delivery against the second, and a broken applier skips the
+  delete equally on both — so the property it asserts (idempotence) was still
+  true of the broken code. A test that compares a thing against itself cannot
+  see a bug that affects both sides.
+- **D1's CONVERGENCE fixture, replayed through this applier, caught it.**
+  `crates/seat/tests/convergence.rs` **failed**: `` `core_entity`: 7 row(s) on
+  the gateway, 8 on the seat `` and `` `core_party`: 4 … 5 ``, with the surviving
+  `conv-b` visible in the printed seat side. That is the value of running lane
+  D1's fixture through lane D2's applier rather than trusting that two
+  implementations of four rules agree.
+
+**Result: the claim held, and the check relocated the coverage.** The delete
+path is covered by the CONVERGENCE fixture and not by the simulation; the
+simulation's workload should grow an update and a delete when a delete-shaped
+command is registered, which is wave 3. It is named here rather than counted as
+covered — and the reason the gap was invisible is that the test I *expected* to
+catch it structurally cannot.
+
+A third, cheaper check, because "the simulation found two bugs" is a claim that
+could be met by two bugs in the simulation: both are in *product* crates
+(`crates/api-proto` + `crates/seat`, and `crates/core`), both have a permanent
+regression test outside `crates/sim`
+(`an_executed_answer_with_neither_a_commit_seq_nor_versions_is_refused` and
+`a_seed_run_twice_reaches_the_same_state`), and both were reproduced by reverting
+the fix and re-running the sweep before the receipt was written.
