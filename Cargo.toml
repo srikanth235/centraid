@@ -9,6 +9,7 @@ members = [
   "crates/*",
   "crates/apps/docs",
   "crates/apps/kit",
+  "crates/apps/locker",
   "crates/apps/photos",
   "crates/apps/tally",
 ]
@@ -119,6 +120,16 @@ jiff = { version = "0.2", default-features = false, features = [
   "std",
   "tzdb-bundle-always",
 ] }
+
+# Wave 4 lane Locker — origin matching, and the one dependency it adds
+# (#1020, D-1020-L10). `psl` is the Public Suffix List embedded and pinned: its
+# version number IS the list's date, which is the same shape `tldts` has on the
+# TypeScript side that `contracts/origin-matching-v1.json` is the spec for. A
+# bump is a list refresh and re-runs that spec in both trees. `url` is the
+# WHATWG parser the policy needs anyway (IDNA, default-port normalisation) and
+# is already in the graph.
+psl = "2.1"
+url = "2.5"
 
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
