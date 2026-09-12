@@ -99,6 +99,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     }
     let mut pr = local;
     pr.extend([
+        step("buf", run_buf),
         step("deny", run_deny),
         step("ci-policy", run_ci_policy),
         step("secrets", run_secrets),
@@ -328,6 +329,154 @@ fn run_ledgers(ctx: &Ctx) -> Result<Outcome> {
         &verdict.base[..verdict.base.len().min(8)],
         display_relative(&ctx.root, &dir)
     )))
+}
+
+/// The schema's compatibility promise (#1020 Compatibility, D-1020-C5).
+///
+/// Two commands, and the second one runs more than once. `buf lint` over both
+/// modules, then `buf breaking` against the PR base **and against every
+/// released tag inside the version window** — `N = 3` minors, open question 4 —
+/// because the promise #1020 makes is to seats that update on their own
+/// schedule, and a seat in the field is running a TAG, not the PR base. Checking
+/// only the previous commit would let a field be renamed in two commits and
+/// pass both.
+///
+/// Required in CI, loud-skipped locally, same posture as `deny`.
+///
+/// One case needs naming or it looks like a hole: when the BASE carries no
+/// `.proto` files at all, buf exits non-zero with `had no .proto files`. That is
+/// this step's answer on the commit that introduces the schema, and there is
+/// nothing there to break — so it is reported as a pass whose line SAYS the base
+/// was empty. It stops happening the moment `main` carries the tree, and the
+/// alternative (failing) would make the schema's first commit unmergeable.
+fn run_buf(ctx: &Ctx) -> Result<Outcome> {
+    const INSTALL: &str = "install the pinned buf release (gate.yml does): curl -sSL https://github.com/bufbuild/buf/releases/download/v1.61.0/buf-Linux-x86_64 -o ~/.local/bin/buf && chmod +x ~/.local/bin/buf";
+    const SUBDIR: &str = "subdir=crates/api-proto/proto";
+
+    if !ctx.root.join("buf.yaml").is_file() {
+        return Ok(Outcome::Skipped(
+            "no buf.yaml — the schema workspace lands in wave 2 lane C (#1020)".to_owned(),
+        ));
+    }
+    if !binary_available("buf") {
+        if ctx.ci {
+            return Ok(Outcome::Failed(format!(
+                "`buf` is not on PATH and this is CI, where the workflow installs it — a missing binary here is an infrastructure failure, not a skip. {INSTALL}"
+            )));
+        }
+        return Ok(Outcome::Skipped(format!(
+            "`buf` is not on PATH — the lint rules and the COMPATIBILITY PROMISE of centraid.core.v1 were NOT checked. {INSTALL}"
+        )));
+    }
+
+    if let Outcome::Failed(detail) = process(ctx, "buf", "buf", &["lint"])? {
+        return Ok(Outcome::Failed(detail));
+    }
+
+    let mut against: Vec<String> = vec![format!(".git#branch=main,{SUBDIR}")];
+    let tags = window_tags(&ctx.root);
+    for tag in &tags {
+        against.push(format!(".git#tag={tag},{SUBDIR}"));
+    }
+
+    let mut empty_bases = 0usize;
+    for base in &against {
+        let outcome = process(ctx, "buf", "buf", &["breaking", "--against", base])?;
+        if let Outcome::Failed(detail) = outcome {
+            if base_carries_no_schema(ctx, "buf") {
+                empty_bases += 1;
+                continue;
+            }
+            return Ok(Outcome::Failed(format!(
+                "buf breaking against {base}: {detail}"
+            )));
+        }
+    }
+
+    let window = if tags.is_empty() {
+        "0 tags in window (no `v*` tag exists yet for v1)".to_owned()
+    } else {
+        format!("{} tag(s) in window: {}", tags.len(), tags.join(", "))
+    };
+    let empty = if empty_bases == 0 {
+        String::new()
+    } else {
+        format!(
+            " — {empty_bases} base(s) carry no .proto files yet, so there was nothing there to break"
+        )
+    };
+    Ok(Outcome::Ok(format!(
+        "buf lint + breaking against {} base(s): main, {window}{empty}",
+        against.len()
+    )))
+}
+
+/// The last `N = 3` minor releases, newest first — the version window from
+/// #1020's Compatibility section (open question 4). Tags are `v<major>.<minor>.
+/// <patch>`; one tag per minor, the highest patch, because a seat in the field
+/// runs the newest patch of its minor.
+fn window_tags(root: &Path) -> Vec<String> {
+    const WINDOW: usize = 3;
+    let Ok(output) = Command::new("git")
+        .args(["tag", "--list", "v*"])
+        .current_dir(root)
+        .output()
+    else {
+        return Vec::new();
+    };
+    let mut minors: Vec<((u32, u32), (u32, String))> = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let tag = line.trim();
+        let Some(rest) = tag.strip_prefix('v') else {
+            continue;
+        };
+        // A prerelease or build suffix is not a released tag.
+        if rest.contains('-') || rest.contains('+') {
+            continue;
+        }
+        let parts: Vec<&str> = rest.split('.').collect();
+        if parts.len() != 3 {
+            continue;
+        }
+        let Ok(major) = parts[0].parse::<u32>() else {
+            continue;
+        };
+        let Ok(minor) = parts[1].parse::<u32>() else {
+            continue;
+        };
+        let Ok(patch) = parts[2].parse::<u32>() else {
+            continue;
+        };
+        match minors
+            .iter_mut()
+            .find(|(series, _)| *series == (major, minor))
+        {
+            Some((_, held)) if held.0 < patch => *held = (patch, tag.to_owned()),
+            Some(_) => {}
+            None => minors.push(((major, minor), (patch, tag.to_owned()))),
+        }
+    }
+    minors.sort_by(|left, right| right.0.cmp(&left.0));
+    minors
+        .into_iter()
+        .take(WINDOW)
+        .map(|(_, (_, tag))| tag)
+        .collect()
+}
+
+/// Did the LAST `buf` failure say the base had no `.proto` files? Read off the
+/// artifact the step just wrote, so the classification is over what buf actually
+/// printed and not over a guess about the tree.
+fn base_carries_no_schema(ctx: &Ctx, step: &str) -> bool {
+    let dir = ctx.artifacts.join(step);
+    for name in ["stderr.log", "stdout.log"] {
+        if let Ok(text) = fs::read_to_string(dir.join(name))
+            && text.contains("had no .proto files")
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// The Rust supply chain. Required in CI (the workflow installs the binary, so
@@ -631,7 +780,7 @@ mod tests {
     #[test]
     fn pr_carries_the_ci_policy_and_security_steps() {
         let pr = names(Profile::Pr);
-        for required in ["ci-policy", "secrets", "osv"] {
+        for required in ["ci-policy", "secrets", "osv", "buf"] {
             assert!(
                 pr.contains(&required),
                 "`{required}` missing from pr: {pr:?}"
@@ -679,6 +828,66 @@ mod tests {
                 }
                 _ => panic!("{} must fail, not pass or skip", entry.name),
             }
+        }
+    }
+
+    /// The version window is the last three MINORS, one tag each (the highest
+    /// patch), newest first — and a prerelease is not a released tag. The
+    /// arithmetic is pinned with a table because #1020's promise is to seats
+    /// running a tag, and a window that silently picked three patches of one
+    /// minor would check one release three times.
+    #[test]
+    fn the_window_is_three_minors_at_their_highest_patch() {
+        let root = crate::testing::fixture_dir("buf-window");
+        let git = |args: &[&str]| {
+            let ok = Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .expect("git runs")
+                .status
+                .success();
+            assert!(ok, "git {args:?}");
+        };
+        git(&["init", "--quiet"]);
+        git(&[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "--allow-empty",
+            "--quiet",
+            "-m",
+            "base",
+        ]);
+        for tag in [
+            "v1.0.0",
+            "v1.1.0",
+            "v1.1.4",
+            "v1.2.0",
+            "v1.3.0",
+            "v1.3.1",
+            "v2.0.0-rc.1",
+            "vnope",
+        ] {
+            git(&["tag", tag]);
+        }
+        assert_eq!(window_tags(&root), ["v1.3.1", "v1.2.0", "v1.1.4"]);
+    }
+
+    #[test]
+    fn the_buf_step_skips_loudly_before_the_schema_lands() {
+        let root = crate::testing::fixture_dir("buf-absent");
+        let ctx = Ctx {
+            root: root.clone(),
+            hardware: DEFAULT_HARDWARE.to_owned(),
+            ci: false,
+            artifacts: root.join("target"),
+        };
+        match run_buf(&ctx).expect("the step runs") {
+            Outcome::Skipped(detail) => assert!(detail.contains("no buf.yaml"), "{detail}"),
+            _ => panic!("without buf.yaml the step must skip loudly"),
         }
     }
 

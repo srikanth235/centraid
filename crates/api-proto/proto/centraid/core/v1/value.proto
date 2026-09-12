@@ -1,0 +1,50 @@
+// SQLite's five storage classes on the wire (#1020, D-1020-C3).
+//
+// v0 carried them as JSON: `null | string | number | boolean | {i} | {b64}`
+// (`packages/core/src/protocol/row-json.ts:30-40`), where an integer beyond
+// ±2^53−1 had to escape into `{i: "<decimal>"}` and a BLOB into a hand-rolled
+// base64 alphabet. Protobuf has an int64 and a bytes field, so both escapes and
+// the `Number.MAX_SAFE_INTEGER` boundary they were built around disappear.
+//
+// Two v0 distinctions are NOT dropped, because they are semantics and not
+// encoding:
+//   * SQL NULL is `null_value`, a present field with an empty message body.
+//   * An ABSENT COLUMN is a key that is not in `RowImage.columns` at all.
+// See row.proto. Conflating them is census seam 2.
+//
+// Booleans are integers, as in v0 (`row-json.ts:90` encodes true/false to 1/0):
+// SQLite has no boolean storage class, so a `bool` on the wire would invent one
+// and force every reader to guess which columns to un-invent.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// SQL NULL. A message rather than a bare enum so the oneof below can hold it as
+// a *present* value: `Value {}` with no kind set is a decode of a value that was
+// never written, and that is a different fact from NULL.
+message NullValue {}
+
+// One SQLite value.
+message Value {
+  oneof kind {
+    // SQL NULL.
+    NullValue null = 1;
+    // TEXT.
+    string text = 2;
+    // INTEGER. The whole i64 range, with no decimal-text escape.
+    int64 integer = 3;
+    // REAL.
+    double real = 4;
+    // BLOB.
+    bytes blob = 5;
+  }
+}
+
+// A record key. A single-column key carries exactly one entry; a composite key
+// carries one entry per key column IN DECLARED KEY ORDER, which is the order
+// v0's `packages/vault/src/replica/change-log.ts:420-442` serialises a composite
+// row id in. Order is load-bearing: the list is the identity of the row.
+message RecordKey {
+  repeated Value values = 1;
+}

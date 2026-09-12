@@ -1,0 +1,46 @@
+// Screen states and events — SHELL-INTERNAL, free to change every release
+// (#1020, D-1020-C4; the issue's *One protobuf schema workspace*).
+//
+// This package's compatibility promise is deliberately weaker than
+// `centraid.core.v1`'s: `buf breaking` checks it against the PR base only, not
+// against released tags, because the only consumers are the KMP shared module,
+// SwiftUI and Compose — all shipped in one artifact with the core that produces
+// these messages. `centraid.core.v1` is the gateway's promise to seats that
+// update on their own schedule; this is not.
+//
+// It is a PLACEHOLDER ENVELOPE until wave 3 lane E writes the three screens
+// (Tally list, Photos grid, Notes editor). The envelope is here now, and empty,
+// so the two-package split and its two `buf` configurations are proven by the
+// tooling in wave 2 rather than asserted and discovered wrong in wave 3.
+//
+// Open question 10 decides after wave 3 whether screen contracts stay protobuf
+// or become Kotlin sealed classes plus SKIE, on the exit criterion written into
+// the issue (lines per screen, fixture disagreements, p95 state delivery). If
+// that decision goes to SKIE, THIS FILE is what goes away; nothing in
+// `centraid.core.v1` moves.
+
+syntax = "proto3";
+
+package centraid.screen.v1;
+
+// One screen's finished state, ready to render. The UI thread only ever
+// receives a finished state message (#1020 Execution model).
+message ScreenState {
+  // Which screen. `tally.list`, `photos.grid`, `notes.editor`.
+  string screen_id = 1;
+  // The state, encoded by whatever message wave 3 defines for `screen_id`.
+  // Opaque here on purpose: an envelope that named its variants would have to
+  // be edited by every screen lane, and this package is the one place that is
+  // allowed to change shape freely.
+  bytes state = 2;
+  // Monotonic per screen instance, so a renderer can drop a state it has
+  // already surpassed rather than re-rendering out of order.
+  uint64 revision = 3;
+}
+
+// One event the view forwards. Swift and Compose own nothing; they render and
+// forward (#1020 Execution model).
+message ScreenEvent {
+  string screen_id = 1;
+  bytes event = 2;
+}

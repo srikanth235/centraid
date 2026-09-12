@@ -1,0 +1,91 @@
+// Commands (#1020, D-1020-C4).
+//
+// A command is the one way anything changes. v0's shapes: `VaultInvokeRequest`
+// (`packages/blueprints/types/centraid.d.ts:74`) and `VaultOutcome` (`:38`).
+//
+// **The CLI is a client** (#1020 Decision): `centraid devices revoke` and every
+// other admin verb send THESE messages, the same ones an owner seat sends, and
+// produce the same receipts. There is no privileged path to audit separately,
+// which is why admin.proto carries payloads and not a second envelope.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message Command {
+  // The registered command name.
+  string name = 1;
+  // The input. Canonical JSON in bytes, for the reasons in
+  // intent.proto's D-1020-C12 note — chiefly that the input is validated
+  // against `agent_command.input_schema_json` held in the vault, so a proto
+  // message per command would put `buf breaking` in the way of adding one.
+  bytes input = 2;
+  // WHICH OF A HANDLER'S CALLS THIS IS. Required, unlike v0, where the fallback
+  // was the call's ORDINAL and only stable for a handler that makes the same
+  // call sequence every time (census, apps §2.1). Without it a replayed intent
+  // can re-execute a command that already committed.
+  string invoke_key = 3;
+  // Who is asking. Never inferred from the connection inside the core: the
+  // gateway resolves the enrolled device to a principal at the ALPN boundary
+  // and stamps it here, and every authority decision downstream reads THIS
+  // field (#1020 wave 2 lane D, per-command authorization).
+  Principal principal = 4;
+  // "This decorates the answer": a seat with no gateway settles it
+  // `FAILED` rather than refusing the whole run
+  // (`packages/blueprints/types/centraid.d.ts:77-84`). The gateway ignores it.
+  bool optional = 5;
+}
+
+// A principal. v0's `authenticate` returns exactly two kinds
+// (`packages/vault/src/gateway/identity.ts:58-113`), and enrolment is full
+// trust (#996 R11): an enrolled device has a row whose public key matches, and
+// revoking deletes it — unknown and revoked are the SAME refusal.
+message Principal {
+  PrincipalKind kind = 1;
+  // `access_device.device_id`, or `access_agent.agent_id` for an agent.
+  string caller_id = 2;
+  // The agent's enrollment key. Empty for an owner device.
+  string principal_id = 3;
+  // The named surface, when one is named; it becomes the caller id in v0
+  // (`identity.ts:104-112`).
+  string surface = 4;
+  // The agent is riding an acting owner. An agent can never exceed the owner it
+  // rides (`packages/vault/src/gateway/access.ts:174-184`), and the assistant
+  // holds NO standing answer of its own (`:205-216`).
+  bool on_behalf_of_owner = 5;
+}
+
+enum PrincipalKind {
+  PRINCIPAL_KIND_UNSPECIFIED = 0;
+  PRINCIPAL_KIND_OWNER_DEVICE = 1;
+  PRINCIPAL_KIND_AGENT = 2;
+}
+
+// The command's verdict. Five of v0's six `VaultOutcome.status` values plus
+// `IN_FLIGHT`; `QUEUED` is the seat's own answer for a durable outbox entry.
+enum CommandStatus {
+  COMMAND_STATUS_UNSPECIFIED = 0;
+  COMMAND_STATUS_EXECUTED = 1;
+  COMMAND_STATUS_PARKED = 2;
+  COMMAND_STATUS_QUEUED = 3;
+  COMMAND_STATUS_IN_FLIGHT = 4;
+  COMMAND_STATUS_FAILED = 5;
+  COMMAND_STATUS_DENIED = 6;
+}
+
+message CommandOutcome {
+  CommandStatus status = 1;
+  // The handler's answer, canonical JSON in bytes.
+  bytes output = 2;
+  // An OWNER-FACING SENTENCE. The author's words for a failed precondition, the
+  // access plane's sentence for a denial. The raw predicate reaches the audit
+  // trail and never a member (`packages/vault/src/gateway/execution.ts:510-533`).
+  string reason = 3;
+  // The audit-band ids, so a caller can point at its own evidence.
+  string invocation_id = 4;
+  string receipt_id = 5;
+  // Set when the refusal was a revocation: a revoked app cannot read the
+  // consent tables to find out for itself, so the host attaches this
+  // (`packages/server/src/engine/handlers/vault-bridge.ts:36`). RFC 3339.
+  optional string revoked_at = 6;
+}

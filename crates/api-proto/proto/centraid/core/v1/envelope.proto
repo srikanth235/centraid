@@ -1,0 +1,89 @@
+// The request/response envelope (#1020, D-1020-C2).
+//
+// Every stream carries length-prefixed `Envelope`s: `u32BE(len) ‖ bytes`, with
+// `len <= MAX_FRAME_BYTES` (262144 — v0's `MAX_HEADER_FRAME_BYTES`,
+// `packages/tunnel/src/protocol.ts:82`) and bodies chunked at 64 KiB. The
+// framing itself lives in `crates/protocol`, which knows nothing about iroh.
+//
+// **Request ids are per connection, monotonic, and never reused.** That is what
+// makes `Cancel{request_id}` unambiguous: an id that has been answered is an id
+// nothing will refer to again, so a late `Cancel` is a no-op rather than a
+// cancellation of somebody else's work.
+//
+// **One envelope, not one stream per request.** v0 opened a bi-stream per
+// tunnelled request; multiplexing over one stream is what lets a change event
+// arrive while a paged read is in flight without a second QUIC stream per
+// subscription.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/admin.proto";
+import "centraid/core/v1/change.proto";
+import "centraid/core/v1/command.proto";
+import "centraid/core/v1/error.proto";
+import "centraid/core/v1/handshake.proto";
+import "centraid/core/v1/intent.proto";
+import "centraid/core/v1/log.proto";
+import "centraid/core/v1/pair.proto";
+import "centraid/core/v1/query.proto";
+import "centraid/core/v1/snapshot.proto";
+
+message Envelope {
+  // Zero is reserved for the handshake, which is not a request: `Hello` is
+  // exchanged before any id has been minted. Every other body carries a
+  // non-zero id.
+  uint64 request_id = 1;
+  oneof body {
+    Request request = 2;
+    Response response = 3;
+    Event event = 4;
+    Cancel cancel = 5;
+    Error error = 6;
+  }
+}
+
+message Request {
+  oneof kind {
+    Hello hello = 1;
+    LogRequest log = 2;
+    SnapshotHeadRequest snapshot_head = 3;
+    Intent intent = 4;
+    Command command = 5;
+    PageRequest page = 6;
+    PairRequest pair = 7;
+    DevicesList devices_list = 8;
+    DevicesRevoke devices_revoke = 9;
+    BackupNow backup_now = 10;
+  }
+}
+
+message Response {
+  oneof kind {
+    Hello hello = 1;
+    UpgradeRequired upgrade_required = 2;
+    Unsupported unsupported = 3;
+    LogPage log = 4;
+    RebootstrapRequired rebootstrap_required = 5;
+    SnapshotHead snapshot_head = 6;
+    Outcome outcome = 7;
+    CommandOutcome command = 8;
+    Page page = 9;
+    PairResponse pair = 10;
+    DevicesListResult devices_list = 11;
+  }
+}
+
+message Event {
+  oneof kind {
+    ChangeEvent change = 1;
+    HealthEvent health = 2;
+    ConnectivityEvent connectivity = 3;
+  }
+}
+
+// Cancel an IN-FLIGHT UNBOUNDED operation. Bounded reads are never cancellable
+// and are bounded instead (#1020 Execution model) — a `Cancel` naming a bounded
+// read is answered by the read finishing.
+message Cancel {}

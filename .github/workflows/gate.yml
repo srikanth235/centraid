@@ -64,6 +64,13 @@ jobs:
           # run summaries have named the destinations.
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `buf breaking --against .git#branch=main,...` and the released tags
+          # inside the version window are read out of the local clone, and
+          # actions/checkout fetches one commit by default. Without the full
+          # history the `buf` step would compare the schema against nothing and
+          # report a pass, which is a gate that gates nothing.
+          fetch-depth: 0
       # Bun and Node for the profile's `ts-static` step, which runs
       # `bun run check:push:static` over whatever TypeScript the v1 tree grows,
       # and the v1 Cargo cache (`target/` plus `~/.cargo/bin`, so cargo-deny
@@ -101,7 +108,7 @@ jobs:
           else
             cargo install cargo-deny --locked
           fi
-      - name: Install actionlint, gitleaks and osv-scanner
+      - name: Install actionlint, gitleaks, osv-scanner and buf
         env:
           # actionlint: the version ci.yml's `static` job pins as a container
           # action. gitleaks and osv-scanner: the same release pins ci.yml's
@@ -109,9 +116,20 @@ jobs:
           # inherited tree state (D-1020-B1, #1020) and are here anyway: a PR
           # gate that stops reporting because its target is red today is a
           # weakening, and inherited red is named, never hidden.
+          #
+          # buf: the `buf` step runs `buf lint` and `buf breaking` over
+          # `crates/api-proto/proto` against the PR base AND every released tag
+          # inside the version window, which is the promise #1020's Compatibility
+          # section makes to seats that update on their own schedule
+          # (docs/decisions.md#the-pr-gate-loop-892 is why this install lives in
+          # this workflow and not in a second one). It is a release BINARY rather
+          # than a marketplace action so the version below is the only pin, the
+          # same posture as the three above; `cargo xtask gate`'s `buf` step
+          # FAILS rather than skips when it is absent under CI.
           ACTIONLINT_VERSION: 1.7.12
           GITLEAKS_VERSION: 8.30.1
           OSV_VERSION: 2.4.0
+          BUF_VERSION: 1.61.0
         run: |
           set -euo pipefail
           curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
@@ -121,9 +139,13 @@ jobs:
           curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
             -o /usr/local/bin/osv-scanner
           chmod +x /usr/local/bin/osv-scanner
+          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" \
+            -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
           actionlint --version
           gitleaks version
           osv-scanner --version
+          buf --version
       - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()

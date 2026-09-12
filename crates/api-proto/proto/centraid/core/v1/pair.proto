@@ -1,0 +1,90 @@
+// Pairing (#1020, D-1020-C8).
+//
+// v0's ticket is `base64url(JSON.stringify(payload))`
+// (`packages/server/src/serve/pairing-ticket-codec.ts:1-13`); this one is
+// `base64url(PairTicket encoded)`, which is smaller in a QR and cannot be
+// hand-edited into a shape the parser half-accepts.
+//
+// **No key rides the ticket** (`packages/core/src/protocol/seat-log.ts:143-158`).
+// The ticket is read off a screen by a camera, survives in a photo roll, and is
+// validated before any device exists to be a principal. The vault's Locker key
+// reaches a seat over the authenticated post-pair channel only.
+//
+// Only a HASH of `secret` is stored on the gateway, TTL is 15 minutes, and
+// redemption BURNS the ticket, records the device's public key in the allowlist
+// and answers — all in one transaction of the gateway's own state store, so a
+// failure anywhere leaves zero enrolment and never a half-paired device
+// (v0's `redeemAndEnroll`, `packages/server/src/serve/pairing-store.ts:98-105`).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// What the QR encodes.
+message PairTicket {
+  // Ticket format version. `1` for v1; a reader refuses anything else rather
+  // than guessing, because a ticket is the one message with no handshake in
+  // front of it.
+  uint32 v = 1;
+  // The gateway's iroh EndpointId, 32 raw bytes.
+  bytes gateway_endpoint = 2;
+  // The relay the gateway expects to be reachable through. Empty means "the
+  // default relays"; a self-hosted deployment names its own
+  // (`crates/net/README.md`).
+  string relay_url = 3;
+  // Names the row in the gateway's `tickets` store.
+  string ticket_id = 4;
+  // The one-use secret, in the clear IN THE TICKET and hashed at rest.
+  bytes secret = 5;
+  // What the member sees on the confirm screen.
+  string vault_name = 6;
+  // Milliseconds since the epoch. `DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000`
+  // (`packages/server/src/serve/pairing-store.ts:21`).
+  uint64 expires_at_ms = 7;
+}
+
+// The seat redeeming it.
+message PairRequest {
+  // The ticket's `secret`, echoed. Named `code` for v0's spelling
+  // (`packages/tunnel/src/protocol.ts:101-114`).
+  bytes code = 1;
+  string ticket_id = 2;
+  // What the member will see in the device list.
+  string device_name = 3;
+  // `ios` / `android` / `macos` / `windows` / `linux`.
+  string platform = 4;
+  // The seat's iroh public key, 32 raw bytes. This is what lands in the
+  // allowlist, and what a later connection on `centraid/v1/seat` is checked
+  // against before any frame is read.
+  bytes device_public_key = 5;
+}
+
+message PairResponse {
+  oneof result {
+    PairOk ok = 1;
+    PairError error = 2;
+  }
+}
+
+message PairOk {
+  string gateway_id = 1;
+  // The vault-side `access_device.device_id` the seat now is.
+  string device_id = 2;
+  string vault_id = 3;
+  string vault_name = 4;
+}
+
+// The closed refusal vocabulary. v0's is the same three
+// (`packages/tunnel/src/protocol.ts:101-114`), and it is deliberately coarse:
+// a member holding a screenshot of an old QR must not learn from the answer
+// whether the ticket ever existed.
+enum PairErrorCode {
+  PAIR_ERROR_CODE_UNSPECIFIED = 0;
+  PAIR_ERROR_CODE_INVALID_CODE = 1;
+  PAIR_ERROR_CODE_EXPIRED_CODE = 2;
+  PAIR_ERROR_CODE_BAD_REQUEST = 3;
+}
+
+message PairError {
+  PairErrorCode code = 1;
+}

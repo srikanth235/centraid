@@ -1,0 +1,145 @@
+// The intent / outbox grammar (#1020, D-1020-C4).
+//
+// An intent is a write a seat submits; an outcome is the gateway's fact about
+// it. v0's shapes: `ReplicaIntent` (`packages/client/src/replica/types.ts:386-431`),
+// the seven gateway statuses (`packages/vault/src/replica/intents.ts:5-12`),
+// `ReplicaWaitingOn` (`:61-69`) and `ReplicaConflict` (`:14-20`).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/value.proto";
+
+message Intent {
+  // The seat's id for this write, and half of the gateway's idempotency key.
+  // Identity is `(vault_id, intent_id, payload_hash)` and deliberately NOT the
+  // device: a seat file outlives its enrolment, so a restored phone re-enrols
+  // under a new endpoint id and replays intents the vault already executed
+  // (`packages/vault/src/replica/intents.ts:237-257`).
+  string intent_id = 1;
+  string app_id = 2;
+  string action = 3;
+  // The action's input.
+  //
+  // D-1020-C12: BYTES CARRYING CANONICAL JSON, not a protobuf `Any` and not a
+  // per-action message. Three reasons, in order of weight. (1) The input is the
+  // hash preimage: `intentPayloadHash` hashes the canonical JSON of
+  // `{action, appId, input, baseVersions?, dependsOn?}`
+  // (`packages/client/src/replica/payload-hash.ts:32-45`) and the gateway
+  // compares with a constant-time equality, so the bytes a seat hashed must be
+  // the bytes the gateway rehashes — protobuf serialisation is explicitly NOT
+  // canonical (map order, unknown fields, default elision all vary by runtime),
+  // so a proto body could not carry a hash at all. (2) The input schema is
+  // per-action and lives in the vault as `agent_command.input_schema_json`
+  // (`packages/vault/src/gateway/execution.ts:481-502`); a proto message per
+  // action would make every app's write surface a schema-package change and put
+  // `buf breaking` in the way of adding a command. (3) The envelope's
+  // unknown-field promise is held at this boundary: opaque bytes cannot be
+  // silently re-encoded, which is what `Unsupported` is for at the message
+  // level. The cost is that the core validates JSON rather than getting it from
+  // the decoder, and that cost is paid in `crates/vault`, once.
+  bytes input = 4;
+  // Lowercase hex sha256 of the canonical payload; the gateway requires
+  // `/^[a-f0-9]{64}$/` and compares in constant time
+  // (`packages/server/src/routes/replica-intent-route.ts:209`, `:257-260`).
+  string payload_hash = 5;
+  // The declared read-set, versioned. A non-empty `missing` on the gateway is a
+  // refusal, not a guess (`packages/server/src/routes/replica-intent-route.ts:221-241`).
+  repeated BaseVersion base_versions = 6;
+  // Predecessor intent ids, in outbox order. Part of the payload hash because
+  // an intent whose predecessors were rewritten in flight is a DIFFERENT intent
+  // (`packages/client/src/replica/offline-chain.ts:18-28`).
+  repeated string depends_on = 7;
+  // The action refuses to be queued offline with a typed reason: Locker reveal,
+  // assistant turns, exports (v0's `ONLINE_ONLY_ACTIONS`,
+  // `packages/blueprints/apps/locker/writes.ts:33-39`). The flag is attached
+  // where the payload is BUILT, not at the call site.
+  bool online_only = 8;
+}
+
+// One entry of the declared read-set.
+message BaseVersion {
+  string entity = 1;
+  string row_id = 2;
+  // Present only for a shape-scoped read.
+  optional string shape_id = 3;
+  uint64 version = 4;
+}
+
+// The gateway's seven statuses. v0: `packages/vault/src/replica/intents.ts:5-12`,
+// matching the table CHECK at `packages/vault/src/schema/replica.ts:259-261`.
+// `EXECUTED`, `DENIED`, `FAILED` and `CONFLICT` are terminal (`:150-155`).
+// `CONFLICT` and `EXPIRED` are real answers and not spellings of `FAILED`; the
+// seat's ten-state machine is its own vocabulary and is NOT this enum.
+enum IntentStatus {
+  INTENT_STATUS_UNSPECIFIED = 0;
+  INTENT_STATUS_QUEUED = 1;
+  INTENT_STATUS_SENDING = 2;
+  INTENT_STATUS_PARKED = 3;
+  INTENT_STATUS_EXECUTED = 4;
+  INTENT_STATUS_DENIED = 5;
+  INTENT_STATUS_FAILED = 6;
+  INTENT_STATUS_CONFLICT = 7;
+}
+
+// Who the gateway is waiting on. `INTENT`'s `label` is the PREDECESSOR'S INTENT
+// ID — the only name a seat can match against its own outbox
+// (`packages/vault/src/replica/intents.ts:61-69`).
+enum WaitingOnSeat {
+  WAITING_ON_SEAT_UNSPECIFIED = 0;
+  WAITING_ON_SEAT_OWNER = 1;
+  WAITING_ON_SEAT_ORIGIN = 2;
+  WAITING_ON_SEAT_GATEWAY = 3;
+  WAITING_ON_SEAT_INTENT = 4;
+}
+
+message WaitingOn {
+  WaitingOnSeat seat = 1;
+  string label = 2;
+}
+
+// An optimistic-concurrency refusal.
+message Conflict {
+  string entity = 1;
+  string row_id = 2;
+  optional string shape_id = 3;
+  uint64 expected_version = 4;
+  // ZERO MEANS THE ROW IS GONE, not "version zero"
+  // (`packages/client/src/replica/types.ts:93-109`). `row_version` starts at 1
+  // and restarts at 1 on every INSERT, so there is no legitimate version 0 and
+  // the sentinel cannot collide. The seat's remedy differs from a plain version
+  // mismatch, which is why v0 keeps `conflict-base-missing` as its own verdict.
+  uint64 actual_version = 5;
+}
+
+// One row the intent produced, in the spelling `replica_log` uses
+// (`packages/vault/src/replica/intents.ts:46-55`).
+message ProducedRow {
+  string table = 1;
+  RecordKey pk = 2;
+  optional uint64 row_version = 3;
+}
+
+// The gateway's answer.
+message Outcome {
+  string intent_id = 1;
+  IntentStatus status = 2;
+  // The commit the effect landed in. Absent until there is one. A seat settles
+  // an `EXECUTED` answer carrying this only once its own applied commit seq has
+  // reached it (`packages/client/src/replica/intent-settlement.ts:88-101`).
+  optional uint64 commit_seq = 3;
+  // Set for `PARKED`.
+  repeated WaitingOn waiting_on = 4;
+  // Set for `CONFLICT`.
+  repeated Conflict conflicts = 5;
+  // Set for `EXECUTED`.
+  repeated ProducedRow produced = 6;
+  // The versions this answer knows about, the #929 settlement path.
+  repeated BaseVersion answered_versions = 7;
+  // An OWNER-FACING SENTENCE for a denial or a failed precondition — the
+  // author's words, never the raw predicate, which reaches the audit trail only
+  // (`packages/vault/src/gateway/execution.ts:510-533`). Never a free-text
+  // engine message; see error.proto.
+  string reason = 8;
+}
