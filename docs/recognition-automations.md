@@ -66,9 +66,9 @@ The source modules live under [`packages/model-runtime/automation-handlers`](../
 
 [`crates/automations`](../crates/automations) carries the whole of the above with four things made structural rather than conventional ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-AU4).
 
-**The tiers are still two constants**, and the lane routing still reads the id and never a declaration — but a manifest can no longer *spell* `system`: `sandbox.lane` parses to exactly `model-runtime` or `media-transcode`, so the widening the comment above warns against is not expressible.
+**The tiers are still two constants**, and the lane routing still reads the id and never a declaration — but a manifest can no longer _spell_ `system`: `sandbox.lane` parses to exactly `model-runtime` or `media-transcode`, so the widening the comment above warns against is not expressible.
 
-**The two caps are two counters**, on one row, and the third answer beside derived and skipped is a value: `Disposition::{Derived, Parked, Declined, Skipped}`. `advances_cursor()` is the one place the difference between parking and advancing is decided, so *pending parks and unsupported advances* is a function rather than a rule two call sites have to remember.
+**The two caps are two counters**, on one row, and the third answer beside derived and skipped is a value: `Disposition::{Derived, Parked, Declined, Skipped}`. `advances_cursor()` is the one place the difference between parking and advancing is decided, so _pending parks and unsupported advances_ is a function rather than a rule two call sites have to remember.
 
 **The models are behind a trait.** `handler::Model` is one method — bytes in, a typed result out — and no `ort` session is in the crate. Each real implementation is an owner hand-off with its exact command and the evidence it needs, listed in [`crates/automations/README.md`](../crates/automations/README.md). The weights half is ported and complete: `centraid_media::models` verifies from disk, fetches only what is missing into a temp file renamed only over verified bytes, and **reports rather than throws** — `handler::NoNetwork` drives every line of that except the socket.
 

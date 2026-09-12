@@ -1,6 +1,6 @@
 # `crates/automations`
 
-The fire spine, the triggers, the enrichment gate and the recognition recipes ([#1020](https://github.com/srikanth235/centraid/issues/1020), inventory row *automations — retain*).
+The fire spine, the triggers, the enrichment gate and the recognition recipes ([#1020](https://github.com/srikanth235/centraid/issues/1020), inventory row _automations — retain_).
 
 One sentence: **decide what should run, and hand it to somebody else to run.** This crate schedules (in the vault's zone), walks cursors, refuses what a member has not consented to, and steers a delegate through exactly one injected seam. It opens no socket, spawns no process, holds no SQL and reaches no harness.
 
