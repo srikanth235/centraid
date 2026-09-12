@@ -215,16 +215,17 @@ fn print_qr_emits_a_parseable_ticket_and_a_qr() {
 /// Every verb whose implementation lands in a later lane exits 3 and says so.
 /// Never 0 (#1020, D-1020-C11).
 ///
-/// The list SHRINKS as lanes land, and it has shrunk twice: `backup now`,
-/// `recover` and `export` became real in wave 2 lane R, and `doctor` in wave 3
-/// lane G (`cmd/doctor.rs`; it now exits 0 on a clean vault and 1 when there is
-/// no vault to check, which `tests/gateway_install.rs` and the release smoke
-/// both rely on). The rule is untouched: a verb that is not implemented exits 3
-/// and never 0, and a verb leaving this list must have an implementation and a
-/// test of its own in the same commit.
+/// The list SHRINKS as lanes land, and it has shrunk three times: `backup now`,
+/// `recover` and `export` became real in wave 2 lane R, `doctor` in wave 3 lane
+/// G (`cmd/doctor.rs`; it now exits 0 on a clean vault and 1 when there is no
+/// vault to check, which `tests/gateway_install.rs` and the release smoke both
+/// rely on), and `seat` plus `native-host` in wave 3 lane F — each with its own
+/// implementation and its own tests in the same commit, which is what the rule
+/// requires of a verb that leaves this list. The rule itself is untouched: a
+/// verb that is not implemented exits 3 and never 0.
 #[test]
 fn every_unimplemented_verb_exits_three_and_names_its_lane() {
-    let verbs: [&[&str]; 2] = [&["seat"], &["devices", "list"]];
+    let verbs: [&[&str]; 2] = [&["devices", "list"], &["devices", "revoke", "d-1"]];
     for verb in verbs {
         let output = Command::new(binary())
             .args(verb)
@@ -248,16 +249,174 @@ fn every_unimplemented_verb_exits_three_and_names_its_lane() {
     }
 }
 
-/// `native-host` is exit 3 too, and it is checked apart from the list above
-/// because it is the one verb a BROWSER launches: a zero exit on a stub would
-/// make the extension believe it has a working host.
+/// `seat` is implemented (wave 3 lane F) and its refusals are USAGE errors with
+/// the missing flag named, never a zero exit on work that did not happen.
+///
+/// This replaces the "exit 3" row the verb used to occupy above. The property
+/// that mattered there — a verb must not exit 0 without doing its work — is
+/// what is asserted here, against the real implementation.
 #[test]
-fn the_native_messaging_host_refuses_rather_than_exiting_zero() {
+fn the_seat_verb_names_the_flag_it_needs_rather_than_exiting_zero() {
+    let output = Command::new(binary())
+        .arg("seat")
+        .output()
+        .expect("run centraid seat");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a seat with no socket is usage"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--socket"), "{stderr}");
+
+    // With a socket but no data directory: still usage, and still names the
+    // flag. A seat with no vault file would answer every read with an empty
+    // list, which is the three-state read law's exact failure.
+    let output = Command::new(binary())
+        .args(["seat", "--socket", "/tmp/centraid-cli-never.sock"])
+        .output()
+        .expect("run centraid seat");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--data-dir"),
+        "the refusal must name the flag"
+    );
+    assert!(
+        !std::path::Path::new("/tmp/centraid-cli-never.sock").exists(),
+        "a refused seat must not have bound a socket"
+    );
+}
+
+/// The statement catalogue the socket serves is printable, and it is the same
+/// document `contracts/desktop/socket-catalogue.json` pins.
+#[test]
+fn the_seat_prints_the_catalogue_it_serves() {
+    let output = Command::new(binary())
+        .args(["seat", "--print-catalogue"])
+        .output()
+        .expect("run centraid seat --print-catalogue");
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let printed: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|error| panic!("not JSON: {error}\n{stdout}"));
+    let committed: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../contracts/desktop/socket-catalogue.json"),
+        )
+        .expect("the committed catalogue is readable"),
+    )
+    .expect("the committed catalogue is JSON");
+    assert_eq!(
+        printed, committed,
+        "the catalogue moved: re-run `centraid seat --print-catalogue > \
+         contracts/desktop/socket-catalogue.json` and say in the receipt what changed"
+    );
+}
+
+/// `native-host` is checked apart from the list above because it is the one
+/// verb a BROWSER launches. Two properties, and both are about stdout: **stdout
+/// is the protocol**, so a closed port exits 0 having written nothing, and a
+/// `ping` is answered in the browser's own framing.
+#[test]
+fn the_native_messaging_host_answers_a_ping_in_the_browsers_framing() {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    // A closed port: a clean end of stream is a closed tab, not a failure.
     let output = Command::new(binary())
         .arg("native-host")
+        .stdin(Stdio::null())
         .output()
         .expect("run centraid native-host");
-    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        output.stdout.is_empty(),
+        "stdout IS the protocol: nothing may be written to it unprompted"
+    );
+
+    // THE ROUND TRIP. `u32` in the HOST's byte order, then UTF-8 JSON — not the
+    // product's own `u32BE` framing, which is the trap this asserts against.
+    let body = br#"{"t":"ping"}"#;
+    let mut child = Command::new(binary())
+        .arg("native-host")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn centraid native-host");
+    {
+        let stdin = child.stdin.as_mut().expect("stdin");
+        stdin
+            .write_all(&(body.len() as u32).to_ne_bytes())
+            .expect("length");
+        stdin.write_all(body).expect("body");
+    }
+    drop(child.stdin.take());
+    let output = child.wait_with_output().expect("the host finished");
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.len() > 4, "no reply was framed");
+    let length = u32::from_ne_bytes(output.stdout[..4].try_into().expect("four bytes")) as usize;
+    assert_eq!(
+        output.stdout.len(),
+        4 + length,
+        "the frame's length is wrong"
+    );
+    let reply: serde_json::Value =
+        serde_json::from_slice(&output.stdout[4..]).expect("the reply is JSON");
+    assert_eq!(reply["t"], "pong");
+    assert_eq!(reply["host"], "dev.centraid.host");
+    // No shell has minted a capability token for this process, so it says so
+    // rather than claiming a seat it cannot reach.
+    assert_eq!(reply["attached"], false);
+}
+
+/// A host manifest needs an extension-id allowlist, and the verb writes one
+/// only where the operator says.
+#[test]
+fn the_host_manifest_carries_an_allowlist_and_is_never_installed_by_guessing() {
+    let dir = std::env::temp_dir().join("centraid-cli-native-host");
+    let _ = fs::remove_dir_all(&dir);
+    let out = dir.join("dev.centraid.host.json");
+    let output = Command::new(binary())
+        .args([
+            "native-host",
+            "install",
+            "--browser",
+            "chrome",
+            "--extension-id",
+            "abcdefghijklmnopabcdefghijklmnop",
+            "--out",
+            out.to_str().expect("utf8"),
+        ])
+        .output()
+        .expect("run centraid native-host install");
+    assert_eq!(output.status.code(), Some(0));
+    let written: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&out).expect("written")).expect("JSON");
+    assert_eq!(written["type"], "stdio");
+    assert_eq!(
+        written["allowed_origins"][0],
+        "chrome-extension://abcdefghijklmnopabcdefghijklmnop/"
+    );
+    // The path is THIS binary, so the browser launches the artifact that wrote
+    // the manifest and not whatever is on PATH.
+    assert_eq!(
+        written["path"].as_str().expect("a path"),
+        binary().to_str().expect("utf8")
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("copy it to"),
+        "the verb must say where it goes rather than putting it there: {stderr}"
+    );
+    // With no allowlist clap refuses before anything is written.
+    let output = Command::new(binary())
+        .args(["native-host", "install", "--browser", "chrome"])
+        .output()
+        .expect("run centraid native-host install");
+    assert_eq!(output.status.code(), Some(2));
+    let _ = fs::remove_dir_all(&dir);
 }
 
 /// A vault directory that is accepted but not yet durable SAYS SO. A gateway

@@ -92,10 +92,22 @@ enum Command {
     Seat {
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        /// The local socket this seat serves. Unix domain socket, mode 0600,
+        /// with a peer-uid check on every connection (R-1020-26). The desktop
+        /// passes `<userData>/seat.sock`.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// The file holding the instance nonce a shell proves. NEVER a flag:
+        /// a flag is in the shell history and in every `ps` listing.
+        #[arg(long)]
+        nonce_file: Option<PathBuf>,
         /// No local copy: forward every call to the gateway and run it under
         /// the caller's principal.
         #[arg(long)]
         thin: bool,
+        /// Print the statement catalogue this seat serves and exit.
+        #[arg(long)]
+        print_catalogue: bool,
         #[command(subcommand)]
         command: Option<SeatCommand>,
     },
@@ -167,7 +179,31 @@ enum Command {
     },
     /// The browser extension's native-messaging host. Launched by the browser,
     /// never by a person.
-    NativeHost,
+    NativeHost {
+        #[command(subcommand)]
+        command: Option<NativeHostCommand>,
+    },
+}
+
+#[derive(Subcommand)]
+enum NativeHostCommand {
+    /// Write the host manifest a browser reads, with its extension-id
+    /// allowlist. It never copies it into a browser's directory: a capability
+    /// that appeared because something was unpacked is a capability nobody
+    /// chose to grant (D-1020-G1's precedent).
+    Install {
+        /// Which browser's manifest shape.
+        #[arg(long, value_parser = ["chrome", "firefox"])]
+        browser: String,
+        /// An extension id this host will talk to. Repeatable, and at least
+        /// one is required.
+        #[arg(long = "extension-id", required = true)]
+        extension_id: Vec<String>,
+        /// Where to write it. Without it the manifest is printed and nothing
+        /// is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -306,12 +342,25 @@ fn main() -> ExitCode {
                 vault_name,
                 no_relay,
             } => run::pair_mint(mint, data_dir, vault_name, no_relay).await,
-            Command::Seat { command, .. } => match command {
+            Command::Seat {
+                data_dir,
+                socket,
+                nonce_file,
+                thin,
+                print_catalogue,
+                command,
+            } => match command {
                 Some(SeatCommand::Pair { ticket }) => run::seat_pair(&ticket).await,
-                None => run::not_yet_available(
-                    "seat",
-                    "the replica, the applier and the outbox land in wave 2 lane D2 (crates/seat)",
-                ),
+                None => {
+                    cmd::seat::run(cmd::seat::SeatArgs {
+                        data_dir,
+                        socket,
+                        nonce_file,
+                        thin,
+                        print_catalogue,
+                    })
+                    .await
+                }
             },
             Command::Devices { command } => match command {
                 DevicesCommand::List => run::not_yet_available(
@@ -357,10 +406,25 @@ fn main() -> ExitCode {
                 out,
                 password_file,
             }),
-            Command::NativeHost => run::not_yet_available(
-                "native-host",
-                "the extension and its native-messaging host land in wave 4",
-            ),
+            Command::NativeHost { command } => match command {
+                Some(NativeHostCommand::Install {
+                    browser,
+                    extension_id,
+                    out,
+                }) => cmd::native_host::install(cmd::native_host::InstallArgs {
+                    browser: if browser == "firefox" {
+                        cmd::native_host::Browser::Firefox
+                    } else {
+                        cmd::native_host::Browser::Chrome
+                    },
+                    allowed: extension_id,
+                    out,
+                }),
+                // The host itself. stdout IS the protocol, so nothing else may
+                // print on it — which is why `install_tracing` writes to
+                // stderr for every verb in this binary.
+                None => cmd::native_host::run(),
+            },
         }
     });
     ExitCode::from(code)

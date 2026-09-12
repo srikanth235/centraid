@@ -14,14 +14,22 @@ path = "src/main.rs"
 
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-core = { path = "../core" }
 centraid-net = { path = "../net" }
 centraid-protocol = { path = "../protocol" }
 centraid-vault = { path = "../vault" }
 base64.workspace = true
 clap.workspace = true
 flate2.workspace = true
+prost.workspace = true
+serde = { workspace = true }
 serde_json.workspace = true
-tokio = { workspace = true, features = ["signal"] }
+# `net` for the seat's Unix socket (and `UnixStream::peer_cred`, which is what
+# lets the peer check happen without `unsafe`); `fs` is not needed — the blob
+# door's waiting read runs on the blocking pool over `std::fs`.
+tokio = { workspace = true, features = ["signal", "net"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

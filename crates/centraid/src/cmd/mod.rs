@@ -18,7 +18,9 @@ pub mod capture;
 pub mod doctor;
 pub mod export;
 pub mod gateway_install;
+pub mod native_host;
 pub mod recover;
+pub mod seat;
 pub mod units;
 
 use std::path::{Path, PathBuf};
