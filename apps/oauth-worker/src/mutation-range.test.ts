@@ -1,7 +1,7 @@
 /**
  * Guard for the line-addressed Stryker mutation range (#656 Layer 3).
  *
- * `stryker.config.mjs` seeds `src/worker.ts:<start>-<end>` — the pure
+ * `stryker.config.ts` seeds `src/worker.ts:<start>-<end>` — the pure
  * predicate block — because most of `worker.ts` is I/O and does not belong in
  * a mutation seed. Line addressing is only safe if something fails when the
  * lines move. This is that something.
@@ -18,13 +18,13 @@ import { describe, expect, test } from "vitest";
 describe("mutation range", () => {
   test("the seeded Stryker line range still brackets the pure guard block", () => {
     const config = readFileSync(
-      new URL("../stryker.config.mjs", import.meta.url),
+      new URL("../stryker.config.ts", import.meta.url),
       "utf8"
     );
     const spec = /"src\/worker\.ts:(?<start>\d+)-(?<end>\d+)"/u.exec(config);
     expect(
       spec,
-      "no worker.ts mutation range in stryker.config.mjs"
+      "no worker.ts mutation range in stryker.config.ts"
     ).not.toBeNull();
     const start = Number(spec?.groups?.start);
     const end = Number(spec?.groups?.end);

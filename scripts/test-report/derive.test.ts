@@ -143,7 +143,7 @@ describe("derivations", () => {
   test("the Stryker and Vitest inventories are read off disk, not typed", async () => {
     expect(deriveStrykerConfigs().length).toBeGreaterThan(0);
     for (const config of deriveStrykerConfigs()) {
-      expect(config).toMatch(/^packages\/[\w-]+\/stryker\.config\.mjs$/u);
+      expect(config).toMatch(/^packages\/[\w-]+\/stryker\.config\.ts$/u);
     }
     expect((await deriveVitestProjects()).length).toBeGreaterThan(0);
   });

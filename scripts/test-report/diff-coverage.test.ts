@@ -69,7 +69,7 @@ describe(isInstrumentableSource, () => {
     expect(isInstrumentableSource("README.md")).toBe(false);
     expect(isInstrumentableSource("scripts/x.mjs")).toBe(false);
     // Package-root tooling configs are outside the executable include roots.
-    expect(isInstrumentableSource("packages/vault/stryker.config.mjs")).toBe(
+    expect(isInstrumentableSource("packages/vault/stryker.config.ts")).toBe(
       false
     );
     expect(

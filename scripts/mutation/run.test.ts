@@ -87,7 +87,7 @@ describe("the mutation seed catalog", () => {
     );
     for (const seed of MUTATION_SEEDS) {
       expect(seed.config).toMatch(
-        /^stryker(?:\.[a-z]+(?:-[a-z]+)*)?\.config\.mjs$/u
+        /^stryker(?:\.[a-z]+(?:-[a-z]+)*)?\.config\.ts$/u
       );
       expect(
         seed.cwd.startsWith("packages/") || seed.cwd.startsWith("apps/"),

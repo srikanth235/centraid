@@ -562,3 +562,22 @@ node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.conf
 ```
 
 37 files, 518 tests, 0 fail.
+
+## Lane configs — Astro + Stryker to TypeScript
+
+Converted `astro.config.mjs` → `astro.config.ts` and every `packages/**` / `apps/**` `stryker.config.mjs` / `stryker.*.config.mjs` → `.ts` (not `.mts`). Export default shape is unchanged. Catalog and filename tests follow: `scripts/mutation/seeds.ts`, `scripts/mutation/run.test.ts` regex, `scripts/docs-site/build.ts --config`, `apps/oauth-worker/src/mutation-range.test.ts`, plus `deriveStrykerConfigs` / its tests.
+
+CJS packages (`packages/design`, `apps/mobile`) cannot `export default` under the NodeNext scripts program (`verbatimModuleSyntax` TS1295). Membership is `scripts/tsconfig.tool-configs.json` (extends `tsconfig.base.json`, bundler/Preserve, no package src). Root `typecheck` / `typecheck:affected` run `tsc -p scripts/tsconfig.tool-configs.json`. `lint:tsconfigs` requires that program when `astro.config.ts` exists.
+
+Lane branch: `issue-1018-lane-configs`. Merged into `issue-1018-mjs-to-ts`.
+
+### Verification
+
+`bunx astro --version` → astro v7.1.5. `tsc -p scripts --noEmit` exit 0 (`packages/*/src` 0). `tsc -p scripts/tsconfig.tool-configs.json --noEmit` exit 0; `--listFiles` is `astro.config.ts` + 25 `stryker*.config.ts`, no package src. Vitest `run.test.ts` + `derive.test.ts` + `diff-coverage.test.ts`: 36 pass. `node --test scripts/lint-tsconfigs.test.mjs`: 19 pass. `lint:tsconfigs`, `format:check`, `lint` clean.
+
+`docs:build` and full mutation were not run. oauth-worker `mutation-range.test.ts` still fails on inherited line-range drift (`889-969` vs `validEnvironment` at 887); not introduced by the rename.
+
+### Paths this slice
+
+`astro.config.ts`; every `packages/**` / `apps/**` `stryker*.config.ts`; `scripts/mutation/{seeds,run,run.test}.ts`; `scripts/docs-site/build.ts`; `scripts/test-report/{derive,derive.test,diff-coverage.test}.ts`; `apps/oauth-worker/src/mutation-range.test.ts`; `scripts/tsconfig.tool-configs.json`; `scripts/lint-tsconfigs.mjs`; `scripts/lint-tsconfigs.test.mjs`; `package.json`; `CHANGELOG.md`; this receipt.
+
