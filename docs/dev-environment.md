@@ -223,8 +223,8 @@ Two of the catalog's rules are about the change rather than about a file. `estat
 `.github/CODEOWNERS` is generated, not hand-kept:
 
 ```bash
-node .governance/law/codeowners.mjs --check   # exit 1 on drift
-node .governance/law/codeowners.mjs --write   # regenerate from the packs' lawPaths
+node .governance/law/codeowners.ts --check   # exit 1 on drift
+node .governance/law/codeowners.ts --write   # regenerate from the packs' lawPaths
 ```
 
 What the **host** would enforce — GitHub branch protection requiring review from code owners on the default branch, and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.

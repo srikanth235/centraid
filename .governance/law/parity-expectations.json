@@ -1,5 +1,5 @@
 {
-  "_comment": "Disagreements between the deleted shell runner and the rules that replaced it, each one a decision on record rather than a hole. A disagreement not listed here fails `node .governance/law/parity.mjs`. See receipts/issue-1005-governance-constitution.md.",
+  "_comment": "Disagreements between the deleted shell runner and the rules that replaced it, each one a decision on record rather than a hole. A disagreement not listed here fails `node .governance/law/parity.ts`. See receipts/issue-1005-governance-constitution.md.",
   "divergences": [
     {
       "directive": "commit-message-format",

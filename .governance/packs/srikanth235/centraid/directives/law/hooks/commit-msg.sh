@@ -18,4 +18,4 @@ LAW_DIR="$ROOT/.governance/law"
 command -v node >/dev/null 2>&1 || exit 0
 
 cd "$ROOT" || exit 1
-exec node .governance/law/run.mjs --door hook --message-file "$MSG_FILE"
+exec node .governance/law/run.ts --door hook --message-file "$MSG_FILE"

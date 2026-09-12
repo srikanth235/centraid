@@ -49,7 +49,7 @@ if [[ -n "${GIT_INDEX_FILE:-}" ]]; then
     DOOR="hook"
 fi
 
-output="$(cd "$REPO_ROOT" && node .governance/law/run.mjs --door "$DOOR" 2>&1)"
+output="$(cd "$REPO_ROOT" && node .governance/law/run.ts --door "$DOOR" 2>&1)"
 status=$?
 printf '%s\n' "$output"
 if [[ $status -ne 0 ]]; then
