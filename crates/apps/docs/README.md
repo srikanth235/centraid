@@ -15,7 +15,7 @@ Docs is 13,183 lines of v0 TypeScript: 4 queries, 16 actions, 34 scopes over fiv
 
 Every one is an answer to a way the port could have been wrong, and every one has a test named after it.
 
-**D-1020-DC1 — identity is the wrapper, never the bytes.** A document is a `core.document` wrapper around a sha256-deduped content item, and **two documents may legitimately share identical bytes** (#352). Dedup is on the bytes; a port that keyed a drive row by content id merges two members' unrelated files. `n_wrappers_over_one_sha_are_n_drive_rows` is a property test over *n*, not a case at two, because a port that special-cased two would still be wrong at three — and each of the *n* carries its own history and its own representation over the same sha.
+**D-1020-DC1 — identity is the wrapper, never the bytes.** A document is a `core.document` wrapper around a sha256-deduped content item, and **two documents may legitimately share identical bytes** (#352). Dedup is on the bytes; a port that keyed a drive row by content id merges two members' unrelated files. `n_wrappers_over_one_sha_are_n_drive_rows` is a property test over _n_, not a case at two, because a port that special-cased two would still be wrong at three — and each of the _n_ carries its own history and its own representation over the same sha.
 
 **D-1020-DC2 — the fold is one module with named windows.** A share is a **standing answer, not a roster**: `share_authority` holds who may reach the document and `share_fulfillment` holds whether it has reached them. `via` says `document` or `folder`, so a member is never told the document itself was shared when it only sits in a shared folder. `delivered_at IS NOT NULL` is the only thing that makes a member `current` (#846: a pass that went unreachable drops back to `syncing`, and reading that as "invited" would tell someone a share they watched land had never arrived). **A denial is `Denied`, not `[]`** — "we cannot see" and "shared with nobody" are different facts and the second is the one a member acts on.
 
@@ -29,11 +29,13 @@ Every one is an answer to a way the port could have been wrong, and every one ha
 
 The drive's window is a **page** of `core_tag`, newest `tagged_at` first. Everything else — the wrappers, the stars, the labels, the content rows, the custody states, the representations and the whole share fold — is `IN`-bounded by ids that page returned. `truncated` is that page's own cursor: `rows.length >= window` cannot tell a window that filled exactly from one that ran out.
 
-The second discovery read is the origin plane, and it runs **before** the folders-scheme gate — because the scheme is created on first use, and returning early there told a member who had *received* a document that nothing had arrived. The third is `search`'s FTS read, which belongs to `crates/search`; the hits arrive here in **rank order** and the fold keeps it.
+The second discovery read is the origin plane, and it runs **before** the folders-scheme gate — because the scheme is created on first use, and returning early there told a member who had _received_ a document that nothing had arrived. The third is `search`'s FTS read, which belongs to `crates/search`; the hits arrive here in **rank order** and the fold keeps it.
 
 `history` walks occurrences from `current_revision_id` through `parent_revision_id`, capped at `MAX_CHAIN_STEPS` (500). A→B→A→B is **four** versions, and the date shown is the occurrence's own — restoring an old version reads as the newest entry even though its bytes are old.
 
 `activity` reads `access_provenance` scoped by the polymorphic `(entity_type, entity_id)` pair. An empty rail is honest: no activity has been recorded yet, not an error.
+
+**And in v0 that rail has never shown an event.** The gateway's paged door serves only tables registered as entities, and `access_provenance` declares no `FOREIGN KEY (prov_id) REFERENCES core_entity(entity_id)` — so `docs.activity.provenance` is refused at `packages/vault/src/gateway/paged-door.ts:436` before any access decision is taken, for every caller including the owner. The manifest declares the scope, the handler ships, the rows are there, and the screen is empty. `crates/apps/docs/tests/parity.rs`'s `the_activity_rail_the_gateways_door_refuses` reads the three events a filed-then-edited-then-starred document actually has; the fixture records v0's refusal verbatim so the day the door admits the audit band, the fixture fails and the finding is re-judged.
 
 ## What stops this crate doing more
 

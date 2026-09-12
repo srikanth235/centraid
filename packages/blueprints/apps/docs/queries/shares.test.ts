@@ -20,8 +20,8 @@ import {
   FOLDER_SCHEME_URI,
   ROOT_FOLDER_NOTATION,
 } from "../../_shared/concept-scheme-kit.ts";
-import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import driveHandler from "./drive.ts";
 import searchHandler from "./search.ts";
 
