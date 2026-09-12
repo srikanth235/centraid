@@ -1,0 +1,211 @@
+{
+  "origin": {
+    "source": "packages/vault/src/schema/ledger.ts",
+    "generator": "contracts/tools/export-ledger-fixture.ts",
+    "issue": "https://github.com/srikanth235/centraid/issues/1020",
+    "note": "GENERATED — do not edit. The DDL itself lives in contracts/migrations/001_baseline.sql; this is the band's declared shape."
+  },
+  "band": "ledger",
+  "registration": "names-only",
+  "mutable": true,
+  "tables": [
+    "conversations",
+    "turns",
+    "items",
+    "attachments",
+    "conversation_harness_sessions",
+    "conversation_turn_locks",
+    "conversation_workspace_selection",
+    "harness_health",
+    "conversation_provider_consent",
+    "automation_state",
+    "automation_trigger_cursor",
+    "trigger_ingress",
+    "conversation_archive",
+    "conversation_digest"
+  ],
+  "tableCount": 14,
+  "automationOwned": [
+    "harness_health",
+    "conversation_provider_consent",
+    "automation_state",
+    "automation_trigger_cursor",
+    "trigger_ingress"
+  ],
+  "vocabularies": [
+    {
+      "column": "kind",
+      "values": [
+        "chat",
+        "automation",
+        "build"
+      ],
+      "nullable": false
+    },
+    {
+      "column": "trigger",
+      "values": [
+        "scheduled",
+        "manual",
+        "replay",
+        "on_failure",
+        "compile",
+        "interactive"
+      ],
+      "nullable": false
+    },
+    {
+      "column": "feedback",
+      "values": [
+        "up",
+        "down"
+      ],
+      "nullable": true
+    },
+    {
+      "column": "kind",
+      "values": [
+        "message_in",
+        "step",
+        "tool",
+        "delegate"
+      ],
+      "nullable": false
+    },
+    {
+      "column": "cost_source",
+      "values": [
+        "harness",
+        "estimated"
+      ],
+      "nullable": true
+    },
+    {
+      "column": "status",
+      "values": [
+        "active",
+        "warm",
+        "cold",
+        "stale"
+      ],
+      "nullable": false
+    },
+    {
+      "column": "primary_kind",
+      "values": [
+        "vault-data",
+        "app",
+        "draft"
+      ],
+      "nullable": false
+    },
+    {
+      "column": "failure_class",
+      "values": [
+        "spawn",
+        "auth",
+        "init",
+        "timeout",
+        "quota",
+        "wedge",
+        "exit",
+        "unknown"
+      ],
+      "nullable": false
+    },
+    {
+      "column": "source",
+      "values": [
+        "webhook",
+        "poll"
+      ],
+      "nullable": false
+    }
+  ],
+  "deleteRules": [
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "turns(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "items(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    },
+    {
+      "references": "conversations(id)",
+      "onDelete": "cascade"
+    }
+  ],
+  "plainColumns": [
+    "turns.parent_turn_id",
+    "items.child_turn_id"
+  ],
+  "indexes": [
+    "idx_attachments_hash",
+    "idx_attachments_item",
+    "idx_automation_trigger_cursor_updated",
+    "idx_conversation_archive_conv",
+    "idx_conversation_archive_sha",
+    "idx_conversation_archive_unpruned",
+    "idx_conversation_digest_automation",
+    "idx_conversation_harness_latest",
+    "idx_conversation_provider_consent_active",
+    "idx_conversations_app",
+    "idx_conversations_automation",
+    "idx_conversations_user_updated",
+    "idx_harness_health_breaker",
+    "idx_items_by_model",
+    "idx_items_by_turn",
+    "idx_items_run_rollup",
+    "idx_items_turn_call",
+    "idx_trigger_ingress_expiry",
+    "idx_trigger_ingress_source_position",
+    "idx_turns_conversation",
+    "idx_turns_idempotency",
+    "idx_turns_parent",
+    "idx_turns_started"
+  ],
+  "triggers": [
+    "conversation_item_count_ad",
+    "conversation_item_count_ai",
+    "fts_conversation_conv_ad",
+    "fts_conversation_conv_ai",
+    "fts_conversation_conv_au",
+    "fts_conversation_item_ad",
+    "fts_conversation_item_ai",
+    "fts_conversation_turn_ad"
+  ],
+  "views": [
+    "run_summary"
+  ],
+  "indexedNotUnique": [
+    "turns.idempotency_key"
+  ],
+  "neverInferred": [
+    "items.effort"
+  ]
+}

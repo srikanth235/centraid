@@ -52,6 +52,8 @@ pub mod devices;
 pub mod error;
 pub mod file;
 pub mod intents;
+// Wave 4 lane assist: the `ledger` band's statements (#1020, D-1020-AS3).
+pub mod ledger;
 pub mod log;
 pub mod migrations;
 pub mod page;
