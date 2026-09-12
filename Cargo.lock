@@ -301,6 +301,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-api-proto",
+ "centraid-net",
+ "centraid-protocol",
+ "clap",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "centraid-api-proto"
 version = "1.0.0-alpha.0"
 dependencies = [

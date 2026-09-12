@@ -1,0 +1,27 @@
+[package]
+name = "centraid"
+description = "The one binary: gateway, seat, pair, devices, backup, doctor, recover, export, native-host (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "centraid"
+path = "src/main.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-net = { path = "../net" }
+centraid-protocol = { path = "../protocol" }
+clap.workspace = true
+tokio = { workspace = true, features = ["signal"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# The no-listener test parses the ticket the binary printed, which is the
+# ticket codec's job and not the CLI's.
+centraid-net = { path = "../net" }
