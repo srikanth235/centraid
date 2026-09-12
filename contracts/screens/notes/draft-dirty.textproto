@@ -1,0 +1,16 @@
+# Edited and not yet saved. AN EDIT NEVER WRITES: `save` is DIRTY and no
+# command has been submitted, because autosave-per-keystroke would fill an
+# outbox with a hundred revisions of one note.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+note_id: "note-0001"
+draft {
+  title: "Winter plans"
+  body: "Book the cabin.\nAsk about the dog."
+  format: FORMAT_MARKDOWN
+  base_revision_id: "rev-0007"
+}
+save: SAVE_STATE_DIRTY

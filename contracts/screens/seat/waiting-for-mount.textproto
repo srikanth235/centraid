@@ -1,0 +1,7 @@
+# WAITING FOR A GATEWAY ID, naming no file. There is no stand-in: the literal
+# "manual" once named a file whose path moved the moment a real endpoint
+# arrived, orphaning every write queued under it
+# (`docs/mobile-offline.md:249-251`).
+availability: AVAILABILITY_WAITING_FOR_MOUNT
+durability: DURABILITY_AUTHORITATIVE
+connectivity: CONNECTIVITY_OFFLINE

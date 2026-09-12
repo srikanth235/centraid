@@ -1,0 +1,13 @@
+# A REFUSED READ REPLACES THE EDITOR, because the body never arrived. The
+# contrast with `save-refused` is the whole point of having both fixtures.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+note_id: "note-0002"
+failure {
+  kind: READ_FAILURE_KIND_REFUSED
+  sentence: "This note is not shared with you."
+}
+save: SAVE_STATE_CLEAN

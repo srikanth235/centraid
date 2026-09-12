@@ -1,0 +1,27 @@
+# iOS's LIMITED selection. Not an empty library and not a denial: the backup
+# runs over the photos the member chose, and the sentence says so.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_LIBRARY
+permission: MEDIA_PERMISSION_LIMITED
+data {
+  cells {
+    asset_id: "ast-0002"
+    captured_at: "2026-09-01T09:00:00Z"
+    captured_utc_offset_minutes: 60
+    kind: KIND_PHOTO
+    capture_group_id: "cg-live-0002"
+  }
+}
+backup {
+  phase: PHASE_TRANSFERRING
+  assets_remaining: 12
+  assets_transferred_this_session: 38
+  bytes_transferred_this_session: 194512384
+  transport: TRANSPORT_IROH_BLOBS
+  paused_reason: "Centraid backs up the photos you selected."
+}
+sheet: SHEET_NONE

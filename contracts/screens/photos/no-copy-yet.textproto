@@ -1,0 +1,18 @@
+# NO COPY YET — a first sync, not a refusal. This is the fixture that keeps
+# `READ_FAILURE_KIND_NO_COPY_YET` and `READ_FAILURE_KIND_REFUSED` apart: they
+# are different screens in v0's own words, and a nullable would erase the
+# difference.
+seat {
+  availability: AVAILABILITY_WAITING_FOR_MOUNT
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_LIBRARY
+permission: MEDIA_PERMISSION_GRANTED
+failure {
+  kind: READ_FAILURE_KIND_NO_COPY_YET
+  sentence: "This device has not copied these yet."
+  remedy: "Stay on Wi-Fi while Centraid catches up."
+}
+backup { phase: PHASE_IDLE }
+sheet: SHEET_NONE

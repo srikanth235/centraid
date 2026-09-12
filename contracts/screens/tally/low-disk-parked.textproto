@@ -1,0 +1,14 @@
+# OUT OF DISK: the feed is PARKED. The cursor and the rows stay durable, the
+# retry cadence stops, and freeing space resumes from where it stopped. Nothing
+# is evicted to manufacture space.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_PARKED_LOW_DISK
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_ACTIVITY
+failure {
+  kind: READ_FAILURE_KIND_LOW_DISK_PARKED
+  sentence: "This device is out of space, so Centraid has paused."
+  remedy: "Free up space and Centraid picks up where it stopped."
+}
