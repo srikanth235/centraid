@@ -43,7 +43,7 @@ inputs:
     default: "false"
   cargo-cache:
     description: >-
-      Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`, or `verify` (both crates). The presets stay separate on purpose: one shared key would let jobs with different target/ contents overwrite each other's entry, which surfaces only as unexplained cold builds. Saves only on `main` (#637).
+      Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`, `verify` (both v0 crates), or `v1` (the #1020 workspace at the repo root, whose target/ and cargo-deny binary the gate lanes reuse). The presets stay separate on purpose: one shared key would let jobs with different target/ contents overwrite each other's entry, which surfaces only as unexplained cold builds. Saves only on `main` (#637).
     required: false
     default: "none"
 
@@ -82,9 +82,9 @@ runs:
       run: |
         set -euo pipefail
         case "$PRESET" in
-          none | data-plane | iroh-wasm | verify) ;;
+          none | data-plane | iroh-wasm | verify | v1) ;;
           *)
-            echo "::error::setup: cargo-cache must be none|data-plane|iroh-wasm|verify, got '$PRESET'"
+            echo "::error::setup: cargo-cache must be none|data-plane|iroh-wasm|verify|v1, got '$PRESET'"
             exit 1
             ;;
         esac
@@ -187,6 +187,37 @@ runs:
           packages/tunnel/data-plane/target
           apps/web/iroh-wasm/target
         key: ${{ steps.cargo-verify.outputs.cache-primary-key }}
+
+    # #1020 — the v1 workspace at the repo root. `~/.cargo/bin` is in the path
+    # set so `cargo-deny` survives between gate runs; the install step in
+    # gate.yml is a no-op on a warm cache and a real install on a cold one.
+    - name: Restore Cargo (v1 workspace)
+      id: cargo-v1
+      if: inputs.cargo-cache == 'v1'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/bin
+          target
+        key: cargo-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        restore-keys: |
+          cargo-v1-${{ runner.os }}-
+
+    - name: Save Cargo (v1 workspace)
+      if: >
+        inputs.cargo-cache == 'v1' && github.ref == 'refs/heads/main' && steps.cargo-v1.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/bin
+          target
+        key: ${{ steps.cargo-v1.outputs.cache-primary-key }}
 
     # No Bun cache: a cold `bun install` is faster than restoring one (#538).
     # Retry extract flakes (`pdfjs-dist` tarball) without unpinning the lockfile.

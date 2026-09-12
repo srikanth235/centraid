@@ -100,6 +100,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     let mut pr = local;
     pr.extend([
         step("deny", run_deny),
+        step("ci-policy", run_ci_policy),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
     ]);
@@ -349,6 +350,84 @@ fn run_deny(ctx: &Ctx) -> Result<Outcome> {
     )))
 }
 
+/// Is `program` on PATH? Spawn success is the signal, not exit status: some of
+/// these tools spell their version flag differently and one of them exits
+/// non-zero for it, but only a missing binary fails to spawn at all.
+fn binary_available(program: &str) -> bool {
+    Command::new(program).arg("--version").output().is_ok()
+}
+
+/// NOT here yet, and named so the omission is visible: `gitleaks` (secret
+/// scanning) and `osv-scanner` (the lockfile advisory inventory) were also
+/// `ci.yml` pull-request lanes, and they are also not v0 gates. They are absent
+/// from this profile because BOTH ARE ALREADY RED on the tree as it stands —
+/// `packages/model-runtime/LICENSES.md` trips gitleaks' `generic-api-key` rule,
+/// and `astro@7.1.5` in `bun.lock` carries a CRITICAL (score 9.8) — so adding
+/// them in wave 1 would import another change's red into every pull request
+/// rather than gate anything. They are two `step(...)` lines and two `external`
+/// calls once those two are fixed; see the wave 1 receipt's findings.
+///
+/// An external binary the repo pins but does not vendor. Required in CI, where
+/// the workflow installs it; loud-skipped locally with the install command.
+/// Same three-outcomes-and-no-fourth contract as `deny`.
+fn external(
+    ctx: &Ctx,
+    step: &str,
+    program: &str,
+    args: &[&str],
+    covers: &str,
+    install: &str,
+) -> Result<Outcome> {
+    if binary_available(program) {
+        return process(ctx, step, program, args);
+    }
+    if ctx.ci {
+        return Ok(Outcome::Failed(format!(
+            "`{program}` is not on PATH and this is CI, where the workflow installs it — a missing binary here is an infrastructure failure, not a skip. {install}"
+        )));
+    }
+    Ok(Outcome::Skipped(format!(
+        "`{program}` is not on PATH — {covers} was NOT checked. {install}"
+    )))
+}
+
+/// THE REPO'S OWN CI POLICY, which is neither v0's nor v1's.
+///
+/// #1020 rules v0's gates off pull requests, and these four are not v0 gates:
+/// they are standing checks over `.github/**` and `tests/path-filter-ledger.json`
+/// — that every third-party action is SHA-pinned, that every job is bounded,
+/// that exactly one workflow listens on open-PR events, that a new workflow
+/// carries an egress policy, and that no tracked directory merges unexercised.
+/// They ran in `ci.yml`'s `static` and `gates` jobs on every PR. Taking the
+/// `pull_request:` trigger off that file would have taken them off PRs too,
+/// which would be weakening a gate rather than moving one — so they move HERE,
+/// into the gate that replaced it. They are the gates that guard this very
+/// workflow, and they cost under a second.
+fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
+    const SCRIPTS: [&str; 3] = ["lint:workflow-pins", "lint:ci-egress", "lint:path-filters"];
+    for script in SCRIPTS {
+        let outcome = process(ctx, "ci-policy", "bun", &["run", script])?;
+        if let Outcome::Failed(detail) = outcome {
+            return Ok(Outcome::Failed(detail));
+        }
+    }
+    // actionlint validates syntax and expressions, which the three scripts above
+    // deliberately do not model. `ci.yml` runs it through a pinned container
+    // action; here it is a pinned binary the workflow installs.
+    let linted = external(
+        ctx,
+        "actionlint",
+        "actionlint",
+        &["-color"],
+        "workflow syntax and expressions",
+        "install the pinned release from github.com/rhysd/actionlint (gate.yml does)",
+    )?;
+    Ok(match linted {
+        Outcome::Ok(_) => Outcome::Ok(format!("{} + actionlint", SCRIPTS.join(", "))),
+        other => other,
+    })
+}
+
 /// The release build, scored against the compile-time ledger.
 ///
 /// The measurement is written as evidence and compared with the ledger's
@@ -496,6 +575,15 @@ mod tests {
         assert_eq!(&pr[..local.len()], &local[..]);
         assert_eq!(&nightly[..pr.len()], &pr[..]);
         assert_eq!(&release[..nightly.len()], &nightly[..]);
+    }
+
+    /// The repo-wide CI policy lane is not one of v0's gates, so taking ci.yml
+    /// off `pull_request` must not take it off pull requests. It is a step of
+    /// the gate that replaced it, and this test is what says so.
+    #[test]
+    fn pr_carries_the_ci_policy_step() {
+        let pr = names(Profile::Pr);
+        assert!(pr.contains(&"ci-policy"), "{pr:?}");
     }
 
     #[test]

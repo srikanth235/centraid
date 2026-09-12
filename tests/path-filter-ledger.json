@@ -3,6 +3,8 @@
   "alwaysOn": {
     "assets": "Product icon sources (13 files: the .svg masters plus the generated .icns/.ico/.png). They are consumed at PACKAGING time by lane-release-desktop.yml and lane-release-mobile.yml, not by any PR lane — there is no per-PR claim about them to gate, and the release lanes rebuild from them unconditionally on every tag.",
     "packages/test-kit": "Test-only harness (no product surface, not shipped in any artifact). It is covered by `verify`, which is unfiltered and runs the whole vitest suite — the only consumer that matters. It is deliberately NOT in the client/gateway filters: the Playwright e2e lanes do not import it, so waking them on a test-kit change would cost minutes and prove nothing.",
+    "contracts": "The v1 tree's language-neutral fixtures and ledgers (#1020). Covered by gate.yml — `cargo xtask gate --profile pr` on every PR, UNFILTERED, by ruling: the v1 gate is one command with one step list and no `paths:` table at all, so there is no lane to wake selectively and nothing for ci.yml's filter table to claim.",
+    "crates": "The v1 Rust workspace (#1020). Covered by gate.yml — `cargo xtask gate --profile pr` on every PR, UNFILTERED, for the same reason as `contracts` above: `cargo fmt/clippy/test --workspace` and the structural rules see the whole tree on every run, and the nightly profile adds the v0 oracle on top of it.",
     "receipts": "The audit trail itself. Covered by `governance.yml` (unfiltered, runs .governance/run.sh on every PR) which owns receipt-per-issue, commit-issue-receipt-match and doc-integrity, plus `gates`' check:ui-receipt. A receipt change has no product lane to wake."
   }
 }

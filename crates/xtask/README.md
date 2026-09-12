@@ -18,7 +18,7 @@ Each profile is a **superset** of the one before, stated in code as concatenatio
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s | the pre-push loop, by hand |
-| `pr` | `deny`, `release-build`, `ts-static` | < 900 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `deny`, `ci-policy`, `release-build`, `ts-static` | < 900 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `v0-oracle`, `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
 | `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
 
@@ -48,6 +48,14 @@ A failing step writes its whole output under `target/xtask/<profile>/<step>/` �
 
 `cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran.
 
+### The `ci-policy` step, and the two lanes that are NOT here
+
+`ci-policy` runs `lint:workflow-pins`, `lint:ci-egress`, `lint:path-filters` and `actionlint`. These are not v0's gates — they are standing checks over `.github/**` and `tests/path-filter-ledger.json`, and they are the gates that guard this very workflow. They ran in `ci.yml`'s `static` and `gates` jobs on every pull request, so taking the `pull_request:` trigger off that file would have taken them off pull requests: that would be weakening a gate rather than moving one, so they moved here. They cost under a second.
+
+Two more `ci.yml` pull-request lanes belong here by the same argument and are **not** here yet, named so the gap is visible rather than quiet: `gitleaks` (secret scanning over the working tree) and `osv-scanner` (the `bun.lock` advisory inventory). Both are **already red on the tree as it stands** — `packages/model-runtime/LICENSES.md` trips gitleaks' `generic-api-key` rule, and `astro@7.1.5` in `bun.lock` carries a CRITICAL — so adding them in wave 1 would import another change's red into every pull request rather than gate anything. Each is two lines (`step(...)` plus an `external` call) once those two are fixed; the wave 1 receipt carries both as findings.
+
+`dependency-review` did move, as its own job in `gate.yml`: it is a GitHub Action reading the PR's dependency diff through the API rather than a command over the tree, so it cannot be a step of `cargo xtask gate`.
+
 ### The `ts-static` step
 
 There is no TypeScript in the v1 tree yet (`crates/`, `contracts/`, `mobile/`, `desktop/`, `extension/`), so the step loud-skips and names the command it will run — `bun run check:push:static` — the moment a `.ts` file appears in any of them. It deliberately does **not** run v0's static gate over the v0 tree: #1020 rules v0's gates off pull requests from wave 1, and re-running them here under a different name would be the same CI bill with the ruling pasted over it.
@@ -60,7 +68,7 @@ There is no TypeScript in the v1 tree yet (`crates/`, `contracts/`, `mobile/`, `
 
 Branch protection's required check today is **`check`**, the single aggregator job in [`ci.yml`](../../.github/workflows/ci.yml). #1020 takes the `pull_request:` trigger off that workflow — v0's gates now run on pushes to `main` and nightly, as the pinned oracle — so **`check` will stop reporting on pull requests**. A required check that never reports blocks the pull request forever, which is the exact failure #557 was written about.
 
-The owner must switch branch protection's required check from `check` (ci.yml) to **`gate`** (gate.yml). Until that is done, pull requests will block. Nothing in this repository can do it: branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)).
+The owner must switch branch protection's required checks from `check` (ci.yml) to **`gate`** and **`dependency-review`**, the two jobs in gate.yml. Until that is done, pull requests will block. Nothing in this repository can do it: branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)).
 
 ## The structural rules
 

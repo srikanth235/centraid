@@ -1,0 +1,146 @@
+name: gate
+
+# THE PULL-REQUEST GATE for the v1 tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+#
+# `cargo xtask gate --profile pr` is the only thing this workflow runs, because
+# the issue rules it the only CI entrypoint: v1 is three languages, and a gate
+# assembled out of per-language jobs would have to be kept in step by hand in
+# four places. One command, one step list, one budget
+# (contracts/ledgers/gate-budgets.json), one artifact directory.
+#
+# THIS WORKFLOW IS NOW THE SINGLE OPEN-PR ENTRY POINT, taking that role from
+# ci.yml. #557's ruling has not changed and is the reason there is exactly one:
+# a workflow that needs `paths:` filters to be affordable can never be a
+# required check, because a filtered-out workflow reports no status and a
+# required check that never reports blocks the PR forever. So there is one
+# PR-triggered workflow and everything a PR must satisfy is inside it. Two jobs,
+# not one, and neither is path-filtered so both always report:
+# `gate` runs the profile, and `dependency-review` is the one PR gate that
+# cannot be a step of a command (see its comment below).
+# `scripts/lint-workflow-pins.mjs` rule 5 enforces the single-entry-point
+# property and now names this file.
+#
+# OWNER HAND-OFF — branch protection must be repointed. The required check today
+# is `check`, ci.yml's aggregator, and ci.yml no longer listens on
+# `pull_request`, so `check` will stop reporting. The owner must make `gate` AND
+# `dependency-review` (both jobs here) the required checks; until then pull
+# requests will block. Branch protection is configured outside this repository,
+# like the code-owner review requirement — see crates/xtask/README.md and
+# docs/toolchain.md.
+#
+# Governance is NOT run here. `.governance/run.sh` is governance.yml's job and
+# its own required check; running it twice would charge the budget twice for one
+# answer and give one failure two places to be reported from.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded PR runs, exactly as ci.yml does for the same reason.
+concurrency:
+  group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # The `pr` profile's budget is 15 minutes and the runner bound is a backstop
+    # against a hung job, not a second budget: a cancelled job is red with no
+    # evidence (#557), and the profile's own timing table is the number that
+    # matters.
+    timeout-minutes: 20
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # `audit` for the reason hygiene.yml and soak-weekly.yml use it: the
+          # allowlist for a lane that talks to crates.io, the sparse index and
+          # the Bun registry has not been learned yet, and a job that dies on an
+          # unlisted endpoint blocks every pull request. Flip to `block` once the
+          # run summaries have named the destinations.
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Bun and Node for the profile's `ts-static` step, which runs
+      # `bun run check:push:static` over whatever TypeScript the v1 tree grows,
+      # and the v1 Cargo cache (`target/` plus `~/.cargo/bin`, so cargo-deny
+      # survives between runs).
+      - uses: ./.github/actions/setup
+        with:
+          cargo-cache: v1
+      # rust-toolchain.toml is the one version file. Reading the channel out of
+      # it here rather than repeating `1.94.1` is what keeps it the only one:
+      # dtolnay/rust-toolchain reads its toolchain from its OWN ref, and a SHA
+      # pin has no ref name to read, so the input is required (lint:workflow-pins
+      # rule 7) and must come from somewhere.
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if [ -z "$channel" ]; then
+            echo "::error::gate: rust-toolchain.toml has no [toolchain] channel"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+          components: rustfmt, clippy
+      # The `pr` profile's external tools. Each one FAILS rather than skips when
+      # its binary is absent under CI (see crates/xtask/src/gate.rs `external`),
+      # so an install that silently stopped working reds the gate instead of
+      # quietly removing a lane. Versions are pinned here and nowhere else.
+      - name: Install cargo-deny
+        run: |
+          set -euo pipefail
+          if command -v cargo-deny >/dev/null 2>&1; then
+            echo "cargo-deny already on PATH from the restored Cargo cache: $(cargo-deny --version)"
+          else
+            cargo install cargo-deny --locked
+          fi
+      - name: Install actionlint
+        env:
+          # The same version ci.yml's `static` job pins as a container action.
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin actionlint
+          actionlint --version
+      - run: cargo xtask gate --profile pr
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: gate-pr-artifacts
+          path: target/xtask/**
+          retention-days: 7
+          if-no-files-found: warn
+
+  # The ONE pull-request gate that cannot be a step of `cargo xtask gate`: it is
+  # a GitHub Action reading the PR's dependency diff through the API, not a
+  # command over the tree. It keeps its own job so `pull-requests: write` is not
+  # handed to the job that compiles third-party crates, and it is unfiltered, so
+  # it always reports on a pull request and can be required. Moved here verbatim
+  # from ci.yml's `dependency-review` job, minus that file's evidence-writing
+  # steps, which belong to its own report pipeline on `main`.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Start at `high`. Starting at `low` on a monorepo this size means the
+          # gate is muted within a week; tighten once the baseline is clean.
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+          # Denies the licence on NEW dependencies only — existing ones are
+          # untouched, so it cannot retroactively red an unrelated PR.
+          deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later

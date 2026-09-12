@@ -1,0 +1,94 @@
+name: gate-nightly
+
+# THE NIGHTLY LANE for the v1 tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+#
+# `cargo xtask gate --profile nightly` — the `pr` profile plus the v0 ORACLE
+# SUITE and the device lanes. The oracle suite is the whole of what v0's CI
+# still owes a v1 commit: from wave 1 v0's own gates are off pull requests
+# (*Two trees, one CI bill*), and what survives is the v0 tests that read
+# `contracts/` files, run once a night against the pinned tree. v0's gates were
+# MOVED, not deleted — ci.yml still runs every one of its jobs on pushes to
+# `main` and on its own nightly schedule.
+#
+# 05:30 UTC: after hygiene.yml's Saturday 05:00 and before e2e.yml's 06:00
+# nightly, so a red v1 gate never competes with either for attention.
+#
+# `schedule:` + `workflow_dispatch:` only — gate.yml is the one workflow allowed
+# to listen on `pull_request` (enforced by lint:workflow-pins rule 5).
+#
+# The profile is unbounded by ruling, so there is no budget line to score; the
+# runner bound below is a backstop against a hung job.
+
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: gate-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate-nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # Same learning posture as gate.yml; this lane's destinations are a
+          # superset (it also builds the v0 package closure the oracle imports).
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # turbo-cache because the oracle step builds the suite's package closure:
+      # the v0 suites import their workspace packages by published entry point,
+      # so they need `dist/` on disk, the same reason ci.yml's `verify` builds
+      # before it runs vitest.
+      - uses: ./.github/actions/setup
+        with:
+          cargo-cache: v1
+          turbo-cache: "true"
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if [ -z "$channel" ]; then
+            echo "::error::gate-nightly: rust-toolchain.toml has no [toolchain] channel"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+          components: rustfmt, clippy
+      # The `pr` profile's external tools. Each one FAILS rather than skips when
+      # its binary is absent under CI (see crates/xtask/src/gate.rs `external`),
+      # so an install that silently stopped working reds the gate instead of
+      # quietly removing a lane. Versions are pinned here and nowhere else.
+      - name: Install cargo-deny
+        run: |
+          set -euo pipefail
+          if command -v cargo-deny >/dev/null 2>&1; then
+            echo "cargo-deny already on PATH from the restored Cargo cache: $(cargo-deny --version)"
+          else
+            cargo install cargo-deny --locked
+          fi
+      - name: Install actionlint
+        env:
+          # The same version ci.yml's `static` job pins as a container action.
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin actionlint
+          actionlint --version
+      - run: cargo xtask gate --profile nightly
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: gate-nightly-artifacts
+          path: target/xtask/**
+          retention-days: 7
+          if-no-files-found: warn

@@ -5,10 +5,27 @@ name: ci
 on:
   push:
     branches: [main]
-  pull_request:
+  # #1020 — THE `pull_request:` TRIGGER IS GONE. From wave 1 the v0 tree is a
+  # pinned read-only ORACLE and its gates stop running on pull requests; PRs run
+  # `gate.yml` (`cargo xtask gate --profile pr`) instead. Keeping both on every
+  # PR would double the bill for one answer — the v0 iOS lane alone is ~51
+  # minutes — which is the *Two trees, one CI bill* paragraph of #1020.
+  #
+  # NO JOB HERE WAS DELETED OR WEAKENED. Every lane below still runs, on every
+  # push to `main` and on the nightly schedule, which is where a v0 regression
+  # now surfaces. Its detection latency goes from push → merge-blocking to
+  # push → within a day, and nothing else changes. See
+  # docs/decisions.md#the-pr-gate-loop-892 for the rung this file occupies and
+  # docs/toolchain.md for the v1 loop that replaces it on PRs.
+  schedule:
+    - cron: "0 4 * * *"
   # #557 — five of the folded workflows carried their own `workflow_dispatch`.
   # Preserved here: on a manual run the `changes` filter has no diff to read, so
-  # `all` below forces every lane on.
+  # `all` below forces every lane on. The nightly schedule has no diff either,
+  # for the same reason, so `all` covers both events — without that a scheduled
+  # run would skip every path-gated lane and report green having exercised
+  # nothing, which is the `skipped`-counts-as-PASS hazard this file's own
+  # comments are about.
   workflow_dispatch:
 
 # Cancel superseded PR runs so stacked pushes do not queue ~18 min serial jobs.
@@ -19,9 +36,13 @@ concurrency:
 permissions:
   contents: read
 
-# ci.yml is the ONLY workflow that listens on `pull_request` (#557). Everything
-# a PR must satisfy is a job here, so all of it rolls up into the single
-# required `check`.
+# ci.yml WAS the only workflow that listened on `pull_request` (#557), and
+# everything a PR had to satisfy was a job here, rolling up into the single
+# required `check`. #1020 moves that role to `gate.yml` — one PR-triggered
+# workflow still, for exactly the reason the next paragraph gives, just a
+# different one. The `check` aggregator below now reports on `main` pushes and
+# on the nightly schedule; **branch protection must be repointed at `gate`**, or
+# a required check that no longer reports will block every pull request.
 #
 # Before this, ten workflows each listened on `pull_request` independently. To
 # stay affordable each carried its own `paths:` filter — and that is precisely
@@ -68,7 +89,13 @@ jobs:
       # `if:`" — which is how this was worded, and how `client-e2e`'s two `with:`
       # inputs came to be the one pair without the fallback. `lint:path-filters`
       # checks the reads now instead of the wording promising it.
-      all: ${{ github.event_name == 'workflow_dispatch' }}
+      #
+      # #1020 — `schedule` joins `workflow_dispatch` here, and the two edits are
+      # inseparable: a scheduled run has no diff either, so without this the
+      # nightly oracle run would skip every path-gated lane and report green
+      # having exercised nothing. Adding the trigger without adding the event to
+      # `all` would have installed a vacuous lane, not an oracle.
+      all: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       web: ${{ steps.filter.outputs.web }}
       desktop: ${{ steps.filter.outputs.desktop }}
       client: ${{ steps.filter.outputs.client }}
