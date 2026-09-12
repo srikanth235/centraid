@@ -157,6 +157,9 @@ export default defineConfig({
     "**/dist/**",
     "**/.expo/**",
     "**/node_modules/**",
+    // Law is ESLint under .governance/law; oxlint's vitest glob would treat
+    // those `node --test` files as Vitest suites (#1018).
+    ".governance/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
     // Release-generated recognition bundles carry minified/transformed module
