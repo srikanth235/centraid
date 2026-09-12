@@ -198,9 +198,105 @@ pub trait Ids: Send + Sync {
     fn next(&self) -> String;
 }
 
+/// **The default: uuid v7 off the injected clock, with a per-open random
+/// suffix.** What a gateway and a seat mint (#1020 wave 3 lane X3).
+///
+/// ## Why this exists, and what it replaces
+///
+/// [`SeededIds`] was the default for `Vault::open` and `Vault::create`, and its
+/// counter starts at zero **per instance**. So every open minted the same
+/// sequence from the beginning and the first write after ANY reopen asked for
+/// an id the first session had already used. Reproduced from Kotlin through
+/// the real C ABI by wave 3 lane E:
+///
+/// ```text
+/// Refused(code=63, detail=entity id is already held by another kind: core_party (#916))
+/// ```
+///
+/// A gateway that restarts fails its next write. `crates/vault/src/file.rs`'s
+/// reopen test is the red.
+///
+/// ## The shape
+///
+/// RFC 9562's layout, and every bit is accounted for:
+///
+/// * 48 bits — milliseconds since the epoch, **from the injected [`Clock`]**,
+///   never `SystemTime::now()` called inline. Time-ordered ids are the whole
+///   reason the audit band could read history before #928 gave it a chain
+///   position, and a clock a test can hold keeps that assertable.
+/// * 4 bits — version `7`.
+/// * 12 bits (`rand_a`) — the **per-open suffix**, drawn once when this source
+///   is constructed. Two sessions of the same vault in the same millisecond
+///   have different ones, which is exactly the collision that was happening.
+/// * 2 bits — variant `0b10`.
+/// * 62 bits (`rand_b`) — fresh randomness per call. This is what makes a
+///   collision improbable rather than merely unlikely: the per-open suffix
+///   separates sessions and this separates calls within one.
+///
+/// Deliberately NOT a counter: a counter is what broke, and a counter mixed in
+/// here would make two ids from two opens differ only if the suffix did.
+pub struct ClockIds {
+    clock: Box<dyn Clock>,
+    /// The per-open suffix, 12 bits.
+    suffix: u16,
+}
+
+impl ClockIds {
+    /// A source over an injected clock.
+    #[must_use]
+    pub fn new(clock: Box<dyn Clock>) -> Self {
+        Self {
+            clock,
+            suffix: rand::random::<u16>() & 0x0fff,
+        }
+    }
+
+    /// A source over the host clock — what `Vault::open` and `Vault::create`
+    /// use when the caller injects nothing.
+    #[must_use]
+    pub fn system() -> Self {
+        Self::new(Box::new(SystemClock))
+    }
+}
+
+impl std::fmt::Debug for ClockIds {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The suffix is not a secret and printing it is how a support bundle
+        // tells two sessions of one vault apart.
+        formatter
+            .debug_struct("ClockIds")
+            .field("suffix", &self.suffix)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Ids for ClockIds {
+    fn next(&self) -> String {
+        // A clock before the epoch cannot be encoded in an unsigned 48-bit
+        // field. Clamped rather than refused: `Ids::next` has no error channel,
+        // and a vault whose host clock is set to 1969 has a problem this
+        // function is not the place to report.
+        let millis = u64::try_from(self.clock.now_ms()).unwrap_or(0) & 0x0000_ffff_ffff_ffff;
+        let rand_b = rand::random::<u64>() & 0x3fff_ffff_ffff_ffff;
+        let time_high = (millis >> 16) & 0xffff_ffff;
+        let time_low = millis & 0xffff;
+        let version_and_a = 0x7000_u16 | self.suffix;
+        let variant_and_b_high = 0x8000_u16 | u16::try_from((rand_b >> 48) & 0x3fff).unwrap_or(0);
+        let b_low = rand_b & 0x0000_ffff_ffff_ffff;
+        format!(
+            "{time_high:08x}-{time_low:04x}-{version_and_a:04x}-{variant_and_b_high:04x}-{b_low:012x}"
+        )
+    }
+}
+
 /// Seeded, uuid-v7-SHAPED ids: the same seed always produces the same
 /// sequence. The same derivation v0's `scripts/golden-vault/build.mjs` uses,
 /// so a fixture generated on either side carries the same ids.
+///
+/// **For fixtures and the simulation only.** It is not a default any more, for
+/// the reason [`ClockIds`] carries: a per-instance counter restarts on every
+/// open. `crates/sim` and the golden freezer inject it deliberately, under a
+/// fixed clock and a fixed seed, which is what makes a seed replayable.
 #[derive(Debug)]
 pub struct SeededIds {
     seed: String,
@@ -302,5 +398,59 @@ mod tests {
         assert_eq!(first[0].len(), 36);
         assert_eq!(&first[0][14..15], "7");
         assert_eq!(&first[0][19..20], "8");
+    }
+
+    /// TWO OPENS OF THE SAME VAULT DO NOT MINT THE SAME IDS, even on the same
+    /// frozen clock. This is the property `SeededIds` did not have and the one
+    /// the reopen collision was (#1020 wave 3, lane E finding 1).
+    #[test]
+    fn two_id_sources_on_one_clock_do_not_share_a_sequence() {
+        let clock = std::sync::Arc::new(FixedClock::frozen());
+        let session = |clock: &std::sync::Arc<FixedClock>| {
+            let ids = ClockIds::new(Box::new(std::sync::Arc::clone(clock)));
+            (0..64).map(|_| ids.next()).collect::<Vec<_>>()
+        };
+        let first = session(&clock);
+        let second = session(&clock);
+        let mut all = first.clone();
+        all.extend(second.clone());
+        let unique: std::collections::BTreeSet<&String> = all.iter().collect();
+        assert_eq!(
+            unique.len(),
+            all.len(),
+            "128 ids from two sessions on one frozen clock must all differ"
+        );
+        // The seeded source, by contrast, repeats itself — which is exactly why
+        // it is a fixture tool and not a default.
+        let seeded = |_: ()| {
+            let ids = SeededIds::new("v1");
+            (0..2).map(|_| ids.next()).collect::<Vec<_>>()
+        };
+        assert_eq!(seeded(()), seeded(()));
+    }
+
+    /// The shape is RFC 9562's, and the timestamp is the INJECTED clock's —
+    /// time-ordered ids are what the audit band reads history by.
+    #[test]
+    fn a_clock_id_is_a_uuid_v7_whose_time_comes_from_the_clock() {
+        let clock = std::sync::Arc::new(FixedClock::frozen());
+        let ids = ClockIds::new(Box::new(std::sync::Arc::clone(&clock)));
+        let early = ids.next();
+        assert_eq!(early.len(), 36);
+        assert_eq!(&early[14..15], "7", "the version nibble");
+        assert!(
+            matches!(&early[19..20], "8" | "9" | "a" | "b"),
+            "the variant is the two bits `0b10`, so the nibble is 8, 9, a or b: {early}"
+        );
+        let millis = u64::from_str_radix(&format!("{}{}", &early[0..8], &early[9..13]), 16)
+            .expect("the first 48 bits are hex");
+        assert_eq!(
+            i64::try_from(millis).expect("in range"),
+            FixedClock::frozen().now_ms(),
+            "the timestamp is the injected clock's, not the host's"
+        );
+        clock.advance_days(1);
+        let late = ids.next();
+        assert!(late > early, "{early} then {late} — v7 ids sort by time");
     }
 }
