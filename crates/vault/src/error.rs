@@ -154,7 +154,7 @@ pub enum VaultError {
     Invariant { context: String },
 
     #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(rusqlite::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -170,26 +170,43 @@ pub enum VaultError {
     Ontology(#[from] centraid_ontology::OntologyError),
 }
 
-impl VaultError {
-    /// Turn a rusqlite error into `DiskFull` when SQLite said `SQLITE_FULL`,
-    /// and leave it alone otherwise.
-    ///
-    /// The classification is on the PRIMARY code, not the message: `disk I/O
-    /// error` and `database or disk is full` are both things SQLite says, and
-    /// only one of them is this.
-    pub fn from_sqlite(context: &str, error: rusqlite::Error) -> Self {
-        use rusqlite::ErrorCode;
-        let full = matches!(
+/// EVERY rusqlite error is classified, including the ones a `?` converts.
+///
+/// This is a hand-written `From` rather than `#[from]` for one reason: a
+/// handler's own `?` on a `rusqlite::Result` is the MOST common way a
+/// `SQLITE_FULL` reaches a caller, and a `DiskFull` that only got classified
+/// where the log plane remembered to call a helper would arrive as a generic
+/// SQLite error from everywhere else. The product renders "your disk is full",
+/// so the classification has to be unconditional (D-1020-D1-8).
+impl From<rusqlite::Error> for VaultError {
+    fn from(error: rusqlite::Error) -> Self {
+        // The PRIMARY code, not the message: `disk I/O error` and `database or
+        // disk is full` are both things SQLite says and only one is this.
+        if matches!(
             &error,
             rusqlite::Error::SqliteFailure(inner, _)
-                if inner.code == ErrorCode::DiskFull
-        );
-        if full {
+                if inner.code == rusqlite::ErrorCode::DiskFull
+        ) {
             return Self::DiskFull {
-                context: format!("{context}: {error}"),
+                context: error.to_string(),
             };
         }
         Self::Sqlite(error)
+    }
+}
+
+impl VaultError {
+    /// Classify a rusqlite error and name what was being done.
+    ///
+    /// The context is the only thing this adds over the `From` above; the
+    /// classification is the same and happens in one place.
+    pub fn from_sqlite(context: &str, error: rusqlite::Error) -> Self {
+        match Self::from(error) {
+            Self::DiskFull { context: detail } => Self::DiskFull {
+                context: format!("{context}: {detail}"),
+            },
+            other => other,
+        }
     }
 
     /// Is this the disk-full answer? The one predicate a caller needs, so a

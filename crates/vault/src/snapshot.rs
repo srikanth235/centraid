@@ -72,6 +72,17 @@ pub enum Step {
 pub enum Fault {
     /// Abort as soon as this step has finished, as a process death would.
     AbortAfter(Step),
+    /// Write the copy somewhere else — for a test that needs `VACUUM INTO` to
+    /// fail for a REAL reason.
+    ///
+    /// A snapshot build can never exhaust SQLite pages (D-1020-D1-17): every
+    /// step after the copy only ever FREES pages, so `PRAGMA max_page_count`
+    /// has nothing to refuse, and SQLite clamps a cap up to the current size
+    /// anyway. The disk-full surface of a build is the two FILE writes — the
+    /// `VACUUM INTO` and the gzip — and this redirects the first of them. A
+    /// test on Linux points it at `/dev/full`, which returns ENOSPC on every
+    /// write and makes SQLite report a genuine `SQLITE_FULL`.
+    CopyTo(&'static str),
 }
 
 /// The identity of a snapshot artifact — lane C's `SnapshotHead`, in Rust
@@ -102,6 +113,13 @@ impl Vault {
             });
         }
         Ok(())
+    }
+
+    fn copy_target(&self) -> Option<&'static str> {
+        match self.fault.get() {
+            Some(Fault::CopyTo(path)) => Some(path),
+            _ => None,
+        }
     }
 }
 
@@ -149,7 +167,9 @@ pub fn build_snapshot(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
 
 fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(SnapshotHead, PathBuf)> {
     // 1. VACUUM INTO. Not a transaction, and it cannot be in one.
-    let target = working.to_string_lossy().to_string();
+    let target = vault
+        .copy_target()
+        .map_or_else(|| working.to_string_lossy().to_string(), str::to_owned);
     vault
         .connection()
         .execute("VACUUM INTO ?1", [&target])
@@ -175,11 +195,13 @@ fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(Snaps
     vault.fault_at(Step::Redacted)?;
 
     // 6. The log goes, the cursor stays.
-    copy.execute("DELETE FROM replica_log", [])?;
+    copy.execute("DELETE FROM replica_log", [])
+        .map_err(|error| VaultError::from_sqlite("truncating the snapshot's log", error))?;
     copy.execute(
         "UPDATE replica_meta SET floor_seq = ?1, active_commit_id = NULL WHERE singleton = 1",
         [seq],
-    )?;
+    )
+    .map_err(|error| VaultError::from_sqlite("keeping the snapshot's cursor", error))?;
     vault.fault_at(Step::LogTruncated)?;
 
     // 7. The step that reclaims the pages.
@@ -233,6 +255,9 @@ fn numbers_from(copy: &Connection) -> Result<(String, String, i64, i64)> {
 }
 
 /// Drop every object a seat's copy must not carry.
+///
+/// Every statement's failure is classified, because a drop is where a capped
+/// or genuinely full disk shows up: dropping a table writes to the freelist.
 fn drop_objects(copy: &Connection) -> Result<()> {
     let private: Vec<String> = centraid_ontology::registries::private_table_names()
         .into_iter()
