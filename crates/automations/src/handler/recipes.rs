@@ -132,9 +132,14 @@ pub const CATALOGUE: [Recipe; 6] = [
         domain: EnrichDomain::Photos,
         lane: EnrichLane::Device,
         content: ContentRead::Preview,
-        // Photos' schema. A region and its embedding are two rows.
-        result_command: "media.upsert_face_region",
-        also_command: Some("enrich.upsert_embedding"),
+        // ONE command, not two: `enrich.upsert_faces` writes the region and
+        // its embedding in one act, because a region with no vector is a box
+        // nothing can ever match and a vector with no region is an orphan.
+        // The rows land in `media_face_region`, which is the Photos lane's
+        // table — but the COMMAND is the `enrich` schema's, which is this
+        // lane's, and that is the line the census draws.
+        result_command: "enrich.upsert_faces",
+        also_command: None,
         weights_capability: Some("faces"),
         model_id: Some("yunet-arcface@1"),
     },
@@ -163,6 +168,37 @@ pub const CATALOGUE: [Recipe; 6] = [
         model_id: None,
     },
 ];
+
+/// Result commands another lane owns and that are **not on this build yet**.
+///
+/// `core.set_extracted_text` is the Docs lane's, in the `core` schema (census
+/// §Cross-lane). It is named here rather than silently absent, because a recipe
+/// whose result command does not exist is unavailable and the honest place to
+/// say so is beside the recipe. [`pending_commands`] is what the parity
+/// manifest reads to mark those cases `pending: core`.
+pub const PENDING_COMMANDS: [&str; 1] = ["core.set_extracted_text"];
+
+/// Is this result command carried by this build's command registry?
+///
+/// The answer is a LIST rather than a registry lookup, because
+/// `crates/automations` does not depend on `crates/vault` — the spine holds no
+/// SQL and no command catalogue. The list is held against the real registry by
+/// a test in `crates/centraid`, which sees both.
+#[must_use]
+pub fn is_pending(command: &str) -> bool {
+    PENDING_COMMANDS.contains(&command)
+}
+
+/// Every result command that is waiting on another lane, sorted.
+#[must_use]
+pub fn pending_commands() -> Vec<&'static str> {
+    let mut pending: Vec<&'static str> = result_commands()
+        .into_iter()
+        .filter(|command| is_pending(command))
+        .collect();
+    pending.sort_unstable();
+    pending
+}
 
 /// `doc-text-extractor` is a SYSTEM recipe with no template row of its own:
 /// it is the PDF text layer, which is extraction rather than inference. It is
@@ -238,6 +274,7 @@ mod tests {
                 "{}",
                 recipe.id
             );
+            assert!(recipe.also_command.is_none(), "{}", recipe.id);
             if let Some(model) = recipe.model_id {
                 assert!(model.contains('@'), "{model} is not <name>@<version>");
             }
@@ -276,8 +313,8 @@ mod tests {
             [
                 "core.set_extracted_text",
                 "enrich.upsert_embedding",
+                "enrich.upsert_faces",
                 "media.set_place_gazetteer",
-                "media.upsert_face_region",
             ]
         );
         // `enrich.*` is this lane's; `core.*` is Docs'; `media.*` is Photos'.
@@ -286,7 +323,11 @@ mod tests {
             .filter(|command| command.starts_with("enrich."))
             .copied()
             .collect();
-        assert_eq!(owned, ["enrich.upsert_embedding"]);
+        assert_eq!(owned, ["enrich.upsert_embedding", "enrich.upsert_faces"]);
+        // And the one that is WAITING on another lane is named rather than
+        // silently absent.
+        assert_eq!(pending_commands(), ["core.set_extracted_text"]);
+        assert!(!is_pending("enrich.upsert_embedding"));
     }
 
     /// `place-names` reads no media bytes at all, and carries no weights.

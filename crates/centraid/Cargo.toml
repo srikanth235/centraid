@@ -20,6 +20,7 @@ centraid-core = { path = "../core" }
 centraid-net = { path = "../net" }
 centraid-protocol = { path = "../protocol" }
 centraid-assist = { path = "../assist" }
+centraid-automations = { path = "../automations" }
 centraid-vault = { path = "../vault" }
 base64.workspace = true
 clap.workspace = true

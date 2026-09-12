@@ -190,10 +190,57 @@ enum Command {
         #[command(subcommand)]
         command: AssistCommand,
     },
+    /// The automations surface: what this release ships, what a trigger may
+    /// watch, when a schedule next fires, and the webhook door (#1020,
+    /// D-1020-AU5). A **client**: the gateway holds the scheduler, so nothing
+    /// here fires anything.
+    Automations {
+        #[command(subcommand)]
+        command: AutomationsCommand,
+    },
     /// Serve the vault's tool surface to a harness over stdin and stdout
     /// (#1020, D-1020-AS2). Launched by the harness as its MCP child, never by
     /// a person; stdout IS the protocol. There is no listening socket.
     Mcp,
+}
+
+#[derive(Subcommand)]
+enum AutomationsCommand {
+    /// The recipe catalogue: six templates, their provenance tiers, what each
+    /// reads and which command its result is persisted through.
+    Recipes {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Every entity a condition or data trigger may watch. The positive form
+    /// of the loop guard: the runtime's own tables are absent rather than
+    /// listed as forbidden.
+    Watchable {
+        #[arg(long)]
+        json: bool,
+    },
+    /// The next runs of one cron expression. `--zone` is REQUIRED: a schedule
+    /// has no meaning without one, and this machine's clock is not an answer.
+    Next {
+        expr: String,
+        #[arg(long)]
+        zone: Option<String>,
+        #[arg(long, default_value_t = 5)]
+        count: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Hand one inbound webhook delivery to the gateway, payload on stdin.
+    /// The secret comes from a file or the environment, never from a flag.
+    Deliver {
+        webhook_id: String,
+        #[arg(long)]
+        delivery_id: Option<String>,
+        #[arg(long)]
+        secret_file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -476,6 +523,36 @@ fn main() -> ExitCode {
                 AssistCommand::Adapters { install, json } => {
                     cmd::assist::run(cmd::assist::Args::Adapters { install, json })
                 }
+            },
+            Command::Automations { command } => match command {
+                AutomationsCommand::Recipes { json } => {
+                    cmd::automations::run(cmd::automations::Args::Recipes { json })
+                }
+                AutomationsCommand::Watchable { json } => {
+                    cmd::automations::run(cmd::automations::Args::Watchable { json })
+                }
+                AutomationsCommand::Next {
+                    expr,
+                    zone,
+                    count,
+                    json,
+                } => cmd::automations::run(cmd::automations::Args::Next {
+                    expr,
+                    zone,
+                    count,
+                    json,
+                }),
+                AutomationsCommand::Deliver {
+                    webhook_id,
+                    delivery_id,
+                    secret_file,
+                    json,
+                } => cmd::automations::run(cmd::automations::Args::Deliver {
+                    webhook_id,
+                    delivery_id,
+                    secret_file,
+                    json,
+                }),
             },
             // stdout IS the protocol here too, for the same reason as
             // `native-host`: a stray line desynchronises the harness's parser.
