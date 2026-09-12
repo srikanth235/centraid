@@ -435,3 +435,140 @@ describe("the snapshot door over HTTP", () => {
     await expect(iterate()).rejects.toThrow(/moved/u);
   });
 });
+
+describe("the seq pin on the snapshot door (#1014, V4)", () => {
+  const head = new Headers({
+    etag: '"e1-7"',
+    "content-length": "128",
+    "x-centraid-seat-seq": "7",
+    "x-centraid-seat-epoch": "e1",
+    "x-centraid-schema-epoch": "2",
+  });
+
+  it("asks for the artifact it measured, not for whatever is current", async () => {
+    // A gateway that never stands still rebuilds the snapshot between the HEAD
+    // and the GET, and `If-Range` refuses the resume. The pin is the seat
+    // naming the file it is downloading so the door can keep serving it.
+    const asked: string[] = [];
+    const door = httpSeatSnapshotTransport({
+      url: "/vault/seat/snapshot",
+      fetch: (input) => {
+        asked.push(String(input));
+        return Promise.resolve(
+          new Response(new Uint8Array([1, 2, 3]), {
+            status: 206,
+            headers: head,
+          })
+        );
+      },
+    });
+    await door.head();
+    for await (const _chunk of door.range(64, '"e1-7"')) void _chunk;
+    expect(asked[0]).toBe("/vault/seat/snapshot");
+    expect(asked[1]).toBe("/vault/seat/snapshot?seq=7");
+  });
+
+  it("sends no pin before a head, so an unmeasured door is asked plainly", async () => {
+    const asked: string[] = [];
+    const door = httpSeatSnapshotTransport({
+      url: "/vault/seat/snapshot",
+      fetch: (input) => {
+        asked.push(String(input));
+        return Promise.resolve(
+          new Response(new Uint8Array([1]), { status: 200, headers: head })
+        );
+      },
+    });
+    for await (const _chunk of door.range(0, '"e1-7"')) void _chunk;
+    expect(asked).toStrictEqual(["/vault/seat/snapshot"]);
+  });
+});
+
+describe("the seat's file during a download (#1014, lane H)", () => {
+  it("keeps the outbox reachable until the install itself", async () => {
+    // WHAT THE OLD ORDER COST. The handle was released before the transport
+    // was even built, so for the whole of a multi-minute download on a phone
+    // every read, `state()` and — the one that matters — `outbox()` threw
+    // `SeatWorkerNotOpenError`: a queued write the member could not reach, and
+    // a `close()` that threw on the way out. Only `install` touches the
+    // destination, so only `install` needs the file shut.
+    const root = workspace();
+    const bytes = seatArtifact(root);
+    let midDownload: (() => void) | undefined;
+    const arrived = new Promise<void>((resolve) => {
+      midDownload = resolve;
+    });
+    let letGo: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      letGo = resolve;
+    });
+    const worker = new SeatWorkerCore({
+      openDatabase: () => new NodeSeatDriver(path.join(root, "seat.db")),
+      staging: () =>
+        nodeSeatStaging({
+          directory: path.join(root, "staging"),
+          databasePath: path.join(root, "seat.db"),
+        }),
+      transport: () => ({
+        head: () =>
+          Promise.resolve({
+            etag: '"e1-7"',
+            bytes: bytes.byteLength,
+            seq: 7,
+            epoch: "e1",
+            schemaEpoch: 2,
+          }),
+        range: (start: number) => ({
+          async *[Symbol.asyncIterator]() {
+            const half = Math.floor((bytes.byteLength - start) / 2);
+            yield bytes.subarray(start, start + half);
+            midDownload?.();
+            await held;
+            yield bytes.subarray(start + half);
+          },
+        }),
+      }),
+    });
+    await worker.open(OPEN);
+    const bootstrapping = worker.bootstrap({
+      vaultId: "vault-1",
+      snapshotUrl: "/snapshot",
+    });
+    await arrived;
+    // Halfway through the artifact, and the seat is still a seat.
+    expect(() => worker.outbox()).not.toThrow();
+    letGo?.();
+    await expect(bootstrapping).resolves.toMatchObject({ seq: 7 });
+    worker.close();
+  });
+
+  it("keeps its file when the artifact is refused before a byte moves", async () => {
+    // A bootstrap refused at the door — no room, a mis-addressed artifact —
+    // never reaches the install and must therefore never have closed anything.
+    const root = workspace();
+    const worker = new SeatWorkerCore({
+      openDatabase: () => new NodeSeatDriver(path.join(root, "seat.db")),
+      staging: () =>
+        nodeSeatStaging({
+          directory: path.join(root, "staging"),
+          databasePath: path.join(root, "seat.db"),
+        }),
+      transport: () => ({
+        head: () => Promise.reject(new Error("the door is not there")),
+        range: () => ({
+          // oxlint-disable-next-line require-yield
+          async *[Symbol.asyncIterator]() {
+            throw new Error("never reached");
+          },
+        }),
+      }),
+    });
+    await worker.open(OPEN);
+    await expect(
+      worker.bootstrap({ vaultId: "vault-1", snapshotUrl: "/snapshot" })
+    ).rejects.toThrow(/not there/u);
+    expect(() => worker.outbox()).not.toThrow();
+    expect(worker.state()).toBeUndefined();
+    worker.close();
+  });
+});

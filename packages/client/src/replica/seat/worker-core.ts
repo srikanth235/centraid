@@ -185,32 +185,50 @@ export class SeatWorkerCore {
   ): Promise<SeatBootstrapResult> {
     const open = this.#open;
     if (!open) throw new SeatWorkerNotOpenError();
-    // THE CARRY-OVER COMES OUT BEFORE THE SWAP, NOT AFTER (R23). The queued
-    // intents, the held blobs and the pins exist nowhere but this file; a
-    // window in which a crash loses them is a repair that destroys the
-    // member's work, and unlike every row here, none of it can be re-fetched.
-    const carried: SeatCarryOver | undefined = this.#driver
-      ? readSeatCarryOver(this.#driver)
-      : undefined;
-    // AND IT GOES SOMEWHERE DURABLE BEFORE THE HANDLE IS RELEASED (#1014,
-    // C5/T6). Reading it into a local was never the guarantee the member was
-    // given: the download that follows takes minutes on a phone, `install()`
-    // deletes the old file before it moves the new one in, and a process
-    // killed anywhere in there had the queue in nothing but a heap object.
-    // The stash is on disk before the file it came out of is closed, and it is
-    // removed only after the write-back has committed into the new one.
     const sidecar = await this.host.carryOver?.(open);
-    const stashed =
-      sidecar && carried && !seatCarryOverIsEmpty(carried)
-        ? serializeSeatCarryOver(carried, open.vaultId)
-        : undefined;
-    if (sidecar && stashed !== undefined) await sidecar.write(stashed);
-    // The handle is released BEFORE the install: a file cannot be replaced
-    // underneath an open SQLite connection on any of the three hosts, and the
-    // one that tolerates it does so by keeping the deleted inode alive, which
-    // is worse — the seat would go on reading the file it just replaced.
-    this.#driver?.close();
-    this.#driver = undefined;
+    let released = false;
+    let carried: SeatCarryOver | undefined;
+    let stashed: string | undefined;
+    /**
+     * THE LAST MOMENT BEFORE THE DESTINATION IS TOUCHED (#1014, C5/T6).
+     *
+     * Everything that has to happen while this seat's file is still open, in
+     * the order it has to happen in — and it runs when the download is DONE
+     * rather than before it starts (`beforeInstall`). The seat therefore keeps
+     * answering reads and, above all, keeps its outbox reachable for the whole
+     * of a multi-minute download; the window in which `SeatWorkerNotOpenError`
+     * is the honest answer is now the install alone.
+     *
+     * THE CARRY-OVER COMES OUT BEFORE THE SWAP, NOT AFTER (R23). The queued
+     * intents, the held blobs and the pins exist nowhere but this file; a
+     * window in which a crash loses them is a repair that destroys the
+     * member's work, and unlike every row here, none of it can be re-fetched.
+     * Read HERE rather than at the top, so an intent the member queued DURING
+     * the download travels too.
+     *
+     * AND IT GOES SOMEWHERE DURABLE BEFORE THE HANDLE IS RELEASED (#1014,
+     * C5/T6). Reading it into a local was never the guarantee the member was
+     * given: `install()` deletes the old file before it moves the new one in,
+     * and a process killed anywhere in there had the queue in nothing but a
+     * heap object. The stash is on disk before the file it came out of is
+     * closed, and it is removed only after the write-back has committed into
+     * the new one.
+     */
+    const release = async (): Promise<void> => {
+      carried = this.#driver ? readSeatCarryOver(this.#driver) : undefined;
+      stashed =
+        sidecar && carried && !seatCarryOverIsEmpty(carried)
+          ? serializeSeatCarryOver(carried, open.vaultId)
+          : undefined;
+      if (sidecar && stashed !== undefined) await sidecar.write(stashed);
+      // A file cannot be replaced underneath an open SQLite connection on any
+      // of the three hosts, and the one that tolerates it does so by keeping
+      // the deleted inode alive, which is worse — the seat would go on reading
+      // the file it just replaced.
+      this.#driver?.close();
+      this.#driver = undefined;
+      released = true;
+    };
     try {
       const [staging, transport] = await Promise.all([
         this.host.staging(options),
@@ -224,6 +242,7 @@ export class SeatWorkerCore {
         ...(options.expansion === undefined
           ? {}
           : { expansion: options.expansion }),
+        beforeInstall: release,
         onProgress: (progress) => this.sink.onBootstrapProgress?.(progress),
       });
       const driver = await this.host.openDatabase(open);
@@ -239,17 +258,19 @@ export class SeatWorkerCore {
       return result;
     } catch (error) {
       // A FAILED BOOTSTRAP MUST NOT COST THE MEMBER THEIR QUEUE'S DOOR
-      // (#1014, C5). The handle was released above and there is no `finally`
-      // that puts it back, so every later call on this worker — `outbox()`
-      // most of all, which is where the member's unsent writes live — threw
+      // (#1014, C5). Once `release` has run there is no `finally` that puts
+      // the handle back, so every later call on this worker — `outbox()` most
+      // of all, which is where the member's unsent writes live — threw
       // `SeatWorkerNotOpenError` until something re-opened the file. On the
       // phone that is a refused download turning a queued write into an
       // unreachable one, and `NativeReplicaSession.close()` itself throwing.
       //
       // So the file is re-adopted on the way out, and the replay runs: if the
       // install DID land before the failure, the stash goes back into it here
-      // rather than waiting for the next open.
-      await this.#reopen(open).catch(() => undefined);
+      // rather than waiting for the next open. A failure BEFORE `release` left
+      // the handle open and must not be given a second one — `#adopt` replaces
+      // the field without closing what was there.
+      if (released) await this.#reopen(open).catch(() => undefined);
       throw error;
     }
   }

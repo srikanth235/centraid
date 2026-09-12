@@ -98,6 +98,23 @@ export const SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER = "x-centraid-schema-epoch";
  */
 export const SEAT_SNAPSHOT_VAULT_HEADER = "x-centraid-seat-vault";
 
+/**
+ * THE SEAT PINS THE ARTIFACT IT MEASURED (#1014, V4).
+ *
+ * The snapshot door builds for the CURRENT watermark, and a gateway is never
+ * quiescent — the system recognition automations write their conversation
+ * ledger on every boot, and those rows replicate. So a phone that HEADed seq 4
+ * and then asked for bytes was answered with seq 5, which `If-Range` correctly
+ * refuses as "a different file". On a slow enough connection against a busy
+ * enough gateway that repeats forever and no bootstrap ever lands.
+ *
+ * `?seq=` is the seat saying WHICH artifact it is downloading. The door serves
+ * that one while it still holds it and falls back to the current watermark when
+ * it does not — and a gateway older than #1014 ignores the parameter entirely,
+ * which is why the client keeps the moved-artifact retry as well.
+ */
+export const SEAT_SNAPSHOT_SEQ_PARAM = "seq";
+
 /** What a seat reads off the snapshot door before it downloads a byte. */
 export interface SeatSnapshotHead {
   /** Strong, and immutable for its name: the artifact is a pure function of `seq`. */

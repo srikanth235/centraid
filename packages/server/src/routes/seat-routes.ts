@@ -42,6 +42,7 @@ import {
   SEAT_SNAPSHOT_EPOCH_HEADER,
   SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
   SEAT_SNAPSHOT_SEQ_HEADER,
+  SEAT_SNAPSHOT_SEQ_PARAM,
   SEAT_SNAPSHOT_VAULT_HEADER,
 } from "@centraid/core/protocol";
 import type {
@@ -75,6 +76,22 @@ const DEFAULT_LOG_PAGE = 1_000;
 const MAX_LOG_PAGE = SEAT_LOG_MAX_PAGE;
 /** How many built snapshots to keep. One per seq, newest first. */
 const DEFAULT_SNAPSHOT_CACHE = 2;
+
+/**
+ * The seq encoded in an artifact's name, or `undefined` for a foreign file.
+ *
+ * THE NAME SORTS BY ITS HASH, NOT BY ITS POSITION (#1014, V19). Eviction used
+ * to `sort().toReversed()` the directory listing, and `snapshot-<hash>-<seq>`
+ * orders by the hash prefix — so "keep the newest two" kept two arbitrary ones
+ * and could delete the artifact a phone was in the middle of downloading. The
+ * seq is the only ordering that means anything here, so it is read back out.
+ */
+function seqOfArtifact(name: string): number | undefined {
+  const match = /^snapshot-[0-9a-f]{16}-(?<seq>\d+)\.db\.gz$/u.exec(name);
+  if (!match?.groups) return undefined;
+  const seq = Number(match.groups["seq"]);
+  return Number.isSafeInteger(seq) ? seq : undefined;
+}
 
 export interface SeatRouteOptions {
   enrollments?: EnrollmentStore;
@@ -114,23 +131,46 @@ function artifactName(epoch: string, seq: number): string {
 }
 
 /**
- * The snapshot for the current watermark, built once and cached.
+ * The snapshot a seat asked for, built once and cached.
  *
  * ONE CACHED SNAPSHOT PER SEQ. The artifact is a pure function of the log
  * position it was taken at, so a second seat bootstrapping at the same
  * position gets the same bytes and the same ETag — which is what makes a
  * resumed download resumable across gateway restarts rather than only within
  * one process.
+ *
+ * AND A SEAT MAY PIN THE ONE IT MEASURED (#1014, V4). Without a pin the door
+ * answers for the CURRENT watermark, and this gateway is never quiescent — the
+ * system recognition automations write their conversation ledger on every boot
+ * and those rows replicate. A phone that HEADed seq 4 and then asked for bytes
+ * got seq 5, `If-Range` refused it as a different file, and the bootstrap
+ * started over; on a slow enough connection it never finishes. `pin` is the
+ * seat naming the artifact it is downloading, served while this directory
+ * still holds it and quietly ignored when it does not — the client's
+ * moved-artifact retry is what covers that, and what covers a gateway older
+ * than #1014 that ignores the parameter outright.
  */
 function snapshotFor(
   vault: Parameters<typeof buildSeatSnapshot>[0],
   dir: string,
-  cacheSize: number
+  cacheSize: number,
+  pin: number | undefined,
+  inFlight: ReadonlySet<string>
 ): SnapshotArtifact {
   const state = replicaLogState(vault);
-  const seq = state.watermark.seq;
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, artifactName(state.epoch, seq));
+  let seq = state.watermark.seq;
+  let file = path.join(dir, artifactName(state.epoch, seq));
+  // A pin is honoured only for an artifact that is ALREADY BUILT: rebuilding a
+  // past watermark is impossible (the vault has moved on) and building nothing
+  // is the point — the pin exists to reuse bytes this directory still has.
+  if (pin !== undefined && pin !== seq) {
+    const pinned = path.join(dir, artifactName(state.epoch, pin));
+    if (existsSync(pinned)) {
+      seq = pin;
+      file = pinned;
+    }
+  }
   if (!existsSync(file)) {
     // Build beside the destination and rename in: a reader that arrives
     // mid-build must see either no artifact or a complete one, never a
@@ -148,16 +188,20 @@ function snapshotFor(
     renameSync(staged, file);
     void built;
   }
-  // Keep the newest few; an older seq is only useful to a download already in
-  // flight, and holding every one of them is how a snapshot cache becomes a
-  // second copy of the vault per commit.
+  // Keep the newest few BY SEQ, and never the artifact this request is about
+  // to serve nor one with a download already in flight — an older seq is
+  // exactly what a resuming phone is still reading, and holding every one of
+  // them is how a snapshot cache becomes a second copy of the vault per commit.
   const kept = readdirSync(dir)
-    .filter((name) => name.startsWith("snapshot-") && name.endsWith(".db.gz"))
-    .sort()
-    .toReversed();
-  for (const name of kept.slice(cacheSize)) {
-    if (path.join(dir, name) !== file)
-      rmSync(path.join(dir, name), { force: true });
+    .map((name) => ({ name, seq: seqOfArtifact(name) }))
+    .filter(
+      (entry): entry is { name: string; seq: number } => entry.seq !== undefined
+    )
+    .sort((a, b) => b.seq - a.seq);
+  for (const entry of kept.slice(cacheSize)) {
+    const candidate = path.join(dir, entry.name);
+    if (candidate === file || inFlight.has(candidate)) continue;
+    rmSync(candidate, { force: true });
   }
   return {
     file,
@@ -211,6 +255,24 @@ export function makeSeatRouteHandler(
 ): RouteHandler {
   const maxPage = options.maxLogPage ?? MAX_LOG_PAGE;
   const cacheSize = options.snapshotCacheSize ?? DEFAULT_SNAPSHOT_CACHE;
+  /**
+   * How many responses are streaming each artifact right now (#1014, V4).
+   *
+   * Eviction runs on every snapshot request, and the request that triggers it
+   * is by definition not the only one in the building. Deleting a file out
+   * from under an open `createReadStream` is a truncated download on some
+   * platforms and a held inode on others; either way it is the resume this
+   * whole door exists to make safe, broken by the cache that serves it.
+   */
+  const inFlight = new Map<string, number>();
+  const holdArtifact = (file: string): (() => void) => {
+    inFlight.set(file, (inFlight.get(file) ?? 0) + 1);
+    return (): void => {
+      const held = (inFlight.get(file) ?? 1) - 1;
+      if (held <= 0) inFlight.delete(file);
+      else inFlight.set(file, held);
+    };
+  };
   return async (req, res): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
     const SEAT_PATHS: readonly string[] = [
@@ -378,7 +440,19 @@ export function makeSeatRouteHandler(
         message: "this gateway has no durable directory to build a snapshot in",
       });
     }
-    const artifact = snapshotFor(plane.db.vault, dir, cacheSize);
+    // THE PIN IS A HINT, NEVER A DEMAND (#1014, V4). A seat naming a seq this
+    // gateway no longer holds — or naming nonsense — is answered with the
+    // current watermark, which its `If-Range` check then correctly reads as
+    // "the artifact moved" and its retry starts over against.
+    const rawPin = url.searchParams.get(SEAT_SNAPSHOT_SEQ_PARAM);
+    const pin = rawPin === null ? Number.NaN : Number(rawPin);
+    const artifact = snapshotFor(
+      plane.db.vault,
+      dir,
+      cacheSize,
+      Number.isSafeInteger(pin) && pin >= 0 ? pin : undefined,
+      new Set(inFlight.keys())
+    );
     options.logger?.info(
       `seat snapshot for ${vaultId}: seq ${artifact.seq}, ${artifact.bytes} bytes, ` +
         `${headOnly ? "HEAD" : "GET"}`
@@ -425,10 +499,18 @@ export function makeSeatRouteHandler(
         `bytes ${range.start}-${range.end}/${artifact.bytes}`
       );
       res.setHeader("Content-Length", String(range.end - range.start + 1));
-      await pipeline(
-        createReadStream(artifact.file, { start: range.start, end: range.end }),
-        res as unknown as NodeJS.WritableStream
-      );
+      const release = holdArtifact(artifact.file);
+      try {
+        await pipeline(
+          createReadStream(artifact.file, {
+            start: range.start,
+            end: range.end,
+          }),
+          res as unknown as NodeJS.WritableStream
+        );
+      } finally {
+        release();
+      }
       return true;
     }
     res.statusCode = 200;
@@ -440,10 +522,15 @@ export function makeSeatRouteHandler(
       res.end();
       return true;
     }
-    await pipeline(
-      createReadStream(artifact.file),
-      res as unknown as NodeJS.WritableStream
-    );
+    const release = holdArtifact(artifact.file);
+    try {
+      await pipeline(
+        createReadStream(artifact.file),
+        res as unknown as NodeJS.WritableStream
+      );
+    } finally {
+      release();
+    }
     return true;
   };
 }
