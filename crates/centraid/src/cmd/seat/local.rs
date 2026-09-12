@@ -233,6 +233,12 @@ pub enum SeatMessage {
         id: u64,
         start: u64,
         end: u64,
+        /// The last byte of the range the seat RESOLVED, before the frame
+        /// ceiling clamped it. The shell needs it to set an honest
+        /// `Content-Length` and to know how many more windows to pull: it
+        /// cannot re-derive it, because the `Range` grammar (and its open-range
+        /// clamp) lives here.
+        req_end: u64,
         total: Option<u64>,
         complete: bool,
         /// Whether the client asked with a `Range` header. `false` means the

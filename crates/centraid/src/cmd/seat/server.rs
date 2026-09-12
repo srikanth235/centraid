@@ -728,6 +728,7 @@ async fn blob_range(
             end: addressable.saturating_sub(1),
         },
     };
+    let resolved_end = range.end;
     let range = blob::ByteRange {
         start: range.start,
         end: range
@@ -765,6 +766,7 @@ async fn blob_range(
             id,
             start,
             end,
+            req_end: resolved_end,
             total: after.as_ref().and_then(|shape| shape.total),
             complete: after.as_ref().is_some_and(|shape| shape.complete),
             partial: header.is_some(),
