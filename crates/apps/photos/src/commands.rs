@@ -155,10 +155,19 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
     ACTIONS.iter().find(|row| row.action == action)
 }
 
-/// `core.tag_item` and `core.untag_item` are polymorphic over a target type,
-/// and Photos' targets are always assets. The action's input names an
-/// `asset_id`; the command takes `target_type` + `target_id`.
-const TAG_TARGET_TYPE: &str = "media.asset";
+/// `core.tag_item` is polymorphic over a SUBJECT type, and Photos' subjects are
+/// always assets. The action's input names an `asset_id`; the command takes
+/// `subject_type` + `subject_id` (`packages/vault/src/commands/tags.ts:80-85`,
+/// and `crates/vault/src/commands/core.rs`'s `TAGGABLE`).
+const TAG_SUBJECT_TYPE: &str = "media.asset";
+
+/// **The capability stays pinned to `faces`, and it is the CONSENT SCOPE**
+/// (#352, `actions/request-enrichment.ts:3`). Before `enrich_request` carried
+/// one, the owner's on-demand ask was untagged, so a face-detection consent
+/// handed the same queue row to every enabled enricher and each one read the
+/// member's "detect faces" as its own permission. A port that dropped the
+/// field would re-open that.
+const ENRICH_CAPABILITY: &str = "faces";
 
 /// Run one of the app's actions.
 ///
@@ -168,12 +177,13 @@ const TAG_TARGET_TYPE: &str = "media.asset";
 /// Two translations happen, and both are v0's:
 ///
 /// 1. `tag-asset`'s `{asset_id, label}` becomes `core.tag_item`'s
-///    `{target_type: "media.asset", target_id, label}`, and `untag-asset`'s
+///    `{subject_type: "media.asset", subject_id, label}`, and `untag-asset`'s
 ///    `{tag_id}` passes straight through — **untag removes the edge by id,
-///    never by label** (`actions/tag-asset.ts`, `_shared/concept-scheme-kit.ts`).
-/// 2. `request-enrichment` defaults its target to the whole photos domain when
-///    the caller names none: the ask is "prioritise faces", not "enrich this
-///    one photograph" (`actions/request-enrichment.ts`).
+///    never by label** (`actions/tag-asset.ts`, `actions/untag-asset.ts`).
+/// 2. `request-enrichment` carries `reason: "manual"` and
+///    `capability: "faces"`, and omits `entity_id` entirely when the caller
+///    named none — the ask is "prioritise faces", not "enrich this one
+///    photograph" (`actions/request-enrichment.ts`).
 pub fn run(
     door: &dyn Commands,
     action: &str,
@@ -189,19 +199,28 @@ pub fn run(
     if row.action == "tag-asset" {
         let asset = input.remove("asset_id").unwrap_or(Value::Null);
         input.insert(
-            "target_type".to_owned(),
-            Value::String(TAG_TARGET_TYPE.to_owned()),
+            "subject_type".to_owned(),
+            Value::String(TAG_SUBJECT_TYPE.to_owned()),
         );
-        input.insert("target_id".to_owned(), asset);
+        input.insert("subject_id".to_owned(), asset);
     }
     if row.action == "request-enrichment" {
         input
             .entry("entity_type".to_owned())
             .or_insert_with(|| Value::String("media.asset".to_owned()));
+        // An absent target is ABSENT, not null: `enrich_request.target_id` is
+        // nullable and a JSON `null` is a value the schema refuses.
+        if input.get("entity_id").is_some_and(Value::is_null) {
+            input.remove("entity_id");
+        }
         // `reason: "manual"` is the owner's ask, and the only reason an app may
         // write (`enrich_request.reason`'s CHECK admits `projected` too, and
         // that one is minted by the vault itself).
         input.insert("reason".to_owned(), Value::String("manual".to_owned()));
+        input.insert(
+            "capability".to_owned(),
+            Value::String(ENRICH_CAPABILITY.to_owned()),
+        );
     }
     door.invoke(&Invocation {
         command: row.command,
@@ -328,16 +347,16 @@ mod tests {
         let seen = door.seen.borrow();
         assert_eq!(seen[0].command, "core.tag_item");
         assert_eq!(
-            seen[0].input.get("target_type"),
+            seen[0].input.get("subject_type"),
             Some(&Value::String("media.asset".to_owned()))
         );
         assert_eq!(
-            seen[0].input.get("target_id"),
+            seen[0].input.get("subject_id"),
             Some(&Value::String("a-1".to_owned()))
         );
         assert!(
             !seen[0].input.contains_key("asset_id"),
-            "the command takes target_id, not asset_id"
+            "the command takes subject_id, not asset_id"
         );
     }
 
@@ -372,6 +391,16 @@ mod tests {
         assert_eq!(
             seen[0].input.get("entity_type"),
             Some(&Value::String("media.asset".to_owned()))
+        );
+        // THE CONSENT SCOPE. Without it one enricher's consent is every
+        // enricher's.
+        assert_eq!(
+            seen[0].input.get("capability"),
+            Some(&Value::String("faces".to_owned()))
+        );
+        assert!(
+            !seen[0].input.contains_key("entity_id"),
+            "an absent target is absent, never a null"
         );
     }
 

@@ -37,6 +37,8 @@
 //! answered from the ledger.
 
 pub mod core;
+pub mod enrich;
+pub mod media;
 pub mod tally;
 
 use std::collections::BTreeMap;
@@ -207,6 +209,12 @@ impl Registry {
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
         for definition in core::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in enrich::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in media::definitions() {
             registry.register(definition)?;
         }
         for definition in tally::definitions() {

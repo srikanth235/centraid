@@ -60,7 +60,15 @@ pub const BLOB_ROUTE: &str = "/centraid/_vault/blobs";
 /// The flags and tags scheme URIs, and the star's notation. Restated here
 /// because `_shared/concept-scheme-kit.ts` is an import-free leaf on the v0
 /// side too; the values are asserted against the fixture in the parity test.
-pub const FLAGS_SCHEME_URI: &str = "centraid:flags:v1";
+///
+/// **The two URIs are spelled differently and that is deliberate**, not drift
+/// to tidy: the flags scheme is an `https` URI because flag SQL fragments are
+/// interpolated into condition SQL, where a `urn:`-style `:flags` reads as a
+/// NAMED PARAMETER (#258, the colon-literal trap) and no parameter name can
+/// start with a slash (`packages/blueprints/apps/_shared/concept-scheme-kit.ts:5`,
+/// `packages/vault/src/commands/flags.ts:11-15`). Unifying them would break
+/// every condition that mentions the scheme.
+pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
 pub const TAGS_SCHEME_URI: &str = "centraid:tags:v1";
 pub const STARRED_NOTATION: &str = "starred";
 

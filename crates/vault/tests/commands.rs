@@ -23,16 +23,23 @@ fn installed(seed: &str) -> (common::Scratch, Registry) {
 #[test]
 fn the_registry_carries_every_command_this_build_has() {
     let registry = registry();
-    // Three real `core.*` commands plus the 23 `tally.*` skeletons.
-    assert_eq!(registry.len(), 26);
-    assert_eq!(
+    // Three real `core.*` commands, the 23 `tally.*` skeletons, the whole
+    // 20-command `media.*` schema and the one app-facing `enrich.*` command
+    // (#1020, wave 4 lane Photos).
+    assert_eq!(registry.len(), 47);
+    let count = |prefix: &str| {
         registry
             .names()
             .iter()
-            .filter(|name| name.starts_with("tally."))
-            .count(),
-        23
-    );
+            .filter(|name| name.starts_with(prefix))
+            .count()
+    };
+    assert_eq!(count("core."), 3);
+    assert_eq!(count("tally."), 23);
+    assert_eq!(count("media."), 20);
+    assert_eq!(count("enrich."), 1);
+    assert!(registry.get("media.answer_face_proposal").is_some());
+    assert!(registry.get("enrich.request_enrichment").is_some());
     assert!(registry.get("core.add_party").is_some());
     assert!(registry.get("tally.add_expense").is_some());
     assert!(registry.get("tally.does_not_exist").is_none());
