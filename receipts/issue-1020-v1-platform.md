@@ -1167,3 +1167,152 @@ No v0 file was edited. `contracts/tools/export-recovery-kit-fixture.ts` **import
    **Result: the claim held, and this check is why D-1020-R8 exists** — the first honest run of exactly this comparison is what reported 29 absent tables, `locker_key` among them.
 
 A third, cheaper one, because `sha256sum` at one moment is not a claim that two files stay equal: the byte-identity of `contracts/golden/format-golden.json` with the v0 fixture is asserted **in code** by `the_contracts_copy_is_byte_identical_to_the_v0_fixture`. Flipping one byte of the contracts copy made it **fail** (`contracts/golden/format-golden.json has drifted from the v0 fixture`), and both files were confirmed back at `9a8cd304bc74f33d0562272ffd0517aad757edd3974400178667752e704d9464` afterwards. The test skips rather than fails once the v0 file is gone in wave 6.
+
+## Wave 2 — lane B2: the feedback-time budgets, re-based for a Rust workspace
+
+The wave-1 ledgers were seeded from a workspace of **one** crate over clap and serde_json. It holds **ten** now, over iroh, quinn, tokio, prost and rusqlite-bundled, with six more due in wave 2b and a Kotlin toolchain in wave 3, and the numbers no longer described anything: `cargo xtask gate --profile local` cost 1394.6 s on a cold tree against a 120 s budget, and `--profile pr` 1420.1 s against 900 s. The owner ruled on 2026-09-12, on [#1020](https://github.com/srikanth235/centraid/issues/1020): _"given that we're migrating away from ts to rust/kotlin, the earlier budget migh not hold...adjust accordingly!"_ — the one legitimate way a number in a down-only ledger rises. This lane spent that ruling once: every raised number carries its measurement, the state of the tree it was measured on and the multiplier that produced it, three numbers were **kept** because their measurement already sat under a third of the ceiling, and the ratchet code is exactly as strict as it was. It also learned to tell a warm tree from a cold one, because one budget cannot be right for both.
+
+### What landed
+
+`fix(xtask): scan the repository, not its build output, for secrets (#1020)`
+- `crates/xtask/src/gate.rs` — `run_secrets` keeps ONE unfiltered `gitleaks detect --no-git` scan (working-tree coverage is the whole point of `--no-git`) and classifies its JSON report afterwards: a finding is dropped only where `git check-ignore` matches the file **and** `git ls-files` does not track it. `external` was split so `missing_binary` is shared by the steps that classify their own report rather than their exit code. Two tests: `only_untracked_ignored_build_output_is_dropped_from_a_secrets_report` (a tracked-but-gitignored file stays), `a_gitleaks_report_is_read_by_its_file_field`.
+
+`feat(xtask): score the local profile warm or cold, and refuse mobile-jvm (#1020)`
+- `crates/xtask/src/gate.rs` — `Tree`, `member_packages`, `tree_state`, `has_linked_artifact`, `score`, the `mobile-jvm` refusal, and `COLD_LOCAL_KEY`. Five tests: the `.rmeta`-only tree, the partially built tree, `--cold`, both scoring branches including "a cold run with no stated ceiling fails", and `pr` scored against its budget on a cold tree.
+- `crates/xtask/src/measure.rs` — a key table (`cleanCheckSeconds`, `incrementalCheckSeconds`, `singleCrateTestSeconds`, `releaseBuildSeconds`, `coldLocalProfileSeconds`), `--only`, the app-crate edit for the incremental number, the heaviest crate for the single-crate number, and `take_cold_local_profile`. Four tests.
+- `crates/xtask/src/main.rs` — `--cold`, `--only`, the `MobileJvm` variant.
+
+`fix(xtask): the gate's last line is the verdict, budget included (#1020)`
+- `crates/xtask/src/gate.rs` — the verdict line reads `ok`, not the step list.
+
+`fix(xtask): name the unbuilt tree the ts-static step trips over (#1020)`
+- `crates/xtask/src/gate.rs` — `run_ts_static` names an unprovisioned tree instead of emitting hundreds of `Cannot find module '@centraid/server/engine'` lines.
+- `.github/workflows/gate.yml` — `bun run build` before the profile (provisioning is the workflow's job, not a charge on the profile's budget); `timeout-minutes` 20 → 40.
+
+`chore(ledgers): re-base the feedback-time budgets for nine Rust crates (#1020)` and `chore(ledgers): re-base release-build on lane R's slower sample too (#1020)`
+- `contracts/ledgers/gate-budgets.json`, `contracts/ledgers/compile-time.json` — the table below.
+- `docs/decisions.md` — `### Decisions — lane B2 (#1020)`, after lane V's block.
+- `docs/toolchain.md`, `docs/dev-environment.md`, `crates/xtask/README.md` — the budget sentences, the profile tables, the warm/cold rule, the measurement table.
+
+### Every ledger number, before and after
+
+| Ledger key | Before | Measured (tree) | Multiplier | After |
+| --- | --- | --- | --- | --- |
+| `profiles.local` | 120 | **24.0 s** warm at 9 members, **41.6 s** at 10 | KEPT — 35% of the ceiling | **120** |
+| `profiles.pr` | 900 | **1420.1 s** cold · 575.8 s warm | 1.06 — the next round number, no further | **1500** |
+| `profiles.nightly` | null | — | — | null |
+| `profiles.release` | null | — | — | null |
+| `profiles.mobile-jvm` | absent | — | placeholder | **null** |
+| `cleanCheckSeconds` | 180 | **541.7 / 480.8 s** | 2 on the higher | **1200** |
+| `incrementalCheckSeconds` | 10 | **0.6 / 0.5 s** (an app crate) | KEPT — 6% of the ceiling | **10** |
+| `singleCrateTestSeconds` | 60 | **2.4 / 2.5 s** (`-p centraid-net`, repeated) | KEPT — 4% of the ceiling | **60** |
+| `releaseBuildSeconds` | 600 | **240.3 / 401.0 / 475.0 s** here, **666.6 s** on lane R | 2 on the highest | **1400** |
+| `coldLocalProfileSeconds` | absent | **1394.6 s** at 9 members, **1562.4 s** at 10 (clippy 626.1 + test 935.6) | 2 on the higher | **3200** |
+| `kotlinNativeLinkSeconds` | absent | — | placeholder | **null** |
+
+The `local` profile's two lines, quoted:
+
+```
+xtask gate — profile local · hardware ci-linux-x64-4c · budget 120s
+  tree warm — all 10 workspace member(s) have a linked artifact in target/debug/deps
+  TOTAL                41.6
+  BUDGET ok — 41.6s of 120s
+gate local: PASS
+```
+```
+xtask gate — profile local · hardware ci-linux-x64-4c · budget 120s
+  tree cold — 9 of 10 workspace member(s) have no linked artifact in target/debug/deps (first: centraid); an `.rmeta` from a previous `cargo check` does not count
+  TOTAL              1562.4
+  BUDGET cold ok — 1562.4s of the 3200s `coldLocalProfileSeconds` ceiling in contracts/ledgers/compile-time.json; the warm 120s budget was not the number scored
+gate local: PASS
+```
+
+### Exit list
+
+| Command | Outcome |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo test -p xtask` | 37 passed (28 before this lane) |
+| `cargo test --workspace` | 371 passed at the pre-lane-R head; at the current head it passed inside the cold `local` run's `test` step (935.6 s). A standalone post-rebase run could not complete — see *Not done* |
+| `cargo xtask gate --profile local`, warm | PASS, 41.6 s of 120 s, `tree warm — all 10 workspace member(s) have a linked artifact` |
+| `cargo xtask gate --profile local`, cold | PASS, 1562.4 s of the 3200 s cold ceiling, `tree cold` (three earlier cold attempts died on ENOSPC — see *Not done*) |
+| `cargo xtask gate --profile pr` | FAIL on the two inherited reds only (`secrets`, `osv`); every other step green, `ts-static` 27.9 s green after `bun run build`. 575.8 s warm, 1420.1 s cold. Both runs predate the lane R rebase and the 900 -> 1500 budget line — not re-run, see *Not done* |
+| `cargo xtask measure` | four of five keys quoted below; the fifth was measured on its own |
+| `bun run format` / `format:check` | 5845 files, all correctly formatted |
+| `bash .governance/run.sh` | all 10 directives passed |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| `bun run check:push:static` | 4/4 in 212.7 s (lint, format:check, turbo:lint, typecheck:affected) |
+
+```
+xtask measure — hardware ci-linux-x64-4c · 5 of 5 key(s)
+  measuring cleanCheckSeconds        `cargo check --workspace` from an empty target/
+    target/ cleaned
+  cleanCheckSeconds           480.8
+  measuring incrementalCheckSeconds  `cargo check --workspace` after one line appended to an app crate
+    one line appended to crates/apps/tally/src/lib.rs and restored
+  incrementalCheckSeconds       0.5
+  measuring singleCrateTestSeconds   `cargo test -p centraid-net` repeated, the heaviest crate's steady-state loop
+  singleCrateTestSeconds        2.5
+  measuring releaseBuildSeconds      `cargo build --workspace --release` from an empty target/release
+    target/release removed
+  releaseBuildSeconds         401.0
+  measuring coldLocalProfileSeconds  `cargo xtask gate --profile local` with no debug artifacts on disk
+    target/debug removed — the gate runner is rebuilt inside this number
+  [the child gate ran to 443.1s and its `test` step died on ENOSPC; measure refused the number]
+xtask: measuring coldLocalProfileSeconds: `cargo xtask gate --profile local` failed on the cold tree — the measurement is the wall clock of a PASSING run, and a failing gate has a red step to fix first
+
+  not written — pass `--write` to update contracts/ledgers/compile-time.json
+```
+
+### Decisions — lane B2
+
+Mirrored into [docs/decisions.md](../docs/decisions.md#decisions--lane-b2-1020) with the options each one weighed. In brief, each citing [#1020](https://github.com/srikanth235/centraid/issues/1020):
+
+- **D-1020-B2-1** — the `local` budget is scored on a **warm** tree, detected by every workspace member having a *linked* artifact (`.rlib` or an extensionless executable) in `target/debug/deps`. Options weighed: a marker file (gameable), "`target/debug` exists" (bought by a 5 s `cargo check`), a mandatory `--cold` flag (an honesty system). Artifact presence is the only one that cannot be satisfied without having done the work, and it deliberately reads a *stale* incremental tree as warm, because that is the tree the loop runs on. A cold `local` run is charged against `coldLocalProfileSeconds` and **fails** when that key states no ceiling. Supersedes lane B's "local under 2 minutes after `cargo clean`" reading and answers lane C's owner hand-off 2.
+- **D-1020-B2-2** — every number is measurement × a stated multiplier. Default 3; **2** for the three large cold numbers, because 3× of a number that size is a ceiling no regression reaches and a budget nobody can miss is a log; **1.06** for `pr`, the next round number above its measurement and no further; **2 on the highest sample** for `releaseBuildSeconds`, because it is the one compile-time number a pull request goes red on and this container's samples spread 2.8×. Three keys kept their ceiling and say so.
+- **D-1020-B2-3** — `pr` stays Rust-only at 1500 s, recorded against #892's rung table: CI restores a Cargo cache, so the warm run (575.8 s) is the p95 the rung budgets and 1420.1 s is the cache-miss tail. Kotlin gets `mobile-jvm` and `kotlinNativeLinkSeconds`, both null, both wave 3 lane E's to measure; `--profile mobile-jvm` refuses.
+- **D-1020-B2-4** — no `approvedDeviation`, waiver or override was added. `ledger.rs`'s `a_risen_number_is_a_finding` still fails a raise against an existing base copy; **the re-base passed the `ledgers` step only because `origin/main` carries no `contracts/ledgers/` yet**, so the base copy is `None` and every entry reads as new. Once #1020 merges these are the baseline and only fall.
+- **D-1020-B2-5** — under the owner's correctness ruling ([R-1020-35](../docs/decisions.md#decisions--lane-v-1020)), lane C's owner hand-off 1: the `secrets` step scans the repository, not its build output. One scan, a report filtered by git's own answer to "is this a file we wrote?", both counts printed, `.gitleaks.toml` untouched. The alternative — one `gitleaks dir` per non-ignored top-level entry (71 of them) — measured 46.5 s against 2.7 s, because gitleaks compiles its ruleset per process.
+
+### Demonstrated reds
+
+- **The cold-with-no-ceiling branch.** Before `coldLocalProfileSeconds` existed, the 1394.6 s cold run printed `BUDGET cold — the 'local' profile took 1394.6s and contracts/ledgers/compile-time.json states no 'coldLocalProfileSeconds' ceiling for ci-linux-x64-4c. An unscored run is not a pass` and exited non-zero. With the ceiling in place the same run passes and names the ceiling it was charged against.
+- **The verdict line.** That same run also printed `gate local: PASS` underneath its budget failure, while exiting non-zero. Fixed; the verdict now reads the budget too, and a green-steps-over-budget run says `FAIL — over budget`.
+- **`measure --write` reported `HELD <key> at <the measurement>`** for a key it had just inserted, because the insert seeded `budgetSeconds` before the comparison read it — a ceiling pinned to one run while the note claimed nothing had moved. Caught by `the_writer_lowers_holds_and_sets_but_never_raises`, which fails on the old code.
+- **`secrets` on a built tree.** Six `.rmeta` false positives were lane C's hand-off; the fixed step reports `1 secret finding(s) in repository files (first: packages/model-runtime/LICENSES.md); 4 finding(s) dropped in files .gitignore excludes and git does not track (build output, e.g. target/debug/deps/libpem_rfc7468-a5a5ad3ac995aa15.rmeta)`. Four rather than six because the scan ran against a tree built to a different point; the count is whatever iroh's PEM doc strings are compiled into at scan time, which is exactly why it cannot be an allowlist row.
+- **`ts-static`.** On an unbuilt tree it reported `packages/server/src/serve/build-gateway.ts(4297,40): error TS` and 200-odd `Cannot find module '@centraid/server/engine'` lines. It now reports the unprovisioned tree by name, and passes (27.9 s) once `bun run build` has run.
+- **`mobile-jvm`** refuses rather than passing with no steps: `REFUSED the 'mobile-jvm' profile is a ledger placeholder with no steps … wave 3 lane E … measures them and sets them`, exit non-zero.
+- **`release`** still fails on `vps-smoke` (lane R made `restore-drill` real), so the profile cannot pass vacuously.
+
+### Findings outside the slice
+
+- **A cold `local` run compiles the dependency graph twice** — clippy 587.6 s and `cargo test --workspace` 806.5 s, check units then linkable artifacts. It is over half the 1394.6 s and it is what the issue's structural answers (sccache, mold or lld) are for. No fix attempted here; recorded as the number the next tooling wave is measured against.
+- **`cargo test -p centraid-net` and `cargo test --workspace` invalidate each other's artifacts** — 185.8 s and 161.7 s on the switch against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union. The gate runs `--workspace` and a developer iterating runs `-p`, so the loop pays this every time it changes shape. The structural answers are one `cargo test` shape for both, or a `[workspace] default-members` that makes them the same graph. Not fixed; `singleCrateTestSeconds` was NOT widened to absorb it.
+- **`gate.yml`'s job timeout was below its own gate's cold cost** — 20 minutes against a 1420.1 s `pr` run plus provisioning. A run the runner kills cannot report the budget it is scored against. Raised to 40 in this lane because it is the CI-side knob the budget semantics needed.
+- **`releaseBuildSeconds` is contention-sensitive on this hardware class** — 240.3 / 401.0 / 475.0 / 666.6 s for the same command on the same container, depending on which other lanes were building. Any per-step wall-clock ceiling scored on a shared runner inherits that spread; this is why the ceiling took 2× the highest sample rather than the median.
+- **One `cargo xtask measure` run died inside `cc-rs`** (`command did not execute successfully … "cc" "-O2"`) while building rusqlite-bundled at roughly 4 GB free. The measurement correctly refused to record a number off a failing gate. Worth knowing for any lane measuring on a shared allowance: the failure surfaces as a compiler error, not as a disk error.
+- **`ts-static` runs v0's whole-repo static gate because five v1 helper scripts are TypeScript** (`contracts/tools/*.ts`). #1020 ruled v0's gates off pull requests; this step puts the largest of them back on, under another name, for five files. Owner hand-off 3.
+
+### Owner hand-offs
+
+1. **`pr` at 1500 s against a rung-2 wall clock of 15 minutes.** The reading adopted is that the rung number budgets the **p95** (a Cargo-cache hit, 575.8 s) and this ledger number is the tail a cache miss must not exceed. Options if that is not the reading you want: (a) accept it as recorded; (b) hold `pr` at 900 s and require the structural work (sccache, mold or lld, a smaller `test` step) that brings the cold number under it, which would red the gate until that work lands; (c) split the cold case into a separate profile. Recommendation and what is in the tree: (a), with (b) as the target for the next tooling wave.
+2. **Two inherited reds are unchanged and unhidden**: gitleaks on `packages/model-runtime/LICENSES.md`, and `astro@7.1.5` (CRITICAL 9.8) in `bun.lock`. Nothing was added to `.gitleaks.toml` or `osv-scanner.toml`. Lane C's hand-off 1 — the `target/` `.rmeta` findings — is **closed** by D-1020-B2-5.
+3. **`ts-static`'s scope.** Options: (a) keep it (the five `contracts/tools/*.ts` files get the only static check there is, at 27.9 s warm plus a provisioning build); (b) add a v1-only typecheck script and point the step at it; (c) move those five scripts out of the v1 directories. Recommendation: (b). Adopted for now: (a), because no v1-only script exists and dropping the check would leave those files ungated.
+4. **The cold first build is 1394.6 s.** That is the bill a new clone or a cold CI cache pays today, at nine crates of fifteen. It is ledgered rather than hidden, and it is the number that decides whether wave 2b lands with sccache or without.
+
+### Not done, and why
+
+- `library-size.json` was not touched. It is seeded empty by design and wave 3 lane G fills it; there is no artifact to measure.
+- No `nightly` or `release` measurement was taken. Both are unbounded by ruling, `nightly` needs the v0 oracle build, and `release` fails on `vps-smoke` regardless.
+- **Three cold runs and one standalone `cargo test --workspace` died on `No space left on device`**, and one of those surfaced as `error occurred in cc-rs` rather than as a disk error. This container's disk allowance is shared with concurrent lanes and a cold debug tree for this workspace is 7-8 GB; the fourth attempt, taken when 16 GB was free, completed green and is the number in the ledger. What this cost the exit list: the `pr` profile was not re-run after the lane R rebase (its `release-build` step needs a release tree alongside the debug one), and `cargo test --workspace` was not run standalone at the current head — it ran inside the green cold `local` gate instead, which is the same command through the same runner. The `pr` budget's arithmetic is unaffected: the only thing that changed for it is the ledger line it is compared against.
+- `measure` does not run the warm `local` and warm `pr` profiles as ledger keys. Their numbers are the gate's own output, scored by the gate against `gate-budgets.json`; adding a second timing path for the same wall clock would give one number two writers.
+
+### Falsification
+
+1. **"An `.rmeta`-only tree reads as cold, so a `cargo check` cannot buy a warm budget."** The unit test builds that tree from fixture files, which proves the predicate and not the world. Throwaway check on the real workspace: after `cargo xtask measure --only cleanCheckSeconds` — which leaves a tree that has been fully checked and nothing else — `cargo xtask gate --profile pr` printed `tree cold — 8 of 9 workspace member(s) have no linked artifact in target/debug/deps`, and its `test` step then took 1072.1 s compiling and linking what the check had not. The 9th member is `xtask` itself, which cargo had just built to run the command; the rule requires **all** members, so one built member cannot make a tree warm.
+2. **"The secrets filter drops build output and never a tracked file."** The risk is a tracked file that matches a `.gitignore` pattern being dropped silently — a real secret hidden by the fix. Throwaway check: a fixture repo with `kept.log` tracked via `git add --force` against a `.gitignore` that lists it; `git check-ignore` honours the index, so the file is not reported as ignored and the classifier keeps it, and the tracked-file probe would keep it even if that changed. On the real tree the same run kept `packages/model-runtime/LICENSES.md` (tracked) and dropped four `target/debug/deps/*.rmeta` (untracked, ignored) — the exact split claimed.
+
+### Doctrine digest
+
+Law `53be88c22ab5`. `.governance/run.sh` all directives pass; `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` no findings. No waiver spent, no law file touched (`.governance/**`, `CONSTITUTION.md`, `scripts/ci/gate-classes.json`, `tests/*.json`, `oxlint.config.ts`, `oxfmt.config.ts`, `.github/CODEOWNERS` are all untouched); `.github/workflows/gate.yml` is territory and is cited to [#the-pr-gate-loop-892](../docs/decisions.md#the-pr-gate-loop-892) through D-1020-B2-3. No v0 file under `packages/**` or `tests/**` was edited, so this lane lists no fixture-adapter edits.
