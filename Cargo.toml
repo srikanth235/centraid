@@ -87,20 +87,90 @@ subtle = "2"
 tempfile = "3"
 zstd = "0.13"
 
-# The edit-run loop is the new Hermes (#1020): dependencies optimised once, our crates rebuilt fast.
+# THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
+# disk (D-1020-G7).
+#
+# Measured on `ci-linux-x64-4c` with the shared target directory three lanes of
+# wave 3 build into: **16 GB** under `debug/`, of which **7.7 GB was 144 test
+# and bin executables** (the four `centraid` test binaries alone were
+# 363–387 MB each) and **4.3 GB was rlibs**. Almost all of it is debuginfo, and
+# almost none of it was ever read: the disk allowance ran out twice during this
+# wave and the thing that ran out was type and variable tables for iroh,
+# rustls and SQLite.
+#
+# So: `debug = "line-tables-only"` for OUR crates — a backtrace still names the
+# file and the line, which is what a red test is read with — and `debug = false`
+# for dependencies, which nobody steps into. `split-debuginfo` keeps the DWARF
+# out of the executable itself, so a 380 MB test binary is a small executable
+# beside object files cargo already had.
+#
+# THE ESCAPE HATCH, because "you cannot debug this workspace" would be a real
+# cost: `CARGO_PROFILE_DEV_DEBUG=2 cargo test -p <crate>` restores full
+# debuginfo for one command, for the one crate being debugged. It is written in
+# `crates/xtask/README.md` beside the gate profiles, not only here.
+[profile.dev]
+debug = "line-tables-only"
+# "unpacked" rather than "packed" for dev: packing runs `dsymutil` (macOS) or
+# `llvm-dwp` (Linux) on every link, which is exactly the wrong trade on the
+# edit-run loop. The release profile packs, because a published symbol file has
+# to be ONE file beside the artifact.
+split-debuginfo = "unpacked"
+
 [profile.dev.package."*"]
+# Dependencies: optimised once, and carrying no debuginfo at all. Stepping into
+# iroh or rusqlite is a `CARGO_PROFILE_DEV_DEBUG=2` session, not the default
+# every build pays for.
 opt-level = 2
+debug = false
+
+# `cargo test` uses `dev` for the crates under test but has its own profile for
+# the test harnesses, and the 7.7 GB above was mostly THOSE. Stated explicitly
+# rather than relying on inheritance, because the inheritance rules for
+# `profile.test` have changed across cargo versions and this is the number that
+# mattered.
+[profile.test]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.test.package."*"]
+opt-level = 2
+debug = false
 
 # THE RELEASE PROFILE (#1020, D-1020-G8). What ships, and what a crash report
 # can be read with.
 #
-# `lto = "thin"` + `codegen-units = 1`: the prebuilt core is one artifact linked
-# by three shells, so it is compiled once per triple in CI and never on a
-# developer's machine — the cost lands on `releaseBuildSeconds` (the one
-# compile-time number a pull request can go red on, so it is measured and not
-# assumed) and the benefit lands on every call every shell makes. "thin" rather
-# than "fat" because fat LTO's extra few per cent is not worth doubling the one
-# number this workspace has a ceiling for.
+# TWO OPTIMISED PROFILES, and the split is measured rather than stylistic.
+#
+# `release` is what a PULL REQUEST builds. `cargo xtask gate --profile pr`'s
+# `release-build` step runs `cargo build --workspace --release` and scores it
+# against the 600 s `releaseBuildSeconds` ceiling in
+# `contracts/ledgers/compile-time.json` — the one compile-time number a pull
+# request can go red on. It is also what a developer builds when checking that
+# something is fast enough to be worth shipping.
+#
+# `dist` is what a TAG publishes. It is `release` plus `lto = "thin"` and
+# `codegen-units = 1`: cross-crate inlining across `crates/*` is the
+# optimisation a prebuilt core linked by three shells cannot get any other way,
+# and it is paid for once per triple on a CI runner rather than on every pull
+# request.
+#
+# WHY THEY ARE SEPARATE. `lto = "thin"` + `codegen-units = 1` was tried inside
+# `release` first, which is the conventional single-profile answer. Measured on
+# `ci-linux-x64-4c`: `cargo build --release --bin centraid` took **630 s** and
+# `cargo build --workspace --release` took **1039 s**, against a 600 s ceiling.
+# The ceiling is a down-only ledger entry and moving it to accommodate a
+# compiler flag is the one thing this repository's rules forbid, so the flag
+# moved instead of the number.
+#
+# WHAT THE SPLIT COSTS, stated because it is a real cost and not a free win:
+# the binary a pull request builds is no longer bit-identical to the binary a
+# tag ships. `cargo xtask gate --profile release`'s `vps-smoke` step therefore
+# smokes the `release` binary, and the `dist` artifact is proved by
+# `.github/workflows/lane-prebuilt-core.yml` — which builds it, stamps it,
+# checks the stamp it reads back out of the binary, and publishes it with its
+# symbol file. What the two profiles share is everything that affects
+# BEHAVIOUR: the same `panic` strategy, the same debuginfo shape, the same
+# dependency graph. What differs is inlining.
 #
 # `panic = "unwind"`, NOT abort, and this is not a size oversight:
 # `crates/core-ffi` exports a C ABI, and a panic crossing a C frame with
@@ -110,19 +180,32 @@ opt-level = 2
 # would buy is a fraction of the artifact; the cost is the shell losing the
 # ability to survive a bug in the core.
 #
-# `debug = "line-tables-only"` + NO `strip` here: a stripped binary with no
-# symbol file anywhere is a crash report nobody can read, and #1020 rules a
-# symbol file published beside every artifact. Line tables are enough for a
-# backtrace with file and line, and they are a fraction of full debuginfo.
-# Stripping happens at PACKAGING (`objcopy --only-keep-debug` + `--strip-debug
-# --add-gnu-debuglink` in `deploy/docker/Dockerfile` and the `prebuilt-core`
-# workflow), so the shipped binary is stripped AND the symbols exist. Setting
-# `strip = "debuginfo"` here would throw them away before anything could keep
-# them, and `contracts/ledgers/library-size.json` measures the stripped artifact
-# either way.
+# DEBUGINFO IS `dist`-ONLY, and that is the third measured decision here. A
+# symbol file is only needed for an artifact somebody SHIPS, and generating and
+# packing one is not free: `release` carrying
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` put
+# `cargo build --workspace --release` at **747 s** on this container, still over
+# the 600 s ceiling the `pr` gate scores. So the debuginfo settings live in
+# `dist`, where the wall clock is bounded by a CI runner rather than by a
+# feedback-time budget, and `release` is cargo's ordinary optimised build.
+#
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` + NO `strip`. A
+# stripped binary with no symbol file anywhere is a crash report nobody can
+# read, and #1020 rules a symbol file published beside every artifact — so the
+# DWARF is kept, and kept OUTSIDE the executable. "packed" is what makes it one
+# file per platform: `centraid.dwp` on Linux, `centraid.dSYM` on macOS, the
+# `.pdb` cargo already emits on Windows. That file is the published symbol
+# artifact, and the shipped binary is stripped at PACKAGING rather than here —
+# `strip = "debuginfo"` in these tables would throw the symbols away before
+# anything could keep them. Line tables rather than full debuginfo for the same
+# reason as `dev` (D-1020-G7).
 [profile.release]
+panic = "unwind"
+
+[profile.dist]
+inherits = "release"
 lto = "thin"
 codegen-units = 1
-panic = "unwind"
 debug = "line-tables-only"
+split-debuginfo = "packed"
 strip = false
