@@ -73,3 +73,6 @@ apps/desktop/release/
 # by `files: ["apps"]` and kept out of the catalog by build-manifest.mjs.
 packages/blueprints/apps/*/actions/*.js
 packages/blueprints/apps/*/queries/*.js
+
+# The v1 Rust workspace build directory (#1020).
+/target/
