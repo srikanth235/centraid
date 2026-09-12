@@ -1,5 +1,5 @@
 {
-  "$generatedBy": "contracts/tools/export-native-theme.ts",
+  "$generatedBy": "contracts/tools/export-copy.ts",
   "app": "notes",
   "strings": {
     "ANCHOR_DEGRADED": "the passage was edited · this anchor now points at the note",
@@ -55,5 +55,8 @@
     "captionFor",
     "SEARCH_EXAMPLES",
     "SEARCH_COPY"
-  ]
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": []
 }

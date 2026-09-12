@@ -1,5 +1,5 @@
 {
-  "$generatedBy": "contracts/tools/export-native-theme.ts",
+  "$generatedBy": "contracts/tools/export-copy.ts",
   "app": "photos",
   "strings": {
     "PHOTOS_ARCHIVE": "Archive",
@@ -30,5 +30,8 @@
     "photosArchiveMoved",
     "PLACE_NO_LOCATION_TERMS",
     "PLACE_HOME_TERMS"
-  ]
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": []
 }

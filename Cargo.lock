@@ -667,6 +667,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-design"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "centraid-media"
 version = "1.0.0-alpha.0"
 dependencies = [

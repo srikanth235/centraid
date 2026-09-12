@@ -1,5 +1,5 @@
 {
-  "$generatedBy": "contracts/tools/export-native-theme.ts",
+  "$generatedBy": "contracts/tools/export-copy.ts",
   "app": "shared",
   "strings": {
     "LEAVING_SHARED_VAULT": "Leaving ends your access to this vault; copies already shared into your own vault stay.",
@@ -14,5 +14,8 @@
     "retryInSeconds",
     "truncatedListNotice",
     "fieldNotOnThisDevice"
-  ]
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": []
 }

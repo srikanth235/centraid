@@ -31,51 +31,21 @@
 // takes the STRING-VALUED exports of the named leaves and leaves the functions
 // behind, listing them so a reader can see what did not cross.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { toNativeTheme } from "../../packages/design/src/index.ts";
 import type { NativeScheme } from "../../packages/design/src/native.ts";
-// NOT re-exported from the package index (`grep -n assertNativeColorRole
-// packages/design/src/index.ts` finds nothing), so the module is imported
-// directly rather than the assertion being skipped.
-import { assertNativeColorRoleContract } from "../../packages/design/src/roles.ts";
+import {
+  NATIVE_COLOR_ROLE_MAP,
+  assertNativeColorRoleContract,
+} from "../../packages/design/src/roles.ts";
+import { emitCopy } from "./export-copy.ts";
+import { emitIdentityCorpus } from "./export-design-corpus.ts";
 
 const repositoryRoot = new URL("../..", import.meta.url).pathname;
 
 const SCHEMES: readonly NativeScheme[] = ["light", "dark"];
-
-/**
- * The copy leaves that reach a native surface, and the app each belongs to.
- *
- * READ AS TEXT, not imported. Two of these four leaves are import-free by
- * design — "a leaf with no imports is the only shape both worlds can read"
- * (`packages/blueprints/apps/_shared/shared-copy.ts:1-11`) — and the other two
- * are not, so importing them pulls a `.tsx` app frame and `@centraid/design`
- * into a build script. `contracts/tools/export-v0-registries.ts` already reads
- * v0 declarations as text for the same reason, and the precedent is the right
- * one: a script that needed the whole web graph to resolve would be a script
- * that breaks whenever a component moves.
- */
-const COPY_LEAVES: Record<string, string> = {
-  notes: "packages/blueprints/apps/notes/view-copy.ts",
-  photos: "packages/blueprints/apps/photos/shared-copy.ts",
-  shared: "packages/blueprints/apps/_shared/shared-copy.ts",
-  tally: "packages/blueprints/apps/tally/route-copy.ts",
-};
-
-/**
- * `export const NAME = "…";` and nothing else.
- *
- * Deliberately narrow: a template literal, a concatenation or a computed value
- * is a DECISION about how a sentence is composed, and the emitter leaves those
- * to the kit rather than half-porting them. What it does not match, it lists.
- */
-const STRING_EXPORT =
-  /^export const (?<name>[A-Z][A-Z0-9_]*)\s*=\s*(?<literal>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*;/gmu;
-const FUNCTION_EXPORT = /^export function (?<name>[A-Za-z][A-Za-z0-9_]*)/gmu;
-const OTHER_CONST_EXPORT =
-  /^export const (?<name>[A-Za-z][A-Za-z0-9_]*)\s*[=:]/gmu;
 
 // --- the token table -------------------------------------------------------
 
@@ -180,6 +150,11 @@ writeFileSync(
         "module and for SwiftUI. Regenerate with " +
         "`bun contracts/tools/export-native-theme.ts && bun run format`; " +
         "`git diff --exit-code design copy mobile` is the drift check (#1020).",
+      // THE ROLE CONTRACT, AS DATA (#1020, D-1020-T1). It is asserted above
+      // over the emitted table, in TypeScript; carrying the map lets
+      // `crates/design` re-assert the same thing over the same bytes rather
+      // than holding a second copy of which fields a native theme must have.
+      colorRoleContract: NATIVE_COLOR_ROLE_MAP,
       schemes: themes,
     },
     undefined,
@@ -414,103 +389,19 @@ writeFileSync(
   `${swiftLines.join("\n")}`
 );
 
-// --- copy -----------------------------------------------------------------
+// --- copy and the identity corpus ----------------------------------------
+//
+// Both are their OWN emitters and are called here, so one command still emits
+// every artifact (#1020, D-1020-T5): `copy/*.json` has exactly one writer, and
+// the eight wave-4 app lanes each add a leaf to `export-copy.ts` alone.
 
-mkdirSync(path.join(repositoryRoot, "copy"), { recursive: true });
-
-const copyKotlin: string[] = [
-  header("kotlin"),
-  "package dev.centraid.design",
-  "",
-  "/**",
-  " * Copy, emitted from v0's per-app `*-copy.ts` leaves (#1020, D-1020-E6).",
-  " *",
-  " * STRINGS ONLY. A leaf's function exports are listed in `copy/<app>.json`'s",
-  " * `functions` array and are NOT emitted: a function is a decision about how to",
-  " * compose a sentence, and a generated Kotlin port of one would be a second",
-  " * implementation that drifts. Wave 4 moves those into the kit.",
-  " */",
-  "public object CentraidCopy {",
-];
-
-for (const [app, leafPath] of Object.entries(COPY_LEAVES).sort(
-  ([left], [right]) => left.localeCompare(right)
-)) {
-  const source = readFileSync(path.join(repositoryRoot, leafPath), "utf8");
-  const strings: Record<string, string> = {};
-  const functions: string[] = [];
-  for (const match of source.matchAll(FUNCTION_EXPORT)) {
-    functions.push(match.groups?.name ?? "");
-  }
-  const literals = new Map<string, string>();
-  for (const match of source.matchAll(STRING_EXPORT)) {
-    const literal = match.groups?.literal ?? '""';
-    literals.set(
-      match.groups?.name ?? "",
-      JSON.parse(`"${literal.slice(1, -1).replace(/"/gu, '\\"')}"`) as string
-    );
-  }
-  // Every other exported const is NOT emitted, and is listed so a reader can
-  // see what did not cross rather than wondering whether it was missed.
-  for (const match of source.matchAll(OTHER_CONST_EXPORT)) {
-    const name = match.groups?.name ?? "";
-    if (!literals.has(name)) functions.push(name);
-  }
-  for (const [name, value] of [...literals.entries()].sort(([left], [right]) =>
-    left.localeCompare(right)
-  )) {
-    strings[name] = value;
-    {
-      // SENTENCE CASE IS A RULE (`docs/decisions.md:98`), and the mobile kit
-      // has its own discipline for it (`apps/mobile/src/kit/copy-case.ts`).
-      // The emitter ASSERTS what it can check without a dictionary: a string
-      // that begins lower-case in a position that should be a sentence would
-      // be a finding, and a string in Title Case Like This is one it can spot.
-      const words = value
-        .split(" ")
-        .filter((word) => /^[A-Z][a-z]+$/u.test(word));
-      if (words.length >= 4) {
-        throw new Error(
-          `copy/${app}.json: "${name}" looks like Title Case ("${value}"), and ` +
-            `DESIGN.md's copy rules are sentence case (docs/decisions.md:98).`
-        );
-      }
-    }
-  }
-  writeFileSync(
-    path.join(repositoryRoot, `copy/${app}.json`),
-    `${JSON.stringify(
-      {
-        $generatedBy: "contracts/tools/export-native-theme.ts",
-        app,
-        strings,
-        functions,
-      },
-      undefined,
-      2
-    )}\n`
-  );
-  copyKotlin.push(`    public object ${app[0].toUpperCase()}${app.slice(1)} {`);
-  for (const [name, value] of Object.entries(strings)) {
-    copyKotlin.push(
-      `        public const val ${name}: String = ${JSON.stringify(value)}`
-    );
-  }
-  copyKotlin.push("    }", "");
-}
-copyKotlin.push("}", "");
-
-writeFileSync(
-  path.join(
-    repositoryRoot,
-    "mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt"
-  ),
-  `${copyKotlin.join("\n")}`
-);
+const copyCounts = emitCopy(repositoryRoot, header);
+const corpusCounts = emitIdentityCorpus(repositoryRoot);
 
 console.error(
   `emitted design/native-theme.json, mobile/shared .../design/{Tokens,Copy}.kt, ` +
     `mobile/iosApp/Design/Theme.swift and copy/*.json ` +
     `(${colorNames.length} colour roles, ${effectNames.length} non-colour effect ` +
-    `entries, ${Object.keys(COPY_LEAVES).length} copy leaves)`
+    `entries, ${copyCounts.leaves} copy leaves, ${copyCounts.strings} strings, ` +
+    `${corpusCounts.hues + corpusCounts.initials + corpusCounts.tones} corpus rows)`
 );
