@@ -65,7 +65,7 @@ SCAN core_party USING INDEX sqlite_autoindex_core_party_1
 ```sql
 SELECT task_id, status, title, due_at, project_id
       FROM schedule_task
-      WHERE status IN (?, ?) AND due_at >= ? AND due_at < ?
+      WHERE status IN (?, ?) AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?
       ORDER BY due_at ASC, task_id ASC
       LIMIT ?
 ```
