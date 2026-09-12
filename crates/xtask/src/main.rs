@@ -5,7 +5,8 @@
 //! three languages. Anything that has to hold across all of them cannot live in
 //! any one of them, so it lives here: `cargo xtask gate --profile <local|pr|
 //! nightly|release>` is the single command CI runs and the single command the
-//! local loop runs. See `crates/xtask/README.md` for the profiles, the budgets,
+//! local loop runs. A fifth profile name, `mobile-jvm`, exists in the ledgers
+//! and refuses to run until wave 3 lane E fills it (#1020, D-1020-B2-3). See `crates/xtask/README.md` for the profiles, the budgets,
 //! where failure artifacts land, and the one thing this runner deliberately
 //! does NOT do (governance — it has its own workflow).
 
@@ -39,6 +40,12 @@ enum Command {
         /// Which profile to run.
         #[arg(long, value_enum)]
         profile: Profile,
+        /// Score this run as a first build even if artifacts are on disk.
+        ///
+        /// `local` detects warm and cold trees on its own; this is for proving
+        /// the cold branch without deleting `target/` (#1020, D-1020-B2-1).
+        #[arg(long)]
+        cold: bool,
     },
     /// Run only the structural rules (the cheap half of every profile).
     Rules,
@@ -47,6 +54,13 @@ enum Command {
         /// Write the measurements into `contracts/ledgers/compile-time.json`.
         #[arg(long)]
         write: bool,
+        /// Measure only these keys (comma-separated). Every key by default.
+        ///
+        /// The keys cost minutes each and two of them delete `target/`, so a
+        /// re-measurement of one number must not force a re-measurement of all
+        /// of them (#1020).
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
     },
 }
 
@@ -62,6 +76,9 @@ pub enum Profile {
     Nightly,
     /// `nightly` plus the restore drill and the VPS smoke.
     Release,
+    /// The Kotlin/Gradle JVM suites. A LEDGER PLACEHOLDER with no steps until
+    /// wave 3 lane E lands them, and a refusal if you run it (D-1020-B2-3).
+    MobileJvm,
 }
 
 impl Profile {
@@ -71,6 +88,7 @@ impl Profile {
             Profile::Pr => "pr",
             Profile::Nightly => "nightly",
             Profile::Release => "release",
+            Profile::MobileJvm => "mobile-jvm",
         }
     }
 }
@@ -92,7 +110,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let root = repo_root();
     let ok = match cli.command {
-        Command::Gate { profile } => match gate::run(profile, &root) {
+        Command::Gate { profile, cold } => match gate::run(profile, &root, cold) {
             Ok(ok) => ok,
             Err(error) => {
                 eprintln!("xtask: {error:#}");
@@ -100,7 +118,7 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
-        Command::Measure { write } => match measure::run(&root, write) {
+        Command::Measure { write, only } => match measure::run(&root, write, &only) {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

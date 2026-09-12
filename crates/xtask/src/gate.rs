@@ -71,6 +71,11 @@ const fn step(name: &'static str, run: Runner) -> Step {
 /// stated as concatenation rather than as a copied list, so a step can never be
 /// in `pr` and missing from `release`.
 pub fn steps(profile: Profile) -> Vec<Step> {
+    if profile == Profile::MobileJvm {
+        // A ledger placeholder, not a runnable profile (D-1020-B2-3). Wave 3
+        // lane E owns the Gradle steps and the measurement that sets its budget.
+        return Vec::new();
+    }
     let local = vec![
         step("fmt", |ctx| {
             process(ctx, "fmt", "cargo", &["fmt", "--all", "--check"])
@@ -131,10 +136,138 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     release
 }
 
+/// Was the profile's own build output on disk before the run started?
+///
+/// The `local` budget is the developer's feedback time after an edit, and the
+/// edit-run loop runs on a tree that has been built before (D-1020-B2-1). The
+/// first run after `cargo clean` or a fresh clone is a different measurement
+/// with its own ledgered ceiling, so the two are told apart rather than averaged
+/// into a number that is wrong for both.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Tree {
+    Warm,
+    Cold,
+}
+
+/// The workspace members' package names, read off `crates/*/Cargo.toml` and
+/// `crates/apps/*/Cargo.toml` — the two globs the root manifest lists.
+pub fn member_packages(root: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    for parent in ["crates", "crates/apps"] {
+        let Ok(entries) = fs::read_dir(root.join(parent)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let manifest = entry.path().join("Cargo.toml");
+            let Ok(text) = fs::read_to_string(&manifest) else {
+                continue;
+            };
+            let mut in_package = false;
+            for line in text.lines() {
+                let line = line.trim();
+                if line.starts_with('[') {
+                    in_package = line == "[package]";
+                    continue;
+                }
+                if let Some(rest) = line.strip_prefix("name")
+                    && in_package
+                    && let Some(value) = rest.split('=').nth(1)
+                {
+                    names.push(value.trim().trim_matches('"').to_owned());
+                    break;
+                }
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Warm iff EVERY workspace member has a **linkable or runnable** artifact in
+/// `target/debug/deps` — a `.rlib` or an executable with no extension.
+///
+/// The discriminator is deliberately not "`target/debug` exists" and not
+/// "`target/debug/deps` is non-empty": `cargo check` and `cargo clippy` produce
+/// `.rmeta` only, so a tree that has merely been checked would claim to be warm
+/// for a profile whose `test` step still has to compile and link every crate
+/// from scratch — which is exactly how the 120 s promise would be gamed. A
+/// *stale* incremental tree does read as warm, on purpose: a tree whose sources
+/// moved since the last build is the tree the edit-run loop runs on, and
+/// rebuilding that delta is the thing the budget is promising.
+///
+/// Returns the state and the one line that says how it was decided.
+pub fn tree_state(root: &Path, forced_cold: bool) -> (Tree, String) {
+    if forced_cold {
+        return (
+            Tree::Cold,
+            "cold — `--cold` was passed, so the run is scored as a first build whatever is on disk"
+                .to_owned(),
+        );
+    }
+    let members = member_packages(root);
+    if members.is_empty() {
+        return (
+            Tree::Cold,
+            "cold — no workspace member manifests were readable under crates/, so nothing can be known to be built".to_owned(),
+        );
+    }
+    let deps = root.join("target/debug/deps");
+    let names: Vec<String> = match fs::read_dir(&deps) {
+        Ok(entries) => entries
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    let missing: Vec<&String> = members
+        .iter()
+        .filter(|member| !has_linked_artifact(&names, member))
+        .collect();
+    if missing.is_empty() {
+        return (
+            Tree::Warm,
+            format!(
+                "warm — all {} workspace member(s) have a linked artifact in target/debug/deps",
+                members.len()
+            ),
+        );
+    }
+    (
+        Tree::Cold,
+        format!(
+            "cold — {} of {} workspace member(s) have no linked artifact in target/debug/deps (first: {}); an `.rmeta` from a previous `cargo check` does not count",
+            missing.len(),
+            members.len(),
+            missing[0]
+        ),
+    )
+}
+
+/// Is there a `lib<crate>-*.rlib` or an extensionless `<crate>-*` executable
+/// among `names`? Hyphens in a package name are underscores in an artifact name.
+fn has_linked_artifact(names: &[String], member: &str) -> bool {
+    let snake = member.replace('-', "_");
+    let library = format!("lib{snake}-");
+    let binary = format!("{snake}-");
+    names.iter().any(|name| {
+        (name.starts_with(&library) && name.ends_with(".rlib"))
+            || (name.starts_with(&binary) && !name[binary.len()..].contains('.'))
+    })
+}
+
 /// Run a profile. Returns `true` when every step passed inside its budget.
-pub fn run(profile: Profile, root: &Path) -> Result<bool> {
+pub fn run(profile: Profile, root: &Path, forced_cold: bool) -> Result<bool> {
     let hardware =
         std::env::var("CENTRAID_GATE_HARDWARE").unwrap_or_else(|_| DEFAULT_HARDWARE.to_owned());
+    if profile == Profile::MobileJvm {
+        println!(
+            "xtask gate — profile mobile-jvm · hardware {hardware}\n\n  REFUSED the `mobile-jvm` profile is a ledger placeholder with no steps. Its `budgetSeconds` in {} and `kotlinNativeLinkSeconds` in {} are both null, and wave 3 lane E — which lands the Kotlin Multiplatform shared module and its Gradle JVM suites — measures them and sets them (#1020, D-1020-B2-3). Running it here would report green for a suite that does not exist",
+            ledger::BUDGETS,
+            ledger::COMPILE_TIME
+        );
+        return Ok(false);
+    }
     let ctx = Ctx {
         root: root.to_path_buf(),
         hardware: hardware.clone(),
@@ -142,9 +275,10 @@ pub fn run(profile: Profile, root: &Path) -> Result<bool> {
         artifacts: root.join("target/xtask").join(profile.name()),
     };
     let budget = ledger::budget_seconds(root, profile.name(), &hardware)?;
+    let (tree, why) = tree_state(root, forced_cold);
 
     println!(
-        "xtask gate — profile {} · hardware {hardware} · budget {}",
+        "xtask gate — profile {} · hardware {hardware} · budget {}\n  tree {why}",
         profile.name(),
         budget.map_or_else(
             || "unbounded".to_owned(),
@@ -176,17 +310,8 @@ pub fn run(profile: Profile, root: &Path) -> Result<bool> {
         .collect();
     let mut ok = failed.is_empty();
 
-    if let Some(seconds) = budget {
-        if total.as_secs_f64() > seconds {
-            ok = false;
-            println!(
-                "\n  BUDGET the `{}` profile took {:.1}s against a {seconds:.0}s budget. The budget is the product's feedback-time promise, not a target — either the step above it got slower or the profile grew a step it should not carry (contracts/ledgers/gate-budgets.json, #1020)",
-                profile.name(),
-                total.as_secs_f64()
-            );
-        } else {
-            println!("  BUDGET ok — {:.1}s of {seconds:.0}s", total.as_secs_f64());
-        }
+    if !score(profile, tree, total.as_secs_f64(), budget, &ctx) {
+        ok = false;
     }
 
     if failed.is_empty() {
@@ -200,6 +325,72 @@ pub fn run(profile: Profile, root: &Path) -> Result<bool> {
         }
     }
     Ok(ok)
+}
+
+/// The `compile-time.json` key a cold `local` run is charged against.
+pub const COLD_LOCAL_KEY: &str = "coldLocalProfileSeconds";
+
+/// Score a profile's total against the number that applies to the tree it ran
+/// on, print the one line that says which, and return whether it held.
+///
+/// Only `local` has a cold ceiling of its own (D-1020-B2-1). Every other profile
+/// runs in CI on a runner that has never seen this workspace, so a cold tree is
+/// its NORMAL case and its `budgetSeconds` has to hold cold or it is not a
+/// budget — the tree state is printed for those and changes nothing. A cold
+/// `local` run is not let off: it is charged against `coldLocalProfileSeconds`,
+/// its own down-only ledger entry, and a cold run with no ceiling stated fails
+/// rather than passing unscored, because "cold" must never be the answer that
+/// makes a slow gate green.
+fn score(profile: Profile, tree: Tree, total: f64, budget: Option<f64>, ctx: &Ctx) -> bool {
+    if profile == Profile::Local && tree == Tree::Cold {
+        let ceiling = ledger::compile_time_ceiling(&ctx.root, &ctx.hardware, COLD_LOCAL_KEY);
+        return match ceiling {
+            Some(ceiling) if total > ceiling => {
+                println!(
+                    "\n  BUDGET cold — the `local` profile took {total:.1}s against the {ceiling:.0}s `{COLD_LOCAL_KEY}` ceiling in {}. A first build is not charged the warm feedback-time budget, and it is not unbudgeted either (#1020, D-1020-B2-1)",
+                    ledger::COMPILE_TIME
+                );
+                false
+            }
+            Some(ceiling) => {
+                println!(
+                    "  BUDGET cold ok — {total:.1}s of the {ceiling:.0}s `{COLD_LOCAL_KEY}` ceiling in {}; the warm {} budget was not the number scored",
+                    ledger::COMPILE_TIME,
+                    budget.map_or_else(
+                        || "unbounded".to_owned(),
+                        |seconds| format!("{seconds:.0}s")
+                    )
+                );
+                true
+            }
+            None => {
+                println!(
+                    "\n  BUDGET cold — the `local` profile took {total:.1}s and {} states no `{COLD_LOCAL_KEY}` ceiling for {}. An unscored run is not a pass: measure it with `cargo xtask measure --only {COLD_LOCAL_KEY} --write` (#1020)",
+                    ledger::COMPILE_TIME,
+                    ctx.hardware
+                );
+                false
+            }
+        };
+    }
+    let Some(seconds) = budget else {
+        return true;
+    };
+    let state = if tree == Tree::Cold {
+        " (on a cold tree, which is this profile's normal case in CI — the budget holds cold or it is not a budget)"
+    } else {
+        ""
+    };
+    if total > seconds {
+        println!(
+            "\n  BUDGET the `{}` profile took {total:.1}s against a {seconds:.0}s budget{state}. The budget is the product's feedback-time promise, not a target — either the step above it got slower or the profile grew a step it should not carry ({}, #1020)",
+            profile.name(),
+            ledger::BUDGETS
+        );
+        return false;
+    }
+    println!("  BUDGET ok — {total:.1}s of {seconds:.0}s{state}");
+    true
 }
 
 fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
@@ -1108,6 +1299,154 @@ mod tests {
             Outcome::Skipped(detail) => assert!(detail.contains("no buf.yaml"), "{detail}"),
             _ => panic!("without buf.yaml the step must skip loudly"),
         }
+    }
+
+    /// `mobile-jvm` is a ledger placeholder: no steps, and a refusal rather
+    /// than a vacuous pass. A profile with an empty step list that scored itself
+    /// green would report "the Kotlin suites passed" before one exists.
+    #[test]
+    fn the_mobile_jvm_profile_has_no_steps_and_refuses_to_run() {
+        assert!(steps(Profile::MobileJvm).is_empty());
+        let root = crate::testing::fixture_dir("mobile-jvm");
+        assert!(
+            !run(Profile::MobileJvm, &root, false).expect("the refusal is not an error"),
+            "a refusal must not be a pass"
+        );
+    }
+
+    fn build_tree(root: &Path, members: &[&str], linked: &[&str]) {
+        for member in members {
+            let dir = root.join("crates").join(member);
+            fs::create_dir_all(&dir).expect("create the member dir");
+            fs::write(
+                dir.join("Cargo.toml"),
+                format!("[package]\nname = \"centraid-{member}\"\nversion = \"0.1.0\"\n\n[dependencies]\nname = \"not-a-package-name\"\n"),
+            )
+            .expect("write the manifest");
+        }
+        let deps = root.join("target/debug/deps");
+        fs::create_dir_all(&deps).expect("create deps");
+        for name in linked {
+            fs::write(deps.join(name), "").expect("write an artifact");
+        }
+    }
+
+    /// The detection is over LINKED artifacts, and this is the case that says
+    /// why: a tree that has only been `cargo check`ed carries `.rmeta` for every
+    /// member and still has to compile and link every test binary, so it is
+    /// cold — otherwise a 5 s `cargo check` would buy a warm 120 s budget.
+    #[test]
+    fn an_rmeta_only_tree_is_cold_and_a_linked_tree_is_warm() {
+        let root = crate::testing::fixture_dir("tree-rmeta");
+        build_tree(
+            &root,
+            &["net", "seat"],
+            &["libcentraid_net-1a.rmeta", "libcentraid_seat-2b.rmeta"],
+        );
+        let (state, why) = tree_state(&root, false);
+        assert_eq!(state, Tree::Cold, "{why}");
+        assert!(why.contains("does not count"), "{why}");
+
+        let warm = crate::testing::fixture_dir("tree-linked");
+        build_tree(
+            &warm,
+            &["net", "seat"],
+            &[
+                "libcentraid_net-1a.rlib",
+                "libcentraid_net-1a.rmeta",
+                "centraid_seat-2b",
+            ],
+        );
+        let (state, why) = tree_state(&warm, false);
+        assert_eq!(state, Tree::Warm, "{why}");
+        assert!(why.contains("all 2 workspace member(s)"), "{why}");
+    }
+
+    /// One member built and one not is cold. A partial tree passing as warm is
+    /// how a budget stops covering the crate that was just added.
+    #[test]
+    fn a_partially_built_tree_is_cold_and_names_the_member() {
+        let root = crate::testing::fixture_dir("tree-partial");
+        build_tree(&root, &["net", "seat"], &["libcentraid_net-1a.rlib"]);
+        let (state, why) = tree_state(&root, false);
+        assert_eq!(state, Tree::Cold, "{why}");
+        assert!(why.contains("centraid-seat"), "{why}");
+        let (forced, why) = tree_state(&root, true);
+        assert_eq!(forced, Tree::Cold);
+        assert!(why.contains("`--cold` was passed"), "{why}");
+    }
+
+    fn scoring_ctx(root: &Path) -> Ctx {
+        Ctx {
+            root: root.to_path_buf(),
+            hardware: "h".to_owned(),
+            ci: false,
+            artifacts: root.join("target/xtask/local"),
+        }
+    }
+
+    fn with_cold_ceiling(name: &str, ceiling: Option<f64>) -> PathBuf {
+        let root = crate::testing::fixture_dir(name);
+        fs::create_dir_all(root.join("contracts/ledgers")).expect("create the ledger dir");
+        let body = match ceiling {
+            Some(seconds) => format!(r#"{{"{COLD_LOCAL_KEY}":{{"budgetSeconds":{seconds}}}}}"#),
+            None => "{}".to_owned(),
+        };
+        fs::write(
+            root.join(ledger::COMPILE_TIME),
+            format!(r#"{{"measurements":{{"h":{body}}}}}"#),
+        )
+        .expect("seed the ledger");
+        root
+    }
+
+    /// The two scoring branches, and the one thing that must not be true of
+    /// either: a cold tree cannot pass the WARM budget by being cold, and it
+    /// cannot pass unscored (D-1020-B2-1).
+    #[test]
+    fn a_cold_local_run_is_charged_to_its_own_ceiling_and_never_goes_unscored() {
+        let root = with_cold_ceiling("score-cold", Some(400.0));
+        let ctx = scoring_ctx(&root);
+        // Warm: the gate budget, as before.
+        assert!(score(Profile::Local, Tree::Warm, 90.0, Some(120.0), &ctx));
+        assert!(!score(Profile::Local, Tree::Warm, 130.0, Some(120.0), &ctx));
+        // Cold: the compile-time ceiling, not the 120 s budget — 300 s is over
+        // the warm budget and under the cold ceiling, and holds.
+        assert!(score(Profile::Local, Tree::Cold, 300.0, Some(120.0), &ctx));
+        assert!(
+            !score(Profile::Local, Tree::Cold, 401.0, Some(120.0), &ctx),
+            "over its own cold ceiling is still a failure"
+        );
+
+        let unstated = with_cold_ceiling("score-cold-unstated", None);
+        assert!(
+            !score(
+                Profile::Local,
+                Tree::Cold,
+                1.0,
+                Some(120.0),
+                &scoring_ctx(&unstated)
+            ),
+            "a cold run with no stated ceiling must fail, not pass unscored"
+        );
+    }
+
+    /// Every profile but `local` runs in CI on a runner that has never seen the
+    /// workspace, so its budget has to hold on a cold tree: the state is
+    /// reported and the number scored is still `budgetSeconds`.
+    #[test]
+    fn pr_is_scored_against_its_budget_on_a_cold_tree() {
+        let root = with_cold_ceiling("score-pr", Some(400.0));
+        let ctx = scoring_ctx(&root);
+        assert!(score(Profile::Pr, Tree::Cold, 380.0, Some(900.0), &ctx));
+        assert!(
+            !score(Profile::Pr, Tree::Cold, 901.0, Some(900.0), &ctx),
+            "the cold ceiling belongs to `local` alone"
+        );
+        assert!(
+            score(Profile::Nightly, Tree::Cold, 9_999.0, None, &ctx),
+            "unbounded by ruling"
+        );
     }
 
     /// The secrets step drops a finding only when git says the file is neither
