@@ -12,7 +12,7 @@
 //! reads the file the same way the oracle does — which is the only claim that
 //! makes this crate a candidate to replace it.
 
-use centraid_ontology::golden::open_golden;
+use centraid_ontology::golden::{GOLDEN_LABEL, open_golden};
 use centraid_ontology::snapshot::{compare_snapshot, snapshot_tables};
 use centraid_ontology::{
     Vault, compare_snapshot as _reexported, format_doctor_report, vault_doctor,
@@ -30,15 +30,19 @@ fn the_ontology_crate_opens_the_v0_golden_vault() {
     let vault = Vault::open(golden.db_path()).expect("the corpus opens");
 
     let manifest = golden.manifest();
-    assert_eq!(manifest.label, "issue-929");
+    assert_eq!(manifest.label, GOLDEN_LABEL);
     assert_eq!(
         manifest.ontology_version,
         centraid_ontology::ONTOLOGY_VERSION
     );
     assert_eq!(vault.user_version(), manifest.user_version);
+    // The BASELINE corpus sits at the ladder head (#1020, D-1020-D1-1): v1
+    // founds its files from this shape, so the number to pin is the high end of
+    // the window, not the low one. The #929 checkpoint corpus is what still
+    // sits at `expected_user_version`, and `version_window` below opens it.
     assert_eq!(
         vault.user_version(),
-        centraid_ontology::expected_user_version()
+        centraid_ontology::ladder_user_version()
     );
     // The corpus is a WAL file; the pragma is read at open so a future change
     // of journal mode is visible rather than silent.
@@ -114,21 +118,16 @@ fn re_snapshotting_the_corpus_reproduces_the_frozen_manifest() {
             }
         }
     }
-    // Both directions, with ONE declared allowance.
+    // Both directions, with NO allowance left to declare.
     //
-    // `replica_change` is the retired per-app change log: #1014 (R-1014-1)
-    // collapsed it into `replica_log` and v0's rung ten DROPs it, so it is
-    // present in the PRE-migration corpus (44 rows), absent after v0's ladder
-    // runs, and absent from the manifest because the era that froze the file
-    // excluded the replica plane's own mechanism from the corpus. Today's
-    // `SNAPSHOT_EXCLUSIONS` names only `replica_meta`, because the other name
-    // left with the table. This crate migrates nothing yet, so it sees the
-    // table; the allowance is declared here, with its reason, rather than
-    // added to the library's exclusion list, which must stay a faithful port
-    // of what v0 enforces today.
-    const CORPUS_ERA_EXCLUSIONS: &[&str] = &["replica_change"];
+    // The #929 corpus needed one: `replica_change`, the retired per-app change
+    // log that #1014 (R-1014-1) collapsed into `replica_log`, was still a
+    // 44-row table in that pre-ladder file and absent from its manifest. The
+    // baseline corpus is frozen AT the ladder head, where v0's rung ten has
+    // already DROPped it, so the exclusion has nothing to exclude and is gone
+    // rather than kept as decoration (#1020, D-1020-D1-1).
     for table in refrozen.keys() {
-        if !frozen.contains_key(table) && !CORPUS_ERA_EXCLUSIONS.contains(&table.as_str()) {
+        if !frozen.contains_key(table) {
             findings.push(format!(
                 "`{table}` is in the re-freeze and not in the manifest"
             ));
@@ -168,16 +167,17 @@ fn the_snapshot_walk_skips_the_shadow_tables_and_the_replica_singleton() {
 /// from `contracts/schema/v0-registries.json` rather than from a constant here
 /// — so this test also fails if the fixture stops exporting a real window.
 ///
-/// HOW THE OUT-OF-CORPUS FILES ARE MADE: the corpus is inflated and its
-/// `PRAGMA user_version` is STAMPED. That synthesises the version number only,
-/// not the shape a rung would have produced, which is the honest limit of what
-/// wave 1 can build — this crate has no ladder and cannot found a vault. That
-/// the ladder head really is `ladderUserVersion` was checked out of band
-/// against v0's own `openVaultDb` (see the receipt); wave 2 lane D re-freezes a
-/// golden AT the ladder head with v0's freezer, and this test then reads it
-/// instead of stamping.
+/// BOTH ENDS ARE NOW REAL FILES (#1020, D-1020-D1-1). Wave 1 could only stamp
+/// a `PRAGMA user_version` onto a copy of the one corpus it had, which
+/// synthesised the number and not the shape a rung would have produced. Wave 2
+/// re-froze a corpus AT the ladder head with v0's own freezer, so
+/// `both_ends_of_the_window_open` opens two files v0 actually wrote: the #929
+/// checkpoint at the low end and the baseline at the head. Stamping survives
+/// only for the two OUTSIDES, which by definition no v0 release ever wrote.
 mod version_window {
-    use centraid_ontology::golden::{inflate, scratch_dir};
+    use centraid_ontology::golden::{
+        GOLDEN_LABEL, GOLDEN_LABEL_CHECKPOINT, inflate, open_golden_labelled, scratch_dir,
+    };
     use centraid_ontology::{OntologyError, Vault, expected_user_version, ladder_user_version};
 
     /// An inflated copy of the corpus stamped at `user_version = version`.
@@ -207,14 +207,22 @@ mod version_window {
 
     #[test]
     fn both_ends_of_the_window_open() {
-        for version in [expected_user_version(), ladder_user_version()] {
-            let (dir, db) = corpus_stamped_at(version);
-            let vault = Vault::open(&db).unwrap_or_else(|error| {
-                panic!("a file at user_version {version} must open, and did not: {error}")
+        for (label, version) in [
+            (GOLDEN_LABEL_CHECKPOINT, expected_user_version()),
+            (GOLDEN_LABEL, ladder_user_version()),
+        ] {
+            let golden =
+                open_golden_labelled(label).unwrap_or_else(|error| panic!("{label}: {error}"));
+            assert_eq!(
+                golden.manifest().user_version,
+                version,
+                "{label} was frozen at {} and the window's end is {version}",
+                golden.manifest().user_version
+            );
+            let vault = Vault::open(golden.db_path()).unwrap_or_else(|error| {
+                panic!("{label}, a real v0 file at user_version {version}, must open: {error}")
             });
             assert_eq!(vault.user_version(), version);
-            drop(vault);
-            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 

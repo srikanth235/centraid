@@ -19,7 +19,7 @@ pub const DDL_FIXTURE_HEADER: &str = "\
 -- GENERATED — do not edit. The golden corpus's schema, one statement per block.
 --
 --   cargo run -p centraid-ontology --bin export-ddl -- \\
---     contracts/golden/issue-929/vault.db.gz > contracts/schema/vault-ddl.sql
+--     contracts/golden/issue-1020/vault.db.gz > contracts/schema/vault-ddl.sql
 --
 -- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null,
 -- ordered by type then name. `sqlite_stat*` is excluded: it is the planner's

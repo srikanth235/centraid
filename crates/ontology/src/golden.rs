@@ -17,8 +17,21 @@ use serde::Deserialize;
 use crate::error::{OntologyError, Result};
 use crate::snapshot::TableSnapshot;
 
-/// The label of the one frozen corpus v0 carries.
-pub const GOLDEN_LABEL: &str = "issue-929";
+/// The label of the **v1 baseline** corpus: a vault frozen by v0's own freezer
+/// at the ladder head, which is the shape v1 founds its files from
+/// ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-D1-1).
+///
+/// It is what `open_golden` opens and what `contracts/schema/vault-ddl.sql` is
+/// generated from. There is ONE baseline; the checkpoint label below is kept
+/// beside it because it is the low end of the accepted `user_version` window,
+/// not a second baseline.
+pub const GOLDEN_LABEL: &str = "issue-1020";
+
+/// The label of the #929 checkpoint corpus, frozen at the LOW end of the
+/// accepted `PRAGMA user_version` window. v0's own golden suite migrates it
+/// forward on every run, which is the only reason a pre-ladder-head file is
+/// worth keeping: it is the evidence that the ladder still climbs.
+pub const GOLDEN_LABEL_CHECKPOINT: &str = "issue-929";
 
 /// The repository root, resolved from this crate's own manifest directory so a
 /// test does not depend on the working directory it was invoked from.
@@ -31,19 +44,29 @@ pub fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// The v1 copy of the corpus: `contracts/golden/<label>`.
+/// The v1 copy of the baseline corpus: `contracts/golden/<label>`.
 #[must_use]
 pub fn contracts_golden_dir() -> PathBuf {
-    repo_root().join("contracts/golden").join(GOLDEN_LABEL)
+    contracts_golden_dir_for(GOLDEN_LABEL)
 }
 
-/// The v0 copy of the corpus, the pinned oracle's own path. It exists until
-/// wave 6 deletes the v0 tree; a caller must handle its absence.
+/// The v1 copy of any labelled corpus.
+#[must_use]
+pub fn contracts_golden_dir_for(label: &str) -> PathBuf {
+    repo_root().join("contracts/golden").join(label)
+}
+
+/// The v0 copy of the baseline corpus, the pinned oracle's own path. It exists
+/// until wave 6 deletes the v0 tree; a caller must handle its absence.
 #[must_use]
 pub fn v0_golden_dir() -> PathBuf {
-    repo_root()
-        .join("packages/vault/tests/golden")
-        .join(GOLDEN_LABEL)
+    v0_golden_dir_for(GOLDEN_LABEL)
+}
+
+/// The v0 copy of any labelled corpus.
+#[must_use]
+pub fn v0_golden_dir_for(label: &str) -> PathBuf {
+    repo_root().join("packages/vault/tests/golden").join(label)
 }
 
 /// The manifest a release froze beside the file.
@@ -116,9 +139,14 @@ impl Drop for InflatedGolden {
     }
 }
 
-/// Inflate the v1 copy of the corpus. The helper every test in this crate uses.
+/// Inflate the v1 copy of the baseline corpus. The helper every test uses.
 pub fn open_golden() -> Result<InflatedGolden> {
     InflatedGolden::from_dir(&contracts_golden_dir())
+}
+
+/// Inflate the v1 copy of a labelled corpus.
+pub fn open_golden_labelled(label: &str) -> Result<InflatedGolden> {
+    InflatedGolden::from_dir(&contracts_golden_dir_for(label))
 }
 
 /// A unique scratch directory for an inflated copy. Outside the repository, so

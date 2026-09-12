@@ -24,7 +24,17 @@
 
 import { readFileSync } from "node:fs";
 
+import { SEAT_LOG_MAX_PAGE } from "../../packages/core/src/protocol/seat-log.ts";
 import { SNAPSHOT_EXCLUSIONS } from "../../packages/vault/src/golden-snapshot.ts";
+import { REPLICA_IDEMPOTENCY_WINDOW_DAYS } from "../../packages/vault/src/replica/intents.ts";
+import {
+  REPLICA_DEFER_THRESHOLD_BYTES,
+  REPLICA_LOCAL_TABLES,
+  REPLICA_LOG_RETENTION_DAYS,
+  REPLICA_LOG_RETENTION_MAX_ROWS,
+  REPLICA_PRODUCER_MAX_ROWS,
+  REPLICA_SEAT_HOLD_DAYS,
+} from "../../packages/vault/src/replica/log.ts";
 import {
   MACHINERY_BANDS,
   ONTOLOGY_PACKS,
@@ -42,7 +52,16 @@ import {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
 } from "../../packages/vault/src/schema/migrate.ts";
-import { PRIVATE_TABLES } from "../../packages/vault/src/schema/private-tables.ts";
+import {
+  PRIVATE_TABLES,
+  REPLICATED_COLUMN_EXCLUSIONS,
+  isReplicatedTable,
+} from "../../packages/vault/src/schema/private-tables.ts";
+import {
+  REPLICA_DDL_VERSION,
+  REPLICA_SCHEMA_EPOCH,
+  SEAT_SQLITE_FLOOR,
+} from "../../packages/vault/src/schema/replica.ts";
 import { SEALED_COLUMNS } from "../../packages/vault/src/schema/sealed.ts";
 
 /** One registered entity, with the physical table the resolver derives. */
@@ -114,6 +133,67 @@ function goldenUserVersion(): number {
   return manifest.userVersion;
 }
 
+/**
+ * The replicated-table ALLOW-LIST, transcribed from the source text.
+ *
+ * `REPLICATED_TABLE_NAMES` is deliberately NOT exported by
+ * `private-tables.ts` — the module's public surface is the `isReplicatedTable`
+ * predicate, because a caller that could see the set would be tempted to
+ * subtract from it. The v0 tree is a pinned oracle (#1020) and adding an
+ * `export` to it is not a permitted edit, so the names are read out of the
+ * declaration's own text and then EVERY name is put back through the exported
+ * predicate. A mis-parse therefore fails loudly here rather than shipping a
+ * short allow-list into `crates/vault` (#1020, D-1020-D1-12).
+ */
+function replicatedTables(): string[] {
+  const source = readFileSync(
+    new URL(
+      "../../packages/vault/src/schema/private-tables.ts",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  const opener =
+    "const REPLICATED_TABLE_NAMES: ReadonlySet<string> = new Set([";
+  const start = source.indexOf(opener);
+  if (start < 0) {
+    throw new Error(
+      "export-v0-registries: REPLICATED_TABLE_NAMES is no longer declared the way this script reads it"
+    );
+  }
+  const end = source.indexOf("]);", start);
+  if (end < 0) {
+    throw new Error(
+      "export-v0-registries: the allow-list literal is unterminated"
+    );
+  }
+  const body = source.slice(start + opener.length, end);
+  const names = [...body.matchAll(/"(?<name>[A-Za-z0-9_]+)"/gu)].map(
+    (match) => match.groups?.name as string
+  );
+  const unique = [...new Set(names)].sort();
+  if (unique.length !== names.length) {
+    throw new Error(
+      "export-v0-registries: the allow-list literal repeats a name"
+    );
+  }
+  // The predicate is the oracle for the parse. An ext-band prefix would pass
+  // it without being in the literal, so the check is one-directional on
+  // purpose: everything parsed IS replicated.
+  const rejected = unique.filter((name) => !isReplicatedTable(name));
+  if (rejected.length > 0) {
+    throw new Error(
+      `export-v0-registries: parsed names that isReplicatedTable() denies: ${rejected.join(", ")}`
+    );
+  }
+  if (unique.length < 100) {
+    throw new Error(
+      `export-v0-registries: only ${unique.length} replicated table(s) parsed; the literal holds well over a hundred`
+    );
+  }
+  return unique;
+}
+
 const exported = {
   $generatedBy: "bun contracts/tools/export-v0-registries.ts",
   $note:
@@ -172,6 +252,33 @@ const exported = {
   snapshotExclusions: [...SNAPSHOT_EXCLUSIONS.entries()]
     .map(([table, reason]) => ({ table, reason }))
     .sort((a, b) => a.table.localeCompare(b.table)),
+  // The replica plane, for `crates/vault` (#1020, D-1020-D1-12). The
+  // allow-list is what a seat's copy holds; the constants are the numbers the
+  // log plane is built out of, and a Rust constant that disagreed with one of
+  // them would be a silent protocol change.
+  replicatedTables: replicatedTables(),
+  replicaConstants: {
+    schemaEpoch: REPLICA_SCHEMA_EPOCH,
+    ddlVersion: REPLICA_DDL_VERSION,
+    seatSqliteFloor: SEAT_SQLITE_FLOOR,
+    producerMaxRows: REPLICA_PRODUCER_MAX_ROWS,
+    deferThresholdBytes: REPLICA_DEFER_THRESHOLD_BYTES,
+    logRetentionDays: REPLICA_LOG_RETENTION_DAYS,
+    logRetentionMaxRows: REPLICA_LOG_RETENTION_MAX_ROWS,
+    seatHoldDays: REPLICA_SEAT_HOLD_DAYS,
+    idempotencyWindowDays: REPLICA_IDEMPOTENCY_WINDOW_DAYS,
+    seatLogMaxPage: SEAT_LOG_MAX_PAGE,
+    localTables: [...REPLICA_LOCAL_TABLES].sort(),
+    jsonKeyExclusions: [...REPLICATED_COLUMN_EXCLUSIONS]
+      .map((exclusion) => ({
+        table: exclusion.table,
+        column: exclusion.column,
+        jsonKeys: [...exclusion.jsonKeys],
+      }))
+      .sort((a, b) =>
+        `${a.table}.${a.column}`.localeCompare(`${b.table}.${b.column}`)
+      ),
+  },
 };
 
 process.stdout.write(`${JSON.stringify(exported, null, 2)}\n`);

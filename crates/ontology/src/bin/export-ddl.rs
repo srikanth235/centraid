@@ -4,7 +4,7 @@
 //!
 //! ```sh
 //! cargo run -p centraid-ontology --bin export-ddl -- \
-//!   contracts/golden/issue-929/vault.db.gz > contracts/schema/vault-ddl.sql
+//!   contracts/golden/issue-1020/vault.db.gz > contracts/schema/vault-ddl.sql
 //! ```
 //!
 //! The argument may be a `.gz` (inflated into a scratch directory first, never
