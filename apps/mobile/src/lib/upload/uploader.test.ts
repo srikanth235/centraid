@@ -288,6 +288,27 @@ describe("uploader", () => {
       expect(store.bySha(SHA)?.state, "403 will not fix itself").toBe("failed");
     });
 
+    it("records a refusal in member words; the raw text goes to the log (R-NY-10)", async () => {
+      enqueue();
+      const warn = vi.spyOn(console, "warn").mockReturnValue(undefined);
+      const raw = "POST /centraid/_vault/blobs/direct refused (507)";
+      const full: DirectTransferClient = {
+        begin: async () => {
+          throw new DirectTransferError(raw, 507);
+        },
+        recordPart: async () => undefined,
+        complete: async () => ({}),
+      };
+      await drainer({ client: full }).drainOnce();
+      // Three member surfaces print this row verbatim — Backup health's
+      // failure list, the backup verdict's detail, Home's notification cause.
+      expect(store.bySha(SHA)?.lastError).toBe("Your vault is out of space");
+      expect(warn).toHaveBeenCalledWith(
+        `[centraid] upload: item-dddd was not sent — ${raw}`
+      );
+      warn.mockRestore();
+    });
+
     it("gives up after MAX_ATTEMPTS transient failures", async () => {
       enqueue();
       const flaky: DirectTransferClient = {
