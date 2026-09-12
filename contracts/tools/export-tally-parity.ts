@@ -173,8 +173,29 @@ const HOST_CLOCK = "<host-clock>";
  * canonicalised anyway, because a fixture that is stable only for half its ids
  * is a fixture whose diff nobody trusts.
  */
-function canonicalise<T>(value: T): T {
+/**
+ * ONE ID SPACE PER VAULT (#1020, wave 4 lane Tally-finish).
+ *
+ * THE BUG THIS FIXES, and it made the fixture uncomparable. `canonicalise` held
+ * its `seen` map in its own body, so each call started numbering at `id-0001`
+ * — and it was called once for `rows` and once for `queries`. The same expense
+ * was therefore `id-0035` in `rows.json` and `id-0016` in `queries.json`, and
+ * `export`'s own inputs named group ids that no row in `rows.json` carried. A
+ * port that rebuilds the vault from the rows and runs the queries could not
+ * compare a single case: every id disagreed, and the disagreement was an
+ * artifact of the generator rather than a fact about either side.
+ *
+ * The map is now created once per VAULT and shared by every artifact read out
+ * of it. The ontology scenarios get their own, because they are built from a
+ * DIFFERENT vault (`buildOntologyScenarios`) and sharing a numbering across two
+ * vaults would assert a relationship that does not exist.
+ */
+function canonicaliser(): <T>(value: T) => T {
   const seen = new Map<string, string>();
+  return <T>(value: T): T => canonicaliseWith(value, seen);
+}
+
+function canonicaliseWith<T>(value: T, seen: Map<string, string>): T {
   const ID =
     /\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/giu;
   // Any instant outside the frozen run's own year. The run is stamped in 2099
@@ -349,6 +370,9 @@ async function tallyScenarios(): Promise<unknown> {
 /** Build the whole bundle. Opens and closes its own vault. */
 export async function buildTallyParity(): Promise<TallyParityBundle> {
   const scenarios = await tallyScenarios();
+  // ONE id space for everything read out of the fixture vault: the rows and
+  // the query answers have to name the same expense by the same token.
+  const vaultIds = canonicaliser();
   const db = openVaultDb();
   const clock = installFixtureClock(PARITY_EPOCH);
   try {
@@ -477,10 +501,11 @@ export async function buildTallyParity(): Promise<TallyParityBundle> {
       // bootstrap ids and seed-derived command ids. The balance cases name
       // their parties `me`, `a`, `b` — synthetic on purpose, so the fold's
       // own cases read as arithmetic rather than as a vault.
-      rows: canonicalise(rows),
-      queries: canonicalise(queries),
+      rows: vaultIds(rows),
+      queries: vaultIds(queries),
       balances: balanceCases(),
-      scenarios: canonicalise(scenarios),
+      // Its own id space: a different vault (see `canonicaliser`).
+      scenarios: canonicaliser()(scenarios),
     };
   } finally {
     clock.restore();
