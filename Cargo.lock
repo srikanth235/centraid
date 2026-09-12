@@ -558,6 +558,7 @@ dependencies = [
  "centraid-apps-kit",
  "centraid-apps-tally",
  "centraid-assist",
+ "centraid-automations",
  "centraid-core",
  "centraid-net",
  "centraid-protocol",

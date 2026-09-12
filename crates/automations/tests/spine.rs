@@ -211,13 +211,20 @@ fn nothing_a_fire_writes_can_be_watched() {
             format!(r#"[{{"kind":"data","entities":["{logical}"]}}]"#),
             format!(r#"[{{"kind":"condition","entity":"{logical}"}}]"#),
         ] {
-            let text = format!(r#"{{"id":"loop","name":"Loop","triggers":{shape}}}"#);
+            // A legal manifest in every other respect, so the refusal can
+            // only be the watch guard: the vault block a condition or data
+            // trigger needs is present, and so is the provenance.
+            let text = format!(
+                r#"{{"name":"Loop","prompt":"loop","triggers":{shape},
+                   "vault":{{"scopes":[{{"schema":"core","verbs":"read"}}]}},
+                   "generated":{{"by":"builder","at":"2026-01-01T00:00:00.000Z"}}}}"#
+            );
             let error = manifest::parse(&text)
                 .expect_err("a trigger over a table a fire writes is refused");
             assert_eq!(
                 error.code,
                 manifest::ManifestErrorCode::DeniedWatch,
-                "{logical}"
+                "{logical}: {error:?}"
             );
         }
     }

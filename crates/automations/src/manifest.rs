@@ -32,10 +32,26 @@
 //!   [`crate::watch`] for the argument; the manifest's job is only to surface
 //!   the refusal with the field that caused it.
 //!
-//! ## What is deliberately NOT here
+//! ## Four couplings a shape check alone would miss
 //!
-//! `confirmation` on a manifest and `confirm` on a vault command are **two
-//! different gates** (census A0) and this file models the first only. And
+//! The interesting refusals are not about types, they are about **coherence**,
+//! and every one of them came out of the parity fixture rather than out of the
+//! type:
+//!
+//! 1. **A condition or data trigger needs a `vault` block.** Such a trigger IS
+//!    a consented vault read, so without a block there is no grant to evaluate
+//!    it under and the manifest means nothing it can carry out.
+//! 2. **An event trigger needs a BOUND connection of its kind.** A provider
+//!    cursor with no connection is a subscription to nothing.
+//! 3. **`requires.secrets` is connector-only** (#293). A non-connector
+//!    declaring them is a manifest bug, not a latent capability.
+//! 4. **A connector needs a `vault` block**, because a connector's whole job is
+//!    writing staged rows into the vault.
+//!
+//! There is **no `confirmation` field** on an automation manifest — census A0's
+//! `confirmation` is an APP manifest's, and the census's point stands either
+//! way: a manifest's gate and a command's `confirm` are two different gates.
+//!
 //! `requires.secrets` is parsed and preserved but reaches nothing: `ctx.fetch`
 //! is connector-only and connectors are on the back burner, so the fetch rail
 //! answers [`crate::handler::CtxError::NotAvailable`] this wave rather than
@@ -399,22 +415,114 @@ pub struct ManifestRequires {
     pub secrets: Vec<String>,
 }
 
+/// When a run tells the member about itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Notify {
+    Always,
+    /// The default. A quiet success is not news.
+    #[default]
+    Failures,
+    Never,
+}
+
+impl Notify {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Always => "always",
+            Self::Failures => "failures",
+            Self::Never => "never",
+        }
+    }
+
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "always" => Some(Self::Always),
+            "failures" => Some(Self::Failures),
+            "never" => Some(Self::Never),
+            _ => None,
+        }
+    }
+}
+
+/// The verbs a vault scope may ask for.
+pub const VAULT_VERBS: [&str; 4] = ["read", "read+act", "act", "reveal"];
+
+/// The vault filter operators a manifest scope may use.
+pub const VAULT_FILTER_OPS: [&str; 10] = [
+    "eq",
+    "ne",
+    "lt",
+    "lte",
+    "gt",
+    "gte",
+    "in",
+    "is-null",
+    "not-null",
+    "within-days",
+];
+
+/// One requested scope. **A REQUEST the owner answers**, never a grant.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VaultScope {
+    pub schema: String,
+    pub table: Option<String>,
+    pub verbs: String,
+    pub row_filter: Vec<WhereClause>,
+    pub field_mask: Vec<String>,
+}
+
+/// `manifest.vault`: the access this automation asks for, and why.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManifestVault {
+    pub why: Option<String>,
+    /// Non-empty by construction: a vault block that asked for nothing would
+    /// be a block the owner cannot answer.
+    pub scopes: Vec<VaultScope>,
+}
+
+/// One bound provider connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionBinding {
+    pub connection_id: String,
+    pub kind: String,
+    pub label: String,
+}
+
+/// Who wrote this manifest, and when. **Required**: an automation with no
+/// provenance is one nobody can answer questions about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Generated {
+    pub by: String,
+    pub at: String,
+}
+
 /// One automation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
-    pub id: String,
     pub name: String,
+    /// `0.1.0` when absent — a version is how a member tells two copies apart,
+    /// and the default is a real version rather than an empty string.
+    pub version: String,
+    pub description: Option<String>,
     /// Lives HERE, not in a table (`manifest.ts:10`–`:13`).
     pub enabled: bool,
-    pub instructions: String,
+    pub notify: Notify,
+    /// The instructions, with `@[…]` anchors still in them
+    /// ([`crate::anchor`]). **Required**: an automation with no prompt has
+    /// nothing to run.
+    pub prompt: String,
     pub triggers: Vec<Trigger>,
     pub requires: ManifestRequires,
+    /// True when a `connector` block is declared. The block's own shape is the
+    /// connectors lane's, and that lane is on the back burner — so this crate
+    /// records its PRESENCE, which is all the four coupling rules need.
+    pub connector: bool,
+    pub connections: Vec<ConnectionBinding>,
+    pub vault: Option<ManifestVault>,
     pub sandbox: Option<SandboxLane>,
     pub enrich: Option<ManifestEnrich>,
-    /// The manifest's own confirmation gate. **NOT** a command's `confirm`
-    /// (census A0): this one says a member is asked before the run, the other
-    /// says a member is asked before one write.
-    pub confirmation: bool,
+    pub generated: Generated,
 }
 
 impl Manifest {
@@ -497,33 +605,40 @@ pub fn from_value(raw: &Value) -> Result<Manifest, ManifestError> {
             "a manifest is a JSON object",
         )
     })?;
-    let id = required_str(object, "id")?;
-    if !is_valid_slug(&id) {
-        return Err(ManifestError::new(
-            ManifestErrorCode::InvalidShape,
-            "manifest.id",
-            format!("\"{id}\" is not a valid automation id (lowercase letters, digits and dashes)"),
-        ));
-    }
     let name = required_str(object, "name")?;
-    let enabled = object.get("enabled").map_or(Ok(true), |value| {
-        value.as_bool().ok_or_else(|| {
-            ManifestError::new(
+    let version = match object.get("version") {
+        None | Some(Value::Null) => "0.1.0".to_owned(),
+        Some(_) => required_str(object, "version")?,
+    };
+    let description = match object.get("description") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => Some(text.clone()),
+        Some(_) => {
+            return Err(ManifestError::new(
                 ManifestErrorCode::InvalidShape,
-                "manifest.enabled",
-                "enabled is a boolean",
-            )
-        })
-    })?;
-    let instructions = object
-        .get("instructions")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-    let confirmation = object
-        .get("confirmation")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+                "manifest.description",
+                "description is a string",
+            ));
+        }
+    };
+    // `enabled` is TRUE unless it is exactly `false`, which is v0's
+    // `r.enabled === true` inverted for the same reason: a truthy junk value
+    // must not silently disable an automation.
+    let enabled = object.get("enabled").map_or(true, |value| value != &Value::Bool(false));
+    let notify = match object.get("notify") {
+        None | Some(Value::Null) => Notify::default(),
+        Some(value) => value
+            .as_str()
+            .and_then(Notify::parse)
+            .ok_or_else(|| {
+                ManifestError::new(
+                    ManifestErrorCode::InvalidShape,
+                    "manifest.notify",
+                    "notify is one of always, failures, never",
+                )
+            })?,
+    };
+    let prompt = required_str(object, "prompt")?;
 
     let triggers_value = object.get("triggers").ok_or_else(|| {
         ManifestError::new(
@@ -541,10 +656,7 @@ pub fn from_value(raw: &Value) -> Result<Manifest, ManifestError> {
     })?;
     let mut triggers = Vec::with_capacity(list.len());
     for (index, entry) in list.iter().enumerate() {
-        triggers.push(parse_trigger(
-            entry,
-            &format!("manifest.triggers[{index}]"),
-        )?);
+        triggers.push(parse_trigger(entry, &format!("manifest.triggers[{index}]"))?);
     }
     // AT MOST ONE WEBHOOK (`manifest.ts:337`–`:342`): a second one would be a
     // second route slug for one handler, and the ingress lookup is by slug.
@@ -561,16 +673,354 @@ pub fn from_value(raw: &Value) -> Result<Manifest, ManifestError> {
         ));
     }
 
+    let requires = parse_requires(object)?;
+    let connector = object
+        .get("connector")
+        .is_some_and(|value| !value.is_null());
+    let connections = parse_connections(object)?;
+    let vault = parse_vault(object)?;
+    let generated = parse_generated(object)?;
+
+    // THE FOUR COUPLINGS. Each one is a manifest that type-checks and means
+    // nothing it can carry out; see the module header.
+    if connector && vault.is_none() {
+        return Err(ManifestError::new(
+            ManifestErrorCode::InvalidShape,
+            "manifest.connector",
+            "a connector stages rows into the vault, so it needs a manifest.vault block",
+        ));
+    }
+    if !connector && !requires.secrets.is_empty() {
+        return Err(ManifestError::new(
+            ManifestErrorCode::InvalidShape,
+            "manifest.requires.secrets",
+            "requires.secrets is connector-only (#293) — a non-connector declaring them is a \
+             manifest bug, not a latent capability",
+        ));
+    }
+    if vault.is_none()
+        && triggers.iter().any(|trigger| {
+            matches!(trigger.kind(), TriggerKind::Condition | TriggerKind::Data)
+        })
+    {
+        return Err(ManifestError::new(
+            ManifestErrorCode::InvalidTrigger,
+            "manifest.vault",
+            "a condition or data trigger IS a consented vault read, and without a manifest.vault \
+             block there is no grant to evaluate it under",
+        ));
+    }
+    for trigger in &triggers {
+        if let Trigger::Event {
+            connector_kind,
+            event,
+            ..
+        } = trigger
+            && !connections
+                .iter()
+                .any(|binding| &binding.kind == connector_kind)
+        {
+            return Err(ManifestError::new(
+                ManifestErrorCode::InvalidTrigger,
+                "manifest.connections",
+                format!(
+                    "the \"{event}\" event trigger needs a bound \"{connector_kind}\" connection — \
+                     a provider cursor with no connection is a subscription to nothing"
+                ),
+            ));
+        }
+    }
+
     Ok(Manifest {
-        id,
         name,
+        version,
+        description,
         enabled,
-        instructions,
+        notify,
+        prompt,
         triggers,
-        requires: parse_requires(object)?,
+        requires,
+        connector,
+        connections,
+        vault,
         sandbox: parse_sandbox(object)?,
         enrich: parse_enrich(object)?,
-        confirmation,
+        generated,
+    })
+}
+
+fn parse_connections(
+    object: &serde_json::Map<String, Value>,
+) -> Result<Vec<ConnectionBinding>, ManifestError> {
+    let Some(value) = object.get("connections") else {
+        return Ok(Vec::new());
+    };
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    let list = value.as_array().ok_or_else(|| {
+        ManifestError::new(
+            ManifestErrorCode::InvalidShape,
+            "manifest.connections",
+            "connections is an array",
+        )
+    })?;
+    let mut out = Vec::with_capacity(list.len());
+    for (index, entry) in list.iter().enumerate() {
+        let field = format!("manifest.connections[{index}]");
+        let binding = entry.as_object().ok_or_else(|| {
+            ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                field.clone(),
+                "a connection binding is an object",
+            )
+        })?;
+        let pick = |key: &str| -> Result<String, ManifestError> {
+            binding
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| {
+                    ManifestError::new(
+                        ManifestErrorCode::InvalidShape,
+                        format!("{field}.{key}"),
+                        "a required non-empty string is missing",
+                    )
+                })
+        };
+        out.push(ConnectionBinding {
+            connection_id: pick("connectionId")?,
+            kind: pick("kind")?,
+            label: pick("label")?,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_vault(
+    object: &serde_json::Map<String, Value>,
+) -> Result<Option<ManifestVault>, ManifestError> {
+    let Some(value) = object.get("vault") else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let block = value.as_object().ok_or_else(|| {
+        ManifestError::new(
+            ManifestErrorCode::InvalidShape,
+            "manifest.vault",
+            "vault is an object",
+        )
+    })?;
+    let why = match block.get("why") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => Some(text.clone()),
+        Some(_) => {
+            return Err(ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                "manifest.vault.why",
+                "why is a string",
+            ));
+        }
+    };
+    let list = block
+        .get("scopes")
+        .and_then(Value::as_array)
+        .filter(|list| !list.is_empty())
+        .ok_or_else(|| {
+            ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                "manifest.vault.scopes",
+                "scopes is a non-empty array — a block that asked for nothing would be one the \
+                 owner cannot answer",
+            )
+        })?;
+    let mut scopes = Vec::with_capacity(list.len());
+    for (index, entry) in list.iter().enumerate() {
+        let field = format!("manifest.vault.scopes[{index}]");
+        let scope = entry.as_object().ok_or_else(|| {
+            ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                field.clone(),
+                "a scope is an object",
+            )
+        })?;
+        let schema = scope
+            .get("schema")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ManifestError::new(
+                    ManifestErrorCode::InvalidShape,
+                    format!("{field}.schema"),
+                    "a scope names its schema",
+                )
+            })?
+            .to_owned();
+        let verbs = scope
+            .get("verbs")
+            .and_then(Value::as_str)
+            .filter(|value| VAULT_VERBS.contains(value))
+            .ok_or_else(|| {
+                ManifestError::new(
+                    ManifestErrorCode::InvalidShape,
+                    format!("{field}.verbs"),
+                    format!("verbs is one of {}", VAULT_VERBS.join(", ")),
+                )
+            })?
+            .to_owned();
+        let table = match scope.get("table") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(text)) if !text.is_empty() => Some(text.clone()),
+            Some(_) => {
+                return Err(ManifestError::new(
+                    ManifestErrorCode::InvalidShape,
+                    format!("{field}.table"),
+                    "table is a non-empty string",
+                ));
+            }
+        };
+        let mut row_filter = Vec::new();
+        if let Some(clauses) = scope.get("rowFilter").filter(|value| !value.is_null()) {
+            let list = clauses
+                .as_array()
+                .filter(|list| !list.is_empty())
+                .ok_or_else(|| {
+                    ManifestError::new(
+                        ManifestErrorCode::InvalidShape,
+                        format!("{field}.rowFilter"),
+                        "rowFilter is a non-empty array",
+                    )
+                })?;
+            for (clause_index, clause) in list.iter().enumerate() {
+                let clause_field = format!("{field}.rowFilter[{clause_index}]");
+                let clause = clause.as_object().ok_or_else(|| {
+                    ManifestError::new(
+                        ManifestErrorCode::InvalidShape,
+                        clause_field.clone(),
+                        "a filter clause is an object",
+                    )
+                })?;
+                let column = clause
+                    .get("column")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        ManifestError::new(
+                            ManifestErrorCode::InvalidShape,
+                            format!("{clause_field}.column"),
+                            "a filter clause names a column",
+                        )
+                    })?
+                    .to_owned();
+                let raw_op = clause
+                    .get("op")
+                    .and_then(Value::as_str)
+                    .filter(|value| VAULT_FILTER_OPS.contains(value))
+                    .ok_or_else(|| {
+                        ManifestError::new(
+                            ManifestErrorCode::InvalidShape,
+                            format!("{clause_field}.op"),
+                            format!(
+                                "op is one of {}",
+                                VAULT_FILTER_OPS.join(", ")
+                            ),
+                        )
+                    })?;
+                row_filter.push(WhereClause {
+                    column,
+                    op: ConditionOp::parse(raw_op).unwrap_or(ConditionOp::Eq),
+                    value: clause.get("value").cloned(),
+                });
+            }
+        }
+        let mut field_mask: Vec<String> = Vec::new();
+        if let Some(mask) = scope.get("fieldMask").filter(|value| !value.is_null()) {
+            let list = mask
+                .as_array()
+                .filter(|list| !list.is_empty())
+                .ok_or_else(|| {
+                    ManifestError::new(
+                        ManifestErrorCode::InvalidShape,
+                        format!("{field}.fieldMask"),
+                        "fieldMask is a non-empty array",
+                    )
+                })?;
+            for entry in list {
+                let column = entry
+                    .as_str()
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        ManifestError::new(
+                            ManifestErrorCode::InvalidShape,
+                            format!("{field}.fieldMask"),
+                            "a field mask is an array of column names",
+                        )
+                    })?;
+                // A DUPLICATE IS REFUSED rather than deduped: a mask written
+                // twice is a mask somebody edited without reading.
+                if field_mask.iter().any(|existing| existing == column) {
+                    return Err(ManifestError::new(
+                        ManifestErrorCode::InvalidShape,
+                        format!("{field}.fieldMask"),
+                        "fieldMask must not repeat a column",
+                    ));
+                }
+                field_mask.push(column.to_owned());
+            }
+        }
+        // A NARROWING WITH NO TABLE IS NOT A NARROWING: a row filter or a field
+        // mask at schema scope would silently apply to nothing.
+        if (!row_filter.is_empty() || !field_mask.is_empty()) && table.is_none() {
+            return Err(ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                format!("{field}.table"),
+                "a rowFilter or a fieldMask narrows one table, so the table must be named",
+            ));
+        }
+        scopes.push(VaultScope {
+            schema,
+            table,
+            verbs,
+            row_filter,
+            field_mask,
+        });
+    }
+    Ok(Some(ManifestVault { why, scopes }))
+}
+
+fn parse_generated(
+    object: &serde_json::Map<String, Value>,
+) -> Result<Generated, ManifestError> {
+    let block = object
+        .get("generated")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                "manifest.generated",
+                "generated is an object naming who wrote this manifest and when",
+            )
+        })?;
+    let pick = |key: &str| -> Result<String, ManifestError> {
+        block
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                ManifestError::new(
+                    ManifestErrorCode::InvalidShape,
+                    format!("manifest.generated.{key}"),
+                    "a required non-empty string is missing",
+                )
+            })
+    };
+    Ok(Generated {
+        by: pick("by")?,
+        at: pick("at")?,
     })
 }
 
@@ -1155,16 +1605,6 @@ fn required_str(
         })
 }
 
-fn is_valid_slug(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-        && !value.starts_with('-')
-        && !value.ends_with('-')
-}
-
 fn is_valid_webhook_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64
@@ -1203,9 +1643,20 @@ fn is_valid_locker_ref(value: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn manifest_with(triggers: &str) -> String {
-        format!(r#"{{"id":"digest","name":"Morning digest","triggers":{triggers}}}"#)
+    /// The smallest legal manifest, as a base every case varies.
+    fn document(extra: &str) -> String {
+        format!(
+            r#"{{"name":"Morning digest","prompt":"summarise yesterday",
+               "generated":{{"by":"builder","at":"2026-01-01T00:00:00.000Z"}}{extra}}}"#
+        )
     }
+
+    fn with_triggers(triggers: &str) -> String {
+        document(&format!(r#","triggers":{triggers}"#))
+    }
+
+    /// A vault block wide enough for a condition or data trigger.
+    const VAULT_BLOCK: &str = r#","vault":{"why":"to reconcile","scopes":[{"schema":"core","verbs":"read"}]}"#;
 
     #[test]
     fn the_registry_carries_every_kind_exactly_once_with_its_side_effect() {
@@ -1217,28 +1668,30 @@ mod tests {
         for entry in TRIGGER_REGISTRY {
             assert!(!entry.side_effect.is_empty());
             assert!(!entry.consent.is_empty());
-            assert!(
-                entry.ledger,
-                "{} must be ledger-covered",
-                entry.kind.as_str()
-            );
+            assert!(entry.ledger, "{} must be ledger-covered", entry.kind.as_str());
         }
     }
 
     #[test]
     fn the_five_kinds_parse() {
-        let text = manifest_with(
-            r#"[
-              {"kind":"cron","expr":"0 7 * * *","tz":"Asia/Kolkata","backfill":"each"},
-              {"kind":"webhook","pending":true},
-              {"kind":"condition","entity":"core.transaction","where":[{"column":"amount","op":"gt","value":100}]},
-              {"kind":"data","entities":["core.document","media.asset"],"every":"*/2 * * * *"},
-              {"kind":"event","connectorKind":"pull.gmail","event":"new-message"}
-            ]"#,
-        );
+        let text = document(&format!(
+            r#","triggers":[
+              {{"kind":"cron","expr":"0 7 * * *","tz":"Asia/Kolkata","backfill":"each"}},
+              {{"kind":"webhook","pending":true}},
+              {{"kind":"condition","entity":"core.transaction",
+                "where":[{{"column":"amount","op":"gt","value":100}}]}},
+              {{"kind":"data","entities":["core.document","media.asset"],"every":"*/2 * * * *"}},
+              {{"kind":"event","connectorKind":"pull.gmail","event":"new-message"}}
+            ]{VAULT_BLOCK},
+            "connections":[{{"connectionId":"c1","kind":"pull.gmail","label":"Inbox"}}]"#
+        ));
         let manifest = parse(&text).expect("the five kinds are legal");
         assert_eq!(manifest.triggers.len(), 5);
         assert!(manifest.enabled, "an absent `enabled` reads as on");
+        assert_eq!(manifest.notify, Notify::Failures, "a quiet success is not news");
+        assert_eq!(manifest.version, "0.1.0", "an absent version is a real one");
+        assert_eq!(manifest.prompt, "summarise yesterday");
+        assert_eq!(manifest.generated.by, "builder");
         assert_eq!(
             manifest.triggers[0],
             Trigger::Cron {
@@ -1261,6 +1714,7 @@ mod tests {
             "event:pull.gmail:new-message:{}",
             "an event cursor's identity carries its binding"
         );
+        assert_eq!(manifest.vault.expect("a block").scopes.len(), 1);
     }
 
     /// THE STRUCTURAL WATCH LIST, through the manifest door.
@@ -1274,12 +1728,16 @@ mod tests {
             "outbox.item",
             "enrich.derivation",
         ] {
-            let text = manifest_with(&format!(r#"[{{"kind":"data","entities":["{entity}"]}}]"#));
+            let text = document(&format!(
+                r#","triggers":[{{"kind":"data","entities":["{entity}"]}}]{VAULT_BLOCK}"#
+            ));
             let error = parse(&text).expect_err("a loop-sensitive entity is refused");
             assert_eq!(error.code, ManifestErrorCode::DeniedWatch, "{entity}");
             assert_eq!(error.field, "manifest.triggers[0].entities[0]");
         }
-        let text = manifest_with(r#"[{"kind":"condition","entity":"trigger_ingress"}]"#);
+        let text = document(&format!(
+            r#","triggers":[{{"kind":"condition","entity":"trigger_ingress"}}]{VAULT_BLOCK}"#
+        ));
         let error = parse(&text).expect_err("a condition trigger is guarded too");
         assert_eq!(error.code, ManifestErrorCode::DeniedWatch);
         assert_eq!(error.field, "manifest.triggers[0].entity");
@@ -1287,23 +1745,22 @@ mod tests {
 
     #[test]
     fn a_pending_webhook_round_trips_and_a_half_minted_one_refuses() {
-        let pending = manifest_with(r#"[{"kind":"webhook","pending":true}]"#);
-        assert!(parse(&pending).is_ok());
+        assert!(parse(&with_triggers(r#"[{"kind":"webhook","pending":true}]"#)).is_ok());
         // Neither id nor hash and not pending: refused.
-        let bare = manifest_with(r#"[{"kind":"webhook"}]"#);
         assert_eq!(
-            parse(&bare)
+            parse(&with_triggers(r#"[{"kind":"webhook"}]"#))
                 .expect_err("a bare webhook is not a state")
                 .code,
             ManifestErrorCode::InvalidTrigger
         );
         // An id with no hash: refused, and it is the HASH that is named.
-        let half = manifest_with(r#"[{"kind":"webhook","id":"abc123"}]"#);
         assert_eq!(
-            parse(&half).expect_err("half-minted").field,
+            parse(&with_triggers(r#"[{"kind":"webhook","id":"abc123"}]"#))
+                .expect_err("half-minted")
+                .field,
             "manifest.triggers[0].secretHash"
         );
-        let minted = manifest_with(&format!(
+        let minted = with_triggers(&format!(
             r#"[{{"kind":"webhook","id":"abc123","secretHash":"{}"}}]"#,
             "a".repeat(64)
         ));
@@ -1312,14 +1769,17 @@ mod tests {
         assert!(!manifest.has_pending_webhook());
         // A secret where a hash belongs is refused by LENGTH, so a manifest
         // cannot carry a plaintext secret that happens to look like one.
-        let plaintext =
-            manifest_with(r#"[{"kind":"webhook","id":"abc123","secretHash":"hunter2"}]"#);
-        assert!(parse(&plaintext).is_err());
+        assert!(
+            parse(&with_triggers(
+                r#"[{"kind":"webhook","id":"abc123","secretHash":"hunter2"}]"#
+            ))
+            .is_err()
+        );
     }
 
     #[test]
     fn at_most_one_webhook() {
-        let text = manifest_with(
+        let text = with_triggers(
             r#"[{"kind":"webhook","pending":true},{"kind":"webhook","pending":true}]"#,
         );
         assert_eq!(
@@ -1330,7 +1790,7 @@ mod tests {
 
     #[test]
     fn an_unknown_zone_is_refused_at_validation_and_not_at_fire_time() {
-        let text = manifest_with(r#"[{"kind":"cron","expr":"0 7 * * *","tz":"Mars/Olympus"}]"#);
+        let text = with_triggers(r#"[{"kind":"cron","expr":"0 7 * * *","tz":"Mars/Olympus"}]"#);
         let error = parse(&text).expect_err("an unknown zone");
         assert_eq!(error.field, "manifest.triggers[0].tz");
         assert!(error.detail.contains("Mars/Olympus"), "{}", error.detail);
@@ -1338,35 +1798,37 @@ mod tests {
 
     #[test]
     fn the_backfill_default_is_latest_and_unknown_classes_refuse() {
-        let text = manifest_with(r#"[{"kind":"cron","expr":"0 7 * * *"}]"#);
-        let manifest = parse(&text).expect("no class declared");
+        let manifest = parse(&with_triggers(r#"[{"kind":"cron","expr":"0 7 * * *"}]"#))
+            .expect("no class declared");
         assert_eq!(
             manifest.cron_triggers().next().expect("one").2,
             Backfill::Latest
         );
-        let bad = manifest_with(r#"[{"kind":"cron","expr":"0 7 * * *","backfill":"all"}]"#);
-        assert!(parse(&bad).is_err());
+        assert!(
+            parse(&with_triggers(
+                r#"[{"kind":"cron","expr":"0 7 * * *","backfill":"all"}]"#
+            ))
+            .is_err()
+        );
     }
 
     #[test]
     fn the_system_sandbox_lane_is_not_spellable() {
-        let text = r#"{"id":"faces","name":"Faces","triggers":[],"sandbox":{"lane":"system"}}"#;
-        let error = parse(text).expect_err("system is decided by provenance");
+        let error = parse(&document(r#","triggers":[],"sandbox":{"lane":"system"}"#))
+            .expect_err("system is decided by provenance");
         assert_eq!(error.field, "manifest.sandbox.lane");
         assert!(error.detail.contains("provenance"), "{}", error.detail);
         for lane in ["model-runtime", "media-transcode"] {
-            let ok = format!(
-                r#"{{"id":"faces","name":"Faces","triggers":[],"sandbox":{{"lane":"{lane}"}}}}"#
-            );
-            assert!(parse(&ok).is_ok(), "{lane}");
+            let text = document(&format!(r#","triggers":[],"sandbox":{{"lane":"{lane}"}}"#));
+            assert!(parse(&text).is_ok(), "{lane}");
         }
     }
 
     #[test]
     fn an_omitted_enrich_lane_reads_as_gateway() {
-        let text = r#"{"id":"faces","name":"Faces","triggers":[],
-          "enrich":{"domain":"photos","capability":"faces"}}"#;
-        let manifest = parse(text).expect("an enricher");
+        let text =
+            document(r#","triggers":[],"enrich":{"domain":"photos","capability":"faces"}"#);
+        let manifest = parse(&text).expect("an enricher");
         let enrich = manifest.enrich.expect("the block");
         assert_eq!(
             enrich.lane,
@@ -1378,60 +1840,193 @@ mod tests {
 
     #[test]
     fn the_mock_provider_cannot_back_a_delegate() {
-        let text = r#"{"id":"x","name":"X","triggers":[],
-          "requires":{"model":"centraid-mock/echo"}}"#;
         assert_eq!(
-            parse(text).expect_err("the mock recurses").field,
+            parse(&document(
+                r#","triggers":[],"requires":{"model":"centraid-mock/echo"}"#
+            ))
+            .expect_err("the mock recurses")
+            .field,
             "manifest.requires.model"
         );
-        let ok = r#"{"id":"x","name":"X","triggers":[],
-          "requires":{"model":"anthropic/some-model","harness":"codex","mcps":["github"],
-                      "secrets":["locker:@bank:password","locker:item-1:api_key"]}}"#;
-        let manifest = parse(ok).expect("a legal requires block");
-        assert_eq!(manifest.requires.secrets.len(), 2);
+        let manifest = parse(&document(
+            r#","triggers":[],"requires":{"model":"anthropic/some-model","harness":"codex",
+                "mcps":["github"]}"#,
+        ))
+        .expect("a legal requires block");
         assert_eq!(manifest.requires.harness.as_deref(), Some("codex"));
+    }
+
+    /// COUPLING 3: `requires.secrets` is connector-only (#293).
+    #[test]
+    fn secrets_are_connector_only() {
+        let error = parse(&document(
+            r#","triggers":[],"requires":{"secrets":["locker:@bank:password"]}"#,
+        ))
+        .expect_err("a non-connector declaring secrets");
+        assert_eq!(error.field, "manifest.requires.secrets");
+        assert!(error.detail.contains("connector-only"), "{}", error.detail);
+        // With a connector block and a vault block, they are legal.
+        let text = document(&format!(
+            r#","triggers":[],"connector":{{"kind":"pull.gmail"}},
+               "requires":{{"secrets":["locker:@bank:password","locker:item-1:api_key"]}}{VAULT_BLOCK}"#
+        ));
+        let manifest = parse(&text).expect("a connector may");
+        assert_eq!(manifest.requires.secrets.len(), 2);
+        assert!(manifest.connector);
     }
 
     #[test]
     fn a_malformed_locker_reference_refuses() {
-        for reference in [
-            "bank:password",
-            "locker:bank",
-            "locker:@:password",
-            "locker::x",
-        ] {
-            let text = format!(
-                r#"{{"id":"x","name":"X","triggers":[],"requires":{{"secrets":["{reference}"]}}}}"#
-            );
+        for reference in ["bank:password", "locker:bank", "locker:@:password", "locker::x"] {
+            let text = document(&format!(
+                r#","triggers":[],"connector":{{"kind":"x"}},
+                   "requires":{{"secrets":["{reference}"]}}{VAULT_BLOCK}"#
+            ));
             assert!(parse(&text).is_err(), "{reference}");
         }
     }
 
+    /// COUPLING 4: a connector stages rows, so it needs a vault block.
+    #[test]
+    fn a_connector_with_no_vault_block_refuses() {
+        let error = parse(&document(r#","triggers":[],"connector":{"kind":"pull.gmail"}"#))
+            .expect_err("a connector with nowhere to stage");
+        assert_eq!(error.field, "manifest.connector");
+    }
+
+    /// COUPLING 1: a condition or data trigger IS a consented vault read.
+    #[test]
+    fn a_condition_or_data_trigger_with_no_vault_block_refuses() {
+        for triggers in [
+            r#"[{"kind":"condition","entity":"core.transaction"}]"#,
+            r#"[{"kind":"data","entities":["core.document"]}]"#,
+        ] {
+            let error = parse(&with_triggers(triggers)).expect_err("no grant to read under");
+            assert_eq!(error.field, "manifest.vault", "{triggers}");
+            assert!(error.detail.contains("consented vault read"), "{}", error.detail);
+        }
+    }
+
+    /// COUPLING 2: an event trigger needs a bound connection of its kind.
+    #[test]
+    fn an_event_trigger_with_no_bound_connection_refuses() {
+        let text = with_triggers(
+            r#"[{"kind":"event","connectorKind":"pull.gmail","event":"new-message"}]"#,
+        );
+        let error = parse(&text).expect_err("a subscription to nothing");
+        assert_eq!(error.field, "manifest.connections");
+        // A binding of ANOTHER kind is not a binding for this one.
+        let wrong = document(
+            r#","triggers":[{"kind":"event","connectorKind":"pull.gmail","event":"new-message"}],
+               "connections":[{"connectionId":"c1","kind":"pull.github","label":"Repos"}]"#,
+        );
+        assert!(parse(&wrong).is_err());
+    }
+
     #[test]
     fn an_unknown_provider_event_refuses_even_though_connectors_are_unbuilt() {
-        let text = manifest_with(
-            r#"[{"kind":"event","connectorKind":"pull.gmail","event":"deleted-message"}]"#,
+        assert!(
+            parse(&with_triggers(
+                r#"[{"kind":"event","connectorKind":"pull.gmail","event":"deleted-message"}]"#
+            ))
+            .is_err()
         );
-        assert!(parse(&text).is_err());
-        let unknown = manifest_with(
-            r#"[{"kind":"event","connectorKind":"pull.dropbox","event":"new-message"}]"#,
+        assert!(
+            parse(&with_triggers(
+                r#"[{"kind":"event","connectorKind":"pull.dropbox","event":"new-message"}]"#
+            ))
+            .is_err()
         );
-        assert!(parse(&unknown).is_err());
     }
 
     #[test]
     fn an_entity_watched_twice_refuses() {
-        let text =
-            manifest_with(r#"[{"kind":"data","entities":["core.document","core.document"]}]"#);
+        let text = document(&format!(
+            r#","triggers":[{{"kind":"data","entities":["core.document","core.document"]}}]{VAULT_BLOCK}"#
+        ));
         assert!(parse(&text).is_err());
     }
 
+    /// The vault block's own narrowing rules.
     #[test]
-    fn the_manifests_confirmation_is_not_a_commands_confirm() {
-        let text = r#"{"id":"x","name":"X","triggers":[],"confirmation":true}"#;
-        assert!(parse(text).expect("legal").confirmation);
-        let default = r#"{"id":"x","name":"X","triggers":[]}"#;
-        assert!(!parse(default).expect("legal").confirmation);
+    fn a_narrowing_with_no_table_is_not_a_narrowing() {
+        let text = document(
+            r#","triggers":[],"vault":{"scopes":[{"schema":"core","verbs":"read",
+               "fieldMask":["title"]}]}"#,
+        );
+        let error = parse(text.as_str()).expect_err("a mask at schema scope");
+        assert_eq!(error.field, "manifest.vault.scopes[0].table");
+        // Named, it is legal.
+        let named = document(
+            r#","triggers":[],"vault":{"scopes":[{"schema":"core","table":"document",
+               "verbs":"read","fieldMask":["title","body"],
+               "rowFilter":[{"column":"document_id","op":"in","value":["d1"]}]}]}"#,
+        );
+        let manifest = parse(&named).expect("a narrow scope");
+        let scope = &manifest.vault.expect("a block").scopes[0];
+        assert_eq!(scope.field_mask, ["title", "body"]);
+        assert_eq!(scope.row_filter.len(), 1);
+        assert_eq!(scope.row_filter[0].op, ConditionOp::In);
+        // A repeated column in a mask is refused rather than deduped.
+        let repeated = document(
+            r#","triggers":[],"vault":{"scopes":[{"schema":"core","table":"document",
+               "verbs":"read","fieldMask":["title","title"]}]}"#,
+        );
+        assert!(parse(&repeated).is_err());
+        // An empty scope list is refused: the owner cannot answer it.
+        assert!(parse(&document(r#","triggers":[],"vault":{"scopes":[]}"#)).is_err());
+        // And an unknown verb is refused with the list.
+        let verb = document(
+            r#","triggers":[],"vault":{"scopes":[{"schema":"core","verbs":"write"}]}"#,
+        );
+        let error = parse(&verb).expect_err("write is not a vault verb");
+        assert!(error.detail.contains("read+act"), "{}", error.detail);
+    }
+
+    #[test]
+    fn provenance_and_the_prompt_are_required() {
+        // No `generated` block: refused.
+        let error = parse(
+            r#"{"name":"X","prompt":"do it","triggers":[]}"#,
+        )
+        .expect_err("no provenance");
+        assert_eq!(error.field, "manifest.generated");
+        // No prompt: refused.
+        let error = parse(
+            r#"{"name":"X","triggers":[],"generated":{"by":"b","at":"t"}}"#,
+        )
+        .expect_err("nothing to run");
+        assert_eq!(error.field, "manifest.prompt");
+        // A generated block missing half of itself.
+        let error = parse(
+            r#"{"name":"X","prompt":"p","triggers":[],"generated":{"by":"b"}}"#,
+        )
+        .expect_err("half a provenance");
+        assert_eq!(error.field, "manifest.generated.at");
+    }
+
+    #[test]
+    fn notify_is_a_closed_vocabulary_and_enabled_only_false_disables() {
+        for (value, expected) in [
+            ("always", Notify::Always),
+            ("failures", Notify::Failures),
+            ("never", Notify::Never),
+        ] {
+            let text = document(&format!(r#","triggers":[],"notify":"{value}""#));
+            assert_eq!(parse(&text).expect("legal").notify, expected);
+        }
+        assert!(parse(&document(r#","triggers":[],"notify":"sometimes"#)).is_err());
+        // ONLY an explicit `false` disables: a truthy junk value must not
+        // silently switch an automation off.
+        assert!(!parse(&document(r#","triggers":[],"enabled":false"#))
+            .expect("legal")
+            .enabled);
+        assert!(parse(&document(r#","triggers":[],"enabled":true"#))
+            .expect("legal")
+            .enabled);
+        assert!(parse(&document(r#","triggers":[],"enabled":"yes""#))
+            .expect("legal")
+            .enabled);
     }
 
     #[test]
@@ -1445,16 +2040,16 @@ mod tests {
             ManifestErrorCode::InvalidShape
         );
         assert_eq!(
-            parse(r#"{"id":"x","name":"X"}"#)
+            parse(r#"{"name":"X","prompt":"p","generated":{"by":"b","at":"t"}}"#)
                 .expect_err("no triggers")
                 .field,
             "manifest.triggers"
         );
         assert_eq!(
-            parse(r#"{"id":"Bad Id","name":"X","triggers":[]}"#)
-                .expect_err("a bad id")
+            parse(r#"{"prompt":"p","triggers":[],"generated":{"by":"b","at":"t"}}"#)
+                .expect_err("no name")
                 .field,
-            "manifest.id"
+            "manifest.name"
         );
     }
 }

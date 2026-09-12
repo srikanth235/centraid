@@ -1,0 +1,534 @@
+[
+  {
+    "document": {
+      "connections": [
+        {
+          "connectionId": "c1",
+          "kind": "pull.gmail",
+          "label": "Inbox"
+        }
+      ],
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "backfill": "each",
+          "expr": "0 7 * * *",
+          "kind": "cron",
+          "tz": "Asia/Kolkata"
+        },
+        {
+          "kind": "webhook",
+          "pending": true
+        },
+        {
+          "entity": "core.transaction",
+          "kind": "condition",
+          "where": [
+            {
+              "column": "amount",
+              "op": "gt",
+              "value": 100
+            }
+          ]
+        },
+        {
+          "entities": ["core.document"],
+          "every": "*/2 * * * *",
+          "kind": "data"
+        },
+        {
+          "connectorKind": "pull.gmail",
+          "event": "new-message",
+          "kind": "event"
+        }
+      ],
+      "vault": {
+        "scopes": [
+          {
+            "schema": "core",
+            "verbs": "read"
+          }
+        ],
+        "why": "to reconcile"
+      }
+    },
+    "enabled": true,
+    "kinds": ["cron", "webhook", "condition", "data", "event"],
+    "name": "the-five-kinds",
+    "notify": "failures",
+    "outcome": "accepted",
+    "version": "0.1.0"
+  },
+  {
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "id": "abc123",
+          "kind": "webhook",
+          "secretHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "enabled": true,
+    "kinds": ["webhook"],
+    "name": "a-minted-webhook",
+    "notify": "failures",
+    "outcome": "accepted",
+    "version": "0.1.0"
+  },
+  {
+    "code": "missing_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "id": "abc123",
+          "kind": "webhook"
+        }
+      ]
+    },
+    "field": "triggers[0].secretHash",
+    "name": "a-half-minted-webhook",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "kind": "webhook",
+          "pending": true
+        },
+        {
+          "kind": "webhook",
+          "pending": true
+        }
+      ]
+    },
+    "field": "triggers",
+    "name": "two-webhooks",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "expr": "0 7 * * *",
+          "kind": "cron",
+          "tz": "Mars/Olympus"
+        }
+      ]
+    },
+    "field": "triggers[0].tz",
+    "name": "an-unknown-zone",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "expr": "hourly",
+          "kind": "cron"
+        }
+      ]
+    },
+    "field": "triggers[0].expr",
+    "name": "an-invalid-expression",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "backfill": "all",
+          "expr": "0 7 * * *",
+          "kind": "cron"
+        }
+      ]
+    },
+    "field": "triggers[0].backfill",
+    "name": "an-unknown-backfill-class",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "entities": ["automation_trigger_cursor"],
+          "kind": "data"
+        }
+      ],
+      "vault": {
+        "scopes": [
+          {
+            "schema": "core",
+            "verbs": "read"
+          }
+        ],
+        "why": "to reconcile"
+      }
+    },
+    "field": "triggers[0].entities[0]",
+    "name": "a-data-trigger-on-the-cursor-table",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "entities": ["outbox.item"],
+          "kind": "data"
+        }
+      ],
+      "vault": {
+        "scopes": [
+          {
+            "schema": "core",
+            "verbs": "read"
+          }
+        ],
+        "why": "to reconcile"
+      }
+    },
+    "field": "triggers[0].entities[0]",
+    "name": "a-data-trigger-on-the-outbox",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "entity": "trigger_ingress",
+          "kind": "condition"
+        }
+      ],
+      "vault": {
+        "scopes": [
+          {
+            "schema": "core",
+            "verbs": "read"
+          }
+        ],
+        "why": "to reconcile"
+      }
+    },
+    "field": "triggers[0].entity",
+    "name": "a-condition-trigger-on-the-ingress",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "entity": "core.transaction",
+          "kind": "condition"
+        }
+      ]
+    },
+    "field": "vault",
+    "name": "a-condition-trigger-with-no-vault-block",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "connectorKind": "pull.gmail",
+          "event": "new-message",
+          "kind": "event"
+        }
+      ]
+    },
+    "field": "connections",
+    "name": "an-event-trigger-with-no-bound-connection",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_trigger",
+    "document": {
+      "connections": [
+        {
+          "connectionId": "c1",
+          "kind": "pull.gmail",
+          "label": "Inbox"
+        }
+      ],
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [
+        {
+          "connectorKind": "pull.gmail",
+          "event": "deleted-message",
+          "kind": "event"
+        }
+      ]
+    },
+    "field": "triggers[0].event",
+    "name": "an-unsupported-provider-event",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "sandbox": {
+        "lane": "system"
+      },
+      "triggers": []
+    },
+    "field": "sandbox.lane",
+    "name": "the-system-sandbox-lane",
+    "outcome": "refused"
+  },
+  {
+    "document": {
+      "enrich": {
+        "capability": "faces",
+        "domain": "photos"
+      },
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": []
+    },
+    "enabled": true,
+    "enrichLane": "gateway",
+    "kinds": [],
+    "name": "an-enricher-with-no-lane",
+    "notify": "failures",
+    "outcome": "accepted",
+    "version": "0.1.0"
+  },
+  {
+    "code": "mock_model_disallowed",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "requires": {
+        "model": "centraid-mock/echo"
+      },
+      "triggers": []
+    },
+    "field": "requires.model",
+    "name": "the-mock-provider",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "requires": {
+        "secrets": ["locker:@bank:password"]
+      },
+      "triggers": []
+    },
+    "field": "requires.secrets",
+    "name": "secrets-without-a-connector",
+    "outcome": "refused"
+  },
+  {
+    "code": "missing_field",
+    "document": {
+      "connector": {
+        "kind": "pull.gmail"
+      },
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": []
+    },
+    "field": "connector.label",
+    "name": "a-connector-with-no-vault-block",
+    "outcome": "refused"
+  },
+  {
+    "code": "missing_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "X",
+      "triggers": []
+    },
+    "field": "prompt",
+    "name": "no-prompt",
+    "outcome": "refused"
+  },
+  {
+    "code": "missing_field",
+    "document": {
+      "name": "X",
+      "prompt": "do it",
+      "triggers": []
+    },
+    "field": "generated",
+    "name": "no-provenance",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "notify": "sometimes",
+      "prompt": "summarise yesterday",
+      "triggers": []
+    },
+    "field": "notify",
+    "name": "an-unknown-notify-class",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [],
+      "vault": {
+        "scopes": [
+          {
+            "fieldMask": ["title"],
+            "schema": "core",
+            "verbs": "read"
+          }
+        ]
+      }
+    },
+    "field": "vault.scopes[0].table",
+    "name": "a-field-mask-with-no-table",
+    "outcome": "refused"
+  },
+  {
+    "code": "invalid_field",
+    "document": {
+      "generated": {
+        "at": "2026-01-01T00:00:00.000Z",
+        "by": "builder"
+      },
+      "name": "Morning digest",
+      "prompt": "summarise yesterday",
+      "triggers": [],
+      "vault": {
+        "scopes": [
+          {
+            "schema": "core",
+            "verbs": "write"
+          }
+        ]
+      }
+    },
+    "field": "vault.scopes[0].verbs",
+    "name": "an-unknown-vault-verb",
+    "outcome": "refused"
+  }
+]
