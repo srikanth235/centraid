@@ -144,7 +144,7 @@ test('8.3 — "New rule" opens the editor; the draft is posted on Save', async (
     ).toBe(false);
 
     await page.getByRole("textbox", { name: "Name" }).fill("Inbox Digest");
-    await page.getByRole("button", { name: "Create automation" }).click();
+    await page.getByRole("button", { name: "Create rule" }).click();
     await expect
       .poll(() =>
         gateway.calls.some(
@@ -252,7 +252,7 @@ test("8.7 — deleting an automation confirms, posts DELETE, returns to the list
     await expect(page.getByTestId("automation-thread")).toBeVisible();
     await openAutomationMenu(page);
     await page.getByTestId("automation-menu-delete").click();
-    await expectConfirm(page, "Delete automation?");
+    await expectConfirm(page, "Delete rule?");
     await confirmDelete(page);
     await expect(statusLine(page)).toContainText('Deleted "Inbox Digest"');
     expect(

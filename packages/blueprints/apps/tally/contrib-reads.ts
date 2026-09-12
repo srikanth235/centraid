@@ -20,7 +20,7 @@ import type { Person } from "./types.ts";
 export interface ContribReads {
   sections: ContribSections;
   /** Does this host hold an approval inbox at all? */
-  hasApprovals: boolean;
+  hasNeedsYou: boolean;
   /** Does it hold the per-intent Approve/Decline door? */
   canDecide: boolean;
 }
@@ -63,7 +63,7 @@ export function useContribReads(args: {
   }, [me, meName, friends]);
 
   const client = window.centraid;
-  const hasApprovals = typeof client.openApprovals === "function";
+  const hasNeedsYou = typeof client.openNeedsYou === "function";
   const canDecide = typeof client.decideCommonsIntent === "function";
 
   const sections = useMemo(
@@ -76,12 +76,12 @@ export function useContribReads(args: {
           cancel: typeof client.cancelCommonsIntent === "function",
           retry: typeof client.retryPendingWrite === "function",
           discard: typeof client.discardPendingWrite === "function",
-          approvals: typeof client.openApprovals === "function",
+          approvals: typeof client.openNeedsYou === "function",
           decide: typeof client.decideCommonsIntent === "function",
         },
       }),
     [client, intents, me, names]
   );
 
-  return { sections, hasApprovals, canDecide };
+  return { sections, hasNeedsYou, canDecide };
 }

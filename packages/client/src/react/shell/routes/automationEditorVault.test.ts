@@ -23,7 +23,7 @@ describe(vaultForTriggers, () => {
       { kind: "data", entities: ["core.transaction", "core.party"] },
     ]);
     expect(vault).toStrictEqual({
-      why: "Evaluate automation triggers.",
+      why: "Evaluate rule triggers.",
       scopes: [
         { schema: "schedule", table: "task", verbs: "read" },
         { schema: "core", table: "transaction", verbs: "read" },
@@ -36,7 +36,7 @@ describe(vaultForTriggers, () => {
     expect(
       vaultForTriggers([{ kind: "condition", entity: "notifications" }])
     ).toStrictEqual({
-      why: "Evaluate automation triggers.",
+      why: "Evaluate rule triggers.",
       scopes: [{ schema: "notifications", verbs: "read" }],
     });
   });

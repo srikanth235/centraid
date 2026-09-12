@@ -162,7 +162,7 @@ export default function RunViewRoute({
         // stranding the user on a permanent loading screen.
         actionsRef.current.navigate({ kind: "automations" });
         actionsRef.current.showToast(
-          "That automation was deleted, and its run history is gone too."
+          "That rule was deleted, and its run history is gone too."
         );
         return;
       }

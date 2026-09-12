@@ -168,7 +168,7 @@ describe("App suite", () => {
       expect(stem.textContent).toContain("Search");
       expect(stem.textContent).toContain("All apps");
       expect(stem.textContent).toContain("Home");
-      expect(stem.textContent).toContain("Notifications");
+      expect(stem.textContent).toContain("Needs you");
       expect(stem.textContent).toContain("Activity");
       expect(stem.textContent).toContain("Vault");
       expect(stem.textContent).not.toContain("Rules");

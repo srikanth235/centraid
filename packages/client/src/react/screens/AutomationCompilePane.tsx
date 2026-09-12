@@ -229,7 +229,7 @@ export default function AutomationCompilePane({
   const verdict: { tone: string; label: string; detail: string } = isCreate
     ? {
         detail:
-          "Save this automation to compile your instructions into a runnable plan.",
+          "Save this rule to compile your instructions into a runnable plan.",
         label: "Not compiled",
         tone: "draft",
       }
@@ -301,7 +301,7 @@ export default function AutomationCompilePane({
               type="button"
               className={styles.runsLink}
               onClick={onOpenRuns}
-              title="This automation's execution history"
+              title="This rule's execution history"
             >
               <span>Runs</span>
               <Icon name="ArrowRight" size={12} />

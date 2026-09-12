@@ -2,24 +2,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import {
-  APPROVALS_ALWAYS_TITLE,
-  APPROVALS_CANNOT_EDIT_KEY,
-  APPROVALS_CANNOT_EDIT_VALUE,
-  APPROVALS_DISCARD_CONSEQUENCE,
-  APPROVALS_EDIT_SUB,
-  APPROVALS_EMPTY_ACTION,
-  APPROVALS_EMPTY_BODY,
-  APPROVALS_EMPTY_TITLE,
-  APPROVALS_GRANTS_NOTE,
-  APPROVALS_HELD_BODY,
-  APPROVALS_NO_GRANTS_NOTE,
-  APPROVALS_OLD_GATEWAY_BODY,
-  APPROVALS_OLD_GATEWAY_TITLE,
-  APPROVALS_REFUSED_TITLE,
-  APPROVALS_REVOKE_GRANT_CONSEQUENCE,
-  APPROVALS_SENDING_FACT_KEY,
-  APPROVALS_SENDING_FACT_VALUE,
-} from "../../approvals-copy.js";
+  NEEDS_YOU_ALWAYS_TITLE,
+  NEEDS_YOU_CANNOT_EDIT_KEY,
+  NEEDS_YOU_CANNOT_EDIT_VALUE,
+  NEEDS_YOU_DISCARD_CONSEQUENCE,
+  NEEDS_YOU_EDIT_SUB,
+  NEEDS_YOU_EMPTY_ACTION,
+  NEEDS_YOU_EMPTY_BODY,
+  NEEDS_YOU_EMPTY_TITLE,
+  NEEDS_YOU_GRANTS_NOTE,
+  NEEDS_YOU_HELD_BODY,
+  NEEDS_YOU_NO_GRANTS_NOTE,
+  NEEDS_YOU_OLD_GATEWAY_BODY,
+  NEEDS_YOU_OLD_GATEWAY_TITLE,
+  NEEDS_YOU_REFUSED_TITLE,
+  NEEDS_YOU_REVOKE_GRANT_CONSEQUENCE,
+  NEEDS_YOU_SENDING_FACT_KEY,
+  NEEDS_YOU_SENDING_FACT_VALUE,
+} from "../../needs-you-copy.js";
 import {
   arrivalCount,
   callerPhrase,
@@ -34,13 +34,13 @@ import {
   outboundLabel,
   subLine,
   wantsTextarea,
-} from "../shell/routes/approvalsPhrasing.js";
+} from "../shell/routes/needsYouPhrasing.js";
 import type {
   Blocking,
   Confirming,
   RecordSection,
   WaitingFilter,
-} from "../shell/routes/approvalsPhrasing.js";
+} from "../shell/routes/needsYouPhrasing.js";
 import Button from "../ui/Button.js";
 import ChipsBlock from "../ui/ChipsBlock.js";
 import DecideBlock from "../ui/DecideBlock.js";
@@ -55,7 +55,7 @@ import { NETWORK_CALLS } from "./networkCalls.js";
 import { mergeRevokedHolders, revokedHolderKey } from "./privacyStores.js";
 import type { StoreGroup, StoreHolderDTO } from "./privacyStores.js";
 
-import styles from "./ApprovalsScreen.module.css";
+import styles from "./NeedsYouScreen.module.css";
 
 // The desktop UI for the vault's consent surface (#815). TWO REGISTERS:
 // everything blocking is a decision CARD, everything decided is reference
@@ -64,7 +64,7 @@ import styles from "./ApprovalsScreen.module.css";
 // arrivals wait in a held tray while anything is mid-edit, ticked or confirming.
 // Identity is the FRAME's; this screen is presentational.
 
-export interface ApprovalsOutboxRowDTO {
+export interface NeedsYouOutboxRowDTO {
   itemId: string;
   connectionLabel: string;
   connectionKind: string;
@@ -85,14 +85,14 @@ export interface ApprovalsOutboxRowDTO {
   artifact: Record<string, unknown>;
 }
 
-export interface ApprovalsNeedsAuthRowDTO {
+export interface NeedsYouNeedsAuthRowDTO {
   connectionId: string;
   label: string;
   kind: string;
   note: string | null;
 }
 
-export interface ApprovalsParkedRowDTO {
+export interface NeedsYouParkedRowDTO {
   invocationId: string;
   command: string;
   caller: string;
@@ -101,14 +101,14 @@ export interface ApprovalsParkedRowDTO {
   inputPreview: string;
 }
 
-export interface ApprovalsScopeRequestRowDTO {
+export interface NeedsYouScopeRequestRowDTO {
   requestId: string;
   appId: string;
   scopeSummary: string;
   requestedAgo: string;
 }
 
-export interface ApprovalsGrantRowDTO {
+export interface NeedsYouGrantRowDTO {
   grantId: string;
   actorLabel: string;
   verb: string;
@@ -116,7 +116,7 @@ export interface ApprovalsGrantRowDTO {
   createdAgo: string;
 }
 
-export interface ApprovalsActivityRowDTO {
+export interface NeedsYouActivityRowDTO {
   receiptId: string;
   label: string;
   detail: string;
@@ -138,7 +138,7 @@ export interface ApprovalsActivityRowDTO {
  * READ back, never re-given: the row carries no action, and a declined answer
  * renders as legibly as a granted one.
  */
-export interface ApprovalsEnrichConsentRowDTO {
+export interface NeedsYouEnrichConsentRowDTO {
   id: string;
   title: string;
   sub: string;
@@ -164,18 +164,18 @@ export interface NoticeRowDTO {
   archivedAt: string | null;
 }
 
-export interface ApprovalsScreenProps {
-  outbox: readonly ApprovalsOutboxRowDTO[];
-  needsAuth: readonly ApprovalsNeedsAuthRowDTO[];
-  parked: readonly ApprovalsParkedRowDTO[];
-  scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
-  grants: readonly ApprovalsGrantRowDTO[];
+export interface NeedsYouScreenProps {
+  outbox: readonly NeedsYouOutboxRowDTO[];
+  needsAuth: readonly NeedsYouNeedsAuthRowDTO[];
+  parked: readonly NeedsYouParkedRowDTO[];
+  scopeRequests: readonly NeedsYouScopeRequestRowDTO[];
+  grants: readonly NeedsYouGrantRowDTO[];
   /** Every declared store is present, even with no holders. */
   storeGrants: readonly StoreGroup[];
-  enrichConsent?: readonly ApprovalsEnrichConsentRowDTO[];
+  enrichConsent?: readonly NeedsYouEnrichConsentRowDTO[];
   /** An empty section would claim nothing was ever answered — a different fact. */
   enrichConsentReadable?: boolean;
-  activity: readonly ApprovalsActivityRowDTO[];
+  activity: readonly NeedsYouActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
   activityTruncated?: boolean;
   busyId: string | null;
@@ -211,7 +211,7 @@ export interface ApprovalsScreenProps {
 }
 
 // ── Copy that states a rule ────────────────────────────────────────────────
-// Shared sentences live in `../../approvals-copy.js` (#805); this is desktop's.
+// Shared sentences live in `../../needs-you-copy.js` (#805); this is desktop's.
 
 const LEDGER_NOTE =
   "Everything an app can reach — revoking takes effect at once.";
@@ -219,8 +219,8 @@ const LEDGER_NOTE =
 const ENRICH_CONSENT_NOTE =
   "Asked once, answered once, recorded — including the answers that were no.";
 
-export default function ApprovalsScreen(
-  props: ApprovalsScreenProps
+export default function NeedsYouScreen(
+  props: NeedsYouScreenProps
 ): JSX.Element {
   const {
     outbox,
@@ -235,7 +235,7 @@ export default function ApprovalsScreen(
     notices = [],
     activityTruncated = false,
     busyId,
-    discardConsequence = APPROVALS_DISCARD_CONSEQUENCE,
+    discardConsequence = NEEDS_YOU_DISCARD_CONSEQUENCE,
     refusal = null,
     onApproveOutbox,
     onDenyOutbox,
@@ -363,12 +363,12 @@ export default function ApprovalsScreen(
     setConfirming(null);
   };
 
-  const draftValue = (row: ApprovalsOutboxRowDTO, key: string): string =>
+  const draftValue = (row: NeedsYouOutboxRowDTO, key: string): string =>
     drafts[row.itemId]?.[key] ??
     row.fields.find((f) => f.key === key)?.value ??
     "";
 
-  const seedDraft = (row: ApprovalsOutboxRowDTO): void => {
+  const seedDraft = (row: NeedsYouOutboxRowDTO): void => {
     setDrafts((prev) => {
       if (prev[row.itemId]) return prev;
       const seed: Record<string, string> = {};
@@ -381,7 +381,7 @@ export default function ApprovalsScreen(
     });
   };
 
-  const submitEdit = (row: ApprovalsOutboxRowDTO): void => {
+  const submitEdit = (row: NeedsYouOutboxRowDTO): void => {
     const draft = drafts[row.itemId] ?? {};
     const artifact: Record<string, unknown> = { ...row.artifact };
     for (const [key, text] of Object.entries(draft)) {
@@ -398,7 +398,7 @@ export default function ApprovalsScreen(
   };
 
   // ── One staged write's facts ────────────────────────────────────────────
-  const statedFacts = (row: ApprovalsOutboxRowDTO): DecideFact[] => {
+  const statedFacts = (row: NeedsYouOutboxRowDTO): DecideFact[] => {
     const facts: DecideFact[] = [];
     // Address facts first, so nothing staged is hidden from the approver.
     const addressed = ["to", "cc", "bcc", "from"];
@@ -418,19 +418,19 @@ export default function ApprovalsScreen(
     if (row.note) facts.push({ key: "note", value: row.note });
     if (!row.canEdit) {
       facts.push({
-        key: APPROVALS_CANNOT_EDIT_KEY,
-        value: APPROVALS_CANNOT_EDIT_VALUE,
+        key: NEEDS_YOU_CANNOT_EDIT_KEY,
+        value: NEEDS_YOU_CANNOT_EDIT_VALUE,
       });
     }
     facts.push({
-      key: APPROVALS_SENDING_FACT_KEY,
+      key: NEEDS_YOU_SENDING_FACT_KEY,
       net: true,
-      value: APPROVALS_SENDING_FACT_VALUE,
+      value: NEEDS_YOU_SENDING_FACT_VALUE,
     });
     return facts;
   };
 
-  const editableFacts = (row: ApprovalsOutboxRowDTO): DecideFact[] =>
+  const editableFacts = (row: NeedsYouOutboxRowDTO): DecideFact[] =>
     row.fields.map((field) => {
       const value = draftValue(row, field.key);
       if (!isAuthorableKey(row.artifact, field.key)) {
@@ -453,7 +453,7 @@ export default function ApprovalsScreen(
       };
     });
 
-  const stagedBody = (row: ApprovalsOutboxRowDTO): string =>
+  const stagedBody = (row: NeedsYouOutboxRowDTO): string =>
     row.fields.find((f) => f.key === "body")?.value ??
     row.bodyPreview ??
     row.target;
@@ -524,7 +524,7 @@ export default function ApprovalsScreen(
                   disabled: !row.canEdit,
                   hint: row.canEdit
                     ? "Edits seed from the staged artifact"
-                    : APPROVALS_CANNOT_EDIT_VALUE,
+                    : NEEDS_YOU_CANNOT_EDIT_VALUE,
                   kind: "outline",
                   label: "Edit and approve",
                   onClick: () => {
@@ -556,7 +556,7 @@ export default function ApprovalsScreen(
             ? {
                 check: {
                   disabled: busy,
-                  label: APPROVALS_ALWAYS_TITLE,
+                  label: NEEDS_YOU_ALWAYS_TITLE,
                   on: always,
                   onChange: (next) =>
                     setAlwaysAllow((prev) => ({
@@ -574,7 +574,7 @@ export default function ApprovalsScreen(
             confirmingThis
               ? discardConsequence
               : editing
-                ? APPROVALS_EDIT_SUB
+                ? NEEDS_YOU_EDIT_SUB
                 : (refusedHere ?? undefined)
           }
           noteNet={confirmingThis || refusedHere !== null}
@@ -934,7 +934,7 @@ export default function ApprovalsScreen(
             {grantConfirmId
               ? rowConfirm(
                   "Matching items park for review again",
-                  APPROVALS_REVOKE_GRANT_CONSEQUENCE,
+                  NEEDS_YOU_REVOKE_GRANT_CONSEQUENCE,
                   () => {
                     setConfirming(null);
                     onRevokeGrant(grantConfirmId);
@@ -944,9 +944,9 @@ export default function ApprovalsScreen(
             {grantRows.length > 0 ? (
               <RowsBlock ariaLabel="Standing grants" rows={grantRows} />
             ) : (
-              <NoteBlock>{APPROVALS_NO_GRANTS_NOTE}</NoteBlock>
+              <NoteBlock>{NEEDS_YOU_NO_GRANTS_NOTE}</NoteBlock>
             )}
-            <NoteBlock>{APPROVALS_GRANTS_NOTE}</NoteBlock>
+            <NoteBlock>{NEEDS_YOU_GRANTS_NOTE}</NoteBlock>
           </>
         ) : null}
       </div>
@@ -1104,9 +1104,9 @@ export default function ApprovalsScreen(
               </>
             ) : (
               <PanelBlock
-                body={APPROVALS_OLD_GATEWAY_BODY}
+                body={NEEDS_YOU_OLD_GATEWAY_BODY}
                 eyebrow="Not available"
-                title={APPROVALS_OLD_GATEWAY_TITLE}
+                title={NEEDS_YOU_OLD_GATEWAY_TITLE}
                 wide
               />
             )
@@ -1213,7 +1213,7 @@ export default function ApprovalsScreen(
         <PanelBlock
           body={refusal.message}
           eyebrow="Not written"
-          title={APPROVALS_REFUSED_TITLE}
+          title={NEEDS_YOU_REFUSED_TITLE}
           tone="net"
           wide
         />
@@ -1224,7 +1224,7 @@ export default function ApprovalsScreen(
             // Re-baseline rather than release: the member is still part-way through, so
             // dropping the hold would snapshot again on the next render.
             action={{ label: "Add them", onClick: () => setHeld(incoming) }}
-            body={APPROVALS_HELD_BODY}
+            body={NEEDS_YOU_HELD_BODY}
             eyebrow="Live"
             title={`${arrived} more arrived`}
             wide
@@ -1240,7 +1240,7 @@ export default function ApprovalsScreen(
         {heads}
         <EmptyBlock
           action={{
-            label: APPROVALS_EMPTY_ACTION,
+            label: NEEDS_YOU_EMPTY_ACTION,
             onClick: () => {
               const el = grantsRef.current;
               if (el && typeof el.scrollIntoView === "function") {
@@ -1248,9 +1248,9 @@ export default function ApprovalsScreen(
               }
             },
           }}
-          body={APPROVALS_EMPTY_BODY}
+          body={NEEDS_YOU_EMPTY_BODY}
           routine
-          title={APPROVALS_EMPTY_TITLE}
+          title={NEEDS_YOU_EMPTY_TITLE}
         />
         {tail}
       </div>

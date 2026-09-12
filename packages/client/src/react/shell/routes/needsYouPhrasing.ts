@@ -2,14 +2,14 @@ import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 
 import type {
   NoticeRowDTO,
-  ApprovalsNeedsAuthRowDTO,
-  ApprovalsOutboxRowDTO,
-  ApprovalsParkedRowDTO,
-  ApprovalsScopeRequestRowDTO,
-} from "../../screens/ApprovalsScreen.js";
+  NeedsYouNeedsAuthRowDTO,
+  NeedsYouOutboxRowDTO,
+  NeedsYouParkedRowDTO,
+  NeedsYouScopeRequestRowDTO,
+} from "../../screens/NeedsYouScreen.js";
 
 /*
- * How Notifications SAYS things (#815) — pure, and out of the component.
+ * How Needs you SAYS things (#815) — pure, and out of the component.
  * Nothing here may reach back into the screen; hence the type-only import.
  */
 
@@ -58,7 +58,9 @@ export function callerPhrase(kind: string, caller: string): string {
     case "app":
       return `the app ${caller}`;
     case "agent":
-      return `the automation ${caller}`;
+      // The item noun is "rule" on both seats (R-SH-11); mobile's
+      // `needs-you-model.ts` says the same words for the same caller kind.
+      return `the rule ${caller}`;
     case "assistant":
       return "the assistant";
     default:
@@ -161,10 +163,10 @@ export function subLine(parts: readonly (string | null | undefined)[]): string {
 }
 
 export interface Blocking {
-  outbox: readonly ApprovalsOutboxRowDTO[];
-  needsAuth: readonly ApprovalsNeedsAuthRowDTO[];
-  parked: readonly ApprovalsParkedRowDTO[];
-  scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
+  outbox: readonly NeedsYouOutboxRowDTO[];
+  needsAuth: readonly NeedsYouNeedsAuthRowDTO[];
+  parked: readonly NeedsYouParkedRowDTO[];
+  scopeRequests: readonly NeedsYouScopeRequestRowDTO[];
 }
 
 export function blockingIds(lists: Blocking): Set<string> {

@@ -245,7 +245,7 @@ describe("AutomationEditorAccountChoice", () => {
     ).not.toContain("Connector");
 
     await act(async () =>
-      button(el, "Create automation").dispatchEvent(
+      button(el, "Create rule").dispatchEvent(
         new MouseEvent("click", { bubbles: true })
       )
     );
@@ -377,7 +377,7 @@ describe("AutomationEditorAccountChoice", () => {
     setSelectValue(harnessPickerSelects[1] as HTMLSelectElement, "acp-smart");
 
     await act(async () =>
-      button(el, "Create automation").dispatchEvent(
+      button(el, "Create rule").dispatchEvent(
         new MouseEvent("click", { bubbles: true })
       )
     );

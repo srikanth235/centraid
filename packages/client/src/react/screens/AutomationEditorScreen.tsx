@@ -363,7 +363,7 @@ function NotificationsPanel({
             On failure, also runs <code>{onFailure}</code>
           </>
         ) : notifyMode === "off" ? (
-          "Failures stay in this automation’s run history only."
+          "Failures stay in this rule’s run history only."
         ) : (
           "Failed runs surface on Home under needs attention."
         )}
@@ -654,9 +654,7 @@ export default function AutomationEditorScreen({
     return (
       <div className={styles.page}>
         <output className={styles.loadingBody}>
-          {state === "loading"
-            ? "Loading automation…"
-            : "Could not load automation."}
+          {state === "loading" ? "Loading rule…" : "Could not load rule."}
         </output>
       </div>
     );
@@ -1556,7 +1554,7 @@ export default function AutomationEditorScreen({
               onClick={openConnectorsPicker}
               aria-expanded={connectorsOpen}
               aria-haspopup="dialog"
-              title="Choose connectors this automation may use"
+              title="Choose connectors this rule may use"
             >
               <Icon name="Plug" size={14} />
               <span>Connectors</span>
@@ -1636,7 +1634,7 @@ export default function AutomationEditorScreen({
           </span>
           <div>
             <div className={styles.headName}>
-              {name.trim() || (isCreate ? "New Automation" : d.name)}
+              {name.trim() || (isCreate ? "New rule" : d.name)}
             </div>
             <span
               className={cx(au.auStatus, styles.headStatus)}
@@ -1674,7 +1672,7 @@ export default function AutomationEditorScreen({
                     type="checkbox"
                     role="switch"
                     aria-checked={enabled}
-                    aria-label={`${enabled ? "Disable" : "Enable"} automation`}
+                    aria-label={`${enabled ? "Disable" : "Enable"} rule`}
                     checked={enabled}
                     disabled={toggleBusy}
                     onChange={(e) => doToggle(e.target.checked)}
@@ -1688,8 +1686,8 @@ export default function AutomationEditorScreen({
                   A third copy in the header only blurred which one you got. */}
               <IconButton
                 icon="Trash"
-                ariaLabel="Delete automation"
-                title="Delete automation"
+                ariaLabel="Delete rule"
+                title="Delete rule"
                 disabled={deleting}
                 onClick={doDelete}
               />
@@ -1713,7 +1711,7 @@ export default function AutomationEditorScreen({
               className={styles.input}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Automation"
+              placeholder="My rule"
               aria-label="Name"
               required
             />
@@ -1798,7 +1796,7 @@ export default function AutomationEditorScreen({
                   isCreate
                     ? saving
                       ? "Creating…"
-                      : "Create automation"
+                      : "Create rule"
                     : saving
                       ? "Saving…"
                       : dirty

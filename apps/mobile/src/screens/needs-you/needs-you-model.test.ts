@@ -15,7 +15,7 @@ import {
   SENDING_FACT_KEY,
   SENDING_FACT_VALUE,
   agoPhrase,
-  approvalsHealth,
+  needsYouHealth,
   callerPhrase,
   matchesFilter,
   needsAuthRowCopy,
@@ -247,7 +247,7 @@ describe("the queue", () => {
 
 describe("the standing line", () => {
   it("states one true thing, and never restates the section's count", () => {
-    const copy = approvalsHealth();
+    const copy = needsYouHealth();
     expect(copy.label).toBe("");
     expect(copy.detail).toBe("Nothing here happens until you decide.");
     // No inline verb, ever: the page's whole content IS the thing to act on.

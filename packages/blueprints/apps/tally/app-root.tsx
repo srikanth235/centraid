@@ -336,7 +336,7 @@ export function Root({
         ),
         settleVerdict: settleVerdict(bag.settle, dashboard.me),
         contrib: contrib.sections,
-        hasApprovals: contrib.hasApprovals,
+        hasNeedsYou: contrib.hasNeedsYou,
         canDecide: contrib.canDecide,
         exportData: exports.data,
         shotUrl,

@@ -80,10 +80,10 @@ describe(usePins, () => {
     mount();
     // A destination that IS in the default set; toggling an unpinned one would
     // pin it rather than exercise the delete.
-    act(() => ctl.togglePin("approvals"));
-    expect(ctl.isPinned("approvals")).toBe(false);
+    act(() => ctl.togglePin("needs-you"));
+    expect(ctl.isPinned("needs-you")).toBe(false);
     expect(Object.keys(store.get("launcher.pins") as object)).not.toContain(
-      "approvals"
+      "needs-you"
     );
   });
 

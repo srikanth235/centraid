@@ -315,7 +315,7 @@ export function AutomationEditorConnectorsPicker({
             Connectors
           </div>
           <p className={styles.connPickerHint}>
-            Pick services this automation may use.
+            Pick services this rule may use.
           </p>
         </div>
         <button

@@ -6,12 +6,12 @@
 // loses its verb entirely, so a second tap cannot stage a second decision.
 
 import {
-  APPROVALS_CANNOT_EDIT_KEY as CANNOT_EDIT_KEY,
-  APPROVALS_CANNOT_EDIT_VALUE as CANNOT_EDIT_VALUE,
-  APPROVALS_HEALTH_DETAIL as HEALTH_DETAIL,
-  APPROVALS_SENDING_FACT_KEY as SENDING_FACT_KEY,
-  APPROVALS_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
-} from "@centraid/client/approvals-copy";
+  NEEDS_YOU_CANNOT_EDIT_KEY as CANNOT_EDIT_KEY,
+  NEEDS_YOU_CANNOT_EDIT_VALUE as CANNOT_EDIT_VALUE,
+  NEEDS_YOU_HEALTH_DETAIL as HEALTH_DETAIL,
+  NEEDS_YOU_SENDING_FACT_KEY as SENDING_FACT_KEY,
+  NEEDS_YOU_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
+} from "@centraid/client/needs-you-copy";
 import {
   EMPTY_HEALTH,
   ERROR_HEALTH,
@@ -31,23 +31,23 @@ import type {
 
 // ─── copy that states a rule ───────
 //
-// Any sentence desktop also renders comes from `@centraid/client/approvals-copy`
+// Any sentence desktop also renders comes from `@centraid/client/needs-you-copy`
 // (#805) — one promise written twice can be broken on one surface. Re-exported
 // under this file's own names.
 
 export {
-  APPROVALS_ALWAYS_TITLE as ALWAYS_TITLE,
-  APPROVALS_DENY_SUB as DENY_SUB,
-  APPROVALS_DENY_TITLE as DENY_TITLE,
-  APPROVALS_EDIT_SUB as EDIT_SUB,
-  APPROVALS_EDIT_TITLE as EDIT_TITLE,
-  APPROVALS_EMPTY_BODY as EMPTY_BODY,
-  APPROVALS_EMPTY_TITLE as EMPTY_TITLE,
-  APPROVALS_ERROR_BODY as ERROR_BODY,
-  APPROVALS_ERROR_TITLE as ERROR_TITLE,
-  APPROVALS_SENDING_FACT_KEY as SENDING_FACT_KEY,
-  APPROVALS_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
-} from "@centraid/client/approvals-copy";
+  NEEDS_YOU_ALWAYS_TITLE as ALWAYS_TITLE,
+  NEEDS_YOU_DENY_SUB as DENY_SUB,
+  NEEDS_YOU_DENY_TITLE as DENY_TITLE,
+  NEEDS_YOU_EDIT_SUB as EDIT_SUB,
+  NEEDS_YOU_EDIT_TITLE as EDIT_TITLE,
+  NEEDS_YOU_EMPTY_BODY as EMPTY_BODY,
+  NEEDS_YOU_EMPTY_TITLE as EMPTY_TITLE,
+  NEEDS_YOU_ERROR_BODY as ERROR_BODY,
+  NEEDS_YOU_ERROR_TITLE as ERROR_TITLE,
+  NEEDS_YOU_SENDING_FACT_KEY as SENDING_FACT_KEY,
+  NEEDS_YOU_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
+} from "@centraid/client/needs-you-copy";
 export {
   ERROR_HEALTH as ERROR_EYEBROW,
   RETRY_ACTION as ERROR_RETRY,
@@ -181,7 +181,7 @@ export function waitingMeta(shown: number, total: number): string {
 /** One true thing, and no count: the "Waiting on you" section already states
  *  how many, so a foot line that says it again is the page repeating itself.
  *  No inline verb, ever: the page's content IS the thing to act on. */
-export function approvalsHealth(): HealthCopy {
+export function needsYouHealth(): HealthCopy {
   return {
     detail: HEALTH_DETAIL,
     emptyText: EMPTY_HEALTH,

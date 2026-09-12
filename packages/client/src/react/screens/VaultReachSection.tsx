@@ -20,8 +20,8 @@ import SectionBlock from "../ui/SectionBlock.js";
 // would. Each row names the question and the place that answers it.
 
 export interface VaultReachSectionProps {
-  /** Notifications — where a decision about a store or a grant is answered. */
-  onOpenApprovals: () => void;
+  /** Needs you — where a decision about a store or a grant is answered. */
+  onOpenNeedsYou: () => void;
   /** Settings → Enrichment — what Centraid reads of the member's own data. */
   onOpenEnrichment: () => void;
   /** Disclosure state — the parent owns it, and renders no body when closed. */
@@ -30,23 +30,23 @@ export interface VaultReachSectionProps {
 }
 
 export default function VaultReachSection({
-  onOpenApprovals,
+  onOpenNeedsYou,
   onOpenEnrichment,
   collapsed,
   onToggle,
 }: VaultReachSectionProps): JSX.Element {
   const rows: RowDef[] = [
     {
-      action: { label: "Open", onClick: onOpenApprovals },
+      action: { label: "Open", onClick: onOpenNeedsYou },
       id: "holders",
-      meta: "Notifications",
+      meta: "Needs you",
       sub: "Which apps and agents were given a store, and on what terms.",
       title: "Apps and agents holding a store",
     },
     {
-      action: { label: "Open", onClick: onOpenApprovals },
+      action: { label: "Open", onClick: onOpenNeedsYou },
       id: "grants",
-      meta: "Notifications",
+      meta: "Needs you",
       sub: "Rules that answer for you without asking again.",
       title: "Standing grants",
     },
@@ -64,7 +64,7 @@ export default function VaultReachSection({
       <SectionBlock
         collapsed={collapsed}
         label="Who can reach it"
-        meta="Answered on Notifications and in Settings"
+        meta="Answered in Needs you and in Settings"
         onToggle={onToggle}
       />
       {collapsed ? null : (

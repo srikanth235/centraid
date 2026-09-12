@@ -58,7 +58,7 @@ export function AutomationEditorHarnessPicker({
         data-open={String(open)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title="Choose the coding agent and model for this automation"
+        title="Choose the coding agent and model for this rule"
         onClick={() => setOpen((current) => !current)}
       >
         <Icon name="Cpu" size={14} />
@@ -72,7 +72,7 @@ export function AutomationEditorHarnessPicker({
         <ShellModal
           layer="inline"
           className={styles.harnessPicker}
-          label="Automation agent"
+          label="Rule agent"
         >
           <div>
             <strong className={styles.harnessPickerTitle}>Agent</strong>

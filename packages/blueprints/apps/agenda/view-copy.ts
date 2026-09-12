@@ -68,11 +68,11 @@ export function partlyDeniedLine(names: readonly string[]): string {
   return `Hidden while denied: ${names.join(", ")}.`;
 }
 
-/** No unpark write in the app — the owner releases it in Approvals. */
+/** No unpark write in the app — the owner releases it in Needs you. */
 export const PARKED_CANCEL_TITLE = "Cancellation held for the owner";
 export const PARKED_CANCEL_BODY =
   "The event stays on the agenda until the owner approves the cancellation.";
-export const PARKED_CANCEL_REVIEW = "Review in Approvals";
+export const PARKED_CANCEL_REVIEW = "Review in Needs you";
 
 /**
  * The one attendance enum, said once (#1015 agenda/findings#16). The event

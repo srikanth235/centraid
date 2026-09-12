@@ -230,11 +230,11 @@ describe("a held write speaks on the row that carries it", () => {
   }
 
   test("parked names the owner's approval and the way to it", async () => {
-    // The Approvals door records what reached it, so the assertion below is the
+    // The Needs you door records what reached it, so the assertion below is the
     // OUTCOME the press produced rather than the fact that a mock ran.
     const opened: string[] = [];
     (window as unknown as { centraid: unknown }).centraid = {
-      openApprovals: () => opened.push("approvals"),
+      openNeedsYou: () => opened.push("needs-you"),
     };
     const container = await renderRow(
       held({
@@ -252,11 +252,11 @@ describe("a held write speaks on the row that carries it", () => {
       "Waiting for the owner to approve this change."
     );
     const review = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Review in Approvals"
+      (button) => button.textContent === "Review in Needs you"
     );
     expect(review).toBeDefined();
     await act(async () => review?.click());
-    expect(opened).toStrictEqual(["approvals"]);
+    expect(opened).toStrictEqual(["needs-you"]);
   });
 
   test("conflict names both versions and offers retry and discard", async () => {

@@ -160,7 +160,7 @@ describe("AutomationsOverviewScreen suite", () => {
   describe(AutomationsOverviewScreen, () => {
     it("renders the two sections as row blocks, attention-first", async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain("Automations");
+      expect(el.textContent).toContain("Rules");
       expect(el.textContent).toContain("Recent runs across everything");
       // A row states what fires it and how it last went — no tile, no pill.
       expect(el.textContent).toContain("Every day at 8am");
@@ -299,9 +299,7 @@ describe("AutomationsOverviewScreen suite", () => {
       await click(
         buttons(el).find((b) => b.textContent === "Drafts") as HTMLElement
       );
-      const list = el.querySelector(
-        '[aria-label="Automations"]'
-      ) as HTMLElement;
+      const list = el.querySelector('[aria-label="Rules"]') as HTMLElement;
       expect(list.textContent).toContain("Filler 0");
       expect(list.textContent).not.toContain("Invoice Sync");
     });

@@ -589,7 +589,7 @@ function RunTurn({
     wireCodeCopy: () => undefined,
     loadAttachmentImage:
       loadAttachmentImage ??
-      (() => Promise.reject(new Error("automation attachments unavailable"))),
+      (() => Promise.reject(new Error("rule attachments unavailable"))),
     onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
     onFeedback: () => undefined,
     onRegenerate: () => undefined,
@@ -978,7 +978,7 @@ function Composer({
           !pending.some((attachment) => attachment.state === "uploading")
         }
         placeholder="Ask about these runs…"
-        ariaLabel="Ask about this automation's runs"
+        ariaLabel="Ask about this rule's runs"
         context={activePicker?.supportsContext ? context : undefined}
         above={
           pending.length ? (
@@ -1081,8 +1081,8 @@ function Composer({
         }
         hint={
           <>
-            Answers only — nothing here changes the automation. Switching agents
-            uses a bounded handoff and may ask for provider consent.{" "}
+            Answers only — nothing here changes the rule. Switching agents uses
+            a bounded handoff and may ask for provider consent.{" "}
             <button
               type="button"
               className={styles.composerLink}
@@ -1273,7 +1273,7 @@ export default function AutomationThreadScreen({
           <Button
             variant="quiet"
             size="chrome"
-            label="Automations"
+            label="Rules"
             onClick={onBack}
           />
           <span className={au.auCrumbSep} aria-hidden="true">
@@ -1289,10 +1289,10 @@ export default function AutomationThreadScreen({
         </div>
         <div className={styles.loadingBody}>
           {state === "loading"
-            ? "Loading automation…"
+            ? "Loading rule…"
             : state === "missing"
-              ? "Automation not found."
-              : "Could not load automation."}
+              ? "Rule not found."
+              : "Could not load rule."}
         </div>
       </div>
     );
@@ -1482,7 +1482,7 @@ export default function AutomationThreadScreen({
               className={cx(au.auBtn, au.auBtnGhost)}
               data-testid="open-compiler"
               onClick={onOpenCompiler}
-              title="Edit and recompile this automation"
+              title="Edit and recompile this rule"
             >
               <Icon name="Braces" size={14} />
               <span>Compiler</span>
@@ -1688,7 +1688,7 @@ export default function AutomationThreadScreen({
             <p className={styles.emptyHint}>
               {d.plan.state === "ready"
                 ? "Run now, or wait for the trigger."
-                : "Nothing has run yet — this automation needs a working plan first."}
+                : "Nothing has run yet — this rule needs a working plan first."}
             </p>
           </div>
         ) : (
@@ -1734,7 +1734,7 @@ export default function AutomationThreadScreen({
                     loadAttachmentImage ??
                     (() =>
                       Promise.reject(
-                        new Error("automation attachments unavailable")
+                        new Error("rule attachments unavailable")
                       )),
                   onCopyMessage: (text) =>
                     void navigator.clipboard?.writeText(text),

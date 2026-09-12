@@ -28,7 +28,7 @@ describe("the launcher model", () => {
         "starred",
         "automations",
         "connectors",
-        "approvals",
+        "needs-you",
         "gateway",
         "household",
         "atlas",
@@ -62,7 +62,7 @@ describe("the launcher model", () => {
   });
 
   it("pins the four questions and keeps setup and diagnostics behind More", () => {
-    expect(DEFAULT_PINS).toStrictEqual(["approvals", "insights", "atlas"]);
+    expect(DEFAULT_PINS).toStrictEqual(["needs-you", "insights", "atlas"]);
     for (const id of [
       "automations",
       "connectors",
@@ -73,7 +73,7 @@ describe("the launcher model", () => {
     const band = bandDestinations(pinsOf(...DEFAULT_PINS), CAPABILITIES_ON);
     expect(band.items.map((destination) => destination.label)).toStrictEqual([
       "Home",
-      "Notifications",
+      "Needs you",
       "Activity",
       "Vault",
     ]);
@@ -91,13 +91,13 @@ describe("the launcher model", () => {
   describe("the compact band", () => {
     it("shows every pinned destination when they fit", () => {
       const band = bandDestinations(
-        pinsOf("assistant", "approvals"),
+        pinsOf("assistant", "needs-you"),
         CAPABILITIES_ON
       );
       expect(band.items.map((d) => d.id)).toStrictEqual([
         "home",
         "assistant",
-        "approvals",
+        "needs-you",
       ]);
       expect(band.overflow).toBe(0);
     });
@@ -105,7 +105,7 @@ describe("the launcher model", () => {
     it("never exceeds five destinations, and reports what More is holding", () => {
       const pins = pinsOf(
         "assistant",
-        "approvals",
+        "needs-you",
         "automations",
         "connectors",
         "insights",
@@ -122,8 +122,7 @@ describe("the launcher model", () => {
 
     it("gives every band item a label short enough to survive a sixth of a phone", () => {
       for (const d of LAUNCHER_DESTINATIONS) {
-        const shown = d.shortLabel ?? d.label;
-        expect(shown.length, `${d.id} band label`).toBeLessThanOrEqual(11);
+        expect(d.label.length, `${d.id} band label`).toBeLessThanOrEqual(11);
       }
     });
   });
@@ -188,7 +187,7 @@ describe("the launcher model", () => {
       expect(ids).not.toContain("insights");
       // Ungated destinations untouched: features withdrawn, not shell slices.
       expect(ids).toContain("home");
-      expect(ids).toContain("approvals");
+      expect(ids).toContain("needs-you");
       expect(ids).toContain("atlas");
     });
 

@@ -128,7 +128,7 @@ interface InlineAppMountProps {
   frame: InlineFrame;
   compact: boolean;
   onRootReady: (el: HTMLElement | null, descriptor: InlineAppModule) => void;
-  onOpenApprovals: () => void;
+  onOpenNeedsYou: () => void;
   onOpenApp: (appId: string) => void;
 }
 
@@ -140,7 +140,7 @@ function InlineAppMount({
   frame,
   compact,
   onRootReady,
-  onOpenApprovals,
+  onOpenNeedsYou,
   onOpenApp,
 }: InlineAppMountProps): JSX.Element {
   const primary = scopes[0]!;
@@ -164,7 +164,7 @@ function InlineAppMount({
       queries: descriptor.queries,
       pendingProjection: descriptor.pendingProjection,
       scopes: [{ scope: primary.scope, session: lease.session }],
-      onOpenApprovals,
+      onOpenNeedsYou,
       onOpenApp,
       onInstalled: (published) => {
         client = published;
@@ -419,7 +419,7 @@ export default function InlineAppRoute({
                     frame={contributed.frame}
                     compact={Boolean(compact)}
                     onRootReady={onRootReady}
-                    onOpenApprovals={() => nav.navigate({ kind: "approvals" })}
+                    onOpenNeedsYou={() => nav.navigate({ kind: "needs-you" })}
                     onOpenApp={(id) => nav.navigate({ kind: "app", id })}
                   />
                 ) : (

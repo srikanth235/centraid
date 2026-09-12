@@ -27,7 +27,7 @@ import {
   ERROR_RETRY,
   ERROR_TITLE,
   LOADING_NOTE,
-  approvalsHealth,
+  needsYouHealth,
 } from "./needs-you/needs-you-model";
 import { styles } from "./needs-you/NeedsYou.styles";
 import Queue from "./needs-you/NeedsYouQueue";
@@ -64,7 +64,7 @@ export default function NeedsYouScreen({
     []
   );
 
-  const health = healthLineFor(page.state, approvalsHealth());
+  const health = healthLineFor(page.state, needsYouHealth());
 
   return (
     <SystemPlace

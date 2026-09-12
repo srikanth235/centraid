@@ -224,7 +224,7 @@ function reduceLiveItem(
     };
   }
   if (event.type === "aborted") {
-    return { ...state, error: "The automation turn was stopped.", done: true };
+    return { ...state, error: "The rule's turn was stopped.", done: true };
   }
   return state;
 }
@@ -368,7 +368,7 @@ export function finishAutomationLiveTrace(
   if (items.size === 0) {
     items.set("terminal", {
       ...createLiveItem("terminal", 0, "delegate"),
-      ...(error ? { error } : { finalText: "The automation completed." }),
+      ...(error ? { error } : { finalText: "The rule completed." }),
       done: true,
     });
     return { ...state, items };
@@ -418,7 +418,7 @@ function liveItemMessages(
   if (!answer && (state.kind === "tool" || state.notices.length > 0))
     return messages;
   if (state.done) {
-    const text = answer || "The automation completed.";
+    const text = answer || "The rule completed.";
     messages.push({
       kind: "ai",
       streaming: false,

@@ -4,7 +4,7 @@
 // PARKED CANCEL IS A STATE, NOT AN ERROR. Cancelling is medium-risk, so the
 // vault HOLDS the ask for the owner instead of executing it. The event stays
 // on the agenda, this panel says exactly what is held, and the way on is
-// Approvals — the owner's own surface. There is deliberately no unpark control
+// Needs you — the owner's own surface. There is deliberately no unpark control
 // here: the vault's release door (`confirmVaultParked`) is the owner's, an app
 // cannot reach it, and a button that could not act would be worse than the
 // sentence that says who decides.
@@ -82,7 +82,7 @@ export function EventDetail(props: EventDetailProps): ReactNode {
   // The owner's own door. It is absent on a host that mounts no approvals
   // surface, and then the panel says where the decision lives instead of
   // drawing a control that goes nowhere.
-  const handleReviewInApprovals = window.centraid.openApprovals;
+  const handleReviewInNeedsYou = window.centraid.openNeedsYou;
   const heldCancel =
     props.pending?.action === "cancel-event" &&
     (props.pending.status === "parked" ||
@@ -203,11 +203,11 @@ export function EventDetail(props: EventDetailProps): ReactNode {
         <section className={styles.parked} aria-label={PARKED_CANCEL_TITLE}>
           <h3 className={styles.sectionLabel}>{PARKED_CANCEL_TITLE}</h3>
           <p className={styles.parkedBody}>{PARKED_CANCEL_BODY}</p>
-          {handleReviewInApprovals ? (
+          {handleReviewInNeedsYou ? (
             <button
               type="button"
               className="kit-btn"
-              onClick={handleReviewInApprovals}
+              onClick={handleReviewInNeedsYou}
             >
               {PARKED_CANCEL_REVIEW}
             </button>

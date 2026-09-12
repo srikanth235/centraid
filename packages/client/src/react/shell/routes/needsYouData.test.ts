@@ -9,10 +9,10 @@ import type {
 } from "../../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
 import {
-  APPROVALS_FULL_AT,
-  approvalsCountLine,
-  approvalsHealth,
-  approvalsState,
+  NEEDS_YOU_FULL_AT,
+  needsYouCountLine,
+  needsYouHealth,
+  needsYouState,
   buildEnrichConsentRow,
   buildGrantRow,
   buildActivityRow,
@@ -24,7 +24,7 @@ import {
   buildOutboxRow,
   buildParkedRow,
   buildScopeRequestRow,
-} from "./approvalsData.js";
+} from "./needsYouData.js";
 
 function reviewEntry(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {
@@ -164,7 +164,7 @@ describe(buildParkedRow, () => {
     expect(out.inputPreview).toContain('"to"');
   });
 
-  it("carries the assistant caller kind through for the Approvals badge", () => {
+  it("carries the assistant caller kind through for the Needs you badge", () => {
     const row: VaultParkedEntry = {
       invocationId: "inv2",
       command: "locker.purge_item",
@@ -425,32 +425,32 @@ describe(collapseAdjacentActivity, () => {
   });
 });
 
-describe("what the frame says about Notifications", () => {
+describe("what the frame says about Needs you", () => {
   it("calls a page with nothing waiting empty, and a long queue full", () => {
-    expect(approvalsState({ grants: 2, waiting: 0 })).toBe("empty");
-    expect(approvalsState({ grants: 2, waiting: 1 })).toBe("ready");
-    expect(approvalsState({ grants: 2, waiting: APPROVALS_FULL_AT })).toBe(
+    expect(needsYouState({ grants: 2, waiting: 0 })).toBe("empty");
+    expect(needsYouState({ grants: 2, waiting: 1 })).toBe("ready");
+    expect(needsYouState({ grants: 2, waiting: NEEDS_YOU_FULL_AT })).toBe(
       "ready"
     );
-    expect(approvalsState({ grants: 2, waiting: APPROVALS_FULL_AT + 1 })).toBe(
+    expect(needsYouState({ grants: 2, waiting: NEEDS_YOU_FULL_AT + 1 })).toBe(
       "full"
     );
   });
 
   it("counts what is waiting and what is standing, and never says zero", () => {
-    expect(approvalsCountLine({ grants: 2, waiting: 3 })).toBe(
+    expect(needsYouCountLine({ grants: 2, waiting: 3 })).toBe(
       "3 decisions waiting · 2 standing grants"
     );
-    expect(approvalsCountLine({ grants: 1, waiting: 1 })).toBe(
+    expect(needsYouCountLine({ grants: 1, waiting: 1 })).toBe(
       "1 decision waiting · 1 standing grant"
     );
-    expect(approvalsCountLine({ grants: 2, waiting: 0 })).toBe(
+    expect(needsYouCountLine({ grants: 2, waiting: 0 })).toBe(
       "Nothing waiting · 2 standing grants"
     );
   });
 
   it("says nothing has happened yet, and offers no inline verb", () => {
-    const health = approvalsHealth({ grants: 0, waiting: 3 });
+    const health = needsYouHealth({ grants: 0, waiting: 3 });
     expect(health.label).toBe("3 waiting on you");
     expect(health.detail).toBe("Nothing here happens until you decide.");
     expect(health).not.toHaveProperty("action");
