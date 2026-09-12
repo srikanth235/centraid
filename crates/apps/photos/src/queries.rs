@@ -27,7 +27,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages, read_window};
+use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, Window, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
@@ -53,6 +54,32 @@ pub const ASSET_JOIN_BOUND: FanOutBound = FanOutBound::new(500, 8);
 /// Tags and album entries are `(asset, concept)` and `(asset, collection)`
 /// pairs over a 2,000-asset window: 500 × 32 = 16,000 rows, stated.
 pub const ASSET_PAIR_BOUND: FanOutBound = FanOutBound::new(500, 32);
+
+/// ONE PAGE, BECAUSE THE SORT COLUMN IS NULLABLE (D-1020-P11).
+///
+/// `media_asset.captured_at`, `media_asset.deleted_at` and
+/// `media_asset_phash.cluster_id` are all nullable, and the kit's door
+/// **refuses a CONTINUED page over a nullable sort key**
+/// (`KitError::NullableSortKey`) because SQLite's row-value comparison puts
+/// every NULL on one side of the keyset and the walk silently drops them.
+/// A declared window wider than [`MAX_PAGE_ROWS`] over such a column is
+/// therefore unreachable by a walk, and the honest answer is one page plus
+/// "there is more" — which is exactly what v0 does by accident (it asks for
+/// its 2,000-row window as one page and the clamp gives it 500) and what this
+/// does on purpose.
+///
+/// The difference from v0 is the REPORT: `filled` is the page's own cursor, so
+/// a surface can say the library is longer than what was read instead of
+/// implying it read all of it. The remedy for the ceiling itself is a typed
+/// cursor on the app's `before` input — a manifest input-schema change, and
+/// therefore the root's (recorded as a finding).
+fn read_one_page(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitResult<Window> {
+    let page = door.page(query, &PageRequest::first(rows.min(MAX_PAGE_ROWS)))?;
+    Ok(Window {
+        filled: page.next.is_some(),
+        rows: page.rows,
+    })
+}
 
 /// The blob route a `blob:` content URI becomes (`_shared.ts:73`).
 pub const BLOB_ROUTE: &str = "/centraid/_vault/blobs";
@@ -753,8 +780,8 @@ pub fn load_library(
     let window = input.window();
     let before = input.before();
 
-    let live = read_window(door, &live_statement(before), window)?;
-    let trash = read_window(door, &trash_statement(), SHELF_ROWS)?;
+    let live = read_one_page(door, &live_statement(before), window)?;
+    let trash = read_one_page(door, &trash_statement(), SHELF_ROWS)?;
     let albums = read_pages(
         door,
         &albums_statement("photos.library.albums"),
@@ -912,7 +939,7 @@ pub fn load_search(door: &dyn PageDoor, hits: &[String], now_ms: i64) -> KitResu
     let mut content_ids: Vec<String> = hits.to_vec();
     content_ids.sort();
     content_ids.dedup();
-    let matched = read_window(door, &search_assets_statement(&content_ids)?, MATCH_ROWS)?;
+    let matched = read_one_page(door, &search_assets_statement(&content_ids)?, MATCH_ROWS)?;
     let assets: Vec<AssetRow> = matched.rows.iter().filter_map(AssetRow::of).collect();
     if assets.is_empty() {
         return Ok(SearchData::default());

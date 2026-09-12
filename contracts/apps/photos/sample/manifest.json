@@ -1,0 +1,165 @@
+{
+  "schema": "centraid-photos-sample/1",
+  "source": "packages/blueprints/apps/photos/sample",
+  "thumbEdge": 360,
+  "rule": "long_edge <= thumbEdge",
+  "why": "The Photos grid paints the ORIGINAL instead of probing a ?variant=thumb derivative when an asset's long edge is at or under THUMB_EDGE (packages/blueprints/apps/photos/media.ts:16-28). Every sample frame is <= 360 px on its long edge ON PURPOSE, so a seeded vault renders without the gateway's preview backstop having generated anything. That coupling between a seed's PIXEL DIMENSIONS and a renderer's constant is census seam A3 and had no test on either side.",
+  "files": [
+    {
+      "file": "ana-and-marco-table.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 9320,
+      "sha256": "1b6c9f8f1447bfc160c0bb3c914c36b8ee74fe129edb39552e57f812eb35ec36"
+    },
+    {
+      "file": "ana-kitchen-window.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 6216,
+      "sha256": "9681be3d799377856b356cd0aed93361d8d18ddfee98067e36601a00f0644454"
+    },
+    {
+      "file": "ana-porch-evening.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 7406,
+      "sha256": "a42d0d803334938d2f11d3cd1a716ee9c1bb957d2e6c199815beab741e61478b"
+    },
+    {
+      "file": "ana-profile-doorway.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 5635,
+      "sha256": "a05faaf1dee177287fd134ef26f186f5218fdd5e19f0ffed518721e2f27ba564"
+    },
+    {
+      "file": "ana-trailhead.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 6637,
+      "sha256": "33440dacd2447b1c80b07928f626ce22da36ff82c1e4c87a3322be885e919036"
+    },
+    {
+      "file": "backyard-last-light.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 62254,
+      "sha256": "7cfa2fed415efb53e686c173b605e588b1fba8af380ce1f595a725792430ba14"
+    },
+    {
+      "file": "cabin-window-morning.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 56515,
+      "sha256": "5f64bb62c80d57ac1554462468639e2dd95dde3e0cae1c1eaa09f6fc03e12500"
+    },
+    {
+      "file": "downtown-blue-hour.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 53817,
+      "sha256": "43162b0fa4116985edc81207380f2c6564bec6ebf76c32caea53613990a44ff9"
+    },
+    {
+      "file": "emerald-bay-overlook.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 49307,
+      "sha256": "73e17db51e198799f79864ef0c9d0d198476b9bb61ce0843bff177d424a061c5"
+    },
+    {
+      "file": "empty-hallway.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 1978,
+      "sha256": "9c26d04c9e22ed4dc746ca3a82846dbc15939dec663e52cd1f6960eece43c4c5"
+    },
+    {
+      "file": "granite-switchback.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 51519,
+      "sha256": "43cf3b0f11eb56745db64fa2d6bae0c985d20872bad9524df763cfdea76e5cad"
+    },
+    {
+      "file": "harbor-lights.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 77416,
+      "sha256": "a128cfdbe1c88719bbebd27509b8a90a053485921654b3b5eec6cc9479431ebc"
+    },
+    {
+      "file": "marco-harbor-wall.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 6937,
+      "sha256": "07dc220c2953a23cbe1c27129f4d4feca0cfd2abcfe3e7fd0cc8c25b254ba0b9"
+    },
+    {
+      "file": "marco-workshop.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 6978,
+      "sha256": "678177c461c7543189409e32bf8f284511fe792c6b9e8c689870b4190a15bd56"
+    },
+    {
+      "file": "sand-harbor-dawn.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 58352,
+      "sha256": "692d835a94b6913c4a2c451ce02e88fcde240362604f95712ae52e9fc042006b"
+    },
+    {
+      "file": "tahoe-dusk-ridge.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 48234,
+      "sha256": "e543aad67c9977d78db484e10ee47f7410a0f4d54968b00964ba01b70a7922f5"
+    },
+    {
+      "file": "trailhead-sign.png",
+      "width": 270,
+      "height": 360,
+      "long_edge": 360,
+      "byte_size": 72443,
+      "sha256": "0a0be1469bee248524fb94b70d7aae78bc74a9794a419892e9d9ca135abba013"
+    },
+    {
+      "file": "truckee-river-bend.png",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 70599,
+      "sha256": "21ec005989144e52737f6b6e5e09f7a8b8487eecec1617bb480943600ea77301"
+    },
+    {
+      "file": "tahoe-pan.mp4",
+      "width": 360,
+      "height": 240,
+      "long_edge": 360,
+      "byte_size": 24,
+      "sha256": "b31fbb18e9018df2eea1df62529227a825951e3e630ab1da49ff744ddc830b0e",
+      "inline": true,
+      "why": "A tiny deterministic video payload, inline base64 in v0's seed rather than a file beside it (packages/blueprints/apps/photos/seed.js's VIDEO.data). The journey corpus needs media-kind diversity, not playback fidelity: the viewer's capability rows and the video badge read the vault's honest kind/duration metadata. Listed here so the generator has one table for every frame in the roll; nothing is copied into contracts/ for it."
+    }
+  ],
+  "inlineFrames": 1,
+  "pngFrames": 18
+}

@@ -599,6 +599,7 @@ name = "centraid-apps-photos"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-media",
  "rusqlite",
  "serde",
  "serde_json",

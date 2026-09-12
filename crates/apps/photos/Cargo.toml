@@ -18,4 +18,5 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+centraid-media = { path = "../../media" }
 rusqlite.workspace = true

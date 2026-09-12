@@ -21,7 +21,8 @@
 use std::collections::BTreeMap;
 
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{PageDoor, in_list, read_pages, read_window};
+use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
+use centraid_apps_kit::reads::{PageDoor, in_list, read_pages};
 use centraid_apps_kit::row::text_of;
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 
@@ -155,7 +156,14 @@ pub fn fold_clusters(
 
 /// Read and fold `duplicates`.
 pub fn duplicate_clusters(door: &dyn PageDoor) -> KitResult<Vec<DuplicateCluster>> {
-    let phashes = read_window(door, &phash_statement(), CLUSTER_ROWS)?;
+    // ONE PAGE: `cluster_id` is nullable, so a continued page over it is
+    // refused by the kit's door (D-1020-P11, and see `queries::read_one_page`).
+    // v0 asks for its 4,000 fingerprints as one page and the clamp gives it
+    // 500; the port asks for the same page and does not pretend otherwise.
+    let phashes = door.page(
+        &phash_statement(),
+        &PageRequest::first(CLUSTER_ROWS.min(MAX_PAGE_ROWS)),
+    )?;
     let cluster_of: Vec<(String, String)> = phashes
         .rows
         .iter()
