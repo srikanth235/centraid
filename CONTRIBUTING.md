@@ -51,8 +51,8 @@ Receipts are **append-only**: a multi-PR issue keeps one receipt and each PR add
 
 The repo's directives are ESLint rules under [`.governance/law/`](.governance/law/README.md), and changing one is an **amendment**, not an edit. Four things move together, in a single commit, or `amendment-pairing` refuses it:
 
-1. the rule — `.governance/law/rules/<id>.mjs`, carrying `meta.door` (`hook`, `window` or `owner`) and its statute link;
-2. its cases — `.governance/law/rules/<id>.test.mjs`. The `invalid` case is the demonstrated red; a directive with no enforcing test is a wish;
+1. the rule — `.governance/law/rules/<id>.ts`, carrying `meta.door` (`hook`, `window` or `owner`) and its statute link;
+2. its cases — `.governance/law/rules/<id>.test.ts`. The `invalid` case is the demonstrated red; a directive with no enforcing test is a wish;
 3. its row — the pack declaration under `.governance/law/packs/`, which sets the severity (`error` blocks, `warn` is a front-page finding, `off` repeals);
 4. its statute — a `### <id>` section in [CONSTITUTION.md](CONSTITUTION.md) stating the door, what the **host** enforces and what the rule only observes. `constitution-coverage` fails on a rule with no section and on a principle that resolves to neither a rule id nor a `docs/decisions.md` anchor.
 

@@ -77,15 +77,11 @@
   under #1011. The file was not touched by that work. Fix is a fake clock or a
   ticket already past its expiry, not a longer TTL.
 
-- **`.mjs` scripts should be TypeScript.** ~460 `.mjs` files under `scripts/`,
-  `.governance/law/`, `tests/agent-e2e-mobile/` and `apps/mobile/scripts/`
-  exist because their call sites say `node …`, not because the runtime needs
-  JS: Bun runs `.ts` natively and Node ≥ 22.18 strips types by default. A
-  sweep is a rename plus every call site (workflows, hooks, `package.json`),
-  collides with the file-size ledger and the law estate, and should pick one
-  runner rule (`bun` under `scripts/`, Node type-stripping for the law).
-  Expo config plugins stay `.cjs` unless imported from `app.config.ts` by
-  value. Its own issue, not a rider.
+- **Maintained tooling source is TypeScript.** Directly executed scripts,
+  law, and agent-e2e harnesses are `.ts` (not `.mjs`, not `.mts`), run as
+  `node path/to/script.ts` with Node's type stripping. Expo config plugins
+  stay `.cjs` unless imported from `app.config.ts` by value. Third-party
+  entrypoints such as `node_modules/vitest/vitest.mjs` stay as shipped.
 
 - **The face-cluster thresholds were tuned for SFace and now serve ArcFace.**
   `packages/vault/src/enrich/face-clusters.ts` keeps 0.3 / 0.22 cosine
@@ -132,7 +128,7 @@
   index commit only revealed it.
 
 - **A golden-corpus re-freeze cannot be read as a diff, and the freezer's own
-  header says it should be.** `scripts/golden-vault/build.mjs` derives every
+  header says it should be.** `scripts/golden-vault/build.ts` derives every
   corpus id from a fixed seed for exactly that reason ("a corpus seeded with
   `Date.now()` and random uuids re-freezes differently every run, so its diff is
   unreadable and nobody can tell a re-freeze from a rewrite"), but the rows it
@@ -193,7 +189,7 @@
   between those two answers is a design decision, not a test-layer one.
 
 - **The comment-density ratchet does not measure what its header claims.**
-  `scripts/check-comment-density-ratchet.mjs` says its parser walk "catches
+  `scripts/check-comment-density-ratchet.ts` says its parser walk "catches
   trailing comments (they lead the NEXT token), JSX comments, and the file-end
   comments carried by the EOF token". `commentRanges()` calls only
   `ts.getLeadingCommentRanges` at each leaf token, and TypeScript classifies a
@@ -436,7 +432,7 @@
 
 - **`origin/main` was already red on `test:comment-density` before #890.**
   Verified in a clean worktree at `3e555c8d`:
-  `node scripts/check-comment-density-ratchet.mjs` fails there on eighteen files
+  `node scripts/check-comment-density-ratchet.ts` fails there on eighteen files
   no branch had touched — `packages/vault/src/gateway/portable-export.ts`,
   `packages/vault/src/{grant/fulfillment,schema/migrate}.test.ts`, six
   `packages/blueprints/apps/*/pending-projection.ts`-shaped files, three

@@ -725,3 +725,27 @@ Recorded digests match actual for `arrival.ts` and every `lib/*.ts` module.
 - `tests/inventory.json`
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Territory — drop oxlint helper mjs shims
+
+Deleted `scripts/lint-oversized-files.mjs` and `scripts/lint-types-rules.mjs`. Law already imports the `.ts` modules. `lint:tsconfigs` `ROOT_TOOLING_PROGRAMS` now requires `.governance/law/tsconfig.json` (extends `tsconfig.node.json`) whenever `.governance/law/run.ts` exists, and root `typecheck` / `typecheck:affected` already run `tsc -p .governance/law`.
+
+Current-state docs record the convention: maintained source is `.ts`; execute with `node path/to/script.ts`; no `.mts`. First-party `.mjs` call sites in package.json, workflows, and shell scripts are gone except third-party `node_modules/vitest/vitest.mjs`. Tracked `*.mjs` source is empty.
+
+### Verification
+
+```sh
+node --test scripts/lint-tsconfigs.test.ts
+bun run lint:tsconfigs
+git ls-files '*.mjs'
+```
+
+### Paths this slice
+
+- `scripts/lint-oversized-files.mjs` (deleted)
+- `scripts/lint-types-rules.mjs` (deleted)
+- `scripts/lint-tsconfigs.ts`
+- `scripts/lint-tsconfigs.test.ts`
+- `docs/toolchain.md`, `TESTING.md`, `QUALITY.md`, `CONTRIBUTING.md`, `docs/coding-standards.md`, `README.md`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

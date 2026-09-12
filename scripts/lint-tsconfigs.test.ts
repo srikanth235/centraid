@@ -6,7 +6,7 @@
 // Uses `mkdtempSync` rather than `@centraid/test-kit`'s `tempDir()`: that module
 // registers a vitest `afterAll` at import time and throws
 // ("Vitest failed to find the current suite") under `node --test`, which is the
-// runner this lane uses. Same pattern as scripts/gateway-package/*.test.mjs.
+// runner this lane uses. Same pattern as scripts/gateway-package/*.test.ts.
 import assert from "node:assert/strict";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -338,6 +338,26 @@ test("a missing scripts program cannot drop out of typecheck", (t) => {
   assert.deepEqual(lintTsconfigs(root).sort(), [
     "scripts/tsconfig.json: missing Node tooling program",
     "tsconfig.node.json: missing Node tooling compiler profile",
+  ]);
+});
+
+test("law run.ts requires the law Node tooling program in typecheck", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests && tsc -p scripts",
+        "typecheck:affected": "tsc -p tests && tsc -p scripts",
+      },
+    }),
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": scriptsProgram,
+    ".governance/law/run.ts": "export {};\n",
+  });
+  assert.deepEqual(lintTsconfigs(root).sort(), [
+    ".governance/law/tsconfig.json: missing Node tooling program",
+    "package.json: typecheck must target tsc -p .governance/law",
+    "package.json: typecheck:affected must target tsc -p .governance/law",
   ]);
 });
 

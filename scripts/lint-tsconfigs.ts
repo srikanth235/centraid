@@ -57,6 +57,12 @@ const ROOT_TOOLING_PROGRAMS: RootToolingProgram[] = [
     extendsNeedle: NODE_TOOLING_PROFILE,
     typecheckNeedles: ["tsc -p tests/tsconfig.agent-e2e.json"],
   },
+  {
+    rel: ".governance/law/tsconfig.json",
+    requiredWhen: ".governance/law/run.ts",
+    extendsNeedle: NODE_TOOLING_PROFILE,
+    typecheckNeedles: ["tsc -p .governance/law"],
+  },
 ];
 
 function typecheckMentions(script: string, needle: string): boolean {
