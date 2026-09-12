@@ -102,6 +102,9 @@ export interface BlobTransferStatus {
   pendingCount: number;
   pendingBytes: number;
   uploadingCount: number;
+  /** Rows that spent `OUTBOX_MAX_ATTEMPTS` and wait for a member (#1014, B12). */
+  quarantinedCount: number;
+  quarantinedBytes: number;
   lastError: string | null;
 }
 
@@ -186,6 +189,20 @@ export class BlobTransferCoordinator {
   }
   pendingSnapshotShas(): string[] {
     return this.state.pendingShas();
+  }
+
+  /** Quarantined rows, for the surface that has to show them (#1014, B12). */
+  quarantinedShas(): string[] {
+    return this.state.quarantinedShas();
+  }
+
+  /** A member's Retry: the named row (or every quarantined row) returns to the
+   *  queue with a fresh attempt budget, and the runner is kicked. */
+  retryQuarantined(sha256?: string): number {
+    const shas = sha256 ? [sha256] : this.state.quarantinedShas();
+    for (const sha of shas) this.state.releaseOutboxQuarantine(sha);
+    if (shas.length > 0) this.outbox.kick();
+    return shas.length;
   }
 
   /** Seed durable obligations before an fs-only vault enables remote-primary. */

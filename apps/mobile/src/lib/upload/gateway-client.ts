@@ -57,10 +57,15 @@ export interface DirectTransferClient {
     etag: string,
     vaultId?: string
   ) => Promise<void>;
+  /** `intentId` names the queued write these bytes are for (#1014, B5): the
+   *  gateway holds the staged row past its 24-hour TTL until that write
+   *  settles, so bytes are not reclaimed out from under a follow-up this phone
+   *  has not been online to send. */
   complete: (
     sessionId: string,
     parts: readonly MultipartPartReceipt[],
-    vaultId?: string
+    vaultId?: string,
+    intentId?: string
   ) => Promise<SettlementReceipt>;
   /** The settlement the gateway already holds for `sha256`, or undefined.
    *  P22 (#1014): an `alreadyPresent` begin that carried no settlement asks
@@ -102,23 +107,29 @@ export function httpDirectTransferClient(
 ): DirectTransferClient {
   const fetchImpl = options.fetchImpl ?? fetch;
   const base = options.gatewayBaseUrl.replace(/\/+$/u, "");
-  const headers = (vaultId?: string): Record<string, string> => ({
+  const headers = (
+    vaultId?: string,
+    intentId?: string
+  ): Record<string, string> => ({
     "content-type": "application/json",
     accept: "application/json",
     ...options.headers?.(),
     // Per REQUEST, not per queue: one queue holds items for several vaults.
     ...(vaultId ? { "x-centraid-vault": vaultId } : {}),
+    // The staged row is held while this write is still to come (#1014, B5).
+    ...(intentId ? { "x-centraid-intent": intentId } : {}),
   });
 
   async function send<T>(
     path: string,
     method: string,
     body: unknown,
-    vaultId?: string
+    vaultId?: string,
+    intentId?: string
   ): Promise<T> {
     const response = await fetchImpl(`${base}${path}`, {
       method,
-      headers: headers(vaultId),
+      headers: headers(vaultId, intentId),
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
@@ -146,12 +157,13 @@ export function httpDirectTransferClient(
         vaultId
       );
     },
-    complete: (sessionId, parts, vaultId) =>
+    complete: (sessionId, parts, vaultId, intentId) =>
       send<SettlementReceipt>(
         `/centraid/_vault/blobs/direct/${encodeURIComponent(sessionId)}/complete`,
         "POST",
         { parts },
-        vaultId
+        vaultId,
+        intentId
       ),
   };
 }

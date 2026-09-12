@@ -17,6 +17,15 @@ export const OUTBOX_ACTIVE_INTERVAL_MS = 1_000;
 export const OUTBOX_IDLE_INTERVAL_MS = 30_000;
 export const OUTBOX_UNCONFIGURED_INTERVAL_MS = 60_000;
 
+/** THE END OF THE RETRY LADDER (#1014, B12). The ceiling below caps the WAIT
+ *  at a minute, so without a count a row that can never upload — a blob the
+ *  provider rejects, a key that no longer wraps it — retried once a minute for
+ *  the life of the host, kept its cache pin, and reported itself as backlog
+ *  that was always about to clear. After this many consecutive failures the
+ *  row is quarantined: still listed, still retryable by hand, no longer
+ *  counted as pending and no longer pinning its bytes. */
+export const OUTBOX_MAX_ATTEMPTS = 12;
+
 export interface BlobOutboxRunnerOptions {
   vault: DatabaseSync;
   state: BlobTransferState;
@@ -127,13 +136,19 @@ export class BlobOutboxRunner {
       await drainOutboxRow(this.deps(), row);
     } catch (error) {
       if (this.closed) return;
+      const message = error instanceof Error ? error.message : String(error);
+      if (row.attempt_count + 1 >= OUTBOX_MAX_ATTEMPTS) {
+        this.options.state.quarantineOutbox(row.sha256, message);
+        this.options.onStatus();
+        return;
+      }
       const backoffMs = Math.min(
         60_000,
         1_000 * 2 ** Math.min(row.attempt_count, 6)
       );
       this.options.state.failOutbox(
         row.sha256,
-        error instanceof Error ? error.message : String(error),
+        message,
         new Date(Date.now() + backoffMs).toISOString()
       );
       this.options.onStatus();

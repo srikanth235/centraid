@@ -183,6 +183,11 @@ function storageStatus(plane: StoragePlane) {
       uploading: outbox.uploadingCount,
       lastError: outbox.lastError,
     },
+    // Rows that spent their attempts (#1014, B12) — not backlog, not drained.
+    quarantined: {
+      count: outbox.quarantinedCount,
+      bytes: outbox.quarantinedBytes,
+    },
     localOnly: { count: counts["local-only"], bytes: bytes["local-only"] },
     // Every storage number traces to one of these buckets (#712); `freeable`
     // and `local-unproven` are the only two that license or refuse releasing a

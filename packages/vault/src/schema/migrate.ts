@@ -24,7 +24,7 @@ import {
   SHARE_DELIVERY_CONFIG_RECUT_DDL,
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
-import { BLOB_DDL } from "./blob.js";
+import { BLOB_DDL, BLOB_TRANSIENT_HOLDS_DDL } from "./blob.js";
 import { CONTENT_TEXT_DDL, LINK_ANCHOR_DDL } from "./core-side-tables.js";
 import { CORE_DDL } from "./core.js";
 import {
@@ -234,6 +234,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // not in `REPLICA_DDL` / `ACCESS_DDL` — `ADD COLUMN` has no `IF NOT
   // EXISTS`, so a column stated in both places would fail the rung.
   REPLICA_FLOOR_SPLIT_DDL,
+  // RUNG NINE (#1014, B5/B12) — the staging band's intent hold and the custody
+  // outbox's quarantine mark. See `BLOB_TRANSIENT_HOLDS_DDL` for what each
+  // column ends; its own rung for the reason rung five gives.
+  BLOB_TRANSIENT_HOLDS_DDL,
 ];
 
 /**

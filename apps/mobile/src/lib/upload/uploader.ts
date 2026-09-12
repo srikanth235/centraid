@@ -314,7 +314,11 @@ export class UploadDrainer {
     const receipt: SettlementReceipt = await this.deps.client.complete(
       plan.sessionId,
       receipts,
-      vaultId
+      vaultId,
+      // The follow-up write for this item has not been sent yet (#1014, B5):
+      // name it, so the gateway holds the staged bytes until it settles rather
+      // than reclaiming them on the 24-hour TTL under a phone that is offline.
+      item.itemId
     );
     this.deps.store.settle(item.itemId, receipt);
     return "settled";

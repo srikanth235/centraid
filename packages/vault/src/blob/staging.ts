@@ -24,6 +24,19 @@ import { sha256OfBytes } from "./store.js";
 /** Staged bytes linger this long before the sweep reclaims them. */
 export const STAGING_TTL_HOURS = 24;
 
+/** BYTES A WRITE IS STILL COMING FOR (#1014, B5). An offline device stages
+ *  its bytes first and sends the claiming intent when it can — after the
+ *  owner decides a parked write, or simply when the radio returns — so the
+ *  24-hour TTL reclaimed bytes out from under a write that was still on its
+ *  way. A row named by an intent is held this long instead, and released
+ *  early the moment that intent has a settled outcome: the hold is an
+ *  extension with a bound, never a pin, so an intent that never comes back
+ *  cannot keep bytes for ever. */
+export const STAGING_INTENT_HOLD_HOURS = 24 * 7;
+
+/** Outcome states that mean the intent will never claim these bytes. */
+const SETTLED_INTENT_STATUS = "('executed','denied','failed','conflict')";
+
 /** The `media.location` vault setting: `keep` (default) or `strip`. */
 export function mediaLocationPolicyForVault(
   vault: DatabaseSync
@@ -56,6 +69,8 @@ export interface StageBlobOptions {
   stagedBy?: string;
   /** Pin past the TTL while an import draft batch references these bytes. */
   heldByBatch?: string;
+  /** Hold past the TTL while this intent has not settled (#1014, B5). */
+  heldByIntent?: string;
   /** Stage as a derivative of `variantOf` — claimed alongside its parent. */
   variant?: DerivativeVariant;
   variantOf?: string;
@@ -138,8 +153,8 @@ export function stageBlobBytes(
   try {
     db.vault
       .prepare(
-        `INSERT INTO blob_staging (staging_id, sha256, media_type, byte_size, original_name, meta_json, staged_by, held_by_batch, variant, variant_of, inline_content, staged_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO blob_staging (staging_id, sha256, media_type, byte_size, original_name, meta_json, staged_by, held_by_batch, held_by_intent, variant, variant_of, inline_content, staged_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (${options.variant ? "variant_of, variant) WHERE variant IS NOT NULL" : "sha256) WHERE variant IS NULL"} DO UPDATE SET
          sha256 = excluded.sha256,
          media_type = excluded.media_type,
@@ -148,6 +163,7 @@ export function stageBlobBytes(
          meta_json = excluded.meta_json,
          staged_by = excluded.staged_by,
          held_by_batch = COALESCE(excluded.held_by_batch, blob_staging.held_by_batch),
+         held_by_intent = COALESCE(excluded.held_by_intent, blob_staging.held_by_intent),
          inline_content = excluded.inline_content,
          staged_at = excluded.staged_at`
       )
@@ -160,6 +176,7 @@ export function stageBlobBytes(
         JSON.stringify(meta),
         options.stagedBy ?? null,
         options.heldByBatch ?? null,
+        options.heldByIntent ?? null,
         options.variant ?? null,
         options.variantOf ?? null,
         contribution?.textContent ?? null,
@@ -318,17 +335,32 @@ export interface StagingSweepResult {
  *  owns the sha (dedup must survive a stale stage). */
 export function sweepBlobStaging(
   db: VaultDb,
-  options: { ttlHours?: number; now?: string } = {}
+  options: { ttlHours?: number; intentHoldHours?: number; now?: string } = {}
 ): StagingSweepResult {
   const now = options.now ?? nowIso();
   const cutoff = new Date(
     Date.parse(now) - (options.ttlHours ?? STAGING_TTL_HOURS) * 3_600_000
   ).toISOString();
+  // AN INTENT HOLD IS AN EXTENSION, NOT A PIN (#1014, B5). A held row leaves
+  // the sweep's reach until either its intent settles — the claim happened, or
+  // it never will — or the hold's own, longer, cutoff passes. Both bounds are
+  // here rather than in a release call, so a device that never comes back and
+  // a release that never ran cost the same: one extra week of bytes.
+  const holdCutoff = new Date(
+    Date.parse(now) -
+      (options.intentHoldHours ?? STAGING_INTENT_HOLD_HOURS) * 3_600_000
+  ).toISOString();
   const rows = db.vault
     .prepare(
-      "SELECT staging_id, sha256, variant FROM blob_staging WHERE staged_at <= ? AND held_by_batch IS NULL"
+      `SELECT staging_id, sha256, variant FROM blob_staging
+        WHERE staged_at <= ? AND held_by_batch IS NULL
+          AND (held_by_intent IS NULL
+               OR staged_at <= ?
+               OR EXISTS (SELECT 1 FROM replica_intent_outcome
+                           WHERE intent_id = blob_staging.held_by_intent
+                             AND status IN ${SETTLED_INTENT_STATUS}))`
     )
-    .all(cutoff) as {
+    .all(cutoff, holdCutoff) as {
     staging_id: string;
     sha256: string;
     variant: DerivativeVariant | null;
@@ -354,6 +386,33 @@ export function sweepBlobStaging(
     expired.push(row.sha256);
   }
   return { expired };
+}
+
+/** HOLD THESE BYTES FOR AN UNSETTLED WRITE (#1014, B5). Called by the ingress
+ *  door for a request that names the intent it is staging for, whichever of
+ *  the staging paths recorded the row. Idempotent, and never widens an
+ *  existing hold to a second intent: the first one named still has a claim to
+ *  make. */
+export function holdStagingForIntent(
+  vault: DatabaseSync,
+  sha256: string,
+  intentId: string
+): void {
+  vault
+    .prepare(
+      `UPDATE blob_staging SET held_by_intent = ?
+        WHERE sha256 = ? AND variant IS NULL AND held_by_intent IS NULL`
+    )
+    .run(intentId, sha256);
+}
+
+/** Release an intent's hold — the claim landed, or the intent is gone. */
+export function releaseIntentHold(vault: DatabaseSync, intentId: string): void {
+  vault
+    .prepare(
+      "UPDATE blob_staging SET held_by_intent = NULL WHERE held_by_intent = ?"
+    )
+    .run(intentId);
 }
 
 /** Release an import batch's hold (publish or discard) — TTL resumes. */
