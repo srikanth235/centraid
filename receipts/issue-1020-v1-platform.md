@@ -119,3 +119,56 @@ No gate, ledger direction, budget, allowlist, lint config or law path was touche
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+## Wave 0b — the owner's ruling on Q-1020-1, Q-1020-2 and the standing delegation (R-1020-34)
+
+Doctrine digest for this lane: **`53be88c22ab5`** (`node .governance/law/brief.mjs`).
+
+**What the owner said.** On 2026-09-12, in the run that recorded the wave 0 charter: *"for Q‑1020‑1 and Q‑1020‑2, go ahead with your recommendations... and in fact for all future decisions, go with recommendations and note them in receipt!"* There is no issue comment; this section is the record of the instruction and of what was adopted under it.
+
+**What was adopted.**
+
+- **Q-1020-1 — ruled.** Every row **R-1020-1** … **R-1020-33** in the [`## v1 platform …` section](../docs/decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020) of `docs/decisions.md` is confirmed as written. They are no longer provisional and no longer a release blocker: they are the owner's rulings by delegation, and reversal is the owner's on [#1020](https://github.com/srikanth235/centraid/issues/1020).
+- **Q-1020-2 — ruled.** `device-android-mid` is the **Samsung Galaxy A55 (2024, Exynos 1480, 8 GB)**: a current mid-range Android in the volume tier the v1 absolute targets are stated for, and distinct from the farm's low-end floor cell. `device-iphone-oldest` is the **iPhone XR on iOS 17**: the oldest iPhone that runs the iOS floor v1's SwiftUI surface needs, and the cheapest and most common handset of that floor. The parked ceilings in [`tests/journeys.json`](../tests/journeys.json) stay parked as `_intended` until a run on those two phones exists — naming a model does not make a number measured. Only the model names change; no entry, ceiling or `approvedDeviation` moved ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+- **New standing ruling R-1020-34 — owner delegation for this umbrella.** For every later open question in [#1020](https://github.com/srikanth235/centraid/issues/1020), the root adopts the recommendation it writes, records the question, the recommendation and the adoption in the `## Decisions` of the lane that raised it in this receipt, and mirrors it into `docs/decisions.md` at the next docs commit. Reversal is by the owner on the issue. The delegation does not extend past [#1020](https://github.com/srikanth235/centraid/issues/1020), and it does not cover a security finding's safer-fix rule (`Claude Approvals`), which is always taken. The owner's reason, in one sentence: they would rather the run proceed on written recommendations than hold waves for a reply, and the receipt is where each one is read back.
+
+**Files touched.** Four, all registry or territory, no law path:
+
+- `docs/decisions.md` — in the [`## v1 platform …` section](../docs/decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020) ([#1020](https://github.com/srikanth235/centraid/issues/1020)): the provisional paragraph is rewritten to current state (recorded provisionally 2026-09-12, confirmed the same day by delegation); **R-1020-34** appended to the ruling table; the **Q-1020-1** and **Q-1020-2** rows rewritten to their ruled state with the two device names.
+- `tests/journeys.json` — the `device-android-mid` and `device-iphone-oldest` hardware descriptions name the models and cite Q-1020-2 as ruled. Nothing else in the file changed: no entry, no ceiling, no `approvedDeviation`, no ledger direction.
+- `CHANGELOG.md` — one appended bullet under `## [Unreleased]` → `### Changed` citing [#1020](https://github.com/srikanth235/centraid/issues/1020): the rulings are in force and the two phones have names. The charter's existing bullet is left byte-for-byte alone; the changelog is the evidence layer and is appended to, never rewritten.
+- `receipts/issue-1020-v1-platform.md` — this section, appended at the end.
+
+**Exit list, with outcomes.**
+
+```sh
+bun run format                # PASS — oxfmt --write, exit 0
+bun run format:check          # PASS — "All matched files use the correct format", exit 0
+bun run lint:journey-ledger   # PASS — journey-ledger: ok
+bun run lint:ledgers          # PASS — check-ledgers: ok against origin/main
+bash .governance/run.sh       # PASS — every directive passed
+node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5
+                              # PASS — 10 rule(s), no findings; baseline is the merge-base with
+                              #        origin/main (e9a7d81a), which is the baseline CI judges
+node .governance/law/run.mjs --door window --range 8ec1fede..HEAD --brief-digest 53be88c22ab5
+                              # 1 finding, doc-integrity, an artifact of the overridden baseline:
+                              #        8ec1fede is an umbrella-branch commit, so this receipt exists
+                              #        at that baseline and `frozen-files receipts/*.md` reads the
+                              #        lane's append as a rewrite. It does not exist at the real
+                              #        merge-base (verified with `git ls-tree e9a7d81a --
+                              #        receipts/issue-1020-v1-platform.md`, empty), where
+                              #        doc-integrity's own rule is that branch-authored content
+                              #        stays editable until it merges — so the run above is clean.
+                              #        No waiver was spent for it. doctrine-citation and
+                              #        registry-completeness also fired on this range first and were
+                              #        FIXED rather than explained: the R-1020-34 crosswalk bullet
+                              #        now cites #1020 in its own paragraph, and CHANGELOG.md
+                              #        carries this lane's own bullet.
+bun run build                 # PASS — 14 successful, 14 total; needed before check:push:static,
+                              #        whose typecheck:affected member resolves @centraid/* via dist
+bun run check:push:static     # PASS — "4/4 gates passed in 24.9s"
+git push -u origin claude/1020-w0b
+                              # PASS — accepted, new branch; no SKIP_* and no --no-verify
+```
+
+No gate, ledger direction, budget, allowlist, lint config or law path was touched. No waiver was spent and no docket row was filed.
