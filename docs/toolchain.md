@@ -157,3 +157,28 @@ The JavaScript Dependabot stream ignores the coupled toolchain pins. On the firs
 - the full validation result.
 
 Formatter churn is an isolated formatting-only commit. Safe lint fixes are a separate mechanical commit. Behavioural corrections are reviewed per site and never mixed into either sweep. Shared infrastructure changes require `check:full`.
+
+## v1: cargo xtask gate (#1020)
+
+The document above is the **TypeScript** toolchain contract and stays exactly that. The v1 tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)) is three languages, so its cross-cutting layer cannot live in any one of them: it is a Rust `xtask` crate, and `cargo xtask gate --profile <local|pr|nightly|release>` is the only entrypoint CI runs for it. [`crates/xtask/README.md`](../crates/xtask/README.md) is the reference; this section is the state of the loop.
+
+**The four profiles.** Each is a superset of the one before, so a step cannot be in `pr` and missing from `release`.
+
+| Profile | Steps it adds | Budget | Where it runs |
+| --- | --- | --- | --- |
+| `local` | `fmt`, `clippy`, `test`, `rules` (the structural rules), `ledgers` (the down-only check) | < 120 s | by hand, on the edit-run loop |
+| `pr` | `deny` (cargo-deny), `ci-policy` (the workflow and path-filter linters plus actionlint), `release-build`, `ts-static` | < 900 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
+| `nightly` | `v0-oracle` (the v0 suites that read `contracts/`), `device-lanes` | unbounded | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) at 05:30 UTC |
+| `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 lane R and wave 3 lane G wire it to the release lane |
+
+The budgets are **enforced, not aspirational**: a profile whose steps together overran its `budgetSeconds` fails and prints the per-step timing table. They live in `contracts/ledgers/gate-budgets.json` alongside `compile-time.json` (clean check, incremental check, single-crate test, release build — "compile time is the new Hermes") and `library-size.json` (seeded empty; the prebuilt-core lane fills it in wave 3). All three are down-only, checked against `git show <merge-base>:<path>` the way [`scripts/check-ledgers.mjs`](../scripts/check-ledgers.mjs) checks v0's, and written only by `cargo xtask measure --write`, which only ever lowers a ceiling. v0's ledgers under `tests/` retire with v0.
+
+Every step prints one line whatever it does — `ok`, a loud `SKIP` naming the command that turns it into a real run, or `FAIL` — and output is buffered and printed only on failure. **A failing step writes its whole output under `target/xtask/<profile>/<step>/`** (`command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the two internal steps) and names the directory in its line; both gate workflows upload `target/xtask/**` on failure.
+
+`release` **fails today on purpose**, on its two `not implemented: lands in wave N` placeholders, so it cannot report green for a release nobody has proven restorable.
+
+**The nightly oracle.** From wave 1 the v0 tree is a pinned read-only oracle and `ci.yml` no longer listens on `pull_request` — it runs every one of its lanes on pushes to `main` and on its own nightly schedule instead. No v0 job was deleted or weakened; what changed is when a v0 regression surfaces. What a v1 commit still owes v0 is the `contracts/` oracle suite, which is the `nightly` profile's `v0-oracle` step. The reason is the issue's _Two trees, one CI bill_: running both trees' gates on every pull request would double the bill for one answer.
+
+**OWNER HAND-OFF — branch protection must be repointed.** The required check today is `check`, `ci.yml`'s aggregator, and it will stop reporting on pull requests. The owner must make **`gate`** and **`dependency-review`** — the two jobs in `gate.yml`, neither path-filtered, so both always report — the required checks. **Until that is done, pull requests will block**, because a required check that never reports blocks the pull request forever. Branch protection is configured outside this repository, like the code-owner review requirement.
+
+**Toolchains.** `rust-toolchain.toml` at the repo root is the one version file for the v1 tree; the gate workflows read the channel out of it and [`flake.nix`](../flake.nix)'s `devShells.default` reads the whole file through `rust-overlay`. The flake pins every toolchain except the Android SDK and Xcode, and says so in its header; `.xcode-version` pins Xcode, which nix cannot install. The v0 byte plane keeps its own pin in `apps/web/iroh-wasm/rust-toolchain.toml` and is excluded from the root workspace — two trees, two pins, until wave 6.
