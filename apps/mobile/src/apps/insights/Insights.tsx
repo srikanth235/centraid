@@ -45,7 +45,6 @@ import { Text } from "../../kit/components/NativeText";
 import PanelBlock from "../../kit/components/PanelBlock";
 import RowsBlock from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
-import { memberFacingError } from "../../kit/member-error";
 import { ACTIVITY_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
@@ -327,9 +326,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
       title="Activity"
     >
       {page.exportError ? (
-        <Text style={[styles.exportError, ink.error]}>
-          {memberFacingError(page.exportError)}
-        </Text>
+        <Text style={[styles.exportError, ink.error]}>{page.exportError}</Text>
       ) : null}
       <AnalyticsBody
         alertCount={alertCount}

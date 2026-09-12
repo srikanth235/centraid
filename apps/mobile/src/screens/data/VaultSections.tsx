@@ -60,11 +60,6 @@ export function VaultCopiesSection({
               ? "Link this phone to a vault from Settings to see its copies."
               : "The saved roster may be stale until your vault's home machine answers."
           }
-          {...(devices.message
-            ? {
-                facts: [{ key: "the connection said", value: devices.message }],
-              }
-            : {})}
           title="Copies are unavailable"
           tone="net"
         />
@@ -94,7 +89,6 @@ export function VaultCopiesSection({
 interface SharingRead {
   links: GatewayLink[];
   state: "loading" | "ready" | "error";
-  error?: string;
 }
 
 const SHARING_START: SharingRead = { links: [], state: "loading" };
@@ -117,11 +111,9 @@ export function VaultSharingSection({
     if (!replica.gatewayBase) return;
     void listLinks(replica.gatewayBase)
       .then((links) => setRead({ links, state: "ready" }))
-      // S14 (#1015): `memberFacingError` lowers the vocabulary of a
-      // sentence the member should never have been shown at all.
-      .catch(() =>
-        setRead({ error: SHELL_ERROR.sharing, links: [], state: "error" })
-      );
+      // S14 (#1015): the seat's one sentence about a read that did not land.
+      // What the transport said is never quoted on a screen (R-NY-10).
+      .catch(() => setRead({ links: [], state: "error" }));
   }, [replica.gatewayBase]);
 
   useEffect(refresh, [refresh]);
@@ -149,14 +141,7 @@ export function VaultSharingSection({
         <PanelBlock
           action={{ label: "Try again", onPress: refresh }}
           action2={{ label: "Open Sharing", onPress: openSharing }}
-          body="Sharing could not be read."
-          {...(visibleRead.error
-            ? {
-                facts: [
-                  { key: "the connection said", value: visibleRead.error },
-                ],
-              }
-            : {})}
+          body={`${SHELL_ERROR.sharing}.`}
           title="Sharing is unavailable"
           tone="net"
         />

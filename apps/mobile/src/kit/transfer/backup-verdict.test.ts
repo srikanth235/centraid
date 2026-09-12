@@ -102,14 +102,14 @@ describe(backupVerdictCopy, () => {
       queue({
         pending: 11,
         failures: [
-          { filename: "IMG_1.HEIC", lastError: "gateway refused: 507" },
-          { lastError: "gateway refused: 507" },
+          { filename: "IMG_1.HEIC", lastError: "Your vault is out of space" },
+          { lastError: "Your vault is out of space" },
         ],
       })
     );
     expect(copy.title).toBe("2 transfers refused");
-    // The transport's own words, not a paraphrase.
-    expect(copy.detail).toContain("vault host refused: 507");
+    // The queue row's own sentence, verbatim (#1015 R-NY-10).
+    expect(copy.detail).toContain("Your vault is out of space");
     expect(copy.detail).toContain("11 photographs are on this device only");
   });
 

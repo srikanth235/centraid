@@ -1,4 +1,3 @@
-import { memberFacingError } from "../../kit/member-error";
 import { custodyDurability } from "../../kit/storage/custody-durability";
 import type { CustodyStatus } from "../../kit/storage/custody-status";
 import { backupVerdict } from "../../kit/transfer/backup-verdict";
@@ -49,7 +48,7 @@ export function originHealthSignal(
       action: "What to do",
       destination: "notifications",
       notificationDetail: "phone",
-      notificationCause: `Upload failed · ${memberFacingError(queue.failures[0]?.lastError ?? "no reason was recorded")}`,
+      notificationCause: `Upload failed · ${queue.failures[0]?.lastError ?? "no reason was recorded"}`,
     };
   }
   if (!facts.online && queue.pending > 0) {

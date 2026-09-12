@@ -14,10 +14,10 @@
 // is a sub-page with a back key to Activity and no band; standing on Home (a
 // deep link) it is Activity's root and draws the band.
 //
-// Words live in `alerts-model.ts`. The headline still goes through
-// `memberFacingError`: R-NY-5 made new headlines sentences, but a vault can
-// hold cards written before it, and R-SH-9 keeps the filter for exactly the
-// strings a seat RECEIVES.
+// Words live in `alerts-model.ts`. The headline is printed VERBATIM: the
+// gateway owes a member sentence for anything it hands a seat to display
+// (#1015 R-NY-10), and a seat that rewrites it rewrites the member's own
+// words — a rule named "Gateway usage" became "vault host usage".
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
@@ -25,7 +25,6 @@ import { StyleSheet } from "react-native";
 import { Text } from "../../kit/components/NativeText";
 import RowsBlock from "../../kit/components/RowsBlock";
 import type { RowsBlockRow } from "../../kit/components/RowsBlock";
-import { memberFacingError } from "../../kit/member-error";
 import { SystemPlace } from "../../kit/rooms";
 import { spacing, t, useTheme } from "../../kit/theme";
 import { runAutomation } from "../../lib/automations";
@@ -138,7 +137,7 @@ export default function GatewayAlerts(props: {
   const rows = useMemo((): RowsBlockRow[] => {
     if (state.kind !== "ready") return [];
     return alertLines(state.notices, state.at).map(({ line, notice }) => {
-      const title = memberFacingError(line.title);
+      const { title } = line;
       const open = openerFor(notice);
       const retryRef = line.retryRef;
       return {

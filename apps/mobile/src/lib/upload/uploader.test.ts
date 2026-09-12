@@ -129,7 +129,11 @@ describe("uploader", () => {
           putPart,
           "no bytes may leave before the URL is pinned"
         ).toHaveBeenCalledTimes(0);
-        expect(store.bySha(SHA)?.lastError).toMatch(/not the active provider/u);
+        // The row is member copy; "not the active provider" is the log's
+        // (#1015 R-NY-10).
+        expect(store.bySha(SHA)?.lastError).toBe(
+          "This phone could not send this file"
+        );
       });
 
       it.each([
@@ -424,7 +428,9 @@ describe("uploader", () => {
       );
       await drainer().drainOnce();
       expect(store.bySha(SHA)?.state).toBe("failed");
-      expect(store.bySha(SHA)?.lastError).toMatch(/expected 999/u);
+      expect(store.bySha(SHA)?.lastError).toBe(
+        "This file changed on this phone, so it was not sent"
+      );
     });
   });
 });
