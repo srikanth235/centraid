@@ -27,7 +27,7 @@ export const INSIGHTS_EMPTY_TITLE = "Nothing has run yet";
  *  empty read has nothing to offer but the reason. Already inside its budget
  *  when it moved here, so it moved unchanged. */
 export const INSIGHTS_EMPTY_BODY =
-  "Once automations and the assistant start doing work, their volume and outcomes appear here.";
+  "Once rules and the assistant start doing work, their volume and outcomes appear here.";
 
 export const INSIGHTS_ERROR_TITLE = "The run log is unavailable";
 
@@ -39,7 +39,7 @@ export const INSIGHTS_ERROR_TITLE = "The run log is unavailable";
  * is the fact that makes the wait legible, so that is what survives.
  */
 export const INSIGHTS_ERROR_BODY =
-  "The rollup rebuilds every ten minutes; this rebuild has not finished.";
+  "Activity is counted up every ten minutes, and this count has not finished yet.";
 
 /** What the spend panel counts, and what it does not claim to be. */
 export const INSIGHTS_SPEND_NOTE =

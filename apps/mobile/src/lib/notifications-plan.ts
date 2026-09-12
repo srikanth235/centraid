@@ -36,6 +36,11 @@ export interface MobileNotificationRow {
   key: string;
   title: string;
   body: string;
+  /** What the push is ABOUT, so a tap lands where it can be acted on
+   *  (#1015 R-NY-2): a decision on Needs you, a notice on Activity's alerts.
+   *  The server's own push is a content-free wake, so this is the only place
+   *  the difference is known. */
+  about: "decision" | "notice";
 }
 
 /** Private Notifications content becomes notification text only on the paired device. */
@@ -43,7 +48,7 @@ export function composeMobileNotifications(
   notifications: MobileNotificationsPull,
   delivered: ReadonlySet<string>
 ): MobileNotificationRow[] {
-  return [
+  const decisions: MobileNotificationRow[] = [
     ...notifications.decisions.outbox.map((row) => ({
       key: `outbox:${row.itemId}:${row.stagedAt}`,
       title:
@@ -68,19 +73,21 @@ export function composeMobileNotifications(
       title: `${row.appId} requests access`,
       body: NOTIFY_SCOPE_BODY,
     })),
-    ...notifications.notices
-      .filter(
-        (notice) =>
-          notice.severity === "high" &&
-          notice.readAt === null &&
-          notice.archivedAt === null
-      )
-      .map((notice) => ({
-        key: `notice:${notice.noticeId}:${notice.lastAt}`,
-        title: notice.headline,
-        body: NOTIFY_NOTICE_BODY,
-      })),
-  ].filter((row) => !delivered.has(row.key));
+  ].map((row) => ({ ...row, about: "decision" as const }));
+  const notices: MobileNotificationRow[] = notifications.notices
+    .filter(
+      (notice) =>
+        notice.severity === "high" &&
+        notice.readAt === null &&
+        notice.archivedAt === null
+    )
+    .map((notice) => ({
+      about: "notice" as const,
+      body: NOTIFY_NOTICE_BODY,
+      key: `notice:${notice.noticeId}:${notice.lastAt}`,
+      title: notice.headline,
+    }));
+  return [...decisions, ...notices].filter((row) => !delivered.has(row.key));
 }
 
 /** What one `syncNotifications` pass should do. */

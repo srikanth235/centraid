@@ -176,7 +176,10 @@ describe("access history on this seat", () => {
     wire.access.mockRejectedValue(new Error("Could not reach the gateway"));
     await loadLockerAccess();
     expect(readLockerVault().bag.accessEntries).toBeNull();
-    expect(readLockerVault().accessError).toContain("Could not reach");
+    // S14 (#1015, R-A-15): "Could not reach the gateway" is the transport's
+    // sentence. It goes to the log; the surface says one thing a member can act
+    // on. What this still pins is that the LIST stays null.
+    expect(readLockerVault().accessError).toBe("That did not load. Try again.");
   });
 
   it("reads the history while LOCKED (#996, W6-D2)", async () => {
@@ -262,11 +265,11 @@ describe("the import bridge on this seat", () => {
     expect(readLockerVault().openBatchId).toBe("b1");
   });
 
-  it("carries a refused door's own words rather than an empty shelf", async () => {
+  it("names a shelf that did not load rather than showing an empty one", async () => {
     wire.batches.mockRejectedValue(new Error("Gateway returned HTTP 404"));
     await loadLockerImportDrafts();
     expect(readLockerVault().importBatches).toStrictEqual([]);
-    expect(readLockerVault().importNote).toContain("HTTP 404");
+    expect(readLockerVault().importNote).toBe("That did not load. Try again.");
   });
 
   it("narrows the shelf to drafts — a published batch is history", async () => {

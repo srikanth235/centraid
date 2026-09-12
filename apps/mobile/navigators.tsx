@@ -10,7 +10,7 @@ import React from "react";
 import {
   AgendaEvent,
   AgendaHome,
-  ApprovalsScreen,
+  NeedsYouScreen,
   BackupHealthScreen,
   DocsHome,
   DocsFolder,
@@ -50,7 +50,6 @@ import {
   PhotoLightbox,
   PhotosHome,
   PhotosLibrary,
-  PhotosSearch,
   PhotoStateView,
   PlacesMap,
   PlacesView,
@@ -106,7 +105,6 @@ export function PhotosNavigator(): React.JSX.Element {
         options={{ animation: "fade_from_bottom", gestureEnabled: false }}
       />
       <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
-      <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
       <PhotosStack.Screen name="PlacesView" component={PlacesView} />
       <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
       <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
@@ -264,7 +262,7 @@ export function SettingsNavigator(): React.JSX.Element {
       }}
     >
       <SettingsStack.Screen name="SettingsHome" component={SettingsScreen} />
-      <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
+      <SettingsStack.Screen name="NeedsYou" component={NeedsYouScreen} />
       <SettingsStack.Screen name="Sharing" component={SharingScreen} />
       <SettingsStack.Screen
         name="PhoneStorage"

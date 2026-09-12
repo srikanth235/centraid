@@ -10,33 +10,26 @@
 //
 // Form: a bottom sheet in the springboard idiom — serif title, per-vault colour
 // accents, a prominent active card. Mechanics mirror the VaultLink/Photos drawers (a
-// transparent Modal, an Animated slide, a fading scrim that closes on tap).
+// `SheetRoom` (#1015, Wave 2): one sheet shape for the whole seat.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Animated,
-  Easing,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { icons as ICON_SET, identityInk } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
-import Grabber from "../../kit/components/Grabber";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import { SheetRoom } from "../../kit/rooms";
 import {
-  motionDuration,
-  useReducedMotion,
-} from "../../kit/hooks/useReducedMotion";
-import { family, radii, t, useTheme } from "../../kit/theme";
+  family,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listVaults } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
@@ -51,7 +44,6 @@ import {
 import type { VaultLink } from "../../lib/vault-links";
 
 const DEFAULT_ICON: IconName = "Sparkle";
-const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits fully off-screen.
 
 // THE CAP DISCLOSURE IS GONE (#996 wave 3). The mounted read plane held four
 // vaults at once, so the switcher had to say which saved Vaults this phone was
@@ -98,11 +90,12 @@ export default function VaultsSwitcher({
   onPairDesktop,
 }: VaultsSwitcherProps): React.JSX.Element {
   const { colors } = useTheme();
-  const reducedMotion = useReducedMotion();
+  // The one confirm (#1015, S7): outlined `--net` verb, the noun in the
+  // title, and a status line it can host - none of which `Alert.alert` can
+  // draw.
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
-  const slide = useAnimatedValue(SHEET_TRAVEL);
-  const fade = useAnimatedValue(0);
 
   // Local mirrors of the registry, kept live via subscribeVaultLinks so a switch/add/
   // forget from within this sheet re-renders it immediately.
@@ -125,23 +118,6 @@ export default function VaultsSwitcher({
   useEffect(() => {
     if (!open) return;
     syncFromRegistry(setVaultLinks, setActiveId);
-    slide.setValue(SHEET_TRAVEL);
-    fade.setValue(0);
-    Animated.parallel([
-      Animated.timing(slide, {
-        toValue: 0,
-        duration: motionDuration(300, reducedMotion),
-        easing: Easing.bezier(0.2, 0.8, 0.2, 1),
-        useNativeDriver: true,
-      }),
-      Animated.timing(fade, {
-        toValue: 1,
-        duration: motionDuration(220, reducedMotion),
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
     let cancelled = false;
     void listVaults()
       .then((vaults) => {
@@ -181,7 +157,7 @@ export default function VaultsSwitcher({
     return () => {
       cancelled = true;
     };
-  }, [fade, open, reducedMotion, slide]);
+  }, [open]);
 
   const runExclusive = useCallback(
     async (action: () => Promise<unknown>): Promise<void> => {
@@ -228,134 +204,102 @@ export default function VaultsSwitcher({
   const onForget = useCallback(
     (vault: VaultLink): void => {
       const label = vault.vaultName || vault.desktopName || "this vault";
-      Alert.alert(
-        "Remove from this phone?",
-        `“${label}” will be removed from this iPhone. The vault itself stays on ${
+      confirmDestructive({
+        body: `“${label}” will be removed from this iPhone. The vault itself stays on ${
           vault.desktopName || "the desktop"
         } — you can add it again by pairing.`,
-        [
-          { style: "cancel", text: "Cancel" },
-          {
-            style: "destructive",
-            text: "Remove",
-            onPress: () => void runExclusive(() => forgetVaultLink(vault.id)),
-          },
-        ]
-      );
+        noun: "this vault from this phone",
+        onConfirm: () => void runExclusive(() => forgetVaultLink(vault.id)),
+        verb: "Remove",
+      });
     },
-    [runExclusive]
+    [confirmDestructive, runExclusive]
   );
 
   const active = vaultLinks.find((s) => s.id === activeId);
   const others = vaultLinks.filter((s) => s.id !== activeId);
 
   return (
-    <Modal
+    <SheetRoom
+      cancelLabel="Close"
+      onClose={onClose}
+      overlay={confirmSheet}
+      title="Vaults"
       visible={open}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
     >
-      <View style={styles.root}>
-        <Animated.View style={[styles.scrim, { opacity: fade }]}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            accessibilityLabel="Close vault switcher"
-            onPress={onClose}
-          />
-        </Animated.View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollBody}
+        showsVerticalScrollIndicator={false}
+      >
+        {active ? (
+          <ActiveCard colors={colors} styles={styles} vault={active} />
+        ) : (
+          <Text style={styles.empty}>
+            No vault yet — pair a desktop to connect one.
+          </Text>
+        )}
 
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              paddingBottom: insets.bottom + 14,
-              transform: [{ translateY: slide }],
-            },
-          ]}
+        {others.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>SWITCH TO</Text>
+            {others.map((vault) => (
+              <VaultLinkRow
+                key={vault.id}
+                colors={colors}
+                styles={styles}
+                vault={vault}
+                disabled={busy}
+                onPress={() => onSwitch(vault)}
+                onForget={() => onForget(vault)}
+              />
+            ))}
+          </>
+        ) : null}
+
+        {addable.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>
+              ADD{" "}
+              {active?.desktopName
+                ? `FROM ${active.desktopName.toUpperCase()}`
+                : "A VAULT"}
+            </Text>
+            {addable.map((vault) => (
+              <AddRow
+                key={vault.vaultId}
+                colors={colors}
+                styles={styles}
+                vault={vault}
+                disabled={busy}
+                onPress={() => onAdd(vault)}
+              />
+            ))}
+          </>
+        ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Pair another desktop"
+          onPress={() => {
+            onClose();
+            onPairDesktop();
+          }}
+          style={({ pressed }) => [styles.pairRow, pressed && styles.pressed]}
         >
-          <Grabber />
-          <Text style={styles.eyebrow}>ON THIS IPHONE</Text>
-          <Text style={styles.title}>Vaults</Text>
-
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollBody}
-            showsVerticalScrollIndicator={false}
-          >
-            {active ? (
-              <ActiveCard colors={colors} styles={styles} vault={active} />
-            ) : (
-              <Text style={styles.empty}>
-                No vault yet — pair a desktop to connect one.
-              </Text>
-            )}
-
-            {others.length > 0 ? (
-              <>
-                <Text style={styles.sectionLabel}>SWITCH TO</Text>
-                {others.map((vault) => (
-                  <VaultLinkRow
-                    key={vault.id}
-                    colors={colors}
-                    styles={styles}
-                    vault={vault}
-                    disabled={busy}
-                    onPress={() => onSwitch(vault)}
-                    onForget={() => onForget(vault)}
-                  />
-                ))}
-              </>
-            ) : null}
-
-            {addable.length > 0 ? (
-              <>
-                <Text style={styles.sectionLabel}>
-                  ADD{" "}
-                  {active?.desktopName
-                    ? `FROM ${active.desktopName.toUpperCase()}`
-                    : "A VAULT"}
-                </Text>
-                {addable.map((vault) => (
-                  <AddRow
-                    key={vault.vaultId}
-                    colors={colors}
-                    styles={styles}
-                    vault={vault}
-                    disabled={busy}
-                    onPress={() => onAdd(vault)}
-                  />
-                ))}
-              </>
-            ) : null}
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Pair another desktop"
-              onPress={() => {
-                onClose();
-                onPairDesktop();
-              }}
-              style={({ pressed }) => [
-                styles.pairRow,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={styles.pairIcon}>
-                <Icon name="Bolt" size={18} color={colors.accent} />
-              </View>
-              <View style={styles.rowMeta}>
-                <Text style={styles.pairTitle}>Pair another desktop</Text>
-                <Text style={styles.rowSub} numberOfLines={1}>
-                  Scan a “Connect phone” code to add a gateway
-                </Text>
-              </View>
-              <Icon name="ChevronRight" size={16} color={colors.textGhost} />
-            </Pressable>
-          </ScrollView>
-        </Animated.View>
-      </View>
-    </Modal>
+          <View style={styles.pairIcon}>
+            <Icon name="Bolt" size={18} color={colors.accent} />
+          </View>
+          <View style={styles.rowMeta}>
+            <Text style={styles.pairTitle}>Pair another desktop</Text>
+            <Text style={styles.rowSub} numberOfLines={1}>
+              Scan a “Connect phone” code to add a gateway
+            </Text>
+          </View>
+          <Icon name="ChevronRight" size={16} color={colors.textGhost} />
+        </Pressable>
+      </ScrollView>
+    </SheetRoom>
   );
 }
 
@@ -531,7 +475,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     activePill: {
       borderRadius: radii.md,
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
       paddingVertical: 3,
     },
     activePillText: {
@@ -562,14 +506,6 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 20,
       paddingVertical: 8,
     },
-    eyebrow: {
-      color: colors.textFaint,
-      fontFamily: family.sansMedium,
-      fontSize: t("control").fontSize,
-      letterSpacing: 1,
-      marginTop: 2,
-      paddingHorizontal: 20,
-    },
     forget: {
       alignItems: "center",
       height: 44,
@@ -595,12 +531,11 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 13,
       marginTop: 12,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 12,
     },
     pairTitle: { ...t("bodyStrong"), color: colors.text },
     pressed: { opacity: 0.55 },
-    root: { flex: 1, justifyContent: "flex-end" },
     row: {
       alignItems: "center",
       flexDirection: "row",
@@ -617,7 +552,7 @@ const makeStyles = (colors: ThemeColors) =>
     rowName: { ...t("bodyStrong"), color: colors.text },
     rowSub: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     scroll: { flexGrow: 0 },
-    scrollBody: { paddingHorizontal: 20, paddingTop: 18 },
+    scrollBody: { paddingHorizontal: pageMargin, paddingTop: 18 },
     sectionLabel: {
       color: colors.textFaint,
       fontFamily: family.sansMedium,
@@ -625,19 +560,5 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.9,
       marginBottom: 4,
       marginTop: 10,
-    },
-    sheet: {
-      backgroundColor: colors.bgElev,
-      borderTopLeftRadius: radii.lg,
-      borderTopRightRadius: radii.lg,
-      maxHeight: "86%",
-      paddingTop: 6,
-    },
-    scrim: { backgroundColor: colors.scrim, ...StyleSheet.absoluteFill },
-    title: {
-      ...t("display"),
-      color: colors.text,
-      marginTop: 2,
-      paddingHorizontal: 20,
     },
   });

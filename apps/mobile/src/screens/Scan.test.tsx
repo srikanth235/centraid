@@ -114,6 +114,19 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
+// The room reads its back destination off the navigator (`shell-places.ts`).
+vi.mock(
+  import("@react-navigation/native"),
+  () =>
+    ({
+      useNavigationState: (selector: (state: unknown) => unknown) =>
+        selector({
+          index: 1,
+          routes: [{ name: "Home" }, { name: "Scan" }],
+        }),
+    }) as never
+);
+
 vi.mock(import("react-native-safe-area-context"), async () => {
   const ReactModule = await import("react");
   return {
@@ -121,6 +134,15 @@ vi.mock(import("react-native-safe-area-context"), async () => {
       ReactModule.createElement("section", null, children),
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
   } as unknown as Partial<SafeAreaContext>;
+});
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
 });
 
 vi.mock(
@@ -163,6 +185,13 @@ vi.mock(
         sansRegular: "mock-sans-regular",
       },
       radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
+      // The rooms barrel is now on this screen's import path, so its own
+      // token reads (`pageMargin`, `metrics`, `density`) must be answered.
+      density: { rowMin: 44 },
+      metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
+      pageMargin: 18,
+      // `StageRoom`'s close key sits on the touch floor (R-NY-14).
+      targetMin: { coarse: 44, fine: 34 },
       spacing: Array.from({ length: 8 }, (_, index) => index * 4),
       t: () => ({}),
       useTheme: () => ({ colors: mocks.colors }),

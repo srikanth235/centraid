@@ -37,36 +37,35 @@ import SkeletonRows from "../../kit/components/SkeletonRows";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
-import { PROPERTIES_BACKUP_WITHHELD } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { PROPERTIES_BACKUP_WITHHELD, custodyLine } from "./docs-copy";
+import { useDocsRoom } from "./docs-room";
 import { useDocs } from "./useDocs";
 
-/** The status sentence, from the custody fact alone — no invented clauses. */
+/**
+ * The status sentence, from the custody fact alone — no invented clauses. The
+ * WORDS live in `docs-copy` with every other Docs enum (#1015, S11); this is
+ * the seam the screen and its tests already import.
+ */
 export function custodyStatusLine(state: string | null): string {
-  switch (state) {
-    case "replicated":
-      return "On the gateway and on this device";
-    case "local-only":
-      return "On this device only · not yet on the gateway";
-    case "remote-only":
-      return "Only in the cloud · not on this device";
-    case "missing":
-      return "Missing — on neither tier · needs attention";
-    case null:
-      return "Not swept yet · custody unknown until the vault's next sweep";
-    default:
-      return "Not swept yet · custody unknown until the vault's next sweep";
-  }
+  return custodyLine(state);
 }
 
 export default function DocumentProperties({
   route,
   navigation,
 }: DocsScreenProps<"DocumentProperties">): React.JSX.Element {
+  const room = useDocsRoom("all");
   const { documentId } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -94,8 +93,14 @@ export default function DocumentProperties({
     : undefined;
 
   return (
-    <DocsScreen current="all">
-      <DocsShelfHeader title={STAGE_PROPS.head} backTo="All" />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <ReplicaStatusBar />
       {drive.loading && !doc ? (
         <SkeletonRows accessibilityLabel="Reading this document" />
@@ -202,7 +207,7 @@ export default function DocumentProperties({
           </Text>
         </ScrollView>
       )}
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -247,10 +252,10 @@ const makeStyles = (colors: ThemeColors) =>
       gap: 8,
       marginTop: 12,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     origin: { ...t("small"), color: colors.textFaint, paddingTop: 12 },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     panel: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
@@ -258,7 +263,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       overflow: "hidden",
     },
-    row: { gap: 3, paddingHorizontal: 12, paddingVertical: 10 },
+    row: { gap: 3, paddingHorizontal: spacing[3], paddingVertical: 10 },
     rowKey: { ...t("eyebrow"), color: colors.textFaint },
     rowNote: { ...t("small"), color: colors.textFaint },
     rowRule: {
@@ -266,6 +271,6 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopWidth: borders.hairline,
     },
     rowValue: { ...t("body"), color: colors.text },
-    scroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 8 },
+    scroll: { paddingBottom: 32, paddingHorizontal: pageMargin, paddingTop: 8 },
     status: { ...t("mono"), color: colors.textFaint, paddingTop: 6 },
   });

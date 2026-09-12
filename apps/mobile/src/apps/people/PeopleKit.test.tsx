@@ -211,3 +211,9 @@ describe("[law:people-row-pending] a queued People change says so on its own row
     ).toBe(false);
   });
 });
+
+// #1015 Wave 2 — the back row and the pushed title are `PushedPage`'s now,
+// and the law they carried ("speaks the parent it descends from, not a
+// literal") is pinned in `kit/rooms/rooms.test.tsx`. `BackRow` is deleted:
+// three People screens named the place they descended from by the app and
+// three by a person, and nothing could tell which was right (audit B7).

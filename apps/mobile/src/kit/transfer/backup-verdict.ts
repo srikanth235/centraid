@@ -20,7 +20,6 @@
 
 import { formatBytes } from "@centraid/design";
 
-import { memberFacingError } from "../member-error";
 import type { CustodyStatus } from "../storage/custody-durability";
 import { custodyDurability } from "../storage/custody-durability";
 import type { TransferQueueCounts } from "./transfer-queue";
@@ -118,9 +117,8 @@ export function backupVerdictCopy(
   if (verdict === "failing") {
     const refused = queue.failures.length;
     // `||`, not `??`: an empty message must fall through, or detail opens " · ".
-    const first = memberFacingError(
-      queue.failures[0]?.lastError || "no reason was recorded"
-    );
+    // The row is already the member's sentence (`transfer-failure.ts`).
+    const first = queue.failures[0]?.lastError || "no reason was recorded";
     return {
       verdict,
       title: `${refused} transfer${refused === 1 ? "" : "s"} refused`,

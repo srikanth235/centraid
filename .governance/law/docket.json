@@ -105,8 +105,8 @@
       "id": "D-11",
       "rule": "estate-separation",
       "path": null,
-      "reason": "#1005 spends this twice: the repeal touches the rules and the files being repealed in one act, and the law's test roster lived in the product's package.json until a glob replaced it. Both are one exception in docket terms \u2014 the rule is the same and neither is path-scoped \u2014 so they are one row rather than two identical ones.",
-      "authority": "pending owner grant",
+      "reason": "#1005 spends this twice: the repeal touches the rules and the files being repealed in one act, and the law's test roster lived in the product's package.json until a glob replaced it. Both are one exception in docket terms — the rule is the same and neither is path-scoped — so they are one row rather than two identical ones.",
+      "authority": "https://github.com/srikanth235/centraid/pull/1017",
       "filedBy": "agent",
       "issue": "#1005",
       "expires": "2026-12-31"

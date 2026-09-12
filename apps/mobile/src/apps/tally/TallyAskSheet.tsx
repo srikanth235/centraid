@@ -6,17 +6,19 @@
 // confirming verb — the member reads why and closes it — rather than a
 // different component, so the two can never drift apart in tone.
 //
+// The room is `SheetRoom` (#1015): the grabber, the title, the one outlined
+// `--net` verb and the quiet way out are the room's; this file supplies the
+// paragraphs, the field and the chips.
+//
 // It doubles as the composer for the two acts that need one typed word: a
 // friend's name and a group's. `Alert.prompt` is iOS-only, and a control that
 // exists on one platform is a control this app cannot rely on.
 
 import React, { useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { VERBS } from "@centraid/blueprints/apps/tally/view-copy";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import { SheetRoom } from "../../kit/rooms";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
@@ -52,9 +54,8 @@ export interface TallyAskSheetProps {
 export default function TallyAskSheet({
   ask,
   onClose,
-}: TallyAskSheetProps): React.JSX.Element {
+}: TallyAskSheetProps): React.JSX.Element | null {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [value, setValue] = useState("");
   const [picks, setPicks] = useState<Record<string, string>>({});
@@ -74,123 +75,80 @@ export default function TallyAskSheet({
 
   const disabled = ask?.field !== undefined && value.trim() === "";
 
+  if (!ask) return null;
   return (
-    <Modal
-      visible={ask !== null}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
+    <SheetRoom
+      onClose={onClose}
+      primary={
+        ask.confirm
+          ? {
+              // Every one of these asks is a REMOVAL, an archive or a leave —
+              // the outlined `--net` verb, never a filled commit (S7).
+              dangerous: true,
+              disabled,
+              label: ask.confirm,
+              onPress: () => {
+                ask.onConfirm?.(value.trim(), picks);
+                onClose();
+              },
+            }
+          : undefined
+      }
+      title={ask.title}
+      visible
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={VERBS.close}
-        onPress={onClose}
-        style={[styles.scrim, { backgroundColor: colors.scrim }]}
-      />
-      {ask ? (
-        <View
-          accessibilityViewIsModal
-          style={[styles.sheet, { paddingBottom: insets.bottom + spacing[4] }]}
-        >
-          <Text style={styles.title}>{ask.title}</Text>
-          {ask.body.map((line) => (
-            <Text key={line} style={styles.body}>
-              {line}
-            </Text>
-          ))}
-          {ask.field ? (
-            <View style={styles.fieldWrap}>
-              <Text style={styles.fieldLabel}>{ask.field.label}</Text>
-              <TextInput
-                accessibilityLabel={ask.field.label}
-                autoFocus
-                onChangeText={setValue}
-                placeholder={ask.field.placeholder}
-                placeholderTextColor={colors.textFaint}
-                style={styles.input}
-                value={value}
-              />
-            </View>
-          ) : null}
-          {(ask.chips ?? []).map((group) => (
-            <View key={group.key} style={styles.fieldWrap}>
-              <Text style={styles.fieldLabel}>{group.label}</Text>
-              <View style={styles.chipRow}>
-                {group.options.map(([id, label]) => {
-                  const on = (picks[group.key] ?? group.initial) === id;
-                  return (
-                    <Pressable
-                      key={id}
-                      accessibilityRole="button"
-                      accessibilityLabel={label}
-                      accessibilityState={{ selected: on }}
-                      onPress={() =>
-                        setPicks((prior) => ({ ...prior, [group.key]: id }))
-                      }
-                      style={[styles.chip, on ? styles.chipOn : undefined]}
-                    >
-                      <Text style={styles.chipText}>{label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
-          <View style={styles.acts}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={VERBS.close}
-              onPress={onClose}
-              style={styles.act}
-            >
-              <Text style={styles.actText}>{VERBS.close}</Text>
-            </Pressable>
-            {ask.confirm ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={ask.confirm}
-                accessibilityState={{ disabled }}
-                disabled={disabled}
-                onPress={() => {
-                  ask.onConfirm?.(value.trim(), picks);
-                  onClose();
-                }}
-                style={[styles.act, styles.actPrimary]}
-              >
-                <Text
-                  style={[
-                    styles.actText,
-                    disabled ? styles.actTextOff : styles.actTextOn,
-                  ]}
-                >
-                  {ask.confirm}
-                </Text>
-              </Pressable>
-            ) : null}
+      <View style={styles.body}>
+        {ask.body.map((line) => (
+          <Text key={line} style={styles.line}>
+            {line}
+          </Text>
+        ))}
+        {ask.field ? (
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>{ask.field.label}</Text>
+            <TextInput
+              accessibilityLabel={ask.field.label}
+              autoFocus
+              onChangeText={setValue}
+              placeholder={ask.field.placeholder}
+              placeholderTextColor={colors.textFaint}
+              style={styles.input}
+              value={value}
+            />
           </View>
-        </View>
-      ) : null}
-    </Modal>
+        ) : null}
+        {(ask.chips ?? []).map((group) => (
+          <View key={group.key} style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>{group.label}</Text>
+            <View style={styles.chipRow}>
+              {group.options.map(([id, label]) => {
+                const on = (picks[group.key] ?? group.initial) === id;
+                return (
+                  <Pressable
+                    accessibilityLabel={label}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    key={id}
+                    onPress={() =>
+                      setPicks((prior) => ({ ...prior, [group.key]: id }))
+                    }
+                    style={[styles.chip, on ? styles.chipOn : undefined]}
+                  >
+                    <Text style={styles.chipText}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </View>
+    </SheetRoom>
   );
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    act: {
-      alignItems: "center",
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      flex: 1,
-      justifyContent: "center",
-      minHeight: 44,
-    },
-    actPrimary: { borderColor: colors.lineStrong },
-    actText: { ...t("control"), color: colors.text },
-    actTextOff: { color: colors.textDisabled },
-    actTextOn: { color: colors.text },
-    acts: { flexDirection: "row", gap: spacing[2], marginTop: spacing[3] },
-    body: { ...t("small"), color: colors.textSoft },
+    body: { gap: spacing[2] },
     chip: {
       alignItems: "center",
       borderColor: colors.line,
@@ -214,19 +172,5 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: 44,
       paddingHorizontal: spacing[3],
     },
-    scrim: { ...StyleSheet.absoluteFill },
-    sheet: {
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderTopLeftRadius: radii.lg,
-      borderTopRightRadius: radii.lg,
-      borderWidth: borders.hairline,
-      bottom: 0,
-      gap: spacing[2],
-      insetInlineEnd: 0,
-      insetInlineStart: 0,
-      padding: spacing[4],
-      position: "absolute",
-    },
-    title: { ...t("bodyStrong"), color: colors.text },
+    line: { ...t("small"), color: colors.textSoft },
   });

@@ -20,6 +20,24 @@ import type { InsightsSummary } from "../../lib/insights";
 const NO_SHARE_SHEET =
   "This device has no way to share a file, so the rollup cannot leave the app.";
 
+/** Everything else: a cache the OS refused, a share sheet that threw. */
+const EXPORT_FAILED = "The CSV could not be shared.";
+
+/**
+ * A failed export in both registers (#1015 R-NY-10). `member` is the sentence
+ * the screen prints verbatim; `detail` is the raw text, which goes to the
+ * `[centraid] insights:` log line (docs/logs.md) and nowhere a member looks.
+ */
+export class ExportFailureError extends Error {
+  constructor(
+    readonly member: string,
+    readonly detail: string
+  ) {
+    super(member);
+    this.name = "ExportFailureError";
+  }
+}
+
 /**
  * Write the window's rollup to the cache and hand it to the share sheet.
  *
@@ -31,14 +49,33 @@ export async function shareCsv(
   summary: InsightsSummary,
   windowDays: number
 ): Promise<void> {
-  if (!(await Sharing.isAvailableAsync())) throw new Error(NO_SHARE_SHEET);
-  const file = new File(Paths.cache, insightCsvFilename(windowDays));
-  // The cache keeps the last export until the OS reclaims it, so the write
-  // overwrites rather than failing on a second export of the same window.
-  file.create({ overwrite: true });
-  file.write(insightRollupCsv(summary));
-  await Sharing.shareAsync(file.uri, {
-    mimeType: "text/csv",
-    UTI: "public.comma-separated-values-text",
-  });
+  if (!(await Sharing.isAvailableAsync()))
+    throw new ExportFailureError(
+      NO_SHARE_SHEET,
+      "no share sheet on this device"
+    );
+  try {
+    const file = new File(Paths.cache, insightCsvFilename(windowDays));
+    // The cache keeps the last export until the OS reclaims it, so the write
+    // overwrites rather than failing on a second export of the same window.
+    file.create({ overwrite: true });
+    file.write(insightRollupCsv(summary));
+    await Sharing.shareAsync(file.uri, {
+      mimeType: "text/csv",
+      UTI: "public.comma-separated-values-text",
+    });
+  } catch (error) {
+    throw new ExportFailureError(EXPORT_FAILED, logTextOf(error));
+  }
+}
+
+/**
+ * A thrown thing's own words, for the `[centraid] insights:` log line. It is
+ * a named function rather than a ternary at the throw, so the one place this
+ * app extracts an exception's text is the one place that says, in its name,
+ * that the result is the log's and never a screen's.
+ */
+function logTextOf(thrown: unknown): string {
+  if (thrown instanceof Error) return thrown.message;
+  return String(thrown);
 }

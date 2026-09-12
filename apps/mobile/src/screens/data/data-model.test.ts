@@ -43,6 +43,7 @@ function census(over: Partial<AtlasCensus> = {}): AtlasCensus {
         tables: [
           {
             bytes: 1_288_490_188,
+            friendly: "Documents",
             label: "documents",
             logical: "documents",
             physical: "core_doc",
@@ -51,6 +52,7 @@ function census(over: Partial<AtlasCensus> = {}): AtlasCensus {
           },
           {
             bytes: 2_097_152,
+            friendly: "People",
             label: "people",
             logical: "people",
             physical: "core_party",
@@ -59,6 +61,7 @@ function census(over: Partial<AtlasCensus> = {}): AtlasCensus {
           },
           {
             bytes: 0,
+            friendly: "Events",
             label: "events",
             logical: "events",
             physical: "core_event",
@@ -77,6 +80,7 @@ function census(over: Partial<AtlasCensus> = {}): AtlasCensus {
         tables: [
           {
             bytes: 220_200_960,
+            friendly: "Audit log",
             label: "audit",
             logical: "audit",
             physical: "eng_audit",
@@ -103,13 +107,49 @@ function graph(over: Partial<AtlasGraph> = {}): AtlasGraph {
 }
 
 describe(censusKinds, () => {
+  it("names each kind by the registry, never by its humanized table (R-NY-13)", () => {
+    const rows = censusKinds(census());
+    expect(rows.map((row) => row.title)).toStrictEqual([
+      "Documents",
+      "People",
+      "Audit log",
+    ]);
+    // The mechanical `label` never reaches the member.
+    const derivative = censusKinds(
+      census({
+        packs: [
+          {
+            bytes: 10,
+            file: "vault",
+            pack: "core",
+            packKind: "ontology",
+            packLabel: "Core",
+            rows: 3,
+            tables: [
+              {
+                bytes: 10,
+                friendly: "Derivatives",
+                label: "Content Derivative",
+                logical: "core.content_derivative",
+                physical: "core_content_derivative",
+                rows: 3,
+                table: "content_derivative",
+              },
+            ],
+          },
+        ],
+      })
+    );
+    expect(derivative.map((row) => row.title)).toStrictEqual(["Derivatives"]);
+  });
+
   it("drops kinds nothing has written to yet", () => {
     expect(censusKinds(census()).map((row) => row.logical)).not.toContain(
       "events"
     );
   });
 
-  it("puts the engine's own bookkeeping after what apps wrote", () => {
+  it("puts Centraid's own bookkeeping after what apps wrote", () => {
     // `audit` has ten times the rows of `documents` and still sorts last.
     expect(censusKinds(census()).map((row) => row.logical)).toStrictEqual([
       "documents",
@@ -143,7 +183,7 @@ describe(filterKinds, () => {
     expect(filterKinds(rows, "all")).toHaveLength(3);
   });
 
-  it("keeps only the engine's own for that chip", () => {
+  it("keeps only what Centraid keeps for that chip", () => {
     expect(
       filterKinds(rows, "machinery").map((row) => row.logical)
     ).toStrictEqual(["audit"]);
@@ -285,6 +325,7 @@ describe(tableCaption, () => {
 describe(pickBrowseTable, () => {
   const tables: BrowseTable[] = [
     {
+      friendly: "Documents",
       label: "documents",
       logical: "documents",
       machinery: false,
@@ -296,6 +337,7 @@ describe(pickBrowseTable, () => {
       singlePk: true,
     },
     {
+      friendly: "Audit log",
       label: "audit",
       logical: "audit",
       machinery: true,

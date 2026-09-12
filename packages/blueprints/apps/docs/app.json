@@ -30,6 +30,11 @@
       { "schema": "core", "table": "move_document", "verbs": "act" },
       { "schema": "core", "table": "trash_document", "verbs": "act" },
       { "schema": "core", "table": "restore_document", "verbs": "act" },
+      {
+        "schema": "core",
+        "table": "empty_document_trash",
+        "verbs": "act"
+      },
       { "schema": "core", "table": "star_document", "verbs": "act" },
       { "schema": "core", "table": "unstar_document", "verbs": "act" },
       { "schema": "core", "table": "edit_document", "verbs": "act" },
@@ -173,6 +178,25 @@
           "document_id": { "type": "string", "minLength": 1 }
         },
         "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": ["core.document"]
+    },
+    {
+      "name": "empty-trash",
+      "description": "Empty the document trash through core.empty_document_trash. Irreversible and takes no id: every document already in the trash has its ~30-day grace window collapsed onto the moment it was trashed, and the gateway's next lifecycle sweep destroys each one — with its rent checks, authority revocations and provenance receipts intact. A document that was restored is no longer in the trash and is untouched. An empty trash is a no-op, not a refusal.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {},
         "additionalProperties": false
       },
       "output": {

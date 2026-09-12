@@ -121,17 +121,6 @@ export function applyZoom(
   }
 }
 
-/** One recogniser for both directions: two Pans here would race. */
-export function buildDismissGesture(
-  onDismiss: () => void,
-  onInfo?: () => void
-): ReturnType<typeof Gesture.Pan> {
-  return Gesture.Pan()
-    .activeOffsetY([-24, 24])
-    .failOffsetX([-24, 24])
-    .onEnd(({ translationY, velocityY }) => {
-      if (translationY > 120 || velocityY > 900) runOnJS(onDismiss)();
-      else if (onInfo && (translationY < -120 || velocityY < -900))
-        runOnJS(onInfo)();
-    });
-}
+// The DISMISS is not here: leaving a stage is the room's act, not the viewer's
+// (`kit/rooms/stage-gesture.ts`, R-NY-14). Only zoom and pan, which are facts
+// about a photograph, stayed behind.

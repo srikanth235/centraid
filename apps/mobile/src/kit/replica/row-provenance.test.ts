@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 import {
   READ_ONLY_SOURCE_REASON,
   readOnlyRouteReason,
-  refusedLabel,
   rowCanWrite,
   rowScopeLabels,
 } from "./row-provenance";
@@ -79,10 +78,13 @@ describe("one sentence for one truth", () => {
     );
   });
 
-  it("keeps a refused verb to ONE text slot", () => {
-    expect(refusedLabel("Star", READ_ONLY_SOURCE_REASON)).toBe(
-      `Star — ${READ_ONLY_SOURCE_REASON}`
-    );
+  // `refusedLabel` is gone (#1015, S12): a refusal is the menu row's own
+  // `reason` line, not a string concatenated into a one-line label that
+  // truncated the verb out of view. Docs' menu passes the sentence through.
+  it("hands the sentence to a refused menu row as its reason", () => {
+    const menu = source("apps/docs/doc-menu.ts");
+    expect(menu).toContain("{ reason: READ_ONLY_SOURCE_REASON }");
+    expect(menu).not.toContain("refusedLabel");
   });
 });
 
@@ -117,9 +119,12 @@ describe("stated once above the route, never one refusing button at a time", () 
     // The checkbox refuses, the long-press that files a task is not attached,
     // and the group's move-all is withheld where no row could take it.
     expect(TASK_ROW_SRC).toMatch(/disabled=\{!writable\}/u);
-    expect(TASK_ROW_SRC).toMatch(
-      /\{\.\.\.\(writable && onPickUp \? \{ onLongPress: \(\) => onPickUp\(task\) \} : \{\}\)\}/u
-    );
+    // The GUARD is what this pins, not the handler's shape: the prop is
+    // spread in only when the row is writable, so a read-only row has no
+    // `onLongPress` at all rather than one that refuses. (The handler itself
+    // grew a mode buzz in #1015 S15; that is inside the guard.)
+    expect(TASK_ROW_SRC).toMatch(/\{\.\.\.\(writable && onPickUp$/mu);
+    expect(TASK_ROW_SRC).toMatch(/onLongPress: \(\): void => \{/u);
     expect(TASKS_SRC).toMatch(/rowCanWrite\(row\)/u);
   });
 

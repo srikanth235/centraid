@@ -237,7 +237,7 @@ export const SEARCH_EXAMPLES: readonly string[] = [
  */
 export const SEARCH_COPY = {
   resting: {
-    eyebrow: "Nothing typed",
+    noun: "documents",
     title: "Search titles and contents, across the whole library",
     body: "Not the page that happens to be loaded — try one of these.",
   },
@@ -269,25 +269,38 @@ export const SEARCH_COPY = {
   },
 } as const satisfies SearchStateCopy;
 
-// ─── Trash's ask (§4.3, §14) ─────
+// ─── Emptying the trash (§4.3, §14; #1015 D1) ─────
 
 /**
- * THE ASK, NOT THE VERB. There is no destroy verb in the platform today;
- * destruction happens only on the purge schedule (§4.3). What is asked for is
- * two typed commands, confirmed as Photos confirms them.
+ * THE VERB, AT LAST. This used to be an ask — "Delete forever and Empty trash,
+ * not available yet" — because no vault command could bring a purge date
+ * forward. `core.empty_document_trash` is that command (#1015, D1), so Docs
+ * answers the question Photos already answered, in the same words.
  *
- * The rationale is a design note, and a design note is NOT copy (DESIGN.md →
- * Copy): the shelf shows the eyebrow, the title, and `TRASH_FALLBACK`'s one
- * sentence — nothing more.
+ * The control never destroys: it opens the confirm, and the confirm says how
+ * many, that it is final, and that restore will not bring them back. Outlined
+ * `--net`, never filled — an irreversible control must not look louder than
+ * Upload (DESIGN.md → Components).
  */
-export const TRASH_ASK = {
-  eyebrow: "Not available yet",
-  title: "Delete forever and Empty trash",
-} as const;
+export const TRASH_NOTE =
+  "Documents in the trash purge on their own schedule; restoring one puts its folder and its star back.";
 
-/** What the shelf says while the ask stands (§14). */
-export const TRASH_FALLBACK =
-  "Destruction happens only on the schedule a purge date announces, so a trash cannot be emptied.";
+export const EMPTY_TRASH_COPY = {
+  control: "Empty trash",
+  /** The noun rides the control, so a member reads WHAT goes (DESIGN.md → Copy). */
+  label: (count: number) =>
+    `Empty trash — ${count} ${count === 1 ? "document" : "documents"}`,
+  question: (count: number) =>
+    `Delete ${count} ${count === 1 ? "document" : "documents"} forever?`,
+  detail: (count: number) =>
+    `This cannot be undone. ${count === 1 ? "It leaves" : "They leave"} the vault now, with every earlier version, and restore will not bring ${count === 1 ? "it" : "them"} back.`,
+  confirm: (count: number) => `Delete ${count} forever`,
+  cancel: "Keep them",
+  /** What the shelf says after the write lands (StatusLine, never a toast). */
+  done: (count: number) =>
+    `Trash emptied — ${count} ${count === 1 ? "document" : "documents"} · receipted.`,
+  empty: "Trash is empty.",
+} as const;
 
 // ─── The fetched window (§4.1 state slot rung 1) ─────
 

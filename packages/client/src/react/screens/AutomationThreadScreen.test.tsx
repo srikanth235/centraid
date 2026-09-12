@@ -307,7 +307,7 @@ describe("AutomationThreadScreen", () => {
     const props = makeProps();
     const el = await mount(props);
     const input = el.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Ask about this automation\'s runs"]'
+      'textarea[aria-label="Ask about this rule\'s runs"]'
     );
     const send = el.querySelector<HTMLButtonElement>(
       'button[aria-label="Send"]'
@@ -338,7 +338,7 @@ describe("AutomationThreadScreen", () => {
     const el = await mount(makeProps({}, makeData({ automationTurns: false })));
     expect(
       el.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Ask about this automation\'s runs"]'
+        'textarea[aria-label="Ask about this rule\'s runs"]'
       )
     ).toBeNull();
   });
@@ -506,7 +506,7 @@ describe("AutomationThreadScreen", () => {
   it("renders the not-found state with a working breadcrumb back", async () => {
     const props = makeProps({}, null);
     const el = await mount(props);
-    expect(el.textContent).toContain("Automation not found.");
+    expect(el.textContent).toContain("Rule not found.");
     const back = el.querySelector(".auCrumb button") as HTMLButtonElement;
     await act(async () =>
       back.dispatchEvent(new MouseEvent("click", { bubbles: true }))

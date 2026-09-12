@@ -284,6 +284,7 @@
         "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
         "@centraid/core": "workspace:*",
+        "@centraid/model-runtime": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
         "ajv": "^8.17.1",

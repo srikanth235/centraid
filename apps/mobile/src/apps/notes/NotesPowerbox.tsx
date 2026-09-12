@@ -6,7 +6,7 @@
 // ABSENT instead of emptying the sheet.
 
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
 import {
   LINK_TARGET_KINDS,
@@ -17,10 +17,10 @@ import { groupTargets } from "@centraid/blueprints/apps/notes/powerbox";
 import type { LinkTarget } from "@centraid/blueprints/apps/notes/types";
 import { POWERBOX_FOOT } from "@centraid/blueprints/apps/notes/view-copy";
 
-import Icon from "../../kit/components/Icon";
-import { Text, TextInput } from "../../kit/components/NativeText";
-import TopSafeArea from "../../kit/components/TopSafeArea";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import SheetRoom from "../../kit/rooms/SheetRoom";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./NotesHome.styles";
 
@@ -45,7 +45,7 @@ export default function NotesPowerbox({
   onTerm,
   onPick,
   onClose,
-}: NotesPowerboxProps): React.JSX.Element {
+}: NotesPowerboxProps): React.JSX.Element | null {
   const { colors } = useTheme();
   const { session } = useReplica();
   const [targets, setTargets] = useState<LinkTarget[]>([]);
@@ -88,81 +88,47 @@ export default function NotesPowerbox({
   }, [excluded, open, session, term]);
 
   return (
-    <Modal
+    <SheetRoom
+      onClose={onClose}
+      title="Link to something in your vault"
       visible={open}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
     >
-      <TopSafeArea
-        accessibilityViewIsModal
-        style={[styles.sheet, { backgroundColor: colors.bg }]}
-      >
-        <View style={styles.modalHeader}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close the link sheet"
-            onPress={onClose}
-            style={styles.iconButton}
-          >
-            <Icon name="x" size={23} color={colors.text} />
-          </Pressable>
-          <Text style={[styles.modalTitle, { color: colors.text }]}>
-            Link to something in your vault
-          </Text>
-        </View>
-        <View style={styles.controls}>
-          <View
-            style={[
-              styles.search,
-              { backgroundColor: colors.bgElev, borderColor: colors.line },
-            ]}
-          >
-            <Icon name="search" size={17} color={colors.textFaint} />
-            <TextInput
-              accessibilityLabel="Search for a link target"
-              value={term}
-              onChangeText={onTerm}
-              autoFocus
-              placeholder="Search your vault"
-              placeholderTextColor={colors.textFaint}
-              style={[styles.searchInput, { color: colors.text }]}
-            />
+      <SearchField
+        accessibilityLabel="Search for a link target"
+        onChangeText={onTerm}
+        placeholder="Search your vault"
+        value={term}
+      />
+      <ScrollView contentContainerStyle={styles.list}>
+        {groupTargets(shown).map((group) => (
+          <View key={group.app} style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textFaint }]}>
+              {group.app}
+            </Text>
+            {group.targets.map((target) => (
+              <Pressable
+                key={`${target.type}/${target.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Link to ${target.title}`}
+                onPress={() => onPick(target)}
+                style={[styles.row, { borderBottomColor: colors.line }]}
+              >
+                <View style={styles.rowOpen}>
+                  <Text style={[styles.rowName, { color: colors.text }]}>
+                    {target.title}
+                  </Text>
+                  <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+                    {target.subtitle}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
           </View>
-        </View>
-        <ScrollView contentContainerStyle={styles.list}>
-          {groupTargets(shown).map((group) => (
-            <View key={group.app} style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textFaint }]}>
-                {group.app}
-              </Text>
-              {group.targets.map((target) => (
-                <Pressable
-                  key={`${target.type}/${target.id}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Link to ${target.title}`}
-                  onPress={() => onPick(target)}
-                  style={[styles.row, { borderBottomColor: colors.line }]}
-                >
-                  <View style={styles.rowOpen}>
-                    <Text style={[styles.rowName, { color: colors.text }]}>
-                      {target.title}
-                    </Text>
-                    <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
-                      {target.subtitle}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          ))}
-        </ScrollView>
-        <Text
-          style={[styles.rowMeta, styles.section, { color: colors.textFaint }]}
-        >
-          {POWERBOX_FOOT}
-        </Text>
-      </TopSafeArea>
-    </Modal>
+        ))}
+      </ScrollView>
+      <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+        {POWERBOX_FOOT}
+      </Text>
+    </SheetRoom>
   );
 }

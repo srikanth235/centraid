@@ -23,11 +23,12 @@ import type { ActivityData } from "@centraid/blueprints/apps/tally/types";
 import {
   SETTLEMENT_NOT_YOURS,
   VERBS,
-  expenseCount,
+  ledgerDayCount,
 } from "@centraid/blueprints/apps/tally/view-copy";
 
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import SeatList from "../../kit/components/SeatList";
+import { formatRelative } from "../../kit/format";
 import { spacing } from "../../kit/theme";
 import { tallyWindowFoot } from "./tally-view-model";
 import TallyEntryRow from "./TallyEntryRow";
@@ -47,6 +48,11 @@ export interface ActivityViewProps {
   loaded: boolean;
   notice: TallyNoticeProps;
   onShowMore: () => void;
+  /** An expense row opens the expense — the same act the group ledger and
+   *  search give the identical row (#1015, tally/findings #9). A feed of rows
+   *  that look tappable and are not is a list that teaches nothing but
+   *  distrust. */
+  onExpense: (expenseId: string) => void;
 }
 
 type ActivityRow = ActivityData["activity"][number];
@@ -72,7 +78,10 @@ export default function ActivityView(
         kind: "day",
         key: bucket.key,
         label: bucket.label,
-        meta: expenseCount(bucket.rows.length),
+        meta: ledgerDayCount(
+          bucket.rows.filter((row) => row.kind !== "settlement").length,
+          bucket.rows.filter((row) => row.kind === "settlement").length
+        ),
       });
       bucket.rows.forEach((row, index) => {
         flat.push({ kind: "entry", key: `${bucket.key}-${index}`, row });
@@ -93,7 +102,7 @@ export default function ActivityView(
         <LedgerRow
           title={settlementTitle(row.from_name, row.to_name)}
           meta={metaSentence([
-            row.date,
+            formatRelative(row.date, props.now),
             money(row.amount_minor, currency),
             row.group_name,
             mine ? "" : SETTLEMENT_NOT_YOURS,
@@ -112,6 +121,9 @@ export default function ActivityView(
         facts={feedFacts(row)}
         currency={currency}
         me={props.data.me}
+        {...(row.expense_id
+          ? { onPress: () => props.onExpense(row.expense_id ?? "") }
+          : {})}
         {...(row.group_name ? { groupName: row.group_name } : {})}
       />
     );

@@ -25,6 +25,17 @@ const replica = vi.hoisted(() => ({
   value: {} as Record<string, unknown>,
 }));
 
+// The room reads its back destination off the navigator (`shell-places.ts`).
+// A stack of one: this page is a root here, so it draws no back control.
+vi.mock(
+  import("@react-navigation/native"),
+  () =>
+    ({
+      useNavigationState: (selector: (state: unknown) => unknown) =>
+        selector({ index: 0, routes: [{ name: "Sharing" }] }),
+    }) as never
+);
+
 vi.mock(import("react-native"), async () => {
   const stub = await import("../test/react-native-stub");
   return stub.reactNativeStub() as unknown as typeof import("react-native");
@@ -38,6 +49,19 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+// The rooms barrel reaches the status-line host, which measures the safe area.
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
 });
 vi.mock(
   import("../kit/components/TopSafeArea"),

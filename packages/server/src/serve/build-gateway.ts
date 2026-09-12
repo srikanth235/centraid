@@ -85,10 +85,12 @@ import {
 } from "@centraid/server/engine";
 import {
   createTokenBucket,
+  forwardedDeviceIdentity,
   PEER_ENDPOINT_HEADER,
   PEER_PLANE_BUDGET,
   PEER_PROOF_HEADER,
   PEER_VAULT_HEADER,
+  PHONE_LINK_PATH,
 } from "@centraid/tunnel";
 import {
   KeyStore,
@@ -201,6 +203,7 @@ import {
 } from "../routes/multiplex-replica-routes.js";
 import { makeOwnersRouteHandler } from "../routes/owners-routes.js";
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
+import { makePhoneLinkRouteHandler } from "../routes/phone-link-routes.js";
 import {
   EDGES_PATH,
   makePlacementRouteHandler,
@@ -216,7 +219,6 @@ import { makeReplicaRouteHandler } from "../routes/replica-routes.js";
 import { makeResourceRouteHandler } from "../routes/resource-routes.js";
 import {
   isDirectHostRequest,
-  isLoopbackRequest,
   readFileMap,
   sendJson,
 } from "../routes/route-helpers.js";
@@ -285,6 +287,7 @@ import {
 } from "./local-share-path.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
+  automationNoticeHeadline,
   enrichRefusalNotice,
   humanizeAutomationRef,
   noticeGist,
@@ -369,6 +372,17 @@ export interface BuildGatewayOptions {
    *  keyed by the gateway endpoint id (#289). */
   deviceAccess?: DeviceAccess;
   keyStore?: KeyStore;
+  /**
+   * The loopback bearer this gateway answers to.
+   *
+   * The HTTP layer enforces it (`serve.ts`), and the embedded lane ALSO uses
+   * it as the key material a phone-tunnel forwarder's device stamp is derived
+   * from (#1015, R-NY-18): the forwarder holds it, the phone never sees it,
+   * and anything else holding it could already reach this gateway as the host.
+   * Absent — a host that lets a fronting layer own auth — means no stamp can
+   * be verified and every forwarded hop is refused rather than promoted.
+   */
+  token?: string;
   hostDeviceEndpointId?: string;
   /**
    * An authenticated caller on this box that is NOT iroh-forwarded (whose
@@ -1321,17 +1335,35 @@ export async function buildGateway(
       kitlessHostIdentity(gatewayKeys.loadOrCreate("endpoint-key.bin")));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
-        // Deliberately `isLoopbackRequest`, NOT `isDirectHostRequest`: the
-        // phone tunnel forwards a paired phone under the host bearer with no
-        // device key, so tightening this severs phone-link. Host-ONLY
-        // capabilities use the stricter `isHostCustody` gate. The peer lane
-        // MUST be excluded: a forwarder also delivers to loopback, and a
-        // linked gateway must never inherit the HOST's owner-tier reach.
-        deviceKeyFor: (req) =>
-          isLoopbackRequest(req) &&
-          req.headers[PEER_ENDPOINT_HEADER] === undefined
-            ? embeddedEndpointId
-            : undefined,
+        /*
+         * TWO PRINCIPALS, AND NO THIRD (#1015, ruling R-NY-18).
+         *
+         * This used to be `isLoopbackRequest` alone, because the phone tunnel
+         * forwarded a paired phone under the host bearer with no device key —
+         * so the only way phone-link worked at all was for the phone to BE
+         * the host at every vault door, the Locker key door included. The
+         * forwarder now names the phone it authenticated, so the fallback can
+         * be what it should always have been:
+         *
+         *   - a hop carrying a forwarder's stamp is the device that stamp
+         *     names, and nothing else. `forwardedDeviceIdentity` checks the
+         *     proof against the loopback bearer and excludes the peer lane —
+         *     a linked gateway must never inherit the HOST's owner-tier
+         *     reach, and its forwarder delivers to loopback too (#726).
+         *   - a request no forwarder touched is the host. `isDirectHostRequest`
+         *     is the SAME predicate host-only capabilities use, so "who is
+         *     this" and "is this the host" can no longer disagree.
+         *
+         * Anything else — a forwarded hop with no stamp, a stamp whose proof
+         * does not verify, a byte relay that forgot to stamp — resolves to
+         * `undefined`, and the composed handler refuses the request. Failing
+         * closed is the point: the previous fallback failed open, upward.
+         */
+        deviceKeyFor: (req) => {
+          const forwarded = forwardedDeviceIdentity(options.token, req.headers);
+          if (forwarded !== undefined) return forwarded;
+          return isDirectHostRequest(req) ? embeddedEndpointId : undefined;
+        },
         vaultsFor: (endpointId) => enrollmentStore.vaultsFor(endpointId),
       }
     : undefined;
@@ -1768,20 +1800,15 @@ export async function buildGateway(
       plane.notices.put({
         kind: "automation",
         sourceRef: automationRef,
-        headline:
-          outcome === "failure"
-            ? gist
-              ? `${name} failed — ${gist}`
-              : `${name} failed`
-            : previousOutcome === "failure"
-              ? `${name} recovered`
-              : `${name} completed`,
+        // R-NY-5 (#1015): a sentence; the gist is the run log's, not the title's.
+        headline: automationNoticeHeadline(name, outcome, previousOutcome),
         severity: outcome === "failure" ? "high" : "info",
         detail: {
           sourceType: "automation",
           outcome,
           automationRef,
           runId,
+          ...(gist ? { gist } : {}),
           ...(noticeContext
             ? {
                 appId: noticeContext.appId,
@@ -3849,9 +3876,29 @@ export async function buildGateway(
           automations: experimental.automations,
           connectors: experimental.connectors,
           seatReplica: true,
+          // The key door is served (#1015, R-NY-19). A seat reads this before
+          // it offers "Enrol this phone", so an older gateway's absent flag
+          // reads as "no such door" rather than as a broken request.
+          seatLockerKey: true,
         },
       })
     ),
+    // The phone-link vouch plane exists only where THIS gateway is the one a
+    // desktop forwards a paired phone into (#1015, R-NY-18). A daemon with its
+    // own device plane admits devices by ticket redemption over iroh and needs
+    // no second door.
+    ...(embeddedAccess
+      ? [
+          forRoutePrefixes(
+            PHONE_LINK_PATH,
+            makePhoneLinkRouteHandler({
+              enrollments: enrollmentStore,
+              hostEndpointId: () => hostOwnerEndpointId,
+              isHostCustody: options.isHostCustody ?? isDirectHostRequest,
+            })
+          ),
+        ]
+      : []),
     ...(options.dataPlaneControl
       ? [
           forRoutePrefixes(

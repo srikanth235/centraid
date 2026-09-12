@@ -423,7 +423,10 @@ function factRows(asset: PhotoAsset): [string, string][] {
         : formatTimezoneOffset(asset.tzOffsetMin),
     ],
     ["Source", asset.scopeLabels?.join(" · ") || asset.source],
-    ["Asset id", asset.assetId ?? asset.id],
+    // NO `Asset id` ROW (#1015, photos/findings #9). It printed a raw internal
+    // URI (`device:ph://0F67DCDF-…`), truncated mid-value, with no way to read
+    // or copy it — an implementation detail shown as a fact about a
+    // photograph, and unreadable even as one.
   ];
 }
 

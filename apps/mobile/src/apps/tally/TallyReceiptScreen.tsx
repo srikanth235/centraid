@@ -137,12 +137,7 @@ export default function TallyReceiptScreen({
   };
 
   return (
-    <TallyScreen
-      current="activity"
-      shelf={RECEIPT}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={RECEIPT} hideBand onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.title}>{RECEIPT_HEAD}</Text>
         <Text style={styles.lede}>{RECEIPT_LEDE_ORIGIN}</Text>

@@ -4,13 +4,13 @@
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RefreshControl, ScrollView, StyleSheet } from "react-native";
 
 import { homeDayOneFoot } from "@centraid/client/home-copy";
 
 import { isAlarmBlanked } from "../kit/e2e-alarm";
 import { useReplica } from "../kit/replica/ReplicaProvider";
+import { HomeRoom } from "../kit/rooms";
 import { TEST_IDS } from "../kit/test-ids";
 import { pageMargin, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
@@ -23,7 +23,7 @@ import {
 import { subscribeVaultLinks } from "../lib/vault-links";
 import type { HomeScreenProps } from "../navigation";
 import AllAppsSheet from "./home/AllAppsSheet";
-import type { BandTarget } from "./home/band";
+import { ALL_APPS_SHEET } from "./home/band-navigation";
 import {
   buildLauncherItems,
   orderByPins,
@@ -45,6 +45,7 @@ import {
   springboardState,
 } from "./home/springboard-policy";
 import { useOriginHealth } from "./home/useOriginHealth";
+import { usePlaceNavigation } from "./home/usePlaceNavigation";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultBar from "./home/VaultBar";
 
@@ -89,15 +90,17 @@ async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
 
 export default function HomeScreen({
   navigation,
+  route: homeRoute,
 }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // Write-only on purpose: the cover renders the same either way, and the
   // setter is what `loadHome` needs to drive its retries.
   const [, setState] = useState<HomeState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
-  const [allAppsOpen, setAllAppsOpen] = useState(false);
+  // More pressed on a place's band lands HERE with `sheet` set (R-NY-1).
+  const sheet = homeRoute.params?.sheet;
+  const [allAppsOpen, setAllAppsOpen] = useState(sheet === ALL_APPS_SHEET);
   const pins = usePins();
   const replica = useReplica();
   const healthSignal = useOriginHealth();
@@ -240,51 +243,14 @@ export default function HomeScreen({
   }, [replica]);
 
   /**
-   * Band and All-apps share this map. `starred` is a stated no-op — no mobile
-   * screen. `default` is `never` so a new place is a typecheck failure.
+   * Band and All-apps go through the one band navigation every place root
+   * uses (`usePlaceNavigation`, R-NY-1): Home + the place, never deeper. On
+   * Home, More opens the sheet in place.
    */
-  const goToPlace = useCallback(
-    (id: PlaceId): void => {
-      switch (id) {
-        case "home":
-          break;
-        case "notifs":
-          navigation.navigate("Settings", { screen: "Approvals" });
-          break;
-        case "autos":
-          navigation.navigate("Automations");
-          break;
-        case "conn":
-          navigation.navigate("Connectors");
-          break;
-        case "settings":
-          openSettings();
-          break;
-        case "stats":
-          navigation.navigate("Insights");
-          break;
-        case "gateway":
-          navigation.navigate("SystemOnPhone");
-          break;
-        case "storage":
-          navigation.navigate("Settings", { screen: "PhoneStorage" });
-          break;
-        case "data":
-          navigation.navigate("Data");
-          break;
-        case "devices":
-          navigation.navigate("Devices");
-          break;
-        case "starred":
-          // No mobile screen — stated no-op.
-          break;
-        default: {
-          const exhaustive: never = id;
-          throw new Error(`Unhandled place: ${String(exhaustive)}`);
-        }
-      }
-    },
-    [navigation, openSettings]
+  const openAllApps = useCallback(() => setAllAppsOpen(true), []);
+  const { goToPlace, selectBandTab } = usePlaceNavigation(
+    navigation,
+    openAllApps
   );
 
   const openPlace = useCallback(
@@ -292,16 +258,18 @@ export default function HomeScreen({
     [goToPlace]
   );
 
-  const selectBandTab = useCallback(
-    (target: BandTarget): void => {
-      if (target === "more") {
-        setAllAppsOpen(true);
-        return;
-      }
-      goToPlace(target);
-    },
-    [goToPlace]
-  );
+  // A `sheet` param arriving on the mounted Home opens the sheet while
+  // rendering: the param is a prop, so this is state adjusted to a prop, not
+  // an effect. The effect only clears the param on the navigator, so a later
+  // arrival does not open the sheet again.
+  const [seenSheet, setSeenSheet] = useState(sheet);
+  if (sheet !== seenSheet) {
+    setSeenSheet(sheet);
+    if (sheet === ALL_APPS_SHEET) setAllAppsOpen(true);
+  }
+  useEffect(() => {
+    if (sheet === ALL_APPS_SHEET) navigation.setParams({ sheet: undefined });
+  }, [navigation, sheet]);
 
   // #890 W6 — the alarm test's mutation site. In every ordinary build this
   // branch is statically false and eliminated: `EXPO_PUBLIC_CENTRAID_E2E_ALARM`
@@ -310,50 +278,62 @@ export default function HomeScreen({
   // suite MUST go red — a green there is the alarm not sounding, and it fails
   // the job. See apps/mobile/src/kit/e2e-alarm.ts for why the mutation belongs
   // in the artifact rather than in the harness.
-  // An empty View rather than `null`, so the production signature stays
+  // An empty ROOM rather than `null`, so the production signature stays
   // `React.JSX.Element` — widening a shipped return type to accommodate a
   // test-only branch would be the mutation leaking into the product. The claim
-  // is identical either way: the band never mounts, so HOME_READY_MARKER never
-  // appears and every flow that waits for it must fail.
-  if (isAlarmBlanked("home")) return <View style={styles.screen} />;
+  // is identical either way: the band never mounts (the room is handed none),
+  // so HOME_READY_MARKER never appears and every flow that waits for it must
+  // fail.
+  if (isAlarmBlanked("home")) return <HomeRoom />;
 
   return (
     // Explicit paddingTop — SafeAreaView edges can resolve to zero in cover stacks.
     // `home-screen` is the arrival handle: HOME_READY_MARKER keyed on the band's
     // accessibility label, and its predecessor ("Home ready") vanished with a
     // copy change (#789/#839). A root testID cannot be re-worded.
-    <View
-      style={[styles.screen, { paddingTop: insets.top }]}
+    <HomeRoom
+      band={<HomeBand active="home" onSelect={selectBandTab} />}
+      /* The same lockup every app draws (`VaultBar`) — the springboard has no
+         special version of "which vault, which gateway". */
+      head={<HomeTitleRow onSettings={openSettings} />}
+      overlay={
+        <AllAppsSheet
+          items={items}
+          onClose={() => setAllAppsOpen(false)}
+          onOpenApp={openItem}
+          onOpenPlace={openPlace}
+          onTogglePin={togglePin}
+          pinnedIds={pins}
+          tiles={tiles}
+          visible={allAppsOpen}
+        />
+      }
+      status={
+        <HomeStatusLine
+          onOpen={() => {
+            switch (healthSignal.destination) {
+              case undefined:
+                break;
+              case "phone":
+                navigation.navigate("Settings", { screen: "PhoneStorage" });
+                break;
+              case "backup":
+                navigation.navigate("Settings", { screen: "BackupHealth" });
+                break;
+              case "notifications":
+                navigation.navigate("SignalNotification", {
+                  cause: healthSignal.notificationCause ?? healthSignal.copy,
+                  detail: healthSignal.notificationDetail ?? "phone",
+                });
+                break;
+            }
+          }}
+          signal={healthSignal}
+        />
+      }
       testID={TEST_IDS.home.screen}
+      vault={<VaultBar />}
     >
-      {/* The same lockup every app draws (`VaultBar`) — the springboard has no
-          special version of "which vault, which gateway". */}
-      <VaultBar />
-
-      {/* Fixed chrome, not scroll content — scrollbar starts below the app-bar rule. */}
-      <HomeTitleRow />
-      <HomeStatusLine
-        signal={healthSignal}
-        onOpen={() => {
-          switch (healthSignal.destination) {
-            case undefined:
-              break;
-            case "phone":
-              navigation.navigate("Settings", { screen: "PhoneStorage" });
-              break;
-            case "backup":
-              navigation.navigate("Settings", { screen: "BackupHealth" });
-              break;
-            case "notifications":
-              navigation.navigate("SignalNotification", {
-                cause: healthSignal.notificationCause ?? healthSignal.copy,
-                detail: healthSignal.notificationDetail ?? "phone",
-              });
-              break;
-          }
-        }}
-      />
-
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -380,20 +360,7 @@ export default function HomeScreen({
           </>
         )}
       </ScrollView>
-
-      <HomeBand active="home" onSelect={selectBandTab} />
-
-      <AllAppsSheet
-        visible={allAppsOpen}
-        items={items}
-        tiles={tiles}
-        pinnedIds={pins}
-        onOpenApp={openItem}
-        onOpenPlace={openPlace}
-        onTogglePin={togglePin}
-        onClose={() => setAllAppsOpen(false)}
-      />
-    </View>
+    </HomeRoom>
   );
 }
 

@@ -45,6 +45,7 @@ import {
   removeLockerVaultKey,
 } from "./locker-device-auth";
 import { revealLockerRow, unlockLockerDoor } from "./locker-door";
+import { enrolThisPhoneInLocker } from "./locker-enrol";
 import { lockerRevealReceipt } from "./locker-gateway";
 import {
   ITEMS_WINDOW,
@@ -75,6 +76,10 @@ export interface LockerVaultState {
   readError: string;
   /** The door's refusal, in its own words, on the reveal that asked for it. */
   revealError: string;
+  /** This phone holds no `K` for this vault, and no gesture here can get one
+   *  (#1015 B1, #996 W6). The wall states the absence instead of offering an
+   *  unlock that refuses every time. */
+  notEnrolled: boolean;
   revealBusy: boolean;
   /** A reveal took itself off the screen with nothing left (STATES.md). */
   reauth: boolean;
@@ -121,6 +126,7 @@ function initialState(): LockerVaultState {
     reading: false,
     readError: "",
     revealError: "",
+    notEnrolled: false,
     revealBusy: false,
     reauth: false,
     masked: false,
@@ -186,9 +192,18 @@ export function resetLockerVault(): void {
   subscribers.clear();
 }
 
+/**
+ * S14 (#1015, R-A-15): the exception is a fact about the program. What the
+ * transport, the keychain or the SQLite driver throws goes to the log
+ * (docs/logs.md); the pane gets Locker's own sentence and the one retry word.
+ */
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  console.warn("[locker] read failed", error);
+  return LOCKER_NOT_READ;
 }
+
+/** Locker's ONE read-failure sentence. */
+const LOCKER_NOT_READ = "Locker could not be read. Try again.";
 
 // ─── The clock ──────────────────────────────────────────────────────────────
 
@@ -308,6 +323,7 @@ export async function unlockLocker(): Promise<void> {
     set({
       session: answer.ok ? session : { ...session, error: answer.message },
       busy: false,
+      notEnrolled: !answer.ok && answer.reason === "not_enrolled",
       revealError: "",
     });
     if (isOpen(state.session)) {
@@ -317,6 +333,28 @@ export async function unlockLocker(): Promise<void> {
   } catch (error) {
     set({ busy: false, readError: message(error) });
   }
+}
+
+/**
+ * Enrol this phone: fetch `K` over the desktop link and put it in the
+ * keychain (#1015, R-NY-19).
+ *
+ * On success the wall does NOT unlock itself. Holding the key and proving
+ * presence are two different facts, and collapsing them would mean the OS
+ * prompt the member has not answered yet had been answered for them. The
+ * absence is gone, so `notEnrolled` clears and the unlock verb appears.
+ */
+export async function enrolLockerPhone(): Promise<void> {
+  const vaultId = getActiveVaultId();
+  set({ busy: true });
+  const answer = await enrolThisPhoneInLocker(vaultId);
+  set({
+    busy: false,
+    notEnrolled: !answer.ok,
+    session: answer.ok
+      ? state.session
+      : { ...state.session, error: answer.message },
+  });
 }
 
 /** Forget `K` on this device — the revoke screen's local half (R13). */

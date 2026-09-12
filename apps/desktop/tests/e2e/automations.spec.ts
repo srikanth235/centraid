@@ -37,7 +37,7 @@ test.afterEach(async () => {
 
 async function openAutomations(page: TypeImport_11i4z7t.Page): Promise<void> {
   await waitForHome(page);
-  await gotoNav(page, "Automations");
+  await gotoNav(page, "Rules");
   await page
     .getByTestId("automations-overview")
     .or(page.getByTestId("automations-error"))
@@ -125,13 +125,13 @@ test("8.2 — a list load failure shows the error panel and Reconnect recovers",
   }
 });
 
-test('8.3 — "New automation" opens the editor; the draft is posted on Save', async () => {
+test('8.3 — "New rule" opens the editor; the draft is posted on Save', async () => {
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    // "New automation" is the page's one filled commit and it lives in the app
+    // "New rule" is the page's one filled commit and it lives in the app
     // bar (#765) — the empty state's own verb is "Browse templates".
-    await page.getByRole("button", { name: "New automation" }).first().click();
+    await page.getByRole("button", { name: "New rule" }).first().click();
     // Draft creation is deliberately deferred to Save — AutomationEditorRoute
     // calls createAutomation() only from its onSave handler — so opening the
     // editor posts nothing. Both halves are asserted rather than dropping
@@ -144,7 +144,7 @@ test('8.3 — "New automation" opens the editor; the draft is posted on Save', a
     ).toBe(false);
 
     await page.getByRole("textbox", { name: "Name" }).fill("Inbox Digest");
-    await page.getByRole("button", { name: "Create automation" }).click();
+    await page.getByRole("button", { name: "Create rule" }).click();
     await expect
       .poll(() =>
         gateway.calls.some(
@@ -252,7 +252,7 @@ test("8.7 — deleting an automation confirms, posts DELETE, returns to the list
     await expect(page.getByTestId("automation-thread")).toBeVisible();
     await openAutomationMenu(page);
     await page.getByTestId("automation-menu-delete").click();
-    await expectConfirm(page, "Delete automation?");
+    await expectConfirm(page, "Delete rule?");
     await confirmDelete(page);
     await expect(statusLine(page)).toContainText('Deleted "Inbox Digest"');
     expect(

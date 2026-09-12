@@ -1,11 +1,12 @@
-// Automations (#765, spec §3). No `New automation` — authoring is a
+// Rules (#765, spec §3) — the place the wire and the route still call
+// `automations` (R-SH-8: one member-facing noun, "Rules"). No `New rule` — authoring is a
 // blueprint act with no mobile route. `Templates` scrolls to `Worth
 // setting up` on this page. Trailing slot is `Open`; Pause lives in the
 // row expansion.
 
 import React, { useCallback, useMemo, useRef } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
-import type { LayoutChangeEvent } from "react-native";
+import { View } from "react-native";
+import type { LayoutChangeEvent, ScrollView } from "react-native";
 
 import { AUTOMATIONS_SUGGESTIONS_NOTE } from "@centraid/client/automations-copy";
 import { SKELETON_NOTE } from "@centraid/client/surface-copy";
@@ -13,22 +14,20 @@ import { SKELETON_NOTE } from "@centraid/client/surface-copy";
 import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
-import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
 import NoteBlock from "../../kit/components/NoteBlock";
 import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { SystemPlace, featureOffEmpty } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { AutomationsScreenProps } from "../../navigation";
+import { usePlaceFrame } from "../../screens/home/usePlaceFrame";
 import {
   automationRowCopy,
   automationsHealth,
@@ -57,21 +56,22 @@ const LOADING_NOTE = SKELETON_NOTE;
 const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
 const NO_RUNS_NOTE =
-  "Nothing has run yet — run an automation once, or wait for its trigger.";
+  "Nothing has run yet — run a rule once, or wait for its trigger.";
 
 export default function AutomationsScreen({
   navigation,
   route,
 }: AutomationsScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("autos");
   const focusedRef = route.params?.automationRef;
   // Gate above both branches so a switched-off gateway never mounts those hooks.
   const { features } = useReplica();
   if (features && !features.automations)
     return (
-      <FeatureOffPlace
-        feature="automations"
-        onLeave={() => navigation.goBack()}
-        title="Automations"
+      <SystemPlace
+        {...frame}
+        empty={featureOffEmpty("automations")}
+        title="Rules"
       />
     );
   return focusedRef ? (
@@ -104,7 +104,7 @@ function AutomationsBody({
   if (state === "loading")
     return (
       <>
-        <SkeletonRows accessibilityLabel="Reading your automations" />
+        <SkeletonRows accessibilityLabel="Reading your rules" />
         <NoteBlock text={LOADING_NOTE} />
       </>
     );
@@ -117,7 +117,7 @@ function AutomationsBody({
             ? page.load.reason
             : errorBody(page.lastRunClock)
         }
-        eyebrow="Automations"
+        eyebrow="Rules"
         facts={
           page.load.kind === "error" && !page.load.unpaired
             ? [
@@ -218,7 +218,7 @@ function AutomationsBody({
     <>
       {full ? (
         <ChipsBlock
-          accessibilityLabel="Filter automations"
+          accessibilityLabel="Filter rules"
           chips={filterChips(page.filter).map((chip) => ({
             id: chip.key,
             label: chip.label,
@@ -228,7 +228,7 @@ function AutomationsBody({
         />
       ) : null}
       <SectionBlock
-        label="Automations"
+        label="Rules"
         meta={
           shown.length === copies.length
             ? countSentence(copies)
@@ -236,9 +236,9 @@ function AutomationsBody({
         }
       />
       {automationRows.length > 0 ? (
-        <RowsBlock accessibilityLabel="Automations" rows={automationRows} />
+        <RowsBlock accessibilityLabel="Rules" rows={automationRows} />
       ) : (
-        <NoteBlock text="No automation is in that state right now." />
+        <NoteBlock text="No rule is in that state right now." />
       )}
 
       <SectionBlock
@@ -275,17 +275,12 @@ function AutomationsBody({
 function AutomationsPlace({
   navigation,
 }: AutomationsScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("autos");
   const { colors } = useTheme();
   const page = useAutomations();
   const scroll = useRef<ScrollView>(null);
   const suggestionsY = useRef(0);
-  const ink = useMemo(
-    () => ({
-      error: { color: colors.net },
-      safe: { backgroundColor: colors.bg },
-    }),
-    [colors]
-  );
+  const ink = useMemo(() => ({ error: { color: colors.net } }), [colors]);
 
   const open = useCallback(
     (ref: string): void => {
@@ -322,58 +317,38 @@ function AutomationsPlace({
   const worst = worstFailure(copies);
 
   return (
-    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
-      <View style={styles.page}>
-        <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
-          <View style={styles.headBar}>
-            {/* No filled commit. Templates withheld while loading/error. */}
-            <PlaceHeader
-              title="Automations"
-              {...(page.templates.length > 0 &&
-              page.state !== "loading" &&
-              page.state !== "error"
-                ? {
-                    secondary: { label: "Templates", onPress: browseTemplates },
-                  }
-                : {})}
-            />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          keyboardShouldPersistTaps="handled"
-          ref={scroll}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void page.refresh()}
-              refreshing={page.refreshing}
-              tintColor={colors.textFaint}
-            />
-          }
-          style={styles.scroll}
-        >
-          {page.actionError ? (
-            <Text style={[styles.actionError, ink.error]}>
-              {page.actionError}
-            </Text>
-          ) : null}
-          <AutomationsBody
-            copies={copies}
-            onBrowseTemplates={browseTemplates}
-            onOpen={open}
-            onSuggestionsLayout={onSuggestionsLayout}
-            page={page}
-          />
-        </ScrollView>
-      </View>
-      {/* Standing chrome — not inside ScrollView. */}
-      <HealthLine
-        text={health.text}
-        {...(health.action && worst
-          ? { action: health.action, onAction: () => open(worst.ref) }
-          : {})}
+    <SystemPlace
+      bodyRef={scroll}
+      footer={
+        /* Standing chrome — not inside the room's body. */
+        <HealthLine
+          text={health.text}
+          {...(health.action && worst
+            ? { action: health.action, onAction: () => open(worst.ref) }
+            : {})}
+        />
+      }
+      {...frame}
+      onRefresh={() => void page.refresh()}
+      refreshing={page.refreshing}
+      // No filled commit. Templates withheld while loading/error.
+      {...(page.templates.length > 0 &&
+      page.state !== "loading" &&
+      page.state !== "error"
+        ? { secondary: { label: "Templates", onPress: browseTemplates } }
+        : {})}
+      title="Rules"
+    >
+      {page.actionError ? (
+        <Text style={[styles.actionError, ink.error]}>{page.actionError}</Text>
+      ) : null}
+      <AutomationsBody
+        copies={copies}
+        onBrowseTemplates={browseTemplates}
+        onOpen={open}
+        onSuggestionsLayout={onSuggestionsLayout}
+        page={page}
       />
-    </TopSafeArea>
+    </SystemPlace>
   );
 }

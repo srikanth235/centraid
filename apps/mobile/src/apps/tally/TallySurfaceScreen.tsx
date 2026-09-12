@@ -17,8 +17,10 @@ import { ScrollView, StyleSheet } from "react-native";
 
 import {
   EXPORT_FOOT,
+  EXPORT_FORMAT_VALUE,
   EXPORT_HEAD,
   EXPORT_LEDE,
+  EXPORT_NEEDS_GROUP,
   EXPORT_NOTE,
   EXPORT_NO_GROUP,
   FIELD_KEYS,
@@ -26,6 +28,7 @@ import {
 } from "@centraid/blueprints/apps/tally/compose-copy";
 import { EXPORT } from "@centraid/blueprints/apps/tally/shelves";
 
+import EmptyBlock from "../../kit/components/EmptyBlock";
 import { Text } from "../../kit/components/NativeText";
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { TallyScreenProps } from "../../navigation";
@@ -55,13 +58,22 @@ export default function TallySurfaceScreen({
 
   const data = vault.exported;
 
+  // REACHED WITH NO GROUP, THIS SCREEN HAS NOTHING TO SAY (#1015,
+  // tally/findings #3). More offers Export from a context that has no group,
+  // and the rows then drew a fallback group, an empty window and a `--net`
+  // warning about a file no act on this screen can write. One sentence naming
+  // the door is the whole of the honest answer.
+  if (!groupId)
+    return (
+      <TallyScreen shelf={EXPORT} hideBand onBack={() => navigation.goBack()}>
+        <ScrollView contentContainerStyle={styles.page}>
+          <EmptyBlock {...EXPORT_NEEDS_GROUP} inset />
+        </ScrollView>
+      </TallyScreen>
+    );
+
   return (
-    <TallyScreen
-      current="more"
-      shelf={EXPORT}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={EXPORT} hideBand onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={[styles.title, { color: colors.text }]}>
           {EXPORT_HEAD}
@@ -87,7 +99,7 @@ export default function TallySurfaceScreen({
           }
           note={EXPORT_NOTE}
         />
-        <FieldRow label={FIELD_KEYS.format} value={FIELD_KEYS.format} />
+        <FieldRow label={FIELD_KEYS.format} value={EXPORT_FORMAT_VALUE} />
         <FieldRow label={EXPORT_WHERE_ROW} note={CUSTODIAN_SEAT_NOTE} />
 
         {/* §6's foot, in the `--net` register: the file leaves the vault. */}

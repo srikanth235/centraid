@@ -33,6 +33,11 @@ export type EditorActionId = "receipt" | "approvals" | "editable";
 
 export const NOT_TEXT_REASON = "this document is not text";
 
+/** The other refused reason a member can be shown: the write threw. What it
+ *  threw is a fact about the program (S14, #1015, R-A-15) and goes to the log
+ *  instead of onto the "Refused · …" line. */
+export const WRITE_NOT_LANDED = "the write did not land";
+
 export const WHAT_CAN_BE_EDITED =
   "A body can only be set on a text document (a kind whose media type is text/…). Every other kind takes a new file through Replace instead — same document, new bytes, each a version in its history.";
 
@@ -111,7 +116,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "approval":
       return {
         line: "Waiting for the owner's approval · held, not refused",
-        note: "Held until the owner consents — it sits in Approvals and is not the same state as queued",
+        note: "Held until the owner consents — it sits in Needs you and is not the same state as queued",
         commit: "Save",
         net: false,
         action: "approvals",
@@ -148,6 +153,6 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
 
 export const EDITOR_ACTION_LABELS: Record<EditorActionId, string> = {
   receipt: "Open the version history",
-  approvals: "Show it in Approvals",
+  approvals: "Show it in Needs you",
   editable: "What can be edited?",
 };

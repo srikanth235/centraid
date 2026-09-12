@@ -16,23 +16,30 @@ import { DCAPS } from "@centraid/blueprints/apps/docs/capabilities";
 
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import { dueEmptyBody, filingStatus } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 
 export default function ProposedFiling({
   navigation,
 }: DocsScreenProps<"DocsProposedFiling">): React.JSX.Element {
+  const room = useDocsRoom("more");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const capability = DCAPS.find((entry) => entry.id === "filing");
 
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader title="Proposed filing" backTo="All" />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <View style={styles.page}>
         <View style={styles.panel}>
           <Text style={styles.eyebrow}>Off</Text>
@@ -54,7 +61,7 @@ export default function ProposedFiling({
         </View>
         <Text style={styles.status}>{filingStatus(0)}</Text>
       </View>
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -63,7 +70,7 @@ const makeStyles = (colors: ThemeColors) =>
     action: { alignSelf: "flex-start", marginTop: 8 },
     body: { ...t("body"), color: colors.textSoft },
     eyebrow: { ...t("eyebrow"), color: colors.textFaint },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     panel: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

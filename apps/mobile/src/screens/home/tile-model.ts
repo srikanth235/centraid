@@ -3,6 +3,8 @@
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
+import { formatBytes } from "../../kit/format";
+
 export type TileStatus = "loading" | "unknown" | "empty" | "content";
 
 export interface TilePhoto {
@@ -199,20 +201,19 @@ export function selectNoteExcerpt(
   };
 }
 
-const BYTE_UNITS = ["bytes", "KB", "MB", "GB", "TB"] as const;
-
-/** One decimal above the byte rung; missing/nonsensical → "", never fabricated 0 bytes. */
-export function formatBytes(bytes: unknown): string {
+/**
+ * A size clause for a tile row, in the seat's ONE byte register
+ * (`kit/format`, #1015 S8 — this module used to carry a second one that said
+ * `bytes` where the other said `B`).
+ *
+ * A replica cell is `unknown`, and a document with no content row has no size
+ * at all: that yields "" — an absent clause — rather than the register's `—`,
+ * because the tile composes this into a line where a dash would read as a
+ * size the vault knows to be nothing.
+ */
+function sizeClause(bytes: unknown): string {
   const value = Number(bytes);
-  if (!Number.isFinite(value) || value < 0) return "";
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < BYTE_UNITS.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  const rounded = unit === 0 ? Math.round(size) : Math.round(size * 10) / 10;
-  return `${rounded.toLocaleString()} ${BYTE_UNITS[unit]}`;
+  return Number.isFinite(value) && value >= 0 ? formatBytes(value) : "";
 }
 
 /** Name + size, never a prose excerpt — Docs and Notes would otherwise look the same. */
@@ -229,7 +230,7 @@ export function selectDocRows(
     .map((row) => ({
       id: text(row, "document_id"),
       name: text(row, "title") || "Untitled",
-      size: formatBytes(sizes.get(text(row, "current_content_id"))),
+      size: sizeClause(sizes.get(text(row, "current_content_id"))),
     }));
 }
 

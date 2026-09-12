@@ -99,6 +99,39 @@ export function noticeGist(
     : collapsed;
 }
 
+/**
+ * An automation notice's headline, in the member's words (#1015 R-NY-5). It is
+ * a sentence about the rule, never the failure's gist: every seat renders the
+ * headline as a title, so an exception's first line there is engine
+ * vocabulary on a member surface. The gist rides `detail.gist` for the run log.
+ */
+export function automationNoticeHeadline(
+  name: string,
+  outcome: "success" | "failure",
+  previousOutcome: "success" | "failure" | undefined
+): string {
+  if (outcome === "failure") return `${name} did not finish`;
+  return previousOutcome === "failure"
+    ? `${name} is working again`
+    : `${name} completed`;
+}
+
+/** An outbox outcome's headline (#1015 R-NY-5): the same rule — a sentence
+ *  naming the write, with the refusal's gist left to `detail.gist`. */
+export function outboxNoticeHeadline(
+  target: string,
+  disposition: "sent" | "failed" | "reparked"
+): string {
+  switch (disposition) {
+    case "sent":
+      return `${target} was sent`;
+    case "failed":
+      return `${target} was not sent`;
+    case "reparked":
+      return `${target} needs your approval again`;
+  }
+}
+
 /** Human label for an automation whose manifest could not be read (#647). */
 export function humanizeAutomationRef(ref: string): string {
   const segment = ref.split("/").at(-1) ?? ref;

@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import {
   FlatList,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -22,11 +21,12 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
-import Tappable from "../../kit/components/Tappable";
-import TopSafeArea from "../../kit/components/TopSafeArea";
+import { PushedPage } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { AssistantFullScreenProps } from "../../navigation";
+import { useShellParent } from "../../screens/shell-places";
 import { makeStyles } from "./Assistant.styles";
+import ConsentSheet from "./ConsentSheet";
 import { useAssistant } from "./useAssistant";
 import type { Bubble } from "./useAssistant";
 
@@ -78,21 +78,6 @@ export default function AssistantScreen({
       hide.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (!pendingConsent) return;
-    Alert.alert(
-      "Share with another provider?",
-      pendingConsent.message,
-      [
-        { text: "Cancel", style: "cancel", onPress: declineConsent },
-        { text: `Allow ${pendingConsent.provider}`, onPress: approveConsent },
-      ],
-      // Android's back gesture dismisses without pressing a button. Silence is
-      // not consent — and without this the turn stays wedged on pendingConsent.
-      { cancelable: true, onDismiss: declineConsent }
-    );
-  }, [approveConsent, declineConsent, pendingConsent]);
 
   const renderBubble = useCallback(
     ({ item }: ListRenderItemInfo<Bubble>): React.JSX.Element => (
@@ -164,37 +149,49 @@ export default function AssistantScreen({
                 : {}),
               onSelect: selectEffort,
             };
+  // Read off the navigator, never written down (#1015, B7).
+  const parent = useShellParent();
   const contextRatio =
     context.used !== undefined && context.size
       ? Math.max(0, Math.min(1, context.used / context.size))
       : 0;
 
   return (
-    <TopSafeArea style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Tappable
-          accessibilityRole="button"
-          accessibilityLabel="Back to home"
-          hitSlop={10}
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="arrow-left" size={26} color={colors.text} />
-        </Tappable>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>Assistant</Text>
-          <Text style={styles.subtitle}>Ask about your vault</Text>
-        </View>
-      </View>
-
-      {phase === "offline" ? (
-        <View style={styles.emptyWrap}>
-          <Icon name="cpu" size={30} color={colors.accent} />
-          <Text style={styles.emptyTitle}>Not connected</Text>
-          <Text style={styles.emptyBody}>
-            Pair your desktop in Settings to chat with your assistant.
-          </Text>
-        </View>
-      ) : (
+    <PushedPage
+      {...(parent ? { backTo: parent } : {})}
+      onBack={() => navigation.goBack()}
+      overlay={
+        <>
+          <ConsentSheet
+            onAllow={approveConsent}
+            onDecline={declineConsent}
+            pending={pendingConsent}
+          />
+          {pickerSpec ? (
+            <OptionSheet
+              visible
+              title={pickerSpec.title}
+              options={pickerSpec.options}
+              {...(pickerSpec.selectedId
+                ? { selectedId: pickerSpec.selectedId }
+                : {})}
+              onSelect={(id) => pickerSpec.onSelect(id)}
+              onClose={() => setPicker(null)}
+            />
+          ) : null}
+        </>
+      }
+      title="Assistant"
+      {...(phase === "offline"
+        ? {
+            empty: {
+              body: "Pair your desktop in Settings to talk to your assistant.",
+              title: "Not connected",
+            },
+          }
+        : {})}
+    >
+      {phase === "offline" ? null : (
         <KeyboardAvoidingView
           style={styles.safe}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -376,19 +373,7 @@ export default function AssistantScreen({
           </View>
         </KeyboardAvoidingView>
       )}
-      {pickerSpec ? (
-        <OptionSheet
-          visible
-          title={pickerSpec.title}
-          options={pickerSpec.options}
-          {...(pickerSpec.selectedId
-            ? { selectedId: pickerSpec.selectedId }
-            : {})}
-          onSelect={(id) => pickerSpec.onSelect(id)}
-          onClose={() => setPicker(null)}
-        />
-      ) : null}
-    </TopSafeArea>
+    </PushedPage>
   );
 }
 

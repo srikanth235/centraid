@@ -8,8 +8,8 @@ export function assistantContextLabel(route: ShellRoute): string {
       return "Home";
     case "assistant":
       return "Assistant";
-    case "approvals":
-      return "Notifications";
+    case "needs-you":
+      return "Needs you";
     case "insights":
       return "Activity";
     case "atlas":

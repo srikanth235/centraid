@@ -202,7 +202,7 @@ export interface InlineCentraidClient {
   }) => Promise<T>;
   retryPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
   discardPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
-  openApprovals?: () => void;
+  openNeedsYou?: () => void;
   /** Handing the member to another first-party app is navigation, never a second copy of that room's UI (#834). */
   openApp?: (appId: string, focus?: { taskId?: string }) => void;
   commonsIntents: (opts?: {
@@ -632,7 +632,7 @@ export interface CreateInlineCentraidOptions {
   scopes?: readonly InlineScopeBinding[];
   session?: InlineScopeSession;
   isOnline?: () => boolean;
-  onOpenApprovals?: () => void;
+  onOpenNeedsYou?: () => void;
   onOpenApp?: (appId: string, focus?: { taskId?: string }) => void;
 }
 
@@ -921,9 +921,7 @@ export function createInlineCentraidClient(
       return discard.call(bindingFor(scope).session, intentId);
     },
 
-    ...(options.onOpenApprovals
-      ? { openApprovals: options.onOpenApprovals }
-      : {}),
+    ...(options.onOpenNeedsYou ? { openNeedsYou: options.onOpenNeedsYou } : {}),
 
     ...(options.onOpenApp ? { openApp: options.onOpenApp } : {}),
 

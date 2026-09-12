@@ -87,7 +87,7 @@ describe("Agenda's copy", () => {
 
   it("says who releases a parked cancellation, and offers no unpark verb", () => {
     expect(copy.PARKED_CANCEL_BODY).toContain("owner");
-    expect(copy.PARKED_CANCEL_REVIEW).toContain("Approvals");
+    expect(copy.PARKED_CANCEL_REVIEW).toContain("Needs you");
   });
 });
 

@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,7 +13,6 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
-import { memberFacingError } from "../../kit/member-error";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { AssistantScreenProps } from "../../navigation";
@@ -26,6 +24,7 @@ import {
   companionPageContext,
   companionSubmitText,
 } from "./assistant-companion";
+import ConsentSheet from "./ConsentSheet";
 import { useAssistant } from "./useAssistant";
 
 export default function AssistantCompanionSheet({
@@ -43,30 +42,6 @@ export default function AssistantCompanionSheet({
     "attachment" | "harness" | "model" | "effort" | null
   >(null);
   const listRef = useRef<FlatList<(typeof assistant.bubbles)[number]>>(null);
-
-  useEffect(() => {
-    if (!assistant.pendingConsent) return;
-    Alert.alert(
-      "Share with another provider?",
-      assistant.pendingConsent.message,
-      [
-        {
-          onPress: assistant.declineConsent,
-          style: "cancel",
-          text: "Cancel",
-        },
-        {
-          onPress: assistant.approveConsent,
-          text: `Allow ${assistant.pendingConsent.provider}`,
-        },
-      ],
-      { cancelable: true, onDismiss: assistant.declineConsent }
-    );
-  }, [
-    assistant.approveConsent,
-    assistant.declineConsent,
-    assistant.pendingConsent,
-  ]);
 
   const text = companionSubmitText(draft, assistant.sending);
   const submit = (): void => {
@@ -139,8 +114,16 @@ export default function AssistantCompanionSheet({
     (harness) => harness.kind === assistant.config?.harnessKind
   );
 
+  const handleAllowProvider = (): void => assistant.approveConsent();
+  const handleDeclineProvider = (): void => assistant.declineConsent();
+
   return (
     <>
+      <ConsentSheet
+        onAllow={handleAllowProvider}
+        onDecline={handleDeclineProvider}
+        pending={assistant.pendingConsent}
+      />
       <Modal
         animationType="slide"
         onRequestClose={() => navigation.goBack()}
@@ -209,7 +192,7 @@ export default function AssistantCompanionSheet({
                       </Text>
                       <Text style={styles.emptyBody}>
                         {(assistant.loadError
-                          ? memberFacingError(assistant.loadError)
+                          ? assistant.loadError
                           : undefined) ??
                           "Ask a question with page context, attachments, and your chosen agent."}
                       </Text>
@@ -244,7 +227,7 @@ export default function AssistantCompanionSheet({
                           {item.pending
                             ? "Thinking…"
                             : item.error
-                              ? memberFacingError(item.text)
+                              ? item.text
                               : item.text}
                         </Text>
                       </View>
@@ -354,7 +337,7 @@ export default function AssistantCompanionSheet({
                 ) : null}
                 {assistant.selectionError ? (
                   <Text style={styles.selectionError}>
-                    {memberFacingError(assistant.selectionError)}
+                    {assistant.selectionError}
                   </Text>
                 ) : null}
                 <Text style={styles.consequence}>

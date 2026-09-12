@@ -394,12 +394,14 @@ describe("build-gateway scenarios", () => {
           .current()
           .notices.getBySource("automation", automationRef)
       ).toMatchObject({
-        // D4: the headline carries the failure gist, not just "failed".
-        headline: "Broken nightly failed — expected automation failure",
+        // R-NY-5 (#1015): the headline is a sentence; the gist is the run
+        // log's, in `detail.gist`.
+        headline: "Broken nightly did not finish",
         count: 1,
         severity: "high",
         detail: {
           outcome: "failure",
+          gist: expect.stringContaining("expected automation failure"),
           error: expect.stringContaining("expected automation failure"),
           appId,
           automationId,

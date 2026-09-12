@@ -6,7 +6,6 @@ import { authHeader } from "../../lib/gateway";
 import { foldPendingUploadGroups } from "../../lib/replica/storage-accounting";
 import { UploadQueue } from "../../lib/upload/native-queue";
 import type { UploadItem } from "../../lib/upload/store";
-import { memberFacingError } from "../member-error";
 
 export interface TransferQueueFailure {
   /** Needed to act on it: the Retry below is addressed by item. */
@@ -86,7 +85,7 @@ function describe(item: UploadItem, terminal: boolean): TransferQueueFailure {
   return {
     itemId: item.itemId,
     ...(item.filename ? { filename: item.filename } : {}),
-    lastError: memberFacingError(item.lastError ?? "no reason was recorded"),
+    lastError: item.lastError ?? "no reason was recorded",
     terminal,
   };
 }

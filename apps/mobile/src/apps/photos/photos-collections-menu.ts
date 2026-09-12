@@ -1,4 +1,4 @@
-// The Collections header menu's model (#712): Show All / Collapse All only.
+// The Collections header menu's model (#712): Show all / Collapse all only.
 // NO REORDER ROW — no order is persisted; a control that forgets across
 // relaunch is worse than none. NO GRID-DENSITY ROW — Collections draws rails,
 // not the rung grid `photos-rungs.ts` governs. Neither row is `checked`: a
@@ -21,13 +21,13 @@ export function collectionsMenuGroups({
       rows: [
         {
           key: "show-all",
-          label: "Show All",
+          label: "Show all",
           icon: "list",
           onSelect: onShowAll,
         },
         {
           key: "collapse-all",
-          label: "Collapse All",
+          label: "Collapse all",
           icon: "chevrons-down",
           onSelect: onCollapseAll,
         },

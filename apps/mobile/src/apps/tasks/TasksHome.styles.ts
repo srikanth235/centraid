@@ -17,14 +17,6 @@ export type TasksStyles = ReturnType<typeof makeTasksStyles>;
 
 export const makeTasksStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    back: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: spacing[1],
-      minHeight: TOUCH,
-      paddingEnd: spacing[2],
-    },
-    backLabel: { ...t("control"), color: colors.text },
     box: {
       alignItems: "center",
       borderColor: colors.lineStrong,
@@ -158,14 +150,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
     numAttention: { color: colors.seam },
     pane: { gap: spacing[2], padding: spacing[4] },
     pendingWords: { ...t("annotLabel"), color: colors.textFaint },
-    placeHead: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: spacing[2],
-      minHeight: TOUCH,
-      paddingHorizontal: spacing[4],
-    },
-    placeTitle: { ...t("title"), color: colors.text, flex: 1 },
     readOnly: {
       ...t("annotLabel"),
       color: colors.textSoft,

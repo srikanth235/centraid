@@ -22,7 +22,7 @@
     "./home-copy": "./src/home-copy.ts",
     "./receipt-capture": "./src/receipt-capture.ts",
     "./version-handshake": "./src/version-handshake.ts",
-    "./approvals-copy": "./src/approvals-copy.ts",
+    "./needs-you-copy": "./src/needs-you-copy.ts",
     "./automations-copy": "./src/automations-copy.ts",
     "./connectors-copy": "./src/connectors-copy.ts",
     "./data-copy": "./src/data-copy.ts",

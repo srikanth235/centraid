@@ -46,6 +46,11 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The Home band on this place (R-NY-1) is `usePlaceFrame`'s claim, held in
+// `place-frame.test.ts`; this file makes none about it.
+vi.mock(import("../../screens/home/usePlaceFrame"), () => ({
+  usePlaceFrame: () => ({}),
+}));
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
@@ -53,6 +58,15 @@ vi.mock(import("react-native-svg"), async () => {
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 // Each mock takes the REAL function's signature, so a wire shape that drifts is
 // a typecheck failure here rather than a test that passes against a module the
@@ -66,6 +80,7 @@ const wire = vi.hoisted(() => ({
   create: vi.fn<() => void>(),
   health: vi.fn<Insights["fetchGatewayHealth"]>(),
   isSharingAvailable: vi.fn<SharingModule["isAvailableAsync"]>(),
+  notices: vi.fn<Gateway["getNotifications"]>(),
   prefs: vi.fn<Gateway["fetchJson"]>(),
   share: vi.fn<SharingModule["shareAsync"]>(),
   summary: vi.fn<Insights["fetchInsightsSummary"]>(),
@@ -88,8 +103,14 @@ vi.mock(
       GatewayError: Error,
       apiHeaders: () => ({}),
       fetchJson: wire.prefs,
+      // The overview's standing way into the alerts view reads the notices.
+      getNotifications: wire.notices,
       requireGatewayBase: () => Promise.resolve("http://127.0.0.1:7777"),
       resolveGatewayBase: () => Promise.resolve("http://127.0.0.1:7777"),
+      subscribeMobileNotificationsChanges: () =>
+        new Promise<void>(() => {
+          // The doorbell never resolves; it is aborted on unmount.
+        }),
     }) as unknown as Gateway
 );
 vi.mock(import("../../lib/vault-links"), () => ({
@@ -195,7 +216,36 @@ const health: GatewayHealth = {
 const navigation = {
   goBack: vi.fn<() => void>(),
   navigate: vi.fn<(name: string, params?: unknown) => void>(),
+  push: vi.fn<(name: string, params?: unknown) => void>(),
 } as unknown as InsightsScreenProps["navigation"];
+
+function notices(
+  over: { severity: "info" | "warning" | "high" }[] = []
+): Awaited<ReturnType<Gateway["getNotifications"]>> {
+  return {
+    decisions: {
+      count: 0,
+      needsAuth: [],
+      outbox: [],
+      parked: [],
+      scopeRequests: [],
+    },
+    notices: over.map((one, index) => ({
+      archivedAt: null,
+      count: 1,
+      detail: {},
+      firstAt: "2026-08-13T08:00:00.000Z",
+      headline: "Nightly digest did not finish",
+      kind: "automation",
+      lastAt: "2026-08-13T08:00:00.000Z",
+      noticeId: `n-${String(index)}`,
+      readAt: null,
+      severity: one.severity,
+      sourceRef: `rule-${String(index)}`,
+    })),
+    unreadNoticeCount: over.length,
+  };
+}
 
 let dispose: (() => void) | undefined;
 
@@ -253,11 +303,48 @@ describe(InsightsScreen, () => {
     wire.prefs.mockResolvedValue({ prefs: {} } as never);
     wire.isSharingAvailable.mockResolvedValue(true);
     wire.share.mockResolvedValue(undefined);
+    wire.notices.mockResolvedValue(notices());
   });
 
   afterEach(() => {
     dispose?.();
     dispose = undefined;
+  });
+
+  // #1015 R-NY-2: notices left Needs you for the alerts view, so the overview
+  // must always lead there — a view reached only when something is wrong is
+  // a view the member never learns exists.
+  it("always offers the alerts, and pushes them over Activity", async () => {
+    const container = await render();
+    expect(textOf(container)).toContain("Nothing needs a look");
+    const face = nodesOf(container, "button").find((node) =>
+      (node.textContent ?? "").startsWith("Alerts")
+    );
+    press(face);
+    expect(navigation.push).toHaveBeenCalledWith("Insights", {
+      initialTab: "alerts",
+    });
+    expect(navigation.navigate).not.toHaveBeenCalledWith(
+      "Insights",
+      expect.anything()
+    );
+  });
+
+  it("counts what needs a look, and leaves news out of it", async () => {
+    wire.notices.mockResolvedValue(
+      notices([{ severity: "high" }, { severity: "info" }])
+    );
+    const container = await render();
+    expect(textOf(container)).toContain("1 needs a look");
+  });
+
+  it("keeps the way into the alerts on a window where nothing ran", async () => {
+    wire.summary.mockResolvedValue(
+      summaryOf({ bySource: [], daily: [], recent: [] })
+    );
+    wire.notices.mockResolvedValue(notices([{ severity: "high" }]));
+    const container = await render();
+    expect(textOf(container)).toContain("1 needs a look");
   });
 
   it("draws the row geometry while it reads, and says why", async () => {
@@ -292,7 +379,7 @@ describe(InsightsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("Nothing has run yet");
     expect(spans).toContain(
-      "Once automations and the assistant start doing work, their volume and outcomes appear here."
+      "Once rules and the assistant start doing work, their volume and outcomes appear here."
     );
     // The one page whose chip row survives its own empty state.
     expect(spans).toContain("7 days");
@@ -300,16 +387,33 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("Nothing to attend to");
   });
 
+  // #1015 R-NY-2: the error replaces the body, the standing Alerts row with
+  // it, yet the alerts read the notices, not the run log that failed.
+  it("keeps the way into the alerts when the run log does not load", async () => {
+    wire.summary.mockRejectedValue(new Error("vault host returned HTTP 404"));
+    const container = await render();
+    expect(textOf(container)).toContain("The run log is unavailable");
+    press(labelled(container, "Open alerts"));
+    expect(navigation.push).toHaveBeenCalledWith("Insights", {
+      initialTab: "alerts",
+    });
+  });
+
   it("reports a failed read as the net panel, with an honest verb", async () => {
     wire.summary.mockRejectedValue(new Error("connect ECONNREFUSED"));
     const container = await render();
     const spans = textOf(container);
-    expect(spans).toContain("THIS PAGE COULD NOT LOAD");
+    // The room's eyebrow, shared with every other seat and sentence case
+    // like every other label (#1015, D2).
+    expect(spans).toContain("This page could not load");
     expect(spans).toContain("The run log is unavailable");
     expect(spans).toContain(
-      "The rollup rebuilds every ten minutes; this rebuild has not finished."
+      "Activity is counted up every ten minutes, and this count has not finished yet."
     );
-    expect(spans).toContain("connect ECONNREFUSED");
+    // S14: the transport's own words never reach the member — one noun and
+    // Try again, no "what happened" fact carrying the gateway's string.
+    expect(spans).not.toContain("connect ECONNREFUSED");
+    expect(spans.join(" ")).not.toContain("ECONNREFUSED");
     expect(
       nodesOf(container, "div").some(
         (node) => styleOf(node).borderColor === colors.net
@@ -342,7 +446,7 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("100% of spend");
     expect(spans).toContain("automations");
     expect(spans).toContain("Recent runs");
-    expect(spans).toContain("Failed · Automation · $0.42 · 1.2k tokens");
+    expect(spans).toContain("Failed · Rule · $0.42 · 1.2k tokens");
     expect(spans).not.toContain("uptime");
     expect(spans).not.toContain("21d 0h");
     expect(spans.join(" ")).not.toMatch(/gateway|daemon|replica|component/iu);
@@ -371,7 +475,13 @@ describe(InsightsScreen, () => {
 
   it("opens the automation a failed run belongs to", async () => {
     const container = await render();
-    press(labelled(container, "Open"));
+    // By the run's own hint: the overview's standing Alerts row carries an
+    // "Open" verb too, above the runs.
+    press(
+      nodesOf(container, "button").find(
+        (node) => node.dataset.hint === "Open Tidy downloads"
+      )
+    );
     expect(navigation.navigate).toHaveBeenCalledWith("Automations", {
       automationRef: "tidy/downloads",
     });
@@ -436,6 +546,17 @@ describe(InsightsScreen, () => {
     expect(textOf(container)).toContain(
       "This device has no way to share a file, so the rollup cannot leave the app."
     );
+  });
+
+  it("names a failed share in member words, never the exception (R-NY-10)", async () => {
+    wire.share.mockRejectedValue(
+      new Error("ENOENT: gateway daemon could not write the cache")
+    );
+    const container = await render();
+    press(labelled(container, "Export CSV"));
+    await settle();
+    expect(textOf(container)).toContain("The CSV could not be shared.");
+    expect(textOf(container).join(" ")).not.toMatch(/ENOENT|cache|daemon/u);
   });
 
   it("offers no filled commit at all — this page writes nothing", async () => {

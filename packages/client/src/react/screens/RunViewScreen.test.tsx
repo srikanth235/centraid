@@ -162,11 +162,10 @@ describe("screens/RunViewScreen", () => {
           deleted: true,
           crumbName: "digest/main",
           headerName: "digest/main",
-          promptInstr:
-            "This automation was deleted — its instructions are gone.",
+          promptInstr: "This rule was deleted — its instructions are gone.",
         })
       );
-      expect(el.textContent).toContain("This automation was deleted");
+      expect(el.textContent).toContain("This rule was deleted");
       expect(el.textContent).toContain("digest/main");
       // The loaded run detail has no in-page breadcrumb (shell chrome owns back).
       expect(el.querySelector(".auCrumb")).toBeNull();

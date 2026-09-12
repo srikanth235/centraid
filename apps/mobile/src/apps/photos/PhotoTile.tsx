@@ -17,18 +17,18 @@ import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
-import { t, useTheme, radii } from "../../kit/theme";
+import { t, useTheme, radii, subBase } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
 import {
   CUSTODY_ICON,
-  CUSTODY_LABEL,
   SELECTION_DOT,
   SELECTION_INSET,
   SELECTION_OUTLINE,
   kindOverlay,
   stateOverlay,
   tileGround,
+  tileLabel,
   vaultMarkFor,
 } from "./tile-overlays";
 import type { VaultFacts } from "./tile-overlays";
@@ -86,9 +86,13 @@ function PhotoTileImpl({
       // The custody mark is a glyph, and the icon contract makes every glyph
       // decorative (DESIGN.md:449) — so its meaning has to reach a screen
       // reader through the control that owns it, not through the mark.
-      accessibilityLabel={
-        state?.form === "custody" ? `${name}, ${CUSTODY_LABEL}` : name
-      }
+      //
+      // EVERY STATE THE TILE DRAWS, NOT ONLY CUSTODY (#1015,
+      // photos/findings #18). A tile that could not be decoded painted a red
+      // `could not decode` line and announced the bare name, so the one member
+      // who cannot see the red was the one never told the photograph is not
+      // there; the same was true of a purge countdown.
+      accessibilityLabel={tileLabel(name, state)}
       accessibilityRole="imagebutton"
       accessibilityState={{ selected }}
       onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
@@ -275,8 +279,11 @@ const makeStyles = (colors: ThemeColors) =>
       bottom: 4,
       insetInlineStart: 4,
       justifyContent: "center",
-      paddingHorizontal: 3,
-      paddingVertical: 2,
+      // proto:4019's chip padding. A SEAM below the 4px base, like the
+      // `state` chip below: both insets are named `subBase` seams — the inline
+      // one is `chip` (#1015, R-NY-15), the block one `gutter` (R-B-6).
+      paddingHorizontal: subBase.chip,
+      paddingVertical: subBase.gutter,
       position: "absolute",
     },
     state: {
@@ -286,8 +293,8 @@ const makeStyles = (colors: ThemeColors) =>
       bottom: 4,
       insetInlineEnd: 4,
       insetInlineStart: 4,
-      paddingHorizontal: 3,
-      paddingVertical: 1,
+      paddingHorizontal: subBase.chip,
+      paddingVertical: subBase.hair,
       position: "absolute",
     },
     stateText: t("mono"),

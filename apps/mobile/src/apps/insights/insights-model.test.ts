@@ -588,7 +588,7 @@ describe("the recent runs", () => {
     );
     expect(row?.title).toBe("Tidy downloads");
     expect(row?.sub).toBe(
-      "Failed · Automation · codex · medium · $0.42 · 3.4k tokens"
+      "Failed · Rule · codex · medium · $0.42 · 3.4k tokens"
     );
     expect(row?.net).toBe(true);
   });

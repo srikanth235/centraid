@@ -3,7 +3,6 @@
 // (./TileBody) read as one grid. Home takes no identity hue (#707); the hue
 // belongs to the app a tile previews, on its chip alone.
 
-import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
@@ -20,7 +19,7 @@ import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
-import { borders, durations, t, useTheme } from "../../kit/theme";
+import { borders, durations, spacing, t, useTheme } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
 import { packTiles } from "./grid-packing";
@@ -43,9 +42,10 @@ function buildPressHandlers(scale: SharedValue<number>): {
 } {
   const timing = { duration: PRESS_DURATION, easing: PRESS_CURVE };
   return {
+    // The scale IS the press feedback. A buzz on every press-in is what made
+    // haptics mean nothing in this app (#1015, S15).
     pressIn: () => {
       scale.value = withTiming(0.97, timing);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
     pressOut: () => {
       scale.value = withTiming(1, timing);
@@ -194,6 +194,10 @@ const makeStyles = (colors: ThemeColors) =>
     header: { alignItems: "center", flexDirection: "row", gap: 8 },
     invite: { ...t("control"), color: colors.textFaint },
     name: { ...t("smallStrong"), color: colors.text, flex: 1 },
-    slot: { paddingBottom: 8, paddingHorizontal: 4, width: "50%" },
+    slot: {
+      paddingBottom: spacing[2],
+      paddingHorizontal: spacing[1],
+      width: "50%",
+    },
     slotWide: { width: "100%" },
   });

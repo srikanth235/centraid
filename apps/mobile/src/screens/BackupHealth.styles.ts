@@ -21,7 +21,6 @@ export const styles = StyleSheet.create({
     marginTop: spacing[3],
   },
   body: { ...t("reading"), marginBottom: spacing[4] },
-  content: { padding: spacing[4] + 2, paddingBottom: spacing[6] + 18 },
   error: { ...t("control"), marginVertical: spacing[1] + 1 },
   failureRow: { gap: spacing[2], marginVertical: spacing[1] },
   eyebrow: t("eyebrow"),
@@ -40,14 +39,6 @@ export const styles = StyleSheet.create({
   factValue: { ...t("mono"), marginTop: spacing[1] },
   /** The one filled element on the surface (§18). */
   filled: { borderColor: "transparent" },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing[3],
-    minHeight: 50,
-    paddingHorizontal: spacing[4] - 2,
-  },
-  headerCopy: { flex: 1 },
   hero: {
     alignItems: "center",
     borderRadius: radii.lg,
@@ -88,7 +79,6 @@ export const styles = StyleSheet.create({
   ruleText: { flex: 1, paddingRight: spacing[3], paddingVertical: spacing[2] },
   // The one sentence that says why a switch is grey (#712).
   ruleReason: { ...t("small"), marginTop: 2 },
-  safe: { flex: 1 },
   section: {
     ...t("eyebrow"),
     marginBottom: spacing[1] + 2,
@@ -105,7 +95,6 @@ export const styles = StyleSheet.create({
   },
   settingsText: t("smallStrong"),
   subtitle: { ...t("small"), marginTop: 2 },
-  title: t("bodyStrong"),
   /** Why something cannot happen right now, beside the control it is about. */
   unavailable: { ...t("small"), marginTop: spacing[3] },
 });

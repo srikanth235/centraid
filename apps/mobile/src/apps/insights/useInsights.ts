@@ -10,7 +10,7 @@ import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
 import { fetchGatewayHealth, fetchInsightsSummary } from "../../lib/insights";
 import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
 import { subscribeVaultLinks } from "../../lib/vault-links";
-import { shareCsv } from "./insights-export";
+import { ExportFailureError, shareCsv } from "./insights-export";
 import { nothingRan } from "./insights-model";
 import { readWindowPref, writeWindowPref } from "./insights-window-pref";
 
@@ -41,6 +41,11 @@ export interface InsightsController {
 
 const NOT_PAIRED = "This phone is not linked to a vault yet.";
 
+/** A rejection `shareCsv` did not raise itself — it throws `ExportFailureError`
+ *  for every path it owns, so this covers only a future one it does not. */
+const EXPORT_UNKNOWN = "The CSV could not be shared.";
+
+/** The raw text of a failed read, for `load.reason` and the export log. */
 function describe(error: unknown): string {
   return (error instanceof GatewayError || error instanceof Error) &&
     error.message
@@ -136,7 +141,18 @@ export function useInsights(): InsightsController {
     setExporting(true);
     setExportError(undefined);
     void shareCsv(load.summary, windowDays)
-      .catch((error: unknown) => setExportError(describe(error)))
+      // R-NY-10: `shareCsv` is the producer — it says which failure this was
+      // in member words and keeps the raw text for the log.
+      .catch((error: unknown) => {
+        const failure =
+          error instanceof ExportFailureError
+            ? error
+            : new ExportFailureError(EXPORT_UNKNOWN, describe(error));
+        setExportError(failure.member);
+        console.warn(
+          `[centraid] insights: the CSV was not shared — ${failure.detail}`
+        );
+      })
       .finally(() => {
         inFlight.current = false;
         setExporting(false);

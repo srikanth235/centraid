@@ -26,70 +26,134 @@ import {
   generatedNativeDirsIgnored,
   moduleNativeDirsFor,
   parseNativeStateArgs,
+  generatedNativeTreeIds,
   trackedGeneratedNativeFiles,
   validateFingerprintInputCoverage,
   validateFingerprints,
+  validateGeneratedTreeDrift,
   validateGeneratedTreesNotHashed,
-  validateGeneratedTreesUntracked,
+  validateGeneratedTreesTracked,
   validateModulePlatformShape,
   GENERATED_NATIVE_DIRS,
+  GENERATED_TREE_KEY,
 } from "./verify-native-state.mjs";
 
-const IGNORED_BOTH = {
-  "apps/mobile/ios": true,
-  "apps/mobile/android": true,
+const IGNORED_NEITHER = {
+  "apps/mobile/ios": false,
+  "apps/mobile/android": false,
 };
 
+/** One tracked file per generated tree — the shape L1 asks for. */
+const TRACKED_BOTH = [
+  "apps/mobile/ios/Podfile",
+  "apps/mobile/android/settings.gradle",
+];
+
 describe("native state guards", () => {
-  // #996 made ios/ and android/ prebuild OUTPUTS. The one way the whole CNG
-  // premise fails silently is a tracked file down there: prebuild overwrites it,
-  // so the edit appears to work, ships once, and disappears.
-  test("L1 fails when a prebuild output is tracked", () => {
-    const errors = validateGeneratedTreesUntracked({
-      trackedNativeFiles: [
-        "apps/mobile/ios/Podfile.lock",
-        "apps/mobile/android/app/build.gradle",
-      ],
-      ignoredDirs: IGNORED_BOTH,
+  // #1011 GENERATES ios/ and android/ and TRACKS them, so a native change
+  // arrives as a reviewable diff. The one way that premise fails silently is
+  // the tree drifting from what prebuild writes — a hand-edit that survives
+  // until the next regeneration reverts it, or an input that moved while the
+  // committed projects did not (R-NY-17, #1015).
+  test("L1 fails when a generated tree has left the index", () => {
+    const errors = validateGeneratedTreesTracked({
+      trackedNativeFiles: ["apps/mobile/ios/Podfile"],
+      ignoredDirs: IGNORED_NEITHER,
     });
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain("2 tracked file(s)");
-    expect(errors[0]).toContain("apps/mobile/ios/Podfile.lock");
+    expect(errors[0]).toContain("apps/mobile/android has no tracked file");
     expect(classifyNativeStateError(errors[0])).toBe("L1");
     const remediated = attachRemediation(errors);
     expect(remediated.at(-1)).toMatch(/fix the native inputs first/u);
     expect(remediated.at(-1)).not.toMatch(/--write`$/u);
   });
 
-  test("L1 fails when a generated tree stops being ignored", () => {
+  // The worst of both worlds, and the state #1011 left behind: the files are
+  // committed AND the rule hides every regeneration from `git status`.
+  test("L1 fails when a tracked generated tree is also ignored", () => {
     expect(
-      validateGeneratedTreesUntracked({
-        trackedNativeFiles: [],
-        ignoredDirs: { "apps/mobile/ios": true, "apps/mobile/android": false },
+      validateGeneratedTreesTracked({
+        trackedNativeFiles: TRACKED_BOTH,
+        ignoredDirs: { "apps/mobile/ios": false, "apps/mobile/android": true },
       })
     ).toEqual([
-      "L1 generated tree: apps/mobile/android is not ignored by git — the next `git add .` would commit a prebuild output (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)",
+      "L1 generated tree: apps/mobile/android is ignored by git while its files are tracked — the next prebuild's changes would never reach `git status` (fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass)",
     ]);
   });
 
-  test("L1 passes on a clean CNG tree", () => {
+  test("L1 passes on a tracked, unignored pair", () => {
     expect(
-      validateGeneratedTreesUntracked({
-        trackedNativeFiles: [],
-        ignoredDirs: IGNORED_BOTH,
+      validateGeneratedTreesTracked({
+        trackedNativeFiles: TRACKED_BOTH,
+        ignoredDirs: IGNORED_NEITHER,
       })
     ).toEqual([]);
   });
 
+  test("L1 drift fails when a generated tree moves off its blessed id", () => {
+    const errors = validateGeneratedTreeDrift(
+      { "apps/mobile/ios": "aaa", "apps/mobile/android": "bbb" },
+      { "apps/mobile/ios": "aaa", "apps/mobile/android": "ccc" }
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("apps/mobile/android drifted");
+    expect(errors[0]).toContain("blessed bbb, now ccc");
+    expect(errors[0]).toContain("native:prebuild");
+    expect(classifyNativeStateError(errors[0])).toBe("L1");
+  });
+
+  // A ratchet with nothing recorded is a ratchet watching nothing — the #638
+  // shape again. Absence is a finding, never a pass.
+  test("L1 drift fails when a tree was never blessed, or is not a tree", () => {
+    expect(
+      validateGeneratedTreeDrift(undefined, {
+        "apps/mobile/ios": "aaa",
+        "apps/mobile/android": "bbb",
+      }).map((error) => error.split(" — ")[0])
+    ).toEqual([
+      "L1 generated tree drift: apps/mobile/ios has no blessed tree id in native-fingerprints.json",
+      "L1 generated tree drift: apps/mobile/android has no blessed tree id in native-fingerprints.json",
+    ]);
+    const gone = validateGeneratedTreeDrift(
+      { "apps/mobile/ios": "aaa", "apps/mobile/android": "bbb" },
+      { "apps/mobile/ios": "aaa" }
+    );
+    expect(gone).toHaveLength(1);
+    expect(gone[0]).toContain("is not a tree in the index");
+  });
+
+  test("L1 drift passes when both trees sit at their blessed ids", () => {
+    expect(
+      validateGeneratedTreeDrift(
+        { "apps/mobile/ios": "aaa", "apps/mobile/android": "bbb" },
+        { "apps/mobile/ios": "aaa", "apps/mobile/android": "bbb" }
+      )
+    ).toEqual([]);
+  });
+
   // The live answer, on whatever tree the suite runs against: a developer's
-  // worktree (prebuilt) and CI (never prebuilt) must both say the same thing.
-  test("this repository's generated trees are untracked and ignored", () => {
-    expect(trackedGeneratedNativeFiles()).toEqual([]);
-    expect(generatedNativeDirsIgnored()).toEqual(IGNORED_BOTH);
+  // worktree and CI must both say the same thing.
+  test("this repository's generated trees are tracked, unignored and unmoved", async () => {
     expect(GENERATED_NATIVE_DIRS).toEqual([
       "apps/mobile/ios",
       "apps/mobile/android",
     ]);
+    const tracked = trackedGeneratedNativeFiles();
+    expect(
+      validateGeneratedTreesTracked({
+        trackedNativeFiles: tracked,
+        ignoredDirs: generatedNativeDirsIgnored(),
+      })
+    ).toEqual([]);
+    const blessed = JSON.parse(
+      await readFile(
+        path.join(import.meta.dirname, "..", "native-fingerprints.json"),
+        "utf8"
+      )
+    )[GENERATED_TREE_KEY];
+    expect(
+      validateGeneratedTreeDrift(blessed, generatedNativeTreeIds())
+    ).toEqual([]);
   });
 
   // A ratchet that stops reading an input does not go red, it goes QUIET: the
@@ -236,7 +300,7 @@ describe("native state guards", () => {
 
   test("attachRemediation refuses --write messaging when an input layer is dirty", () => {
     const errors = attachRemediation([
-      "L1 generated tree: 1 tracked file(s) under the prebuild outputs",
+      "L1 generated tree: apps/mobile/android has no tracked file",
       "ios native fingerprint mismatch: committed a, current b; review",
     ]);
     expect(errors.at(-1)).toMatch(/fix the native inputs first/u);
@@ -246,7 +310,7 @@ describe("native state guards", () => {
   test("--status report distinguishes the input layers from L4 identity", () => {
     const text = formatStatusReport({
       errors: [
-        "L1 generated tree: 1 tracked file(s) under the prebuild outputs",
+        "L1 generated tree: apps/mobile/android has no tracked file",
         "ios native fingerprint mismatch: committed a, current b; review",
       ],
       inputInventory: {
@@ -262,7 +326,7 @@ describe("native state guards", () => {
     expect(text).toContain("L2: ok");
     expect(text).toContain("L3: ok");
     expect(text).toContain("L4: FAIL");
-    expect(text).toContain("generated-tree purity");
+    expect(text).toContain("generated-tree fidelity");
     expect(text).toContain("identity ratchet");
     expect(text).toContain("plugins [plugins/withCentraidIos.cjs]");
   });

@@ -64,7 +64,6 @@ import type { OpsPage } from "./opsBar.js";
 import { openPrompt } from "./prompt.js";
 import { resetQueryCache } from "./queryCache.js";
 import { routeKey } from "./router.js";
-import ApprovalsRoute from "./routes/ApprovalsRoute.js";
 import type { AssistantConversationEntry } from "./routes/AssistantConversations.js";
 import AssistantConversations from "./routes/AssistantConversations.js";
 import AssistantRoute from "./routes/AssistantRoute.js";
@@ -85,6 +84,7 @@ import { releaseHomeTileBlobs } from "./routes/homeTileContent.js";
 import InlineAppRoute from "./routes/InlineAppRoute.js";
 import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
+import NeedsYouRoute from "./routes/NeedsYouRoute.js";
 import PairDeviceModal from "./routes/PairDeviceModal.js";
 import { createPaletteConversationSearch } from "./routes/paletteConversationSearch.js";
 import {
@@ -169,7 +169,7 @@ function shellOpsVerbs(
     case "household":
       return { onCommit: openPairDevice };
     // Listed rather than defaulted, so a seventh ops page must answer this.
-    case "approvals":
+    case "needs-you":
     case "atlas":
     case "connectors":
     case "insights":
@@ -185,7 +185,7 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
     case "starred":
     case "automations":
     case "connectors":
-    case "approvals":
+    case "needs-you":
     case "household":
     case "atlas":
       return route.kind;
@@ -231,6 +231,15 @@ export function SettingsRouteRedirect({
 
 // The shell root: owns renderer state, drives ShellApp (chrome frame + router),
 // and renders every route from `renderRoute`.
+/** Where a launch URL lands: a tapped push opens where it can be acted on
+ *  (`notificationTarget` in `notifications-model.ts`), anything else is Home. */
+function launchRoute(href: string): ShellRoute {
+  const params = new URL(href).searchParams;
+  if (params.has("needs-you")) return { kind: "needs-you" };
+  if (params.has("activity")) return { kind: "insights" };
+  return { kind: "home" };
+}
+
 export default function App({
   seedSampleOnFirstRun = false,
 }: {
@@ -346,10 +355,7 @@ export default function App({
   const switcherButtonRef = useRef<HTMLButtonElement | null>(null);
   const switcherActionRef = useRef<(() => void) | null>(null);
   const initialShellRoute = useMemo<ShellRoute>(
-    () =>
-      new URL(window.location.href).searchParams.has("notifications")
-        ? { kind: "approvals" }
-        : { kind: "home" },
+    () => launchRoute(window.location.href),
     []
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -1062,8 +1068,8 @@ export default function App({
           return <AutomationsRoute />;
         case "connectors":
           return <ConnectorsRoute />;
-        case "approvals":
-          return <ApprovalsRoute />;
+        case "needs-you":
+          return <NeedsYouRoute />;
         case "gateway":
           return (
             <GatewayRoute

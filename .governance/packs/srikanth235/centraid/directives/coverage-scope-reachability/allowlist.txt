@@ -58,3 +58,13 @@ apps/mobile/plugins
 # measure nothing. Correctness is pinned where it is observable instead: the
 # blueprint filters that call `toSorted` are floored in their own tree.
 apps/mobile/polyfills
+# apps/mobile/ios carries one .js file, and it is neither authored nor
+# reachable: `ShareExtension/ShareExtensionPreprocessor.js` is written by
+# `expo prebuild` (expo-share-intent) and runs inside iOS's share-sheet web
+# preprocessor, in Safari's JavaScript context, never in the app bundle and
+# never in node. #1011 committed the generated trees so a native change is a
+# reviewable diff (#1015 R-NY-17), which is what surfaced it here; a floor on
+# it would measure a file `expo prebuild` overwrites on every run. What
+# watches this tree is `ci:native-state` L1, which fails the moment the
+# committed tree drifts from what prebuild writes.
+apps/mobile/ios

@@ -75,7 +75,6 @@ import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import type { ChipDef } from "../../kit/components/ChipsBlock";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import SectionBlock from "../../kit/components/SectionBlock";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -85,6 +84,20 @@ import { saveLockerItem } from "./locker-writes";
 import LockerScanSheet from "./LockerScanSheet";
 import LockerScreen from "./LockerScreen";
 import { useLockerVault } from "./useLockerVault";
+
+/** A FORM FIELD'S LABEL IS NOT A SECTION HEADING (#1015, locker/findings #11).
+ *  Every field in this editor used to be opened by `SectionBlock` — the same
+ *  component the access history uses to head a list of receipts — so one block
+ *  meant "a band of the page" on one screen and "the label of the next input"
+ *  on another, and the editor gained a full section rule between every field.
+ *  This is the kit's field-label treatment, the one People's `FieldRow` uses.
+ *  It carries no header role: the input beside it already spells its own name. */
+function FieldLabel({ label }: { label: string }): React.JSX.Element {
+  const { colors } = useTheme();
+  return (
+    <Text style={[t("annotLabel"), { color: colors.textSoft }]}>{label}</Text>
+  );
+}
 
 export default function LockerEditScreen({
   navigation,
@@ -149,10 +162,9 @@ export default function LockerEditScreen({
 
   return (
     <LockerScreen
-      current="items"
       hideBand
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
-      route="edit"
+      route={editing ? "edit" : "editNew"}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -167,11 +179,11 @@ export default function LockerEditScreen({
           <Text style={styles.note}>{EDIT_LEDE_TAIL}</Text>
         </View>
 
-        <SectionBlock label={TYPE_ROW} />
+        <FieldLabel label={TYPE_ROW} />
         <ChipsBlock accessibilityLabel={TYPE_ROW} chips={typeChips} />
         <Text style={styles.note}>{TYPE_NOTE}</Text>
 
-        <SectionBlock label={TITLE_ROW} />
+        <FieldLabel label={TITLE_ROW} />
         <TextInput
           accessibilityLabel={TITLE_ROW}
           onChangeText={(value) =>
@@ -189,7 +201,7 @@ export default function LockerEditScreen({
           const untouched = value === SEALED;
           return (
             <View key={field.key} style={styles.field}>
-              <SectionBlock label={field.label} />
+              <FieldLabel label={field.label} />
               <TextInput
                 accessibilityLabel={field.label}
                 autoCapitalize="none"
@@ -223,7 +235,7 @@ export default function LockerEditScreen({
 
         {carriesMatchPolicy(seed.type) ? (
           <>
-            <SectionBlock label={MATCH_POLICY_ROW} />
+            <FieldLabel label={MATCH_POLICY_ROW} />
             <ChipsBlock
               accessibilityLabel={MATCH_POLICY_ROW}
               chips={[
@@ -257,7 +269,7 @@ export default function LockerEditScreen({
           </>
         ) : null}
 
-        <SectionBlock label={TAGS_ROW} />
+        <FieldLabel label={TAGS_ROW} />
         <TextInput
           accessibilityLabel={TAGS_ROW}
           autoCapitalize="none"
@@ -339,7 +351,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     lede: { ...t("small"), color: colors.textSoft },
     note: {
-      ...t("mono"),
+      ...t("small"),
       color: colors.textFaint,
       paddingHorizontal: spacing[4],
       paddingTop: spacing[1],

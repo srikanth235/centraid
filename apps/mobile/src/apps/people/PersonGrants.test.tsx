@@ -32,9 +32,23 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The confirm is `SheetRoom` now (#1015), which hosts a status line, and
+// that reaches the safe-area module; unmocked it is untranspiled Flow.
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
 });
 
 // No gateway base by default: tests inject a door to make the plane reachable.
@@ -74,13 +88,15 @@ vi.mock(
 );
 
 const posted = vi.hoisted(() => [] as string[]);
-vi.mock(
-  import("../../kit/components/status-line"),
-  () =>
-    ({
-      postStatus: (message: string) => posted.push(message),
-    }) as never
-);
+vi.mock(import("../../kit/components/status-line"), async (importOriginal) => {
+  const actual = await importOriginal();
+  // Partial: the confirm is `SheetRoom` now, which HOSTS the status line, so
+  // the real reader and subscriber have to stay real. Only the post is spied.
+  return {
+    ...actual,
+    postStatus: (message: string) => posted.push(message),
+  } as never;
+});
 
 const ASHA = "Asha Rao";
 const PARTY = "party-asha";

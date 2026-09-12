@@ -63,6 +63,7 @@ export default function RecordSheet({
       visible={true}
     >
       <Pressable
+        accessibilityRole="button"
         accessibilityLabel="Dismiss"
         onPress={onClose}
         style={[styles.scrim, { backgroundColor: colors.scrim }]}

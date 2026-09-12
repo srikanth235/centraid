@@ -44,7 +44,10 @@ export interface AtlasCensusTable {
   logical: string;
   physical: string;
   table: string;
+  /** MECHANICAL — the table name humanized. Never member copy. */
   label: string;
+  /** The registry's declared name — what every seat shows (R-NY-13). */
+  friendly: string;
   /** Live row count (COUNT(*) — an owner ops screen, computed on request). */
   rows: number;
   /** Bytes attributable to this table + its indexes; null under `estimate`. */
@@ -120,6 +123,7 @@ export function atlasCensus(vault: DatabaseSync): AtlasCensusPayload {
       physical: entry.physical,
       table: entry.table,
       label: entry.label,
+      friendly: entry.friendly,
       rows,
       bytes,
       pages,

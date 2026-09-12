@@ -1,6 +1,8 @@
 // The stage (Docs handoff Part 2 §8; #821) — a document on the dark
 // ground, "a mode with its own exit, and the one thing that drops the band"
-// (deviation 2: `DocsScreen`'s `hideBand`, passed here and nowhere else).
+// (deviation 2: the one Docs surface that carries no band, because the stage
+// is the document and a band under it is a second thing to look at). The room
+// is still `PushedPage` — it simply passes no `band` (#1015).
 // Every colour on it is a named stage token off the native theme.
 //
 // What actually renders is what this seat can actually render:
@@ -34,13 +36,15 @@ import { postStatus } from "../../kit/components/status-line";
 import { imageSource, videoSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
+import PushedPage from "../../kit/rooms/PushedPage";
 import GrantSheet from "../../kit/share/GrantSheet";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
+import { DOCS_HANDOVER_FAILED, DOCS_TRASHED } from "./docs-copy";
 import { openElsewhere } from "./docs-export";
 import type { MobileDriveDoc } from "./docs-projection";
-import DocsScreen from "./DocsScreen";
+import { useDocsRoom } from "./docs-room";
 import { docBytesUrl } from "./document-read-model";
 import { useDocs, useDocsWrite } from "./useDocs";
 import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
@@ -49,6 +53,7 @@ export default function DocumentViewer({
   route,
   navigation,
 }: DocsScreenProps<"DocumentViewer">): React.JSX.Element {
+  const room = useDocsRoom("all");
   const { documentId } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -83,7 +88,7 @@ export default function DocumentViewer({
   const onTrash = async (target: MobileDriveDoc): Promise<void> => {
     const result = await write("trash", { document_id: target.document_id });
     if (result) {
-      postStatus("Moved to trash.");
+      postStatus(DOCS_TRASHED);
       navigation.goBack();
     }
   };
@@ -91,38 +96,21 @@ export default function DocumentViewer({
     try {
       await openElsewhere(target, gatewayBase, vaultId);
     } catch (error) {
-      postStatus(
-        error instanceof Error
-          ? error.message
-          : "This document could not be handed over."
-      );
+      // The exception is for the LOG, never for the member (#1015, S14).
+      console.warn("[docs] hand-over failed", error);
+      postStatus(DOCS_HANDOVER_FAILED);
     }
   };
 
   return (
-    <DocsScreen current="all" hideBand>
+    <PushedPage
+      backTo={room.backTo}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={doc?.title ?? "Document"}
+    >
       <View style={styles.stage}>
-        <View style={styles.bar}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={STAGE_ACTIONS.close}
-            onPress={() => navigation.goBack()}
-            style={styles.close}
-          >
-            <Icon name="x" size={20} color={colors.onStage} />
-          </Pressable>
-          <View style={styles.barTitle}>
-            <Text numberOfLines={1} style={styles.title}>
-              {doc?.title ?? "Document"}
-            </Text>
-            {doc ? (
-              <Text numberOfLines={1} style={styles.meta}>
-                {`${typeMeta(doc.media_type, doc.title).name} · ${fmtBytes(doc.byte_size)}`}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
         <View style={styles.body}>
           {doc ? (
             <StageMedia
@@ -248,7 +236,7 @@ export default function DocumentViewer({
           onStatus={postStatus}
         />
       ) : null}
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -391,7 +379,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 8,
       minHeight: 52,
-      paddingHorizontal: 10,
+      paddingHorizontal: spacing[3],
     },
     barTitle: { flex: 1, gap: 1, minWidth: 0 },
     body: { flex: 1, justifyContent: "center", minHeight: 0 },
@@ -412,7 +400,7 @@ const makeStyles = (colors: ThemeColors) =>
     cannotWrap: {
       flexGrow: 1,
       justifyContent: "center",
-      paddingHorizontal: 32,
+      paddingHorizontal: spacing[6],
     },
     close: {
       alignItems: "center",
@@ -428,7 +416,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopWidth: borders.hairline,
       flexDirection: "row",
       minHeight: 32,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     statusText: { ...t("small"), color: colors.onStageSoft, flex: 1 },
     stepNext: { insetInlineEnd: 12 },

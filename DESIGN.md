@@ -495,6 +495,28 @@ The three renderers are generated from the same recipe table: the blueprint rend
 
 One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Every icon shares one contract regardless of which app claims it: single-tone stroke on a 24 grid, `fill: none`, round caps and joins, and `aria-hidden` on the `<svg>` — an app-specific mark (Photos' `heart`, `album`, `place`, `person`, `dupe`, `restore`, `removeFrom`, `info`, `more`, and its shared `trash`/`add`/`share`/`download`) draws new artwork inside that same contract rather than a one-off. Identity uses one initials formatter and one identity-colour resolver. Relative time and bytes use one formatter module. `aria-label` on a container is a REPLACEMENT, not an addition: use it only on controls whose visible content is an icon, and mark decorative SVG `aria-hidden`.
 
+### The seven rooms (mobile)
+
+A mobile screen is one of seven rooms, and nothing else ([apps/mobile/src/kit/rooms/README.md](apps/mobile/src/kit/rooms/README.md)). The recipes above say what a control looks like; the rooms say what a SCREEN is, which is the half the audit of #1015 found missing — nine surfaces sharing no header, back affordance, search field, confirm, empty state or date format, because the kit was optional and nothing noticed a screen ignoring it.
+
+| Room | Anatomy | Examples |
+| --- | --- | --- |
+| `HomeRoom` | cover grid of app marks, one status line, no floating key, one trailing verb (Settings) | Home |
+| `AppPlace` | `AppHeader` (mark + name + ≤1 trailing action), optional search under it, app band as a render prop | Photos grid, Tasks list, Tally ledger |
+| `PushedPage` | `PlaceHeader`, back to the **named parent** (a computed `PlaceRef`, never a string), ≤1 trailing action | album, contact, document, settings sub-page |
+| `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
+| `SheetRoom` | grabber, title carrying the noun, ≤1 ink button, status line hosted inside | confirm delete, pick date, add to album |
+| `SystemPlace` | `PlaceHeader` + `SectionBlock` / `RowsBlock` only; a place root draws the Home band at its foot and no `HomeKey`, a sub-page keeps `HomeKey` or its back key in the header's leading slot | Settings, Vault, Copies, Backup health |
+| `StageRoom` | full-bleed `--stage` ground under the safe area, no header and no band, the caller's own floating chrome, one close act reached by a control and by a swipe down | photo lightbox, its slideshow, a video |
+
+The room owns the header, the back control, search, the empty/loading/error states, the status host, selection and the gutter; the app supplies content and copy. A screen that hand-rolls any of those is a finding, not a variant.
+
+`StageRoom` is the one room that takes none of those, and that is the point rather than an omission: one piece of media edge to edge has nothing to be empty of, nothing to search, and no list to select from, and a strip across the top of a photograph is a second ground. What it owes a member instead is a way out, so the room owns the swipe-down dismiss and hands the caller's chrome the same close act — a stage that brings no chrome gets the room's own close key, because a stage with no visible way out is a black screen.
+
+Six product rulings sit behind the rooms and are not re-decided per screen — trash, casing, editors, push-versus-sheet, the band under a selection, and where Settings is reachable from: [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015), D1–D6.
+
+`node scripts/lint-mobile-rooms.mjs --enforce` is the enforcement, wired into `bun run lint:product`: a hand-rolled screen root, a back destination written as a string, a gutter typed as a number, an identity hue on a control, a Title Case label, or an exception rendered as member copy fails the push gate.
+
 ## Copy
 
 **Copy is signage, not conversation.** The voice is calm, concrete, and specific — the same voice the rest of this document is written in — and it is read at a glance, on the way to something else. One glance is the unit: a label a member has to parse twice has already failed, and a second sentence explaining the first one is the label admitting it did not work. Crisp is not curt. "Photo deleted" is the register; "Deleted" throws away the noun that made it legible, and "Your photo has been successfully deleted." pads a fact into an announcement.
@@ -525,12 +547,14 @@ Voice survives compression. The evocative half of a line is usually the short ha
 
 | Where | Before | After |
 | --- | --- | --- |
-| [ApprovalsScreen.tsx](packages/client/src/react/screens/ApprovalsScreen.tsx) empty state | "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state." | "Staged writes, lapsed connections and access requests land here." |
+| [NeedsYouScreen.tsx](packages/client/src/react/screens/NeedsYouScreen.tsx) empty state | "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state." | "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here." |
 | [docs/view-copy.ts](packages/blueprints/apps/docs/view-copy.ts) offline banner | "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back." | "Gateway unreachable — filing works from this device, opening and search do not." |
 | [MemoriesView.tsx](apps/mobile/src/apps/photos/MemoriesView.tsx) empty state | "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed." | "Your own photographs, noticed — a year behind a day, a trip, a burst." |
 | [write-outcome.ts](apps/mobile/src/kit/replica/write-outcome.ts) write failure | "&lt;title&gt;: Please try again." | "&lt;title&gt;. Retry." |
 
 The first two lose a whole sentence of reassurance about what still works; the third keeps the image and drops the defence in front of it; the fourth deletes an apology that told a member nothing they could act on. Audit everything, churn nothing — a string already inside its budget is left alone, and an allowlist entry is a debt that carries its reason in the file.
+
+**One noun per thing, and the same noun on every seat.** A place and its rows share a vocabulary: a place named Rules whose rows are called automations makes a member learn two words for one thing, and hear a third from VoiceOver. A short form may DROP words from the full name, never swap one in. Identifiers are exempt and are not copy — a wire flag, a route key, a deep-link path, a module name, a file name and a concept id (`DESTINATION_MARKS`' keys) keep whatever they were called; no member reads them. When two seats share a copy module, the noun is fixed AT THE SOURCE: renaming half a shared pool is worse than the divergence it was meant to close. `apps/mobile/src/screens/shell-copy.test.ts` sweeps this — no sentence in the shell trees or the shared copy modules may say "automation" — and [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015) R-SH-8/R-SH-11/R-SH-12 carries the reasoning.
 
 ## Responsive Behavior
 

@@ -86,8 +86,8 @@ export const MOBILE_FEATURE_OFF_COPY: Record<
   { title: string; body: string }
 > = {
   automations: {
-    title: "Automations are off",
-    body: "This gateway has not switched automations on — turn them on from the desktop.",
+    title: "Rules are off",
+    body: "This gateway has not switched rules on — turn them on from the desktop.",
   },
   connectors: {
     title: "Connectors are off",

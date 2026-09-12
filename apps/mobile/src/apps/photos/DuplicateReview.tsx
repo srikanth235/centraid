@@ -11,8 +11,9 @@
 // answers the same question a merge would.
 
 import React, { useMemo, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
@@ -28,6 +29,7 @@ import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
+import { TRASH_KEEPS_THE_ORIGINAL } from "./photos-confirm-copy";
 import { batchFavorite, vaultAssets } from "./photos-selection-writes";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
@@ -47,6 +49,7 @@ export default function DuplicateReview({
   const timeline = usePhotoTimeline();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const [selection, setSelection] = useState(new Set<string>());
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const [trashing, setTrashing] = useState(false);
   const hints = useMemo(
     () => timeline.assets.filter((asset) => asset.duplicateHint),
@@ -61,18 +64,13 @@ export default function DuplicateReview({
         selection.has(asset.id) && Boolean(asset.assetId)
     );
     if (targets.length === 0) return;
-    Alert.alert(
-      `Trash ${targets.length} duplicate${targets.length === 1 ? "" : "s"}?`,
-      "The device original is never deleted by this action.",
-      [
-        { text: "Cancel" },
-        {
-          onPress: () => void runTrash(targets),
-          style: "destructive",
-          text: "Trash",
-        },
-      ]
-    );
+    confirmDestructive({
+      body: TRASH_KEEPS_THE_ORIGINAL,
+      count: targets.length,
+      noun: "duplicate",
+      onConfirm: () => void runTrash(targets),
+      verb: "Trash",
+    });
   };
   const runTrash = async (
     targets: readonly (PhotoAsset & { assetId: string })[]
@@ -120,6 +118,8 @@ export default function DuplicateReview({
       : null
     : "Not connected to a gateway, so nothing can be written here.";
   const selectionBar = {
+    // The room's one way out of the mode (D5); the word is always "Cancel".
+    onCancel: () => setSelection(new Set()),
     count: selection.size,
     shelf: "normal" as const,
     copyLabel: share.copyLabel,
@@ -153,7 +153,17 @@ export default function DuplicateReview({
     // Duplicates is a genuine CHILD of the More sheet's row, so it keeps a
     // back affordance — and it now also carries the band, so the way out of
     // Photos is no harder to reach than the app's own tabs (§F).
-    <PhotosScreen current="more" selection={selectionBar}>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="duplicateReview"
+      // Presence is the mode (`bandStateFor`): a screen that is not
+      // choosing passes NO selection. Passing the bar unconditionally
+      // left this screen permanently in the selection mode — the header
+      // swapped for "Choose photographs" and the band sat dimmed and
+      // dead before a single photograph had been picked (R-A-14).
+      selection={selection.size > 0 ? selectionBar : undefined}
+      title="Duplicates review"
+    >
       <View style={styles.header}>
         <Tappable
           accessibilityLabel={selecting ? "Clear selection" : "Back to Photos"}
@@ -220,6 +230,7 @@ export default function DuplicateReview({
         onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
+      {confirmSheet}
     </PhotosScreen>
   );
 }

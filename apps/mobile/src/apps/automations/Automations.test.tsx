@@ -47,6 +47,11 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The Home band on this place (R-NY-1) is `usePlaceFrame`'s claim, held in
+// `place-frame.test.ts`; this file makes none about it.
+vi.mock(import("../../screens/home/usePlaceFrame"), () => ({
+  usePlaceFrame: () => ({}),
+}));
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
@@ -54,6 +59,15 @@ vi.mock(import("react-native-svg"), async () => {
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 // The one fact this screen reads from the session: which experimental
 // features the gateway advertised on the single `/info` answer the
@@ -218,9 +232,7 @@ describe(AutomationsScreen, () => {
     const skeleton = nodesOf(container, "div").find(
       (node) => node.dataset.role === "progressbar"
     );
-    expect(skeleton?.getAttribute("aria-label")).toBe(
-      "Reading your automations"
-    );
+    expect(skeleton?.getAttribute("aria-label")).toBe("Reading your rules");
     const spans = textOf(container);
     expect(spans).toContain(
       "A row knows its shape before its content arrives, so nothing reflows when it does."
@@ -228,11 +240,11 @@ describe(AutomationsScreen, () => {
     expect(spans).toContain("Reading from the gateway");
   });
 
-  it("says what an automation is, quietly, when nothing runs on its own", async () => {
+  it("says what a rule is, quietly, when nothing runs on its own", async () => {
     const container = await render();
     const spans = textOf(container);
     expect(spans).toContain("Nothing runs on its own yet");
-    expect(spans).toContain("An automation is a trigger and a thing to do.");
+    expect(spans).toContain("A rule is a trigger and a thing to do.");
     expect(spans).toContain("Nothing to attend to");
   });
 
@@ -279,7 +291,7 @@ describe(AutomationsScreen, () => {
     expect(
       spans.some((span) =>
         span.startsWith(
-          "1 automation is failing · Weekly digest has failed its last 2 runs, since "
+          "1 rule is failing · Weekly digest has failed its last 2 runs, since "
         )
       )
     ).toBe(true);
@@ -364,7 +376,9 @@ describe(AutomationsScreen, () => {
   it("carries no filled commit, because no author flow exists here", async () => {
     wire.list.mockResolvedValue([row()]);
     const container = await render();
-    expect(buttonLabelled(container, "New automation")).toBeNull();
-    expect(textOf(container)).toContain("Automations");
+    expect(buttonLabelled(container, "New rule")).toBeNull();
+    // R-SH-8: the place is "Rules" in the title, the band and the page label.
+    expect(textOf(container)).toContain("Rules");
+    expect(textOf(container)).not.toContain("Automations");
   });
 });

@@ -132,7 +132,7 @@ export default function LockerAccessView(
       keyExtractor={(entry) => entry.receipt_id}
       ListEmptyComponent={
         listing ? (
-          <EmptyBlock body={ACCESS_EMPTY_BODY} title={ACCESS_EMPTY} />
+          <EmptyBlock body={ACCESS_EMPTY_BODY} inset title={ACCESS_EMPTY} />
         ) : null
       }
       ListFooterComponent={foot}
@@ -159,7 +159,7 @@ const makeStyles = (colors: ThemeColors) =>
     factKey: { ...t("eyebrow"), color: colors.textFaint, width: 92 },
     factValue: { ...t("small"), color: colors.text, flex: 1 },
     foot: {
-      ...t("mono"),
+      ...t("small"),
       color: colors.textFaint,
       paddingHorizontal: spacing[4],
       paddingTop: spacing[3],
@@ -167,7 +167,7 @@ const makeStyles = (colors: ThemeColors) =>
     head: { gap: spacing[2], padding: spacing[4] },
     lede: { ...t("small"), color: colors.textSoft },
     note: {
-      ...t("mono"),
+      ...t("small"),
       color: colors.textFaint,
       paddingHorizontal: spacing[4],
       paddingTop: spacing[3],
@@ -184,7 +184,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     rowAt: { ...t("mono"), color: colors.textFaint },
     rowMark: { ...t("eyebrow") },
-    rowMeta: { ...t("mono"), color: colors.textFaint },
+    rowMeta: { ...t("small"), color: colors.textFaint },
     rowText: { flex: 1, gap: 2, minWidth: 0 },
     rowVerb: { ...t("small"), color: colors.text },
     scroll: { paddingBottom: spacing[6] },

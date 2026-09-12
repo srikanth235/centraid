@@ -150,8 +150,9 @@ function lightProps(): Record<string, string> {
   for (const [key, value] of Object.entries(spacing)) {
     props[`--sp-${key}`] = `${value}px`;
   }
-  // The two named sub-base seams (v7 §E) — same namespace, same reason as the
-  // shell sheet: an app pane may not invent a third value under the base.
+  // The three named sub-base seams (v7 §E, #1015) — same namespace, same
+  // reason as the shell sheet: an app pane may not invent a fourth value
+  // under the base.
   for (const [key, value] of Object.entries(subBase)) {
     props[`--sp-${key}`] = `${value}px`;
   }

@@ -60,6 +60,7 @@ import type {
   NativeReplicaSession,
 } from "../../lib/replica/native-session";
 import { createNativeReplicaSession } from "../../lib/replica/native-session-open";
+import { hapticsStub } from "../../test/haptics-stub";
 
 // The shared block stub, plus the one primitive it does not wire: it forwards
 // `onPress` and drops every other handler, and a journey that TYPES needs
@@ -109,6 +110,18 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The one moment channel's device seam (#1015, S15).
+vi.mock(import("expo-haptics"), () => hapticsStub());
+// The composer's date chip opens the platform picker (#1015, tally/findings
+// #5), whose source ships as Flow and cannot be parsed by this tier's bundler.
+// It is a device service and draws nothing this journey asserts.
+vi.mock(
+  import("@react-native-community/datetimepicker"),
+  () =>
+    ({
+      default: () => null,
+    }) as unknown as typeof import("@react-native-community/datetimepicker")
+);
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
@@ -139,6 +152,15 @@ vi.mock(import("expo-crypto") as Promise<unknown>, () => ({
   digestStringAsync: () => Promise.resolve("digest"),
   randomUUID: () => "journey-id",
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 // The frame asks the wire client for one thing — the app's icon and colour.
 // The rest of that module is the phone's whole gateway transport, and none of
@@ -197,6 +219,9 @@ vi.mock(
   () =>
     ({
       postStatus: (message: string) => posted.push(message),
+      // News is suppressed while the line carries an action (#1015, S3);
+      // nothing here posts one, so the line reads quiet.
+      readStatus: () => null,
       showUndoStatus: (message: string) => posted.push(message),
     }) as never
 );

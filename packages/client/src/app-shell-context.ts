@@ -25,7 +25,7 @@ export type ShellRoute =
   | { kind: "starred" }
   | { kind: "automations" }
   | { kind: "connectors" }
-  | { kind: "approvals" }
+  | { kind: "needs-you" }
   | {
       kind: "gateway";
       /** ROUTES, not local state, so the frame's back arrow works. */

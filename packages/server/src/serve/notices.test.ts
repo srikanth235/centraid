@@ -5,9 +5,11 @@ import { openVaultDb, readReplicaLog } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
 import {
+  automationNoticeHeadline,
   humanizeAutomationRef,
   NoticeStore,
   noticeGist,
+  outboxNoticeHeadline,
   shouldWriteAutomationNotice,
 } from "./notices.js";
 import {
@@ -214,6 +216,38 @@ describe("Notifications notice delivery", () => {
       ).toBe(false);
       expect(shouldWriteAutomationNotice("always", "success")).toBe(true);
       expect(shouldWriteAutomationNotice("never", "failure")).toBe(false);
+    });
+  });
+
+  // R-NY-5 (#1015): every seat renders a notice headline as a title, so it is
+  // a sentence the server writes — the exception gist never lands in it.
+  describe("notice headlines are sentences, never a gist", () => {
+    test("an automation headline names the rule and its state", () => {
+      expect(
+        automationNoticeHeadline("Nightly digest", "failure", undefined)
+      ).toBe("Nightly digest did not finish");
+      expect(
+        automationNoticeHeadline("Nightly digest", "success", "failure")
+      ).toBe("Nightly digest is working again");
+      expect(
+        automationNoticeHeadline("Nightly digest", "success", undefined)
+      ).toBe("Nightly digest completed");
+    });
+
+    test("no headline carries the failure's gist or a dash-joined reason", () => {
+      const gist = noticeGist("TypeError: cannot read 'id' of undefined");
+      const headlines = [
+        automationNoticeHeadline("Nightly digest", "failure", "success"),
+        automationNoticeHeadline("Nightly digest", "failure", undefined),
+        outboxNoticeHeadline("The survey came back", "failed"),
+        outboxNoticeHeadline("The survey came back", "reparked"),
+        outboxNoticeHeadline("The survey came back", "sent"),
+      ];
+      for (const headline of headlines) {
+        expect(headline).not.toContain(gist);
+        expect(headline).not.toMatch(/ — |: /u);
+        expect(headline).not.toMatch(/Error|undefined/u);
+      }
     });
   });
 

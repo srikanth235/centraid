@@ -20,7 +20,7 @@ export function InfoToggle({
       type="button"
       className={styles.info}
       // One name for one surface.
-      aria-label="Details"
+      aria-label="Properties"
       aria-pressed={on}
       onClick={onToggle}
     >

@@ -6,16 +6,20 @@
  *  - `centraid/pair/1`: any endpoint may connect but must present the
  *    one-time QR pairing code; success stores its EndpointId.
  *
- * This forwarder holds no device key: the phone authenticates at the QUIC
- * layer, then we speak to the gateway AS THE HOST — client identity headers
- * are stripped and every hop marked `TUNNEL_FORWARDED_HEADER`, so host-only
- * capabilities do not mistake 127.0.0.1 for the owner (#568).
+ * The phone authenticates at the QUIC layer and the forwarder then NAMES it
+ * to the gateway: every client copy of the identity headers is deleted and
+ * replaced with the EndpointId this connection actually proved, stamped with
+ * a proof derived from the loopback bearer the phone never sees (#1015,
+ * R-NY-18 — `forward-identity.ts` carries the argument). The hop stays marked
+ * `TUNNEL_FORWARDED_HEADER`, so host-only capabilities still do not mistake
+ * 127.0.0.1 for the owner (#568).
  */
 
 import crypto from "node:crypto";
 import http from "node:http";
 
 import type { DeviceStore, PairedDevice } from "./device-store.js";
+import { forwardIdentityHeaders } from "./forward-identity.js";
 import type {
   Accepting,
   Connection,
@@ -288,7 +292,7 @@ class DesktopTunnel {
           connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
           return;
         }
-        void this.serveStream(bi.send, bi.recv).catch(() => {
+        void this.serveStream(endpointId, bi.send, bi.recv).catch(() => {
           // Per-request failures already answered with a 502 frame.
         });
         return serveNextStream();
@@ -301,7 +305,11 @@ class DesktopTunnel {
     }
   }
 
-  private async serveStream(send: SendStream, recv: RecvStream): Promise<void> {
+  private async serveStream(
+    endpointId: string,
+    send: SendStream,
+    recv: RecvStream
+  ): Promise<void> {
     let header: TunnelRequestHeader;
     let body: Buffer;
     try {
@@ -324,11 +332,16 @@ class DesktopTunnel {
     }
     const base = new URL(upstream.baseUrl);
     const headers = sanitizeHeaders(header.headers ?? {});
-    // Loopback is not an identity (#568): strip client identity headers and
-    // mark the hop forwarded so host-only capabilities refuse it.
+    // Loopback is not an identity (#568): DELETE every client copy of the
+    // identity headers, then stamp the EndpointId this connection actually
+    // authenticated (#1015, R-NY-18). Order matters — the assignment below
+    // must be the last word on these three names, or a phone could keep the
+    // header it sent. The hop stays marked forwarded, so host-only
+    // capabilities still refuse it.
     delete headers[DEVICE_IDENTITY_HEADER];
     delete headers[DEVICE_PROOF_HEADER];
-    headers[TUNNEL_FORWARDED_HEADER] = "1";
+    delete headers[TUNNEL_FORWARDED_HEADER];
+    Object.assign(headers, forwardIdentityHeaders(upstream.token, endpointId));
     headers.host = base.host;
     headers.authorization = `Bearer ${upstream.token}`;
     if (body.length > 0) headers["content-length"] = String(body.length);

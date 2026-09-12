@@ -109,7 +109,7 @@ export async function collectAutomationRuns(): Promise<{
         ? (nameByRef.get(run.automationId) ??
           run.automationName ??
           run.automationId)
-        : "Automation",
+        : "Rule",
       run,
     })),
   };

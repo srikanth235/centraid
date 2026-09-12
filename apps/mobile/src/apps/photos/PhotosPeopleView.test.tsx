@@ -150,6 +150,13 @@ vi.mock(import("react-native"), async () => {
 });
 
 vi.mock(
+  import("../../kit/components/Icon"),
+  () =>
+    ({
+      default: () => null,
+    }) as never
+);
+vi.mock(
   import("../../kit/theme"),
   () =>
     ({
@@ -238,10 +245,10 @@ vi.mock(import("./PeopleEmptyState"), async () => {
   const ReactModule = await import("react");
   return {
     default: (props: {
-      prioritise: { available: boolean; reason?: string };
+      prioritize: { available: boolean; reason?: string };
       busy?: boolean;
-      prioritised?: boolean;
-      onPrioritise: () => void;
+      prioritized?: boolean;
+      onPrioritize: () => void;
     }) =>
       ReactModule.createElement(
         "div",
@@ -250,15 +257,15 @@ vi.mock(import("./PeopleEmptyState"), async () => {
           "button",
           {
             disabled:
-              !props.prioritise.available ||
+              !props.prioritize.available ||
               !!props.busy ||
-              !!props.prioritised,
-            onClick: props.onPrioritise,
+              !!props.prioritized,
+            onClick: props.onPrioritize,
             type: "button",
           },
-          "Prioritise faces"
+          "Prioritize faces"
         ),
-        props.prioritise.reason
+        props.prioritize.reason
       ),
   } as unknown as Partial<PeopleEmptyStateModule>;
 });
@@ -355,7 +362,7 @@ describe("the people roster's empty state (issue 712 C2, ruled 2026-09-09)", () 
 
   const priorityButton = (): HTMLButtonElement | undefined =>
     Array.from(container!.querySelectorAll("button")).find(
-      (button) => button.textContent === "Prioritise faces"
+      (button) => button.textContent === "Prioritize faces"
     );
 
   beforeEach(() => {
@@ -406,7 +413,7 @@ describe("the people roster's empty state (issue 712 C2, ruled 2026-09-09)", () 
     );
     await act(async () => undefined);
     expect(mocks.postStatus).toHaveBeenCalledExactlyOnceWith(
-      "Faces prioritised — this library runs sooner"
+      "Faces prioritized — this library runs sooner"
     );
   });
 

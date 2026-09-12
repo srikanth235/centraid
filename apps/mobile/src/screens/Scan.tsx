@@ -26,13 +26,13 @@ import { recognizeText } from "../../modules/centraid-ocr";
 import { ConsentGate } from "../kit/components/ConsentGate";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
-import TopSafeArea from "../kit/components/TopSafeArea";
 import { useSeatPages } from "../kit/hooks/useSeatPages";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../kit/replica/write-outcome";
+import { PushedPage } from "../kit/rooms";
 import { useTheme } from "../kit/theme";
 import { apiHeaders, authHeader } from "../lib/gateway";
 import {
@@ -58,12 +58,13 @@ import { saveScannedCard } from "./scan-locker";
 import { scannedReceiptExpense } from "./scan-tally";
 import {
   ChoiceRows,
-  CloseHeader,
   Field,
   parseCard,
   PrimaryButton,
   scanStyles as styles,
 } from "./scan-ui";
+import { SHELL_ERROR } from "./shell-copy";
+import { useShellParent } from "./shell-places";
 
 type Destination = "tally" | "docs" | "photos" | "locker";
 interface Extraction {
@@ -84,6 +85,7 @@ export default function ScanScreen({
   route,
 }: ScanScreenProps): React.JSX.Element {
   const { colors } = useTheme();
+  const backTo = useShellParent();
   const camera = useRef<CameraView>(null);
   const extractedSource = useRef("");
   const [permission, requestPermission] = useCameraPermissions();
@@ -191,8 +193,9 @@ export default function ScanScreen({
         const draft = parseReceiptText(next.text);
         setReceipt(draft);
         setAllocations({});
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : String(error));
+      } catch {
+        // S14 (#1015): the extractor's own sentence is the program's.
+        setErrorMessage(SHELL_ERROR.scan);
       } finally {
         setBusy(false);
       }
@@ -255,8 +258,8 @@ export default function ScanScreen({
       setMediaType("image/jpeg");
       setFileUri(photo.uri);
       setExtraction(undefined);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } catch {
+      setErrorMessage(SHELL_ERROR.scan);
       setBusy(false);
     }
   };
@@ -323,7 +326,7 @@ export default function ScanScreen({
         if (
           !surfaceWriteOutcome(outcome, {
             onParked: () =>
-              navigation.navigate("Settings", { screen: "Approvals" }),
+              navigation.navigate("Settings", { screen: "NeedsYou" }),
           })
         )
           return;
@@ -365,8 +368,11 @@ export default function ScanScreen({
   };
 
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <CloseHeader colors={colors} onClose={() => navigation.goBack()} />
+    <PushedPage
+      backTo={backTo}
+      onBack={() => navigation.goBack()}
+      title="Scan and review"
+    >
       <ScrollView contentContainerStyle={styles.content}>
         {fileUri && ocrConsentReady && !ocrConsent ? (
           // THE CONSENT GATE (#712), shown once per device, before
@@ -594,6 +600,6 @@ export default function ScanScreen({
           </>
         )}
       </ScrollView>
-    </TopSafeArea>
+    </PushedPage>
   );
 }

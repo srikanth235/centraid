@@ -13,16 +13,16 @@
 export const NOTIFY_OUTBOX_BODY = "External write needs your approval";
 
 /** A connection's credential lapsed. */
-export const NOTIFY_NEEDS_AUTH_BODY = "Open Notifications to reconnect";
+export const NOTIFY_NEEDS_AUTH_BODY = "Open Needs you to reconnect";
 
 /** A parked invocation is waiting. */
-export const NOTIFY_PARKED_BODY = "A decision is waiting in Notifications";
+export const NOTIFY_PARKED_BODY = "A decision is waiting in Needs you";
 
 /** An app asked for wider access. */
-export const NOTIFY_SCOPE_BODY = "Review the requested scope in Notifications";
+export const NOTIFY_SCOPE_BODY = "Review the requested scope in Needs you";
 
-/** A high-severity notice landed. */
-export const NOTIFY_NOTICE_BODY = "Open Notifications for details";
+/** A high-severity notice landed; a tap opens Activity, not Needs you (R-NY-16). */
+export const NOTIFY_NOTICE_BODY = "Open Activity for details";
 
 /** An event reminder's body: the lead time, or that it is starting. */
 export function notifyEventReminderBody(minutesBefore: number): string {

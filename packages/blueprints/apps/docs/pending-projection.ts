@@ -61,6 +61,11 @@ export const docsPendingProjection = definePendingProjection({
     trash: ({ input }) => pendingTombstone("core.document", input.document_id),
     restore: ({ input }) =>
       pendingPatch("core.document", input.document_id, input),
+    "empty-trash": {
+      excluded: true,
+      reason:
+        "The write names no row: it collapses the grace window on every document already in the trash, and each one leaves when the sweep destroys it.",
+    },
     star: ({ input }) =>
       pendingPatch("core.document", input.document_id, input),
     unstar: ({ input }) =>

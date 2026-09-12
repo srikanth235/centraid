@@ -11,7 +11,7 @@
 // already decides that a denied write may be retried and an expired one may
 // only be discarded; the door those verbs go through is `window.centraid`'s
 // (`retryPendingWrite`, `discardPendingWrite`, `cancelCommonsIntent`,
-// `decideCommonsIntent`, `openApprovals`). This module maps one to the other
+// `decideCommonsIntent`, `openNeedsYou`). This module maps one to the other
 // and NOTHING else.
 //
 // APPROVE AND DECLINE ARE THE STEWARD'S ANSWER, and they are drawn only where

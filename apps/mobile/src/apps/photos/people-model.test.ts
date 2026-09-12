@@ -236,7 +236,7 @@ describe("the People shelf's model", () => {
     ).toBe(PEOPLE_PENDING_EMPTY);
   });
 
-  it("offers Prioritise faces only at the rung that actually runs the sweep", () => {
+  it("offers Prioritize faces only at the rung that actually runs the sweep", () => {
     expect(detectFacesFor("gateway")).toStrictEqual({ available: true });
     // On-device enrichment is a real setting and a real refusal, with a reason
     // that names the road ("allow that in Privacy") rather than just failing.

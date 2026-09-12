@@ -24,6 +24,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -35,7 +36,10 @@ const PLATE_GAP = 8;
 
 export interface AgendaBandProps {
   owner: BandOwner;
-  current: AgendaBandDestinationKey;
+  /** `undefined` on a surface the band cannot name — the pushed event page.
+   *  Lighting one of the three there would point at a place the member is not
+   *  looking at (#1015, audit agenda/findings#8). */
+  current?: AgendaBandDestinationKey;
   onSelect: (key: AgendaBandDestinationKey) => void;
   onHome: () => void;
 }
@@ -82,7 +86,13 @@ export default function AgendaBand({
               // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.agenda}${destination.key}`}
               accessibilityState={{ selected: active }}
-              onPress={() => onSelect(destination.key)}
+              onPress={() => {
+                // The band moving to another place IS the one selection
+                // moment (#1015, S15) — the same tick the shell's own band
+                // gives, so a member feels one product, not five.
+                hapticSelect();
+                onSelect(destination.key);
+              }}
               style={styles.tab}
             >
               <View

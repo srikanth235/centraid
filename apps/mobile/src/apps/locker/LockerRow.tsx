@@ -118,7 +118,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 28,
     },
-    chipText: { ...t("mono"), color: colors.textSoft },
+    chipText: { ...t("small"), color: colors.textSoft },
     main: {
       alignItems: "center",
       flex: 1,
@@ -128,7 +128,7 @@ const makeStyles = (colors: ThemeColors) =>
       minWidth: 0,
       paddingVertical: spacing[2],
     },
-    meta: { ...t("mono"), color: colors.textFaint },
+    meta: { ...t("small"), color: colors.textFaint },
     row: {
       alignItems: "center",
       borderTopColor: colors.line,

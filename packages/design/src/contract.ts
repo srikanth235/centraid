@@ -27,7 +27,7 @@ const paletteNames = Object.keys(palette).flatMap((key) => [
 const commonScale = [
   ...Object.keys(radii).map((key) => `--r-${key}`),
   ...Object.keys(spacing).map((key) => `--sp-${key}`),
-  // The two named sub-base seams share the `--sp-` namespace with the six
+  // The three named sub-base seams share the `--sp-` namespace with the six
   // rungs, so they are part of the same contract rather than a side door.
   ...Object.keys(subBase).map((key) => `--sp-${key}`),
 ];

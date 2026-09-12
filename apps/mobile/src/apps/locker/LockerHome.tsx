@@ -85,19 +85,19 @@ export default function LockerHome({
     });
   }, []);
 
-  const body = useMemo(() => {
-    if (destination === "watch") {
-      return (
+  // An expression, not a render function: the frame below is this screen's
+  // root, and a `return (<…` ahead of it reads as the root to the rooms gate
+  // (`scripts/lint-mobile-rooms.mjs`, R-NY-7).
+  const body = useMemo(
+    () =>
+      destination === "watch" ? (
         <LockerReviewView
           onOpen={openItem}
           pending={pendingCount}
           rows={vault.rows}
           state={state}
         />
-      );
-    }
-    if (destination === "gen") {
-      return (
+      ) : destination === "gen" ? (
         <LockerGenView
           onCopy={copy}
           onOptions={setGenOptions}
@@ -108,57 +108,52 @@ export default function LockerHome({
           options={genOptions}
           value={vault.bag.generated}
         />
-      );
-    }
-    if (destination === "search") {
-      return (
+      ) : destination === "search" ? (
         <LockerSearchView
           onOpen={openItem}
           onSearch={(term) => void searchLocker(term)}
           results={vault.bag.searchResults}
           term={vault.bag.searchTerm}
         />
-      );
-    }
-    return (
-      <LockerItemsView
-        filter={filter}
-        loaded={vault.loaded}
-        onFilter={setFilter}
-        onImport={() =>
-          navigation.navigate("LockerSurface", { surface: "import" })
-        }
-        onNew={() => navigation.navigate("LockerEdit", {})}
-        onOpen={openItem}
-        onShowMore={() => void showMoreLockerItems()}
-        pending={pendingCount}
-        waiting={pendingWait}
-        rows={vault.rows}
-        state={state}
-        truncated={vault.truncated}
-      />
-    );
-  }, [
-    copy,
-    destination,
-    filter,
-    genOptions,
-    navigation,
-    openItem,
-    pendingCount,
-    pendingWait,
-    state,
-    vault.bag.generated,
-    vault.bag.searchResults,
-    vault.bag.searchTerm,
-    vault.loaded,
-    vault.rows,
-    vault.truncated,
-  ]);
+      ) : (
+        <LockerItemsView
+          filter={filter}
+          loaded={vault.loaded}
+          onFilter={setFilter}
+          onImport={() =>
+            navigation.navigate("LockerSurface", { surface: "import" })
+          }
+          onNew={() => navigation.navigate("LockerEdit", {})}
+          onOpen={openItem}
+          onShowMore={() => void showMoreLockerItems()}
+          pending={pendingCount}
+          waiting={pendingWait}
+          rows={vault.rows}
+          state={state}
+          truncated={vault.truncated}
+        />
+      ),
+    [
+      copy,
+      destination,
+      filter,
+      genOptions,
+      navigation,
+      openItem,
+      pendingCount,
+      pendingWait,
+      state,
+      vault.bag.generated,
+      vault.bag.searchResults,
+      vault.bag.searchTerm,
+      vault.loaded,
+      vault.rows,
+      vault.truncated,
+    ]
+  );
 
   return (
     <LockerScreen
-      current={destination}
       route={ROUTE_OF[destination]}
       onBack={() => {
         // A place's back row is the way out of the app, not up the stack:

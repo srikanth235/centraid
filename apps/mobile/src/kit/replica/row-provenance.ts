@@ -47,7 +47,6 @@ export function readOnlyRouteReason(
   return rows.every((row) => !row.canWrite) ? READ_ONLY_SOURCE_REASON : null;
 }
 
-/** A refused verb keeps ONE text slot: label, em dash, why. */
-export function refusedLabel(label: string, reason: string): string {
-  return `${label} — ${reason}`;
-}
+// `refusedLabel` is deleted (#1015, S12): a refusal is a row's own `reason`
+// line in `AnchoredMenu`, not a string concatenated into a label that
+// truncates. Callers pass `READ_ONLY_SOURCE_REASON` as the row's `reason`.

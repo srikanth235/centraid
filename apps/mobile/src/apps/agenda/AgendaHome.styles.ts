@@ -3,7 +3,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { radii, t } from "../../kit/theme";
+import { pageMargin, radii, spacing, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   body: { flex: 1 },
@@ -23,24 +23,29 @@ export const styles = StyleSheet.create({
     borderStartWidth: 2,
     gap: 3,
     minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
   },
   eventMeta: { ...t("annotLabel") },
   eventTime: { ...t("mono") },
   eventTitle: { ...t("bodyStrong") },
   eventsCol: { flex: 1, gap: 6 },
   frame: { flex: 1 },
-  header: {
+  list: { gap: 14, paddingBottom: spacing[5], paddingHorizontal: pageMargin },
+  /** The day bar: which day the surface is anchored on, and the two steps
+   *  either side of it. Without it there was no way to reach any day but
+   *  today (#1015, audit agenda/findings#3). */
+  dayBar: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    gap: spacing[2],
+    paddingHorizontal: pageMargin,
+    paddingVertical: spacing[2],
   },
-  headerActions: { flexDirection: "row", gap: 14 },
-  headerCopy: { flex: 1 },
-  list: { gap: 14, paddingBottom: 24, paddingHorizontal: 18 },
+  dayBarLabel: { ...t("bodyStrong"), flex: 1, textAlign: "center" },
+  /** The month heading between two day rows. A 120-day list with no month
+   *  turns September into October in silence (findings#4). */
+  monthHead: { ...t("eyebrow"), paddingTop: spacing[3] },
   /** The held-write mark: a 2pt rule on the reading edge and the words beside
    *  it. Drawn inline here rather than in a shared kit file — it is two
    *  elements, and a component for it would be a dependency for nothing. */
@@ -50,18 +55,6 @@ export const styles = StyleSheet.create({
     paddingStart: 8,
   },
   pendingText: { ...t("annotLabel") },
-  search: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    flexDirection: "row",
-    gap: 8,
-    marginHorizontal: 18,
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  searchInput: { ...t("body"), flex: 1 },
-  subtitle: { ...t("control") },
-  title: { ...t("title") },
   /** THE DAY-CONTEXT RIBBON (#834): a costless fact about the day on a 2pt
    *  rule, in the annotation register — decoration on the day, never a card
    *  competing with a meeting. */

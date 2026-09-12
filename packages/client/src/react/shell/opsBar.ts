@@ -7,7 +7,7 @@
 
 /** These ids are persisted pin-set keys: do not rename them. */
 export type OpsPage =
-  | "approvals"
+  | "needs-you"
   | "automations"
   | "connectors"
   | "insights"
@@ -42,19 +42,19 @@ const VAULT: Omit<OpsBarDef, "page"> = {
 };
 
 const DEFS: Record<OpsPage, OpsBarDef> = {
-  approvals: {
+  "needs-you": {
     commit: { label: "Review all" },
-    page: "approvals",
+    page: "needs-you",
     secondary: { label: "History" },
-    title: "Notifications",
+    title: "Needs you",
     tone: "net",
   },
   atlas: { ...VAULT, page: "atlas" },
   automations: {
-    commit: { label: "New automation" },
+    commit: { label: "New rule" },
     page: "automations",
     secondary: { label: "Templates" },
-    title: "Automations",
+    title: "Rules",
     tone: "net",
   },
   connectors: {
@@ -75,7 +75,7 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
 };
 
 export const OPS_PAGES: readonly OpsPage[] = [
-  "approvals",
+  "needs-you",
   "automations",
   "connectors",
   "insights",

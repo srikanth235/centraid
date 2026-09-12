@@ -5,6 +5,7 @@ import { icons } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import { useTheme } from "../theme";
+import { resolveIconFill } from "./icon-fill";
 import { resolveIconName } from "./icon-resolver";
 import { resolveStrokeWidth } from "./icon-stroke-width";
 
@@ -13,6 +14,9 @@ export interface IconProps {
   size?: number;
   color?: string;
   strokeWidth?: number;
+  /** Solid in the same ink, for a filled-vs-unfilled state (a starred row).
+   *  Off by default — see ./icon-fill.ts. */
+  fill?: boolean;
 }
 
 // Set drawn for round caps and joins; the caller sets stroke-width — 1.6
@@ -26,6 +30,7 @@ export default function Icon({
   size = 20,
   color,
   strokeWidth,
+  fill = false,
 }: IconProps): React.JSX.Element | null {
   const { colors } = useTheme();
   const paths = icons[resolveIconName(name)];
@@ -41,7 +46,7 @@ export default function Icon({
           strokeWidth={resolvedStrokeWidth}
           strokeLinecap="round"
           strokeLinejoin="round"
-          fill={p.fill === "currentColor" ? resolvedColor : "none"}
+          fill={resolveIconFill(resolvedColor, fill, p.fill)}
         />
       ))}
     </Svg>

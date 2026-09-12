@@ -2,8 +2,22 @@
 // budgets are DESIGN.md § Copy. `Share` and `Revoke` take their words from the
 // shared kit (#825) and are never restated. `Link vault` has no copy: linking
 // is not an act a member performs.
+import { plural } from "../_shared/format-kit.ts";
 
 export const APP_TITLE = "People";
+
+/**
+ * WHAT A PUSHED ROUTE IS CALLED (#1015 S2). Every pushed screen in People used
+ * to draw a back row and nothing else, so Trash and the new-person form were
+ * indistinguishable at a glance — both headed `‹ People` with no title at all.
+ */
+export const ROUTE_TITLES = {
+  trash: "Trash",
+  newPerson: "New person",
+  editPerson: "Edit person",
+  merge: "Merge",
+  logTouch: "Log a touch",
+} as const;
 export const TOUCH_TITLE = "Touch";
 export const SEARCH_TITLE = "Search";
 
@@ -23,6 +37,12 @@ export const VERBS = {
   save: "Save",
   share: "Share",
   trash: "Trash",
+  /** THE PLACE AND THE ACT ARE NOT ONE WORD (#1015, people/findings #3). The
+   *  roster header's `Trash` means "go to the bin" and the person screen's
+   *  meant "destroy this person" — same word, same outline, one screen apart,
+   *  the only difference a red border. The act says what it does; the place
+   *  keeps the noun. */
+  moveToTrash: "Move to trash",
   undo: "Undo",
 } as const;
 
@@ -30,7 +50,9 @@ export const FILTER_CHIPS = [
   { id: "all", label: "All" },
   { id: "linked", label: "Linked" },
   { id: "unlinked", label: "Unlinked" },
-  { id: "starred", label: "★" },
+  // A CHIP IS ANNOUNCED BY ITS LABEL (#1015, people/findings #9/#15): `★` was
+  // the whole accessible name, so VoiceOver read a symbol with no verb.
+  { id: "starred", label: "Starred" },
   { id: "due", label: "Overdue" },
 ] as const;
 
@@ -47,7 +69,11 @@ export function filterChips(
 export const TOUCH_TILES = [
   { id: "all", label: "People", net: false },
   { id: "reconnect", label: "Reconnect", net: true },
-  { id: "upcoming", label: "Upcoming", net: true },
+  // `--net` is the colour of a CONSEQUENCE (DESIGN.md). Two birthdays is not
+  // one, and the same red carries "overdue" and the read-only refusal two
+  // screens away, so the tile read as an alert (people/findings #8). The
+  // linked tile set already said `net: false` for the same fact.
+  { id: "upcoming", label: "Upcoming", net: false },
   { id: "starred", label: "Starred", net: false },
 ] as const;
 
@@ -85,6 +111,43 @@ export const LINK = {
 /** The vault stores the word. */
 export const LOG_KINDS = ["Message", "Call", "Met up", "Note"] as const;
 
+/**
+ * THE TWO KIND TABLES (#1015 Wave 3, S11; people/findings #12). The app used
+ * the stored enum as its own label in three places — the channel composer's
+ * chips and field label read `phone`, `email`, `handle` in lowercase, and
+ * Touch's Recent sub-lines read `message`, `visit`, `call` — while the Log
+ * screen's chips said `Message · Call · Met up · Note`. So one event appeared
+ * as `Met up` on the screen that recorded it and `visit` on the screen that
+ * lists it, and every other label in the app is sentence case.
+ *
+ * A label is a presentation of an enum: the writers and the readers of a kind
+ * both come through these, and an unrecognised value is shown as itself rather
+ * than hidden, because a value the vault holds is a fact.
+ */
+export const CHANNEL_KIND_LABEL: Readonly<Record<string, string>> = {
+  phone: "Phone",
+  email: "Email",
+  handle: "Handle",
+};
+
+export function channelKindLabel(kind: string): string {
+  return CHANNEL_KIND_LABEL[kind] ?? kind;
+}
+
+/** Both spellings of a touch kind — the word this seat writes and the word an
+ *  older or another writer stored — land on one member-facing noun. */
+export const TOUCH_KIND_LABEL: Readonly<Record<string, string>> = {
+  message: "Message",
+  call: "Call",
+  visit: "Met up",
+  "met up": "Met up",
+  note: "Note",
+};
+
+export function touchKindLabel(kind: string): string {
+  return TOUCH_KIND_LABEL[kind.toLowerCase()] ?? kind;
+}
+
 /** `Never` IS THE ZERO: zero is never overdue (`format.ts` isOverdue). */
 export const CADENCE_CHIPS = [0, 7, 14, 30, 90] as const;
 
@@ -110,7 +173,10 @@ export const FRAGMENTS = {
   reminderOff: "reminder off",
   daysLeft: (days: number) =>
     days <= 0 ? "Today" : `${days} ${days === 1 ? "day" : "days"} left`,
-  was: (field: string, value: string) => `${field} · was ${value}`,
+  /** The `Result` row's second line: the surviving value, and what it replaced
+   *  where the duplicate held something else (#1015, people/findings #13). The
+   *  FIELD is the row's top line, like every other row in this app. */
+  was: (kept: string, replaced: string) => `${kept} · was ${replaced}`,
 } as const;
 
 export const MERGE_HEADS = {
@@ -159,6 +225,15 @@ export const CONFIRMS = {
     body: SENTENCES.mergeWarning,
     verb: VERBS.merge,
   },
+  /** A channel has no reverse write, so it joins Trash and Merge on the modal
+   *  rather than on the status line's Undo (#1015, people/findings #7). The
+   *  `✕` used to destroy the row on one tap, from a 44pt target sitting beside
+   *  the row's own open-the-person target. */
+  removeChannel: {
+    title: (kind: string) => `Remove this ${kind}?`,
+    body: "There is no undo for this one.",
+    verb: VERBS.remove,
+  },
 } as const;
 
 /** Never a zero standing in for a number nobody could see. */
@@ -185,8 +260,11 @@ export const STATUS = {
   touchLinked: (linked: number, toLink: number, due: number) =>
     `${linked} vaults · ${toLink} to link · ${due} overdue`,
   searchResting: "Searches names, roles and notes",
+  /** `1 of 7 match` was ungrammatical at every count (people/findings #11). */
   searchResults: (matched: number, total: number) =>
-    `${matched} of ${total} match`,
+    matched === 0
+      ? `No matches in ${plural(total, "person", "people")}`
+      : `${String(matched)} of ${plural(total, "person", "people")}`,
   searchUnreachable: "Search could not be reached.",
   logging: "Logging stamps last contacted",
   editing: "Nothing is written until you save",

@@ -188,7 +188,7 @@ describe("the section heading and the chips", () => {
       ),
       automationRowCopy(row({ ref: "quotes/follow" }), context([], [])),
     ];
-    expect(countSentence(copies)).toBe("3 automations · 1 failing · 1 paused");
+    expect(countSentence(copies)).toBe("3 rules · 1 failing · 1 paused");
     expect(showingSentence(1, 3)).toBe("showing 1 of 3");
   });
 
@@ -237,7 +237,7 @@ describe("the standing line", () => {
     const copies = [once, thrice];
     expect(worstFailure(copies)?.title).toBe("Weekly digest");
     const health = automationsHealth(copies, [], NOW);
-    expect(health.label).toBe("2 automations are failing");
+    expect(health.label).toBe("2 rules are failing");
     expect(health.detail).toContain(
       "Weekly digest has failed its last 3 runs, since "
     );
@@ -248,14 +248,14 @@ describe("the standing line", () => {
     const copies = [automationRowCopy(row(), context([run()]))];
     const health = automationsHealth(copies, [run()], NOW);
     expect(health.label).toBe("Nothing is failing");
-    expect(health.detail).toContain("1 automation on this gateway · last run ");
+    expect(health.detail).toContain("1 rule on this gateway · last run ");
     expect(health.action).toBeUndefined();
   });
 
   it("says nothing has run yet rather than inventing a last run", () => {
     const copies = [automationRowCopy(row(), context([]))];
     expect(automationsHealth(copies, [], NOW).detail).toBe(
-      "1 automation on this gateway · nothing has run yet."
+      "1 rule on this gateway · nothing has run yet."
     );
   });
 });

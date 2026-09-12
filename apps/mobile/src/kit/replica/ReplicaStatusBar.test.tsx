@@ -48,6 +48,11 @@ vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   return {
     Alert: { alert: vi.fn<() => void>() },
+    // The rooms own keyboard avoidance and dismissal now (#1015, R-A-17).
+    Keyboard: { dismiss: (): void => undefined },
+    Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios },
+    KeyboardAvoidingView: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement("div", null, children),
     Modal: ({
       children,
       visible,
@@ -99,6 +104,17 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
+// The rooms the sheet is built on reach the safe area and the icon set; this
+// suite asserts on neither.
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+
+vi.mock(import("react-native-svg"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+
 vi.mock(
   import("../components/NativeText"),
   () =>
@@ -129,7 +145,12 @@ vi.mock(
   import("@centraid/design"),
   () =>
     ({
+      // What the rooms' own leaves read; no assertion here touches them.
+      borders: { hairline: 1 },
       formatRelativeTime: () => "just now",
+      icons: {},
+      nativeButtonStyle: () => ({ label: {}, view: {} }),
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
     }) as unknown as Partial<DesignModule>
 );
 
@@ -156,9 +177,18 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
+      density: { rowMin: 44 },
       family: { sansMedium: "sans-medium", sansRegular: "sans-regular" },
-      radii: { lg: 12, md: 7 },
+      // The pending sheet is a `SheetRoom` now (#1015, Wave 2), and the rooms'
+      // own leaves read these. No assertion here touches them.
+      metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
+      pageMargin: 18,
+      radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 16, xs: 0 },
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
+      subBase: { chip: 3, gutter: 2, hair: 1 },
       t: () => ({}),
+      // `StageRoom`'s close key sits on the touch floor (R-NY-14).
+      targetMin: { coarse: 44, fine: 34 },
       useTheme: () => ({
         colors: {
           accent: "#mock-accent",
@@ -177,6 +207,15 @@ const pendingMock = vi.hoisted(() => ({
   pending: [] as unknown[],
   refresh: vi.fn<() => void>(),
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 vi.mock(
   import("./pending-changes"),
@@ -345,7 +384,7 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     expect(container.textContent).toContain("Tally · Add expense");
     expect(container.textContent).toContain("changed somewhere else");
     expect(container.textContent).toContain("Expected version 3; found 5.");
-    expect(container.textContent).toContain("Retry");
+    expect(container.textContent).toContain("Try again");
     expect(container.textContent).toContain("Discard");
     // Never the raw state, and never a Cancel for a write already settled.
     expect(container.textContent).not.toContain("conflict");
@@ -357,7 +396,7 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     replicaMock.session = sessionMock;
     await render();
     await press("Pending changes 1");
-    await press("Retry Tally · Add expense");
+    await press("Try again Tally · Add expense");
 
     expect(outbox.calls).toStrictEqual([["retry", "intent-1"]]);
   });
@@ -372,7 +411,9 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
 
     expect(container.textContent).toContain("waiting to send");
     expect(container.textContent).toContain("Cancel");
-    expect(container.textContent).not.toContain("Retry");
+    // The retry VERB, not the words: `PENDING_CHANGE_NOT_ACCEPTED` ends with
+    // "Try again." as a sentence (R-SH-7), which is not a control.
+    expect(container.textContent).not.toContain("Try again Tally");
     expect(container.textContent).not.toContain("Discard");
   });
 });

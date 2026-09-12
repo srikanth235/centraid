@@ -96,6 +96,7 @@ const table = (
   physical: logical.replace(".", "_"),
   table: logical.split(".")[1] ?? logical,
   label,
+  friendly: label,
   rows,
   bytes,
   pages: bytes === null ? null : 1,

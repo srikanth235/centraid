@@ -338,6 +338,12 @@ export interface FriendData {
  *  else, which the row says out loud. */
 export interface ActivityRow {
   kind: "expense" | "settlement";
+  /** The ids `queries/activity.ts` has carried since #872 and this type never
+   *  declared — so the feed's rows could not open the expense they name, and
+   *  the identical row was tappable on the group ledger and dead here (#1015,
+   *  tally/findings #9). Absent on a settlement, which has no expense. */
+  expense_id?: string;
+  group_id?: string | null;
   date?: string;
   description?: string;
   category?: string;

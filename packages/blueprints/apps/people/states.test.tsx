@@ -161,9 +161,13 @@ describe("people.dayone — the roster with nothing in it", () => {
     expect(text).toContain(EMPTY.noMatch);
     expect(text).not.toContain(FIRST_RUN.title);
     expect(text).not.toContain(FIRST_RUN.body);
-    // The chips are still drawn — the way off the filter has to stay reachable.
+    // The chips are still drawn — the way off the filter has to stay
+    // reachable. The chip is named `Starred` since #1015 (people/findings #9):
+    // `★` was its whole accessible name, so VoiceOver read a bare symbol.
     expect(
-      buttons(container).some((button) => button.textContent?.trim() === "★")
+      buttons(container).some(
+        (button) => button.textContent?.trim() === "Starred"
+      )
     ).toBe(true);
   });
 });

@@ -294,7 +294,7 @@ describe("Collections' per-section collapse", () => {
     container = undefined;
   });
 
-  // No header row of its own: the `···` chip and its Show All / Collapse All
+  // No header row of its own: the `···` chip and its Show all / Collapse all
   // menu are covered by `PhotosHome.test.tsx`.
 
   it("a collapsed section keeps its heading and count, and drops its rail", () => {
@@ -308,8 +308,8 @@ describe("Collections' per-section collapse", () => {
     ).toBeTruthy();
   });
 
-  it("Collapse All (as PhotosHome's menu would set it) folds every section, each still stating its heading", () => {
-    // PhotosHome's Collapse All sets `collapsed` to every key at once — the
+  it("Collapse all (as PhotosHome's menu would set it) folds every section, each still stating its heading", () => {
+    // PhotosHome's Collapse all sets `collapsed` to every key at once — the
     // view must honour that shape, not only single-section chevron folds.
     render(new Set(COLLECTION_SECTION_KEYS));
     const expanders = [
@@ -324,7 +324,7 @@ describe("Collections' per-section collapse", () => {
     ).toBeTruthy();
   });
 
-  it("Show All (an empty set from PhotosHome's menu) leaves every section expanded", () => {
+  it("Show all (an empty set from PhotosHome's menu) leaves every section expanded", () => {
     render(new Set());
     expect(
       container!.querySelectorAll("button[aria-label^='Expand ']")

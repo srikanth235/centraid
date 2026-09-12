@@ -18,16 +18,19 @@ import type { MergeRouteProps, PersonRow } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { Caption, Commits, Row, Section, SkeletonBlock } from "./Shared.tsx";
 
-/** One `Result` row: the surviving value and what it replaced. */
+/** One `Result` row: the field, and under it the surviving value plus what it
+ *  replaced. Both seats read the row the same way round (#1015,
+ *  people/findings #13). */
 function resultRow(
   field: string,
   kept: string,
   replaced: string | undefined
-): { name: string; sub: string } {
+): { name: string; sub: string; value: string } {
   const differs = Boolean(replaced) && replaced !== kept;
   return {
-    name: kept,
-    sub: differs && replaced ? FRAGMENTS.was(field, replaced) : field,
+    name: field,
+    sub: differs && replaced ? FRAGMENTS.was(kept, replaced) : kept,
+    value: kept,
   };
 }
 
@@ -61,7 +64,7 @@ export function MergeRoute(props: MergeRouteProps): ReactNode {
       cadenceLabel(cadenceDays),
       source ? cadenceLabel(source.cadence_days) : undefined
     ),
-  ].filter((row) => row.name);
+  ].filter((row) => row.value);
 
   return (
     <>
@@ -97,7 +100,7 @@ export function MergeRoute(props: MergeRouteProps): ReactNode {
 
       <Section title={SECTIONS.result} ruled>
         {rows.map((row) => (
-          <Row key={row.sub} name={row.name} strong sub={row.sub} />
+          <Row key={row.name} name={row.name} strong sub={row.sub} />
         ))}
       </Section>
 

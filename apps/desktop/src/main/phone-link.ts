@@ -10,6 +10,12 @@
 // remote gateway is active the phone gets 503s (the phone pairs with this
 // desktop, not with remote gateways). The gateway keeps binding 127.0.0.1
 // and its HTTP surface is untouched.
+//
+// A PAIRED PHONE IS ALSO AN ENROLMENT (#1015, ruling R-NY-18). `devices.json`
+// is the transport allowlist and nothing more; the vault doors read the
+// gateway's enrolment store, and since a tunnelled phone now reaches them as
+// ITSELF rather than as the host, both gestures here have a second half:
+// pairing vouches for the phone's EndpointId, revoking tombstones it.
 
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +31,8 @@ import {
 import type { DesktopTunnelHandle, PairedDevice } from "@centraid/tunnel";
 
 import { deviceIrohKeyPersistence } from "./gateway-secrets.js";
+import { vouchPhoneDevice } from "./phone-link-vouch-core.js";
+import type { VouchUpstream } from "./phone-link-vouch-core.js";
 import { loadSettings } from "./settings.js";
 
 export const PHONE_PAIRED_CHANNEL = "centraid:phone:paired";
@@ -64,6 +72,17 @@ function deviceStore(): DeviceStore {
  * "Connect phone" panel opens with the endpoint already listening, and so
  * previously paired phones can reconnect without any UI open.
  */
+/** The local gateway, or `undefined` while a remote one is active. */
+async function localUpstream(): Promise<VouchUpstream | undefined> {
+  const settings = await loadSettings();
+  if (settings.activeGatewayKind !== "local") return undefined;
+  if (!(settings.gatewayUrl && settings.gatewayToken)) return undefined;
+  return {
+    baseUrl: settings.gatewayUrl.replace(/\/+$/u, ""),
+    token: settings.gatewayToken,
+  };
+}
+
 export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
   if (handle) return handle;
   if (starting) return starting;
@@ -77,16 +96,25 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
       }),
       deviceStore: deviceStore(),
       desktopName: os.hostname().replace(/\.local$/u, ""),
-      upstream: async () => {
-        const settings = await loadSettings();
-        if (settings.activeGatewayKind !== "local") return undefined;
-        if (!(settings.gatewayUrl && settings.gatewayToken)) return undefined;
-        return {
-          baseUrl: settings.gatewayUrl.replace(/\/+$/u, ""),
-          token: settings.gatewayToken,
-        };
-      },
+      upstream: localUpstream,
       onPaired: (device) => {
+        // The enrolment the QR gesture owes the vault doors (#1015, R-NY-18).
+        // A refusal is logged, never thrown: the phone is paired at the
+        // transport either way, and the panel would have nowhere to put an
+        // exception raised inside the tunnel's own callback.
+        void (async () => {
+          const answer = await vouchPhoneDevice(await localUpstream(), {
+            action: "enrol",
+            endpointId: device.endpointId,
+            label: device.name,
+            platform: device.platform,
+          });
+          if (!answer.ok) {
+            console.warn(
+              `phone link: the gateway did not enrol ${device.name} (${answer.error ?? answer.status})`
+            );
+          }
+        })();
         for (const win of BrowserWindow.getAllWindows()) {
           if (win.isDestroyed()) continue;
           win.webContents.send(PHONE_PAIRED_CHANNEL, { device });
@@ -138,11 +166,30 @@ export function cancelPhonePairing(): void {
   handle?.cancelPairing();
 }
 
-export function revokePhoneDevice(deviceId: string): PairedDevice | undefined {
+export async function revokePhoneDevice(
+  deviceId: string
+): Promise<PairedDevice | undefined> {
   // The tunnel handle also drops the device's live connections; fall back
   // to a plain store removal if the endpoint never came up.
-  if (handle) return handle.revokeDevice(deviceId);
-  return deviceStore().remove(deviceId);
+  const removed = handle
+    ? handle.revokeDevice(deviceId)
+    : deviceStore().remove(deviceId);
+  if (!removed) return undefined;
+  // THE SECOND HALF (#1015, R-NY-18): the transport row is gone, so this
+  // phone can no longer dial in — but a phone is its own principal at the
+  // vault doors now, and "revoked" has to be true in the store those doors
+  // read, whichever way the device comes back. Awaited, unlike the enrolment
+  // above: a revoke the member asked for must not race the answer they get.
+  const answer = await vouchPhoneDevice(await localUpstream(), {
+    action: "revoke",
+    endpointId: removed.endpointId,
+  });
+  if (!answer.ok) {
+    console.warn(
+      `phone link: the gateway did not tombstone ${removed.name} (${answer.error ?? answer.status})`
+    );
+  }
+  return removed;
 }
 
 export async function shutdownPhoneLink(): Promise<void> {

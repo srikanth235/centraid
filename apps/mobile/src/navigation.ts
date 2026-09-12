@@ -24,7 +24,6 @@ export type PhotosStackParamList = {
     | undefined;
   PhotoLightbox: { assetId: string };
   PhotosLibrary: undefined;
-  PhotosSearch: undefined;
   // Cards first: More → `PlacesView`, shelf head → `PlacesMap`, card → `PlaceDetail`. Not a `PhotoStateView` mode.
   PlacesView: undefined;
   PlacesMap: undefined;
@@ -63,8 +62,10 @@ export type DocsStackParamList = {
   // Name rides along so the app bar need not wait a replica round-trip.
   DocsFolder: { folderId: string; folderName: string };
   // One read route: reading view for kinds Docs can set, facts panel for kinds it cannot.
-  DocumentRead: { documentId: string };
-  DocumentViewer: { documentId: string };
+  // `title` rides along like `DocsFolder.folderName`, so this head and the head
+  // one push deeper name the document before the read lands (#1015).
+  DocumentRead: { documentId: string; title?: string };
+  DocumentViewer: { documentId: string; title?: string };
   DocumentEditor: { documentId: string };
   DocumentVersions: { documentId: string };
   DocumentProperties: { documentId: string };
@@ -148,7 +149,11 @@ export type PeopleStackParamList = {
 };
 
 export type AgendaStackParamList = {
-  AgendaHome: undefined;
+  // Same longhand as `DocsHome.destination` (import boundary): the band's three
+  // places live on this one route, so a band tap from the pushed event page
+  // pops back to the place it names rather than to whichever place the list was
+  // last left on (#1015).
+  AgendaHome: { destination?: "day" | "schedule" | "waiting" } | undefined;
   // `instanceKey` is the tapped occurrence; writes still target the series via `eventId`.
   AgendaEvent: { eventId: string; instanceKey?: string };
 };
@@ -156,7 +161,7 @@ export type AgendaStackParamList = {
 export type SettingsStackParamList = {
   /** Not `Settings` — the root stack owns that name for the navigator. */
   SettingsHome: undefined;
-  Approvals: undefined;
+  NeedsYou: undefined;
   Sharing: undefined;
   PhoneStorage: { signalCause?: string } | undefined;
   // Frame screen, never Photos stack (#712): policy also covers Docs scans and Notes attachments.
@@ -164,7 +169,9 @@ export type SettingsStackParamList = {
 };
 
 export type RootStackParamList = {
-  Home: undefined;
+  // `sheet` is More pressed on a place's band: the ONE Home opens its
+  // all-apps sheet on arrival and clears the param (R-NY-1, `band-navigation.ts`).
+  Home: { sheet?: "all-apps" } | undefined;
   Capture: { text?: string } | undefined;
   Scan:
     | {

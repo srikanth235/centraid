@@ -160,12 +160,15 @@ describe(EnrichmentSection, () => {
     expect(text).toContain("No policy your gateway can honour");
   });
 
-  it("says the gateway is unreachable rather than showing a policy", async () => {
+  it("says the host is unreachable rather than showing a policy", async () => {
     const container = await render(() =>
       Promise.reject(new Error("Could not reach the gateway: offline"))
     );
     const text = textOf(container);
-    expect(text).toContain("Could not reach the gateway: offline");
+    // S14 (#1015): one noun for this surface; the exception's own sentence
+    // (transport vocabulary and all) never reaches the member.
+    expect(text).toContain("Your enrichment settings could not be read");
+    expect(text).not.toContain("gateway");
     expect(text).toContain("this phone does not keep its own copy");
     expect(text).not.toContain("Text in photos");
   });

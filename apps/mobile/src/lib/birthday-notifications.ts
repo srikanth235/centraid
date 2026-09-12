@@ -2,7 +2,6 @@
 // birthday. Starred is the whole permission model. Pure; `notifications-core.ts` schedules this.
 import {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
-  BIRTHDAY_LEADS,
   birthdayNotificationBody,
   birthdayNotificationTitle,
 } from "@centraid/blueprints/apps/agenda/day-context-copy";
@@ -10,6 +9,7 @@ import {
 export {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
   BIRTHDAY_LEADS,
+  birthdayLeadPhrase,
 } from "@centraid/blueprints/apps/agenda/day-context-copy";
 
 export interface BirthdayPerson {
@@ -61,12 +61,6 @@ export function monthDayOf(birthDate: string): string | null {
   return /^\d{2}-\d{2}$/u.test(tail) ? tail : null;
 }
 
-export function leadLabel(days: number): string {
-  return (
-    BIRTHDAY_LEADS.find((lead) => lead.days === days)?.label ?? `${days} days`
-  );
-}
-
 /**
  * Next `MM-DD` on or after `from`. 29 February is absent in a non-leap year
  * rather than rounded onto 1 March.
@@ -114,7 +108,7 @@ export function planBirthdayNotifications(input: {
     if (delivered.has(key)) continue;
     out.push({
       at,
-      body: birthdayNotificationBody(leadLabel(leadDays)),
+      body: birthdayNotificationBody(leadDays),
       day: dayKeyOf(day),
       key,
       partyId: person.partyId,

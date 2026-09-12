@@ -17,7 +17,7 @@ import { SearchScaffold } from "./SearchScaffold.tsx";
 
 const COPY: SearchStateCopy = {
   resting: {
-    eyebrow: "Nothing typed",
+    noun: "things",
     title: "Search everything",
     body: "Try one of these.",
   },
@@ -74,6 +74,12 @@ describe("SearchScaffold's four states", () => {
     expect(html).toContain("one");
     expect(html).toContain("two");
     expect(html).not.toContain("the caller's own results");
+  });
+
+  it("prints the house's resting eyebrow, never a state report", () => {
+    const html = render({ query: "", status: "resting", count: 0 });
+    expect(html).toContain("Search your things");
+    expect(html).not.toContain("Nothing typed");
   });
 
   it("is determinate while searching, driven by the caller's own copy", () => {

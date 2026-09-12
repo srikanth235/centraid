@@ -69,18 +69,19 @@ The CSS debt ledger is empty. `scripts/lint-design-tokens.mjs` accepts only a cu
 
 Expo has the same zero-debt contract in native syntax. `scripts/lint-mobile-design.mjs` rejects literal font family/weight, numeric `fontSize`/`lineHeight`, numeric radius properties, and literal style/JSX hex or rgb(a) in production consumers. Use `t(role)`, `family.mono*` for actual code, `radii.role`, and `colors.role`. `apps/mobile/src/kit/theme/native.ts` and `resolve.ts` are the two lowering owners excluded from consumer scanning; the design package's native contract tests own their source values. There is no generated copy and no per-file mobile allowance map. Run both syntax gates together with `bun run lint:design-consumers`.
 
-## Two values live under the 4px base, and they are named
+## Three values live under the 4px base, and they are named
 
-`4 / 8 / 12 / 16 / 24 / 32` is the gap scale. v7 measured fifteen sub-base gaps in the reference — 1, 2, 3, 5 and 6px — and folded thirteen back onto it. The two survivors are seams rather than rhythm steps, and they are tokens precisely so the difference is legible in a diff:
+`4 / 8 / 12 / 16 / 24 / 32` is the gap scale. v7 measured fifteen sub-base gaps in the reference — 1, 2, 3, 5 and 6px — and folded thirteen back onto it. The two survivors are seams rather than rhythm steps, and they are tokens precisely so the difference is legible in a diff. A third, `--sp-chip`, is a recorded system change for the one chip drawn on a photograph tile ([#1015](https://github.com/srikanth235/centraid/issues/1015), R-NY-15):
 
-| Token         | Value | Only use                                |
-| ------------- | ----- | --------------------------------------- |
-| `--sp-hair`   | 1px   | the rule inside a tight text stack      |
-| `--sp-gutter` | 2px   | the seam between two images in a mosaic |
+| Token         | Value | Only use                                   |
+| ------------- | ----- | ------------------------------------------ |
+| `--sp-hair`   | 1px   | the rule inside a tight text stack         |
+| `--sp-gutter` | 2px   | the seam between two images in a mosaic    |
+| `--sp-chip`   | 3px   | the inline inset of a chip on a photo tile |
 
-A loose `gap: 2px` is indistinguishable from someone eyeballing a rung; `var(--sp-gutter)` says which of the two exceptions is being claimed. Nothing else under 4px is permitted — a third sub-base value is a system change, not a call-site decision.
+A loose `gap: 2px` is indistinguishable from someone eyeballing a rung; `var(--sp-gutter)` says which of the three exceptions is being claimed. Nothing else under 4px is permitted — a fourth sub-base value is a system change in `packages/design`, never a call-site or kit constant.
 
-- [ ] Under 4px? Use `--sp-hair` or `--sp-gutter`, or move onto the scale. There is no third option.
+- [ ] Under 4px? Use `--sp-hair`, `--sp-gutter` or `--sp-chip` (native: `subBase.hair|gutter|chip`), or move onto the scale. There is no fourth option.
 
 ## Checklist
 

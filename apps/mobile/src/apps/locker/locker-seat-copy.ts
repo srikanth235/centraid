@@ -16,10 +16,48 @@
 /** The lock wall's second way in, where one has been enrolled. */
 export const DEVICE_UNLOCK = "Unlock with this device";
 
+/**
+ * WHEN THIS PHONE HOLDS NO KEY (#1015, rulings B1 and R-NY-19).
+ *
+ * The wall used to say that enrolling a phone was not available and to open
+ * Locker on the desktop. The first half was true and the second was not: no
+ * seat could reveal, because nothing anywhere wrote `K`. Now one can, and it
+ * is this one — the member asks for the key here and it arrives over the
+ * desktop link this phone already authenticated. The stated absence becomes a
+ * verb, and no sentence claims another seat can do what this one cannot.
+ */
+export const DEVICE_NOT_ENROLLED_TITLE = "Not enrolled on this phone";
+export const DEVICE_NOT_ENROLLED_BODY =
+  "Locker unlocks once this phone holds this vault’s key · enrol this phone to fetch it over your desktop link.";
+
+/** The verb that fetches `K` (#1015, R-NY-19). Locker's, not pairing's: the
+ *  key to every secret in the vault does not ride along with a transport
+ *  ceremony the member did in Settings before they opened this app. */
+export const DEVICE_ENROL = "Enrol this phone";
+export const DEVICE_ENROL_DONE = "This phone holds this vault’s key";
+/** The four ways enrolment is refused, each naming what to do next. */
+export const ENROL_NEEDS_TUNNEL =
+  "Enrolling needs your desktop link · pair this phone in Settings, then try again.";
+export const ENROL_NO_DOOR =
+  "This desktop does not hand out Locker keys · update it, then try again.";
+export const ENROL_NOT_ALLOWED =
+  "Your desktop has not enrolled this phone for this vault · pair it again in Settings.";
+export const ENROL_REFUSED = "This phone was not enrolled · try again.";
+export const ENROL_WRONG_VAULT =
+  "Your desktop answered for another vault · switch vaults, then try again.";
+
 /** Forgetting the vault key on this device — the revoke gesture's local half
  *  (#996, R13). It is not "revoke a credential" any more: what this phone
  *  holds is `K` itself, and dropping it is what stops this device reading. */
 export const DEVICE_FORGET = "Forget this vault's key";
+/** The guard the one unrecoverable act in this app did not have (#1015,
+ *  locker/findings #3). Every soft, restorable delete in the product is
+ *  confirmed; this one dropped `K` on a single tap and said nothing at all. */
+export const DEVICE_FORGET_NOUN = "key";
+export const DEVICE_FORGET_BODY =
+  "This phone stops reading every secret in this vault. Nothing is deleted from the vault, and enrolling this phone again is the only way back.";
+/** What the status line says once the key is gone. The noun, as signage. */
+export const DEVICE_FORGET_DONE = "Key forgotten on this phone";
 
 /** What this phone actually holds, said plainly (#996, R13 / W6-D2). */
 export const DEVICE_NOTE =
@@ -47,7 +85,6 @@ export const OPEN_ITEM_ACT = "Open it";
 export const OPEN_ITEM_BODY = "This item is sealed until you ask for it.";
 export const OUTSIDE_WINDOW =
   "This item is not in the window this device read.";
-export const BACK_TO_ITEMS = "Items";
 
 /** The two metadata verbs the item screen puts beside Edit. Both queue like
  *  any other metadata write; neither can carry a secret. */

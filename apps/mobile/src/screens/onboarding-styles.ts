@@ -3,7 +3,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, family, radii, t } from "../kit/theme";
+import { borders, family, radii, spacing, t } from "../kit/theme";
 // Pure resolver, not barrel: runs at module scope; barrel drags RN-only
 // surfaces that tests mock.
 import { resolveTheme } from "../kit/theme/resolve";
@@ -101,7 +101,7 @@ export const styles = StyleSheet.create({
     fontFamily: family.sansRegular,
     fontSize: t("body").fontSize,
     height: 52,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing[4],
   },
   lede: {
     color: C.textFaint,
@@ -123,7 +123,7 @@ export const styles = StyleSheet.create({
     fontFamily: family.sansRegular,
     fontSize: t("body").fontSize,
     height: 64,
-    paddingHorizontal: 15,
+    paddingHorizontal: spacing[4],
   },
   pressed: { opacity: 0.82 },
   primary: {

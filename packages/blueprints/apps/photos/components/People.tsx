@@ -91,24 +91,24 @@ export function PeopleShelf({
   if (emptyState) {
     // ONE sentence, ONE action; an inert action states its reason BESIDE
     // itself (#712 E1).
-    const handlePrioritise = emptyState.onPrioritise;
+    const handlePrioritize = emptyState.onPrioritize;
     return (
       <div className={styles.shelf}>
         <div className={styles.empty}>
           <p className={styles.emptyStatus}>{emptyState.statusLine}</p>
           <p className={styles.note}>{emptyState.line}</p>
-          {emptyState.prioritise.reason ? (
-            <p className={styles.emptyReason}>{emptyState.prioritise.reason}</p>
+          {emptyState.prioritize.reason ? (
+            <p className={styles.emptyReason}>{emptyState.prioritize.reason}</p>
           ) : null}
           <button
             type="button"
             className="kit-btn secondary"
             disabled={
-              !emptyState.prioritise.available ||
+              !emptyState.prioritize.available ||
               emptyState.busy ||
-              emptyState.prioritised
+              emptyState.prioritized
             }
-            onClick={handlePrioritise}
+            onClick={handlePrioritize}
           >
             {emptyState.action}
           </button>

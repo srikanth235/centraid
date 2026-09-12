@@ -71,7 +71,7 @@ describe("Docs' navigation rail", () => {
       "Starred",
       // Inside Drive: a delivered copy IS this vault's document, so the shelf
       // is a lens on the drive, not a second one.
-      "Shared with you",
+      "Shared",
       "# Folders",
       "Folders",
       "  Property",

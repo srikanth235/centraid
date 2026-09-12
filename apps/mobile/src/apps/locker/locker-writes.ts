@@ -48,11 +48,17 @@ import {
   nativeWriteOutput,
   surfaceWriteFailure,
   surfaceWriteOutcome,
+  surfaceWriteRefusal,
 } from "../../kit/replica/write-outcome";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import { handOffLockerExport } from "./locker-files";
 import { loadLockerItems } from "./locker-store";
 import { seedFromEntry } from "./otpauth";
+
+/** Locker's TWO error nouns, one per act (#1015, S14). Every failure and
+ *  every refusal on this seat says one of them and nothing else. */
+const LOCKER_NOT_WRITTEN = "Locker change not written";
+const LOCKER_NOT_EXPORTED = "Locker not exported";
 
 /**
  * A one-time-code field takes a seed OR an otpauth URI (`route-copy.ts`'s own
@@ -79,10 +85,7 @@ async function issue(
   executed: string
 ): Promise<boolean> {
   if (!session) {
-    surfaceWriteFailure(
-      new Error("This phone is not paired with a gateway."),
-      "Not written"
-    );
+    surfaceWriteRefusal("unpaired", LOCKER_NOT_WRITTEN);
     return false;
   }
   try {
@@ -95,7 +98,7 @@ async function issue(
     if (ok) postStatus(executed);
     return ok;
   } catch (error) {
-    surfaceWriteFailure(error, "Not written");
+    surfaceWriteFailure(error, LOCKER_NOT_WRITTEN);
     return false;
   }
 }
@@ -184,10 +187,7 @@ export async function exportLockerVault(
   options: { includeTrashed?: boolean; includeHistory?: boolean }
 ): Promise<void> {
   if (!session) {
-    surfaceWriteFailure(
-      new Error("This phone is not paired with a gateway."),
-      "Not exported"
-    );
+    surfaceWriteRefusal("unpaired", LOCKER_NOT_EXPORTED);
     return;
   }
   const write = exportWrite(options);
@@ -199,7 +199,7 @@ export async function exportLockerVault(
       onlineOnly: true,
     });
   } catch (error) {
-    surfaceWriteFailure(error, "Not exported");
+    surfaceWriteFailure(error, LOCKER_NOT_EXPORTED);
     return;
   }
   const settled = nativeWriteOutput(outcome) as
@@ -210,7 +210,7 @@ export async function exportLockerVault(
     return;
   }
   if (settled?.status === "denied") {
-    surfaceWriteFailure(new Error(settled.reason ?? ""), "Not exported");
+    surfaceWriteRefusal("denied", LOCKER_NOT_EXPORTED, settled.reason);
     return;
   }
   const payload = settled?.output;
@@ -221,7 +221,7 @@ export async function exportLockerVault(
   try {
     await handOffLockerExport(exportFileName(payload), exportCsv(payload));
   } catch (error) {
-    surfaceWriteFailure(error, "Not exported");
+    surfaceWriteFailure(error, LOCKER_NOT_EXPORTED);
     return;
   }
   postStatus(EXPORT_WRITTEN);

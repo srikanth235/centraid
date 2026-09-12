@@ -92,8 +92,17 @@ const copy = (await import(app("drive-copy.ts"))) as {
       tail?: string;
     }
   ) => readonly Crumb[];
-  TRASH_ASK: { eyebrow: string; title: string };
-  TRASH_FALLBACK: string;
+  TRASH_NOTE: string;
+  EMPTY_TRASH_COPY: {
+    control: string;
+    label: (count: number) => string;
+    question: (count: number) => string;
+    detail: (count: number) => string;
+    confirm: (count: number) => string;
+    cancel: string;
+    done: (count: number) => string;
+    empty: string;
+  };
   WINDOW_FAILED: string;
 };
 const docCopy = (await import(app("document-copy.ts"))) as {
@@ -340,14 +349,23 @@ describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
     );
   });
 
-  it("draws trash's ask without a destroy verb", () => {
-    // A label and one sentence: the eyebrow says it is not a control that
-    // failed, and the fallback says why destruction is scheduled. The design
-    // rationale is a comment in drive-copy.ts, never printed at a member.
-    expect(copy.TRASH_ASK.eyebrow).toBe("Not available yet");
-    expect(copy.TRASH_ASK.title).toBe("Delete forever and Empty trash");
-    expect(copy.TRASH_FALLBACK).toContain("cannot be emptied");
-    expect(JSON.stringify(copy.TRASH_ASK)).not.toContain("destroy verb");
+  it("names the documents on the destroy verb, and says it is final", () => {
+    // The trash used to carry an ask ("not available yet") because no vault
+    // command could purge a document. `core.empty_document_trash` is that
+    // command (#1015 D1), so the copy is a verb now — and it carries the
+    // noun, the count and the finality, the way Photos already did.
+    expect(copy.EMPTY_TRASH_COPY.control).toBe("Empty trash");
+    expect(copy.EMPTY_TRASH_COPY.label(12)).toBe("Empty trash — 12 documents");
+    expect(copy.EMPTY_TRASH_COPY.label(1)).toBe("Empty trash — 1 document");
+    expect(copy.EMPTY_TRASH_COPY.question(1)).toBe(
+      "Delete 1 document forever?"
+    );
+    expect(copy.EMPTY_TRASH_COPY.detail(3)).toContain("cannot be undone");
+    expect(copy.EMPTY_TRASH_COPY.done(3)).toBe(
+      "Trash emptied — 3 documents · receipted."
+    );
+    // Nothing anywhere still promises that a trash cannot be emptied.
+    expect(JSON.stringify(copy.TRASH_NOTE)).not.toContain("cannot be emptied");
   });
 
   it("says nothing about a window still in flight, and one thing about a failed one", () => {

@@ -15,8 +15,8 @@ import {
   toggleSelectionKey,
   toggleSelectionRange,
 } from "../_shared/selection-engine.ts";
+import type { SelectionShelfKind } from "../_shared/selection-engine.ts";
 import { assetKey, parseAssetKey } from "./asset-key.ts";
-import type { SelectionShelfKind } from "./components/SelectionBar.tsx";
 import {
   LABEL_BREAKPOINT,
   PhoneAlbumSheet,

@@ -3,15 +3,16 @@
 // as whatever sentence `viewerWriteRefusal` returns (§6, §18): read-only
 // vault, or not-in-a-vault-yet for a device row. Trash `--net` ink, never fill.
 
-import * as Haptics from "expo-haptics";
 import React from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
 import { TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { ViewerChromePlate, ViewerChromeTarget } from "./PhotoLightboxChrome";
+import { TRASH_KEEPS_THE_ORIGINAL } from "./photos-confirm-copy";
 import type { PhotoAsset } from "./timeline-model";
 import {
   VIEWER_BOTTOM_GROUPS,
@@ -19,6 +20,7 @@ import {
   viewerWriteRefusal,
 } from "./viewer-model";
 import type { ViewerActionId } from "./viewer-model";
+import { viewerToolbarStates } from "./viewer-toolbar-states";
 
 interface PhotoLightboxToolbarProps {
   asset: PhotoAsset;
@@ -48,33 +50,25 @@ export function PhotoLightboxToolbar({
     hasVaultAsset: Boolean(asset.assetId && asset.sourceVaultId),
   });
   const writable = refusal === undefined;
-  // Crop/rotate are raster on a still; do not pretend a video has a non-destructive editor.
-  const editable = asset.kind === "photo" || asset.kind === "scan";
-  const enabled: Record<ViewerActionId, boolean> = {
-    // "Copy" is now ONLY "keep this shared photo in my vault" (#996 wave 3).
-    // The cross-vault placement it also used to offer went with the plane that
-    // carried it, so an item with no commons offer has nothing to copy INTO.
-    copy: Boolean(onSaveToMyVault),
-    edit: writable && editable && onEdit !== undefined,
-    favorite: writable,
-    info: true,
-    trash: writable,
-  };
-  const reason: Partial<Record<ViewerActionId, string>> = {
-    copy: onSaveToMyVault ? undefined : "This photograph is already yours",
-    edit: writable
-      ? editable
-        ? undefined
-        : "Crop and rotate work on photographs, not on this kind of media"
-      : refusal,
-    favorite: refusal,
-    trash: refusal,
-  };
+  // The table is DATA (#1015 B10) — see `viewerToolbarStates`. Every disabled
+  // control here renders in `--on-stage-soft` with `accessibilityState.disabled`
+  // and its reason as the hint; the row's shared refusal stays on screen below.
+  const states = viewerToolbarStates({
+    writable: asset.canWrite === true,
+    hasVaultAsset: Boolean(asset.assetId && asset.sourceVaultId),
+    // Crop/rotate are raster on a still; do not pretend a video has a
+    // non-destructive editor.
+    editable: asset.kind === "photo" || asset.kind === "scan",
+    canSaveToMyVault: Boolean(onSaveToMyVault),
+    hasEditor: onEdit !== undefined,
+  });
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const run: Record<ViewerActionId, () => void> = {
     copy: () => onSaveToMyVault?.(),
     edit: () => onEdit?.(),
+    // No buzz on a favorite: it is a metadata write, not one of the three
+    // moments `kit/haptics.ts` names (#1015, S15).
     favorite: () => {
-      void Haptics.selectionAsync();
       void onWrite("update-asset", {
         asset_id: asset.assetId!,
         favorite: asset.favorite ? 0 : 1,
@@ -82,29 +76,24 @@ export function PhotoLightboxToolbar({
     },
     info: onInfo,
     trash: () =>
-      Alert.alert(
-        "Move to trash?",
-        "The device original is never deleted by this action.",
-        [
-          { text: "Cancel" },
-          {
-            text: "Trash",
-            style: "destructive",
-            onPress: () =>
-              void onWrite("delete-asset", { asset_id: asset.assetId! }),
-          },
-        ]
-      ),
+      confirmDestructive({
+        body: TRASH_KEEPS_THE_ORIGINAL,
+        noun: "photograph",
+        onConfirm: () =>
+          void onWrite("delete-asset", { asset_id: asset.assetId! }),
+        verb: "Trash",
+      }),
   };
   return (
     <>
+      {confirmSheet}
       <View style={styles.actionRow} accessibilityRole="toolbar">
         {VIEWER_BOTTOM_GROUPS.map((group) => (
           <ViewerChromePlate colors={colors} key={group.actions.join("-")}>
             {group.actions.map((id) => {
               const action = viewerAction(id);
-              const on = enabled[id];
-              const why = reason[id];
+              const on = states[id].enabled;
+              const why = states[id].reason;
               const selected = id === "favorite" ? asset.favorite : undefined;
               const label =
                 id === "copy" && onSaveToMyVault

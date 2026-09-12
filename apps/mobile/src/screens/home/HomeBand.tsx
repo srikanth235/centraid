@@ -3,8 +3,12 @@
 // apps. Bare ink, no tinted chip. No active bar: `band`→`control` + full ink
 // is the state; inactive icon is `textFaint`. Native-stack chrome, never
 // bottom-tabs: apps are covers pushed from Home.
+//
+// Drawn on Home and at the foot of every frame place root (R-NY-1, through
+// `PlaceBand`), never inside an app, which keeps its own band. Where a tab
+// goes is `usePlaceNavigation`'s, not this component's: a press here only
+// names the target.
 
-import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,9 +20,18 @@ import {
 } from "../../kit/band-surface";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
-import { borders, family, metrics, t, useTheme, radii } from "../../kit/theme";
+import {
+  borders,
+  family,
+  metrics,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { bandTabs } from "./band";
 import type { BandTab, BandTarget } from "./band";
@@ -59,7 +72,7 @@ export default function HomeBand({
           colors={colors}
           styles={styles}
           onPress={() => {
-            void Haptics.selectionAsync();
+            hapticSelect();
             onSelect(tab.id);
           }}
         />
@@ -69,7 +82,7 @@ export default function HomeBand({
         accessibilityRole="button"
         accessibilityLabel="All apps and places"
         onPress={() => {
-          void Haptics.selectionAsync();
+          hapticSelect();
           onSelect("more");
         }}
         style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
@@ -102,7 +115,10 @@ function Tab({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={tab.name + (active ? ", current place" : "")}
+      // SPEAK WHAT IS PAINTED (#1015, shell/findings 6): the band once spoke
+      // one noun for Needs you and painted another, so two members got two
+      // nouns.
+      accessibilityLabel={tab.short + (active ? ", current place" : "")}
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
@@ -180,13 +196,13 @@ const makeStyles = (colors: ThemeColors) =>
       overflow: "hidden",
       // Gutter on the tab, not the label, so the 44pt target is unchanged.
       paddingBottom: 3,
-      paddingHorizontal: 4,
+      paddingHorizontal: spacing[1],
       paddingTop: 7,
     },
     tabPressed: { backgroundColor: colors.bgPress },
     wrap: {
       flexDirection: "row",
-      paddingHorizontal: 4,
+      paddingHorizontal: spacing[1],
       // Floats (§G), never a flush bar. Ground is `bgElev`, not `bg` (page
       // colour does not float) and not `bgChrome` (sinks on dark). Edge is
       // `lineStrong`.

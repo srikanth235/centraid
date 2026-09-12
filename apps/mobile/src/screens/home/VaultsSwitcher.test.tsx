@@ -10,7 +10,10 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { hapticsStub } from "../../test/haptics-stub";
 import VaultsSwitcher from "./VaultsSwitcher";
+
+vi.mock(import("expo-haptics"), () => hapticsStub());
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -55,6 +58,11 @@ vi.mock(import("react-native"), async () => {
       out: () => undefined,
       quad: undefined,
     },
+    // The rooms own keyboard avoidance and dismissal now (#1015, R-A-17).
+    Keyboard: { dismiss: (): void => undefined },
+    Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios },
+    KeyboardAvoidingView: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement("div", null, children),
     Modal: ({
       children,
       visible,
@@ -100,8 +108,14 @@ vi.mock(
   import("@centraid/design"),
   () =>
     ({
+      // The switcher now mounts the kit confirm, which reaches the band
+      // surface and its hairline (#1015, Wave 2). The mock stays partial;
+      // it just has to answer for what the tree actually reads.
+      borders: { hairline: 1 },
       icons: { Sparkle: () => null },
       identityInk: () => "#mock-ink",
+      // The room's own action row draws kit `Button`s.
+      nativeButtonStyle: () => ({ label: {}, view: {} }),
     }) as unknown as Partial<DesignModule>
 );
 
@@ -151,8 +165,15 @@ vi.mock(
   import("../../kit/theme"),
   () =>
     ({
+      // `borders`, `metrics` and `targetMin`: the kit confirm the switcher
+      // mounts reaches the rooms' style sheet (#1015, Wave 2).
+      borders: { hairline: 1 },
       family: { sansMedium: "sans-medium" },
-      radii: { lg: 12, md: 7 },
+      metrics: { control: 34, controlTouch: 44, row: 44, segmented: 28 },
+      radii: { lg: 12, md: 7, sm: 4 },
+      targetMin: { coarse: 44, fine: 34 },
+      pageMargin: 18,
+      spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
       t: () => ({ fontSize: 12 }),
       useTheme: () => ({
         colors: {
@@ -197,6 +218,15 @@ const registry = vi.hoisted(() => ({
   }>,
   activeId: "link-1",
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 vi.mock(
   import("../../lib/vault-links"),

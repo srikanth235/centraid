@@ -174,6 +174,12 @@
     "door": "hook",
     "why": "Design-token consumption on the mobile surface."
   },
+  "lint:mobile-rooms": {
+    "class": "product",
+    "rung": 1,
+    "door": "hook",
+    "why": "The six rooms are the mobile surface's one frame contract (#1015); this is what notices a screen ignoring them."
+  },
   "lint:mobile-testids": {
     "class": "contract",
     "rung": 1,

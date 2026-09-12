@@ -6,6 +6,13 @@ import type { AccessibilityRole, StyleProp, ViewStyle } from "react-native";
  * The kit's bare tap target, not a second `Button`: the caller owns what is
  * visible, the kit what surrounds it. Invariant 4's 44px floor is bought with
  * SLOP, never a `minWidth` box that would move every header (#883).
+ *
+ * THE DISABLED CONTRACT (#1015, S9): this control refuses the responder and
+ * reports `accessibilityState.disabled`, and because the caller owns what is
+ * visible, the caller puts `colors.textDisabled` on the LEAF it renders —
+ * the `Text` or the `Icon`, never a container `opacity` over the group. The
+ * press treatment below is the one opacity in this file and it is transient,
+ * applied on press and never while disabled.
  */
 
 const PRESSED_OPACITY = 0.85;

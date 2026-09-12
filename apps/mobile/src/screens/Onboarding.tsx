@@ -1,5 +1,4 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Haptics from "expo-haptics";
 import React, { useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import {
@@ -110,10 +109,9 @@ export default function Onboarding({
     setStep("done");
   };
 
-  const enter = (): void => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onDone();
-  };
+  // No buzz for arriving at a screen (#1015, S15): the moment channel has
+  // three moments and this is not one of them.
+  const enter = (): void => onDone();
 
   return (
     <TopSafeArea style={styles.safe} edges={["top", "bottom"]}>
@@ -205,9 +203,6 @@ function ConnectionStep({
     const run = async (): Promise<void> => {
       try {
         await pair(payload, deviceName);
-        void Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success
-        );
         // Never re-ask a member the roster knows. Undefined means "ask",
         // never "assume".
         onPaired(await readSelfMemberName());
@@ -237,7 +232,11 @@ function ConnectionStep({
             onBarcodeScanned={({ data }) => submit(data)}
           />
         </View>
-        <Pressable onPress={() => setScanning(false)} style={styles.textBtn}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setScanning(false)}
+          style={styles.textBtn}
+        >
           <Text style={styles.textBtnLabel}>Cancel</Text>
         </Pressable>
       </View>
@@ -309,6 +308,7 @@ function ConnectionStep({
               onPress={() => (pairing ? undefined : submit(code))}
             />
             <Pressable
+              accessibilityRole="button"
               onPress={() => (pairing ? undefined : setShowPaste(false))}
               style={styles.textBtn}
             >
@@ -332,6 +332,7 @@ function ConnectionStep({
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setShowPaste(true)}
               style={styles.textBtn}
               testID={TEST_IDS.onboarding.paste}

@@ -6,12 +6,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, metrics, radii, spacing, t } from "../theme";
-
-/** The reference's `gap: 1px` between a row's title and its sub line — a
- *  seam inside one text stack, not a rhythm step, which is why it is not on
- *  the 4px scale. */
-const TITLE_SEAM = 1;
+import { borders, metrics, radii, spacing, subBase, t } from "../theme";
 
 export const styles = StyleSheet.create({
   action: { flexGrow: 0, flexShrink: 0 },
@@ -23,6 +18,16 @@ export const styles = StyleSheet.create({
   // The per-row escape hatch (an outbox editor, an expansion) sits UNDER the
   // row line inside the same cell, so the divider still separates records.
   expansion: { paddingBottom: spacing[3], paddingHorizontal: spacing[3] },
+  // A tappable row's text and meta, as one press target beside the verb: the
+  // same row geometry as `line`, so a row reads identically tappable or not.
+  face: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing[3],
+    minWidth: 0,
+  },
   line: {
     alignItems: "center",
     flexDirection: "row",
@@ -40,6 +45,10 @@ export const styles = StyleSheet.create({
   // call site, on the leaf, never as a container opacity.
   struck: { textDecorationLine: "line-through" as const },
   sub: t("mono"),
-  text: { flex: 1, gap: TITLE_SEAM, minWidth: 0 },
+  // `subBase.hair`, not a bare 1: the seam between a row's title and its sub
+  // line is a rule inside one text stack, and the exception to the 4px scale
+  // is claimed by name in the system rather than eyeballed here (#1015, R-B-6;
+  // docs/decisions.md#typography-and-design-contracts).
+  text: { flex: 1, gap: subBase.hair, minWidth: 0 },
   title: t("body"),
 });

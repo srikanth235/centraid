@@ -1,7 +1,7 @@
 // The Folders shelf (handoff Part 2 §2; #821).
 //
-// "A folder is a label on the document, not a place it sits" — the copy says
-// it out loud in the status line and the caption. Three blocks:
+// "A folder is a label on the document, not a place it sits" — the shared
+// caption says it, once; the status line carries the count alone (R-NY-11). Three blocks:
 //
 //   1. The folder rows, with counts, each opening `DocsFolder`.
 //   2. `Unfiled` — documents never put anywhere. Not an error, and not a
@@ -29,7 +29,14 @@ import EmptyBlock from "../../kit/components/EmptyBlock";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
 import { folderCount, foldersStatus, UNFILED_NOTE } from "./docs-copy";
@@ -128,7 +135,12 @@ export default function DocsFoldersView({
       {drive.loading && drive.folders.length === 0 ? (
         <SkeletonRows accessibilityLabel="Reading folders" />
       ) : emptyView.visible ? (
-        <EmptyBlock title={emptyView.title} body={emptyView.body} routine />
+        <EmptyBlock
+          title={emptyView.title}
+          body={emptyView.body}
+          inset
+          routine
+        />
       ) : (
         <View style={styles.container}>
           {drive.folders.map((folder, index) => (
@@ -206,14 +218,14 @@ const makeStyles = (colors: ThemeColors) =>
     caption: {
       ...t("small"),
       color: colors.textFaint,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingTop: 8,
     },
     composer: {
       alignItems: "center",
       flexDirection: "row",
       gap: 8,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingVertical: 8,
     },
     composerField: {
@@ -224,7 +236,7 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       flex: 1,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     container: {
       backgroundColor: colors.bgElev,
@@ -237,7 +249,7 @@ const makeStyles = (colors: ThemeColors) =>
     goneNote: {
       ...t("small"),
       color: colors.textSoft,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingVertical: 8,
     },
     goneSection: { paddingTop: 16 },
@@ -245,7 +257,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "flex-end",
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingVertical: 8,
     },
     newButton: {
@@ -256,7 +268,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 6,
       minHeight: 36,
-      paddingHorizontal: 10,
+      paddingHorizontal: spacing[3],
     },
     newLabel: { ...t("control"), color: colors.text },
     page: { paddingBottom: 24 },
@@ -264,7 +276,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       minHeight: 44,
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
     },
     quietLabel: { ...t("control"), color: colors.textSoft },
     row: {
@@ -273,7 +285,7 @@ const makeStyles = (colors: ThemeColors) =>
       gap: 12,
       // Same rhythm as the document row, for the same reason (see DocRow).
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: spacing[2],
     },
     rowMain: { flex: 1, gap: 2, minWidth: 0 },
@@ -289,13 +301,13 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: radii.md,
       justifyContent: "center",
       minHeight: 44,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[4],
     },
     saveLabel: { ...t("control"), color: colors.onAccent },
     status: {
       ...t("mono"),
       color: colors.textFaint,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingTop: 6,
     },
     unfiled: {
@@ -309,7 +321,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginHorizontal: 18,
       marginTop: 8,
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 8,
     },
     unfiledCount: { ...t("mono"), color: colors.textFaint },

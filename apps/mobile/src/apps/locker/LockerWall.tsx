@@ -37,7 +37,14 @@ import { Text } from "../../kit/components/NativeText";
 import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { DEVICE_FORGET, DEVICE_NOTE, DEVICE_UNLOCK } from "./locker-seat-copy";
+import {
+  DEVICE_ENROL,
+  DEVICE_FORGET,
+  DEVICE_NOT_ENROLLED_BODY,
+  DEVICE_NOT_ENROLLED_TITLE,
+  DEVICE_NOTE,
+  DEVICE_UNLOCK,
+} from "./locker-seat-copy";
 
 /** The gate's own heading. `Lock.tsx` draws the same word on the web. */
 const LOCK_TITLE = "Locked";
@@ -49,6 +56,12 @@ export interface LockerWallProps {
   busy: boolean;
   /** The door's refusal, in its own words. */
   error: string;
+  /** This phone holds no `K` for this vault (#1015 B1). The wall says so and
+   *  offers the ONE verb that changes it, rather than an unlock that would
+   *  refuse every time it was pressed. */
+  notEnrolled: boolean;
+  /** Enrol: fetch `K` over the desktop link (#1015, R-NY-19). */
+  onEnrol: () => void;
   /** Unlock: asks the OS to prove the member is present. */
   onUnlock: () => void;
   /** Forget `K` on this device — the revoke gesture's local half (R13). */
@@ -59,6 +72,8 @@ export default function LockerWall({
   mode,
   busy,
   error,
+  notEnrolled,
+  onEnrol,
   onUnlock,
   onForgetKey,
 }: LockerWallProps): React.JSX.Element {
@@ -89,10 +104,16 @@ export default function LockerWall({
       testID={TEST_IDS.locker.gate}
     >
       <Text accessibilityRole="header" style={styles.title}>
-        {LOCK_TITLE}
+        {notEnrolled ? DEVICE_NOT_ENROLLED_TITLE : LOCK_TITLE}
       </Text>
-      <Text style={styles.body}>{LOCK_BODY}</Text>
+      <Text style={styles.body}>
+        {notEnrolled ? DEVICE_NOT_ENROLLED_BODY : LOCK_BODY}
+      </Text>
 
+      {/* A refusal is an alert on both walls now. It was folded into the
+          heading while the not-enrolled wall was a dead end with nothing to
+          say twice; the enrol verb can fail for four different reasons, and
+          each of them has to be readable beside the button that caused it. */}
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
@@ -102,8 +123,8 @@ export default function LockerWall({
       <View style={styles.acts}>
         <Button
           disabled={busy}
-          label={DEVICE_UNLOCK}
-          onPress={onUnlock}
+          label={notEnrolled ? DEVICE_ENROL : DEVICE_UNLOCK}
+          onPress={notEnrolled ? onEnrol : onUnlock}
           testID={TEST_IDS.locker.gateSubmit}
           variant="primary"
         />
@@ -117,15 +138,18 @@ export default function LockerWall({
           </View>
         ))}
       </View>
-      <View style={styles.deviceRow}>
-        <Text style={styles.body}>{DEVICE_NOTE}</Text>
-        <Button
-          disabled={busy}
-          label={DEVICE_FORGET}
-          onPress={onForgetKey}
-          variant="destructive"
-        />
-      </View>
+      {/* Nothing to forget on a phone that holds no key. */}
+      {notEnrolled ? null : (
+        <View style={styles.deviceRow}>
+          <Text style={styles.body}>{DEVICE_NOTE}</Text>
+          <Button
+            disabled={busy}
+            label={DEVICE_FORGET}
+            onPress={onForgetKey}
+            variant="destructive"
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }

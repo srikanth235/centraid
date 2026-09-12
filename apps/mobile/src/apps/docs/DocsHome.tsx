@@ -38,20 +38,33 @@ import type { MenuAnchor, MenuGroup } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import AppPlace from "../../kit/rooms/AppPlace";
+import type { RoomSelection } from "../../kit/rooms/room-contracts";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
+import { resolveAppMeta } from "../../lib/gateway";
 import type { DocsScreenProps } from "../../navigation";
-import { allStatus, SHARED_TITLE } from "./docs-copy";
+import { allStatus, DOCS_ARRANGEMENT, SHARED_TITLE } from "./docs-copy";
 import { sortDocuments } from "./docs-projection";
+import { useDocsRoom } from "./docs-room";
 import { useDriveViewPrefs } from "./docs-view-prefs";
 import DocsDueView from "./DocsDueView";
 import DocsFoldersView from "./DocsFoldersView";
-import DocsScreen from "./DocsScreen";
 import DocsSearchView from "./DocsSearchView";
 import DocsSharedView from "./DocsSharedView";
 import DocsStarredView from "./DocsStarredView";
 import DriveList from "./DriveList";
 import { useDocs } from "./useDocs";
+
+/** The app's own mark and hue, from the one builtin table. */
+const DOCS = resolveAppMeta({ id: "docs" });
 
 type ShelfDestination =
   | "all"
@@ -65,8 +78,6 @@ export default function DocsHome({
   route,
   navigation,
 }: DocsScreenProps<"DocsHome">): React.JSX.Element {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const drive = useDocs();
 
   const [destination, setDestination] = useState<ShelfDestination>(
@@ -78,11 +89,19 @@ export default function DocsHome({
       queueMicrotask(() => setDestination(routeDestination));
   }, [routeDestination]);
 
+  // The band lights the place the member is looking at.
+  const room = useDocsRoom(destination);
+
   const [filters, setFilters] = useState<DriveFilters>(NO_FILTERS);
   const [prefs, updatePrefs] = useDriveViewPrefs();
   // Owned here, not in `DriveList`: the control that turns it on is the app
   // bar's, and the app bar belongs to the screen.
   const [selecting, setSelecting] = useState(false);
+  // SELECTION IS A MODE (#1015, D5, audit docs/findings#2): the head swaps in
+  // place to the count and the one way out, the controls row stands down, and
+  // the band below dims. Before this the drive carried the bulk bar AND a live
+  // five-tab band at the foot, and one tap navigated away mid-selection.
+  const [selection, setSelection] = useState<RoomSelection | undefined>();
 
   const active = useMemo(
     () => drive.documents.filter((doc) => !doc.trashed),
@@ -114,51 +133,41 @@ export default function DocsHome({
             : shelfCopy(null).title;
 
   return (
-    <DocsScreen current={destination}>
-      <View style={styles.header}>
-        <Text numberOfLines={1} style={styles.title}>
-          {headTitle}
-        </Text>
-        {/* Both acts sit on the DRIVE only. Search and Coming due have no set
-            to choose from, Folders already carries its own New folder — two
-            differently-scoped "New"s on one screen is a question, not an
-            affordance — and Starred is a VIEW of the drive: a "New" there
-            would have to promise a star it cannot set before the document
-            exists. Its rows keep the row menu, star included. */}
-        {destination === "all" ? (
-          <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={selecting ? "Cancel" : "Select documents"}
-              onPress={() => setSelecting((on) => !on)}
-              style={styles.headAction}
-            >
-              <Text style={styles.headActionLabel}>
-                {selecting ? "Cancel" : "Select"}
-              </Text>
-            </Pressable>
-            {/* The drive's PRIMARY act, one tap from the set — a file app
-                whose way in is three taps down an overflow sheet has buried
-                the reason it exists. Stood down during a selection: the bar
-                owns the verbs while a set is being chosen. */}
-            {selecting ? null : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Add a document"
-                onPress={() => navigation.navigate("DocsAdd")}
-                style={[styles.headPrimary, { backgroundColor: colors.accent }]}
-              >
-                <Icon name="Plus" size={16} color={colors.onAccent} />
-                <Text
-                  style={[styles.headPrimaryLabel, { color: colors.onAccent }]}
-                >
-                  New
-                </Text>
-              </Pressable>
-            )}
-          </>
-        ) : null}
-      </View>
+    <AppPlace
+      {...(destination === "all" && !selecting
+        ? {
+            // The drive's PRIMARY act, one tap from the set — a file app whose
+            // way in is three taps down an overflow sheet has buried the
+            // reason it exists.
+            action: {
+              // The destination's own name, not a second one (R-NY-11).
+              label: "Add a document",
+              onPress: () => navigation.navigate("DocsAdd"),
+            },
+          }
+        : {})}
+      app={{
+        color: DOCS.color,
+        iconKey: DOCS.iconKey,
+        title: headTitle,
+      }}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={() => navigation.popTo("Home")}
+      overlay={room.overlay}
+      {...(selection ? { selection } : {})}
+      {...(destination === "all" && !selecting
+        ? {
+            // Both acts sit on the DRIVE only. Search and Coming due have no
+            // set to choose from, Folders already carries its own New folder —
+            // two differently-scoped "New"s on one screen is a question, not
+            // an affordance — and Starred is a VIEW of the drive: a "New"
+            // there would have to promise a star it cannot set before the
+            // document exists.
+            secondary: { label: "Select", onPress: () => setSelecting(true) },
+          }
+        : {})}
+    >
       <ReplicaStatusBar />
       {destination === "all" ? (
         <AllShelf
@@ -174,6 +183,7 @@ export default function DocsHome({
           onPrefs={updatePrefs}
           selecting={selecting}
           onSelectingChange={setSelecting}
+          onSelection={setSelection}
         />
       ) : destination === "folders" ? (
         <DocsFoldersView drive={drive} />
@@ -186,7 +196,7 @@ export default function DocsHome({
       ) : (
         <DocsSearchView drive={drive} />
       )}
-    </DocsScreen>
+    </AppPlace>
   );
 }
 
@@ -207,6 +217,7 @@ function AllShelf({
   onPrefs,
   selecting,
   onSelectingChange,
+  onSelection,
 }: {
   drive: ReturnType<typeof useDocs>;
   docs: ReturnType<typeof useDocs>["documents"];
@@ -225,6 +236,7 @@ function AllShelf({
   }) => void;
   selecting: boolean;
   onSelectingChange: (active: boolean) => void;
+  onSelection: (selection: RoomSelection | undefined) => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -301,83 +313,86 @@ function AllShelf({
 
   return (
     <View style={styles.shelf}>
-      <View style={styles.controls}>
-        {/* `flex: 1` on the SCROLLER, not its content: without it the row's
+      {/* The filter, sort and arrangement row describes the set being READ.
+          While a set is being chosen the member is no longer reading it, and
+          leaving these live was the second half of the two-bars defect. */}
+      {selecting ? null : (
+        <View style={styles.controls}>
+          {/* `flex: 1` on the SCROLLER, not its content: without it the row's
             fixed siblings and this list negotiate width against each other and
             a chip is left sliced at the sort control's edge. */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
-          contentContainerStyle={styles.chipRow}
-        >
-          {axes.map((axis) => {
-            const chosen = filters[axis.id];
-            return (
-              <Pressable
-                key={axis.id}
-                accessibilityRole="button"
-                accessibilityLabel={axis.label}
-                accessibilityState={{ selected: chosen !== null }}
-                onPress={(event) => openFrom(axis.id, event)}
-                style={[styles.chip, chosen ? styles.chipOn : undefined]}
-              >
-                <Text
-                  style={[
-                    styles.chipLabel,
-                    chosen ? styles.chipLabelOn : undefined,
-                  ]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipRow}
+          >
+            {axes.map((axis) => {
+              const chosen = filters[axis.id];
+              return (
+                <Pressable
+                  key={axis.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={axis.label}
+                  accessibilityState={{ selected: chosen !== null }}
+                  onPress={(event) => openFrom(axis.id, event)}
+                  style={[styles.chip, chosen ? styles.chipOn : undefined]}
                 >
-                  {chosen ?? axis.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-          {anyFilter ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={CLEAR_FILTERS}
-              onPress={() => onFilters(NO_FILTERS)}
-              style={styles.clear}
-            >
-              <Text style={styles.clearLabel}>{CLEAR_FILTERS}</Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Sort: ${sortNow.name}, ${sortNow.sub}`}
-          onPress={(event) => openFrom("sort", event)}
-          style={styles.sortButton}
-        >
-          {/* The glyph alone. The order it names lives in the menu this
-              opens, and the control's `accessibilityLabel` still speaks it. */}
-          <Icon name="SwitchVert" size={18} color={colors.text} />
-        </Pressable>
-        <View style={styles.viewPair}>
-          {(["list", "grid"] as const).map((candidate) => {
-            const on = view === candidate;
-            return (
+                  <Text
+                    style={[
+                      styles.chipLabel,
+                      chosen ? styles.chipLabelOn : undefined,
+                    ]}
+                  >
+                    {chosen ?? axis.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {anyFilter ? (
               <Pressable
-                key={candidate}
                 accessibilityRole="button"
-                accessibilityLabel={
-                  candidate === "list" ? "List view" : "Grid view"
-                }
-                accessibilityState={{ selected: on }}
-                onPress={() => onPrefs({ view: candidate })}
-                style={[styles.viewItem, on ? styles.viewItemOn : undefined]}
+                accessibilityLabel={CLEAR_FILTERS}
+                onPress={() => onFilters(NO_FILTERS)}
+                style={styles.clear}
               >
-                <Icon
-                  name={candidate === "list" ? "List" : "Grid"}
-                  size={16}
-                  color={on ? colors.text : colors.textFaint}
-                />
+                <Text style={styles.clearLabel}>{CLEAR_FILTERS}</Text>
               </Pressable>
-            );
-          })}
+            ) : null}
+          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${sortNow.name}, ${sortNow.sub}`}
+            onPress={(event) => openFrom("sort", event)}
+            style={styles.sortButton}
+          >
+            {/* The glyph alone. The order it names lives in the menu this
+              opens, and the control's `accessibilityLabel` still speaks it. */}
+            <Icon name="SwitchVert" size={18} color={colors.text} />
+          </Pressable>
+          <View style={styles.viewPair}>
+            {(["list", "grid"] as const).map((candidate) => {
+              const on = view === candidate;
+              return (
+                <Pressable
+                  key={candidate}
+                  accessibilityRole="button"
+                  accessibilityLabel={DOCS_ARRANGEMENT[candidate]}
+                  accessibilityState={{ selected: on }}
+                  onPress={() => onPrefs({ view: candidate })}
+                  style={[styles.viewItem, on ? styles.viewItemOn : undefined]}
+                >
+                  <Icon
+                    name={candidate === "list" ? "List" : "Grid"}
+                    size={16}
+                    color={on ? colors.text : colors.textFaint}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
 
       <DriveList
         shelf={null}
@@ -400,6 +415,7 @@ function AllShelf({
         status={allStatus(activeCount)}
         selecting={selecting}
         onSelectingChange={onSelectingChange}
+        onSelection={onSelection}
       />
 
       <AnchoredMenu
@@ -421,7 +437,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: 32,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     chipLabel: { ...t("control"), color: colors.textSoft },
     chipLabelOn: { color: colors.onAccent },
@@ -437,7 +453,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       minHeight: 32,
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing[2],
     },
     clearLabel: {
       ...t("control"),
@@ -449,7 +465,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 8,
       paddingBottom: 8,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     headAction: {
       alignItems: "center",
@@ -458,7 +474,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: 36,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     headActionLabel: { ...t("control"), color: colors.text },
     headPrimary: {
@@ -468,7 +484,7 @@ const makeStyles = (colors: ThemeColors) =>
       gap: 6,
       justifyContent: "center",
       minHeight: 36,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     headPrimaryLabel: { ...t("control") },
     header: {
@@ -476,7 +492,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 8,
       minHeight: 44,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingVertical: 4,
     },
     shelf: { flex: 1 },

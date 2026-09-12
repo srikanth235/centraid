@@ -8,7 +8,6 @@
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
 
 import { LABELS } from "@centraid/blueprints/apps/people/people-copy";
 
@@ -28,10 +27,6 @@ export type {
   AvatarSubject,
   LinkRing,
 } from "../../kit/components/PersonAvatar";
-
-/** Star mark: 17px on a 24 grid, stroke 1.5 (the handoff's path). */
-const STAR_PATH =
-  "M12 3.8l2.6 5.2 5.7.9-4.1 4 1 5.7-5.2-2.8-5.2 2.8 1-5.7-4.1-4 5.7-.9z";
 
 /** Its own 44×44 target — pressing never opens the person. */
 export function StarButton({
@@ -73,16 +68,9 @@ export function StarButton({
         borderRadius: radii.md,
       }}
     >
-      <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
-        <Path
-          d={STAR_PATH}
-          stroke={stroke}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill={starred && !disabled ? colors.text : "none"}
-        />
-      </Svg>
+      {/* The registry's `Star`, filled by the kit (#1015): a hand-rolled path
+          at its own weight drifted from every other glyph on the row. */}
+      <Icon color={stroke} fill={starred && !disabled} name="star" size={17} />
     </Pressable>
   );
 }
@@ -253,8 +241,17 @@ export function PeopleSection(props: PeopleSectionProps): React.JSX.Element {
           {props.count}
         </Text>
       )}
+      {/* THE CARET IS A GLYPH FROM THE ICON SET (#1015, people/findings #9).
+          It used to be the literal characters `−` and `+`, which take neither
+          the set's stroke nor its size scale and read to VoiceOver as their
+          Unicode names — and a leading `+` beside a count on a head that
+          sometimes carries an `Add` verb says ADD, not EXPAND. */}
       {props.collapsible ? (
-        <Text style={styles.sectionCaret}>{open ? "−" : "+"}</Text>
+        <Icon
+          color={colors.textSoft}
+          name={open ? "chevron-down" : "chevron-right"}
+          size={16}
+        />
       ) : null}
     </>
   );
@@ -405,35 +402,6 @@ export function VaultTag({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** Back row: chevron + the DESTINATION's name, never "Back". */
-export function BackRow({
-  destination,
-  onPress,
-}: {
-  destination: string;
-  onPress: () => void;
-}): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Back to ${destination}`}
-      onPress={onPress}
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: spacing[1],
-        minHeight: 40,
-      }}
-    >
-      <Icon name="chevron-left" size={18} color={colors.textSoft} />
-      <Text style={[t("smallStrong"), { color: colors.textSoft }]}>
-        {destination}
-      </Text>
-    </Pressable>
-  );
-}
-
 /** Count tiles: two-up; each filters or navigates — never a bare badge. */
 export function CountTiles({
   tiles,
@@ -517,7 +485,6 @@ const makeStyles = (colors: ThemeColors) =>
     rowPending: { ...t("annotLabel"), color: colors.textSoft },
     rowSub: { ...t("annotLabel"), color: colors.textFaint },
     section: { paddingTop: spacing[4] },
-    sectionCaret: { ...t("smallStrong"), color: colors.textSoft },
     sectionHead: {
       alignItems: "center",
       flexDirection: "row",

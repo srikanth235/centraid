@@ -45,6 +45,17 @@ The phone is the ONLY producer of display rungs for HEVC-coded HEIC (the gateway
 
 Both `skipped` lines mean the item stays exactly as backfillable as it was, and the gateway will stamp it `preview-codec@1` unsupported until a sweep or a re-import. Emitted by `contributeDeviceRungs` in `apps/mobile/src/apps/photos/camera-roll-import-run.ts`. Absence of all three for an HEIC still means the rung branch was never entered — check the candidate's filename extension, which is what routes it.
 
+## The raw text behind a member sentence
+
+A screen prints the member sentence its producer built and never the exception ([protocol.md](protocol.md#the-member-sentence-and-its-detail-1015-r-ny-10)). The raw text is not discarded — it is here, in the Metro / device console ([#1015](https://github.com/srikanth235/centraid/issues/1015)):
+
+| Line | Means |
+| --- | --- |
+| `[centraid] upload: <itemId> was not sent — <reason>` | A queue item's attempt failed. The row the member sees says which of the five outcomes it was (`memberTransferFailure`); `<reason>` is the HTTP refusal, the URL-gate refusal, or the local-file mismatch. |
+| `[centraid] insights: the CSV was not shared — <reason>` | The Activity export did not reach the share sheet. The screen says `The CSV could not be shared.`; `<reason>` is the file or sharing error. |
+
+Emitted by `UploadDrainer.drainOnce` in `apps/mobile/src/lib/upload/uploader.ts` and `useInsights` in `apps/mobile/src/apps/insights/useInsights.ts`. A failed transfer with NO `[centraid] upload:` line never reached the drainer — check the network policy (`canTransfer`), which halts the drain before any attempt.
+
 ## Desktop crash log
 
 | Path | Contents |

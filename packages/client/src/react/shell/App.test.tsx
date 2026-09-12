@@ -168,10 +168,10 @@ describe("App suite", () => {
       expect(stem.textContent).toContain("Search");
       expect(stem.textContent).toContain("All apps");
       expect(stem.textContent).toContain("Home");
-      expect(stem.textContent).toContain("Notifications");
+      expect(stem.textContent).toContain("Needs you");
       expect(stem.textContent).toContain("Activity");
       expect(stem.textContent).toContain("Vault");
-      expect(stem.textContent).not.toContain("Automations");
+      expect(stem.textContent).not.toContain("Rules");
       expect(stem.textContent).not.toContain("Connectors");
       expect(stem.textContent).not.toContain("Copies");
       expect(stem.textContent).not.toContain("System");
@@ -212,12 +212,12 @@ describe("App suite", () => {
       const el = await mount();
       const autoBtn = [
         ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
-      ].find((b) => b.textContent?.includes("Automations"))!;
+      ].find((b) => b.textContent?.includes("Rules"))!;
       await act(async () => {
         autoBtn.click();
       });
       const active = el.querySelector('.stem [data-active="true"]');
-      expect(active?.textContent).toContain("Automations");
+      expect(active?.textContent).toContain("Rules");
     });
 
     it("names an operational route in the bar, and lets its loader fill the count line (#765)", async () => {
@@ -225,29 +225,27 @@ describe("App suite", () => {
       const el = await mount();
       const autoBtn = [
         ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
-      ].find((b) => b.textContent?.includes("Automations"))!;
+      ].find((b) => b.textContent?.includes("Rules"))!;
       await act(async () => {
         autoBtn.click();
       });
       const bar = el.querySelector(".appBar")!;
-      expect(bar.textContent).toContain("Automations");
+      expect(bar.textContent).toContain("Rules");
       // Stub gateway has no automations endpoint: error withdraws the commit.
-      expect(bar.textContent).not.toContain("New automation");
+      expect(bar.textContent).not.toContain("New rule");
       expect(bar.textContent).toContain("Templates");
       expect(el.querySelector(".opsCount")).toBeNull();
 
       await act(async () => {
         publishVitals("automations", {
-          count: "6 automations · 1 failing · 1 paused",
+          count: "6 rules · 1 failing · 1 paused",
           state: "ready",
         });
       });
       expect(el.querySelector(".opsCount")?.textContent).toBe(
-        "6 automations · 1 failing · 1 paused"
+        "6 rules · 1 failing · 1 paused"
       );
-      expect(el.querySelector(".appBar")?.textContent).toContain(
-        "New automation"
-      );
+      expect(el.querySelector(".appBar")?.textContent).toContain("New rule");
       expect(el.querySelector(".appBar")?.textContent).toContain("Templates");
 
       // Loading withdraws both verbs — acting on an unread page is acting on nothing.
@@ -255,7 +253,7 @@ describe("App suite", () => {
         publishVitals("automations", { state: "loading" });
       });
       expect(el.querySelector(".appBar")?.textContent).not.toContain(
-        "New automation"
+        "New rule"
       );
       expect(el.querySelector(".appBar")?.textContent).not.toContain(
         "Templates"

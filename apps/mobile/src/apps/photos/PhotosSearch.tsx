@@ -28,12 +28,10 @@ import { PHOTOS_SEARCH_PLACEHOLDER } from "@centraid/blueprints/apps/photos/shar
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 import type { PageQuery } from "@centraid/core/page";
 
-import Icon from "../../kit/components/Icon";
-import { Text, TextInput } from "../../kit/components/NativeText";
-import TopSafeArea from "../../kit/components/TopSafeArea";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { useSeatPages } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
@@ -79,8 +77,12 @@ const SEARCH_EXAMPLES: readonly string[] = [
 /** Diverges from proto:3961's "the live library" on purpose: `session.search`
  *  resolves against the replica's eager-metadata surface (`REPLICA_LOCAL_SEARCH`)
  *  and every group below comes from replica rows, so the live-library claim is
- *  a sentence this code does not keep. */
-const SEARCH_SCOPE = "searched the whole replica on this device";
+ *  a sentence this code does not keep.
+ *
+ *  `replica` IS AN IMPLEMENTATION NOUN (#1015, photos/findings #9). The scope
+ *  the sentence states is unchanged — everything this phone holds, not the
+ *  gateway's index — and it is said in the app's own vocabulary. */
+const SEARCH_SCOPE = "searched everything this device holds";
 
 const UNREACHABLE_EYEBROW = "Cannot reach the vault";
 const UNREACHABLE_TITLE = "Search needs the gateway";
@@ -102,21 +104,13 @@ interface SemanticHit {
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
-/** Dead registration: nothing pushes this route — the band renders
- *  `PhotosSearchView` in place. Kept only so `App.tsx` does not dangle. */
-export default function PhotosSearch({
-  navigation,
-}: PhotosScreenProps<"PhotosSearch">): React.JSX.Element {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <ReplicaStatusBar />
-      <PhotosSearchView navigation={navigation as unknown as Nav} />
-    </TopSafeArea>
-  );
-}
-
+/*
+ * NO ROUTE OF ITS OWN (#1015, R-NY-7). Search is the band's destination, and
+ * `PhotosHome` renders this view in place. A standalone `PhotosSearch` route
+ * used to be registered as well, pushed by nothing and kept "so App.tsx does
+ * not dangle" — a bare safe area with no header and no band. It was deleted
+ * rather than given a room: a route nobody reaches has nothing to migrate.
+ */
 export function PhotosSearchView({
   navigation,
 }: {
@@ -440,33 +434,24 @@ export function PhotosSearchView({
 
       {/* One query box (proto:4257), docked at the BOTTOM of the surface
           (#712). Nothing else is a control on this shelf. */}
-      <View style={styles.fieldRow}>
-        <View style={styles.field}>
-          <Icon name="search" size={16} color={colors.textSoft} />
-          <TextInput
-            accessibilityLabel="Search photographs"
-            testID={TEST_IDS.photos.searchField}
-            autoFocus
-            value={term}
-            onChangeText={onTerm}
-            placeholder={PHOTOS_SEARCH_PLACEHOLDER}
-            placeholderTextColor={colors.textFaint}
-            style={styles.input}
-          />
-          {term ? (
-            // Mono underlined TEXT (proto:4146-4147), never an ✕ — ambiguous
-            // between "clear this" and "close this".
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Clear the query"
-              onPress={() => setTerm("")}
-              style={styles.clearTarget}
-            >
-              <Text style={styles.clearText}>Clear</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+      {/* One query box (proto:4257), docked at the BOTTOM of the surface
+          (#712) — the route is unchanged; the field is the kit's (#1015, S4),
+          which is where its keyboard contract comes from. Photos had none:
+          an auto-capitalised term silently searched for something else. */}
+      <SearchField
+        accessibilityLabel="Search photographs"
+        // A search PLACE opens with the keyboard up: arriving at a field the
+        // member came here to type in and having to tap it is a wasted tap
+        // (#1015, S4). Restored on the kit's own prop, not a local ref.
+        autoFocus
+        clearLabel="Clear the query"
+        onChangeText={onTerm}
+        placeholder={PHOTOS_SEARCH_PLACEHOLDER}
+        // The handle `photos-search.mjs` types into (#890 W2). It survived the
+        // hand-rolled field it was born on; the kit's field takes it now.
+        testID={TEST_IDS.photos.searchField}
+        value={term}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -533,12 +518,6 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       paddingHorizontal: spacing[6],
     },
-    clearText: {
-      ...t("mono"),
-      color: colors.textSoft,
-      textDecorationLine: "underline",
-    },
-    clearTarget: { justifyContent: "center", minHeight: 34 },
     example: {
       borderColor: colors.line,
       borderRadius: radii.pill,
@@ -576,19 +555,6 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[1],
       paddingTop: spacing[2],
     },
-    // §9's field: 34px tall, 7px radius (proto:4140-4152).
-    field: {
-      alignItems: "center",
-      backgroundColor: colors.bgSunken,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      flexDirection: "row",
-      gap: spacing[2],
-      height: 34,
-      paddingHorizontal: spacing[2],
-    },
-    fieldRow: { paddingHorizontal: spacing[4], paddingVertical: spacing[2] },
     fill: { flex: 1 },
     foot: {
       ...t("mono"),
@@ -623,15 +589,6 @@ const makeStyles = (colors: ThemeColors) =>
     // Exactly one line's height, no vertical padding, Android font padding off
     // (#712). A TextInput stretched to the field's 34px centres against the
     // iOS control box, not the glyph box, and drops off the magnifier's line.
-    input: {
-      ...t("body"),
-      color: colors.text,
-      flex: 1,
-      height: t("body").lineHeight,
-      includeFontPadding: false,
-      paddingVertical: 0,
-      textAlignVertical: "center",
-    },
     panel: {
       borderColor: colors.line,
       borderRadius: radii.lg,
@@ -643,6 +600,5 @@ const makeStyles = (colors: ThemeColors) =>
     panelBody: { ...t("small"), color: colors.textSoft },
     panelNet: { borderColor: colors.net },
     panelTitle: { ...t("display"), color: colors.text },
-    safe: { flex: 1 },
     status: { ...t("mono"), color: colors.textSoft },
   });

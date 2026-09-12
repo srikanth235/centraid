@@ -8,13 +8,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
-import Icon from "../kit/components/Icon";
+import { SHARING_CHANGE_NOT_SAVED } from "@centraid/client/sharing-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
+
 import { Text } from "../kit/components/NativeText";
-import Tappable from "../kit/components/Tappable";
-import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
+import { PushedPage } from "../kit/rooms";
 import { TEST_IDS } from "../kit/test-ids";
-import { t, useTheme } from "../kit/theme";
+import { pageMargin, spacing, t, useTheme } from "../kit/theme";
 import { approveLink, listLinks } from "../lib/replica/links-transport";
 import type { GatewayLink } from "../lib/replica/links-transport";
 import type { SettingsScreenProps } from "../navigation";
@@ -26,6 +27,7 @@ import {
 } from "./sharing-reads";
 import type { ShareRead } from "./sharing-reads";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
+import { useShellParent } from "./shell-places";
 
 export default function SharingScreen({
   navigation,
@@ -56,7 +58,8 @@ export default function SharingScreen({
         await action();
         refresh();
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : String(error));
+        console.warn("[sharing] change failed", error);
+        setErrorMessage(`${SHARING_CHANGE_NOT_SAVED} ${RETRY_ACTION}`);
       } finally {
         setBusyId(undefined);
       }
@@ -65,31 +68,15 @@ export default function SharingScreen({
   );
 
   const linkRows = links.state === "read" ? links.rows : [];
+  const backTo = useShellParent();
 
   return (
-    <TopSafeArea
-      style={[styles.safe, { backgroundColor: colors.bg }]}
+    <PushedPage
+      backTo={backTo}
+      onBack={() => navigation.goBack()}
       testID={TEST_IDS.sharing.screen}
+      title="People and circles"
     >
-      <View style={styles.header}>
-        <Tappable
-          accessibilityLabel="Back"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Tappable>
-        <View style={styles.headerCopy}>
-          <Text style={[t("title"), { color: colors.text }]}>
-            People &amp; circles
-          </Text>
-          {links.state === "read" ? (
-            <Text style={[t("small"), { color: colors.textSoft }]}>
-              {linkRows.length} {linkRows.length === 1 ? "person" : "people"}
-            </Text>
-          ) : null}
-        </View>
-      </View>
       <ScrollView contentContainerStyle={styles.body}>
         {errorMessage ? (
           <Text style={[t("small"), { color: colors.danger }]}>
@@ -138,7 +125,7 @@ export default function SharingScreen({
           )}
         </Section>
       </ScrollView>
-    </TopSafeArea>
+    </PushedPage>
   );
 }
 
@@ -167,10 +154,7 @@ function Section({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 18, padding: 18 },
-  header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 18 },
-  headerCopy: { flex: 1 },
-  safe: { flex: 1 },
+  body: { gap: spacing[4], padding: pageMargin, paddingBottom: spacing[6] },
   section: { gap: 8 },
   sectionTitle: { letterSpacing: 0.6 },
 });

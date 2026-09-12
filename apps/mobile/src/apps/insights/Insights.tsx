@@ -15,7 +15,6 @@
 // Custodian seat; Activity on this phone is only the member's run history.
 
 import React, { useMemo } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
 
 import {
   INSIGHTS_EMPTY_BODY,
@@ -42,19 +41,16 @@ import DistributionBlock from "../../kit/components/DistributionBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
-import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
-import NoteBlock from "../../kit/components/NoteBlock";
 import PanelBlock from "../../kit/components/PanelBlock";
-import PlaceHeader from "../../kit/components/PlaceHeader";
 import RowsBlock from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
-import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
-import { memberFacingError } from "../../kit/member-error";
 import { ACTIVITY_SECTION_ORDER } from "../../kit/origin-seat-layout";
+import { SystemPlace } from "../../kit/rooms";
 import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
+import { usePlaceFrame } from "../../screens/home/usePlaceFrame";
+import { alertsEntryCopy } from "./alerts-model";
 import GatewayAlerts from "./GatewayAlerts";
 import {
   failedLegendKey,
@@ -67,13 +63,13 @@ import {
   windowChips,
 } from "./insights-model";
 import { styles } from "./Insights.styles";
+import { useAlertCount } from "./useAlertCount";
 import { useInsights } from "./useInsights";
 import type { InsightsController } from "./useInsights";
 
 /** The error state: what failed, what is safe, one way forward. The rollup
  *  rebuilds on its own schedule and nothing here can trigger it, so the verb
  *  is the honest one — ask again. */
-const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
 const ERROR_TITLE = INSIGHTS_ERROR_TITLE;
 const ERROR_BODY = INSIGHTS_ERROR_BODY;
 const ERROR_RETRY = RETRY_ACTION;
@@ -121,7 +117,7 @@ export default function InsightsScreen({
   route,
 }: InsightsScreenProps): React.JSX.Element {
   return route.params?.initialTab === "alerts" ? (
-    <GatewayAlerts onLeave={() => navigation.goBack()} />
+    <GatewayAlerts navigation={navigation} />
   ) : (
     <Analytics navigation={navigation} route={route} />
   );
@@ -129,44 +125,41 @@ export default function InsightsScreen({
 
 function AnalyticsBody({
   page,
+  alertCount,
+  onOpenAlerts,
   onOpenAutomation,
 }: {
   page: InsightsController;
+  alertCount: number | undefined;
+  onOpenAlerts: () => void;
   onOpenAutomation: (automationRef: string) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { load, state, windowDays } = page;
 
-  if (state === "loading")
-    return (
-      <>
-        <SkeletonRows accessibilityLabel="Reading the run log" />
-        <NoteBlock text={LOADING_NOTE} />
-      </>
-    );
-
-  if (state === "error" || load.kind !== "ready")
-    return (
-      <PanelBlock
-        body={ERROR_BODY}
-        eyebrow={ERROR_EYEBROW}
-        facts={
-          load.kind === "error"
-            ? [
-                {
-                  key: "what happened",
-                  net: true,
-                  value: memberFacingError(load.reason),
-                },
-              ]
-            : undefined
-        }
-        action={{ label: ERROR_RETRY, onPress: page.retry }}
-        title={ERROR_TITLE}
-        tone="net"
-      />
-    );
+  // Loading and error are the ROOM's states (#1015, Wave 2). This guard is
+  // the type narrowing they leave behind, never a second error plate.
+  if (load.kind !== "ready") return null;
 
   const { summary } = load;
+  // The standing way into the alerts view (R-NY-2): drawn in the empty
+  // window too, because a gateway can be down on a day nothing ran.
+  const alerts = (
+    <RowsBlock
+      accessibilityLabel="Alerts"
+      rows={[
+        {
+          ...alertsEntryCopy(alertCount),
+          action: {
+            hint: "Open the alerts",
+            label: "Open",
+            onPress: onOpenAlerts,
+          },
+          key: "alerts",
+          onPress: onOpenAlerts,
+        },
+      ]}
+    />
+  );
   const chips = (
     <ChipsBlock
       accessibilityLabel="Time window"
@@ -184,6 +177,7 @@ function AnalyticsBody({
     return (
       <>
         {chips}
+        {alerts}
         <EmptyBlock body={EMPTY_BODY} routine title={EMPTY_TITLE} />
       </>
     );
@@ -195,6 +189,7 @@ function AnalyticsBody({
   return (
     <>
       {chips}
+      {alerts}
       <PanelBlock
         body={INSIGHTS_SPEND_NOTE}
         facts={insightSpendFacts(summary, PHONE_INSIGHT_WORDS)}
@@ -274,8 +269,10 @@ function AnalyticsBody({
 }
 
 function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
+  const frame = usePlaceFrame("stats");
   const { colors } = useTheme();
   const page = useInsights();
+  const alertCount = useAlertCount();
   const ink = useMemo(
     () => ({
       error: { color: colors.net },
@@ -285,51 +282,60 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
   );
   const summary = page.load.kind === "ready" ? page.load.summary : undefined;
   const line = healthLineFor(page.state, originActivityHealth(summary));
+  // PUSHED, not navigated: navigating to this same route name would swap the
+  // overview's own params and leave no Activity to go back to. Pushed over
+  // Activity, the alerts view draws a back key (R-NY-1).
+  const openAlerts = (): void =>
+    navigation.push("Insights", { initialTab: "alerts" });
 
   return (
-    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
-      <View style={styles.page}>
-        <View style={styles.head}>
-          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
-          <View style={styles.headBar}>
-            {/* No filled verb at all — this page writes nothing. The quiet
-                verb is withdrawn while loading (the reference's own gating)
-                and while there is nothing read to export, because a share
-                sheet over an empty file is worse than no button. */}
-            <PlaceHeader
-              title="Activity"
-              {...(summary && !page.exporting
-                ? {
-                    secondary: { label: "Export CSV", onPress: page.exportCsv },
-                  }
-                : {})}
-            />
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.body}
-          refreshControl={
-            <RefreshControl
-              onRefresh={() => void page.refresh()}
-              refreshing={page.refreshing}
-              tintColor={colors.textFaint}
-            />
-          }
-        >
-          {page.exportError ? (
-            <Text style={[styles.exportError, ink.error]}>
-              {memberFacingError(page.exportError)}
-            </Text>
-          ) : null}
-          <AnalyticsBody
-            onOpenAutomation={(automationRef) =>
-              navigation.navigate("Automations", { automationRef })
+    <SystemPlace
+      error={
+        page.state === "error"
+          ? {
+              // No `detail`: the reason is the gateway's own words ("vault
+              // host returned HTTP 404"), and S14 gives the member one noun
+              // and Try again, never the transport.
+              body: ERROR_BODY,
+              retry: { label: ERROR_RETRY, onPress: page.retry },
+              // The error replaces the whole body, standing Alerts row
+              // included — but the alerts read a different source (the
+              // notices), so the way in must survive a run log that did not
+              // load (#1015 R-NY-2).
+              secondary: { label: "Open alerts", onPress: openAlerts },
+              title: ERROR_TITLE,
             }
-            page={page}
-          />
-        </ScrollView>
-      </View>
-      <HealthLine text={line.text} />
-    </TopSafeArea>
+          : undefined
+      }
+      footer={<HealthLine text={line.text} />}
+      loading={
+        page.state === "loading"
+          ? { label: "Reading the run log", note: LOADING_NOTE }
+          : undefined
+      }
+      {...frame}
+      onRefresh={() => void page.refresh()}
+      refreshing={page.refreshing}
+      // No filled verb at all — this page writes nothing. The quiet verb is
+      // withdrawn while loading (the reference's own gating) and while there
+      // is nothing read to export, because a share sheet over an empty file
+      // is worse than no button.
+      {...(summary && !page.exporting
+        ? { secondary: { label: "Export CSV", onPress: page.exportCsv } }
+        : {})}
+      title="Activity"
+    >
+      {page.exportError ? (
+        <Text style={[styles.exportError, ink.error]}>{page.exportError}</Text>
+      ) : null}
+      <AnalyticsBody
+        alertCount={alertCount}
+        onOpenAlerts={openAlerts}
+        onOpenAutomation={(automationRef) =>
+          navigation.navigate("Automations", { automationRef })
+        }
+        page={page}
+      />
+    </SystemPlace>
   );
 }

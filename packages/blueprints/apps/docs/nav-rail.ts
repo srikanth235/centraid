@@ -20,7 +20,7 @@ const DRIVE_GROUP: readonly { id: ShelfId; label: string }[] = [
   { id: null, label: "All" },
   { id: RECENT, label: "Recently changed" },
   { id: STARRED, label: "Starred" },
-  { id: SHARED, label: "Shared with you" },
+  { id: SHARED, label: "Shared" },
 ];
 
 /** One counts map, shared with the strip and the More sheet. */

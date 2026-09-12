@@ -45,7 +45,7 @@ const SHELF_COPY: Readonly<Record<string, ShelfCopy>> = {
   [TRASH]: { title: "Docs", unit: "documents" },
   [SEARCH]: { title: "Search", unit: "results" },
   [STORAGE]: { title: "Storage", unit: "documents" },
-  [NEWDOC]: { title: "Add to Docs", unit: "documents" },
+  [NEWDOC]: { title: "Add a document", unit: "documents" },
   [SCAN]: { title: "Scan a document", unit: "pages" },
   [CAPABILITIES]: { title: "What Docs may read", unit: "capabilities" },
   [FILING]: { title: "Proposed filing", unit: "proposals" },
@@ -70,7 +70,7 @@ export const SHELF_LABELS: Readonly<Record<string, string>> = {
   [FOLDERS]: "Folders",
   [RECENT]: "Recently changed",
   [STARRED]: "Starred",
-  [SHARED]: "Shared with you",
+  [SHARED]: "Shared",
   [TRASH]: "Trash",
   [SEARCH]: "Search",
   [STORAGE]: "Storage",
@@ -218,7 +218,8 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
     variant: "shelf",
     display: false,
     title: "No folders yet",
-    body: "A folder is a label on the document, not a place it sits.",
+    // The caption under the set states what a folder is, once (R-NY-11).
+    body: "Make one with New folder, then move documents into it.",
   },
 };
 
@@ -392,7 +393,8 @@ export interface MoreRow {
 export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
   { shelf: RECENT, label: "Recently changed", live: true },
   { shelf: STARRED, label: "Starred", meta: "shared", live: true },
-  { shelf: TRASH, label: "Trash", meta: "purged in 30 days", live: true },
+  // The trash caption states the purge, once (R-NY-11): no meta here.
+  { shelf: TRASH, label: "Trash", live: true },
   { shelf: NEWDOC, label: "Add a document", meta: "the ways in", live: true },
   {
     shelf: SCAN,

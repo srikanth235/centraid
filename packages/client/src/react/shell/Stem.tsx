@@ -111,11 +111,7 @@ function LauncherItem({
           strokeWidth={compact ? undefined : STEM_GLYPH_STROKE}
         />
       </span>
-      <span className={chrome.launchLabel}>
-        {compact
-          ? (destination.shortLabel ?? destination.label)
-          : destination.label}
-      </span>
+      <span className={chrome.launchLabel}>{destination.label}</span>
       <span className={chrome.launchBar} aria-hidden="true" />
     </button>
   );

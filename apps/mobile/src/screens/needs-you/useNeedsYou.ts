@@ -1,0 +1,199 @@
+// Needs you's data half (#765): read (`getNotifications()`), SSE doorbell,
+// poll, push permission, replica wake, and the four decision writes — all
+// load-bearing. Notices ride the read and are never counted or written here,
+// and standing grants are Settings → Access's (#1015 R-NY-2): the queue of
+// decisions is what the page is FOR.
+
+import * as WebBrowser from "expo-web-browser";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import type { OpsState } from "../../kit/components/health-line";
+import {
+  ASSIST_RETURN_URL,
+  classifyAuthSession,
+  reconnectFailureMessage,
+} from "../../lib/connection-reauth";
+import {
+  beginNotificationsConnectionAuthorization,
+  completeNotificationsConnectionAuthorization,
+  confirmParked,
+  decideNotificationsOutbox,
+  decideNotificationsScope,
+  getNotifications,
+  resolveGatewayBase,
+  subscribeMobileNotificationsChanges,
+} from "../../lib/gateway";
+import type { MobileNotifications } from "../../lib/gateway";
+import { requestNotificationPermission } from "../../lib/notifications-core";
+import { registerReplicaPushWake } from "../../lib/replica/background-sync";
+import { SHELL_ERROR } from "../shell-copy";
+import { NOT_PAIRED, opsStateFor, waitingTotal } from "./needs-you-model";
+
+/** How often the page re-reads while it is open, between doorbells. */
+const POLL_MS = 60_000;
+
+export type NeedsYouLoad =
+  | { kind: "loading" }
+  /** `at` anchors every relative phrase — never a render-time clock read. */
+  | { at: number; kind: "ready"; data: MobileNotifications }
+  /** `reason` is the error panel's one fact; its body never changes. */
+  | { kind: "error"; reason: string; unpaired: boolean };
+
+export interface NeedsYouController {
+  load: NeedsYouLoad;
+  state: OpsState;
+  data: MobileNotifications | undefined;
+  now: number;
+  waiting: number;
+  refreshing: boolean;
+  /** Id of the decision mid-flight; its verb is withdrawn. */
+  busyId: string | undefined;
+  actionError: string | undefined;
+  refresh: () => Promise<void>;
+  retry: () => void;
+  /** Run one write, then re-read. Never patches a row in place: what is
+   *  waiting is the gateway's to report. */
+  act: (id: string, write: () => Promise<void>) => void;
+  approveOutbox: (
+    itemId: string,
+    alwaysAllow: boolean,
+    artifact?: Record<string, unknown>
+  ) => void;
+  denyOutbox: (itemId: string) => void;
+  confirmParkedInvocation: (invocationId: string, approve: boolean) => void;
+  decideScope: (requestId: string, approve: boolean) => void;
+  reconnect: (connectionId: string) => void;
+}
+
+// S14 (#1015): one noun for a decision that did not land, whatever the
+// exception said. A failed READ is the room's error, never this line.
+function describe(_error: unknown): string {
+  return SHELL_ERROR.needsYou;
+}
+
+async function read(apply: (next: NeedsYouLoad) => void): Promise<void> {
+  try {
+    if (!(await resolveGatewayBase())) {
+      apply({ kind: "error", reason: NOT_PAIRED, unpaired: true });
+      return;
+    }
+    const data = await getNotifications();
+    apply({ at: Date.now(), data, kind: "ready" });
+  } catch (error) {
+    apply({ kind: "error", reason: describe(error), unpaired: false });
+  }
+}
+
+/** In-app reconnection: the host app must stay active so the phone-local
+ *  tunnel serves the gateway's OAuth callback and the Assist return resolves
+ *  into THIS process. See `lib/connection-reauth.ts`. */
+async function reauthorize(connectionId: string): Promise<void> {
+  const authUrl = await beginNotificationsConnectionAuthorization(connectionId);
+  const outcome = classifyAuthSession(
+    await WebBrowser.openAuthSessionAsync(authUrl, ASSIST_RETURN_URL)
+  );
+  const failure = reconnectFailureMessage(outcome);
+  if (failure) throw new Error(failure);
+  if (outcome.kind === "assist-handoff")
+    await completeNotificationsConnectionAuthorization(outcome.handoff);
+  // `closed` needs nothing: BYO finishes at the gateway; caller re-reads.
+}
+
+export function useNeedsYou(): NeedsYouController {
+  const [load, setLoad] = useState<NeedsYouLoad>({ kind: "loading" });
+  const [refreshing, setRefreshing] = useState(false);
+  const [busyId, setBusyId] = useState<string | undefined>();
+  const [actionError, setActionError] = useState<string | undefined>();
+  // A ref, not state: the guard must hold WITHIN a tick — two taps before a
+  // re-render would otherwise stage two decisions about one item.
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    void read(setLoad);
+    void requestNotificationPermission()
+      .then(async (granted) => {
+        if (!granted) return;
+        const base = await resolveGatewayBase();
+        if (base) await registerReplicaPushWake(base);
+      })
+      .catch(() => undefined);
+    const controller = new AbortController();
+    void subscribeMobileNotificationsChanges(
+      () => void read(setLoad),
+      controller.signal
+    ).catch(() => undefined);
+    const timer = setInterval(() => void read(setLoad), POLL_MS);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, []);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true);
+    setActionError(undefined);
+    await read(setLoad);
+    setRefreshing(false);
+  }, []);
+
+  const retry = useCallback((): void => {
+    setLoad({ kind: "loading" });
+    setActionError(undefined);
+    void read(setLoad);
+  }, []);
+
+  const act = useCallback((id: string, write: () => Promise<void>): void => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusyId(id);
+    setActionError(undefined);
+    void (async (): Promise<void> => {
+      try {
+        await write();
+        await read(setLoad);
+      } catch (error) {
+        setActionError(describe(error));
+      } finally {
+        inFlight.current = false;
+        setBusyId(undefined);
+      }
+    })();
+  }, []);
+
+  const data = load.kind === "ready" ? load.data : undefined;
+  const waiting = data ? waitingTotal(data) : 0;
+  const state = useMemo(
+    () => opsStateFor(load.kind === "ready" ? "ready" : load.kind, waiting),
+    [load.kind, waiting]
+  );
+
+  return {
+    act,
+    actionError,
+    approveOutbox: (itemId, alwaysAllow, artifact) =>
+      act(itemId, () =>
+        decideNotificationsOutbox(itemId, "approve", {
+          ...(artifact ? { artifact } : {}),
+          alwaysAllow,
+        })
+      ),
+    busyId,
+    confirmParkedInvocation: (invocationId, approve) =>
+      act(invocationId, () => confirmParked(invocationId, approve)),
+    data,
+    decideScope: (requestId, approve) =>
+      act(requestId, () => decideNotificationsScope(requestId, approve)),
+    denyOutbox: (itemId) =>
+      act(itemId, () => decideNotificationsOutbox(itemId, "discard")),
+    load,
+    // Nothing not `ready` shows a time; epoch keeps clocks out of render.
+    now: load.kind === "ready" ? load.at : 0,
+    reconnect: (connectionId) =>
+      act(connectionId, () => reauthorize(connectionId)),
+    refresh,
+    refreshing,
+    retry,
+    state,
+    waiting,
+  };
+}
