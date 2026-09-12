@@ -73,6 +73,20 @@ tokio = { version = "1", features = [
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # `proptest` is declared above, by lane D3. One entry for the workspace.
 
+# Wave 2 lane R — the byte plane, key custody, backup and recovery (#1020).
+# These are the versions `packages/tunnel/data-plane` seals the cross-language
+# golden with. The formats are normative (D-1020-R1), so a major bump on any of
+# the AEAD/KDF crates is a re-keying event to be proven against
+# `contracts/golden/format-golden.json`, never routine housekeeping.
+aes-gcm = "0.11"
+hkdf = "0.13"
+hmac = "0.13"
+ryu-js = "1.0.3"
+scrypt = "0.12"
+subtle = "2"
+tempfile = "3"
+zstd = "0.13"
+
 # The edit-run loop is the new Hermes (#1020): dependencies optimised once, our crates rebuilt fast.
 [profile.dev.package."*"]
 opt-level = 2

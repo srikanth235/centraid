@@ -1,0 +1,26 @@
+[package]
+name = "centraid-media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+aes-gcm.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+flate2.workspace = true
+hex.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+# ECMAScript number spelling: the canonicalizer must agree with
+# `JSON.stringify`, not with serde_json's integer spelling (#1020, D-1020-R1).
+ryu-js.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+zstd.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
