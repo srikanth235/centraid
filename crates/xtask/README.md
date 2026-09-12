@@ -17,7 +17,7 @@ Each profile is a **superset** of the one before, stated in code as concatenatio
 
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
-| `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s **warm**, < 3000 s **cold** | the pre-push loop, by hand |
+| `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | the pre-push loop, by hand |
 | `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static` | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `v0-oracle`, `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
 | `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
@@ -25,7 +25,7 @@ Each profile is a **superset** of the one before, stated in code as concatenatio
 
 The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as [D-1020-B2](../../docs/decisions.md#decisions--lane-b2-1020).
 
-**`local` is scored warm or cold, and they are different numbers.** The 120 s promise is the developer's feedback time after an edit, not the cost of the first build after a clone — 24.0 s against 1394.6 s on this container at nine crates. The runner asks whether **every** workspace member has a *linked* artifact in `target/debug/deps` (a `.rlib` or an extensionless executable): an `.rmeta` from a previous `cargo check` does not count, so a tree that has only been checked cannot buy a warm budget while its `test` step still has to compile and link everything. A *stale* incremental tree does read as warm, on purpose — that is the tree the loop runs on, and rebuilding the delta is what the budget promises. Each run prints `tree warm` or `tree cold` with the reason; `--cold` forces the cold branch without deleting `target/`. A cold `local` run is charged against `coldLocalProfileSeconds` in `compile-time.json` and **fails** if that key states no ceiling, because cold must never be the answer that makes a slow gate green. No other profile has a cold ceiling: they run in CI on a runner that has never seen the workspace, so their budgets hold cold or they are not budgets.
+**`local` is scored warm or cold, and they are different numbers.** The 120 s promise is the developer's feedback time after an edit, not the cost of the first build after a clone — 41.6 s against 1562.4 s on this container at ten crates. The runner asks whether **every** workspace member has a _linked_ artifact in `target/debug/deps` (a `.rlib` or an extensionless executable): an `.rmeta` from a previous `cargo check` does not count, so a tree that has only been checked cannot buy a warm budget while its `test` step still has to compile and link everything. A _stale_ incremental tree does read as warm, on purpose — that is the tree the loop runs on, and rebuilding the delta is what the budget promises. Each run prints `tree warm` or `tree cold` with the reason; `--cold` forces the cold branch without deleting `target/`. A cold `local` run is charged against `coldLocalProfileSeconds` in `compile-time.json` and **fails** if that key states no ceiling, because cold must never be the answer that makes a slow gate green. No other profile has a cold ceiling: they run in CI on a runner that has never seen the workspace, so their budgets hold cold or they are not budgets.
 
 `mobile-jvm` is in the ledgers and not in the step lists. Running it prints a refusal naming wave 3 lane E, which lands the Kotlin Multiplatform shared module and the Gradle suites, measures `budgetSeconds` and `kotlinNativeLinkSeconds`, and sets them both. A profile with no steps that scored itself green would report "the Kotlin suites passed" before one exists.
 
@@ -118,15 +118,15 @@ What each ledger stores is a ceiling with **stated headroom**, not the last meas
 
 On this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `tests/journeys.json`), with `CENTRAID_GATE_HARDWARE` overridable so a self-hosted device runner can score itself. The wave-1 column is a workspace of **one** crate over clap and serde_json; the 2026-09-12 column is **nine** crates over iroh, quinn, tokio, prost and rusqlite-bundled, which is why the ceilings were re-based ([D-1020-B2](../../docs/decisions.md#decisions--lane-b2-1020)):
 
-| Measurement                                        | Wave 1 | 2026-09-12    | Ceiling   |
-| -------------------------------------------------- | ------ | ------------- | --------- |
-| `gate --profile local`, **warm**                   | —      | 24.0 s        | 120 s     |
-| `gate --profile local`, **cold**                   | 4.9 s  | 1394.6 s      | 3000 s    |
-| `gate --profile pr`, cold                          | 16.8 s | 1420.1 s      | 1500 s    |
-| `gate --profile pr`, warm                          | —      | 575.8 s       | 1500 s    |
-| `cargo check --workspace`, clean                   | 17.4 s | 541.7 s       | 1200 s    |
-| `cargo check --workspace`, one line in an app crate | 0.1 s  | 0.6 s         | 10 s      |
-| `cargo test -p centraid-net`, repeated             | 10.4 s | 2.4 s         | 60 s      |
-| `cargo build --workspace --release`, clean         | 28.9 s | 240.3-666.6 s | 1400 s    |
+| Measurement | Wave 1 | 2026-09-12 | Ceiling |
+| --- | --- | --- | --- |
+| `gate --profile local`, **warm** | — | 24.0-41.6 s | 120 s |
+| `gate --profile local`, **cold** | 4.9 s | 1394.6-1562.4 s | 3200 s |
+| `gate --profile pr`, cold | 16.8 s | 1420.1 s | 1500 s |
+| `gate --profile pr`, warm | — | 575.8 s | 1500 s |
+| `cargo check --workspace`, clean | 17.4 s | 541.7 s | 1200 s |
+| `cargo check --workspace`, one line in an app crate | 0.1 s | 0.6 s | 10 s |
+| `cargo test -p centraid-net`, repeated | 10.4 s | 2.4 s | 60 s |
+| `cargo build --workspace --release`, clean | 28.9 s | 240.3-666.6 s | 1400 s |
 
-Two numbers that are not ceilings and are worth knowing. A cold `local` run spends 587.6 s in `clippy` and 806.5 s in `cargo test --workspace` — the same dependency graph compiled twice, once for check units and once for artifacts to link against. And alternating `cargo test -p centraid-net` with `cargo test --workspace` costs 185.8 s / 161.7 s each way against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts.
+Two numbers that are not ceilings and are worth knowing. A cold `local` run spends 587.6-626.1 s in `clippy` and 806.5-935.6 s in `cargo test --workspace` — the same dependency graph compiled twice, once for check units and once for artifacts to link against. And alternating `cargo test -p centraid-net` with `cargo test --workspace` costs 185.8 s / 161.7 s each way against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts.
