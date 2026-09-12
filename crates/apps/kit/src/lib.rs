@@ -35,6 +35,7 @@
 //! | Turn a denial into an error | a denial is a value in the app's own payload; the kit's [`error::KitError`] has no denial variant |
 
 pub mod changes;
+pub mod contract_vault;
 pub mod error;
 pub mod fixtures;
 pub mod grammar;

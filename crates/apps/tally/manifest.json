@@ -1,0 +1,2035 @@
+{
+  "manifestVersion": 1,
+  "id": "tally",
+  "name": "Tally",
+  "description": "Split, settled — a personal expense splitter as a projection of the vault. Track shared costs across groups and friends, see who owes whom, and settle up. A friend is a canonical core.party; a group is a social.circle (the vault's one audience mechanism) decorated by a tally.group with an emoji icon, membership on the circle (you included). An expense stores its resolved splits (equally, exact amounts, percentages, shares, equally-adjusted or by line), its payers (one or several), and the method it was entered with, all re-validated server-side to sum to the amount; an expense can also stand outside any group as a 1:1. A settlement is a real cash payment. Balances are NEVER stored — they are derived at read time by the one balance engine, and the simplification proposal and rate suggestion are derived the same way and written nowhere. Adding, editing, re-allocating and deleting expenses, settling up, leaving and archiving groups, and preparing a reminder all run through typed vault commands — consent-checked and receipted; a prepared reminder parks for your confirmation and is never sent. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.3.0",
+  "iconKey": "Receipt",
+  "colorKey": "indigo",
+  "vault": {
+    "why": "Keeps your shared expenses split, balanced and settled.",
+    "scopes": [
+      {
+        "schema": "core",
+        "table": "vault",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "friend",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "group",
+        "verbs": "read"
+      },
+      {
+        "schema": "social",
+        "table": "circle",
+        "verbs": "read"
+      },
+      {
+        "schema": "social",
+        "table": "circle_member",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense_split",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense_payer",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense_line_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense_line_allocation",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "settlement",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "obligation",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "nudge",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "recurring_expense",
+        "verbs": "read"
+      },
+      {
+        "schema": "schedule",
+        "table": "recurrence_exception",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "add_friend",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "create_group",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "rename_group",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "add_group_member",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "remove_group_member",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "delete_group",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "add_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "add_receipt_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "edit_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "delete_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "restore_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "undo_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "settle_up",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "reallocate_receipt",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "set_group_simplification",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "leave_group",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "archive_group",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "nudge",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "save_recurring_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "materialize_recurring_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "edit_recurring_expense_occurrence",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read",
+        "rowFilter": [
+          {
+            "column": "entity_type",
+            "op": "eq",
+            "value": "tally.expense"
+          }
+        ],
+        "fieldMask": [
+          "revision_id",
+          "entity_type",
+          "entity_id",
+          "operation",
+          "snapshot_json",
+          "recorded_at",
+          "undo_until",
+          "undone_at"
+        ]
+      },
+      {
+        "schema": "core",
+        "table": "transaction",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "account",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link_entities",
+        "verbs": "act"
+      }
+    ]
+  },
+  "actionSideEffect": "vault-write",
+  "actions": [
+    {
+      "name": "add-receipt-expense",
+      "description": "Publish a reviewed receipt image as canonical content together with OCR line items, tax/tip rows, per-line participant allocations, and the resulting balanced expense.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "paid_by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "spent_on": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "staged_sha": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "ocr_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "share_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["item", "tax", "tip"]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "amount_minor": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allocations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "party_id": {
+                        "type": "string"
+                      },
+                      "share_minor": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["party_id", "share_minor"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "description",
+                "amount_minor",
+                "allocations"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "paid_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "paid_minor"],
+              "additionalProperties": false
+            }
+          },
+          "split_params": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "staged_sha",
+          "ocr_text",
+          "splits",
+          "line_items"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.attachment",
+        "core.content_derivative",
+        "core.content_item",
+        "core.content_representation",
+        "core.content_text",
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
+    },
+    {
+      "name": "add-expense",
+      "description": "Add an expense through tally.add_expense. The division (equally / exact / percentages / shares / equally-adjusted / by line) is resolved to a splits map client-side; the command re-validates it sums to the amount and every participant is in scope, and records the method so an edit re-opens the way it was entered. `group_id` is optional — without it the expense is a group-less 1:1 and participants are checked against the friend roster. `payers` carries several payers; omitted, `paid_by` paid it all.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "original_amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "original_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "settlement_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "rate_scaled": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rate_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "rate_source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rate_date": {
+            "type": "string",
+            "minLength": 1
+          },
+          "paid_by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "spent_on": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "share_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "paid_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "paid_minor"],
+              "additionalProperties": false
+            }
+          },
+          "split_method": {
+            "type": "string",
+            "enum": [
+              "equally",
+              "exact",
+              "percentages",
+              "shares",
+              "adjusted",
+              "by_line"
+            ]
+          },
+          "split_params": {
+            "type": "object"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["item", "tax", "tip"]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "amount_minor": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allocations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "party_id": {
+                        "type": "string"
+                      },
+                      "share_minor": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["party_id", "share_minor"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "description",
+                "amount_minor",
+                "allocations"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "splits"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
+    },
+    {
+      "name": "save-recurring-expense",
+      "description": "Create or edit a deterministic recurring expense template with fixed-point currency provenance and a human-readable recurrence preview.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "original_amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "original_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "settlement_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "paid_by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "splits": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "weight": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": ["party_id", "weight"],
+              "additionalProperties": false
+            }
+          },
+          "rrule": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anchor_start": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tz": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rate_scaled": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rate_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "rate_source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rate_date": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "ended"]
+          }
+        },
+        "required": [
+          "group_id",
+          "description",
+          "original_amount_minor",
+          "original_currency",
+          "settlement_currency",
+          "paid_by",
+          "category",
+          "splits",
+          "rrule",
+          "anchor_start",
+          "tz"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["tally.recurring_expense"]
+    },
+    {
+      "name": "materialize-recurring-expense",
+      "description": "Materialize one exact recurring occurrence idempotently, respecting occurrence/future exceptions.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "original_start_local": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["template_id", "original_start_local"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "tally.expense",
+        "tally.expense_payer",
+        "tally.expense_split",
+        "tally.recurring_expense"
+      ]
+    },
+    {
+      "name": "edit-recurring-expense-occurrence",
+      "description": "Skip or override this occurrence, this and future occurrences, or the full recurring expense series.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "original_start_local": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["occurrence", "future", "series"]
+          },
+          "action": {
+            "type": "string",
+            "enum": ["skip", "override"]
+          },
+          "override": {
+            "type": "object"
+          }
+        },
+        "required": ["template_id", "original_start_local", "scope", "action"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["schedule.recurrence_exception", "tally.recurring_expense"]
+    },
+    {
+      "name": "edit-expense",
+      "description": "Rewrite an expense through tally.edit_expense — same fields as add, re-validated the same way, including payers, the recorded division and typed lines.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "original_amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "original_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "settlement_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "rate_scaled": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rate_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "rate_source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rate_date": {
+            "type": "string",
+            "minLength": 1
+          },
+          "paid_by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "spent_on": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "share_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "paid_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "paid_minor"],
+              "additionalProperties": false
+            }
+          },
+          "split_method": {
+            "type": "string",
+            "enum": [
+              "equally",
+              "exact",
+              "percentages",
+              "shares",
+              "adjusted",
+              "by_line"
+            ]
+          },
+          "split_params": {
+            "type": "object"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["item", "tax", "tip"]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "amount_minor": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allocations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "party_id": {
+                        "type": "string"
+                      },
+                      "share_minor": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["party_id", "share_minor"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "description",
+                "amount_minor",
+                "allocations"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "expense_id",
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "splits"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
+    },
+    {
+      "name": "delete-expense",
+      "description": "Delete an expense through tally.delete_expense.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["tally.expense"]
+    },
+    {
+      "name": "undo-expense",
+      "description": "Apply one durable pre-edit or pre-trash expense snapshot exactly once.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["expense_id", "revision_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.entity_revision",
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
+    },
+    {
+      "name": "restore-expense",
+      "description": "Restore a soft-deleted expense and its preserved splits through tally.restore_expense.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["tally.expense"]
+    },
+    {
+      "name": "settle-up",
+      "description": "Record a cash payment through tally.settle_up (from → to), paying balances down.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "settlement_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
+          "from_party": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to_party": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "paid_on": {
+            "type": "string"
+          }
+        },
+        "required": ["from_party", "to_party", "amount_minor"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.account", "core.transaction", "tally.settlement"]
+    },
+    {
+      "name": "add-friend",
+      "description": "Add a friend through tally.add_friend — enrolls a person party the vault already knows when one is named or reachable at the address given, and mints one only when it knows nobody. The avatar hue is derived from the party, not stored here.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "minLength": 3
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 3
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.party", "social.contact_channel", "tally.friend"]
+    },
+    {
+      "name": "create-group",
+      "description": "Create a group through tally.create_group — name, icon and member party ids (you are added automatically).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "icon": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": "string"
+          },
+          "member_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["name", "icon", "member_ids"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["social.circle", "social.circle_member", "tally.group"]
+    },
+    {
+      "name": "rename-group",
+      "description": "Rename a group through tally.rename_group.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["group_id", "name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["social.circle", "tally.group"]
+    },
+    {
+      "name": "add-group-member",
+      "description": "Add a member to a group through tally.add_group_member.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["group_id", "party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["social.circle_member", "tally.group"]
+    },
+    {
+      "name": "remove-group-member",
+      "description": "Remove a member from a group through tally.remove_group_member — refused while they are on the ledger.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["group_id", "party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["social.circle_member", "tally.group"]
+    },
+    {
+      "name": "delete-group",
+      "description": "Delete an empty group through tally.delete_group — refused while it still holds expenses.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "social.circle",
+        "social.circle_member",
+        "tally.group",
+        "tally.settlement"
+      ]
+    },
+    {
+      "name": "reallocate-receipt",
+      "description": "Re-cut an itemised expense: rewrite every line allocation and the derived splits in one transaction through tally.reallocate_receipt, re-validating that the lines sum to the expense and each line's allocations sum to it. The amount never changes.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["item", "tax", "tip"]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "amount_minor": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allocations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "party_id": {
+                        "type": "string"
+                      },
+                      "share_minor": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["party_id", "share_minor"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "description",
+                "amount_minor",
+                "allocations"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": {
+                  "type": "string"
+                },
+                "share_minor": {
+                  "type": "integer"
+                }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["expense_id", "line_items", "splits"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_split"
+      ]
+    },
+    {
+      "name": "set-group-simplification",
+      "description": "Turn debt simplification on or off for one group through tally.set_group_simplification. Off by default; the flag is all that is stored, and the proposal itself is derived at read time and written nowhere.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "simplify": {
+            "type": "boolean"
+          }
+        },
+        "required": ["group_id", "simplify"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["tally.group"]
+    },
+    {
+      "name": "leave-group",
+      "description": "Leave a group through tally.leave_group. Your rows stay on the ledger, marked departed, and your balance with the group stays visible. Defaults to you when no party is named.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["social.circle", "social.circle_member", "tally.group"]
+    },
+    {
+      "name": "archive-group",
+      "description": "Archive a group through tally.archive_group — it leaves the lists and keeps everything, and it does not need a settled balance. Pass archived:false to bring it back.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["tally.group"]
+    },
+    {
+      "name": "nudge",
+      "description": "Prepare a reminder about a stale balance through tally.nudge. The command requires owner confirmation, so this parks rather than executing, and nothing is ever sent — the record is the intention.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "as_of_minor": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": ["party_id", "as_of_minor"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["tally.nudge"]
+    },
+    {
+      "name": "accept-match",
+      "description": "Record the owner's judgment that two imported transactions are one movement, as a temporal core.link same-as edge. Nothing is merged or deleted: both statement lines stay exactly as they were imported.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "left_txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["left_txn_id", "right_txn_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
+    },
+    {
+      "name": "reject-match",
+      "description": "Record the owner's judgment that two imported transactions of the same amount are two movements, as a temporal core.link distinct-from edge, so the proposal is not offered again.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "left_txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["left_txn_id", "right_txn_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "dashboard",
+      "description": "The home view: the owner party id (`me`), the base currency, per-friend balances keyed `(party, currency)` (positive = they owe you), the you-owe / you-are-owed positions as explicit valuations (a single figure only where one currency, or a rate, makes one true — otherwise `unavailable` with the amounts per currency), each live group's net for the owner with its simplification opt-in, archived groups in their own list, the expense and settlement counts the hero states its arithmetic from, rate suggestions quoted from this vault's own earlier expenses, and the reminders you prepared (none of which was sent). All balances are derived from expenses, payers and settlements — never stored.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": {
+            "type": ["string", "null"]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "friends": {
+            "type": "array"
+          },
+          "groups": {
+            "type": "array"
+          },
+          "trash": {
+            "type": "array"
+          },
+          "recurring": {
+            "type": "array"
+          },
+          "owe": {
+            "type": "object"
+          },
+          "owed": {
+            "type": "object"
+          },
+          "vaultDenied": {
+            "type": "object"
+          },
+          "archived_groups": {
+            "type": "array"
+          },
+          "expense_count": {
+            "type": "integer"
+          },
+          "settlement_count": {
+            "type": "integer"
+          },
+          "rate_suggestions": {
+            "type": "array"
+          },
+          "nudges": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    {
+      "name": "group",
+      "description": "One group: its meta including the simplification opt-in and archive state, current members plus departed durable ledger participants with their net balances, the expense ledger (newest first) with each row's payers, division and typed lines, and the derived simplification proposal with what it would rewire.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": {
+            "type": ["string", "null"]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "group": {
+            "type": ["object", "null"]
+          },
+          "members": {
+            "type": "array"
+          },
+          "ledger": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          },
+          "simplification": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "friend",
+      "description": "One friend: the net balance with them, that net broken into parts (one per group plus “Outside any group”), and the expenses you both took part in, newest first.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": {
+            "type": ["string", "null"]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "friend": {
+            "type": ["object", "null"]
+          },
+          "ledger": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "activity",
+      "description": "Expenses and settlements interleaved, newest first, each carrying the owner's role and the display names needed to render a one-line entry.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": {
+            "type": ["string", "null"]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "activity": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Match expenses by description, newest first, in the same decorated ledger row shape (with group context).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": {
+            "type": ["string", "null"]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "history",
+      "description": "Durable edit/trash history for one expense, including one-shot undo state.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "revisions": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "export",
+      "description": "One group's ledger as a structured payload: expenses with their payers, splits and typed lines, settlements, and the edit history. Balances are excluded by design — they are arithmetic over these rows. Optionally bounded to rows dated on or after `since` (expenses by spent_on, settlements by paid_on; revisions follow the expenses that travel). The window is bounded and states its range and whether it truncated.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "since": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          }
+        },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": ["object", "null"]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "expenses": {
+            "type": "array"
+          },
+          "settlements": {
+            "type": "array"
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "balances_excluded": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "object"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "matches",
+      "description": "Cross-source match proposals (#996 OQ-12): pairs of imported transactions that are the same money on two different accounts within a few days, with the pairs the owner has already answered removed. It proposes; it never merges, and it writes nothing.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array"
+          },
+          "accounts": {
+            "type": "object"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#0FA678",
+      "options": [
+        {
+          "value": "#0FA678",
+          "label": "Emerald"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#E8923C",
+          "label": "Amber"
+        },
+        {
+          "value": "#E0567A",
+          "label": "Rose"
+        }
+      ]
+    }
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": ["camera"],
+    "disabledOn": [],
+    "northStar": "splitwise"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
+  }
+}
