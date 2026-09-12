@@ -66,7 +66,7 @@ function main() {
   // Gated on ACTIONS_ID_TOKEN_REQUEST_URL, which GitHub only injects when the
   // job declares `permissions: id-token: write`. `npm publish --provenance`
   // HARD FAILS without it, so this must stay a runtime probe rather than an
-  // unconditional flag — a local `node publish.mjs` must keep working.
+  // unconditional flag — a local `node publish.ts` must keep working.
   const canProvenance = Boolean(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
   if (!effectiveDry && !canProvenance) {
     console.warn(

@@ -68,6 +68,18 @@ test("a commented-out invocation is not an invocation", () => {
   );
 });
 
+test("a TypeScript invocation is an invocation", () => {
+  const [hit] = directInvocations(
+    "      - run: node tests/agent-e2e-mobile/run-roster.ts --rung 4 --platform android"
+  );
+  if (!hit) throw new Error("expected roster invocation");
+  assert.equal(hit.target, "tests/agent-e2e-mobile/run-roster.ts");
+  assert.deepEqual(invocationSelector(hit.line), {
+    rung: 4,
+    platform: "android",
+  });
+});
+
 test("an invocation carries the whole line, because the flags are the wiring", () => {
   // #915 Wave 2: `--rung/--platform/--suite` select the journeys. A parser that
   // returned the target alone could not tell a rung-2 gate from a rung-4
@@ -87,11 +99,12 @@ test("stripComments keeps the code half of a trailing-comment line", () => {
   assert.equal(stripComments("run: node x.mjs # why"), "run: node x.mjs ");
 });
 
-test("only run-*.mjs at the directory root counts as a suite runner", () => {
+test("only run-*.{mjs,ts} at the directory root counts as a suite runner", () => {
   assert.equal(
     isRunnerPath("tests/agent-e2e-mobile/run-photos-suite.mjs"),
     true
   );
+  assert.equal(isRunnerPath("tests/agent-e2e-mobile/run-roster.ts"), true);
   // Machinery a lane legitimately node-runs, which owes no FLOWS array.
   assert.equal(
     isRunnerPath("tests/agent-e2e-mobile/lib/ci-gateway.mjs"),
@@ -99,6 +112,10 @@ test("only run-*.mjs at the directory root counts as a suite runner", () => {
   );
   assert.equal(
     isRunnerPath("tests/agent-e2e-mobile/flows/home-loads.mjs"),
+    false
+  );
+  assert.equal(
+    isRunnerPath("tests/agent-e2e-mobile/flows/home-loads.ts"),
     false
   );
 });

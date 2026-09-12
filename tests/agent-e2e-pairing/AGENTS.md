@@ -9,16 +9,16 @@ The device-pairing ceremony (issue #289) crosses three processes — daemon, adm
 ## Running
 
 ```sh
-node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs   # happy path + restart + revoke
-node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs     # non-burning wrong secret / expiry / refusal
-node tests/agent-e2e-pairing/flows/cross-network-relay.mjs        # real relay transport, needs Docker
+node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts   # happy path + restart + revoke
+node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.ts     # non-burning wrong secret / expiry / refusal
+node tests/agent-e2e-pairing/flows/cross-network-relay.ts        # real relay transport, needs Docker
 ```
 
-The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds one marked `Personal` vault at construction, and `--init-vault` no longer exists. The lifecycle flow targets **`Personal`**, and an unscoped `pair` targets the same marked default. Shared vaults are created later by an explicit owner action. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.mjs`.
+The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds one marked `Personal` vault at construction, and `--init-vault` no longer exists. The lifecycle flow targets **`Personal`**, and an unscoped `pair` targets the same marked default. Shared vaults are created later by an explicit owner action. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.ts`.
 
 Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log`. On FAIL the workspace is kept — `gateway.db`, `keys/`, `vaults/`, and `gateway.log` are the ground truth to inspect. The Docker flow copies `gateway.db` into its run workspace before tearing down the container.
 
-`cross-network-relay` is a different tool for a different job: the other two flows prove ceremony/hygiene semantics over a loopback transport (device relays explicitly disabled); this one proves the ceremony survives the REAL n0 relay/hole-punch path, by running gateway and device in separate Docker containers on separate, non-interconnected bridge networks. Use it when you touch `packages/tunnel/src/client.ts`, `iroh.ts`, or anything about how a connection actually gets negotiated — the other two flows will pass even if that layer is broken, because they never dial anything but loopback. See [flows/cross-network-relay.md](flows/cross-network-relay.md) for the full design, including two host-specific gotchas its harness (`lib/docker-harness.mjs`) works around: the container needs its own platform's `@number0/iroh` native addon (fetched additively if the host's own `bun install` targeted a different platform), and at least one real Docker install (OrbStack) doesn't isolate bridge networks from each other by default the way `ubuntu-latest`'s does — the harness enforces it explicitly with `DOCKER-USER` firewall rules and _proves_ it with a raw TCP probe before running any part of the ceremony, rather than trusting the driver.
+`cross-network-relay` is a different tool for a different job: the other two flows prove ceremony/hygiene semantics over a loopback transport (device relays explicitly disabled); this one proves the ceremony survives the REAL n0 relay/hole-punch path, by running gateway and device in separate Docker containers on separate, non-interconnected bridge networks. Use it when you touch `packages/tunnel/src/client.ts`, `iroh.ts`, or anything about how a connection actually gets negotiated — the other two flows will pass even if that layer is broken, because they never dial anything but loopback. See [flows/cross-network-relay.md](flows/cross-network-relay.md) for the full design, including two host-specific gotchas its harness (`lib/docker-harness.ts`) works around: the container needs its own platform's `@number0/iroh` native addon (fetched additively if the host's own `bun install` targeted a different platform), and at least one real Docker install (OrbStack) doesn't isolate bridge networks from each other by default the way `ubuntu-latest`'s does — the harness enforces it explicitly with `DOCKER-USER` firewall rules and _proves_ it with a raw TCP probe before running any part of the ceremony, rather than trusting the driver.
 
 ## Conventions
 
@@ -41,10 +41,10 @@ Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log
 
 ## Where to look
 
-- [lib/harness.mjs](lib/harness.mjs) — `runFlow` + the ctx verbs for the two loopback flows. Read before adding a helper there.
-- [lib/docker-harness.mjs](lib/docker-harness.mjs) — `runFlow` for `cross-network-relay`: network isolation (real, not assumed — see its module docstring), native-addon preflight, container lifecycle.
-- [lib/device-redeem.mjs](lib/device-redeem.mjs) — the device role, run standalone inside the device container by `cross-network-relay`.
-- [flows/device-pairing-lifecycle.mjs](flows/device-pairing-lifecycle.mjs) — canonical example of the loopback-flow shape.
-- [flows/cross-network-relay.mjs](flows/cross-network-relay.mjs) — canonical example of the Docker-flow shape.
+- [lib/harness.ts](lib/harness.ts) — `runFlow` + the ctx verbs for the two loopback flows. Read before adding a helper there.
+- [lib/docker-harness.ts](lib/docker-harness.ts) — `runFlow` for `cross-network-relay`: network isolation (real, not assumed — see its module docstring), native-addon preflight, container lifecycle.
+- [lib/device-redeem.ts](lib/device-redeem.ts) — the device role, run standalone inside the device container by `cross-network-relay`.
+- [flows/device-pairing-lifecycle.ts](flows/device-pairing-lifecycle.ts) — canonical example of the loopback-flow shape.
+- [flows/cross-network-relay.ts](flows/cross-network-relay.ts) — canonical example of the Docker-flow shape.
 - [`packages/server/src/serve/pairing-store.ts`](../../packages/server/src/serve/pairing-store.ts), [`enrollment-store.ts`](../../packages/server/src/serve/enrollment-store.ts), [`../cli/endpoint-host.ts`](../../packages/server/src/cli/endpoint-host.ts) — the policy under test.
 - [`packages/tunnel/src/gateway-endpoint.ts`](../../packages/tunnel/src/gateway-endpoint.ts) — the ALPNs and pair protocol frames.

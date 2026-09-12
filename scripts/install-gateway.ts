@@ -27,7 +27,7 @@ function usage() {
 Usage:
   bash scripts/install-gateway.sh [options]     # macOS / Linux
   curl -fsSL …/install-gateway.sh | bash -s -- [options]
-  node scripts/install-gateway.mjs [options]
+  node scripts/install-gateway.ts [options]
 
   Windows (PowerShell): npm install -g @centraid/server
   (multi-OS tunnel NAPI ships in the package — see README / #511)

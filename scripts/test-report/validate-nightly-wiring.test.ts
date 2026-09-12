@@ -10,7 +10,7 @@ const e2ePath = path.join(root, ".github/workflows/e2e.yml");
 
 /**
  * Structural unit tests for nightly wiring (#545 A9). Complements the
- * executable validate-nightly-wiring.mjs gate by asserting the #545 A1/A2
+ * executable validate-nightly-wiring.ts gate by asserting the #545 A1/A2
  * quality-outcome aggregator and mutation gating stay present.
  */
 describe("validate-nightly-wiring structure (#545)", () => {

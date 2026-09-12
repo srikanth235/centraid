@@ -34,12 +34,12 @@ Reference implementation: `src/protocol.ts` (Node) — the Swift/Kotlin implemen
 
 ## Spike (Phase 0)
 
-Validated 2026-07-04 under Node 22, Bun, and the Electron 37 main process (NAPI binding binds, dials, and streams). `scripts/spike-pipe.mjs` drives the whole loop:
+Validated 2026-07-04 under Node 22, Bun, and the Electron 37 main process (NAPI binding binds, dials, and streams). `scripts/spike-pipe.ts` drives the whole loop:
 
 ```sh
-node scripts/spike-pipe.mjs --local            # one machine, in-process demo gateway
-node scripts/spike-pipe.mjs --serve            # desktop role: prints the pair payload
-node scripts/spike-pipe.mjs --dial '<payload>' # phone role: localhost proxy → open in a browser
+node scripts/spike-pipe.ts --local            # one machine, in-process demo gateway
+node scripts/spike-pipe.ts --serve            # desktop role: prints the pair payload
+node scripts/spike-pipe.ts --dial '<payload>' # phone role: localhost proxy → open in a browser
 ```
 
 Known rough edge: `@number0/iroh@1.0.0` publishes broken `main`/`types` fields; `src/iroh.ts` loads the entry by deep path and carries its own types for the subset we use.

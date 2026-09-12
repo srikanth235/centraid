@@ -1,3 +1,6 @@
+import { access } from "node:fs/promises";
+import path from "node:path";
+
 /**
  * The reserved keys of `tests/journeys.json#rigs` (#927).
  *
@@ -25,4 +28,21 @@ export const RESERVED_RIG_KEYS = new Set(["approvedDeviation", "_comment"]);
  */
 export function rigPaths(rigs: Record<string, unknown> | undefined): string[] {
   return Object.keys(rigs ?? {}).filter((key) => !RESERVED_RIG_KEYS.has(key));
+}
+
+/** A registered rig path is present if that file, or its `.ts` sibling, exists. */
+export async function rigPresent(root: string, rig: string) {
+  const names = [rig];
+  if (rig.endsWith(".mjs")) names.push(`${rig.slice(0, -4)}.ts`);
+  const hits = await Promise.all(
+    names.map(async (name) => {
+      try {
+        await access(path.join(root, name));
+        return true;
+      } catch {
+        return false;
+      }
+    })
+  );
+  return hits.some(Boolean);
 }

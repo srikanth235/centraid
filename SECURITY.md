@@ -262,7 +262,7 @@ Complementary controls on top of manual review and the threat model above. These
 
 **Roles (lockfile):** dependency-review = “don’t _add_ a known-bad dep on this PR.” OSV = “what is _already_ in the lockfile?” so inventory debt cannot hide behind an unrelated change.
 
-**Structural contract:** `node --test scripts/ci/hygiene-gates.test.mjs` asserts the three gates stay wired into real workflows (part of `scripts:test`).
+**Structural contract:** `node --test scripts/ci/hygiene-gates.test.ts` asserts the three gates stay wired into real workflows (part of `scripts:test`).
 
 **Two postures worth stating plainly, because both look like regressions and neither is:**
 

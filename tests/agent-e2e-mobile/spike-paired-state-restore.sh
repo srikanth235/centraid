@@ -65,7 +65,7 @@ echo "spike: simulator $udid"
 # Pair once, normally. Any flow that calls ctx.configureGateway() will do; the
 # Docs journey is the one the home-apps suite already uses as its fresh pairer.
 echo "spike: step 0 — pairing fresh"
-node "$FLOWS_DIR/docs-drive.mjs"
+node "$FLOWS_DIR/docs-drive.ts"
 
 # ---------------------------------------------------------------- step 1
 # The cheap answer first. If the identity IS inside the app container, a
@@ -112,7 +112,7 @@ xcrun simctl bootstatus "$udid" -b
 # restored device is still paired. It fails on "Connect your gateway." — the
 # ticket-onboarding screen — if the keychain did not survive the round trip.
 echo "spike: step 5 — does the restored device land on Home?"
-if MAESTRO_REUSE_PAIRED_STATE=1 node "$FLOWS_DIR/agenda-week.mjs"; then
+if MAESTRO_REUSE_PAIRED_STATE=1 node "$FLOWS_DIR/agenda-week.ts"; then
   echo "spike: VERDICT restorable — a whole-device snapshot survives an erase."
   echo "spike: D2 resolves toward pair-once; record the numbers and re-cost the suite."
   exit 0

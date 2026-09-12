@@ -38,8 +38,8 @@ Per [docs/coding-standards.md](../../docs/coding-standards.md) ("Scale rigs are 
 bun run --cwd packages/server build && bun run --cwd packages/server build
 
 # Then, the one-command perf run (rebuilds web dist + runs the spec):
-node scripts/perf/run-waterfall.mjs
-node scripts/perf/summarize.mjs        # pretty-print the JSON report
+node scripts/perf/run-waterfall.ts
+node scripts/perf/summarize.ts        # pretty-print the JSON report
 ```
 
 It also runs as part of the normal web e2e suite (same Playwright `testDir`):
@@ -50,9 +50,9 @@ cd apps/web && bun run e2e            # runs every tests/e2e/*.spec.ts, incl. pe
 
 > A **fresh `vite build`** matters for test 3: the committed `apps/web/dist` is gitignored and may predate the `iroh-transport.ts` timing instrumentation. The runner rebuilds it; when a stale dist lacks the counters, test 3 skips itself with a message rather than failing.
 
-### `run-waterfall.mjs` measures UNCOMPRESSED bytes — read this before trusting a transfer number
+### `run-waterfall.ts` measures UNCOMPRESSED bytes — read this before trusting a transfer number
 
-`run-waterfall.mjs` runs a bare `vite build`. The web app's real build is `bun run --cwd apps/web build`, which is `… && vite build && node scripts/precompress.mjs` — so the runner **skips `precompress.mjs`**, and because `emptyOutDir` is on, it also **deletes the `.br`/`.gz` sidecars any previous full build left behind.**
+`run-waterfall.ts` runs a bare `vite build`. The web app's real build is `bun run --cwd apps/web build`, which is `… && vite build && node scripts/precompress.ts` — so the runner **skips `precompress.ts`**, and because `emptyOutDir` is on, it also **deletes the `.br`/`.gz` sidecars any previous full build left behind.**
 
 `transferSize` is the **compressed** size. Measured through the runner, the cold shell reads about **1.79 MB**; measured against a properly precompressed dist it is about **448 KB**. Same code, same spec — a 4× difference that is entirely serving, not the bundle.
 
@@ -68,7 +68,7 @@ cd apps/web && bunx playwright test perf-waterfall \
   -c tests/e2e/playwright.config.ts -g "app-open waterfall"
 ```
 
-Use `run-waterfall.mjs` for request counts, ratios, and the QUIC pool numbers; use the two commands above whenever a byte total is the point.
+Use `run-waterfall.ts` for request counts, ratios, and the QUIC pool numbers; use the two commands above whenever a byte total is the point.
 
 ## The budgets — and how to update them
 
@@ -80,7 +80,7 @@ All ceilings live in one file: **`apps/web/tests/e2e/perf-budgets.ts`**. Each nu
 
 **When a change moves the measured numbers** (bundling work, a richer app fixture), update the ceilings from a fresh measurement:
 
-1. Re-run `node scripts/perf/run-waterfall.mjs`.
+1. Re-run `node scripts/perf/run-waterfall.ts`.
 2. Read the new numbers from the SUMMARY / report.
 3. Update each ceiling in `perf-budgets.ts` to `measured + documented headroom`. When the numbers DROP, **tighten** — that's how the win is locked in and a future regression that re-inflates it gets caught.
 
@@ -93,9 +93,9 @@ Timing-only, guarded, zero behavior change:
 
 ## The other rigs in this directory (#659)
 
-`run-waterfall.mjs` / `summarize.mjs` are the PWA rig described above. Two more things live here now:
+`run-waterfall.ts` / `summarize.ts` are the PWA rig described above. Two more things live here now:
 
-- **`app-weight.mjs`** (R3d) — weighs the artifacts a user actually downloads: `apps/desktop/dist/renderer` and the two `expo export` outputs under `dist/mobile-bundle-smoke/`. Both builds already ran in CI on every desktop/mobile PR and had never been weighed. Run `bun run perf:app-weight -- --surface desktop|mobile` (add `--report` to print without failing). Ceilings live in `tests/journeys.json<surface>.json` and are tighten-only. Source maps are excluded as diagnostics; the script reports total shipped bytes AND the largest single chunk, because a total that holds while one chunk swallows everything is exactly what a code-split is meant to prevent.
+- **`app-weight.ts`** (R3d) — weighs the artifacts a user actually downloads: `apps/desktop/dist/renderer` and the two `expo export` outputs under `dist/mobile-bundle-smoke/`. Both builds already ran in CI on every desktop/mobile PR and had never been weighed. Run `bun run perf:app-weight -- --surface desktop|mobile` (add `--report` to print without failing). Ceilings live in `tests/journeys.json<surface>.json` and are tighten-only. Source maps are excluded as diagnostics; the script reports total shipped bytes AND the largest single chunk, because a total that holds while one chunk swallows everything is exactly what a code-split is meant to prevent.
 
   Measured 2026-07-31 (darwin arm64): desktop renderer **5,827,344 B** across 33 files, largest `react-boot.js` at 1,333,046 B. Mobile **11,596,398 B** (iOS) / **11,604,148 B** (Android), of which the Hermes bundle is 6,355,198 B.
 

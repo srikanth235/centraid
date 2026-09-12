@@ -7,7 +7,7 @@
  * builds workflow steps against it and the report slice builds the reader
  * against the same schema module.
  *
- *   node scripts/test-report/write-evidence.mjs \
+ *   node scripts/test-report/write-evidence.ts \
  *     --lane <id> --rung <n> --platform <p> --verdict <v|auto> \
  *     [--job-status <success|failure|cancelled>] \
  *     --started-at <ISO> [--finished-at <ISO>] --budget-ms <n> \

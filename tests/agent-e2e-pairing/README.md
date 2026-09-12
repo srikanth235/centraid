@@ -7,13 +7,13 @@ This is the tier the unit tests can't reach: cross-process seams (the daemon per
 ## Running a flow
 
 ```sh
-node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
-node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
-node tests/agent-e2e-pairing/flows/cross-network-relay.mjs      # needs Docker — see below
-node tests/agent-e2e-pairing/flows/extension-companion.mjs      # needs Playwright Chromium + display
+node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts
+node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.ts
+node tests/agent-e2e-pairing/flows/cross-network-relay.ts      # needs Docker — see below
+node tests/agent-e2e-pairing/flows/extension-companion.ts      # needs Playwright Chromium + display
 ```
 
-The first two run gateway + device as plain processes on the same host with the device's iroh relays explicitly disabled (`lib/harness.mjs`'s `newDevice()`), so every request dials a loopback address directly — real enough for ceremony/hygiene semantics, but it never exercises iroh's actual hole-punch/relay path. `cross-network-relay` is the one that does: it runs gateway and device in separate Docker containers on separate, non-interconnected bridge networks (`lib/docker-harness.mjs`), forcing `@centraid/tunnel`'s real n0-relay default. See [flows/cross-network-relay.md](flows/cross-network-relay.md) for the full writeup, including two host-specific gotchas it works around (missing linux native addon when the host's own `bun install` targeted a different platform; a Docker network driver — OrbStack, locally — that doesn't isolate bridge networks by default the way GitHub Actions' `ubuntu-latest` does).
+The first two run gateway + device as plain processes on the same host with the device's iroh relays explicitly disabled (`lib/harness.ts`'s `newDevice()`), so every request dials a loopback address directly — real enough for ceremony/hygiene semantics, but it never exercises iroh's actual hole-punch/relay path. `cross-network-relay` is the one that does: it runs gateway and device in separate Docker containers on separate, non-interconnected bridge networks (`lib/docker-harness.ts`), forcing `@centraid/tunnel`'s real n0-relay default. See [flows/cross-network-relay.md](flows/cross-network-relay.md) for the full writeup, including two host-specific gotchas it works around (missing linux native addon when the host's own `bun install` targeted a different platform; a Docker network driver — OrbStack, locally — that doesn't isolate bridge networks by default the way GitHub Actions' `ubuntu-latest` does).
 
 That's the whole loop for the first two flows. The harness:
 
@@ -43,14 +43,14 @@ ctx.note(msg); // observation preserved in verdict.md
 
 Flows throw on failure and return `{ pass: true, notes }` on success — same contract as the other agent-e2e tiers.
 
-`cross-network-relay` (`lib/docker-harness.mjs`) uses a different, Docker-backed ctx instead — see [flows/cross-network-relay.md](flows/cross-network-relay.md):
+`cross-network-relay` (`lib/docker-harness.ts`) uses a different, Docker-backed ctx instead — see [flows/cross-network-relay.md](flows/cross-network-relay.md):
 
 ```js
 ctx.gateway; // { url, token, endpointId } of the live daemon
 ctx.netB; // the device-side network name
 ctx.gatewayExec(args); // admin CLI, run via `docker exec` into the gateway container
 ctx.mintTicket(opts); // pair → { raw, payload }
-ctx.runDevice(opts); // run lib/device-redeem.mjs in a container on netB;
+ctx.runDevice(opts); // run lib/device-redeem.ts in a container on netB;
 // opts: { ticket, probeTarget } → parsed JSON result
 ctx.note(msg); // observation preserved in verdict.md
 ```
@@ -61,10 +61,10 @@ Same throw-on-failure / `{ pass: true, notes }` contract; same verdict.md / PASS
 
 ```
 tests/agent-e2e-pairing/
-  flows/                ← committed flows (.md intent + .mjs runnable pairs)
-  lib/harness.mjs        ← runFlow() + daemon boot/restart/teardown (loopback flows)
-  lib/docker-harness.mjs ← runFlow() for cross-network-relay (Docker networks + containers)
-  lib/device-redeem.mjs  ← runs INSIDE the device container for cross-network-relay
+  flows/                ← committed flows (.md intent + .ts runnable pairs)
+  lib/harness.ts        ← runFlow() + daemon boot/restart/teardown (loopback flows)
+  lib/docker-harness.ts ← runFlow() for cross-network-relay (Docker networks + containers)
+  lib/device-redeem.ts  ← runs INSIDE the device container for cross-network-relay
   runs/                  ← gitignored audit trail per run
 ```
 

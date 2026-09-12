@@ -7,7 +7,7 @@
  * Usage, from the repo root, after `bun run --cwd packages/vault build`:
  *
  *   strace -f -c -e trace=fsync,fdatasync \
- *     node scripts/measure-read-fsync.mjs . FULL agent 50
+ *     node scripts/measure-read-fsync.ts . FULL agent 50
  *
  * Modes: `idle` (no reads — the bootstrap baseline to subtract), `owner`
  * (owner-direct, which writes no allow receipt), `agent` (a receipting

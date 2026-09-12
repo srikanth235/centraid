@@ -14,9 +14,9 @@
  * the count is a down-only budget, ratcheted with the coverage floors.
  *
  * Usage:
- *   node scripts/test-report/quarantine.mjs            # validate (check:pr)
- *   node scripts/test-report/quarantine.mjs --exclude  # print runner excludes
- *   node scripts/test-report/quarantine.mjs --json     # machine-readable state
+ *   node scripts/test-report/quarantine.ts            # validate (check:pr)
+ *   node scripts/test-report/quarantine.ts --exclude  # print runner excludes
+ *   node scripts/test-report/quarantine.ts --json     # machine-readable state
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";

@@ -101,7 +101,7 @@ export function jobBlock(yaml: string, job: string): string | null {
 const INVOKE_RE =
   /\bnode\s+(?:--[\w-]+(?:=\S+)?\s+)*(?<target>tests\/agent-e2e-mobile\/[\w./-]+\.(?:mjs|ts))/gu;
 
-/** Direct `node tests/agent-e2e-mobile/*.mjs` invocations in a source chunk,
+/** Direct `node tests/agent-e2e-mobile/*.{mjs,ts}` invocations in a source chunk,
  * each with THE WHOLE LINE it appeared on. The line is what carries
  * `--rung/--platform/--suite`, and #915 Wave 2 made those flags the wiring: a
  * target alone can no longer say what a lane schedules. */
@@ -124,7 +124,7 @@ function lineAt(text: string, index: number) {
 
 /** The selector an invocation carries, when it is a roster invocation.
  *
- * `node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform android`
+ * `node tests/agent-e2e-mobile/run-roster.ts --rung 4 --platform android`
  * — flags on the invocation line itself, which is what makes the wiring
  * readable by a text-scanning gate (see this file's header).
  */

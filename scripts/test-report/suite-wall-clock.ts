@@ -16,8 +16,8 @@
  * a budget that cannot be measured must not read as a budget that was met.
  *
  * Usage:
- *   node scripts/test-report/suite-wall-clock.mjs           # enforce
- *   node scripts/test-report/suite-wall-clock.mjs --write   # ratchet DOWN only
+ *   node scripts/test-report/suite-wall-clock.ts           # enforce
+ *   node scripts/test-report/suite-wall-clock.ts --write   # ratchet DOWN only
  */
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";

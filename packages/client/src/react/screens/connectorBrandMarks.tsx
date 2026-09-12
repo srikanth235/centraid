@@ -1,5 +1,5 @@
 /* Brand SVGs from Iconify (https://icon-sets.iconify.design/), offline-embedded.
- * Prefer regenerating with: node scripts/fetch-connector-brand-icons.mjs
+ * Prefer regenerating with: node scripts/fetch-connector-brand-icons.ts
  *
  * Sources:
  *   gmail: logos:google-gmail

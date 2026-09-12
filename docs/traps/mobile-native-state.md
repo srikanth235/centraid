@@ -70,6 +70,6 @@ Script-key reorders in `apps/mobile/package.json` do not move identity (`sourceS
 
 - Issue [#996](https://github.com/srikanth235/centraid/issues/996) (CNG migration), [#646](https://github.com/srikanth235/centraid/issues/646) (completeness loop), #587 E23 (fingerprint ratchet)
 - [dev-environment.md](../dev-environment.md#mobile-the-native-projects-are-generated)
-- `apps/mobile/scripts/verify-native-state.mjs`, `verify-native-state-lib.mjs`
-- `apps/mobile/scripts/native-fingerprint.mjs`
+- `apps/mobile/scripts/verify-native-state.ts`, `verify-native-state-lib.ts`
+- `apps/mobile/scripts/native-fingerprint.ts`
 - `apps/mobile/native-fingerprints.json`

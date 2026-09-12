@@ -9,7 +9,7 @@
  * `fuzz-parsers` nor `dast-scan`, so the one part a reader would act on was
  * also the part most likely to be stale.
  *
- *   node scripts/test-report/rolling-issue-body.mjs \
+ *   node scripts/test-report/rolling-issue-body.ts \
  *     --lane <id> --summary dist/test-report/summary.json \
  *     [--evidence artifacts/evidence] [--report-url <url>]
  */

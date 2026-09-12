@@ -202,7 +202,7 @@ const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
 // wedged chunk could spend it and leave the suite's own comparison to report an
 // overrun it could no longer prevent. `lib/run-suite.mjs` publishes the suite's
 // absolute deadline here; a chunk gets whichever is smaller. A lane with no
-// deadline (a local `node flows/<flow>.mjs`, the nightly's un-budgeted members)
+// deadline (a local `node flows/<flow>.ts`, the nightly's un-budgeted members)
 // keeps the flat ceiling, so this only ever tightens.
 //
 // The floor exists because a clamp that reaches zero would kill Maestro before

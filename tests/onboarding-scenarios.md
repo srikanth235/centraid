@@ -38,7 +38,7 @@ Other flags: `--owner <id-or-label>` (existing owner selector; self-pair only â€
 
 ### Browser (web PWA)
 
-Fresh-state reset = a new browser profile / incognito window. Clearing `centraid.web.v1.*` from local **and** session storage plus the SW iroh-bridge caches also works but is easy to get half-right. To exercise uncommitted client code: `bun run --cwd apps/web build && node packages/server/scripts/embed-web.mjs`, then restart serve.
+Fresh-state reset = a new browser profile / incognito window. Clearing `centraid.web.v1.*` from local **and** session storage plus the SW iroh-bridge caches also works but is easy to get half-right. To exercise uncommitted client code: `bun run --cwd apps/web build && node packages/server/scripts/embed-web.ts`, then restart serve.
 
 ### Desktop (Electron)
 

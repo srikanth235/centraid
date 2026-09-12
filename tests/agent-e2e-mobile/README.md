@@ -44,14 +44,14 @@ cd apps/mobile && bunx expo start --dev-client
 Then drive a flow:
 
 ```sh
-node tests/agent-e2e-mobile/flows/home-loads.mjs
+node tests/agent-e2e-mobile/flows/home-loads.ts
 ```
 
 By default the harness picks **iOS first** if both a booted Simulator and a running emulator are present. Force a side with the `MAESTRO_PLATFORM` env var:
 
 ```sh
-MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
-MAESTRO_PLATFORM=ios     node tests/agent-e2e-mobile/flows/home-loads.mjs
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.ts
+MAESTRO_PLATFORM=ios     node tests/agent-e2e-mobile/flows/home-loads.ts
 ```
 
 `runFlow()` prints the chosen target on the first line:
@@ -83,7 +83,7 @@ Two files, same slug — mirrors the desktop convention:
 ```
 flows/
   my-flow.md     ← prose intent: goal, setup, steps, expectations
-  my-flow.mjs    ← runnable: calls runFlow() with the steps
+  my-flow.ts     ← runnable: calls runFlow() with the steps
 ```
 
 Skeleton:
@@ -93,7 +93,7 @@ import {
   DEV_LAUNCHER_HANDOFF,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
-} from "../lib/harness.mjs";
+} from "../lib/harness.ts";
 
 await runFlow("my-flow", async (ctx) => {
   // `ctx.state.appId` is the installed package for the resolved platform AND
@@ -131,7 +131,7 @@ ctx surface:
 - `ctx.configureGateway(url?, token?)` — clear app state, mint a pairing ticket from the declared gateway (ownership: the ticket lands the phone in whichever owner host custody resolves — a fresh gateway founds a placeholder owner, a reused one lands on the owner an earlier flow already named), redeem it through the real ticket-only onboarding UI, and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
 - `ctx.ensureDemo(appId)` — idempotently load the named gateway demo scenario before pairing. Each seeded Photos journey calls it when run independently. In the `photos` suite, the permissions journey first proves the empty-vault denial state, the library journey then seeds and pairs Photos, and the remaining journeys reuse that paired app state so the suite shares one boot and seed.
 
-  **On a CI lane this is a no-op, and it has to be** (#905). `ensureDemo` writes to the GATEWAY; nothing pulls a post-clone write down to a phone that is already paired. A lane is many flows sharing one pairing — the PR gate pairs in `pairing-canary`, the nightly's rung-4 plan pairs inside `probes-suite` and then runs four more suites against that profile — so only the first flow's seeding could ever precede a clone. The lane therefore seeds the whole corpus itself, in `seed-demo-corpus.mjs`, before `android-emulator-install.sh` hands off to Maestro; the per-flow calls stay because they document each journey's fixture and are what makes a flow runnable on its own.
+  **On a CI lane this is a no-op, and it has to be** (#905). `ensureDemo` writes to the GATEWAY; nothing pulls a post-clone write down to a phone that is already paired. A lane is many flows sharing one pairing — the PR gate pairs in `pairing-canary`, the nightly's rung-4 plan pairs inside `probes-suite` and then runs four more suites against that profile — so only the first flow's seeding could ever precede a clone. The lane therefore seeds the whole corpus itself, in `seed-demo-corpus.ts`, before `android-emulator-install.sh` hands off to Maestro; the per-flow calls stay because they document each journey's fixture and are what makes a flow runnable on its own.
 
   Getting this wrong does not look like a seeding failure. An empty vault is a legitimate product state: `springboardState` calls it `first-run` and Home renders `DayOne` instead of `LauncherGrid`, so every `Open <App>` tile is absent and twelve journeys fail at their first tap with `Element not found` — while `HOME_READY_MARKER` ("All apps and places", a `HomeBand` label present in both states) still reports the screen ready. `lint:e2e-wiring`'s RULE `corpus` holds both halves down.
 
@@ -154,7 +154,7 @@ Since [#890](https://github.com/srikanth235/centraid/issues/890) W1 this directo
 | **Local exploratory** | dev-client build (`expo run:ios` / `run:android`) | Metro, live | "try this journey, tell me what breaks" — the Claude Code ⇄ Maestro MCP loop, and the only place the dev-harness machinery below applies |
 | **Scheduled CI lanes** | **release build with the Hermes bundle embedded** | none | every lane in the table below |
 
-Every scheduled lane sets `CENTRAID_MOBILE_BUILD=release`, and on that path the harness skips Metro reachability, the bundle prewarm and the `adb reverse` entirely, `DEV_LAUNCHER_HANDOFF` is the empty string, and the Android package is `dev.centraid.mobile` rather than the `.debug` suffix. `scripts/test-report/validate-nightly-wiring.mjs` refuses a lane that starts Metro or builds iOS without `--configuration Release`, so the dev client cannot creep back one convenient step at a time.
+Every scheduled lane sets `CENTRAID_MOBILE_BUILD=release`, and on that path the harness skips Metro reachability, the bundle prewarm and the `adb reverse` entirely, `DEV_LAUNCHER_HANDOFF` is the empty string, and the Android package is `dev.centraid.mobile` rather than the `.debug` suffix. `scripts/test-report/validate-nightly-wiring.ts` refuses a lane that starts Metro or builds iOS without `--configuration Release`, so the dev client cannot creep back one convenient step at a time.
 
 The claims layer under all of it is unchanged: what belongs _here_ is the runtime, gesture, accessibility and OS-state claims no unit or component layer can falsify. What no longer belongs here is state variety — see [The roster shrinks](#the-roster-shrinks).
 
@@ -187,19 +187,19 @@ Every lane, every suite and every flow is declared in [`roster.json`](roster.jso
 | `promoting-suite` (2 flows) | 4 | the D3 promotion pipeline — budget in [flows/promoting-budget.md](flows/promoting-budget.md) |
 | `ios-depth` (6 flows) | 4 | the iOS-only claims — budget in [flows/ios-depth-budget.md](flows/ios-depth-budget.md) |
 
-`flows/pairing-canary.mjs` is the shared prerequisite of every other journey — a ticket minted, redeemed, and pairing completed to Home — and runs FIRST and SHORT-CIRCUITING in every suite that has a canary.
+`flows/pairing-canary.ts` is the shared prerequisite of every other journey — a ticket minted, redeemed, and pairing completed to Home — and runs FIRST and SHORT-CIRCUITING in every suite that has a canary.
 
 ### One roster, one runner (#915 Wave 2)
 
-Members, budgets, rungs, platforms and claims are ROWS in [`roster.json`](roster.json), read by [`lib/roster.mjs`](lib/roster.mjs) and run by [`run-roster.mjs`](run-roster.mjs):
+Members, budgets, rungs, platforms and claims are ROWS in [`roster.json`](roster.json), read by [`lib/roster.ts`](lib/roster.ts) and run by [`run-roster.ts`](run-roster.ts):
 
 ```
-node tests/agent-e2e-mobile/run-roster.mjs --rung <2|3|4|5> --platform <android|ios> [--suite <id>] [--dry-run]
+node tests/agent-e2e-mobile/run-roster.ts --rung <2|3|4|5> --platform <android|ios> [--suite <id>] [--dry-run]
 ```
 
 Seven `run-*-suite.mjs` files used to carry a `const FLOWS` and a `const BUDGET_MS` literal that three separate gates read back off disk by regex, and none of them had a rung. Six thin shims survive only until the workflow wiring is swapped to the runner; they carry no literals.
 
-**The flags are the wiring.** `lint:e2e-wiring` derives what a lane schedules by reading the invocation the shipped YAML or shell script actually contains and resolving it through `lib/roster.mjs`. A runner that picked its suite from an environment variable would make every lane look identical to the linter whose `promoting` and `exploratory` rules exist to tell a blocking lane from a nightly one — which is also why there is still one committed shell script per lane shape.
+**The flags are the wiring.** `lint:e2e-wiring` derives what a lane schedules by reading the invocation the shipped YAML or shell script actually contains and resolving it through `lib/roster.ts`. A runner that picked its suite from an environment variable would make every lane look identical to the linter whose `promoting` and `exploratory` rules exist to tell a blocking lane from a nightly one — which is also why there is still one committed shell script per lane shape.
 
 `--dry-run` prints the resolved plan as JSON, so the linter and the runner answer "what does this invocation schedule" with the same code.
 
@@ -213,7 +213,7 @@ A simulator minute on macOS costs roughly **600×** a vitest second on Linux, so
 
 ### Instrumentation
 
-Every run appends a record to [`ledger/durations.json`](ledger/README.md): duration, pass/fail, and the failure **class**. That ledger is what the derived budgets above become measured p95 ratchets from, and it is what the classified retry reads — see [`lib/retry-policy.mjs`](lib/retry-policy.mjs). **Retry is classification, not forgiveness:** one clean-state retry for an infrastructure-classified failure only, both attempts' evidence kept, and a product assertion never retried, because an `assertVisible` timeout is the exact shape a real regression takes.
+Every run appends a record to [`ledger/durations.json`](ledger/README.md): duration, pass/fail, and the failure **class**. That ledger is what the derived budgets above become measured p95 ratchets from, and it is what the classified retry reads — see [`lib/retry-policy.ts`](lib/retry-policy.ts). **Retry is classification, not forgiveness:** one clean-state retry for an infrastructure-classified failure only, both attempts' evidence kept, and a product assertion never retried, because an `assertVisible` timeout is the exact shape a real regression takes.
 
 ### Origin acts
 
@@ -231,13 +231,13 @@ The claims below are the reason this layer exists at all — each one is a fact 
 
 | App · seat / state | Flow file | The assertion that carries it | Why only a device |
 | --- | --- | --- | --- |
-| photos · origin / `denied` | `flows/photos-permissions.mjs` | launched with `permissions: { all: deny }`, then `Photos cannot reach your camera roll`, `Allow access\|Open Settings`, and `Select` asserted **disabled** | The refusal is the OS's, not the app's. Nothing below the device can produce a real denied `MediaLibrary` authorization, and the takeover has to hold on an _empty_ vault — the state in which a fabricated grid would be indistinguishable from a working one. |
-| locker · origin / `denied` | `flows/locker-gate.mjs` | `Open Locker, locked` on Home (a **withheld** count, never `0`), then `Protect Locker` + `Create passphrase` asserted **disabled**, re-asserted after `ctx.restart()` | Two OS facts at once: that Home's launcher never read the one app it must not, and that no Locker session crossed a real process boundary. A component test renders whichever state it is handed; only killing the process proves nothing survived it. |
+| photos · origin / `denied` | `flows/photos-permissions.ts` | launched with `permissions: { all: deny }`, then `Photos cannot reach your camera roll`, `Allow access\|Open Settings`, and `Select` asserted **disabled** | The refusal is the OS's, not the app's. Nothing below the device can produce a real denied `MediaLibrary` authorization, and the takeover has to hold on an _empty_ vault — the state in which a fabricated grid would be indistinguishable from a working one. |
+| locker · origin / `denied` | `flows/locker-gate.ts` | `Open Locker, locked` on Home (a **withheld** count, never `0`), then `Protect Locker` + `Create passphrase` asserted **disabled**, re-asserted after `ctx.restart()` | Two OS facts at once: that Home's launcher never read the one app it must not, and that no Locker session crossed a real process boundary. A component test renders whichever state it is handed; only killing the process proves nothing survived it. |
 | photos · origin | the `photos` suite | see [flows/photos-budget.md](flows/photos-budget.md) | native grid, viewer gestures, and selection writes on the real replica |
-| docs · origin | `flows/docs-drive.mjs` | `N · press and hold a row for quick actions`, then the breadcrumb, then a band tap that **pops** (`assertNotVisible: { id: "docs-breadcrumb" }` after landing on the Folders shelf, with the copy negative kept beside it) | The pop-not-push rule is a React Navigation stack fact. Both a push and a pop render the destination; only a real stack shows the second copy. The negative moved onto the handle because an `assertNotVisible` on COPY passes forever the day the copy is re-worded, and `lint:mobile-testids` holds the other end so the id cannot quietly stop naming anything (#890 W2). |
-| agenda · origin | `flows/agenda-week.mjs` | `Go to today` + `New event`, then the Schedule surface's widened read carrying `Dinner with Maya` two days out, then the event screen's `Back to the agenda` | The Day and Schedule surfaces differ only by the size of the read (1 day vs 120); a fixture that hands both the same rows cannot tell them apart. |
-| notes · origin | `flows/notes-library.mjs` | `Open Mom's chili, written down properly` **and** the body preview under it | The row and the body are two separate replica reads joined on device. A dropped join is headings above empty previews — green on every fixture that pre-merges them. |
-| tasks · origin | `flows/tasks-board.mjs` | `Move all to today` + `N · nothing was deleted` on Today, then a nested subtask under its dated parent on Upcoming | The grouping arithmetic is pure and already covered; what is not is that the rows the phone's replica hands it are the vault's rows and land in the group the screen draws. |
+| docs · origin | `flows/docs-drive.ts` | `N · press and hold a row for quick actions`, then the breadcrumb, then a band tap that **pops** (`assertNotVisible: { id: "docs-breadcrumb" }` after landing on the Folders shelf, with the copy negative kept beside it) | The pop-not-push rule is a React Navigation stack fact. Both a push and a pop render the destination; only a real stack shows the second copy. The negative moved onto the handle because an `assertNotVisible` on COPY passes forever the day the copy is re-worded, and `lint:mobile-testids` holds the other end so the id cannot quietly stop naming anything (#890 W2). |
+| agenda · origin | `flows/agenda-week.ts` | `Go to today` + `New event`, then the Schedule surface's widened read carrying `Dinner with Maya` two days out, then the event screen's `Back to the agenda` | The Day and Schedule surfaces differ only by the size of the read (1 day vs 120); a fixture that hands both the same rows cannot tell them apart. |
+| notes · origin | `flows/notes-library.ts` | `Open Mom's chili, written down properly` **and** the body preview under it | The row and the body are two separate replica reads joined on device. A dropped join is headings above empty previews — green on every fixture that pre-merges them. |
+| tasks · origin | `flows/tasks-board.ts` | `Move all to today` + `N · nothing was deleted` on Today, then a nested subtask under its dated parent on Upcoming | The grouping arithmetic is pure and already covered; what is not is that the rows the phone's replica hands it are the vault's rows and land in the group the screen draws. |
 
 ### Gaps — device-only and unowned
 
@@ -252,7 +252,7 @@ Each row names what would own it, so it can be filed as a `gap` cell with a real
 | — · origin / `denied` | **notification permission and delivery** — `src/lib/notifications-core.ts` asks with `requestPermissionsAsync`, and a tapped notification carries a `centraid://` URL into `src/deep-links.ts` | a flow launched with `permissions: { notifications: allow }`, then `xcrun simctl push` (iOS) / `adb shell am broadcast` (Android) of a payload carrying a deep link, asserting the app lands on the named screen | the delivery half is out-of-band tooling the harness does not wrap yet; the permission half alone would be a vacuous cell |
 | locker · origin | the passphrase floor **transitioning** (a short passphrase still refused, a long one accepted) | a flow that types into the gate's field | the field is `secureTextEntry` (its value can never be read back) and its `accessibilityLabel` is on a React Native `TextInput`, which does not reach the iOS accessibility tree — see "Known caveats". It needs a relative-anchor selector validated against a live hierarchy, not one written out of the source. |
 | docs · origin | the reading surface carrying the **current** version's bytes | an assertion on a body line that exists only in the seeded second version | the reading view renders the whole markdown body as ONE multi-line text node, and Maestro anchors a text selector to the whole node with a regex whose `.` does not cross newlines. Needs a single-line surface or an on-disk read. |
-| tally · origin | the whole seat | a `tally-*.mjs` journey | closed: `flows/tally-derived.mjs` shipped under #873 and is scheduled on the roster lanes |
+| tally · origin | the whole seat | a `tally-*.ts` journey | closed: `flows/tally-derived.ts` shipped under #873 and is scheduled on the roster lanes |
 
 The declared **origin acts** — a camera, a scanner, a voice capture, an autofill provider — are tracked separately in [`origin-acts.json`](origin-acts.json), because those are enumerated by the app manifests and so can be checked for completeness in a way this prose table cannot. `bun run lint:seat-verbs` holds the two together.
 
@@ -302,7 +302,7 @@ The harness automatically runs `adb reverse tcp:8081 tcp:8081` during `setup()` 
 
 ## Known caveats
 
-- **Maestro's iOS driver is the flakier of the two.** Observed on 2.x once a flow gets past ~10 commands — common failure modes are `Failed to connect to /127.0.0.1:7001`, `kAXErrorInvalidUIElement` from the accessibility tree, and visibility polls timing out on elements that _are_ visible in the hierarchy. **Keep iOS flows short and batch directives.** `home-loads.mjs` (5 directives) runs reliably on both platforms; longer flows on iOS have hit driver disconnects during text input. The Android driver (UIAutomator2) doesn't exhibit this — flows that work on both targets are best validated against Android first, and it is the reason D1 ([docs/decisions.md](../../docs/decisions.md#mobile-testing-890)) makes Android the PR-gate platform. Both lanes pin `MAESTRO_VERSION: 2.6.1`; the version is a single fact in `.github/workflows/e2e.yml`, not a number retyped in prose.
+- **Maestro's iOS driver is the flakier of the two.** Observed on 2.x once a flow gets past ~10 commands — common failure modes are `Failed to connect to /127.0.0.1:7001`, `kAXErrorInvalidUIElement` from the accessibility tree, and visibility polls timing out on elements that _are_ visible in the hierarchy. **Keep iOS flows short and batch directives.** `home-loads.ts` (5 directives) runs reliably on both platforms; longer flows on iOS have hit driver disconnects during text input. The Android driver (UIAutomator2) doesn't exhibit this — flows that work on both targets are best validated against Android first, and it is the reason D1 ([docs/decisions.md](../../docs/decisions.md#mobile-testing-890)) makes Android the PR-gate platform. Both lanes pin `MAESTRO_VERSION: 2.6.1`; the version is a single fact in `.github/workflows/e2e.yml`, not a number retyped in prose.
 - **Maestro's text matcher misses RN `TextInput` values** in some cases — the value appears in `inspect_view_hierarchy` (under both `text=` and `value=`), but `assertVisible: "<substring>"` against it doesn't match. Read AsyncStorage from disk (see "Authoring rules of thumb") rather than relying on UI assertions for state.
 - **A passing step is not a working step.** Every one of these was green in CI while doing nothing, and all of them came from writing selectors out of the React source instead of off a running app. Drive the simulator and read `inspect_view_hierarchy` before you trust a selector:
   - _Matching is substring-based._ `tapOn: "http://127.0.0.1:18789"` matched the help paragraph that mentions the URL, not the input below it. The tap "COMPLETED", the `inputText` went nowhere, and Save persisted an empty string. Disambiguate with a relative anchor (`below: "Dev fallback for simulators.*"`).
@@ -310,8 +310,8 @@ The harness automatically runs `adb reverse tcp:8081 tcp:8081` during `setup()` 
   - _Prefer a string unique to the target screen._ `assertVisible: "Settings"` passes on Home — the header gear, the tab, and the screen title are all "Settings". Assert "Desktop link" instead. Same trap for every tab label, which is on screen everywhere.
   - _Route names are not labels._ Settings calls `navigation.navigate('Apps', …)`, so `visible: "Apps"` looks right in the source — but the tab renders as "Home" and no "Apps" string exists in the app at all.
   - _The keyboard covers the bottom of the screen._ `hideKeyboard` before tapping anything below an input (e.g. Save).
-  - _The first `inputText` on a clean simulator raises iOS's keyboard onboarding sheet_ ("Type English and Dutch … Continue"), which covers the tab bar and swallows later taps. CI boots a fresh simulator every run, so it hits this every time — use `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.
+  - _The first `inputText` on a clean simulator raises iOS's keyboard onboarding sheet_ ("Type English and Dutch … Continue"), which covers the tab bar and swallows later taps. CI boots a fresh simulator every run, so it hits this every time — use `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.ts` after typing.
 - **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y tree** — the node keeps the placeholder as its `hintText` and gains no `accessibilityText`. Adding one to make a field selectable does not work; use a relative anchor instead.
 - **Budget for a cold JS bundle.** `clearState: true` drops the dev build's cached bundle, so the first launch refetches it from Metro. On a cold transform cache that dominates the flow: `home-loads` measured ~19s end-to-end against a warm Metro and ~43s against a cold one on an M-series Mac, and the nightly runner is slower still. `setup()` first waits through Metro's bounded startup/reload window, then prewarms the bundle; flows use `FIRST_LAUNCH_TIMEOUT_MS` rather than a hand-picked 30s. This matters because Expo can answer `/status` once and briefly stop accepting requests while its file graph settles. A 30s launch budget or a one-shot readiness probe here makes the nightly `mobile-e2e` lane fail against copy that is entirely correct.
-- **`launchApp: { clearState: true }`** wipes the dev client's stored "last opened" URL along with app state, so a plain relaunch sits on the launcher's empty server picker forever (`expo-dev-client`, shipped by #723). Every cleared-state launch MUST be followed by `- openLink: "${DEV_LAUNCHER_LINK}"` (exported from `lib/metro.mjs`) to hand the launcher the Metro bundle URL explicitly; `ctx.configureGateway()` and `home-loads.mjs` already do this. Non-cleared launches auto-resume the last session and need nothing.
+- **`launchApp: { clearState: true }`** wipes the dev client's stored "last opened" URL along with app state, so a plain relaunch sits on the launcher's empty server picker forever (`expo-dev-client`, shipped by #723). Every cleared-state launch MUST be followed by `- openLink: "${DEV_LAUNCHER_LINK}"` (exported from `lib/metro.ts`) to hand the launcher the Metro bundle URL explicitly; `ctx.configureGateway()` and `home-loads.ts` already do this. Non-cleared launches auto-resume the last session and need nothing.
 - **Metro starts from `apps/mobile/` cwd.** Running it from the repo root resolves to an empty project root and fails with `Unable to resolve module expo`. Use `bunx expo start` from `apps/mobile/`, not `bun run` from root.

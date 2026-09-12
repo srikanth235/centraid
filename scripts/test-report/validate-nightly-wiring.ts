@@ -8,7 +8,7 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { rigPaths } from "./journey-rigs.ts";
+import { rigPaths, rigPresent } from "./journey-rigs.ts";
 import { bags } from "./record.ts";
 import type { Loose } from "./record.ts";
 
@@ -495,13 +495,10 @@ const rigs = await Promise.all(
   )
 );
 const orphanChecks = await Promise.all(
-  [...registered].map(async (rig) => {
-    const present = await access(path.join(root, rig)).then(
-      () => true,
-      () => false
-    );
-    return { rig, present };
-  })
+  [...registered].map(async (rig) => ({
+    rig,
+    present: await rigPresent(root, rig),
+  }))
 );
 
 for (const { lane, key, source } of rigs) {

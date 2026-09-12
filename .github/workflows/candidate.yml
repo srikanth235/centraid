@@ -96,9 +96,9 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          fp="$(node scripts/native-fingerprint.mjs android)"
+          fp="$(node scripts/native-fingerprint.ts android)"
           test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
-          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          js="$(node scripts/js-bundle-fingerprint.ts)"
           test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
@@ -375,7 +375,7 @@ jobs:
           set -euo pipefail
           # @expo/fingerprint reads node_modules for the autolinked native tree,
           # so this runs after the setup action's install.
-          fp="$(node scripts/native-fingerprint.mjs ios)"
+          fp="$(node scripts/native-fingerprint.ts ios)"
           test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
           # Captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's exit
           # status, so a broken xcodebuild would silently weaken the key.
@@ -427,7 +427,7 @@ jobs:
         run: |
           set -euo pipefail
           udid="$(xcrun simctl list devices available --json \
-            | node apps/mobile/scripts/resolve-ios-simulator.mjs)"
+            | node apps/mobile/scripts/resolve-ios-simulator.ts)"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid" || true
           xcrun simctl bootstatus "$udid" -b

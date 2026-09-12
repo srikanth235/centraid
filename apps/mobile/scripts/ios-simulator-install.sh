@@ -209,7 +209,7 @@ test "$banked" = "$js_bundle_hash" || {
 xcrun simctl install "$SIMULATOR_UDID" "$app"
 xcrun simctl get_app_container "$SIMULATOR_UDID" "$expected_bundle_id" > /dev/null
 
-node scripts/test-report/prepare.mjs
+node scripts/test-report/prepare.ts
 
 # #905 — THE CORPUS GOES IN BEFORE ANYTHING PAIRS. A lane is many flows sharing
 # ONE pairing, and a flow's own `ctx.ensureDemo` writes to the gateway only, so

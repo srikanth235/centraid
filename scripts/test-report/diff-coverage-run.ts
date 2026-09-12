@@ -1,7 +1,7 @@
 /**
  * Scoped diff-coverage runner (#576).
  *
- * Produces the coverage map `diff-coverage.mjs` scores, doing the least work
+ * Produces the coverage map `diff-coverage.ts` scores, doing the least work
  * that can produce a correct verdict:
  *
  *   1. No instrumentable file changed (docs, config, tests-only)? Skip
@@ -21,9 +21,9 @@
  * preview of that gate, not a replacement for it.
  *
  * Usage:
- *   node scripts/test-report/diff-coverage-run.mjs
- *   node scripts/test-report/diff-coverage-run.mjs --dependents
- *   node scripts/test-report/diff-coverage-run.mjs --base origin/main
+ *   node scripts/test-report/diff-coverage-run.ts
+ *   node scripts/test-report/diff-coverage-run.ts --dependents
+ *   node scripts/test-report/diff-coverage-run.ts --base origin/main
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";

@@ -7,7 +7,7 @@
 
 // Metro's port. 8081 is Expo's default and what CI uses; every Metro URL in the
 // harness derives from here so an override is one env var
-// (`METRO_PORT=8082 node tests/agent-e2e-mobile/flows/<flow>.mjs`).
+// (`METRO_PORT=8082 node tests/agent-e2e-mobile/flows/<flow>.ts`).
 //
 // Overriding it does NOT move the app: this project has no `expo-dev-client`
 // dependency, so the iOS debug build asks `RCTBundleURLProvider` for

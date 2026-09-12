@@ -3,7 +3,7 @@
  * Fetch connector brand SVGs from Iconify and rewrite connectorBrandMarks.tsx.
  *
  * Browse: https://icon-sets.iconify.design/
- * Usage:  node scripts/fetch-connector-brand-icons.mjs
+ * Usage:  node scripts/fetch-connector-brand-icons.ts
  */
 import fs from "node:fs";
 import https from "node:https";
@@ -99,7 +99,7 @@ out.default =
 sources.default = "local:default";
 
 const file = `/* Brand SVGs from Iconify (https://icon-sets.iconify.design/), offline-embedded.
- * Prefer regenerating with: node scripts/fetch-connector-brand-icons.mjs
+ * Prefer regenerating with: node scripts/fetch-connector-brand-icons.ts
  *
  * Sources:
 ${Object.entries(sources)

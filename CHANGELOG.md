@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Remaining first-party `node …mjs` invocations (mobile fingerprints, iOS simulator resolver, lane `prepare`, spike flows) now run the TypeScript sources. Workflow-text linters accept `.ts` (or dual). Humans run `node path/to/script.ts`; `node_modules/vitest/vitest.mjs` stays as shipped ([#1018](https://github.com/srikanth235/centraid/issues/1018)).
 - Oxlint helper `.mjs` re-export shims are gone. Maintained tooling source is `.ts`, executed as `node path/to/script.ts`; no `.mts`. `lint:tsconfigs` requires `.governance/law/tsconfig.json` in root typecheck ([#1018](https://github.com/srikanth235/centraid/issues/1018)).
 - `oxlint.config.ts` imports the oversized-file and type-aware-rule helpers as TypeScript. `tests/inventory.json#fileSize` drops three stale `.mjs` rows and lowers `_budget` to 126 ([#1018](https://github.com/srikanth235/centraid/issues/1018)).
 - Governance law (`.governance/law`) is TypeScript: rules, tests, runner, and generator execute as `node path/to/file.ts`. `amendment-pairing` pairs `rules/<id>.ts` with `rules/<id>.test.ts`. Managed-tree digest keys use the new `.ts` paths ([#1018](https://github.com/srikanth235/centraid/issues/1018)).

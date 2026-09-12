@@ -31,7 +31,7 @@
  * HARD FAILURE that says the check did not run — a silent pass here would
  * restore precisely the blind spot the gate exists to remove.
  *
- * Usage:  GITHUB_TOKEN=… node scripts/test-report/validate-citations-open.mjs
+ * Usage:  GITHUB_TOKEN=… node scripts/test-report/validate-citations-open.ts
  * Exit:   0 clean, 1 on a closed citation, a stale ledger state, or an
  *         unreachable API.
  */

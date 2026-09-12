@@ -1,10 +1,10 @@
 # AGENTS.md — agent-driven e2e (mobile)
 
-Notes for any agent (or human) writing or running flows in this folder. Pair with [README.md](README.md) (general user-facing how-to). Shared run-id and verdict conventions live in [`../agent-e2e-shared/harness.mjs`](../agent-e2e-shared/harness.mjs); desktop regression ownership lives in `apps/desktop/tests/e2e/`.
+Notes for any agent (or human) writing or running flows in this folder. Pair with [README.md](README.md) (general user-facing how-to). Shared run-id and verdict conventions live in [`../agent-e2e-shared/harness.ts`](../agent-e2e-shared/harness.ts); desktop regression ownership lives in `apps/desktop/tests/e2e/`.
 
 ## What this layer is for
 
-The single mobile journey layer for both exploratory work and committed native regression. The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `ensureDemo`, `configureGateway`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
+The single mobile journey layer for both exploratory work and committed native regression. The harness ([`lib/harness.ts`](lib/harness.ts)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `ensureDemo`, `configureGateway`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
 
 `MAESTRO_PLATFORM=ios|android` forces a target when both are running; otherwise iOS is preferred. `state.json` and `verdict.md` record the chosen platform alongside the udid.
 
@@ -30,7 +30,7 @@ cd apps/mobile && bunx expo start --dev-client
 Then:
 
 ```sh
-node tests/agent-e2e-mobile/flows/<slug>.mjs
+node tests/agent-e2e-mobile/flows/<slug>.ts
 ```
 
 Verdict at `runs/<slug>-<runId>/verdict.md`. Run dir is always kept — mobile runs are mostly screenshot audit trails, not ephemeral workspaces like desktop's `userData`.
@@ -39,7 +39,7 @@ Verdict at `runs/<slug>-<runId>/verdict.md`. Run dir is always kept — mobile r
 
 1. **Drive the screen manually via the MCP first.** Use `inspect_view_hierarchy` to dump the actual accessibility tree for the screen you want to assert on — selectors live there. Don't guess what Maestro sees from reading the RN source; the RN accessibility tree and the source aren't 1:1 (e.g. `accessibilityLabel` shows up as `accessibilityText` in the hierarchy, but `testID` doesn't exist at all unless you've added one).
 2. **Write `flows/<slug>.md` first** — Goal, Setup, Steps, Expectations, Verdict. The prose stays the source of intent.
-3. **Encode it as `flows/<slug>.mjs`** using `runFlow`. Skeleton in [README.md](README.md#authoring-a-flow).
+3. **Encode it as `flows/<slug>.ts`** using `runFlow`. Skeleton in [README.md](README.md#authoring-a-flow).
 4. **Iterate against `~/.maestro/tests/<timestamp>/` debug artifacts** when a step fails — the latest dir has the failure screenshot and the parsed `commands-(*).json` so you can see exactly which selector or assertion Maestro objected to.
 5. **Commit both files.** `runs/` is gitignored.
 
@@ -52,7 +52,7 @@ Verdict at `runs/<slug>-<runId>/verdict.md`. Run dir is always kept — mobile r
 
 ## Flow authoring rules
 
-Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while observing nothing, or red for a reason unrelated to their claim. These rules prevent the recurrence (issue #483). The first two are **mechanically enforced** by `scripts/lint-e2e-flows.mjs` (runs in `bun run check:pr` and CI `static`); the rest are review judgment. The linter discovers flows from disk (#842 W0.4), so a new journey is linted the moment it is created — there is no roster to update. A `# e2e-lint-allow:` marker naming a rule that does not exist is a dead comment, not an exemption: the real rule names are `unasserted-input` and `route-name`.
+Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while observing nothing, or red for a reason unrelated to their claim. These rules prevent the recurrence (issue #483). The first two are **mechanically enforced** by `scripts/lint-e2e-flows.ts` (runs in `bun run check:pr` and CI `static`); the rest are review judgment. The linter discovers flows from disk (#842 W0.4), so a new journey is linted the moment it is created — there is no roster to update. A `# e2e-lint-allow:` marker naming a rule that does not exist is a dead comment, not an exemption: the real rule names are `unasserted-input` and `route-name`.
 
 1. **Every `inputText` must be observed before it can be wiped.** _(enforced)_ Follow it with an `assertVisible`/`extendedWaitUntil` on the value typed, so a dropped or corrupted keystroke fails AT the field — not as an unrelated redbox two steps later. A value that genuinely cannot be read back (a masked secret, a throwaway keystroke that is erased) is exempt with a reason: `# e2e-lint-allow: unasserted-input — <why>` on the step or the comment above it.
 2. **Never assert on a tab-bar label or route name.** _(enforced)_ `Home/Photos/Docs/Agenda/Settings/Apps` render in the tab bar on every screen (and `Apps` is a route name, never visible text), so `tapOn "Docs.*"` + `assertVisible "Docs"` passes even when the tap did nothing. Assert a string the target screen alone publishes — a heading or a Pressable `accessibilityLabel` (e.g. Photos → "Search photos"). `tapOn` on a label is fine; asserting one is not. Exempt a deliberate case with `# e2e-lint-allow: route-name — <why>`.
@@ -94,7 +94,7 @@ Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while 
 ## Where to look
 
 - [README.md](README.md) — user-facing how-to and known caveats.
-- [lib/harness.mjs](lib/harness.mjs) — `runFlow`, `setup`, sim/Metro preflight, ctx surface. Read this before adding a helper.
-- [flows/home-loads.mjs](flows/home-loads.mjs) — canonical example flow (5 directives, runs in ~20s).
-- [../agent-e2e-shared/harness.mjs](../agent-e2e-shared/harness.mjs) — shared run identity and verdict writer, parent of these conventions.
+- [lib/harness.ts](lib/harness.ts) — `runFlow`, `setup`, sim/Metro preflight, ctx surface. Read this before adding a helper.
+- [flows/home-loads.ts](flows/home-loads.ts) — canonical example flow (5 directives, runs in ~20s).
+- [../agent-e2e-shared/harness.ts](../agent-e2e-shared/harness.ts) — shared run identity and verdict writer, parent of these conventions.
 - [../../AGENTS.md](../../AGENTS.md) — repo-wide conventions agents must follow on top of these.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Comment-only proof for a diff (#861) — sweep evidence, not a gate.
 //
-// Usage: `node scripts/comment-only-diff.mjs [<git-ref>]` (default origin/main).
+// Usage: `node scripts/comment-only-diff.ts [<git-ref>]` (default origin/main).
 //
 // A doctrine sweep touches hundreds of files and must change no behaviour. Eyes
 // cannot certify that at that size, and a line diff cannot either — reflowing a

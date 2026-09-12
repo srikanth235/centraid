@@ -12,8 +12,8 @@
  * promotion. This is the guard that reads it, and it is enforced in three
  * places so the answer arrives as early as possible:
  *
- *   prepare.mjs               before anything is versioned — the useful one
- *   classify.mjs --require-candidate   for a caller that only classifies
+ *   prepare.ts               before anything is versioned — the useful one
+ *   classify.ts --require-candidate   for a caller that only classifies
  *   release.yml `require-candidate`    the backstop, after the tag exists
  *
  * The escape is `--allow-uncandidated`, and it PRINTS THE REASON it was used.

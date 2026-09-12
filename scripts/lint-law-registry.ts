@@ -13,7 +13,7 @@
  * re-duplicating a law looks like at write time.
  *
  * Deliberately dependency-free and pure over an injectable root, so the fail
- * path is testable from `node --test` (see lint-law-registry.test.mjs).
+ * path is testable from `node --test` (see lint-law-registry.test.ts).
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";

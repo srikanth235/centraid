@@ -356,7 +356,7 @@ jobs:
       #             suffered (it mixed in the whole e2e.yml and all of ios/,
       #             including build products, so any workflow edit or leftover
       #             build dir busted the cache).
-      #             The hashing lives in apps/mobile/scripts/native-fingerprint.mjs.
+      #             The hashing lives in apps/mobile/scripts/native-fingerprint.ts.
       #   xc<hash>  the host toolchain (Xcode build + iphonesimulator SDK).
       #             @expo/fingerprint hashes the PROJECT, not the MACHINE — so a
       #             binary built by a newer Xcode after a macos image roll must
@@ -376,7 +376,7 @@ jobs:
           # @expo/fingerprint reads node_modules for the autolinked native tree,
           # so this runs after `bun install` above. The script prints the bare
           # hash and hard-fails on an empty digest (no constant false-hit key).
-          fp="$(node scripts/native-fingerprint.mjs ios)"
+          fp="$(node scripts/native-fingerprint.ts ios)"
           test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
           # #915 Wave 2 — NATIVE ONLY. The key carried a `js` component from
           # #892 Phase 0, because `--configuration Release` EMBEDS the Hermes
@@ -458,7 +458,7 @@ jobs:
         run: |
           set -euo pipefail
           udid="$(xcrun simctl list devices available --json \
-            | node apps/mobile/scripts/resolve-ios-simulator.mjs)"
+            | node apps/mobile/scripts/resolve-ios-simulator.ts)"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid" || true
           xcrun simctl bootstatus "$udid" -b
@@ -646,7 +646,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       # Fingerprint the Android native build inputs — same mechanism as the iOS
-      # job (apps/mobile/scripts/native-fingerprint.mjs). Keyed so a JS-only
+      # job (apps/mobile/scripts/native-fingerprint.ts). Keyed so a JS-only
       # commit reuses the cached .apk while any native-input change rebuilds it.
       # The Android build toolchain (Gradle/AGP/NDK/compileSdk) is decided by
       # app.config.ts and the withCentraidAndroidBuild plugin since #996, and the
@@ -665,9 +665,9 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          fp="$(node scripts/native-fingerprint.mjs android)"
+          fp="$(node scripts/native-fingerprint.ts android)"
           test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
-          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          js="$(node scripts/js-bundle-fingerprint.ts)"
           test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"

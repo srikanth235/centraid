@@ -749,3 +749,20 @@ git ls-files '*.mjs'
 - `docs/toolchain.md`, `TESTING.md`, `QUALITY.md`, `CONTRIBUTING.md`, `docs/coding-standards.md`, `README.md`
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Territory — remaining `node …mjs` invocations
+
+Tracked `*.mjs` source was already empty, but CI still executed a handful of first-party `.mjs` paths: `native-fingerprint`, `js-bundle-fingerprint`, `resolve-ios-simulator`, `test-report/prepare`, and the spike's `docs-drive` / `agenda-week` flows. Those commands now run the TypeScript files.
+
+`lint-e2e-wiring` already matched `.ts` invocations; `lint-evidence-mapping` now matches `write-evidence.ts` (or `.mjs`) so it still sees the shipped YAML. Current-state run docs and script usage comments say `node path/to/script.ts`. Law ledger `_comment` strings were left alone.
+
+### Paths this slice
+
+- `.github/workflows/{ci,e2e,candidate}.yml`
+- `apps/mobile/scripts/{android-emulator-install,ios-simulator-install}.sh`
+- `tests/agent-e2e-mobile/spike-paired-state-restore.sh`
+- `scripts/test-report/lint-evidence-mapping.ts`
+- `scripts/lint-e2e-wiring.test.ts`, `scripts/lint-e2e-wiring.reach.ts`
+- current-state READMEs / AGENTS.md / perf README / usage comments
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

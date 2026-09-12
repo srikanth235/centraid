@@ -2,7 +2,7 @@
  * Merge a generated test-health report into a Pages site tree.
  *
  * Usage:
- *   node scripts/test-report/prepare-pages-site.mjs \
+ *   node scripts/test-report/prepare-pages-site.ts \
  *     --report dist/test-report \
  *     --site site \
  *     --slot main

@@ -11,9 +11,9 @@
  * Pure comparison helpers are exported for unit tests.
  *
  * Usage:
- *   node scripts/test-report/diff-coverage.mjs
- *   node scripts/test-report/diff-coverage.mjs --base origin/main --threshold 80
- *   node scripts/test-report/diff-coverage.mjs --coverage coverage/coverage-final.json
+ *   node scripts/test-report/diff-coverage.ts
+ *   node scripts/test-report/diff-coverage.ts --base origin/main --threshold 80
+ *   node scripts/test-report/diff-coverage.ts --coverage coverage/coverage-final.json
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -338,7 +338,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     console.log(
-      "Usage: node scripts/test-report/diff-coverage.mjs [--base <ref>] [--threshold 80] [--coverage coverage/coverage-final.json]"
+      "Usage: node scripts/test-report/diff-coverage.ts [--base <ref>] [--threshold 80] [--coverage coverage/coverage-final.json]"
     );
     process.exit(0);
   }

@@ -29,7 +29,7 @@ import type { Loose } from "./record.ts";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const WORKFLOWS = path.join(ROOT, ".github/workflows");
 
-/** The `--flag value` pairs of one `write-evidence.mjs` invocation. */
+/** The `--flag value` pairs of one `write-evidence.ts` invocation. */
 export function parseStep(command: string) {
   const flags: Record<string, string | undefined> = {};
   for (const match of command.matchAll(
@@ -73,7 +73,7 @@ export function resolveLanes(raw: unknown, block: unknown): string[] {
 export function stepsIn(source: string) {
   const steps: Array<Loose & { lanes: string[] }> = [];
   const pattern =
-    /node scripts\/test-report\/write-evidence\.mjs(?<rest>[\s\S]*?)(?=\n\s*(?:-\s|\w+:)|\n\n|$)/gu;
+    /node scripts\/test-report\/write-evidence\.(?:mjs|ts)(?<rest>[\s\S]*?)(?=\n\s*(?:-\s|\w+:)|\n\n|$)/gu;
   for (const match of source.matchAll(pattern)) {
     const flags = parseStep(
       (match.groups?.rest ?? "").replaceAll(/\\\s*\n\s*/gu, " ")

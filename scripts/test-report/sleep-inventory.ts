@@ -184,7 +184,7 @@ export function validateSleepInventory(
       );
     } else if (Number(count) < Number(inventoried)) {
       errors.push(
-        `${file} is down to ${count} fixed sleep site(s) but inventoried at ${inventoried}; ratchet it (node scripts/test-report/sleep-inventory.mjs --write)`
+        `${file} is down to ${count} fixed sleep site(s) but inventoried at ${inventoried}; ratchet it (node scripts/test-report/sleep-inventory.ts --write)`
       );
     }
   }
@@ -207,7 +207,7 @@ export function validateSleepInventory(
     );
   } else if (measured < Number(budget)) {
     errors.push(
-      `fixed-sleep budget is slack: ${measured} sites against a budget of ${budget}. Ratchet _budget down to ${measured} (node scripts/test-report/sleep-inventory.mjs --write).`
+      `fixed-sleep budget is slack: ${measured} sites against a budget of ${budget}. Ratchet _budget down to ${measured} (node scripts/test-report/sleep-inventory.ts --write).`
     );
   }
 

@@ -1126,9 +1126,9 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          fp="$(node scripts/native-fingerprint.mjs android)"
+          fp="$(node scripts/native-fingerprint.ts android)"
           test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
-          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          js="$(node scripts/js-bundle-fingerprint.ts)"
           test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
@@ -1142,7 +1142,7 @@ jobs:
       # against rather than being generated over.
       #
       # It runs AFTER the fingerprint step on purpose: the fingerprint ignores
-      # both generated trees (native-fingerprint.mjs), so its value is the same
+      # both generated trees (native-fingerprint.ts), so its value is the same
       # either way, and keeping the ratchet's inputs untouched by a prebuild is
       # what makes that ignore assertable.
       - name: Generate the Android project
@@ -1240,7 +1240,7 @@ jobs:
       # execution history it can legitimately report tasks UP-TO-DATE, and
       # `createBundleReleaseJsAndAssets` under-declares: React Native annotates
       # its sources as a file tree under `apps/mobile` only, while
-      # `js-bundle-fingerprint.mjs` correctly counts the four workspace packages
+      # `js-bundle-fingerprint.ts` correctly counts the four workspace packages
       # and `bun.lock` as bundle inputs too. So the bundle task is forced with
       # `--rerun` in `apps/mobile/scripts/android-emulator-install.sh` — the full
       # argument is written there, next to the invocation it constrains.

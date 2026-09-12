@@ -11,9 +11,9 @@ The nightly downloads every lane's artifact with ONE glob and `merge-multiple: t
   with: { pattern: nightly-evidence-*, path: artifacts, merge-multiple: true }
 ```
 
-So every producer must upload with `path: artifacts/` — never `path: artifacts/evidence/`. Uploading the subdirectory flattens `evidence/` away and the files land where nothing reads them. This is the exact #532 defect, and `scripts/test-report/validate-nightly-wiring.mjs` guards it.
+So every producer must upload with `path: artifacts/` — never `path: artifacts/evidence/`. Uploading the subdirectory flattens `evidence/` away and the files land where nothing reads them. This is the exact #532 defect, and `scripts/test-report/validate-nightly-wiring.ts` guards it.
 
-`write-evidence.mjs` always resolves its output against the **repo root**, not the cwd, for the same reason `prepare.mjs` does (#535 F2): a lane that runs from `apps/mobile` would otherwise write `apps/mobile/artifacts/evidence/`.
+`write-evidence.ts` always resolves its output against the **repo root**, not the cwd, for the same reason `prepare.ts` does (#535 F2): a lane that runs from `apps/mobile` would otherwise write `apps/mobile/artifacts/evidence/`.
 
 ## 2. Forgetting `if: always()`
 
@@ -36,7 +36,7 @@ A matrix leg (`coverage-shard-${{ matrix.shard }}`) writes one file per leg unde
   env:
     LANE_STARTED_AT: ${{ steps.start.outputs.at }}
   run: >
-    node scripts/test-report/write-evidence.mjs --lane <job-id> --rung 4 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate "$CANDIDATE_SHA" --qualities journey --surfaces mobile-native
+    node scripts/test-report/write-evidence.ts --lane <job-id> --rung 4 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate "$CANDIDATE_SHA" --qualities journey --surfaces mobile-native
 ```
 
 Parks need nothing here: the writer reads `tests/quarantine.json#lanes` itself and writes `verdict: "parked"` rather than `"failed"` for a lane with an unexpired entry. A park is a date on the debt, never a mute.

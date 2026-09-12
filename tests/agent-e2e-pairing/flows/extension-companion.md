@@ -8,7 +8,7 @@ Run under a display because Chromium extensions do not run in normal headless mo
 
 ```sh
 bunx playwright install chromium
-xvfb-run --auto-servernum node tests/agent-e2e-pairing/flows/extension-companion.mjs
+xvfb-run --auto-servernum node tests/agent-e2e-pairing/flows/extension-companion.ts
 ```
 
 This flow uses the same gateway/pairing harness as the other ceremony tests. It needs internet egress to the production n0 relay because browser iroh cannot take the native loopback UDP path.

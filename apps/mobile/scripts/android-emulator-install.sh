@@ -351,7 +351,7 @@ echo "--- active network (what the transfer rules will be evaluated against) ---
 adb shell dumpsys connectivity 2>/dev/null | sed -n '/Active default network/,+8p' || true
 adb shell dumpsys connectivity 2>/dev/null | grep -m2 -oE 'Transports: [A-Z_|]+' || true
 
-node scripts/test-report/prepare.mjs
+node scripts/test-report/prepare.ts
 
 # #905 — THE CORPUS GOES IN BEFORE ANYTHING PAIRS.
 #

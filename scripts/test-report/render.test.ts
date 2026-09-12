@@ -169,7 +169,7 @@ describe("lint:evidence-mapping", () => {
   test("a step naming an unregistered lane is an error, never a banner", () => {
     const workflows = {
       "ci.yml":
-        "      - name: Write lane evidence\n        run: node scripts/test-report/write-evidence.mjs --lane ghost --rung 2 --platform any\n",
+        "      - name: Write lane evidence\n        run: node scripts/test-report/write-evidence.ts --lane ghost --rung 2 --platform any\n",
     };
     const { errors } = checkEvidenceMapping({ workflows, lanes });
     expect(errors.join(" ")).toContain(
@@ -180,7 +180,7 @@ describe("lint:evidence-mapping", () => {
   test("a rung that disagrees with the registry is an error", () => {
     const workflows = {
       "ci.yml":
-        "      - name: Write lane evidence\n        run: node scripts/test-report/write-evidence.mjs --lane static --rung 4 --platform any\n",
+        "      - name: Write lane evidence\n        run: node scripts/test-report/write-evidence.ts --lane static --rung 4 --platform any\n",
     };
     const { errors } = checkEvidenceMapping({ workflows, lanes });
     expect(errors.join(" ")).toContain(
@@ -208,7 +208,7 @@ describe("lint:evidence-mapping", () => {
 
   test("reads the flags off a wrapped step", () => {
     const steps = stepsIn(
-      "        run: >\n          node scripts/test-report/write-evidence.mjs\n          --lane static --rung 2 --platform any --budget-ms 900000\n"
+      "        run: >\n          node scripts/test-report/write-evidence.ts\n          --lane static --rung 2 --platform any --budget-ms 900000\n"
     );
     expect(steps).toHaveLength(1);
     expect(steps[0]).toMatchObject({
