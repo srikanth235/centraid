@@ -1941,6 +1941,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "interactionP95": {
@@ -1962,6 +1963,7 @@
       "hardware": "device-android-mid",
       "spans": ["client.frame", "seat.apply"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "frameMissesDuringSync": {
@@ -1983,6 +1985,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "keystrokeP95": {
@@ -2004,6 +2007,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "residentMemory": {
@@ -2025,6 +2029,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "seat.apply"],
       "consumers": [],
+      "lane": "gate-nightly.yml / battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "batteryPerPass": {
@@ -2046,6 +2051,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
+      "lane": "gate-nightly.yml / android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "coldStartAtYear3": {
@@ -2067,6 +2073,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "interactionP95": {
@@ -2088,6 +2095,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["client.frame", "seat.apply"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "frameMissesDuringSync": {
@@ -2109,6 +2117,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "keystrokeP95": {
@@ -2130,6 +2139,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call"],
       "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "residentMemory": {
@@ -2151,6 +2161,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "seat.apply"],
       "consumers": [],
+      "lane": "gate-nightly.yml / battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "batteryPerPass": {
@@ -2172,6 +2183,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
+      "lane": "gate-nightly.yml / android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "coldStartAtYear3": {

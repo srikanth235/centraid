@@ -106,3 +106,166 @@ jobs:
           path: target/xtask/**
           retention-days: 7
           if-no-files-found: warn
+
+  # THE DEVICE LANES ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G4).
+  #
+  # Four cells, each `cargo xtask gate --profile nightly --lane <name>`, each
+  # running ONLY on a runner that carries the `[self-hosted, macos, devices]`
+  # labels with one iPhone and one Android attached. That runner does not exist
+  # yet — it is open question 13 and an owner hand-off — so on GitHub-hosted
+  # infrastructure these jobs do not run at all and the `gate-nightly` job above
+  # reports `device-lanes` as a loud SKIP naming them.
+  #
+  # WHY A SEPARATE JOB PER LANE and not one job with four steps: the four have
+  # different failure modes and different owners (Maestro flows, Macrobenchmark,
+  # XCTest metrics, a battery measurement), and one job would make "which lane
+  # is red" a question you answer by reading a log.
+  #
+  # WHY `runs-on` IS A MATRIX ENTRY and not a literal: `runs-on` cannot be
+  # conditional, and a job pinned to a label no runner carries sits queued until
+  # it times out — which reads as a hung lane rather than as an absent runner.
+  # The `if:` below is what makes it not start at all, and the workflow's own
+  # dispatch input is how the owner turns them on once the runner exists.
+  #
+  # WHAT THESE LANES MAY AND MAY NOT DO TO A LEDGER: they measure, and a number
+  # measured here is written to `tests/journeys.json` only when it came from a
+  # run on a NAMED REFERENCE DEVICE (`device-android-mid` / `device-iphone-oldest`,
+  # R-1020-20). A simulator or an emulator number bounds the experience from
+  # below and can never become a ceiling, which is why no `_intended` entry is
+  # promoted by this workflow existing.
+  device-lanes:
+    # `vars.CENTRAID_DEVICE_RUNNER` is set by the owner once the self-hosted
+    # runner is enrolled. Until then this evaluates false and the four cells are
+    # never queued.
+    if: vars.CENTRAID_DEVICE_RUNNER == 'true'
+    runs-on: [self-hosted, macos, devices]
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - ios-transfer-experiment
+          - android-macrobenchmark
+          - ios-xctest-metrics
+          - battery-per-background-pass
+    env:
+      # `cargo xtask gate`'s `device-lanes` step reads this: set, it stops
+      # skipping and starts REQUIRING the two device enumerators to answer
+      # (`xcrun devicectl list devices` for a physical iPhone — not `simctl`,
+      # which lists simulators — and `adb devices`). A runner that claims the
+      # label and has no phone goes red rather than quietly reporting four lanes
+      # it did not run.
+      CENTRAID_DEVICE_RUNNER: "1"
+      CENTRAID_GATE_HARDWARE: device-android-mid
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+      - name: Lease a device and make it appear where the harness looks
+        # The lease script's rule, unchanged: it leases a device and makes it
+        # appear where the EXISTING harness already looks, because a farm SDK
+        # that drove the flows itself would be a second device driver whose
+        # green says nothing about the first. iOS needs `xcrun devicectl`, which
+        # is the change wave 3 lane E owns.
+        run: bash scripts/ci/device-farm-lease.sh
+      - run: cargo xtask gate --profile nightly --lane ${{ matrix.lane }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: device-lane-${{ matrix.lane }}
+          path: target/xtask/**
+          retention-days: 14
+          if-no-files-found: warn
+
+  # THE FLAKE, which has still never been evaluated ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G6).
+  #
+  # `nix` is not installed on the container the v1 tree was built on, so
+  # `flake.nix` has been written and never run. There are two honest things to
+  # do about that and not a third: evaluate it, or say it has not been
+  # evaluated. This job does the second, and checks the one property of the
+  # flake that IS checkable without nix.
+  #
+  # WHY THERE IS NO `nix flake check` STEP HERE YET. Running it needs nix on the
+  # runner, and this repository installs external tools one of exactly two ways:
+  # a SHA-pinned third-party action, or a pinned release binary fetched in a
+  # `run:` step (`scripts/lint-workflow-pins.mjs` rule 1 and `gate.yml`'s
+  # actionlint/gitleaks/osv-scanner/buf installs). It has no pin for either
+  # shape of nix installer, and inventing one would be a fabricated pin in the
+  # file whose whole subject is pinning. So the evaluation is an OWNER HAND-OFF
+  # with the command written down, and this job refuses to imply otherwise.
+  #
+  # OWNER HAND-OFF: on a machine with nix, run `nix flake check
+  # --print-build-logs`, commit the resulting `flake.lock`, and add the pinned
+  # installer this job is missing. Until then `flake.nix`'s header says it has
+  # never been evaluated and so does this lane's summary.
+  flake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The flake states the toolchain channel ONCE, and has not been evaluated
+        run: |
+          set -euo pipefail
+          # THE ONE CHECKABLE PROPERTY. `rust-toolchain.toml` is the single
+          # version file for the v1 tree; `flake.nix` must read it through
+          # `fromRustupToolchainFile` rather than repeat the channel, because a
+          # second literal is exactly how the two drift. This is greppable
+          # without nix, and it is the part of the flake most likely to rot.
+          if ! grep -q 'fromRustupToolchainFile ./rust-toolchain.toml' flake.nix; then
+            echo "::error title=flake repeats the toolchain::flake.nix must read the channel from rust-toolchain.toml (fromRustupToolchainFile), not state it again"
+            exit 1
+          fi
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if grep -q "\"${channel}\"" flake.nix; then
+            echo "::error title=flake repeats the channel literal::flake.nix names ${channel} as a literal; rust-toolchain.toml is the one place it belongs"
+            exit 1
+          fi
+          echo "flake.nix reads the channel (${channel}) from rust-toolchain.toml and states no second copy"
+          if [ -f flake.lock ]; then
+            echo "::warning title=flake.lock exists and nothing evaluated it::add the pinned nix installer this job is missing, then `nix flake check`"
+          fi
+          {
+            echo "### nix flake check: NOT RUN"
+            echo
+            echo "\`flake.nix\` has never been evaluated. \`nix\` is absent from every runner"
+            echo "this repository uses and there is no pinned installer for it, so the first"
+            echo "evaluation is an owner hand-off: \`nix flake check --print-build-logs\` on a"
+            echo "machine with nix, then commit \`flake.lock\`. What WAS checked here is that"
+            echo "the flake reads the Rust channel out of \`rust-toolchain.toml\` instead of"
+            echo "carrying a second copy of it."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # THE CANDIDATE POINTER, in its v1 form ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G3).
+  #
+  # `docs/release.md`'s candidate precondition is the one thing standing between
+  # a tag and a commit no deep rung ever exercised, because "every release lane
+  # BUILDS the tree rather than testing it". v0 moves `refs/candidates/latest`
+  # on a green `candidate.yml`; v1's deep rung is this workflow, so a green
+  # nightly gate is what promotes. `release.yml`'s `require-candidate` backstop
+  # is unchanged and still accepts either the current pointer or any commit in
+  # the gh-pages promotion history.
+  #
+  # It writes the ref through the repository's existing script rather than a
+  # hand-rolled `git push`, so there is one writer and one shape of history.
+  promote-candidate:
+    needs: [gate-nightly]
+    if: github.event_name == 'schedule' && needs.gate-nightly.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - run: node scripts/ci/write-candidate.mjs --sha "${{ github.sha }}" --reason "green cargo xtask gate --profile nightly (#1020)"

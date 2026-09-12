@@ -31,10 +31,12 @@ name: lane-prebuilt-core
 # for publishing one — nothing in v0 ships a dSYM or an NDK `symbols.zip`
 # (census §G4) — so the steps are written here per platform: `objcopy
 # --only-keep-debug` on Linux, `dsymutil` on macOS, the `.pdb` cargo already
-# emits on Windows. The release profile deliberately does NOT `strip` (see the
-# comment on `[profile.release]` in the root `Cargo.toml`): stripping happens
-# here, after the symbols have been lifted out, so the shipped binary is
-# stripped AND the symbols exist.
+# emits on Windows, all three produced by `split-debuginfo = "packed"`. Neither
+# optimised profile `strip`s (see the comment on `[profile.release]` and
+# `[profile.dist]` in the root `Cargo.toml`): stripping happens here, after the
+# symbol file has been collected, so the shipped binary is stripped AND the
+# symbols exist. This lane builds `--profile dist` — `release` plus thin LTO —
+# because that is what a tag publishes.
 #
 # `required: true` TARGETS GATE THE PUBLISH, the rest do not — the same three
 # that v0's native matrix requires before it publishes
@@ -169,7 +171,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          key="$(cargo xtask artifact-key --triple '${{ matrix.triple }}' --profile release --explain)"
+          key="$(cargo xtask artifact-key --triple '${{ matrix.triple }}' --profile dist --explain)"
           echo "key=${key}" >> "$GITHUB_OUTPUT"
           echo "artifact key ${key}" >> "$GITHUB_STEP_SUMMARY"
       - name: Build
@@ -177,32 +179,35 @@ jobs:
         env:
           CENTRAID_BUILD_GIT_SHA: ${{ github.sha }}
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
-        run: cargo build --release --bin centraid --target '${{ matrix.triple }}'
+        run: cargo build --profile dist --bin centraid --target '${{ matrix.triple }}'
       # SYMBOLS FIRST, THEN STRIP. The other order throws them away.
-      - name: Split the symbols and strip the binary
+      - name: Collect the symbol file and strip the binary
         shell: bash
         run: |
           set -euo pipefail
-          out="dist/${{ matrix.triple }}"
+          out="artifact/${{ matrix.triple }}"
           mkdir -p "$out"
-          src="target/${{ matrix.triple }}/release/centraid"
+          built="target/${{ matrix.triple }}/dist"
+          # `split-debuginfo = "packed"` means cargo has ALREADY written one
+          # symbol file beside the binary — `.dwp` on Linux, `.dSYM` on macOS,
+          # and on Windows the `.pdb` the linker always emits. Collecting what
+          # cargo produced, rather than running objcopy/dsymutil here, is what
+          # keeps the symbol file and the binary from being derived by two
+          # different tools at two different times.
           case "${{ runner.os }}" in
             Linux)
-              cp "$src" "$out/centraid"
-              objcopy --only-keep-debug "$out/centraid" "$out/centraid.debug"
-              objcopy --strip-debug --add-gnu-debuglink="$out/centraid.debug" "$out/centraid"
+              cp "$built/centraid" "$out/centraid"
+              cp "$built/centraid.dwp" "$out/centraid.dwp"
+              objcopy --strip-debug "$out/centraid"
               ;;
             macOS)
-              cp "$src" "$out/centraid"
-              dsymutil "$out/centraid" -o "$out/centraid.dSYM"
+              cp "$built/centraid" "$out/centraid"
+              cp -R "$built/centraid.dSYM" "$out/centraid.dSYM"
               strip -S "$out/centraid"
               ;;
             Windows)
-              # cargo already emits the .pdb beside the .exe; it IS the symbol
-              # file, and the linker never put debuginfo in the executable, so
-              # there is nothing to strip.
-              cp "${src}.exe" "$out/centraid.exe"
-              cp "target/${{ matrix.triple }}/release/centraid.pdb" "$out/centraid.pdb"
+              cp "$built/centraid.exe" "$out/centraid.exe"
+              cp "$built/centraid.pdb" "$out/centraid.pdb"
               ;;
           esac
           ls -l "$out"
@@ -212,7 +217,7 @@ jobs:
           KEY: ${{ steps.key.outputs.key }}
         run: |
           set -euo pipefail
-          out="dist/${{ matrix.triple }}"
+          out="artifact/${{ matrix.triple }}"
           # The stamp the binary reports, read back OUT OF THE BINARY rather than
           # copied from the environment: a build that dropped the stamp would
           # otherwise publish an identity file nothing in the artifact matches,
@@ -234,7 +239,7 @@ jobs:
           path: |
             centraid-${{ matrix.triple }}.tar.gz
             SHA256SUMS.${{ matrix.triple }}
-            dist/${{ matrix.triple }}/centraid-${{ matrix.triple }}.identity.json
+            artifact/${{ matrix.triple }}/centraid-${{ matrix.triple }}.identity.json
           retention-days: 90
           if-no-files-found: error
 
@@ -271,7 +276,7 @@ jobs:
       - id: key
         run: |
           set -euo pipefail
-          key="$(cargo xtask artifact-key --triple android-all-abis --profile release)"
+          key="$(cargo xtask artifact-key --triple android-all-abis --profile dist)"
           echo "key=${key}" >> "$GITHUB_OUTPUT"
       - name: Build the four ABIs
         env:
@@ -282,7 +287,7 @@ jobs:
           cargo ndk \
             -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 \
             -o dist/android/jni \
-            build --release -p centraid-core-ffi
+            build --profile dist -p centraid-core-ffi
           find dist/android -name '*.so' -print
       # THE JNI INITIALIZER STUB is lane E's: the AAR needs a class whose static
       # initializer calls `System.loadLibrary`, and where that class lives is a
@@ -352,7 +357,7 @@ jobs:
       - id: key
         run: |
           set -euo pipefail
-          key="$(cargo xtask artifact-key --triple apple-ios-xcframework --profile release)"
+          key="$(cargo xtask artifact-key --triple apple-ios-xcframework --profile dist)"
           echo "key=${key}" >> "$GITHUB_OUTPUT"
       - name: Build the three slices and the header
         env:
@@ -361,7 +366,7 @@ jobs:
         run: |
           set -euo pipefail
           for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
-            cargo build --release -p centraid-core-ffi --target "$target"
+            cargo build --profile dist -p centraid-core-ffi --target "$target"
           done
           mkdir -p dist/ios/Headers
           cbindgen --crate centraid-core-ffi --output dist/ios/Headers/centraid_core.h
@@ -370,11 +375,11 @@ jobs:
           # two separate simulator slices is rejected by Xcode.
           mkdir -p dist/ios/sim
           lipo -create \
-            target/aarch64-apple-ios-sim/release/libcentraid_core_ffi.a \
-            target/x86_64-apple-ios/release/libcentraid_core_ffi.a \
+            target/aarch64-apple-ios-sim/dist/libcentraid_core_ffi.a \
+            target/x86_64-apple-ios/dist/libcentraid_core_ffi.a \
             -output dist/ios/sim/libcentraid_core_ffi.a
           xcodebuild -create-xcframework \
-            -library target/aarch64-apple-ios/release/libcentraid_core_ffi.a -headers dist/ios/Headers \
+            -library target/aarch64-apple-ios/dist/libcentraid_core_ffi.a -headers dist/ios/Headers \
             -library dist/ios/sim/libcentraid_core_ffi.a -headers dist/ios/Headers \
             -output dist/ios/CentraidCore.xcframework
           echo "${IPHONEOS_DEPLOYMENT_TARGET}" > dist/ios/DEPLOYMENT_TARGET

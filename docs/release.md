@@ -154,7 +154,8 @@ Do not fork process text into skills.
 | `release.yml` | `v*` / `companion-v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
 | `lane-release-desktop.yml` | `workflow_call` | macOS + Windows + Linux; Environment `release` |
 | `lane-release-mobile.yml` | `workflow_call` (dispatch only, never a tag) | Environment `mobile-release`; EAS when `EXPO_TOKEN` |
-| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image |
+| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image, built from [`deploy/docker/gateway-v0.Dockerfile`](../deploy/docker/gateway-v0.Dockerfile) |
+| `lane-prebuilt-core.yml` | `workflow_call` | **the v1 prebuilt core** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): six binary triples, the four Android ABIs, the iOS XCFramework, a symbol file beside each, and `prebuilt-core-required` as the one verdict. Also invoked by `gate.yml` on pushes to `main` with `binary-only: true` |
 | `lane-release-gateway-npm.yml` | `workflow_call` | multi-OS native + pack; publish when token |
 | `lane-release-companion.yml` | `workflow_call` (`companion-v*`) | companion packages |
 | `ci.yml` | PR / main push / dispatch | rung 2 — **the only `pull_request` listener**; `docs`, `web-build` and every other PR gate roll up into the required `check` |
@@ -163,6 +164,51 @@ Do not fork process text into skills.
 | `oauth-worker.yml` | path-filtered main push | protected deploy only when explicit flag + production evidence gates pass (PR gate is ci.yml's `oauth-worker`) |
 
 Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the desktop signing identity, `NPM_TOKEN` and GHCR push never reach a lane that has no business with them.
+
+## The v1 prebuilt core: triples, keys, identity, symbols
+
+[#1020](https://github.com/srikanth235/centraid/issues/1020) ships a **prebuilt core**: every shell links a binary artifact rather than compiling Rust. Two separate mechanisms make that safe, and they answer different questions.
+
+**The key** — `cargo xtask artifact-key --triple <triple> [--features …] [--profile …]` — answers _is the artifact in the cache the one this tree would produce?_ It is `sha256` over `crates/`, `contracts/` **minus `contracts/ledgers/`**, the `rust-toolchain.toml` channel, the triple, the features, the profile, and the resolved dependency graph (every `[[package]]`'s name, version and checksum out of `Cargo.lock`, and nothing else from that file). Two consequences are the rule rather than an accident: a `Cargo.lock` edit that changes no name, version or checksum does **not** move the key, and one that bumps a version or a checksum does. A ledger is excluded because a ledger is evidence _about_ an artifact — hashing `library-size.json` would make every measurement invalidate the artifact it measured. `--explain` prints the five inputs separately so a moved key can be attributed instead of guessed at.
+
+**The identity stamp** answers _is the artifact a shell just loaded the one this tree produced?_ Every build bakes in `{gitSha, digest, schemaVersion}` (`crates/centraid/build.rs`; the digest is the key above). `centraid --version --json` prints it, the release publishes the same document as `centraid-<triple>.identity.json`, and three places check it: `deploy/vps/install.sh` at install, `CENTRAID_EXPECTED_CORE_DIGEST` at gateway start, and `crates/core-ffi`'s `open` handshake once that crate lands. A mismatch is a refusal, never a warning — a stale core starts, answers, and answers from a schema the shell stopped speaking. A local build with no release stamp is marked `dev` and says so.
+
+**Required targets gate the publish**, the rest are reported: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc` are required (the same three v0's native matrix requires); `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and `aarch64-pc-windows-msvc` are optional. `prebuilt-core-required` also asserts that every published artifact reports **one** digest, because they were all built from one tree.
+
+**A symbol file beside every artifact.** There was no precedent for this in the repository — nothing in v0 publishes a dSYM or an NDK `symbols.zip` — so `[profile.release]` keeps line-table debuginfo with `split-debuginfo = "packed"` and the lane publishes `centraid.dwp` (Linux), `centraid.dSYM` (macOS) or `centraid.pdb` (Windows) beside a **stripped** binary. Stripping happens at packaging, after the symbols have been lifted out; a profile that stripped would have thrown them away before anything could keep them.
+
+## Installing a gateway on a host, and the release smoke
+
+[`deploy/README.md`](../deploy/README.md) is the one home for the image, the units and the installer. Three rules an operator can rely on:
+
+1. `deploy/vps/install.sh` verifies **before** it unpacks (`SHA256SUMS`), then checks the installed binary's identity stamp against the release's `identity.json`.
+2. It **never installs an OS service silently**. `--with-service` prints the commands; only `--yes` writes a unit, and enabling is always left to the operator.
+3. `centraid gateway install --dry-run` writes nothing at all.
+
+`cargo xtask gate --profile release`'s `vps-smoke` step exercises all three inside a clean, digest-pinned Docker container: install, `--dry-run` writes nothing (checked by listing `/etc/systemd/system` before and after), the gateway founds a vault, a seat pairs over iroh, a WAL capture tick seals a segment, `centraid backup now` ships a generation with a non-empty tail, `centraid doctor` is clean, the container restarts over the same data directory and opens the existing vault rather than founding a second one — and finally the same artifact with a tampered `identity.json` is refused. The transcript lands at `target/xtask/release/vps-smoke/transcript.txt`.
+
+### OWNER HAND-OFF — the real VPS run
+
+The container proves the device-less half. The commands for a real host, and the transcript to expect:
+
+```bash
+# On a fresh VPS, as a user with sudo:
+curl --proto '=https' --tlsv1.2 -sSfL \
+  https://raw.githubusercontent.com/srikanth235/centraid/main/deploy/vps/install.sh -o install.sh
+sha256sum install.sh                      # compare against the release notes
+bash install.sh --version vX.Y.Z --with-service --system --instance home
+# reads: "checksum ok", "identity ok", "installed /usr/local/bin/centraid",
+#        then the two commands it did NOT run
+sudo systemd-creds encrypt --name=centraid-keystore - /etc/centraid/credentials/centraid-gateway@home.keystore.cred
+bash install.sh --version vX.Y.Z --with-service --system --instance home --yes
+sudo systemctl enable --now centraid-gateway@home
+systemctl status centraid-gateway@home    # active (running), Restart=on-failure
+sudo -u '#'"$(systemctl show -p UID --value centraid-gateway@home)" \
+  centraid doctor --data-dir /var/lib/centraid/home   # exit 0, "clean"
+sudo systemctl restart centraid-gateway@home          # comes back, no second vault founded
+```
+
+What the container cannot prove and this run must: that `DynamicUser` + `StateDirectory` actually start (the unit has never been loaded by a real systemd), that `systemd-creds` hands the secret over, that the service survives a reboot, and that a seat on another machine pairs across a real network rather than over loopback. Record the transcript in the issue.
 
 ## Enrollment / signing secrets
 

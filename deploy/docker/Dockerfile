@@ -71,7 +71,7 @@ RUN set -eu; \
     : > "$dir/src/lib.rs"; \
     printf 'fn main() {}\n' > "$dir/src/main.rs"; \
   done; \
-  cargo build --release --workspace || true
+  cargo build --profile dist --workspace || true
 
 # The real sources. `contracts/` is copied because several crates read its
 # fixtures through `include_str!`-shaped paths at build time.
@@ -82,17 +82,18 @@ COPY buf.yaml buf.gen.yaml ./
 # `touch` defeats the placeholder mtimes cargo cached above.
 RUN set -eu; \
   find crates -name '*.rs' -exec touch {} +; \
-  cargo build --release --bin centraid
+  cargo build --profile dist --bin centraid
 
-# SYMBOLS ARE SPLIT, NOT DISCARDED (#1020, D-1020-G2). The release profile
-# keeps split debuginfo; `objcopy --only-keep-debug` lifts it out so the image
-# ships a stripped binary and the symbol file is published beside the artifact
-# instead of being thrown away, which is what makes a crash report from a member
-# readable at all.
+# SYMBOLS ARE SPLIT, NOT DISCARDED (#1020, D-1020-G2/G7). `[profile.dist]`
+# carries `split-debuginfo = "packed"`, so cargo has already written the DWARF
+# to `centraid.dwp` beside the binary — one file, which is what a published
+# symbol artifact has to be. The image ships the STRIPPED binary and the `.dwp`
+# is copied out for the release to publish; a stripped binary with no symbol
+# file anywhere is a crash report nobody can read.
 RUN set -eu; \
-  install -D target/release/centraid /out/centraid; \
-  objcopy --only-keep-debug /out/centraid /out/centraid.debug; \
-  objcopy --strip-debug --add-gnu-debuglink=/out/centraid.debug /out/centraid; \
+  install -D target/dist/centraid /out/centraid; \
+  cp target/dist/centraid.dwp /out/centraid.dwp; \
+  objcopy --strip-debug /out/centraid; \
   ls -l /out
 
 FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS runtime

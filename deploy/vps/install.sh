@@ -140,9 +140,29 @@ fi
 
 if [ -n "$identity_expected" ]; then
   reported="$("${work}/centraid" --version --json)"
+  # One field at a time, by hand, because this script runs on a freshly
+  # unpacked host where `jq` may not exist — and pulling in a JSON parser to
+  # read three scalars would make the verification depend on something the
+  # verification has not verified. `schemaVersion` is a NUMBER and the other two
+  # are strings, so the extractor accepts both shapes; a quoted-only pattern
+  # read `schemaVersion` as empty and this check died on its own artifact.
+  field_of() {
+    printf '%s' "$2" \
+      | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+      | head -1
+  }
+  number_of() {
+    printf '%s' "$2" \
+      | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" \
+      | head -1
+  }
   for field in gitSha digest schemaVersion; do
-    want="$(sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$identity_expected" | head -1)"
-    got="$(printf '%s' "$reported" | sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1)"
+    want="$(field_of "$field" "$(cat "$identity_expected")")"
+    got="$(field_of "$field" "$reported")"
+    if [ -z "$want" ] && [ -z "$got" ]; then
+      want="$(number_of "$field" "$(cat "$identity_expected")")"
+      got="$(number_of "$field" "$reported")"
+    fi
     [ -n "$want" ] || die "the release identity file states no ${field}"
     if [ "$want" != "$got" ]; then
       die "IDENTITY MISMATCH on ${field}: the release says '${want}', the binary says '${got}'. This artifact is not the one this release published — refusing to install it."
