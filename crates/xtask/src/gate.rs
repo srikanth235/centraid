@@ -159,6 +159,13 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // ceiling, which is the issue's own rule.
         step("sim", run_sim),
         step("call-budget", run_call_budget),
+        // CLAUSE 9 AGAINST A REAL PANIC (#1020 wave 3, lane E finding 4). The
+        // `debug-fault` feature is off in every other step and in every release
+        // profile, so this is the one place the tree is compiled with it — and
+        // it has to be a step rather than a note, because a fault door nobody
+        // exercises is a door that rots and a clause nobody proves against the
+        // real library is a clause a shell only believes.
+        step("fault-door", run_fault_door),
     ]);
     if profile == Profile::Pr {
         return pr;
@@ -792,6 +799,30 @@ fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
             "call_budget",
             "--",
             "--nocapture",
+        ],
+    )
+}
+
+/// `fault-door` — clause 9 over a REAL panic inside `call`.
+///
+/// One test, one extra compilation of `centraid-core` and `centraid-core-ffi`
+/// under `--features debug-fault`. Narrowed to the one test name on purpose:
+/// the point is the fault door, and re-running the other ten contract tests
+/// under a feature they do not use would buy nothing and cost a link.
+fn run_fault_door(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "fault-door",
+        "cargo",
+        &[
+            "test",
+            "-p",
+            "centraid-core-ffi",
+            "--features",
+            "debug-fault",
+            "--test",
+            "contract",
+            "a_real_panic_inside_call_poisons_the_handle_through_the_abi",
         ],
     )
 }

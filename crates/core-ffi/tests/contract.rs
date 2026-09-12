@@ -495,10 +495,10 @@ fn calls_after_close_return_a_typed_error() {
 #[test]
 fn a_rust_panic_never_crosses_the_boundary() {
     let opened = Opened::gateway();
-    // A real panic inside a `call` would need a fault injection point the ABI
-    // does not have, so the POISON half — which is the half a shell depends on
-    // — is driven directly, and the `catch_unwind` half is proved by the
-    // process surviving `poison` plus every entry point afterwards.
+    // The POISON half — the half a shell depends on — is driven directly here.
+    // The `catch_unwind` half over a REAL panic is
+    // `a_real_panic_inside_call_poisons_the_handle_through_the_abi` below,
+    // which needs `--features debug-fault` (#1020 wave 3, lane E finding 4).
     // SAFETY: the handle is live.
     let core = unsafe { &*opened.handle };
     let filed = core.poison("call");
@@ -526,6 +526,94 @@ fn a_rust_panic_never_crosses_the_boundary() {
     // C would have aborted before this line.
     let (again, _) = call(opened.handle, &hello());
     assert_eq!(again, CENTRAID_PANICKED, "the poison is sticky");
+}
+
+/// CLAUSE 9, over a REAL panic inside `call` (#1020 wave 3, lane E finding 4).
+///
+/// Every other clause-9 assertion drives `Handle::poison` directly, which is a
+/// Rust-side call no shell can make — so nothing proved that the real library
+/// produces what `mobile/core`'s fake ABI produces. The `debug-fault` feature
+/// makes a `Command` named `debug.panic` panic inside `Handle::call`; it rides
+/// an existing request rather than a sixth symbol, and it is never on in a
+/// release. Run it with:
+///
+/// ```text
+/// cargo test -p centraid-core-ffi --features debug-fault \
+///   a_real_panic_inside_call_poisons_the_handle_through_the_abi
+/// ```
+#[cfg(feature = "debug-fault")]
+#[test]
+fn a_real_panic_inside_call_poisons_the_handle_through_the_abi() {
+    let opened = Opened::gateway();
+    let fault = envelope(
+        1,
+        wire::request::Kind::Command(wire::Command {
+            name: centraid_core::handle::DEBUG_FAULT_COMMAND.to_owned(),
+            ..Default::default()
+        }),
+    );
+
+    // The panic crosses `catch_unwind` and comes back as a CODE, not as an
+    // unwind into C — which would have aborted the process before this line.
+    let (code, bytes) = call(opened.handle, &fault);
+    assert_eq!(code, CENTRAID_PANICKED);
+    let refusal = wire::Envelope::decode(&bytes[..]).expect("a refusal decodes");
+    let Some(wire::envelope::Body::Error(error)) = refusal.body else {
+        panic!("a caught panic answers with an Error body, not a partial answer");
+    };
+    assert_eq!(error.code, wire::ErrorCode::Internal as i32);
+    let filed = error.diagnostic_id.clone();
+    assert!(!filed.is_empty(), "a panic is filed under a diagnostic id");
+
+    // THE HANDLE STAYS POISONED, and the FIRST diagnostic id is the one kept:
+    // a later panic is a symptom of running on state nobody can vouch for.
+    let (again, bytes) = call(opened.handle, &hello());
+    assert_eq!(again, CENTRAID_PANICKED, "the poison is sticky");
+    let refusal = wire::Envelope::decode(&bytes[..]).expect("a refusal decodes");
+    let Some(wire::envelope::Body::Error(error)) = refusal.body else {
+        panic!("a poisoned handle answers with an Error body");
+    };
+    assert_eq!(error.diagnostic_id, filed);
+
+    // And `next_event` refuses too rather than hanging.
+    let mut buf: *mut u8 = std::ptr::null_mut();
+    let mut len: usize = 0;
+    // SAFETY: live handle and live out-pointers.
+    let code = unsafe { centraid_next_event(opened.handle, 1, &raw mut buf, &raw mut len) };
+    assert_eq!(code, CENTRAID_PANICKED, "never a hang");
+    if !buf.is_null() {
+        // SAFETY: what the call reported.
+        unsafe { centraid_free(buf, len) };
+    }
+}
+
+/// WITHOUT the feature, the fault command is just an unknown command.
+///
+/// The door has to be absent from a default build, and "absent" has to be
+/// checked rather than asserted in a comment: a build that answered
+/// `debug.panic` with a panic because someone left the feature on a default
+/// list would be a release that can be crashed by a request.
+#[cfg(not(feature = "debug-fault"))]
+#[test]
+fn the_fault_door_is_absent_from_a_default_build() {
+    let opened = Opened::gateway();
+    let fault = envelope(
+        1,
+        wire::request::Kind::Command(wire::Command {
+            name: centraid_core::handle::DEBUG_FAULT_COMMAND.to_owned(),
+            ..Default::default()
+        }),
+    );
+    let (code, bytes) = call(opened.handle, &fault);
+    assert_ne!(code, CENTRAID_PANICKED, "no panic door in a default build");
+    let answer = wire::Envelope::decode(&bytes[..]).expect("it decodes");
+    if let Some(wire::envelope::Body::Error(error)) = answer.body {
+        assert_ne!(
+            error.code,
+            wire::ErrorCode::Internal as i32,
+            "an unregistered command is a request error, not a crash"
+        );
+    }
 }
 
 /// CLAUSE 9, the `open` corner: there is no handle to poison.
