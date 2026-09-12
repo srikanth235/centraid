@@ -231,7 +231,20 @@ async function dropEntry(
   if (entry.idleTimer) clearTimeout(entry.idleTimer);
   entry.idleTimer = undefined;
   await entry.promise
-    .then((session) => (mode === "purge" ? session.purge() : session.close()))
+    .then(async (session) => {
+      if (mode !== "purge") return session.close();
+      const taken = await session.purge();
+      // NEVER SILENT (#1014, P24; R-1014-12). A purge that took the member's
+      // unsent work says so; the browser has no revoked-notice store to hang
+      // it on, so the console is where a support session can find it.
+      if (taken && taken.unsent > 0) {
+        console.warn(
+          `[centraid] replica: purged ${entry.identity.vaultId} with ${taken.unsent} ` +
+            `unsent change(s) — ${taken.saved ? "saved to revoked-outbox JSON in OPFS" : "NOT saved"}`
+        );
+      }
+      return undefined;
+    })
     .catch(() => undefined)
     .finally(() => {
       if (mode === "purge") terminalPurgeRetryLoop.wake();

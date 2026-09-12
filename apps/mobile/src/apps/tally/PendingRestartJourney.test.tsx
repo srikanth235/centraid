@@ -55,11 +55,11 @@ import { EMPTY_BAG, valuate } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openNodeNativeSeat } from "../../lib/replica/native-seat.test-fixtures";
-import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type {
   NativeChangeFeed,
   NativeReplicaSession,
 } from "../../lib/replica/native-session";
+import { createNativeReplicaSession } from "../../lib/replica/native-session-open";
 
 // The shared block stub, plus the one primitive it does not wire: it forwards
 // `onPress` and drops every other handler, and a journey that TYPES needs

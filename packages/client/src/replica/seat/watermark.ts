@@ -79,10 +79,16 @@ export function seatWatermarkLine(
   watermark: SeatWatermark | undefined
 ): string | undefined {
   if (!watermark) return undefined;
+  const behind = `${watermark.behind.toLocaleString()} change${watermark.behind === 1 ? "" : "s"} behind`;
   if (watermark.deferredPending) {
-    // Said first and said plainly: this one does not clear by waiting.
-    return "a large update is waiting for wifi";
+    // Said plainly: this one does not clear by waiting. AND WITH THE DISTANCE
+    // WHEN THERE IS ONE (#1014, C1) — the applier now stops at an owed span
+    // instead of stepping over it, so `behind` counts real unapplied work and
+    // hiding it would understate what the member is missing.
+    return watermark.behind === 0
+      ? "a large update is waiting for wifi"
+      : `${behind} — a large update is waiting for wifi`;
   }
   if (watermark.behind === 0) return "up to date";
-  return `${watermark.behind.toLocaleString()} change${watermark.behind === 1 ? "" : "s"} behind`;
+  return behind;
 }

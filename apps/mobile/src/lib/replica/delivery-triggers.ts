@@ -151,11 +151,22 @@ export class SeatDelivery {
 export function seatDeliverySink(options: {
   emit: (invalidations: ReplicaInvalidation[]) => void;
   applied?: (at: number) => void;
+  /**
+   * R24's other half (#1014, C10/C11): the applier cleared these overlays
+   * inside the commit's transaction and told us AFTER it committed. The
+   * browser has consumed this since #996; the phone did not, so an executed
+   * write's pending badge sat over the very rows that settled it until
+   * something else happened to move the queue.
+   */
+  overlaysCleared?: (intentIds: readonly string[]) => void;
 }): SeatWorkerSink {
   return {
     onChange: (notice) => {
       options.emit(seatChangeInvalidations(notice));
       options.applied?.(notice.cursor);
     },
+    ...(options.overlaysCleared
+      ? { onOverlaysCleared: options.overlaysCleared }
+      : {}),
   };
 }

@@ -482,7 +482,7 @@ export async function commandDevices(
       }
       const removed = devices.revoke(target);
       for (const row of removed) {
-        cleanupRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
+        cleanupRegistry.get(row.vaultId)?.retireReplicaDevice(row.endpointId);
       }
       for (const row of removed)
         process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);

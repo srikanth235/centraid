@@ -37,6 +37,7 @@ import { replicaIntentInvalidations } from "./intent-invalidations.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
 import { IntentQueue } from "./intents.js";
 import { MemoryIntentStore } from "./memory-intent-store.js";
+import { invalidateOutboxMirror } from "./outbox-mirror.js";
 import {
   replicaIdentityForGatewayAuth,
   fetchReplicaForScope,
@@ -64,6 +65,7 @@ import {
   QUEUED_OFFLINE,
 } from "./shell-outcomes.js";
 import { purgeShellScope } from "./shell-session-purge.js";
+import type { ShellScopePurgeResult } from "./shell-session-purge.js";
 import type {
   ReplicaShellSessionOptions,
   ShellReplicaSearchRequest,
@@ -128,6 +130,8 @@ export class ReplicaShellSession {
    * remote-only browser would be local data the member asked it not to keep.
    */
   #queue: IntentQueue | undefined;
+  /** The raw store the mirror was built over (#1014, C11). */
+  #outboxStore: IntentRecordStore | undefined;
   #rowKeys: SeatRowKeys | undefined;
   #opening: Promise<void> | undefined;
 
@@ -265,6 +269,7 @@ export class ReplicaShellSession {
     const file = await this.#seat.file();
     const store =
       this.#injectedStore ?? file?.outbox() ?? new MemoryIntentStore();
+    this.#outboxStore = store; // `settleCleared` reaches the mirror through it.
     if (file) this.#rowKeys = new SeatRowKeys(file);
     this.#queue = new IntentQueue(
       store,
@@ -467,6 +472,10 @@ export class ReplicaShellSession {
    * settled and the badges they were drawn with go.
    */
   private settleCleared(intentIds: readonly string[]): void {
+    // THE MIRROR DID NOT SEE THIS WRITE (#1014, C11): the rows went from
+    // `seat_outbox` on the seat's own connection, not through the proxy the
+    // mirror invalidates on, so the badge stayed over rows that had landed.
+    invalidateOutboxMirror(this.#outboxStore);
     for (const intentId of intentIds)
       this.#admission.resolve(intentId, { intentId, status: "executed" });
   }
@@ -509,19 +518,24 @@ export class ReplicaShellSession {
     await this.#seat.close();
   }
 
-  /** Unpair/revoke/vault-switch terminal cleanup for this scope's storage. */
-  async purge(): Promise<void> {
+  /**
+   * Unpair/revoke/vault-switch terminal cleanup for this scope's storage.
+   *
+   * Answers what it TOOK from the member (#1014, P24; R-1014-12): the drain
+   * stops, the unsent work is written beside the file, and the count comes
+   * back so the caller has a sentence instead of silence. */
+  async purge(): Promise<ShellScopePurgeResult | undefined> {
     clearVaultChangeCursor(this.gatewayAuth);
     const identity = replicaIdentityForGatewayAuth(this.gatewayAuth);
+    const factory = this.#indexedDbFactory;
+    const storage = {
+      ...(factory ? { indexedDbFactory: factory } : {}),
+      ...(this.#inventory ? { inventory: this.#inventory } : {}),
+    };
     if (this.#closed) {
       if (this.#rememberStorage)
-        await purgeReplicaIdentityStorage(identity, {
-          ...(this.#indexedDbFactory
-            ? { indexedDbFactory: this.#indexedDbFactory }
-            : {}),
-          ...(this.#inventory ? { inventory: this.#inventory } : {}),
-        });
-      return;
+        await purgeReplicaIdentityStorage(identity, storage);
+      return undefined;
     }
     this.#closed = true;
     this.#admission.rejectAll(
@@ -530,13 +544,13 @@ export class ReplicaShellSession {
     this.detach();
     this.emit(seatPurgeInvalidation());
     this.#bus.clear();
-    await purgeShellScope({
+    return purgeShellScope({
       identity,
       seat: this.#seat,
       queue: this.#queue,
       remembered: this.#rememberStorage,
-      indexedDbFactory: this.#indexedDbFactory,
-      inventory: this.#inventory,
+      ...storage,
+      quiesce: () => this.#drainPromise ?? Promise.resolve(),
     });
   }
 

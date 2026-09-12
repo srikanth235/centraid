@@ -18,6 +18,14 @@
 // the ids here whenever its queue moves, and the sweep reads the last push.
 // The failure mode of a stale snapshot is one pass that protects a byte it no
 // longer needs to — never one that evicts a byte it does.
+//
+// AND THERE IS ONE SET PER VAULT, NOT ONE PER PHONE (#1014, C7). This was a
+// module-global: every session's publish OVERWROTE the previous one and one
+// session closing cleared them all. A phone with Personal and Family both
+// mounted — the arrangement R25 was actually found in — made vault A's
+// captured-but-unsent photograph evictable the moment vault B's queue moved.
+// The eviction rule asks about a content id, and a content id is protected if
+// ANY mounted vault's queue still needs it, so the answer is the union.
 
 import { namedRowIds } from "@centraid/client/replica/native";
 import type { ReplicaIntent } from "@centraid/client/replica/native";
@@ -38,7 +46,13 @@ const UNSETTLED = new Set([
   "failed",
 ]);
 
-let referenced: ReadonlySet<string> = new Set();
+/** Per vault, so one seat's queue never speaks for another's (#1014, C7). */
+const referenced = new Map<string, ReadonlySet<string>>();
+
+function referencedByAnyVault(contentId: string): boolean {
+  for (const held of referenced.values()) if (held.has(contentId)) return true;
+  return false;
+}
 
 /** Every row id the unsettled outbox names, deduplicated. */
 export function contentRefsPendingIntentsNeed(
@@ -60,16 +74,26 @@ export function contentRefsPendingIntentsNeed(
  * open and then trusted for the life of the process.
  */
 export function publishPendingContentRefs(
+  vaultId: string,
   intents: readonly ReplicaIntent[]
 ): void {
-  referenced = contentRefsPendingIntentsNeed(intents);
+  referenced.set(vaultId, contentRefsPendingIntentsNeed(intents));
+  // Re-registered rather than registered once, because the registry's rule is
+  // "the last caller wins" and something else may have installed its own
+  // answers since. The predicate reads the live map, so a vault that publishes
+  // after this call is already covered by it.
   setContentProtections({
-    referencedByPendingIntent: (ref) => referenced.has(ref.contentId),
+    referencedByPendingIntent: (ref) => referencedByAnyVault(ref.contentId),
   });
 }
 
-/** The seat is closing: its queue is no longer a reason to keep anything. */
-export function forgetPendingContentRefs(): void {
-  referenced = new Set();
-  clearContentProtections();
+/**
+ * THIS seat is closing: its queue is no longer a reason to keep anything.
+ *
+ * The other mounted vaults' queues still are, so the registry is withdrawn
+ * only once the last of them has gone.
+ */
+export function forgetPendingContentRefs(vaultId: string): void {
+  referenced.delete(vaultId);
+  if (referenced.size === 0) clearContentProtections();
 }

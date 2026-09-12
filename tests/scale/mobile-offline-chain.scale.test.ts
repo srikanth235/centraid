@@ -32,8 +32,8 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openNodeNativeSeat } from "../../apps/mobile/src/lib/replica/native-seat.test-fixtures";
-import { createNativeReplicaSession } from "../../apps/mobile/src/lib/replica/native-session";
 import type { NativeChangeFeed } from "../../apps/mobile/src/lib/replica/native-session";
+import { createNativeReplicaSession } from "../../apps/mobile/src/lib/replica/native-session-open";
 import { journeyCeiling } from "../helpers/journeys.js";
 
 const OWNER = "tests/scale/mobile-offline-chain.scale.test.ts";
