@@ -23,6 +23,11 @@ import {
   parsePageLimit,
 } from "./ipc-core.js";
 import type { SeatConnection } from "./seat-socket.js";
+import {
+  checkForUpdatesManual,
+  getUpdateStatus,
+  relaunchToUpdate,
+} from "./update-watcher.js";
 
 export interface IpcDeps {
   /** The live connection, or `undefined` while the seat is down. */
@@ -150,6 +155,20 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       packaged: app.isPackaged,
     }),
   }));
+
+  // THE UPDATER, carried whole (D-1020-F7). `relaunchToUpdate` installs only a
+  // download `admitDownloadedUpdate` trusted, and with no release key enrolled
+  // that is never — so this door relaunches rather than installs, which is the
+  // fail-closed state and not a gap.
+  ipcMain.handle(Channel.UPDATE_STATUS, () => getUpdateStatus());
+  ipcMain.handle(
+    Channel.UPDATE_CHECK,
+    async () => await checkForUpdatesManual()
+  );
+  ipcMain.handle(Channel.UPDATE_RELAUNCH, () => {
+    relaunchToUpdate();
+    return { ok: true };
+  });
 
   ipcMain.handle(Channel.HOST_REVEAL, async (_event, raw: unknown) => {
     const input = (raw ?? {}) as Record<string, unknown>;

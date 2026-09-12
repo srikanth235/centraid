@@ -93,11 +93,13 @@ describe("the channel map", () => {
     );
   });
 
-  it("is a tenth of v0's forty-one, because the renderer has one door", () => {
+  it("is a third of v0's forty-one, because the renderer has one door", () => {
     // Not a golden number for its own sake: the count IS the claim that the
     // socket replaced the per-door channels, and a jump back up is a design
-    // change somebody should have to justify.
-    expect(CHANNELS.length).toBeLessThanOrEqual(12);
+    // change somebody should have to justify. Fifteen: eleven for the seat and
+    // the shell, four for the updater — which is carried whole rather than
+    // reduced (D-1020-F7).
+    expect(CHANNELS.length).toBeLessThanOrEqual(16);
   });
 });
 

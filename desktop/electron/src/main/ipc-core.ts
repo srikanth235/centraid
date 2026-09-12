@@ -39,6 +39,18 @@ export const Channel = {
   HOST_INFO: "centraid:host:info",
   /** Reveal a path in the OS file manager. */
   HOST_REVEAL: "centraid:host:reveal",
+  /** The update the watcher last found, if any. */
+  UPDATE_STATUS: "centraid:update:status",
+  /** Check now, rather than on the four-hour cadence. */
+  UPDATE_CHECK: "centraid:update:check",
+  /** Relaunch into the update — only ever an ADMITTED, SIGNED download. */
+  UPDATE_RELAUNCH: "centraid:update:relaunch",
+  /**
+   * Pushed when an update is available. The string is
+   * `update-watcher.ts`'s own `UPDATE_AVAILABLE_CHANNEL`, which sends on it
+   * directly — so it is spelled once, here, rather than twice.
+   */
+  UPDATE_AVAILABLE: "centraid:update:available",
 } as const;
 
 export type ChannelName = (typeof Channel)[keyof typeof Channel];

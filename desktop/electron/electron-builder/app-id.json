@@ -1,0 +1,6 @@
+{
+  "_note": "NOT the source of truth (#1020 wave 3 lane F, D-1020-F7). v0 kept the appId and the `centraid://` protocol registration in this second file, so a lane that rewrote `electron-builder.yml` silently lost the scheme (census §F seam 6). Both now live in `electron-builder.yml`; this file stays as a pointer at it so the old path does not read as configuration, and `desktop/electron/electron-builder.test.ts` asserts the two agree.",
+  "appId": "dev.centraid.desktop",
+  "productName": "Centraid",
+  "protocols": [{ "name": "Centraid", "schemes": ["centraid"] }]
+}

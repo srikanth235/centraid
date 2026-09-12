@@ -96,6 +96,13 @@ export function createCentraidApi(bridge: PreloadBridge) {
     getHostInfo: () => bridge.invoke(Channel.HOST_INFO),
     reveal: (input: { id: string }) =>
       bridge.invoke(Channel.HOST_REVEAL, input),
+
+    getUpdateStatus: () => bridge.invoke(Channel.UPDATE_STATUS),
+    checkForUpdates: () => bridge.invoke(Channel.UPDATE_CHECK),
+    relaunchToUpdate: () => bridge.invoke(Channel.UPDATE_RELAUNCH),
+    onUpdateAvailable: (
+      callback: (message: { available: boolean; version: string }) => void
+    ) => subscribe(bridge, Channel.UPDATE_AVAILABLE, callback),
   };
 }
 
