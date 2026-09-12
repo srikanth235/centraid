@@ -506,10 +506,16 @@ export function runContractAndExecute(
   // them. A command with no live registration is refused below either way.
   const declared = commands.get(command.name);
   if (!declared) return denyContract("handler missing", { stage: "execution" });
+  // ONE CLOCK FOR THE WHOLE INVOCATION (#1020, R-1020-35). Minted before the
+  // preconditions run and handed to every stage — the conditions, `ctx.now`,
+  // and the postconditions — so a condition can never disagree with the row
+  // the handler wrote.
+  const now = nowIso();
   const preResults = evaluateConditions(
     db.vault,
     declared.preconditions,
-    request.input
+    request.input,
+    now
   );
   for (const result of preResults) {
     writeCheck(
@@ -557,7 +563,7 @@ export function runContractAndExecute(
     identity,
     invocationId,
     input: request.input,
-    now: nowIso(),
+    now,
     newId,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
     cite: (citation) => citations.push(citation),
@@ -613,7 +619,7 @@ export function runContractAndExecute(
         promoteStagedBlob(
           {
             vault: db.vault,
-            now: nowIso(),
+            now,
             newId,
             wrote: (entityType, entityId) =>
               writes.push({ entityType, entityId }),
@@ -650,10 +656,12 @@ export function runContractAndExecute(
     closeRevisionCapture(db.vault);
     // Same transaction, so no committed row ever holds a clear secret (#293).
     sealWrites(db, writes);
-    postResults = evaluateConditions(db.vault, registered.postconditions, {
-      ...request.input,
-      ...output,
-    });
+    postResults = evaluateConditions(
+      db.vault,
+      registered.postconditions,
+      { ...request.input, ...output },
+      now
+    );
     const failedPost = postResults.find((r) => !r.passed);
     if (failedPost) {
       rollbackInvocationTransaction(db.vault, vaultTransaction);

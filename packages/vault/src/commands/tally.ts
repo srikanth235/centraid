@@ -102,7 +102,7 @@ const EXPENSE_LIVE_SQL =
 // was told had been deleted.
 const EXPENSE_TRASHED_SQL = `SELECT count(*) AS n FROM tally_expense
    WHERE expense_id = :expense_id AND deleted_at IS NOT NULL
-     AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+     AND (purge_at IS NULL OR purge_at > :ctx_now)`;
 const EXPENSE_ANY_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id";
 

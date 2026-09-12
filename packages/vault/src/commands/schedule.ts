@@ -562,7 +562,7 @@ const RESTORE_EVENT: CommandDefinition = {
       // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_event
              WHERE event_id = :event_id AND deleted_at IS NOT NULL
-               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+               AND (purge_at IS NULL OR purge_at > :ctx_now)`,
       column: "n",
       op: "eq",
       value: 1,

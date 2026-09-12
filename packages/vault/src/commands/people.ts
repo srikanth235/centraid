@@ -204,7 +204,7 @@ const PERSON_TRASHED_SQL = `
     JOIN core_party p ON p.party_id = pr.party_id
    WHERE pr.party_id = :party_id AND p.kind = 'person'
      AND pr.deleted_at IS NOT NULL
-     AND (pr.purge_at IS NULL OR pr.purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+     AND (pr.purge_at IS NULL OR pr.purge_at > :ctx_now)`;
 const PERSON_ANY_SQL = `
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id

@@ -338,6 +338,21 @@ export function decodeChangeset(
       `SELECT * FROM ${quoted(table)} WHERE ` +
         key.map((column) => `${quoted(column)} = ?`).join(" AND ")
     );
+    // A WIDE INTEGER IS CAPTURED, NOT REFUSED (#1020, R-1020-35).
+    //
+    // Without this, `node:sqlite` reads an INTEGER above 2^53 by trying to
+    // make it a JavaScript number and throws `ERR_OUT_OF_RANGE` — inside the
+    // capture, inside the invocation's transaction, so the WHOLE COMMIT rolls
+    // back and the member's write is silently refused. A byte count or an
+    // epoch-nanosecond timestamp is enough to reach it, and the wire format
+    // has carried the `{ i: "<decimal>" }` form for exactly this value all
+    // along: `encodeWireValue` turns a bigint into it, and `decodeWireValue`
+    // turns it back. The producer just could never emit one.
+    //
+    // Reading big ints does NOT widen the common case: `encodeWireValue` keeps
+    // anything inside the safe range as a plain number, so only a value that
+    // could not be represented otherwise costs the `{i}` form.
+    read.setReadBigInts(true);
     reads.set(table, read);
   }
   const local = isPrivateTable(table);

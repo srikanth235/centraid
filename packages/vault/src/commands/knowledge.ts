@@ -757,7 +757,7 @@ const RESTORE_NOTE: CommandDefinition = {
       // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM knowledge_note
              WHERE note_id = :note_id AND deleted_at IS NOT NULL
-               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+               AND (purge_at IS NULL OR purge_at > :ctx_now)`,
       column: "n",
       op: "eq",
       value: 1,
