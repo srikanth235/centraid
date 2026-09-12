@@ -274,8 +274,15 @@ mod tests {
     /// meaningful.
     #[test]
     fn the_face_thresholds_are_stricter_for_a_stranger_than_for_a_confirmation() {
-        assert!(faces::CLUSTER_MAX_DISTANCE < faces::PARTY_MAX_DISTANCE);
-        assert_eq!(faces::MIN_CLUSTER_SIZE, 2);
+        // A stranger group is named in ONE gesture, so its threshold is the
+        // stricter of the two: a false MERGE destroys trust late, a false
+        // SPLIT costs one gesture. Read through runtime values so the
+        // comparison is a test rather than a constant folded away.
+        let stranger = std::hint::black_box(faces::CLUSTER_MAX_DISTANCE);
+        let party = std::hint::black_box(faces::PARTY_MAX_DISTANCE);
+        assert!(stranger < party, "{stranger} vs {party}");
+        assert!(party < 1.0, "a threshold of 1.0 would group every face");
+        assert_eq!(std::hint::black_box(faces::MIN_CLUSTER_SIZE), 2);
     }
 
     #[test]
