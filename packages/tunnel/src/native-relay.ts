@@ -9,6 +9,7 @@ import type {
   DesktopTunnelHandle,
   DesktopTunnelOptions,
 } from "./desktop-tunnel.js";
+import { forwardIdentityHeaders } from "./forward-identity.js";
 import type { GatewayEndpointHandle } from "./gateway-endpoint.js";
 import type { PairQrPayload, PairRequest, PairResponse } from "./protocol.js";
 import { TUNNEL_FORWARDED_HEADER } from "./protocol.js";
@@ -157,9 +158,20 @@ export async function startNativeDesktopTunnel(
         sendControlJson(res, 200, {
           allowed,
           // The desktop relay carries a paired phone, not the host itself, so
-          // it marks the hop as forwarded (#568). The Rust relay
-          // drops any client copy of the identity headers on the same pass.
-          ...(allowed ? { headers: { [TUNNEL_FORWARDED_HEADER]: "1" } } : {}),
+          // it marks the hop as forwarded (#568) AND names the phone the
+          // connection authenticated (#1015, R-NY-18). The Rust relay drops
+          // any client copy of the identity headers on the same pass and
+          // stamps exactly what this answer returns, so the two forwarder
+          // lanes cannot drift into naming devices differently. Without an
+          // upstream there is no bearer to derive the proof from — and no
+          // request to forward either, so the hop is marked and nothing more.
+          ...(allowed
+            ? {
+                headers: upstream
+                  ? forwardIdentityHeaders(upstream.token, endpointId)
+                  : { [TUNNEL_FORWARDED_HEADER]: "1" },
+              }
+            : {}),
           ...(upstream
             ? { upstreamUrl: upstream.baseUrl, upstreamToken: upstream.token }
             : {}),

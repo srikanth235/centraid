@@ -25,6 +25,11 @@ export type {
   DesktopTunnelOptions,
   TunnelUpstream,
 } from "./desktop-tunnel.js";
+export {
+  forwardedDeviceIdentity,
+  forwardIdentityHeaders,
+  PHONE_LINK_PATH,
+} from "./forward-identity.js";
 export { DeviceStore, sanitizeDeviceName } from "./device-store.js";
 export type { PairedDevice } from "./device-store.js";
 export { EndpointSecretError, loadEndpointSecret } from "./endpoint-secret.js";
