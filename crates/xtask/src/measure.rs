@@ -195,8 +195,9 @@ fn take_single_crate_test(root: &Path) -> Result<f64> {
 }
 
 fn take_release_build(root: &Path) -> Result<f64> {
-    remove(&root.join("target/release"))?;
-    println!("    target/release removed");
+    let release = crate::target_dir(root).join("release");
+    remove(&release)?;
+    println!("    {} removed", release.display());
     time(root, "cargo", &["build", "--workspace", "--release"])
 }
 
@@ -208,8 +209,12 @@ fn take_release_build(root: &Path) -> Result<f64> {
 /// own output is not suppressed, so its `cold` line and per-step table are part
 /// of the evidence this subcommand leaves behind.
 fn take_cold_local_profile(root: &Path) -> Result<f64> {
-    remove(&root.join("target/debug"))?;
-    println!("    target/debug removed — the gate runner is rebuilt inside this number");
+    let debug = crate::target_dir(root).join("debug");
+    remove(&debug)?;
+    println!(
+        "    {} removed — the gate runner is rebuilt inside this number",
+        debug.display()
+    );
     let started = Instant::now();
     let status = Command::new("cargo")
         .args(["xtask", "gate", "--profile", "local"])
