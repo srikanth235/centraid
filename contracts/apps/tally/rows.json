@@ -1,0 +1,967 @@
+[
+  {
+    "columns": [
+      "vault_id",
+      "self_party_id",
+      "display_name",
+      "status",
+      "base_currency",
+      "settings_json",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0001",
+        "id-0002",
+        "Priya's vault",
+        "active",
+        "GBP",
+        "{}",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "core_vault"
+  },
+  {
+    "columns": [
+      "party_id",
+      "kind",
+      "display_name",
+      "sort_name",
+      "birth_date",
+      "avatar_content_id",
+      "created_at",
+      "updated_at",
+      "row_version",
+      "deleted_at",
+      "purge_at"
+    ],
+    "rows": [
+      [
+        "id-0002",
+        "person",
+        "Priya",
+        null,
+        null,
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null
+      ],
+      [
+        "id-0003",
+        "person",
+        "Cleo",
+        null,
+        null,
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null
+      ],
+      [
+        "id-0004",
+        "person",
+        "Bo",
+        null,
+        null,
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null
+      ],
+      [
+        "id-0005",
+        "person",
+        "Ana",
+        null,
+        null,
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null
+      ]
+    ],
+    "table": "core_party"
+  },
+  {
+    "columns": [
+      "attachment_id",
+      "target_type",
+      "target_id",
+      "content_id",
+      "role",
+      "is_primary",
+      "created_at"
+    ],
+    "rows": [],
+    "table": "core_attachment"
+  },
+  {
+    "columns": [
+      "content_id",
+      "content_uri",
+      "sha256",
+      "byte_size",
+      "language",
+      "creator_party_id",
+      "origin_device_id",
+      "deleted_at",
+      "purge_at",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [],
+    "table": "core_content_item"
+  },
+  {
+    "columns": [
+      "representation_id",
+      "content_id",
+      "owner_type",
+      "owner_id",
+      "media_type",
+      "charset",
+      "interpretation",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [],
+    "table": "core_content_representation"
+  },
+  {
+    "columns": [
+      "revision_id",
+      "entity_type",
+      "entity_id",
+      "operation",
+      "snapshot_json",
+      "recorded_at",
+      "undo_until",
+      "undone_at",
+      "actor_party_id",
+      "invocation_id",
+      "content_id",
+      "parent_revision_id",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0006",
+        "social.circle_member",
+        "id-0007",
+        "delete",
+        "{\"member_id\":\"id-0007\",\"circle_id\":\"id-0008\",\"party_id\":\"id-0004\",\"added_at\":\"<host-clock>\",\"updated_at\":\"<host-clock>\",\"row_version\":1,\"capability\":\"read+write\"}",
+        "<host-clock>",
+        "<host-clock>",
+        null,
+        "id-0002",
+        "id-0009",
+        null,
+        null,
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0010",
+        "tally.group",
+        "id-0011",
+        "update",
+        "{\"group_id\":\"id-0011\",\"circle_id\":\"id-0008\",\"icon\":\"🏠\",\"color\":\"#0FA678\",\"simplify_opt_in\":0,\"archived_at\":null,\"currency\":\"GBP\",\"created_at\":\"<host-clock>\",\"updated_at\":\"<host-clock>\",\"row_version\":1}",
+        "<host-clock>",
+        "<host-clock>",
+        null,
+        "id-0002",
+        "id-0012",
+        null,
+        null,
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0013",
+        "tally.expense",
+        "id-0014",
+        "trash",
+        "{\"expense\":{\"description\":\"Cancelled order\",\"amount_minor\":1500,\"paid_by\":\"id-0002\",\"split_method\":\"exact\",\"split_params_json\":null,\"spent_on\":\"2099-05-04\",\"category\":\"groceries\",\"original_amount_minor\":1500,\"original_currency\":\"GBP\",\"settlement_currency\":\"GBP\",\"rate_scaled\":1000000,\"rate_scale\":6,\"rate_source\":\"identity\",\"rate_date\":\"2099-05-04\",\"deleted_at\":null,\"purge_at\":null},\"splits\":[{\"party_id\":\"id-0002\",\"share_minor\":750},{\"party_id\":\"id-0005\",\"share_minor\":750}],\"payers\":[{\"party_id\":\"id-0002\",\"paid_minor\":1500}]}",
+        "<host-clock>",
+        "<host-clock>",
+        null,
+        "id-0002",
+        "id-0015",
+        null,
+        null,
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "core_entity_revision"
+  },
+  {
+    "columns": [
+      "txn_id",
+      "account_id",
+      "posted_at",
+      "amount_minor",
+      "currency",
+      "direction",
+      "status",
+      "transfer_group_id",
+      "counterparty_party_id",
+      "description",
+      "category_concept_id",
+      "external_id",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0016",
+        "id-0017",
+        "<host-clock>",
+        5000,
+        "GBP",
+        "credit",
+        "posted",
+        null,
+        "id-0005",
+        "Tally settlement — Ana",
+        null,
+        "tally:settlement:id-0018",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "core_transaction"
+  },
+  {
+    "columns": [
+      "account_id",
+      "owner_party_id",
+      "name",
+      "kind",
+      "currency",
+      "institution_party_id",
+      "external_ref",
+      "is_asset",
+      "opened_at",
+      "closed_at"
+    ],
+    "rows": [
+      [
+        "id-0017",
+        "id-0002",
+        "Tally settlements",
+        "cash",
+        "GBP",
+        null,
+        null,
+        1,
+        null,
+        null
+      ]
+    ],
+    "table": "core_account"
+  },
+  {
+    "columns": [
+      "link_id",
+      "from_type",
+      "from_id",
+      "to_type",
+      "to_id",
+      "relation_concept_id",
+      "valid_from",
+      "valid_to",
+      "asserted_by",
+      "provenance_id",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [],
+    "table": "core_link"
+  },
+  {
+    "columns": [
+      "circle_id",
+      "owner_party_id",
+      "name",
+      "kind",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0008",
+        "id-0002",
+        "Sitwell Road",
+        "custom",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0019",
+        "id-0002",
+        "Tokyo",
+        "custom",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0020",
+        "id-0002",
+        "Lisbon",
+        "custom",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "social_circle"
+  },
+  {
+    "columns": [
+      "member_id",
+      "circle_id",
+      "party_id",
+      "added_at",
+      "updated_at",
+      "row_version",
+      "capability"
+    ],
+    "rows": [
+      [
+        "id-0021",
+        "id-0020",
+        "id-0005",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ],
+      [
+        "id-0022",
+        "id-0008",
+        "id-0005",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ],
+      [
+        "id-0023",
+        "id-0020",
+        "id-0002",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ],
+      [
+        "id-0024",
+        "id-0019",
+        "id-0002",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ],
+      [
+        "id-0025",
+        "id-0008",
+        "id-0002",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ],
+      [
+        "id-0026",
+        "id-0020",
+        "id-0003",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ],
+      [
+        "id-0027",
+        "id-0019",
+        "id-0004",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        "read+write"
+      ]
+    ],
+    "table": "social_circle_member"
+  },
+  {
+    "columns": [
+      "exception_id",
+      "target_type",
+      "target_id",
+      "original_start_local",
+      "recurrence_semantics",
+      "scope",
+      "action",
+      "override_json",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0028",
+        "tally.recurring_expense",
+        "id-0029",
+        "2099-07-01T09:00:00",
+        "zoned",
+        "occurrence",
+        "skip",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "schedule_recurrence_exception"
+  },
+  {
+    "columns": [
+      "friend_id",
+      "party_id",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      ["id-0030", "id-0003", "<host-clock>", "<host-clock>", 1],
+      ["id-0031", "id-0004", "<host-clock>", "<host-clock>", 1],
+      ["id-0032", "id-0005", "<host-clock>", "<host-clock>", 1]
+    ],
+    "table": "tally_friend"
+  },
+  {
+    "columns": [
+      "group_id",
+      "circle_id",
+      "icon",
+      "color",
+      "simplify_opt_in",
+      "archived_at",
+      "currency",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0033",
+        "id-0019",
+        "🏠",
+        "#0FA678",
+        0,
+        null,
+        "JPY",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0034",
+        "id-0020",
+        "🏠",
+        "#0FA678",
+        0,
+        null,
+        "EUR",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0011",
+        "id-0008",
+        "🏠",
+        "#0FA678",
+        1,
+        null,
+        "GBP",
+        "<host-clock>",
+        "<host-clock>",
+        2
+      ]
+    ],
+    "table": "tally_group"
+  },
+  {
+    "columns": [
+      "expense_id",
+      "group_id",
+      "description",
+      "amount_minor",
+      "currency",
+      "paid_by",
+      "split_method",
+      "split_params_json",
+      "spent_on",
+      "category",
+      "txn_id",
+      "created_at",
+      "updated_at",
+      "row_version",
+      "deleted_at",
+      "purge_at",
+      "original_amount_minor",
+      "original_currency",
+      "settlement_currency",
+      "rate_scaled",
+      "rate_scale",
+      "rate_source",
+      "rate_date",
+      "recurring_template_id"
+    ],
+    "rows": [
+      [
+        "id-0035",
+        "id-0033",
+        "Ramen",
+        4200,
+        "JPY",
+        "id-0004",
+        "exact",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null,
+        4200,
+        "JPY",
+        "JPY",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ],
+      [
+        "id-0014",
+        "id-0011",
+        "Cancelled order",
+        1500,
+        "GBP",
+        "id-0002",
+        "exact",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        2,
+        "<host-clock>",
+        "<host-clock>",
+        1500,
+        "GBP",
+        "GBP",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ],
+      [
+        "id-0036",
+        "id-0011",
+        "Boiler service",
+        24000,
+        "GBP",
+        "id-0005",
+        "exact",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null,
+        24000,
+        "GBP",
+        "GBP",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ],
+      [
+        "id-0037",
+        "id-0034",
+        "Pastéis",
+        10000,
+        "EUR",
+        "id-0002",
+        "exact",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null,
+        10000,
+        "EUR",
+        "EUR",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ],
+      [
+        "id-0038",
+        "id-0011",
+        "Groceries",
+        10001,
+        "GBP",
+        "id-0002",
+        "exact",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null,
+        10001,
+        "GBP",
+        "GBP",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ],
+      [
+        "id-0039",
+        "id-0011",
+        "Hardware shop",
+        3000,
+        "GBP",
+        "id-0004",
+        "by_line",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null,
+        3000,
+        "GBP",
+        "GBP",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ],
+      [
+        "id-0040",
+        null,
+        "Cinema",
+        2500,
+        "GBP",
+        "id-0002",
+        "exact",
+        null,
+        "2099-05-04",
+        "groceries",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null,
+        2500,
+        "GBP",
+        "GBP",
+        1000000,
+        6,
+        "identity",
+        "2099-05-04",
+        null
+      ]
+    ],
+    "table": "tally_expense"
+  },
+  {
+    "columns": [
+      "expense_id",
+      "party_id",
+      "share_minor",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      ["id-0035", "id-0002", 2100, "<host-clock>", "<host-clock>", 1],
+      ["id-0035", "id-0004", 2100, "<host-clock>", "<host-clock>", 1],
+      ["id-0014", "id-0002", 750, "<host-clock>", "<host-clock>", 1],
+      ["id-0014", "id-0005", 750, "<host-clock>", "<host-clock>", 1],
+      ["id-0036", "id-0002", 8000, "<host-clock>", "<host-clock>", 1],
+      ["id-0036", "id-0004", 8000, "<host-clock>", "<host-clock>", 1],
+      ["id-0036", "id-0005", 8000, "<host-clock>", "<host-clock>", 1],
+      ["id-0037", "id-0002", 5000, "<host-clock>", "<host-clock>", 1],
+      ["id-0037", "id-0003", 5000, "<host-clock>", "<host-clock>", 1],
+      ["id-0038", "id-0002", 3334, "<host-clock>", "<host-clock>", 1],
+      ["id-0038", "id-0004", 3333, "<host-clock>", "<host-clock>", 1],
+      ["id-0038", "id-0005", 3334, "<host-clock>", "<host-clock>", 1],
+      ["id-0039", "id-0002", 2000, "<host-clock>", "<host-clock>", 1],
+      ["id-0039", "id-0004", 1000, "<host-clock>", "<host-clock>", 1],
+      ["id-0040", "id-0002", 1250, "<host-clock>", "<host-clock>", 1],
+      ["id-0040", "id-0005", 1250, "<host-clock>", "<host-clock>", 1]
+    ],
+    "table": "tally_expense_split"
+  },
+  {
+    "columns": [
+      "expense_id",
+      "party_id",
+      "paid_minor",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      ["id-0035", "id-0004", 4200, "<host-clock>", "<host-clock>", 1],
+      ["id-0014", "id-0002", 1500, "<host-clock>", "<host-clock>", 1],
+      ["id-0036", "id-0004", 10000, "<host-clock>", "<host-clock>", 1],
+      ["id-0036", "id-0005", 14000, "<host-clock>", "<host-clock>", 1],
+      ["id-0037", "id-0002", 10000, "<host-clock>", "<host-clock>", 1],
+      ["id-0038", "id-0002", 10001, "<host-clock>", "<host-clock>", 1],
+      ["id-0039", "id-0004", 3000, "<host-clock>", "<host-clock>", 1],
+      ["id-0040", "id-0002", 2500, "<host-clock>", "<host-clock>", 1]
+    ],
+    "table": "tally_expense_payer"
+  },
+  {
+    "columns": [
+      "line_item_id",
+      "expense_id",
+      "receipt_id",
+      "kind",
+      "description",
+      "amount_minor",
+      "sort_order",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0041",
+        "id-0039",
+        null,
+        "item",
+        "Paint",
+        2000,
+        0,
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ],
+      [
+        "id-0042",
+        "id-0039",
+        null,
+        "item",
+        "Brushes",
+        1000,
+        1,
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "tally_expense_line_item"
+  },
+  {
+    "columns": [
+      "line_item_id",
+      "party_id",
+      "share_minor",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      ["id-0041", "id-0002", 2000, "<host-clock>", "<host-clock>", 1],
+      ["id-0042", "id-0004", 1000, "<host-clock>", "<host-clock>", 1]
+    ],
+    "table": "tally_expense_line_allocation"
+  },
+  {
+    "columns": [
+      "settlement_id",
+      "group_id",
+      "from_party",
+      "to_party",
+      "amount_minor",
+      "currency",
+      "paid_on",
+      "txn_id",
+      "created_at",
+      "updated_at",
+      "row_version",
+      "deleted_at",
+      "purge_at"
+    ],
+    "rows": [
+      [
+        "id-0018",
+        "id-0011",
+        "id-0005",
+        "id-0002",
+        5000,
+        "GBP",
+        "2099-05-20",
+        "id-0016",
+        "<host-clock>",
+        "<host-clock>",
+        1,
+        null,
+        null
+      ]
+    ],
+    "table": "tally_settlement"
+  },
+  {
+    "columns": [
+      "obligation_id",
+      "from_party",
+      "to_party",
+      "amount_minor",
+      "currency",
+      "reason",
+      "incurred_on",
+      "settled_at",
+      "created_at",
+      "updated_at",
+      "row_version",
+      "deleted_at",
+      "purge_at"
+    ],
+    "rows": [],
+    "table": "tally_obligation"
+  },
+  {
+    "columns": [
+      "nudge_id",
+      "party_id",
+      "group_id",
+      "as_of_minor",
+      "note",
+      "prepared_at",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0043",
+        "id-0005",
+        "id-0011",
+        1250,
+        "when you get a chance",
+        "<host-clock>",
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "tally_nudge"
+  },
+  {
+    "columns": [
+      "template_id",
+      "group_id",
+      "description",
+      "original_amount_minor",
+      "original_currency",
+      "settlement_currency",
+      "paid_by",
+      "category",
+      "rrule",
+      "anchor_start",
+      "tz",
+      "rate_scaled",
+      "rate_scale",
+      "rate_source",
+      "rate_date",
+      "status",
+      "last_materialized_start",
+      "created_at",
+      "updated_at",
+      "row_version"
+    ],
+    "rows": [
+      [
+        "id-0029",
+        "id-0011",
+        "Broadband",
+        3500,
+        "GBP",
+        "GBP",
+        "id-0002",
+        "utilities",
+        "FREQ=MONTHLY",
+        "2099-01-01T09:00:00",
+        "Europe/London",
+        null,
+        null,
+        null,
+        null,
+        "active",
+        null,
+        "<host-clock>",
+        "<host-clock>",
+        1
+      ]
+    ],
+    "table": "tally_recurring_expense"
+  }
+]
