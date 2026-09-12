@@ -72,7 +72,7 @@ describe("docs route titles", () => {
     ).toBe("Coming due");
     expect(
       docsRouteTitle({ name: "DocsHome", params: { destination: "shared" } })
-    ).toBe("Shared with you");
+    ).toBe("Shared");
     expect(docsRouteTitle({ name: "DocsHome" })).toBe(
       docsRouteTitle({ name: "DocsHome", params: { destination: "all" } })
     );

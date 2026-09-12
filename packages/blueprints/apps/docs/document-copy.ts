@@ -16,7 +16,6 @@ export type RailTabId = (typeof RAIL_TABS)[number]["id"];
 
 /** Each note is the spec's own sentence, never a paraphrase. */
 export const RAIL_NOTES = {
-  folder: "a label on the document, not a place it sits",
   owner: "this document is in your own space",
   namesOff: "Docs has not looked. One consent, running on this device",
   cannotRender:

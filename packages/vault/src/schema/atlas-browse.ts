@@ -163,7 +163,10 @@ export interface BrowseTableEntry {
   pack: string;
   packLabel: string;
   packKind: AtlasPackKind;
+  /** MECHANICAL — the table name humanized. Never member copy. */
   label: string;
+  /** The registry's declared name — what every seat shows (R-NY-13). */
+  friendly: string;
   rows: number;
   /** Machinery bands are read-only by default (#441). */
   machinery: boolean;
@@ -184,6 +187,7 @@ export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
     packLabel: e.packLabel,
     packKind: e.packKind,
     label: e.label,
+    friendly: e.friendly,
     rows: countRows(vault, e.physical),
     machinery: e.packKind === "machinery",
     singlePk: primaryKeyColumns(vault, e.physical).length === 1,

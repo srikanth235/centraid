@@ -140,6 +140,30 @@ describe(GatewayAlerts, () => {
     dispose = undefined;
   });
 
+  it("prints the gateway's headline verbatim, and never the failure (R-NY-10)", async () => {
+    wire.notifications.mockResolvedValue(
+      payload([
+        notice({
+          detail: {
+            automationRef: "mail/gateway-usage",
+            gist: "ECONNREFUSED reaching the replica component",
+            outcome: "failure",
+            sourceType: "automation",
+          },
+          // The member named this rule. A seat that rewrites the headline
+          // rewrites the member's own words — which is why the gateway owes
+          // the sentence and the seat owes it verbatim.
+          headline: "Gateway usage did not finish",
+          sourceRef: "mail/gateway-usage",
+        }),
+      ])
+    );
+    const container = await render();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Gateway usage did not finish");
+    expect(text).not.toMatch(/ECONNREFUSED|replica component/u);
+  });
+
   it("re-runs a failed rule from its line, and says nothing else", async () => {
     wire.notifications.mockResolvedValue(payload([notice()]));
     const container = await render();

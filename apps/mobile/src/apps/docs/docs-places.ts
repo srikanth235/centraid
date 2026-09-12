@@ -84,7 +84,7 @@ export function docsRouteTitle(route: DocsRouteLike | undefined): string {
     case "DocsProposedFiling":
       return "Proposed filing";
     case "DocsAdd":
-      return "Add to Docs";
+      return "Add a document";
     case "DocsUpload":
       return "Uploading";
     case "DocsScan":

@@ -239,6 +239,21 @@ Their handlers are deleted, not gated. What a proved peer may still reach on `/c
 
 **Cross-host grant delivery is an open gap.** Fulfillment resolves an audience vault through the host gateway's own registry, so a grant to a party whose vault lives on another gateway parks at `syncing` with that vault named and stays there. It is not an error state and no route reports it as one; v1's tested reach is co-hosted vaults, and carrying a grant across the peer plane is a follow-up under [#825](https://github.com/srikanth235/centraid/issues/825).
 
+## The member sentence and its detail (#1015 R-NY-10)
+
+Anything a producer hands a seat **to display** travels in two registers, and the seat prints one of them.
+
+| Register | What it is | Who reads it |
+| --- | --- | --- |
+| The member sentence | A whole sentence about the member's vault, in member words, one error noun, sentence case | Every screen, **verbatim** |
+| `detail` | The raw text — exception, HTTP status, path, filename | The run log, Diagnostics, `[centraid]` console lines ([logs.md](logs.md)) |
+
+The producer owes both. A gateway notice carries `headline` (the sentence, built by `automationNoticeHeadline` / `outboxNoticeHeadline` / `enrichRefusalNotice` in `packages/server/src/serve/notices.ts`) and `detail.gist` (`noticeGist`, the failure's first line); a seat renders `headline` and never `detail.gist`. A refusal on a route answers a member sentence in `message` with the machine-readable reason in its own field, the way the grant plane's `subject_not_offerable` does.
+
+Where the producer is the seat itself — nothing crossed the wire — the same split holds inside the app. The transfer queue's `upload_item.last_error` is member copy produced by `memberTransferFailure` (`apps/mobile/src/lib/upload/transfer-failure.ts`) at the drainer's catch, because three surfaces print that row verbatim; the exception goes to the log. A failed CSV export throws `ExportFailureError(member, detail)` from `insights-export.ts` for the same reason. `DirectTransferError` carries an optional `member` for the cases where the thrower knows better than its status does.
+
+**A seat never repairs a string it was given.** The phone used to run gateway headlines and queue rows through a regex that lowered "gateway" to "vault host", which laundered the vocabulary of sentences that should never have reached a screen, and rewrote the member's own words when a rule they named contained one of those nouns. That filter is deleted; a producer that emits engine vocabulary is a bug at the producer.
+
 ## Stream authority
 
 | Channel | Authority | Use |

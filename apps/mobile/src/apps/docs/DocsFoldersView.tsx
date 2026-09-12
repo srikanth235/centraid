@@ -1,7 +1,7 @@
 // The Folders shelf (handoff Part 2 §2; #821).
 //
-// "A folder is a label on the document, not a place it sits" — the copy says
-// it out loud in the status line and the caption. Three blocks:
+// "A folder is a label on the document, not a place it sits" — the shared
+// caption says it, once; the status line carries the count alone (R-NY-11). Three blocks:
 //
 //   1. The folder rows, with counts, each opening `DocsFolder`.
 //   2. `Unfiled` — documents never put anywhere. Not an error, and not a

@@ -57,8 +57,12 @@ export interface DirectTransferClient {
 
 export class DirectTransferError extends Error {
   constructor(
+    /** The raw text: for the log and nothing else (#1015 R-NY-10). */
     message: string,
-    readonly status: number
+    readonly status: number,
+    /** The sentence a member reads, when the thrower knows better than the
+     *  status does. Absent leaves it to `memberTransferFailure`. */
+    readonly member?: string
   ) {
     super(message);
     this.name = "DirectTransferError";

@@ -173,7 +173,7 @@ export function buildDocMenu(
     },
     {
       key: "details",
-      label: "Details",
+      label: "Properties",
       icon: MENU_ICON_NAMES.details,
       onSelect: on.properties,
     },

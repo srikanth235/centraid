@@ -330,7 +330,7 @@ function ThisDocument({
         styles={styles}
       />
       <LinkRow
-        label="Details"
+        label="Properties"
         note="filing, purge date, size and custody"
         onPress={onDetails}
         styles={styles}

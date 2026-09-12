@@ -41,7 +41,6 @@ const PROPER_NOUNS = new Set([
   "Due",
   "Storage",
   "Properties",
-  "Details",
   "Versions",
   "List",
   "Grid",

@@ -11,7 +11,10 @@ export interface AtlasKind {
   logical: string;
   physical: string;
   table: string;
+  /** MECHANICAL — the table name humanized. Never member copy. */
   label: string;
+  /** The registry's declared name — the only name a member reads (R-NY-13). */
+  friendly: string;
   rows: number;
   bytes: number | null;
 }
@@ -46,8 +49,8 @@ export interface AtlasGraphNode {
   label: string;
   pack: string;
   packKind: PackKind;
-  /** The name to show ("People", not "core_party"). */
-  friendly?: string;
+  /** The name to show ("People", not "core_party"). Always sent. */
+  friendly: string;
   /** Absent means none exists; never fabricate one. */
   blurb?: string;
 }
@@ -88,7 +91,10 @@ export interface BrowseTable {
   pack: string;
   packLabel: string;
   packKind: PackKind;
+  /** MECHANICAL — never shown (R-NY-13). */
   label: string;
+  /** The registry's declared name — the only name a member reads. */
+  friendly: string;
   rows: number;
   machinery: boolean;
   /** False for composite-key tables, whose ids are JSON arrays. */

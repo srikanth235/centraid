@@ -133,7 +133,8 @@ export default function PhotoStateView({
             ? params.personName
             : "Trash";
   const noun = assets.length === 1 ? "photograph" : "photographs";
-  // Trash meta is count PLUS the purge window (proto:3945) — the window is what makes the count trustworthy.
+  // Trash meta is count PLUS the purge window (proto:3945) — the window is what makes the count trustworthy,
+  // and this is the ONE place the phone states it (R-NY-11).
   const meta =
     mode === "trash"
       ? `${assets.length} in trash · purged 30 days after deletion`
@@ -344,10 +345,6 @@ export default function PhotoStateView({
       ) : null}
       {mode === "trash" ? (
         <>
-          {/* Restore promise once here, not folded into the meta line (proto:4445). */}
-          <Text style={[styles.note, { color: colors.textSoft }]}>
-            Deleted photographs stay here for 30 days, then they are purged.
-          </Text>
           {/* Head control's cost, or the refusal in its place — a greyed control with nothing to read is the defect. */}
           {assets.length ? (
             <Text style={[styles.note, { color: colors.net }]}>

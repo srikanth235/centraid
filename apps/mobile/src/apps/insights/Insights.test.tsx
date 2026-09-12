@@ -539,6 +539,17 @@ describe(InsightsScreen, () => {
     );
   });
 
+  it("names a failed share in member words, never the exception (R-NY-10)", async () => {
+    wire.share.mockRejectedValue(
+      new Error("ENOENT: gateway daemon could not write the cache")
+    );
+    const container = await render();
+    press(labelled(container, "Export CSV"));
+    await settle();
+    expect(textOf(container)).toContain("The CSV could not be shared.");
+    expect(textOf(container).join(" ")).not.toMatch(/ENOENT|cache|daemon/u);
+  });
+
   it("offers no filled commit at all — this page writes nothing", async () => {
     const container = await render();
     const filled = nodesOf(container, "button").filter(

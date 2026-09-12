@@ -93,7 +93,8 @@ export function censusKinds(census: AtlasCensus): KindRow[] {
         machinery: pack.packKind === "machinery",
         rows: table.rows,
         sub: kindSub(table),
-        title: table.label || table.logical,
+        // The registry's name, never the humanized `label` (R-NY-13).
+        title: table.friendly,
       });
     }
   }
@@ -108,7 +109,8 @@ export type KindFilter = "all" | "largest" | "machinery";
 export const KIND_FILTERS: readonly { id: KindFilter; label: string }[] = [
   { id: "all", label: "All kinds" },
   { id: "largest", label: "Largest" },
-  { id: "machinery", label: "The engine's own" },
+  // Member words for machinery packs: no engine vocabulary (R-NY-13).
+  { id: "machinery", label: "Kept by Centraid" },
 ];
 
 /** By size where measured, by record count where estimated. */
@@ -128,7 +130,7 @@ export function filterKinds(rows: KindRow[], filter: KindFilter): KindRow[] {
 
 function friendlyName(graph: AtlasGraph, logical: string): string {
   const node = graph.nodes.find((entry) => entry.logical === logical);
-  return node?.friendly ?? node?.label ?? logical;
+  return node?.friendly ?? logical;
 }
 
 /** Authored links lead; FK edges are the fallback for a vault that has linked

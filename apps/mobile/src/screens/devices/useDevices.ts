@@ -19,7 +19,6 @@ import { isLastDeviceRefusal, memberDeviceError } from "./devices-model";
 
 export interface DevicesData {
   status: "loading" | "ready" | "error";
-  message?: string;
   /** This phone is not paired at all; the panel talks pairing. */
   noGateway: boolean;
   devices: DeviceRow[];
@@ -40,7 +39,6 @@ export interface DevicesData {
 
 interface Loaded {
   status: "loading" | "ready" | "error";
-  message?: string;
   noGateway: boolean;
   devices: DeviceRow[];
   vaults?: VaultRow[];
@@ -65,13 +63,10 @@ async function loadRoster(set: (next: Loaded) => void): Promise<void> {
       status: "ready",
       ...(vaults ? { vaults } : {}),
     });
-  } catch (error) {
-    set({
-      devices: [],
-      message: memberDeviceError(error, "Could not read the devices."),
-      noGateway: false,
-      status: "error",
-    });
+  } catch {
+    // The section says the one sentence about a roster that did not load;
+    // what the transport said is never quoted on a screen (#1015 R-NY-10).
+    set({ devices: [], noGateway: false, status: "error" });
   }
 }
 
@@ -163,7 +158,6 @@ export function useDevices(): DevicesData {
     rename,
     revoke,
     status: loaded.status,
-    ...(loaded.message === undefined ? {} : { message: loaded.message }),
     ...(loaded.vaults === undefined ? {} : { vaults: loaded.vaults }),
     ...(ticket === undefined ? {} : { ticket }),
   };

@@ -337,7 +337,7 @@ describe("Docs, on the real React Native host tree", () => {
     expect(screen.getByText("Choose documents")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     // The primary act stands down; the foot row owns the verbs.
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add a document" })).toBeNull();
     expect(screen.getByRole("button", { name: "Trash" })).toBeTruthy();
     // The set-describing controls go with it.
     expect(screen.queryByRole("button", { name: "Grid view" })).toBeNull();

@@ -161,11 +161,11 @@ export function Details({
   const body = (
     <>
       <div className={styles.detailsHead}>
-        <span className={styles.lbl}>Details</span>
+        <span className={styles.lbl}>Properties</span>
         <button
           type="button"
           className={`kit-icon-btn ${styles.railClose}`}
-          aria-label="Close details"
+          aria-label="Close properties"
           onClick={onClose}
         >
           <Icon svg={I.closeSm!} />
@@ -264,7 +264,7 @@ export function Details({
           </>
         )}
         {/* Three tabs, one 2px underline — the same ink bar as the shelf. */}
-        <div className={styles.tabs} role="tablist" aria-label="Details">
+        <div className={styles.tabs} role="tablist" aria-label="Properties">
           {RAIL_TABS.map((entry) => (
             <button
               key={entry.id}

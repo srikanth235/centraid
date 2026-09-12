@@ -69,7 +69,7 @@ describe(originHealthSignal, () => {
         online: true,
         paired: true,
         queue: queue({
-          failures: [{ lastError: "gateway refused the upload" }],
+          failures: [{ lastError: "Your vault is out of space" }],
           pending: 1,
         }),
       })
@@ -77,7 +77,7 @@ describe(originHealthSignal, () => {
       copy: "1 item only on this phone · uploads need attention",
       destination: "notifications",
       notificationDetail: "phone",
-      notificationCause: "Upload failed · vault host refused the upload",
+      notificationCause: "Upload failed · Your vault is out of space",
       tone: "urgent",
     });
   });

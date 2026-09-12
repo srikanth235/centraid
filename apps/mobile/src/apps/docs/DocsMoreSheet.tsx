@@ -3,7 +3,7 @@
 //
 // The band is capped at five destinations, and Docs has more shelves than
 // slots — the sixth onward live here: Recently changed, Starred, Trash,
-// Storage, What Docs may read, Add to Docs. Labels and meta come from the
+// Storage, What Docs may read, Add a document. Labels and meta come from the
 // shared `view-copy.ts` table (`docs-band.ts` selects the mobile six), so the
 // sheet can never drift from what the web app calls the same shelves.
 //

@@ -1,4 +1,4 @@
-// Add to Docs (Docs handoff Part 2 §13; #821) — four ways in on a
+// Add a document (Docs handoff Part 2 §13; #821) — four ways in on a
 // phone: Upload, a blank document, a folder, and Scan. Drag and paste are
 // pointer-only and absent here, deliberately.
 //
@@ -129,7 +129,7 @@ export default function AddToDocs({
           <WayIn
             icon="folder-plus"
             label="A folder"
-            note="a label on documents, not a place they sit"
+            note="a name to file documents under"
             onPress={() => openComposer("folder")}
             styles={styles}
           />

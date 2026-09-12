@@ -55,7 +55,7 @@ describe(buildDocMenu, () => {
     // menu on the web — this seat used to invent shorter labels of its own.
     expect(labels(groups)).toStrictEqual([
       ["Open", "Download"],
-      ["Rename", "Move to…", "Star", "Version history", "Details"],
+      ["Rename", "Move to…", "Star", "Version history", "Properties"],
       ["Move to trash"],
     ]);
     const trashRow = groups[2]?.rows[0] as MenuActionRow;
@@ -120,7 +120,7 @@ describe("the Share verb", () => {
     expect(labels(groups)).toStrictEqual([
       ["Share"],
       ["Open", "Download"],
-      ["Rename", "Move to…", "Star", "Version history", "Details"],
+      ["Rename", "Move to…", "Star", "Version history", "Properties"],
       ["Move to trash"],
     ]);
     const share = groups[0]!.rows[0] as MenuActionRow;
@@ -180,7 +180,7 @@ describe("a read-only source's row", () => {
       "Open",
       "Download",
       "Version history",
-      "Details",
+      "Properties",
     ]);
     for (const row of reads) expect(row.disabled).toBeUndefined();
   });
@@ -198,7 +198,7 @@ describe("a read-only source's row", () => {
       "Move to…",
       "Star",
       "Version history",
-      "Details",
+      "Properties",
     ]);
     expect(labels(groups)[2]).toStrictEqual(["Move to trash"]);
     const star = groups[1]?.rows[2] as MenuActionRow;
@@ -262,7 +262,7 @@ describe("a read-only source's row", () => {
       "Move to…",
       "Star",
       "Version history",
-      "Details",
+      "Properties",
     ]);
   });
 });
