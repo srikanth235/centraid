@@ -49,7 +49,9 @@ pub mod testdoor;
 
 pub use error::{KitError, KitResult};
 pub use page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest, page_of, probe_limit};
-pub use reads::{FanOutBound, JOIN_FAN_OUT, PageDoor, in_list, read_by_id, read_pages};
+pub use reads::{
+    FanOutBound, JOIN_FAN_OUT, PageDoor, Window, in_list, read_by_id, read_pages, read_window,
+};
 pub use row::{Cell, Row};
 pub use statement::{
     PageBindValue, PageOrder, PageQuery, page_cursor_boundary, page_cursor_of, page_statement,

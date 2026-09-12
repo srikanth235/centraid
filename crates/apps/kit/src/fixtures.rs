@@ -24,15 +24,20 @@
 //! table and a version bump.
 //!
 //! **Where the rows go, today and later.** Today the generator writes through
-//! this connection, because `crates/vault`'s command path does not exist yet
-//! (lane D1). The row *values* are the ones the commands produce — resolved
-//! splits that sum to the amount, a full payer set including the degenerate
-//! single-payer row, a group-scoped currency every expense in it agrees with —
-//! so the same generator re-points at `Vault::invoke` without the fixture
-//! changing. The tables it creates are the ledger subset of
-//! `contracts/schema/vault-ddl.sql` with the cross-band foreign keys dropped;
-//! it is a **stand-in for the vault's own DDL, not a second schema**, and the
-//! receipt records the swap as a follow-up.
+//! the connection it is handed, because `crates/vault`'s command path does not
+//! exist yet (lane D1). The row *values* are the ones the commands produce —
+//! resolved splits that sum to the amount, a full payer set including the
+//! degenerate single-payer row, a group-scoped currency every expense in it
+//! agrees with — so the same generator re-points at `Vault::invoke` without the
+//! fixture changing.
+//!
+//! **It creates no tables.** The caller hands it a connection that already
+//! carries the model, which in practice means
+//! [`crate::contract_vault::open_contract_vault`] over
+//! `contracts/schema/vault-ddl.sql`. A generator that created its own tables
+//! would be a second copy of the schema, and the second copy is always the one
+//! that is missing a column — this generator had exactly that bug, and the
+//! year-3 measurement is what found it.
 
 use rusqlite::Connection;
 
@@ -180,131 +185,6 @@ const fn month_length(year: u32, month: u32) -> u32 {
     }
 }
 
-/// The ledger subset of the vault's DDL. See the module note: a stand-in until
-/// `crates/vault` can be asked to create it.
-pub const LEDGER_DDL: &str = "\
-CREATE TABLE IF NOT EXISTS core_party (
-  party_id TEXT PRIMARY KEY,
-  display_name TEXT NOT NULL,
-  sort_name TEXT,
-  kind TEXT NOT NULL DEFAULT 'person',
-  deleted_at TEXT
-) STRICT;
-CREATE TABLE IF NOT EXISTS core_vault (
-  vault_id TEXT PRIMARY KEY,
-  self_party_id TEXT NOT NULL,
-  base_currency TEXT NOT NULL,
-  time_zone TEXT NOT NULL DEFAULT 'UTC'
-) STRICT;
-CREATE TABLE IF NOT EXISTS social_circle (
-  circle_id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'household'
-) STRICT;
-CREATE TABLE IF NOT EXISTS social_circle_member (
-  member_id TEXT PRIMARY KEY,
-  circle_id TEXT NOT NULL,
-  party_id TEXT NOT NULL,
-  departed_at TEXT
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_friend (
-  friend_id TEXT PRIMARY KEY,
-  party_id TEXT NOT NULL,
-  created_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_group (
-  group_id TEXT PRIMARY KEY,
-  circle_id TEXT NOT NULL UNIQUE,
-  icon TEXT NOT NULL,
-  color TEXT NOT NULL,
-  simplify_opt_in INTEGER NOT NULL DEFAULT 0 CHECK (simplify_opt_in IN (0,1)),
-  archived_at TEXT,
-  currency TEXT NOT NULL CHECK (length(currency) = 3),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_expense (
-  expense_id TEXT PRIMARY KEY,
-  group_id TEXT,
-  description TEXT NOT NULL,
-  amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
-  currency TEXT NOT NULL CHECK (length(currency) = 3),
-  paid_by TEXT NOT NULL,
-  split_method TEXT NOT NULL DEFAULT 'exact',
-  split_params_json TEXT,
-  spent_on TEXT NOT NULL,
-  category TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  deleted_at TEXT,
-  purge_at TEXT,
-  settlement_currency TEXT,
-  recurring_template_id TEXT
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_expense_split (
-  expense_id TEXT NOT NULL,
-  party_id TEXT NOT NULL,
-  share_minor INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (expense_id, party_id)
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_expense_payer (
-  expense_id TEXT NOT NULL,
-  party_id TEXT NOT NULL,
-  paid_minor INTEGER NOT NULL CHECK (paid_minor >= 0),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (expense_id, party_id)
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_settlement (
-  settlement_id TEXT PRIMARY KEY,
-  group_id TEXT,
-  from_party TEXT NOT NULL,
-  to_party TEXT NOT NULL CHECK (to_party <> from_party),
-  amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
-  currency TEXT NOT NULL CHECK (length(currency) = 3),
-  paid_on TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  deleted_at TEXT
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_obligation (
-  obligation_id TEXT PRIMARY KEY,
-  party_id TEXT NOT NULL,
-  direction TEXT NOT NULL,
-  amount_minor INTEGER NOT NULL,
-  currency TEXT NOT NULL,
-  reason TEXT,
-  settled_at TEXT,
-  deleted_at TEXT,
-  created_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_nudge (
-  nudge_id TEXT PRIMARY KEY,
-  party_id TEXT NOT NULL,
-  group_id TEXT,
-  as_of_minor INTEGER NOT NULL,
-  note TEXT,
-  prepared_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS tally_recurring_expense (
-  template_id TEXT PRIMARY KEY,
-  group_id TEXT,
-  description TEXT NOT NULL,
-  original_amount_minor INTEGER NOT NULL,
-  original_currency TEXT NOT NULL,
-  settlement_currency TEXT,
-  paid_by TEXT NOT NULL,
-  category TEXT NOT NULL,
-  rrule TEXT NOT NULL,
-  anchor_start TEXT NOT NULL,
-  tz TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-) STRICT;";
-
 /// The owner's party id in a generated fixture. Fixed, because the owner is the
 /// one party every fold reads by name.
 pub const YEAR3_OWNER_PARTY: &str = "party-000000";
@@ -335,7 +215,6 @@ pub fn year3_tally(
     seed: u64,
 ) -> KitResult<Year3TallyCounts> {
     let door = |error: rusqlite::Error| KitError::Door(error.to_string());
-    connection.execute_batch(LEDGER_DDL).map_err(door)?;
     connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
     let counts = seed_ledger(connection, shape, seed);
     match counts {
@@ -368,7 +247,10 @@ fn seed_ledger(
 
     // --- parties. Index 0 is the owner; the rest are friends on the roster.
     let mut insert_party = connection
-        .prepare("INSERT INTO core_party (party_id, display_name, sort_name) VALUES (?, ?, ?)")
+        .prepare(
+            "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
+             VALUES (?, 'person', ?, ?, ?)",
+        )
         .map_err(door)?;
     let mut insert_friend = connection
         .prepare("INSERT INTO tally_friend (friend_id, party_id, created_at) VALUES (?, ?, ?)")
@@ -381,7 +263,7 @@ fn seed_ledger(
             format!("Friend {index:04}")
         };
         insert_party
-            .execute(rusqlite::params![party, name, name])
+            .execute(rusqlite::params![party, name, name, created])
             .map_err(door)?;
         if index > 0 {
             insert_friend
@@ -391,18 +273,30 @@ fn seed_ledger(
     }
     connection
         .execute(
-            "INSERT INTO core_vault (vault_id, self_party_id, base_currency) VALUES (?, ?, ?)",
-            rusqlite::params!["vault-000000", YEAR3_OWNER_PARTY, shape.currencies[0]],
+            "INSERT INTO core_vault
+               (vault_id, self_party_id, display_name, status, base_currency, settings_json,
+                created_at)
+             VALUES (?, ?, 'Year 3', 'active', ?, '{}', ?)",
+            rusqlite::params![
+                "vault-000000",
+                YEAR3_OWNER_PARTY,
+                shape.currencies[0],
+                created
+            ],
         )
         .map_err(door)?;
 
     // --- groups: a circle, its members, and the group that decorates it.
     let mut insert_circle = connection
-        .prepare("INSERT INTO social_circle (circle_id, name) VALUES (?, ?)")
+        .prepare(
+            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind, created_at)
+             VALUES (?, ?, ?, 'friends', ?)",
+        )
         .map_err(door)?;
     let mut insert_member = connection
         .prepare(
-            "INSERT INTO social_circle_member (member_id, circle_id, party_id) VALUES (?, ?, ?)",
+            "INSERT INTO social_circle_member (member_id, circle_id, party_id, added_at)
+             VALUES (?, ?, ?, ?)",
         )
         .map_err(door)?;
     let mut insert_group = connection
@@ -420,14 +314,20 @@ fn seed_ledger(
         let circle = id("circle", index);
         let group = id("group", index);
         insert_circle
-            .execute(rusqlite::params![circle, format!("Group {index:04}")])
+            .execute(rusqlite::params![
+                circle,
+                YEAR3_OWNER_PARTY,
+                format!("Group {index:04}"),
+                created
+            ])
             .map_err(door)?;
         let mut roster = vec![YEAR3_OWNER_PARTY.to_owned()];
         insert_member
             .execute(rusqlite::params![
                 id("member", index * shape.members_per_group),
                 circle,
-                YEAR3_OWNER_PARTY
+                YEAR3_OWNER_PARTY,
+                created
             ])
             .map_err(door)?;
         for seat in 1..shape.members_per_group {
@@ -437,7 +337,8 @@ fn seed_ledger(
                 .execute(rusqlite::params![
                     id("member", index * shape.members_per_group + seat),
                     circle,
-                    party
+                    party,
+                    created
                 ])
                 .map_err(door)?;
             roster.push(party);
@@ -612,8 +513,9 @@ fn seed_ledger(
         .prepare(
             "INSERT INTO tally_recurring_expense
                (template_id, group_id, description, original_amount_minor, original_currency,
-                paid_by, category, rrule, anchor_start, tz, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'FREQ=MONTHLY', ?, 'Europe/London', ?, ?)",
+                settlement_currency, paid_by, category, rrule, anchor_start, tz, created_at,
+                updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'FREQ=MONTHLY', ?, 'Europe/London', ?, ?)",
         )
         .map_err(door)?;
     for index in 0..shape.recurring {
@@ -624,6 +526,7 @@ fn seed_ledger(
                 id("group", group_index),
                 format!("Standing order {index:04}"),
                 10_000,
+                shape.currencies[group_index % shape.currencies.len()],
                 shape.currencies[group_index % shape.currencies.len()],
                 YEAR3_OWNER_PARTY,
                 "rent",
@@ -662,8 +565,15 @@ mod tests {
         ..YEAR3_TALLY
     };
 
+    /// The committed schema, as every caller of the generator supplies it.
     fn seeded(shape: Year3TallyShape, seed: u64) -> (Connection, Year3TallyCounts) {
-        let connection = Connection::open_in_memory().expect("an in-memory database opens");
+        let ddl = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../contracts/schema/vault-ddl.sql"),
+        )
+        .expect("the committed DDL is readable");
+        let connection =
+            crate::contract_vault::open_contract_vault(&ddl, "[]").expect("the model is created");
         let counts = year3_tally(&connection, shape, seed).expect("the ledger seeds");
         (connection, counts)
     }

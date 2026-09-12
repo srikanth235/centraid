@@ -21,10 +21,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages};
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_apps_kit::{PageRequest, page::Page};
 
 use crate::balance::{BalanceData, BalanceExpense, BalanceSettlement};
 
@@ -38,10 +37,18 @@ pub const RECURRING_ROWS: usize = 500;
 pub const EXCEPTION_ROWS: usize = 2_000;
 
 /// A split, a payer or a line per `(expense, person)`: 8,000 rows.
-pub const LEDGER_FAN_OUT: FanOutBound = FanOutBound::new(1_000, 8);
+///
+/// **The page size is 500, and v0's is 1,000** (D-1020-D3-12). v0 declares
+/// `{pageSize: 1000, fanOutPages: 8}` and calls it 8,000 rows
+/// (`queries/dashboard.ts:58`), but `MAX_PAGE_ROWS` clamps every page to 500,
+/// so the walk reaches 4,000 and throws a sentence naming 8,000. At the window
+/// Tally's own ceiling is stated at — 2,000 expenses, four sharers each —
+/// that is 8,000 split rows and v0's dashboard throws. Sixteen pages of 500 is
+/// the same stated ceiling and the first one that can be reached.
+pub const LEDGER_FAN_OUT: FanOutBound = FanOutBound::new(500, 16);
 
-/// An allocation per `(line, person)`: four times that.
-pub const ALLOCATION_FAN_OUT: FanOutBound = FanOutBound::new(1_000, 32);
+/// An allocation per `(line, person)`: four times that, by the same arithmetic.
+pub const ALLOCATION_FAN_OUT: FanOutBound = FanOutBound::new(500, 64);
 
 /// One expense, as the ledger holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +107,10 @@ pub struct TallyData {
     pub settlement_currencies: BTreeMap<String, String>,
     pub obligations: Vec<Row>,
     pub nudges: Vec<Row>,
+    /// `true` when the ledger is longer than `LEDGER_ROWS`, so a surface can
+    /// say the balance is over a window rather than over everything. v0 has no
+    /// such field and no way to know.
+    pub ledger_window_filled: bool,
 }
 
 impl TallyData {
@@ -417,13 +428,20 @@ pub fn independent_statements() -> Vec<PageQuery> {
 // The fold.
 // ---------------------------------------------------------------------------
 
-/// A window read as one page, with the probe dropped.
+/// A stated window, WALKED rather than clamped.
 ///
-/// A page that filled is not an error: `LEDGER_ROWS` is the promise, and the
-/// dashboard says which window it read. What would be an error is a WALK that
-/// ran past its ceiling, and that is [`read_pages`]'s to refuse.
-fn one_page(door: &dyn PageDoor, statement: &PageQuery, limit: usize) -> KitResult<Page<Row>> {
-    door.page(statement, &PageRequest::first(limit))
+/// v0 asks for its windows as one page and takes `.rows`, which the door
+/// clamps to `MAX_PAGE_ROWS` — so a 2,000-row window reads 500 and the fold
+/// runs over a quarter of the ledger with nothing saying so. See
+/// [`centraid_apps_kit::reads::read_window`] for the whole finding.
+/// `filled` is carried into [`TallyData`] so a surface can say the ledger is
+/// longer than what was read.
+fn window(
+    door: &dyn PageDoor,
+    statement: &PageQuery,
+    rows: usize,
+) -> KitResult<centraid_apps_kit::reads::Window> {
+    read_window(door, statement, rows)
 }
 
 fn expense_row(row: &Row) -> Option<ExpenseRow> {
@@ -466,12 +484,12 @@ fn pairs(rows: &[Row], amount_column: &str) -> BTreeMap<String, BTreeMap<String,
 /// Seventeen statements, then the party resolution that depends on what the
 /// first sixteen turned out to name.
 pub fn load_tally(door: &dyn PageDoor) -> KitResult<TallyData> {
-    let vault = one_page(door, &vault_statement(), 1)?;
-    let friends = one_page(door, &friends_statement(), LEDGER_ROWS)?;
-    let groups = one_page(door, &groups_statement(), LEDGER_ROWS)?;
-    let circles = one_page(door, &circles_statement(), LEDGER_ROWS)?;
-    let members = one_page(door, &circle_members_statement(), LEDGER_ROWS)?;
-    let expenses = one_page(door, &expenses_statement(), LEDGER_ROWS)?;
+    let vault = window(door, &vault_statement(), 1)?;
+    let friends = window(door, &friends_statement(), LEDGER_ROWS)?;
+    let groups = window(door, &groups_statement(), LEDGER_ROWS)?;
+    let circles = window(door, &circles_statement(), LEDGER_ROWS)?;
+    let members = window(door, &circle_members_statement(), LEDGER_ROWS)?;
+    let expenses = window(door, &expenses_statement(), LEDGER_ROWS)?;
     let splits = read_pages(door, &splits_statement(), LEDGER_FAN_OUT)?;
     let payers = read_pages(door, &payers_statement(), LEDGER_FAN_OUT)?;
     let settlements = read_pages(door, &settlements_statement(), LEDGER_FAN_OUT)?;
@@ -479,7 +497,7 @@ pub fn load_tally(door: &dyn PageDoor) -> KitResult<TallyData> {
     let _receipts = read_pages(door, &receipts_statement(), LEDGER_FAN_OUT)?;
     let _lines = read_pages(door, &receipt_lines_statement(), LEDGER_FAN_OUT)?;
     let _allocations = read_pages(door, &receipt_allocations_statement(), ALLOCATION_FAN_OUT)?;
-    let nudges = one_page(door, &nudges_statement(), LEDGER_ROWS)?;
+    let nudges = window(door, &nudges_statement(), LEDGER_ROWS)?;
 
     let vault_row = vault.rows.first();
     let me = vault_row.and_then(|row| text_of(row, "self_party_id"));
@@ -631,6 +649,7 @@ pub fn load_tally(door: &dyn PageDoor) -> KitResult<TallyData> {
         settlement_currencies,
         obligations,
         nudges: nudges.rows,
+        ledger_window_filled: expenses.filled,
     })
 }
 
@@ -639,9 +658,9 @@ pub fn load_tally(door: &dyn PageDoor) -> KitResult<TallyData> {
 /// (`queries/dashboard.ts:944`, `:959`, `:973`).
 pub fn load_dashboard_extras(door: &dyn PageDoor) -> KitResult<(Vec<Row>, Vec<Row>, Vec<Row>)> {
     Ok((
-        one_page(door, &trash_statement(), TRASH_ROWS)?.rows,
-        one_page(door, &recurring_statement(), RECURRING_ROWS)?.rows,
-        one_page(door, &recurring_exceptions_statement(), EXCEPTION_ROWS)?.rows,
+        window(door, &trash_statement(), TRASH_ROWS)?.rows,
+        window(door, &recurring_statement(), RECURRING_ROWS)?.rows,
+        window(door, &recurring_exceptions_statement(), EXCEPTION_ROWS)?.rows,
     ))
 }
 
@@ -742,10 +761,14 @@ mod tests {
     }
 
     #[test]
-    fn the_stated_ceilings_are_v0s() {
+    fn the_stated_ceilings_are_the_ones_v0_meant_and_can_be_reached() {
         assert_eq!(LEDGER_FAN_OUT.cap(), 8_000);
         assert_eq!(ALLOCATION_FAN_OUT.cap(), 32_000);
         assert_eq!(LEDGER_ROWS, 2_000);
+        // The window Tally promises needs the ceiling it states: 2,000
+        // expenses with four sharers each is exactly 8,000 split rows, and a
+        // bound that stopped at 4,000 would refuse the promise.
+        assert!(LEDGER_FAN_OUT.cap() >= LEDGER_ROWS * 4);
     }
 
     #[test]
