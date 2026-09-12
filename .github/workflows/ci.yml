@@ -984,11 +984,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/ci-versions.out
           exit 0
-      # #996 — INPUTS, not a native tree. `ios/` and `android/` are prebuild
-      # outputs and gitignored, so this lane deliberately does NOT prebuild:
-      # the gate's whole claim is that the committed fingerprints are
-      # reproducible from app.config.ts, plugins/ and modules/ alone, and a
-      # runner that generated the projects first could not make that claim.
+      # #996, #1015 R-NY-17 — the inputs, and the committed trees' fidelity to
+      # them. This lane deliberately does NOT prebuild: the gate's claim is that
+      # the committed fingerprints are reproducible from app.config.ts,
+      # plugins/ and modules/ alone, and a runner that generated the projects
+      # first could not make it. L1's drift half compares the tree ids the INDEX
+      # carries against the blessed ones, which is exactly the question a
+      # never-prebuilt runner can answer.
       - name: Verify the native inputs and the fingerprint ratchet
         run: bun run --cwd apps/mobile ci:native-state
       - name: Bundle iOS and Android through Metro

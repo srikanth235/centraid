@@ -1,11 +1,17 @@
-# CONTINUOUS NATIVE GENERATION (#996 CNG wave).
+# CONTINUOUS NATIVE GENERATION, COMMITTED (#996 CNG wave; #1011).
 #
-# `ios/` and `android/` are OUTPUTS of `expo prebuild`, not sources. Everything
-# this app decides about them lives in `app.config.ts`, the config plugins under
-# `plugins/`, and the autolinked local modules under `modules/` — the generated
-# projects carry no edit that is not written from one of those on every run.
+# `ios/` and `android/` are OUTPUTS of `expo prebuild`, and they are TRACKED —
+# not ignored. Everything this app decides about them still lives in
+# `app.config.ts`, the config plugins under `plugins/`, and the autolinked local
+# modules under `modules/`; committing the result is what makes a native change
+# arrive as a reviewable diff instead of as a hash nobody can read.
 #
-# There is no exception below on purpose: a file that has to survive a
-# regeneration is a file a plugin must write.
-/ios/
-/android/
+# So there is no rule for either tree here, on purpose. A rule over a tracked
+# tree is the worst of both worlds: the files stay committed while the next
+# regeneration never shows up in `git status`, which is the one thing this
+# arrangement exists to show. `apps/mobile/ios/.gitignore` and
+# `apps/mobile/android/.gitignore` — themselves prebuild outputs — carry the
+# build artefacts each tree produces.
+#
+# A file that has to survive a regeneration is still a file a plugin must write:
+# prebuild overwrites a hand-edit, and `ci:native-state`'s L1 fails the drift.

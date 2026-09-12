@@ -387,8 +387,10 @@ jobs:
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
-      # GENERATE THE iOS PROJECT (#996). `apps/mobile/ios` is a prebuild output
-      # and is gitignored. `expo run:ios` would generate it implicitly on the
+      # REGENERATE THE iOS PROJECT (#996; tracked since #1011). `apps/mobile/ios`
+      # is a prebuild output — committed, but regenerated here so this lane
+      # builds what the inputs say rather than what the index happens to carry.
+      # `expo run:ios` would generate it implicitly on the
       # BUILD path, but the INJECT path reads
       # `ios/Pods/hermes-engine/.../hermesc` without ever running it, and
       # `native:prebuild` also builds `vec.xcframework`, which must exist before

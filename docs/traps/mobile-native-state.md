@@ -1,12 +1,14 @@
 # Trap: mobile native inputs vs the fingerprint ratchet
 
-`apps/mobile/ios` and `apps/mobile/android` are **outputs** of `expo prebuild` and are gitignored ([#996](https://github.com/srikanth235/centraid/issues/996)). The gate that used to read them — a committed `Podfile.lock`, a committed `project.pbxproj` — reads the **inputs** instead: `app.config.ts`, `plugins/*.cjs`, `plugins/native/**`, the local Expo modules under `modules/`, and the dependency set.
+`apps/mobile/ios` and `apps/mobile/android` are **outputs** of `expo prebuild` ([#996](https://github.com/srikanth235/centraid/issues/996)) and are **tracked** ([#1011](https://github.com/srikanth235/centraid/issues/1011)) — generated, and committed so that a native change arrives as a reviewable diff instead of as a hash nobody can read. Neither tree is gitignored, on purpose: a rule over a tracked tree keeps the files committed while hiding every regeneration from `git status`.
+
+The recipe is still the **inputs**: `app.config.ts`, `plugins/*.cjs`, `plugins/native/**`, the local Expo modules under `modules/`, and the dependency set. Nothing else writes these trees.
 
 ## What goes wrong
 
 Two failures, both silent, both of which the layers below fail closed on.
 
-**A native file gets committed.** Someone hand-edits the generated project to fix something, `git add`s it, and it works — once. The next prebuild overwrites it, the fix disappears with no error anywhere, and the committed file now has no writer keeping it current. Anything that has to survive a regeneration is written by a config plugin; there is no second answer.
+**A generated file gets hand-edited.** Someone edits the generated project to fix something, commits it, and it works — for as long as nobody regenerates. The next prebuild overwrites it, the fix disappears with no error anywhere, and the committed file had no writer keeping it current in the meantime. Anything that has to survive a regeneration is written by a config plugin; there is no second answer. The same failure wearing different clothes is an input moving while the committed trees do not, so the projects describe an app that no longer exists.
 
 **The ratchet goes quiet instead of red.** A fingerprint that stops reading a config plugin or a local module keeps matching the committed hash forever while the thing it exists to watch moves freely. That is the historical [#638](https://github.com/srikanth235/centraid/issues/638) hole — a module shipped, its lock entry did not, and fingerprints were ratcheted onto the incomplete world — one layer up from the file it used to live in.
 
@@ -18,7 +20,7 @@ Two failures, both silent, both of which the layers below fail closed on.
 
 | Layer | What |
 | --- | --- |
-| **L1** | Generated-tree purity — nothing under `ios/` or `android/` is tracked, and git ignores both |
+| **L1** | Generated-tree fidelity — both trees are tracked, neither is ignored, and each sits at the git tree id blessed beside the input fingerprints. A git tree id IS the directory's content: one byte changed anywhere under it moves the id, and nothing else does. It is read from the **index**, so a regeneration and the `--write` that blesses it are one commit; on a clean checkout the index is HEAD |
 | **L2** | Input coverage — every `plugins/*.cjs` and every local module's platform directory is in the fingerprint's source list, the `expoConfig` / `expoAutolinkingConfig:<platform>` sources are present, and each module's `expo-module.config.json` declares the platforms its directories imply |
 | **L3** | Host independence — no prebuild output contributes to the hash, so a prebuilt worktree and a fresh checkout compute the same value |
 | **L4** | Identity ratchet — committed `native-fingerprints.json` matches `@expo/fingerprint` |
@@ -35,7 +37,7 @@ bun run --cwd apps/mobile ci:native-state --status
 bun run --cwd apps/mobile ci:native-state --write
 ```
 
-`--write` **refuses** when L1–L3 fail. Do not hand-edit hashes to silence CI.
+`--write` **refuses** when L1–L3 fail — except for L1's own drift, which is the thing a reviewed `--write` exists to move: a regeneration necessarily changes the tree ids, and blessing them is the act of reviewing the diff. Everything else (a tree that left the index, a tree that is ignored, L2, L3) still blocks, because a tree nobody can review is a tree nobody may bless. Do not hand-edit hashes to silence CI.
 
 To see what the inputs produce, regenerate rather than inspect a committed tree:
 
@@ -54,13 +56,14 @@ Script-key reorders in `apps/mobile/package.json` do not move identity (`sourceS
 
 1. **Committing a generated file to make a build work** — L1 fails closed; the fix belongs in a config plugin.
 2. **Running `--write` to "make CI green"** — refused while L1–L3 are red.
-3. **Adding a `.gitignore` exception for one native file** — same as (1), and L1 checks the ignore rule as well as the index.
+3. **Adding a `.gitignore` rule over `ios/` or `android/`** — it does not un-track what is already committed; it only hides the next regeneration from review. L1 fails a tracked tree that is also ignored.
 4. **Blaming oxfmt script sorting for identity churn** — deafened in the fingerprint options; do not carve the formatter.
 5. **Expecting a lane to build without prebuilding** — `expo run:*` generates the project implicitly, `./gradlew` and the `hermesc` injection path do not. Every CI lane that touches either runs `native:prebuild` in a step of its own, before it restores any cache that lives inside the generated tree.
 
 ## Checklist
 
-- [ ] Native change expressed in `app.config.ts`, a plugin, or a local module — never in `ios/` or `android/`
+- [ ] Native change expressed in `app.config.ts`, a plugin, or a local module — never hand-edited under `ios/` or `android/`
+- [ ] The regenerated trees committed in the same change, with `native-fingerprints.json`'s `trees` block moved by `--write`
 - [ ] New/changed local modules declare their platforms in `expo-module.config.json`
 - [ ] `bun run --cwd apps/mobile ci:native-state` green (or `--status` explains which layer)
 - [ ] If L4 only: deliberate `--write` with the input delta named in the issue receipt
