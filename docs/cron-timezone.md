@@ -83,6 +83,20 @@ Devices sharing a vault share one cursor row, so the schedule is owned by whiche
 
 The cost is the other half of the same coin: a device far enough behind never fires at all while a leading device is present. This is characterised (not pinned — it contradicts no ruling) in `packages/server/src/automation/fire/clock-adversity-cron.test.ts`, so a future change that lets a lagging device sweep its own window turns that exact configuration into a visible double fire rather than a silent one.
 
+## v1: the vault's zone, and tier 3 deleted
+
+The three tiers above are v0's. [`crates/automations`](../crates/automations) resolves in **two**, and the third is a refusal ([#1020](https://github.com/srikanth235/centraid/issues/1020), R-1020-33, D-1020-AU2):
+
+1. **Per-trigger `tz`** — unchanged.
+2. **The vault's zone** — `core_vault.settings_json`'s zone, written from Settings and validated as IANA at write. This replaces the gateway-wide device pref: a zone is a property of the household, not of a device.
+3. **Nothing.** A typed `ZoneUnset` refuses the registration and raises a system signal, so a member is asked for their zone instead of being given a schedule in somebody else's.
+
+Tier 3 is deleted rather than ported because it is host-local wall clock and a gateway now runs on a server. On a laptop it is a promise — *your seven o'clock reminder keeps arriving at seven* — and on a UTC VPS it silently becomes seven in UTC. **This is recorded as a finding against v0 and not fixed there**: v0 does not ship to a VPS, so the promise it makes is the right one for the machines it runs on. The evidence is a row rather than a paragraph — `contracts/automations/cron-cases.json` carries a `finding` block with what v0 answers for `0 7 * * *` at 01:30 UTC both with the vault's zone (`true`) and with none (`false`).
+
+**The host's zone is unreachable from the v1 crate by construction.** `jiff` is depended on without its `tz-system` feature and with `tzdb-bundle-always`, so there is no code path that can read `TZ` or `/etc/localtime`, and the zone database is compiled into the binary — the answer does not change when a host is reinstalled without `tzdata`.
+
+The DST table, the backfill classes and the multiple-device rule above are unchanged and are held over the same pinned transition dates in `contracts/automations/cron-windows.json`, generated from v0's own `readCronCursor`.
+
 ## Code pointers
 
 | Concern | Location |
@@ -96,5 +110,7 @@ The cost is the other half of the same coin: a device far enough behind never fi
 | Manifest shape + IANA validation | `packages/server/src/automation/manifest/manifest.ts` |
 | Gateway default wiring | `packages/server/src/serve/build-gateway.ts` (`defaultCronTimeZone`) |
 | Client preview + labels | `packages/client/src/cron.ts` |
+| **v1** resolution, matching, cursor and preview | [`crates/automations/src/cron.rs`](../crates/automations/src/cron.rs), [`fire/cron_cursor.rs`](../crates/automations/src/fire/cron_cursor.rs) |
+| **v1** cases, generated from v0 | `contracts/automations/{cron-cases,cron-windows}.json` |
 | Editor timezone control | `packages/client/src/react/screens/AutomationEditorScreen.tsx` |
 | Settings default | `packages/client/src/react/screens/SettingsLayoutScreen.tsx` |

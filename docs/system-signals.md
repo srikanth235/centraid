@@ -57,6 +57,22 @@ Recent-run health alone said `ok` forever on a recipe whose walk had not moved i
 
 "Armed" is what the SCHEDULER does, not what a stored bit says: a system recipe (`faces`, `photo-ocr`, `doc-text-extractor`) is armed unconditionally on every boot ([recognition automations](recognition-automations.md)), so the probe counts it as armed whatever its `enabled` column reads. Counting it off is how health and the scheduler came to disagree about what was running.
 
+### The automations plane's five signals
+
+[`crates/automations`](../crates/automations) raises a **value**, never a log line ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-AU7). A refusal that lived only in the gateway's log would be indistinguishable from a quiet morning, which is the whole failure the ladder above exists to prevent.
+
+| Code | Tone | Cause | Destination |
+| --- | --- | --- | --- |
+| `automation.zone-unset` | attention | a cron trigger names no zone and neither does the vault, so the schedule cannot be set | Settings |
+| `automation.recipe-paused` | quiet | the owner's background pause covers this recipe, and **paused is not disabled** | Automations |
+| `automation.element-dead-lettered` | attention | one trigger element was tried five times and given up on, durably | Automations |
+| `enrichment.target-declined` | quiet | a target reached its cap and the walk advanced past it — the poison the `enrichment` probe above lists | System |
+| `enrichment.capability-unavailable` | quiet | a capability's pinned weights are not on disk and could not be fetched, so its automation stays unavailable until the next boot | System |
+
+`zone-unset` is the one that pushes, because it is the only one a member can fix and the only one whose absence is silent by construction — it is what replaces v0's fall-back to the host clock.
+
+The **wire** form is a hand-off: `centraid.core.v1`'s `Event` oneof carries `change`, `health` and `connectivity`, none of which is a signal, and `crates/api-proto` is a shared file no app lane owns. `contracts/handoff/automations/api-proto.patch` carries the fourth arm with its demonstrated red; until it lands, `signals::SignalSink` is the seam and nothing in the crate logs a signal instead of raising it.
+
 ## Destination responsibilities
 
 - **Vault** owns Contents, Copies, and Sharing, in that order. The app-bar meta is a custody sentence.
