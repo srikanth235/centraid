@@ -20,6 +20,7 @@ const SCHEMA_PATH = path.resolve(
   import.meta.dirname,
   "../../../vault/src/schema/domains-locker.ts"
 );
+const MANIFEST_PATH = path.resolve(import.meta.dirname, "app.json");
 
 /** Pull the quoted members out of `export type LockerItemType = ...`. */
 function declaredLockerItemTypes(): string[] {
@@ -52,6 +53,38 @@ function schemaLockerItemTypes(): string[] {
   return [...match[1]!.matchAll(/'(?<name>[^']+)'/gu)].map((m) => m[1]!);
 }
 
+/**
+ * Pull `add-item`'s declared `type` enum out of the manifest.
+ *
+ * THE THIRD LEG OF THE TRIPWIRE (#1020, R-1020-35). The two legs above pin
+ * `types.ts` to the CHECK constraint, and both were right while the manifest —
+ * the schema the DISPATCHER validates an action body against
+ * (`packages/server/src/engine/handlers/dispatcher.ts:439`, `:580`) — still
+ * listed only the six column-backed types. So the type picker offered all
+ * fifteen (`view-copy.ts`'s `ALL_TYPES`), `draft.ts` built a `TEMPLATE_ONLY`
+ * payload for the nine, `locker.add_item` accepted all fifteen
+ * (`packages/vault/src/commands/locker-types.ts`'s `LOCKER_ITEM_TYPES`), and
+ * a member who picked "Passport" got `INVALID_INPUT` from the dispatcher
+ * before any of that ran. Two lists agreeing is not the invariant; three are.
+ */
+function manifestAddItemTypes(): string[] {
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as {
+    actions: { name: string; input: { properties?: Record<string, unknown> } }[];
+  };
+  const addItem = manifest.actions.find((action) => action.name === "add-item");
+  if (!addItem) throw new Error("app.json declares no add-item action");
+  const declared = (addItem.input.properties as
+    | { type?: { enum?: string[] } }
+    | undefined)?.type?.enum;
+  if (!declared) {
+    throw new Error(
+      "add-item's input schema declares no type enum — this tripwire's third " +
+        "leg needs updating to match the new shape."
+    );
+  }
+  return declared;
+}
+
 describe("LockerItemType mirrors the schema's CHECK constraint (issue #712 C4)", () => {
   it("the schema's own list still names fifteen types — else this tripwire is stale", () => {
     // Six column-backed types plus the nine template-backed ones #872 added.
@@ -60,6 +93,12 @@ describe("LockerItemType mirrors the schema's CHECK constraint (issue #712 C4)",
 
   it("types.ts's union matches domains-locker.ts's CHECK constraint exactly", () => {
     expect(declaredLockerItemTypes().toSorted()).toStrictEqual(
+      schemaLockerItemTypes().toSorted()
+    );
+  });
+
+  it("app.json's add-item enum matches the CHECK constraint exactly", () => {
+    expect(manifestAddItemTypes().toSorted()).toStrictEqual(
       schemaLockerItemTypes().toSorted()
     );
   });
