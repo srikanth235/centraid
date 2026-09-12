@@ -20,4 +20,7 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+# The #842 corpus asks the audit-band registry which produced tables are
+# EVIDENCE of a refusal rather than a breach, so the check is over life data.
+centraid-ontology = { path = "../ontology" }
 tempfile.workspace = true

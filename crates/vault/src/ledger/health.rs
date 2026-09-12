@@ -193,8 +193,9 @@ pub fn classes_for(
             .map_err(|error| VaultError::from_sqlite("reading harness health", error))?;
         let mut found = Vec::new();
         for row in rows {
-            found
-                .push(row.map_err(|error| VaultError::from_sqlite("reading harness health", error))?);
+            found.push(
+                row.map_err(|error| VaultError::from_sqlite("reading harness health", error))?,
+            );
         }
         Ok(found)
     })
@@ -243,7 +244,10 @@ mod tests {
     fn the_permanent_sentinel_is_never_read_as_expired() {
         assert!(is_open(Some(PERMANENT), i64::MAX));
         assert!(is_open(Some(10), 9));
-        assert!(!is_open(Some(10), 10), "a deadline that has arrived is open");
+        assert!(
+            !is_open(Some(10), 10),
+            "a deadline that has arrived is open"
+        );
         assert!(!is_open(None, 0));
     }
 }
