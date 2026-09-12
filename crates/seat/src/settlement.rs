@@ -402,6 +402,42 @@ mod tests {
         );
     }
 
+    /// The version path considers ONLY `awaiting-change` intents with no
+    /// commit seq.
+    ///
+    /// Killed the mutant that turned the `||` into `&&`: with `&&`, an intent
+    /// is skipped only when it is *both* not awaiting-change *and* carrying a
+    /// commit seq — so a plain `queued` intent with matching versions would be
+    /// settled by this path, clearing an overlay for a write that was never
+    /// sent.
+    #[test]
+    fn the_version_set_path_never_settles_an_intent_that_is_not_awaiting_change() {
+        let connection = Connection::open_in_memory().expect("opens");
+        let outbox = Outbox::open(&connection).expect("opens");
+        // A QUEUED intent — never sent — that happens to carry base versions
+        // the mirror already holds.
+        let mut never_sent = record("i-queued");
+        never_sent.state = IntentState::Queued;
+        never_sent.base_versions.push(version("n1", 4));
+        outbox.enqueue(&never_sent, "t").expect("queues");
+        outbox
+            .transition("i-queued", IntentState::Queued, "t", |entry| {
+                entry.base_versions = vec![version("n1", 4)];
+            })
+            .expect("transitions");
+
+        assert!(
+            settle_answered_intents(&outbox, "t2", |_| Some(true))
+                .expect("runs")
+                .is_empty(),
+            "a queued intent was settled by the version path; its write was never sent"
+        );
+        assert_eq!(
+            outbox.get("i-queued").expect("reads").expect("there").state,
+            IntentState::Queued
+        );
+    }
+
     #[test]
     fn the_version_set_path_leaves_a_commit_seq_answer_to_the_cursor() {
         let connection = Connection::open_in_memory().expect("opens");

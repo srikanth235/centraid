@@ -560,6 +560,111 @@ mod tests {
         assert_eq!(read.created_order, 0, "the record's own field is untouched");
     }
 
+    /// The INDEXED COLUMNS carry what the record carries.
+    ///
+    /// Killed nine mutants across `waiting_on_json`, `json_or_null` and
+    /// `base_versions_json` that returned `None`, `Some("")` and
+    /// `Some("xyzzy")`. Every other test read the round trip back out of
+    /// `record_json`, so the columns the queue ORDERS, FILTERS and CLEARS on
+    /// were unasserted — and a `None` there is an index that matches nothing.
+    #[test]
+    fn the_indexed_columns_hold_what_the_record_holds() {
+        let connection = seat();
+        let outbox = Outbox::open(&connection).expect("opens");
+
+        // Empty means NULL, not `""`: a `WHERE … IS NOT NULL` index is what
+        // reads these, and an empty string is a value.
+        outbox
+            .enqueue(&record("i-empty", IntentState::Queued), "t")
+            .expect("queues");
+        let empties: (Option<String>, Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT waiting_on_json, depends_on_json, base_versions_json
+                   FROM seat_outbox WHERE intent_id = 'i-empty'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("the columns read");
+        assert_eq!(empties, (None, None, None));
+
+        // And a populated intent's columns hold real JSON with its values in.
+        let mut full = record("i-full", IntentState::Queued);
+        full.depends_on.push("i-empty".to_owned());
+        full.base_versions
+            .push(centraid_vault::intents::BaseVersion {
+                entity: "note".to_owned(),
+                row_id: "n1".to_owned(),
+                shape_id: None,
+                version: 7,
+            });
+        full.waiting_on.push(WaitingOn {
+            seat: WaitingOnSeat::Gateway,
+            label: "the gateway is thinking".to_owned(),
+        });
+        outbox.enqueue(&full, "t").expect("queues");
+        let (waits, depends, versions): (String, String, String) = connection
+            .query_row(
+                "SELECT waiting_on_json, depends_on_json, base_versions_json
+                   FROM seat_outbox WHERE intent_id = 'i-full'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("the columns read");
+        assert!(
+            waits.contains("gateway") && waits.contains("thinking"),
+            "{waits}"
+        );
+        assert!(depends.contains("i-empty"), "{depends}");
+        assert!(
+            versions.contains("n1") && versions.contains('7'),
+            "{versions}"
+        );
+        // Each one is JSON a reader can parse, not a string that merely
+        // contains the words.
+        for column in [&waits, &depends, &versions] {
+            serde_json::from_str::<serde_json::Value>(column)
+                .unwrap_or_else(|error| panic!("`{column}` is not JSON: {error}"));
+        }
+    }
+
+    /// Every `waiting_on` seat round-trips.
+    ///
+    /// Killed the mutants that deleted the `"origin"` and `"gateway"` arms of
+    /// `read_waiting_on`: a deleted arm drops the wait silently, and a screen
+    /// then tells the member their write is waiting on nothing.
+    #[test]
+    fn every_waiting_on_seat_survives_the_round_trip() {
+        let connection = seat();
+        let outbox = Outbox::open(&connection).expect("opens");
+        for (index, seat_kind) in [
+            WaitingOnSeat::Owner,
+            WaitingOnSeat::Origin,
+            WaitingOnSeat::Gateway,
+            WaitingOnSeat::Intent,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let id = format!("i-{index}");
+            let mut entry = record(&id, IntentState::Queued);
+            entry.waiting_on.push(WaitingOn {
+                seat: seat_kind,
+                label: format!("label-{index}"),
+            });
+            outbox.enqueue(&entry, "t").expect("queues");
+            let read = outbox.get(&id).expect("reads").expect("there");
+            assert_eq!(
+                read.waiting_on,
+                entry.waiting_on,
+                "`{}` was dropped on the way back",
+                seat_kind.as_str()
+            );
+        }
+        // And a seat this build does not know is DROPPED rather than guessed —
+        // which is the behaviour the deleted arms would have faked.
+        assert!(read_waiting_on(&serde_json::json!({ "seat": "councillor" })).is_none());
+    }
+
     #[test]
     fn created_order_is_allocated_by_the_queue_and_not_by_the_clock() {
         let connection = seat();

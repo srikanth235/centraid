@@ -131,6 +131,30 @@ mod tests {
         assert!(error.is_disk_full());
     }
 
+    /// A full file is recognised even when it arrived as a plain `Sqlite`.
+    ///
+    /// Killed the mutant that deleted the `Self::Sqlite` arm of
+    /// `is_disk_full`. A `?` on a `rusqlite::Result` anywhere in this crate
+    /// produces exactly that variant, which makes it the MOST common way a
+    /// full file reaches a caller — and the one arm a reader is most likely to
+    /// think redundant.
+    #[test]
+    fn a_full_file_is_recognised_through_the_plain_sqlite_variant() {
+        let plain = SeatError::Sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(13),
+            None,
+        ));
+        assert!(
+            plain.is_disk_full(),
+            "a `?` on a rusqlite::Result is the commonest way a full file arrives"
+        );
+        let other = SeatError::Sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(5),
+            None,
+        ));
+        assert!(!other.is_disk_full());
+    }
+
     #[test]
     fn another_sqlite_failure_is_not_mistaken_for_a_full_file() {
         let error = SeatError::from_sqlite(

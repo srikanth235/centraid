@@ -423,6 +423,66 @@ mod tests {
         }
     }
 
+    /// `never_retried` is exactly the two states a retry cannot change.
+    ///
+    /// Killed the mutants that made it always `true` and always `false`. Always
+    /// `true` stops the chain retrying anything; always `false` makes a
+    /// successor wait forever on a predecessor that was denied.
+    #[test]
+    fn never_retried_is_exactly_denied_and_expired() {
+        for state in ALL_STATES {
+            assert_eq!(
+                state.never_retried(),
+                matches!(state, IntentState::Denied | IntentState::Expired),
+                "`{}` disagrees",
+                state.as_str()
+            );
+        }
+        // At least one of each, so a constant cannot satisfy the loop.
+        assert!(ALL_STATES.iter().any(|state| state.never_retried()));
+        assert!(ALL_STATES.iter().any(|state| !state.never_retried()));
+    }
+
+    /// The gateway's and the answer's spellings, asserted literally.
+    ///
+    /// Killed four mutants that made `as_str` return `""` and `"xyzzy"` on both
+    /// enums. These strings are a FILE FORMAT — the outcome table's `CHECK`
+    /// constraint and the wire both hold them — so they are asserted as
+    /// literals rather than round-tripped, which a constant return would pass.
+    #[test]
+    fn the_gateway_and_outcome_spellings_are_the_ones_the_file_holds() {
+        assert_eq!(
+            GATEWAY_STATUSES.map(GatewayStatus::as_str),
+            [
+                "queued", "sending", "parked", "executed", "denied", "failed", "conflict"
+            ]
+        );
+        assert_eq!(
+            OUTCOME_STATUSES.map(OutcomeStatus::as_str),
+            ["executed", "parked", "denied", "failed", "conflict"]
+        );
+    }
+
+    /// A gateway status parses back to itself, and only to itself.
+    ///
+    /// Killed the mutant that flipped `==` to `!=` in `parse`: with the
+    /// comparison inverted, `"queued"` parses as `sending` — the FIRST status
+    /// that is not the one asked for — and every answer is silently attributed
+    /// to the wrong state.
+    #[test]
+    fn a_gateway_status_parses_back_to_itself() {
+        for status in GATEWAY_STATUSES {
+            assert_eq!(
+                GatewayStatus::parse(status.as_str()).expect("it parses"),
+                status,
+                "`{}` parsed as something else",
+                status.as_str()
+            );
+        }
+        assert!(GatewayStatus::parse("awaiting-change").is_err());
+        assert!(GatewayStatus::parse("").is_err());
+    }
+
     #[test]
     fn parked_and_expired_are_retained_but_not_actionable() {
         assert!(IntentState::Parked.retained_attention());

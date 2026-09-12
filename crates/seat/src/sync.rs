@@ -632,6 +632,11 @@ mod tests {
 
         assert_eq!(report.pages_fetched, 2, "the log was drained twice");
         assert_eq!(report.overlays_cleared, ["i-1"]);
+        // THE COUNT, not only the list. Killed the mutant that turned
+        // `intents_settled +=` into `*=`: the list and the count are extended
+        // by two different statements, and a caller that shows "3 writes saved"
+        // reads the count.
+        assert_eq!(report.intents_settled, 1);
         assert!(
             outbox.get("i-1").expect("reads").is_none(),
             "the intent settled in the same pass it was submitted in"
@@ -740,6 +745,111 @@ mod tests {
         assert!(
             sink.submitted.is_empty(),
             "submitting against a cursor about to be replaced gets the intent refused"
+        );
+    }
+
+    /// The counters ACCUMULATE across the pages of one pass.
+    ///
+    /// Killed four mutants that turned `+=` into `-=` and `*=` on
+    /// `rows_applied`, `rows_duplicate` and `commits_applied`. A single-page
+    /// pass cannot tell the difference — `0 += n` and `0 -= n` differ only in
+    /// sign, and every other test fetched one page. So this one fetches three.
+    #[test]
+    fn the_counters_accumulate_across_every_page_of_one_pass() {
+        let connection = seat();
+        let mut source = ScriptedSource {
+            outcomes: vec![
+                page(vec![row(1, 1, "a"), row(2, 1, "b")], true, 5),
+                page(vec![row(3, 2, "c")], true, 5),
+                page(vec![row(4, 3, "d"), row(5, 3, "e")], false, 5),
+            ],
+            asked: Vec::new(),
+        };
+        let mut sink = ScriptedSink {
+            answers: Vec::new(),
+            submitted: Vec::new(),
+        };
+        let report = drive(pass(&connection, &mut source, &mut sink, "t")).expect("the pass runs");
+        assert_eq!(report.pages_fetched, 3);
+        // FIVE rows over THREE pages: a counter that multiplied would be 0 and
+        // one that subtracted would be negative — which a `usize` cannot even
+        // hold, so the mutant that does it panics rather than lying.
+        assert_eq!(report.rows_applied, 5);
+        assert_eq!(report.commits_applied, 3);
+
+        // And the duplicate counter accumulates too: the whole span again.
+        let mut again = ScriptedSource {
+            outcomes: vec![
+                page(vec![row(1, 1, "a"), row(2, 1, "b")], true, 5),
+                page(vec![row(3, 2, "c")], false, 5),
+            ],
+            asked: Vec::new(),
+        };
+        let replayed =
+            drive(pass(&connection, &mut again, &mut sink, "t2")).expect("the pass runs");
+        assert_eq!(replayed.rows_duplicate, 3);
+        assert_eq!(replayed.rows_applied, 0);
+        assert_eq!(replayed.intents_settled, 0, "nothing settled on a replay");
+    }
+
+    /// `intents_settled` accumulates across the pages of one pass.
+    ///
+    /// Two intents waiting on two different commits, arriving on two pages. A
+    /// count that multiplied would be 0 and one that took only the last page
+    /// would be 1.
+    #[test]
+    fn the_settled_count_accumulates_across_pages() {
+        let connection = seat();
+        let outbox = Outbox::open(&connection).expect("opens");
+        for (id, commit_seq) in [("i-1", 1), ("i-2", 2)] {
+            outbox.enqueue(&queued(id), "t").expect("queues");
+            outbox
+                .transition(id, IntentState::AwaitingChange, "t", |entry| {
+                    entry.commit_seq = Some(commit_seq);
+                })
+                .expect("waits");
+        }
+        let mut source = ScriptedSource {
+            outcomes: vec![
+                page(vec![row(1, 1, "a")], true, 2),
+                page(vec![row(2, 2, "b")], false, 2),
+            ],
+            asked: Vec::new(),
+        };
+        let mut sink = ScriptedSink {
+            answers: Vec::new(),
+            submitted: Vec::new(),
+        };
+        let report = drive(pass(&connection, &mut source, &mut sink, "t2")).expect("the pass runs");
+        assert_eq!(report.pages_fetched, 2);
+        assert_eq!(report.intents_settled, 2);
+        assert_eq!(report.overlays_cleared.len(), 2);
+    }
+
+    /// `is_due` measures ELAPSED time, which is a subtraction.
+    ///
+    /// Killed the mutant that turned `-` into `+`. Every other test used
+    /// `updated_at_ms = 0`, where `now - 0` and `now + 0` are the same number —
+    /// so the arithmetic was unasserted for every intent that had ever been
+    /// tried at a real time.
+    #[test]
+    fn a_retry_measures_elapsed_time_from_when_it_was_last_tried() {
+        let mut record = queued("i-1");
+        record.attempts = 1; // a 2,000 ms backoff
+        let last_tried = 1_000_000_i64;
+        assert!(
+            !is_due(&record, last_tried, last_tried + 1_999),
+            "not due 1,999 ms after the last attempt"
+        );
+        assert!(
+            is_due(&record, last_tried, last_tried + 2_000),
+            "due 2,000 ms after the last attempt"
+        );
+        // AND NOT DUE at a `now` before the last attempt, which is what a
+        // clock that went backwards looks like: an addition would call it due.
+        assert!(
+            !is_due(&record, last_tried, last_tried - 5_000),
+            "a clock that went backwards does not make a retry due"
         );
     }
 

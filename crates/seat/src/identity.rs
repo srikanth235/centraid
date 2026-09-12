@@ -78,6 +78,27 @@ mod tests {
         );
     }
 
+    /// The method and the function are the same answer.
+    ///
+    /// Killed two mutants that made `SeatIdentity::storage_key` return `""` and
+    /// `"xyzzy"`: the other tests called the free function, so the method — the
+    /// one every caller actually uses — was unasserted.
+    #[test]
+    fn the_method_and_the_free_function_agree() {
+        let identity = SeatIdentity::new("gw-a", "vault-1");
+        assert_eq!(
+            identity.storage_key(),
+            replica_storage_key("gw-a", "vault-1")
+        );
+        assert_eq!(identity.storage_key().len(), 64);
+        // And two identities do not share a key, which a constant return would
+        // make them do — every gateway's seat in one file.
+        assert_ne!(
+            identity.storage_key(),
+            SeatIdentity::new("gw-b", "vault-1").storage_key()
+        );
+    }
+
     #[test]
     fn the_file_names_are_derived_and_not_stored() {
         let identity = SeatIdentity::new("gw-a", "vault-1");

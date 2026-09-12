@@ -605,6 +605,93 @@ mod tests {
         assert_eq!(crate::state::watermark(&state).behind, 4_000);
     }
 
+    /// The report starts from the state's cursor, not from zero.
+    ///
+    /// Killed two mutants that deleted `cursor` and `applied_commit_seq` from
+    /// the initialiser: a report that started at zero would tell a caller the
+    /// seat had rewound, and the caller most likely to read it is the one
+    /// deciding whether to ask for more.
+    #[test]
+    fn an_empty_page_reports_the_cursor_the_seat_already_had() {
+        let connection = seat();
+        apply_page(
+            &connection,
+            &header("e", 9),
+            &[
+                row(1, 1, "e", LogOp::Insert, "a"),
+                row(2, 2, "e", LogOp::Insert, "b"),
+            ],
+            &mut ApplyHooks::default(),
+        )
+        .expect("applies");
+
+        let report = apply_page(
+            &connection,
+            &header("e", 9),
+            &[],
+            &mut ApplyHooks::default(),
+        )
+        .expect("an empty page applies");
+        assert_eq!(
+            report.cursor, 2,
+            "the report starts from the state's cursor"
+        );
+        assert_eq!(report.applied_commit_seq, 2);
+    }
+
+    /// `tables` is deduplicated, and `applied` is not.
+    ///
+    /// Killed the mutant that flipped the `!` in the containment check: without
+    /// it `tables` is either empty or one entry per row, and a caller that
+    /// invalidates a cache per table would either miss every table or do the
+    /// work N times.
+    #[test]
+    fn the_touched_tables_are_deduplicated_and_the_row_count_is_not() {
+        let connection = seat();
+        let report = apply_page(
+            &connection,
+            &header("e", 3),
+            &[
+                row(1, 1, "e", LogOp::Insert, "a"),
+                row(2, 1, "e", LogOp::Insert, "b"),
+                row(3, 1, "e", LogOp::Insert, "c"),
+            ],
+            &mut ApplyHooks::default(),
+        )
+        .expect("applies");
+        assert_eq!(report.tables, ["mirror"], "one entry for one table");
+        assert_eq!(report.applied, 3, "three rows, not three tables");
+        assert_eq!(report.touched.len(), 3, "and one `touched` entry per row");
+    }
+
+    /// The cursor's `updated_at` is a real timestamp.
+    ///
+    /// Killed two mutants that made `now_text` return `""` and `"xyzzy"`.
+    /// `updated_at` is what a diagnostics screen shows as "last synced", and a
+    /// blank or nonsense value there is a member being told nothing while the
+    /// product believes it said something.
+    #[test]
+    fn the_state_carries_a_real_timestamp_after_an_apply() {
+        let connection = seat();
+        apply_page(
+            &connection,
+            &header("e", 1),
+            &[row(1, 1, "e", LogOp::Insert, "a")],
+            &mut ApplyHooks::default(),
+        )
+        .expect("applies");
+        let stamped = seat_state(&connection).expect("reads").updated_at;
+        assert!(
+            stamped.len() == 24 && stamped.ends_with('Z') && stamped.contains('T'),
+            "`{stamped}` is not the `YYYY-MM-DDTHH:MM:SS.mmmZ` the schema's own \
+             defaults write"
+        );
+        assert!(
+            stamped.starts_with("20"),
+            "`{stamped}` is not a year this product runs in"
+        );
+    }
+
     #[test]
     fn the_watermark_never_moves_backwards() {
         let connection = seat();

@@ -216,6 +216,19 @@ mod tests {
         assert!(PayloadHash::parse(&"z".repeat(64)).is_err());
     }
 
+    /// `Display` prints the hash, not nothing.
+    ///
+    /// Killed the mutant that made `fmt` write nothing and report success. The
+    /// hash reaches a log line and a support bundle through `Display`, and a
+    /// blank one there is a diagnosis nobody can make.
+    #[test]
+    fn display_prints_the_hash_itself() {
+        let hash =
+            PayloadHash::of("notes", "edit", &serde_json::json!({}), &[], &[]).expect("it hashes");
+        assert_eq!(format!("{hash}"), hash.as_str());
+        assert_eq!(hash.to_string().len(), 64);
+    }
+
     #[test]
     fn the_sort_key_separator_cannot_be_forged_by_a_row_id() {
         // NUL, not `:`. With a colon these two would collide.
