@@ -3447,3 +3447,335 @@ a hole: a process that binds nothing but reads the vault file itself is not a
 listener and is still exactly the architecture D-1020-AS2 rules out. "No socket"
 was never the property worth proving on its own; "no second door" is.
 
+
+## Wave 4 — lane Photos: the library as a projection, the `media` schema, and v0's own answers as the fixture
+
+The largest app in the product ported: 8 queries and 18 actions in Rust over a
+crate that holds no SQL, the whole `media` command schema plus the one
+app-facing `enrich` command in `crates/vault`, the near-duplicate clustering and
+the model lock in `crates/media`, and — the half that decides whether any of it
+is true — **v0's own answers, generated from the v0 tree and compared value for
+value, ids and page order included**. Doctrine digest stamp: law `53be88c22ab5`.
+
+### What landed, by commit
+
+**`685930c3` — the manifest, eight queries as statements-as-data, 18 actions.**
+`crates/apps/photos/{Cargo.toml,manifest.json}` and
+`src/{lib,manifest,queries,storage,faces,duplicates,enrichment,places,commands}.rs`.
+v0's `app.json` is committed byte for byte and parsed by the kit's parser at
+load time rather than transcribed, because two copies of "which tables does
+Photos write" is how the two answers drift. 38 scopes over five schemas; the
+declared bounds are `LIBRARY_MAX` 2,000, `SHELF_ROWS` 200, `MATCH_ROWS` 300,
+`QUEUE_LIMIT` 60, `REGION_ROWS` 4,000, `PARTY_ROWS` 500, and every one reports
+the size it reaches (D-1020-D3-12).
+
+**`35ada4a1` — `crates/media::{phash,duplicates,models}`.** Hamming distance
+over hex digests where unequal widths and non-hex characters are **not
+comparable** (`None`, never `0`); union-find over Hamming ≤ 6 with the group's
+lowest `asset_id` as the cluster id, compare-then-write; and
+`models.lock.json`'s parser with one verify-then-fetch. Landed here because no
+wave 4 lane owns `crates/media`, and `crates/media/README.md` says so and marks
+the three constants that are format decisions.
+
+**`c6a70063` — the `media` schema's twenty commands and the one app-facing
+enrich.** `crates/vault/src/commands/media.rs` (2,227 lines), `enrich.rs` with
+`enrich.request_enrichment` alone under a header saying the rest is slot 4b's,
+and `tests/media_commands.rs` (21 tests). Nineteen real handlers plus
+`media.add_asset` **registered and refusing**: moving bytes needs a blob door on
+`CommandCtx`, which is an owner hand-off rather than a stub that writes a row
+and calls it an asset.
+
+**`bec6b049` — the harness, the demo seed and the year-3 axis.**
+`crates/apps/kit/src/fixtures.rs` (+1,054 lines: `photos_demo`, `year3_photos`),
+`crates/apps/photos/tests/{parity,year3}.rs`,
+`contracts/apps/photos/{README.md,manifest.json,sample/**}`,
+`contracts/apps/photos/recognition-placement.md`,
+`contracts/tools/export-photos-parity.ts`.
+
+**`7e171f6c` — a v0 wrong answer, fixed at source (R-1020-35).**
+`packages/blueprints/apps/photos/queries/face-queue.ts`: the statement declared
+`width`/`height` on its own `RawAsset` and mapped `asset.width ?? null` into
+every queue entry, but never **selected** the columns — so a review card's
+dimensions were structurally `null` in every vault that ever ran it. One line,
+fixture-proven, in its own commit.
+
+**`c24cc561` — v0's own answers as the parity bundle, and one bug in the port.**
+`contracts/apps/photos/{rows,queries,commands,scenarios}.json` generated;
+`tests/quality/photos-parity.contract.test.ts` as their emitter **and** their
+oracle; `contracts/tools/{export-photos-parity.ts,photos-parity-bundle.ts,photos-parity-queries.ts}`;
+`crates/apps/photos/src/representations.rs`; 813 lines of comparison in
+`tests/parity.rs`; `crates/media/src/models.rs`'s `NoNetwork` test; both
+READMEs; `Cargo.toml` reformatted by the repository formatter.
+
+### The bundle, and why it compares ids and order
+
+`rows.json` is the state `queries.json` was read from, and both are
+canonicalised **in one pass over one vault** — so `id-0049` in an answer is the
+row `id-0049` in the rows, and `parity.rs` builds its vault *from the rows* and
+compares the ported answers including the page's order, not shapes and counts.
+The numbers: **21 query cases over 8 queries** (6 library windows incl. one
+keyset page, 4 search terms, 5 assets' faces, 2 storage phases, and one each of
+face-queue, people, duplicates, enrichment-status), **32 command cases over 20
+commands, 7 of them refusals**, **155 rows across 21 tables**, 3 ontology
+scenarios (ONT-22/26/28), 19 sample frames.
+
+Fixing the generator found **three bugs in the generator itself**, each of which
+had made the bundle say less than it looked like it said:
+
+1. **A negative lookbehind that spared nothing.** `/(?<!2099)\b(?:19|20)\d{2}-…/`
+   was meant to keep the frozen epoch and tokenise the host clock; the
+   lookbehind inspects the four characters *before* the match, which for
+   `"2099-06-01T…"` are a quote and a colon. Every deterministic instant in the
+   bundle was replaced — `captured_at` included — which silently deleted the
+   ordering the library query is *about* and the capture time the face queue
+   dates a proposal by. Replaced by a range on the parsed value.
+2. **A per-slice id map.** Each of the four files was canonicalised on its own
+   counter, so the same token named different things in different files and the
+   comparison above could not have been written.
+3. **A drift id that had moved.** The scenarios filter asked for `ONT-03`,
+   which the scenario set has not carried since the ids were renumbered, and
+   answered quietly with one scenario instead of two. It now throws, and the
+   oracle has a floor on the three drifts.
+
+Two things the generator now does that no command does, because two of the eight
+queries read only what they write: it runs v0's own `recomputeDuplicateClusters`
+and `refreshCustodyRollup` before the compared read. Without the first,
+`duplicates` answers `{clusters: []}` for every corpus — and the fixture would
+have agreed with a port that does nothing.
+
+**The one case that is not the swept state** is `storage` at `phase: "unswept"`:
+`computedAt: null` with every bucket zero, read before the sweeps. The pair is
+the whole of D-1020-P1 — two answers that differ in `computedAt` alone, which is
+the difference between "nothing to free" and "not counted yet" — and
+`the_storage_summary_is_what_v0_answered_swept_and_unswept` compares both.
+
+### The bug the fixture found in the port
+
+`media_type` came back `None` for every asset while v0 answered `image/png`.
+The port had left the field empty with a comment calling the representation read
+another lane's job. But what the bytes ARE is not a property of the bytes
+(#996 R20(b), drift ONT-28): it is `core_content_representation`, keyed on the
+**owner** — two assets sharing one sha read as two different things.
+`crates/apps/photos/src/representations.rs` ports it: owner-keyed, bounded by
+the caller's own content ids and walked to the end of that set, and a denial
+renders as no type rather than as an error. v0's copy is in `_shared/` because
+six apps call it; the Rust home for it is `crates/apps/kit`, which is another
+lane's file this slot — **owner hand-off**: lift it when the second app needs
+it, the fold and its statement are written to be moved, not copied.
+
+### Exit list
+
+| Command | Outcome |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy -p centraid-apps-photos -p centraid-media -p centraid-vault --all-targets` | no warnings |
+| `cargo test -p centraid-apps-photos` | **98 passed** (71 unit, 24 parity, 3 year-3; the 50k axis `#[ignore]`d as longer than the whole `local` budget) — re-run green in `cargo-target-photos` |
+| `cargo test -p centraid-media` | 37 passed — re-run green in `cargo-target-photos` |
+| `cargo test -p centraid-vault` | 241 passed — re-run green in `cargo-target-photos` |
+| `cargo test --workspace` | **974 passed, 0 failed** in `/home/user/cargo-target-2b` at `c24cc561`'s tree. The root's later instruction retired that directory as corrupting (see finding 4), and the re-run in the lane's own `cargo-target-photos` reached **112 passed over 7 suites and then `No space left on device`** with 285 MB free and four lanes live. The three package suites below were all re-run green in the new directory; the workspace verdict is the older one, and it is named rather than implied |
+| `cargo xtask gate --profile local` | **PASS** at `c24cc561`'s tree, in the retired shared directory: `fmt` ok, `clippy --workspace --all-targets -- -D warnings` ok, `test` ok (192.1s), `sql-confinement — 89 file(s) scanned, clean (92 in the allowed crates, 9 in the rule runner)`, `abi-five-symbols` clean, `no-listening-socket` clean, `4 rule(s) applied`, `5 ledger(s) hold against e9a7d81a`; TOTAL 221.2s, scored against the **cold** 3,200s ceiling rather than the warm 120s budget (finding 3). **Not re-run** in the new directory: the profile's `test` step is `cargo test --workspace`, which cannot finish on 285 MB |
+| `node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/photos-parity.contract.test.ts` | PASS **without** `CENTRAID_WRITE_CONTRACTS` — the bundle was rebuilt from the live v0 handlers and asserted equal to what is committed, which is both the oracle and the idempotency proof |
+| generator idempotency | two write runs, `md5sum -c` over all four files: OK |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| `bash .governance/run.sh` | all 10 directives pass |
+| `bun run format` / `format:check` | clean (it reflowed `Cargo.toml` and `recognition-placement.md`, which the lane's earlier commits left unformatted) |
+| `bun run lint` | clean, after the generator was split at the 625-line ceiling into `photos-parity-{bundle,queries}.ts` |
+| `bun run check:push:static` | see the report line |
+| `cargo xtask gate --profile pr` | **not run** — the profile's `release-build` step needs several GB and the shared disk was at 2.6 GB free with three lanes live; filling it would have broken them. Named, not waived |
+
+The three trap tests the brief names, by name:
+`the_storage_summary_of_an_unswept_vault_is_not_counted_yet` and
+`the_storage_summary_is_what_v0_answered_swept_and_unswept` (D-1020-P1);
+`the_face_queue_counts_matches_and_dates_them_by_capture` and
+`the_face_queue_is_what_v0_answered` (D-1020-P2);
+`cluster_ids_do_not_depend_on_input_order` — a proptest over 63 permutations of
+every input order (D-1020-P3). Plus
+`a_host_with_no_network_is_reported_and_never_throws`: a `Fetch` whose every
+`get` refuses, asserting `ensure` **returns** a `Provision::failed` and leaves
+no file a later `verify` would trust.
+
+### Year-3 numbers (`year3-50k-assets`, projected provenance, D-1020-D3-7)
+
+Measured on `ci-linux-x64-4c` with `cargo test --release`-less debug+opt-level-2
+(`[profile.dev.package."*"]`), single run, after the representation read landed:
+
+| Read | Time |
+| --- | --- |
+| seed 50,000 assets through the fixture generator | 34,883 ms |
+| `library` at the 500 default window | **48 ms** |
+| `library` asked for 2,000, one page served | 42 ms |
+| `library`, ten cursored pages | 458 ms |
+| `face-queue` over the 4,000-region window | **40 ms** |
+| `duplicates` over 4,000 clustered fingerprints | 16 ms |
+
+Projected, not a ceiling: the numbers come from one machine under three
+concurrent lanes, and `tests/journeys.json` rows are the root's to write. What
+they establish is that the year-3 library is **not** where the cost is — the
+pairwise clustering v0 avoids with multi-index banding is 16 ms at 4,000
+fingerprints here, which is why the banding is named as unported rather than
+ported without a rig that could check it.
+
+### Findings outside the slice
+
+1. **`media.forget_person` deletes other people's confirmed faces.** The SQL is
+   `WHERE party_id = :party_id OR confirmed_by_party_id = :party_id` — both
+   party columns, documented as deliberate (#724 W5) — and in a single-member
+   vault the owner is the `confirmed_by_party_id` of *every* confirmation. So
+   "forget me" erases every confirmed face of everyone. The port reproduces it
+   and the fixture pins it (`regions_forgotten: 2` before the script was
+   reordered). **Re-judged, not deferred to the citation** (AGENTS.md): the
+   privacy argument for deleting a party's own regions is sound; deleting the
+   regions they *judged* is data loss about third parties, and no consumer in
+   this tree depends on it. **Question for the owner**, with options: (a) keep
+   both columns; (b) delete on `party_id` only and *null* `confirmed_by_party_id`
+   where it matches, which keeps the erasure of the member's judgement without
+   erasing the other person's face; (c) split into two commands.
+   **Recommendation: (b).**
+2. **`media.forget_person` executes with no confirmation.** It carries
+   `confirm: true`, which parks a **non-owner** invocation; an owner
+   credential — the only one a single-seat vault has — walks straight through,
+   which is why the generator's "expected refusal" executed. That is the two
+   gates working as designed (census A0), and the manifest's `confirmation` is
+   the one that would ask. Named because the generator's comment assumed
+   otherwise, and because the surface, not the command, is the only thing
+   standing between a member and an irreversible face purge.
+3. **The gate's warm/cold detector ignores `CARGO_TARGET_DIR`.**
+   `crates/xtask/src/gate.rs:259` reads `root.join("target/debug/deps")`, while
+   `smoke.rs:436` honours the variable — so every lane working under the shared
+   target dir the briefs mandate is scored **cold** and the `local` 120s budget
+   is never the number scored. A gate that reports a false state is a bug in the
+   gate (R-1020-35). `crates/xtask` is lane X3's file this slot, so this is an
+   owner hand-off: read `CARGO_TARGET_DIR` in `tree_state` exactly as
+   `release_binary` does. Symlinking the worktree's `target` at the shared dir
+   did **not** make it warm, so the fix is the variable and not the path.
+4. **A shared `CARGO_TARGET_DIR` across worktrees produces false reds, and the
+   mechanism is a build script.** Three times a workspace build failed to
+   compile a crate this lane never touched — `centraid-apps-photos` against a
+   `centraid-apps-kit` with no `fixtures` symbols, `centraid-protocol` with six
+   errors, then `centraid-core` with `missing field 'sentence' in initializer of
+   centraid_api_proto::core_v1::Error` — and each one compiled and passed on a
+   per-package rerun seconds later. The root identified it mid-lane:
+   `crates/api-proto`'s build script writes to an `OUT_DIR` keyed by package
+   identity, which is **identical across worktrees**, so the last lane to build
+   wins and the next lane compiles against another lane's generated protos.
+   Two workarounds were used and both belong in `docs/dev-environment.md` if
+   the multi-lane pattern continues: `touch crates/apps/kit/src/*.rs` before a
+   workspace run (forces this lane's sources to be the fresh ones), and
+   `touch crates/api-proto/build.rs` after switching directories (forces the
+   protos to be regenerated from this worktree). A per-lane `CARGO_TARGET_DIR`
+   fixes it properly and is what the root moved every lane to; the cost is
+   disk, and the disk ran out (285 MB free with four lanes live), which is why
+   the workspace and gate verdicts above are the older directory's.
+
+5. **`contracts/apps/photos/sample/` has no trashed-asset case.** The scripted
+   command set purges the one asset it trashes, so the `trash` shelf in every
+   library case is empty and the shelf's `purge_in_days` arithmetic is proved
+   only by the Rust-seeded half of `parity.rs`. One extra `media.delete_asset`
+   without its purge would close it; noted rather than done because it moves
+   every id in the bundle.
+
+### Decisions — lane Photos
+
+- **D-1020-P1 … P8** were adopted as briefed and are recorded against their
+  tests in `crates/apps/photos/README.md`; each cites
+  [#1020](https://github.com/srikanth235/centraid/issues/1020). What follows is
+  what this lane had to decide that the brief did not.
+- **D-1020-P9 — the bundle is ONE canonicalisation pass over ONE vault, and the
+  host clock is one flat parenthesised token.** Options: (i) a token per file,
+  which is what the generator did and which makes cross-file comparison
+  impossible; (ii) one pass, with host instants numbered chronologically so
+  ordering survives; (iii) one pass, one flat token. **(ii) was built first and
+  rejected as not idempotent**: two rows share a millisecond in one run and not
+  the next, the distinct count moves, and every later number shifts. **Adopted
+  (iii)**, with the token parenthesised because `(` sorts below every digit
+  under BINARY collation and the host clock is below the 2099 epoch — so an
+  undated asset still rides the end of a newest-first page, where the real
+  instant put it. An angle-bracketed token sorts *above* the digits and moved
+  those assets to the front of every page. Cost: no ordering *among* host
+  instants, which the reading statement breaks on a UUIDv7 primary key —
+  and `the_library_pages_are_what_v0_answered_order_included` proves that
+  tie-break is v0's order rather than assuming it. Cites #1020.
+- **D-1020-P10 — the keyset case's cursor is the newest dated asset's
+  `taken_at`, not the page's own `tail`.** `tail` is `captured_at ?? created_at`
+  of the last live row, and three of the seed's assets carry no `captured_at`,
+  so the tail is a host instant and feeding it back would make the case's
+  *input* unreproducible. Options: (i) drop the page-boundary case; (ii) give
+  the undated assets a capture time, distorting v0's own corpus; (iii) cursor at
+  a dated instant mid-roll. **Adopted (iii)** — a real keyset read at a real
+  boundary, at an instant the fixture owns. Cites #1020.
+- **D-1020-P12 — `representations` lands in `crates/apps/photos`, not in the
+  kit.** Options: (i) a `contracts/handoff/photos/kit.patch` for
+  `crates/apps/kit`, which no test in this lane could then run against; (ii) the
+  module in the app crate with the lift named as a hand-off. **Adopted (ii)**:
+  the kit is another lane's file this slot, and a fixture-proven module in the
+  app is worth more than a patch nobody has applied. Cites #1020.
+- **D-1020-P13 — the generator is split at the line ceiling rather than the
+  ceiling raised.** `oxlint`'s `max-lines` (625) refused the 844-line generator.
+  Options: (i) an inline disable; (ii) raise the rule; (iii) split. **Adopted
+  (iii)** — `photos-parity-bundle.ts` is what a case and a row set ARE plus the
+  canonicalisation, `photos-parity-queries.ts` is which handler at which input,
+  and `export-photos-parity.ts` is the run. Never weaken policy to go green.
+  Cites #1020.
+
+### The recognition-placement proposal, in one paragraph
+
+`contracts/apps/photos/recognition-placement.md` designs open question 9's third
+execution site and builds none of it. The recommendation, end to end: make
+**`device` mean "on the device that holds the asset"** with a new fourth tier
+name rather than re-meaning a stored consent (§1); stamp *where* a model ran on
+`enrich_derivation` as a nullable `device_id` with `ON DELETE SET NULL`, because
+a forgotten device must not take its derivations with it (§2); treat an offline
+device as **parked, not failed** — no `enrich_target_failure` row, no count, no
+backoff — while keeping a per-site cursor so a phone in a drawer cannot stop the
+gateway's OCR (§3, §4); expose the ask to the shell as `EnrichAsk` events plus
+one `enrich.submit_derivation` command, so `crates/core` owns the queue and the
+shell owns only Vision/ML Kit (§5); and keep the `ort` gateway fallback behind a
+**per-capability** rate budget with weights fetched on first use through the
+`models.lock.json` verify-then-fetch this lane did build (§6). The root
+integrates it across the automations lane; nothing in it is a lane's to land
+alone, which is §7.
+
+### Falsification
+
+**Claim 1 — "the parity bundle is v0's answers, not the port's beliefs."** The
+throwaway check: the oracle was run **without** `CENTRAID_WRITE_CONTRACTS`,
+which rebuilds the whole bundle from the live v0 handler graph and asserts
+equality with what is committed — it passed, and it is the same command CI would
+run. Then the inverse: `media_type` was stripped from every asset in the
+committed `queries.json` by hand and the same run **failed** —
+`AssertionError: queries.json is stale — regenerate it` — which is the check
+that a hand-edited fixture cannot survive. The file was restored by
+regeneration, not by editing, and `bun run format && git diff --exit-code
+contracts/apps/photos` then came back clean: the committed bytes are the
+generator's output **after** oxfmt, which is why the oracle compares parsed
+values and the repository's formatter owns the whitespace.
+
+**Claim 2 — "the comparison would catch a wrong port."** Three deliberate breaks
+were run against the Rust side and all three were reverted:
+
+(a) `live_statement`'s `PageOrder::desc` flipped to `asc` →
+`the_library_pages_are_what_v0_answered_order_included` **failed**, and *where*
+it failed is the interesting part: the fifteen dated assets kept their order
+(the fold sorts them, as v0's does) and the **two undated ones swapped** —
+`…"id-0031", "id-0025", "id-0029"]` against v0's `…"id-0031", "id-0029",
+"id-0025"]`. That is the tie-break D-1020-P9 rests on, proved rather than
+assumed.
+
+(b) The two confidences conflated — `AssetFace::detector_confidence` fed the
+queue's count instead of the detector's score →
+`one_photographs_faces_are_what_v0_answered` failed with
+`the detector score on id-0049: left Some(0.0), right Some(0.94)`. (The
+*intended* break, an invented proposal time, could **not** be demonstrated
+against this bundle: every queue entry in the corpus sits on a photograph that
+has a capture time, so `first_seen_at`'s `None` branch is covered by the
+Rust-seeded unit tests and by nothing in the fixture. Named as a gap rather
+than claimed as a check.)
+
+(c) The cluster id changed from the group's lowest `asset_id` to its highest →
+**five** tests failed, and *not* the app's parity test: the four in
+`crates/media::duplicates` plus
+`the_pre_stamped_cluster_ids_are_the_ones_the_sweep_would_compute`
+(`asset-000001 carries a cluster id the sweep would not stamp: left
+Some("asset-000002")`). The app's `duplicates` comparison passed throughout,
+because the app only READS the stamped column — which is D-1020-P3 working, and
+is why the clustering needs its own tests rather than the query's.
