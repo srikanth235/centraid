@@ -1,104 +1,105 @@
-//! **WHAT THE BYTES ARE**, which is not a property of the bytes (#996, ruling
-//! R20(b), drift ONT-28).
+//! Photos' owner-typed view of the kit's representation fold.
 //!
-//! `core_content_item` carries no `media_type`: the same sha is `text/html`
-//! under one document and `text/plain` under another, so what it IS lives in
-//! `core_content_representation`, one row per `(owner_type, owner_id)`. Every
-//! grid row still ships a `media_type` FIELD — a tile on a phone has to say
-//! whether it is a photograph or a video before it can decide what to paint —
-//! and this module is the only place that field is filled in, exactly as v0's
-//! `packages/blueprints/apps/_shared/representation-reads.ts` is the only place
-//! on its side.
+//! **The fold moved.** It was written here by lane Photos with the lift filed
+//! as an owner hand-off "for whichever lane ports the second caller", because
+//! `crates/apps/kit` was another lane's file that slot (census §Cross-lane).
+//! Docs is that second caller (#1020 wave 4 slot 4b), so the fold now lives in
+//! [`centraid_apps_kit::representations`] — where v0 keeps its own copy
+//! (`packages/blueprints/apps/_shared/representation-reads.ts`) — and this
+//! module is what is left: the owner type Photos keys on, and a fold narrowed
+//! to it.
 //!
-//! Three things the port keeps, because each one is a bug it would otherwise
-//! reintroduce:
+//! Nothing this module exported changed name or meaning. What the lift ADDED is
+//! the content index the kit now carries: Photos never needed it, and Docs'
+//! `history` query cannot be written without it, because a superseded version
+//! has no representation of its own.
 //!
-//! 1. **The index is keyed on the OWNER, never on the content.** `media.asset`
-//!    plus the asset id. A content-keyed lookup answers "whatever the oldest
-//!    owner thought", which for two assets sharing one sha is the wrong one.
-//! 2. **The set is bounded by the caller's own content ids and then walked to
-//!    the END of that set** — not windowed again. v0 originally windowed it and
-//!    a vault with enough representations silently answered short, so rows came
-//!    back with no type rather than the wrong one; the read is bounded by
-//!    construction here through [`ASSET_JOIN_BOUND`].
-//! 3. **A denial is not an error.** The caller renders without a type. This
-//!    module returns an empty index for a door that refuses, and the field is
-//!    then `None` — which is what "we may not read that" looks like on a tile.
-//!
-//! WHY THIS LIVES IN PHOTOS AND NOT IN THE KIT. v0's copy is in `_shared/`
-//! because six apps call it. On the Rust side Photos is the first app to need
-//! it; a shared home is `crates/apps/kit`, which is another lane's file this
-//! slot (census §Cross-lane). The receipt files the lift as an owner hand-off
-//! for whichever lane ports the second caller — the fold and its statement are
-//! written here to be moved, not to be copied.
+//! The doctrine — owner-keyed and never content-keyed, bounded by the caller's
+//! own ids and walked to the end of them, a denial that is an absent field and
+//! not a failed screen — is stated once, in the kit.
 
 use std::collections::BTreeMap;
 
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{PageDoor, in_list, read_pages};
-use centraid_apps_kit::row::{Row, text_of};
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::reads::PageDoor;
+use centraid_apps_kit::representations::{
+    RepresentationIndex, fold_representations, read_representations,
+};
+use centraid_apps_kit::row::Row;
+
+pub use centraid_apps_kit::representations::representations_statement;
 
 use crate::queries::ASSET_JOIN_BOUND;
 
 /// The owner type every Photos asset's representation is keyed under.
 pub const ASSET_OWNER_TYPE: &str = "media.asset";
 
-/// `photos.shared.representations` — the media types of a bounded content set.
+/// THE FOLD, narrowed to `media.asset`: `asset_id` → media type.
 ///
-/// The keyset's second axis is `representation_id` and NOT `content_id`: one
-/// sha read as two things by two owners is the row this table exists for, and a
-/// cursor keyed on `content_id` would stall on it.
-pub fn representations_statement(content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        "photos.shared.representations",
-        "representation_id, content_id, owner_type, owner_id, media_type, created_at",
-        "core_content_representation",
-        PageOrder::asc("created_at", "representation_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// THE FOLD: `asset_id` → media type, for the rows owned by `media.asset`.
-///
-/// A row whose media type is empty is skipped rather than stored as `""`: the
-/// column is `NOT NULL`, so an empty string is a writer's bug and "no type" is
-/// the honest reading of it.
+/// A row owned by anything else is skipped — a `core.document` over the same
+/// sha is a different reading of the same bytes, and it is not this library's
+/// answer.
 #[must_use]
 pub fn fold_media_types(rows: &[Row]) -> BTreeMap<String, String> {
-    let mut by_owner = BTreeMap::new();
-    for row in rows {
-        let Some(media_type) = text_of(row, "media_type").filter(|text| !text.is_empty()) else {
-            continue;
-        };
-        if text_of(row, "owner_type").as_deref() != Some(ASSET_OWNER_TYPE) {
-            continue;
-        }
-        let Some(owner_id) = text_of(row, "owner_id") else {
-            continue;
-        };
-        // FIRST WINS, and the read is oldest-first: the same deterministic
-        // answer the vault's own resolver gives.
-        by_owner.entry(owner_id).or_insert(media_type);
-    }
-    by_owner
+    narrow(&fold_representations(rows))
+}
+
+/// The asset-owned half of a kit index.
+fn narrow(index: &RepresentationIndex) -> BTreeMap<String, String> {
+    index
+        .by_owner
+        .iter()
+        .filter(|((owner_type, _), _)| owner_type == ASSET_OWNER_TYPE)
+        .map(|((_, owner_id), media_type)| (owner_id.clone(), media_type.clone()))
+        .collect()
 }
 
 /// Read and fold the media types of a bounded content set.
 ///
-/// An empty set reads nothing — a statement with an empty `IN ()` is a refusal
-/// in the kit's grammar, and asking for the types of no bytes is not an error.
+/// An empty set reads nothing, and a door that refuses answers with an empty
+/// index: the caller renders a tile with no type rather than no tile.
 pub fn read_media_types(
     door: &dyn PageDoor,
     content_ids: &[String],
 ) -> KitResult<BTreeMap<String, String>> {
-    if content_ids.is_empty() {
-        return Ok(BTreeMap::new());
+    Ok(narrow(&read_representations(
+        door,
+        content_ids,
+        ASSET_JOIN_BOUND,
+    )?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use centraid_apps_kit::row::Cell;
+
+    /// The narrowing is the whole of what is left here, so it is what is
+    /// tested: a document's reading of the same bytes is not an asset's.
+    #[test]
+    fn only_asset_owned_readings_reach_the_library() {
+        let mut asset = Row::new();
+        for (column, value) in [
+            ("representation_id", "r1"),
+            ("content_id", "c1"),
+            ("owner_type", ASSET_OWNER_TYPE),
+            ("owner_id", "a1"),
+            ("media_type", "image/png"),
+        ] {
+            asset.insert(column.to_owned(), Cell::Text(value.to_owned()));
+        }
+        let mut document = Row::new();
+        for (column, value) in [
+            ("representation_id", "r2"),
+            ("content_id", "c1"),
+            ("owner_type", "core.document"),
+            ("owner_id", "d1"),
+            ("media_type", "application/pdf"),
+        ] {
+            document.insert(column.to_owned(), Cell::Text(value.to_owned()));
+        }
+        let folded = fold_media_types(&[asset, document]);
+        assert_eq!(folded.get("a1").map(String::as_str), Some("image/png"));
+        assert!(folded.get("d1").is_none());
     }
-    let mut ids: Vec<String> = content_ids.to_vec();
-    ids.sort();
-    ids.dedup();
-    let rows = read_pages(door, &representations_statement(&ids)?, ASSET_JOIN_BOUND)?;
-    Ok(fold_media_types(&rows))
 }

@@ -43,6 +43,7 @@ pub mod manifest;
 pub mod money;
 pub mod page;
 pub mod reads;
+pub mod representations;
 pub mod row;
 pub mod statement;
 pub mod testdoor;
@@ -52,6 +53,7 @@ pub use page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest, page_of, probe_limi
 pub use reads::{
     FanOutBound, JOIN_FAN_OUT, PageDoor, Window, in_list, read_by_id, read_pages, read_window,
 };
+pub use representations::{RepresentationIndex, read_representations};
 pub use row::{Cell, Row};
 pub use statement::{
     PageBindValue, PageOrder, PageQuery, page_cursor_boundary, page_cursor_of, page_statement,
