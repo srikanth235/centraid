@@ -5,6 +5,7 @@ import {
   cleanupDeviceDerivatives,
   contributeDeviceDerivatives,
 } from "./derivatives-native";
+import { followupBelongsToSession } from "./followup-routing";
 import type { UploadQueue } from "./native-queue";
 
 /** After this many failed replays a follow-up is quarantined, not retried (F4). */
@@ -51,17 +52,11 @@ export async function replaySettledUploadFollowups(
   const replayNext = async (index: number): Promise<void> => {
     const followup = followups[index];
     if (!followup) return;
-    if (
-      followup.targetVaultId !== undefined &&
-      sessionVaultId !== undefined &&
-      followup.targetVaultId !== sessionVaultId
-    ) {
-      // P2 (#1014): this used to write through the MOUNTED session whatever
-      // the row said, so a photograph queued for the family vault landed in
-      // the personal one — in the wrong vault, and unrecoverably, because the
-      // follow-up was cleared on the way. It waits instead.
-      waitingForVault[followup.targetVaultId] =
-        (waitingForVault[followup.targetVaultId] ?? 0) + 1;
+    if (!followupBelongsToSession(followup.targetVaultId, sessionVaultId)) {
+      // P2 (#1014) — the rule and its history live in `followup-routing.ts`.
+      // A follow-up for another vault waits for the seat that holds it.
+      const waiting = followup.targetVaultId!;
+      waitingForVault[waiting] = (waitingForVault[waiting] ?? 0) + 1;
       return replayNext(index + 1);
     }
     try {
