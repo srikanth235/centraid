@@ -41,6 +41,12 @@ pub fn local_hello(product_version: &str, capabilities: &[&str]) -> Hello {
         min_supported: MIN_SUPPORTED,
         product_version: product_version.to_owned(),
         capabilities: capabilities.iter().map(|name| (*name).to_owned()).collect(),
+        // NOT KNOWN HERE. The identity is the artifact's, and this crate is
+        // linked into more than one; `crates/core`'s `Handle::hello` fills it
+        // (#1020 wave 3, lane E finding 3). `None` is honest: a peer that
+        // receives no identity has not been told, which is the branch
+        // `require_digest` treats as unchecked and says so.
+        identity: None,
     }
 }
 
@@ -88,6 +94,7 @@ mod tests {
 
     fn hello(schema_version: u32, min_supported: u32) -> Hello {
         Hello {
+            identity: None,
             schema_version,
             min_supported,
             product_version: "test".to_owned(),

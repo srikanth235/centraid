@@ -78,6 +78,7 @@ fn hello() -> Vec<u8> {
     envelope(
         0,
         wire::request::Kind::Hello(wire::Hello {
+            identity: None,
             schema_version: centraid_protocol::SCHEMA_VERSION,
             min_supported: centraid_protocol::MIN_SUPPORTED,
             product_version: "contract-test".to_owned(),
@@ -166,6 +167,7 @@ fn inputs_are_borrowed_for_the_call_and_never_retained() {
         let request = envelope(
             0,
             wire::request::Kind::Hello(wire::Hello {
+                identity: None,
                 schema_version: centraid_protocol::SCHEMA_VERSION,
                 min_supported: centraid_protocol::MIN_SUPPORTED,
                 product_version: format!("borrowed-{index}"),
@@ -249,6 +251,7 @@ fn every_request_carries_a_request_id_and_cancel_names_one() {
     let request = envelope(
         4_242,
         wire::request::Kind::Hello(wire::Hello {
+            identity: None,
             schema_version: centraid_protocol::SCHEMA_VERSION,
             min_supported: centraid_protocol::MIN_SUPPORTED,
             product_version: "ids".to_owned(),

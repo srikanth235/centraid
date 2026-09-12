@@ -282,6 +282,9 @@ async fn serve_gateway(path: &Path, seed_label: String) -> turmoil::Result {
             create: false,
             clock: None,
             ids: None,
+            // The simulation IS this build; there is no prebuilt artifact to
+            // check against (#1020 wave 3).
+            expected_digest: None,
         }
         .with_clock(
             Box::new(centraid_vault::clock::FixedClock::frozen()),

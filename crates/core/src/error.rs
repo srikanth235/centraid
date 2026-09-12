@@ -70,6 +70,16 @@ pub enum CoreError {
     #[error(transparent)]
     Decode(#[from] prost::DecodeError),
 
+    /// THE STALE-ARTIFACT REFUSAL, at `open` (#1020 Artifacts, D-1020-G2).
+    ///
+    /// The shell passed an `expectedIdentity` its own build recorded and this
+    /// core's digest is a different one. Refused before the handle exists, so
+    /// nothing answers a single call from the wrong schema.
+    #[error(
+        "stale core refused: the shell expects digest {expected} and this core is {found};          rebuild or re-download the prebuilt core for this commit"
+    )]
+    StaleCore { expected: String, found: String },
+
     #[error("core invariant: {context}")]
     Invariant { context: String },
 }
@@ -82,6 +92,12 @@ impl CoreError {
             // A closed or poisoned handle is INTERNAL from the shell's side:
             // the remedy is the same, which is to restart the core.
             Self::Closed | Self::Poisoned { .. } | Self::Invariant { .. } => ErrorCode::Internal,
+            // THE VERSION WINDOW, not `Internal`. "This app and that core are
+            // not the same build" is the same remedy as "these two are too far
+            // apart to talk" — update the one the diagnostics screen names —
+            // and a shell that branched on `Internal` would offer a restart,
+            // which cannot fix it (#1020 wave 3).
+            Self::StaleCore { .. } => ErrorCode::VersionWindow,
             Self::Unavailable { .. } => ErrorCode::PeerUnreachable,
             Self::InvalidRequest { .. } | Self::NotCancellable { .. } | Self::Decode(_) => {
                 ErrorCode::InvalidRequest

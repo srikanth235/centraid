@@ -78,8 +78,8 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
     // nobody claimed an expectation, which is a developer running the binary by
     // hand; it is not treated as a match.
     if let Ok(expected) = std::env::var("CENTRAID_EXPECTED_CORE_DIGEST") {
-        let identity = crate::identity::ArtifactIdentity::current();
-        match crate::identity::require_digest(&identity, &expected) {
+        let identity = centraid_core::identity::ArtifactIdentity::current();
+        match centraid_core::identity::require_digest(&identity, &expected) {
             Ok(None) => {}
             Ok(Some(warning)) => eprintln!("centraid: {warning}"),
             Err(refusal) => {

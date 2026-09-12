@@ -77,9 +77,19 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 ///
 /// `config` is `len` bytes of UTF-8 JSON: `{"path": "...", "role":
 /// "gateway"|"seat-replicated"|"seat-thin", "gateway": "<hex>"?, "create":
-/// bool?, "uiThreadName": "..."?}`. JSON and not protobuf, because a
-/// configuration is read once at startup by a human-written call site and being
-/// able to log it verbatim is worth more than the encoding.
+/// bool?, "uiThreadName": "..."?, "expectedIdentity": "<digest>"?}`. JSON and
+/// not protobuf, because a configuration is read once at startup by a
+/// human-written call site and being able to log it verbatim is worth more than
+/// the encoding.
+///
+/// `expectedIdentity` is the artifact digest the SHELL's build recorded for the
+/// core it intends to load. A mismatch is refused here, before a handle exists
+/// and before one query is answered from the wrong schema (#1020 Artifacts,
+/// D-1020-G2). Absent means the caller claimed no expectation, which is not a
+/// match — it is unchecked, and a `dev` build on either side logs a warning
+/// that says so. `mobile/core`'s `CentraidCore.open(dataDir, expectedIdentity)`
+/// already takes it, and the handshake's `Hello.identity` is what a shell
+/// compares after the fact.
 ///
 /// On success writes an owned handle to `out` and returns [`CENTRAID_OK`]. The
 /// handle is released **only** by [`centraid_close`].

@@ -101,6 +101,7 @@ mod tests {
             id,
             Request {
                 kind: Some(request_kind::Kind::Hello(Hello {
+                    identity: None,
                     schema_version: 1,
                     min_supported: 1,
                     product_version: "1.0.0-alpha.0".to_owned(),

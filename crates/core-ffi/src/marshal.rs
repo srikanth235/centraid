@@ -147,6 +147,16 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // freezer — callers that are Rust.
         clock: None,
         ids: None,
+        // THE ONE IDENTITY CHECK A SHELL CAN MAKE (#1020 Artifacts, D-1020-G2;
+        // wave 3 lane E finding 3). A shell that linked a prebuilt core passes
+        // the digest its OWN build recorded and `Core::open` refuses a
+        // mismatch. Absent means the caller claimed no expectation, which is
+        // not a match — it is unchecked, and `require_digest` says so.
+        expected_digest: parsed
+            .get("expectedIdentity")
+            .and_then(serde_json::Value::as_str)
+            .filter(|digest| !digest.trim().is_empty())
+            .map(str::to_owned),
     };
     config.create = parsed
         .get("create")
@@ -276,6 +286,33 @@ mod tests {
         );
         assert!(config_from_json(b"not json").is_err());
         assert!(config_from_json(&[0xff, 0xfe]).is_err(), "not UTF-8");
+    }
+
+    /// `expectedIdentity` CROSSES THE ABI, and an empty one is not an
+    /// expectation (#1020 Artifacts, D-1020-G2; wave 3 lane E finding 3).
+    ///
+    /// A shell that linked a prebuilt core has no other way to say which core
+    /// its own build was made against. Absent or blank is "not checked" rather
+    /// than "matched": `Core::open` then skips the comparison instead of
+    /// passing an empty string to `require_digest`, which refuses one.
+    #[test]
+    fn an_expected_identity_crosses_the_abi_and_a_blank_one_is_not_an_expectation() {
+        let config =
+            config_from_json(br#"{"path":"/tmp/v.db","expectedIdentity":"abc123"}"#).expect("ok");
+        assert_eq!(config.expected_digest.as_deref(), Some("abc123"));
+        for blank in [
+            &br#"{"path":"/tmp/v.db"}"#[..],
+            &br#"{"path":"/tmp/v.db","expectedIdentity":""}"#[..],
+            &br#"{"path":"/tmp/v.db","expectedIdentity":"   "}"#[..],
+        ] {
+            assert!(
+                config_from_json(blank)
+                    .expect("ok")
+                    .expected_digest
+                    .is_none(),
+                "a blank expectation is unchecked, never a match"
+            );
+        }
     }
 
     #[test]

@@ -92,7 +92,25 @@ impl Core {
             create,
             clock,
             ids,
+            expected_digest,
         } = config;
+        // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
+        // then refused would have already run whatever migration its own
+        // `head_version` carries, which is the half that cannot be undone
+        // (#1020 wave 3, lane E finding 3).
+        if let Some(expected) = expected_digest.as_deref() {
+            let identity = crate::identity::ArtifactIdentity::current();
+            match crate::identity::require_digest(&identity, expected) {
+                Ok(None) => {}
+                Ok(Some(warning)) => tracing::warn!("{warning}"),
+                Err(_) => {
+                    return Err(CoreError::StaleCore {
+                        expected: expected.to_owned(),
+                        found: identity.digest,
+                    });
+                }
+            }
+        }
         // The file's EXISTENCE decides create-versus-open, before the clock is
         // moved. Trying `open` first and falling back on `Missing` would need
         // the clock twice, and a `Box<dyn Clock>` is not clonable — for the
@@ -417,7 +435,13 @@ impl Handle {
         // The handshake's JUDGEMENT is lane C's; the core's answer is what this
         // build is. Judging here too would be two places that can disagree.
         let _ = peer;
-        centraid_protocol::local_hello(env!("CARGO_PKG_VERSION"), CAPABILITIES)
+        let mut hello = centraid_protocol::local_hello(env!("CARGO_PKG_VERSION"), CAPABILITIES);
+        // WHAT THIS BUILD IS, on the first message (#1020 wave 3, lane E
+        // finding 3). Filled here rather than in `local_hello` because the
+        // identity is the CORE's — a seat and a gateway are two artifacts and
+        // `crates/protocol` is linked into both.
+        hello.identity = Some(crate::identity::ArtifactIdentity::current().to_wire());
+        hello
     }
 
     fn log_page(&self, request: &wire::LogRequest) -> Result<wire::Response> {
@@ -590,6 +614,7 @@ mod tests {
     fn hello() -> wire::Request {
         wire::Request {
             kind: Some(wire::request::Kind::Hello(wire::Hello {
+                identity: None,
                 schema_version: 1,
                 min_supported: 1,
                 product_version: "test".to_owned(),
@@ -631,6 +656,58 @@ mod tests {
         assert_eq!(answer.schema_version, centraid_protocol::SCHEMA_VERSION);
         assert_eq!(answer.min_supported, centraid_protocol::MIN_SUPPORTED);
         assert!(!answer.product_version.is_empty());
+
+        // AND WHAT ARTIFACT IT IS (#1020 Artifacts, D-1020-G2; wave 3 lane E
+        // finding 3). Without this a released shell that linked a prebuilt
+        // core could never check what it loaded — the case the whole mechanism
+        // exists for — and `mobile/core`'s `identityOf` had to report `dev`.
+        let identity = answer.identity.expect("the handshake carries an identity");
+        assert!(!identity.digest.is_empty(), "never an empty digest");
+        assert!(!identity.git_sha.is_empty());
+        assert_eq!(
+            identity.schema_version,
+            centraid_vault::head_version(),
+            "the vault user_version this build writes, not a second copy of it"
+        );
+        let read_back = crate::identity::ArtifactIdentity::from_wire(&identity);
+        assert_eq!(read_back, crate::identity::ArtifactIdentity::current());
+    }
+
+    /// THE EXPECTATION IS CHECKED AT `open`, and an unmet one refuses before a
+    /// handle exists.
+    ///
+    /// On a developer machine the core's digest is the `dev` marker, so the
+    /// refusal cannot be reached from here without faking the stamp — which
+    /// would be testing the fake. What IS asserted here: a `dev` core with an
+    /// expectation still OPENS (a development shell must be able to load a
+    /// development core) and the refusal it would otherwise return is typed and
+    /// carries both digests. `identity::require_digest`'s own tests cover the
+    /// released case, which is the one that matters in production.
+    #[test]
+    fn an_expected_digest_is_carried_into_open_and_a_mismatch_is_typed() {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let handle = Core::open(
+            CoreConfig::gateway(dir.join("vault.db")).expecting_digest("aaaa1111bbbb2222"),
+        )
+        .expect("a dev core loads for a dev shell, loudly");
+        assert!(handle.is_gateway());
+        drop(handle);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let refusal = CoreError::StaleCore {
+            expected: "aaaa1111bbbb2222".to_owned(),
+            found: "cccc3333dddd4444".to_owned(),
+        };
+        // THE VERSION WINDOW, not `Internal`: the remedy is to update one side,
+        // and a shell branching on `Internal` would offer a restart instead.
+        assert_eq!(
+            refusal.code(),
+            centraid_api_proto::core_v1::ErrorCode::VersionWindow
+        );
+        let text = refusal.to_string();
+        assert!(text.contains("aaaa1111bbbb2222"), "{text}");
+        assert!(text.contains("cccc3333dddd4444"), "{text}");
     }
 
     #[test]

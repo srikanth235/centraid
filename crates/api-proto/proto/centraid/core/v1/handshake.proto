@@ -30,6 +30,26 @@ message Hello {
   // absent-tolerant pair is `automations` / `connectors`
   // (`docs/protocol.md:143-161`).
   repeated string capabilities = 4;
+  // WHAT THIS BUILD IS ([#1020](https://github.com/srikanth235/centraid/issues/1020)
+  // Artifacts, D-1020-G2). A prebuilt core the shell did not compile cannot be
+  // checked by construction, and a stale core is the worst failure shape in the
+  // design: it starts, it answers, and it answers from a schema the shell
+  // stopped speaking. A fresh field number, which `buf breaking`'s FILE
+  // category admits because an older peer ignores it.
+  ArtifactIdentity identity = 5;
+}
+
+// The three facts every artifact carries, baked in at build time by
+// `crates/core`'s `build.rs`. `crates/core::identity` is the one definition;
+// these field names are the contract a shell asserts against.
+message ArtifactIdentity {
+  // The commit. For a human reading a crash report.
+  string git_sha = 1;
+  // `cargo xtask artifact-key`'s output for this triple. THE field a machine
+  // compares: two artifacts with the same digest are the same artifact.
+  string digest = 2;
+  // The vault `user_version` this build writes.
+  int64 schema_version = 3;
 }
 
 // Sent INSTEAD of any other message when the window does not admit the peer.

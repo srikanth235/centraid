@@ -52,6 +52,7 @@ pub mod convert;
 pub mod error;
 pub mod events;
 pub mod handle;
+pub mod identity;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;
@@ -59,6 +60,7 @@ pub use config::{CoreConfig, Role, SeatKind};
 pub use error::{CoreError, Result, sentence_for_code};
 pub use events::{EVENT_QUEUE_CAP, EventQueue};
 pub use handle::{Core, Handle};
+pub use identity::{ArtifactIdentity, require_digest};
 
 /// The request and response envelopes, spelled once.
 pub use centraid_api_proto::core_v1::{Event, Request, Response};
