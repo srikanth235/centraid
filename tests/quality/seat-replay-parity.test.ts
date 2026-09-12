@@ -78,7 +78,6 @@ function comparableTables(seat: NodeSeatDriver): string[] {
         !name.startsWith("sqlite_") &&
         !name.startsWith("fts_") &&
         name !== "replica_log" &&
-        name !== "replica_change" &&
         name !== "replica_meta" &&
         name !== "seat_state"
     );

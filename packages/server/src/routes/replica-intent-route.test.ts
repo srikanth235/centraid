@@ -1172,8 +1172,8 @@ describe("replica-intent-route suite", () => {
   });
 
   test("still checks opaque row versions after the change log is pruned", async () => {
-    // FAILS CLOSED (#1014, G9). The candidate ids used to come from
-    // `replica_change`, and an empty candidate set SKIPPED the check — so
+    // FAILS CLOSED (#1014, G9). The candidate ids used to come from the log,
+    // and an empty candidate set SKIPPED the check — so
     // after any retention prune or epoch bump every opaque-shape base version
     // passed unconditionally, on the one path whose job is to refuse a write
     // made against a row someone else has moved. The candidates come from the
@@ -1218,7 +1218,7 @@ describe("replica-intent-route suite", () => {
       )
       .run();
     // Exactly the state retention leaves behind.
-    vault.db.vault.exec(`DELETE FROM replica_change`);
+    vault.db.vault.exec(`DELETE FROM replica_log`);
 
     const input = { title: "offline edit" };
     const baseVersions = [

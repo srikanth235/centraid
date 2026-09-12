@@ -194,20 +194,10 @@ export function buildSeatSnapshot(
 
     // 4. The log goes; the cursor stays. `floor_seq` is where this file sits,
     //    so the seat's first tail request asks for exactly what it is missing.
-    //    Both logs: `replica_change` is on its way out but a file frozen
-    //    before it went still carries it, and on the year-3 corpus that is
-    //    78,376 rows of a mechanism the seat has no reader for.
+    //    ONE log to truncate since #1014 (R-1014-1) — on the year-3 corpus the
+    //    trigger log this replaces was 78,376 rows of a mechanism the seat had
+    //    no reader for.
     copy.exec(`DELETE FROM replica_log`);
-    if (
-      copy
-        .prepare(
-          `SELECT 1 AS present FROM sqlite_schema
-            WHERE type = 'table' AND name = 'replica_change'`
-        )
-        .get() !== undefined
-    ) {
-      copy.exec(`DELETE FROM replica_change`);
-    }
     copy
       .prepare(
         `UPDATE replica_meta SET floor_seq = ?, active_commit_id = NULL

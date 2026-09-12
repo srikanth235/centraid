@@ -5,20 +5,13 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import {
-  currentReplicaLogState,
-  pruneReplicaChanges,
-  REPLICA_COMPACTION_HELD_ENTITIES,
-} from "@centraid/vault";
+import { currentReplicaLogState } from "@centraid/vault";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
-import {
-  projectReplicaPage,
-  replicaShapeIds,
-  SHAPE_CONTROL_ENTITIES,
-} from "./replica-projection.js";
+import { projectReplicaPage, replicaShapeIds } from "./replica-projection.js";
 import type { ReplicaProjectedPage } from "./replica-projection.js";
+import { capturedWrite } from "./replica-write.test-fixtures.js";
 
 const logger = {
   info: () => undefined,
@@ -85,38 +78,46 @@ describe("replica projection doorbell-only mode", () => {
          (task_id, owner_party_id, title, description, status, priority)
        VALUES (?, ?, ?, ?, ?, 0)`
     );
-    insert.run(
-      "task-visible",
-      vault.boot.ownerPartyId,
-      "Visible",
-      "short",
-      "needs-action"
-    );
-    insert.run(
-      "task-leaving",
-      vault.boot.ownerPartyId,
-      "Leaving",
-      "short",
-      "needs-action"
-    );
+    capturedWrite(vault.db.vault, () => {
+      insert.run(
+        "task-visible",
+        vault.boot.ownerPartyId,
+        "Visible",
+        "short",
+        "needs-action"
+      );
+      insert.run(
+        "task-leaving",
+        vault.boot.ownerPartyId,
+        "Leaving",
+        "short",
+        "needs-action"
+      );
+    });
     const since = currentReplicaLogState(vault.db.vault).watermark;
 
-    vault.db.vault
-      .prepare(
-        `UPDATE schedule_task SET title = ?, description = ? WHERE task_id = ?`
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `UPDATE schedule_task SET title = ?, description = ? WHERE task_id = ?`
+        )
+        .run("Updated", "x".repeat(70_000), "task-visible")
+    );
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `UPDATE schedule_task SET status = 'completed' WHERE task_id = ?`
+        )
+        .run("task-leaving")
+    );
+    capturedWrite(vault.db.vault, () =>
+      insert.run(
+        "task-unseen",
+        vault.boot.ownerPartyId,
+        "Never visible",
+        "short",
+        "completed"
       )
-      .run("Updated", "x".repeat(70_000), "task-visible");
-    vault.db.vault
-      .prepare(
-        `UPDATE schedule_task SET status = 'completed' WHERE task_id = ?`
-      )
-      .run("task-leaving");
-    insert.run(
-      "task-unseen",
-      vault.boot.ownerPartyId,
-      "Never visible",
-      "short",
-      "completed"
     );
     return { vault, since };
   }
@@ -187,11 +188,20 @@ describe("replica projection doorbell-only mode", () => {
 });
 
 /**
- * RETENTION COMPACTION IS REPLAY-EQUIVALENT (#883 C6). The hard case: a row
- * leaving a filter projects as a DELETE decided from the state before the
- * oldest shown change — the very entry churn supersedes.
+ * A CATCH-UP REPLAY IS PAGE-SIZE INDEPENDENT (#883 C6; #1014, R-1014-1).
+ *
+ * The hard case has not changed, only the mechanism under it: a row leaving a
+ * filter projects as a DELETE decided from the state BEFORE the oldest change
+ * the page shows for it. That state used to be reconstructed by retention
+ * compaction's `prior_op` / `prior_old_values_json` pair, which existed because
+ * a trigger-log entry was a POINTER and several of them for one row said
+ * nothing more than the last. A log row is a full image plus the delta of what
+ * the statement changed, so there is nothing to fold — and the property to hold
+ * is the one that survived the mechanism: a replay in three-row pages lands
+ * byte-identical with a replay in one, and stripping the prior loses the
+ * filter-exit delete.
  */
-describe("replica projection under retention compaction", () => {
+describe("replica projection replay equivalence", () => {
   afterEach(async () => {
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
       cleanup()
@@ -205,7 +215,7 @@ describe("replica projection under retention compaction", () => {
     since: ReturnType<typeof currentReplicaLogState>["watermark"];
     base: ReplicaState;
   }> {
-    const dir = await tempDir(`replica-compaction-${crypto.randomUUID()}-`);
+    const dir = await tempDir(`replica-replay-${crypto.randomUUID()}-`);
     const vault = openVaultPlane({
       bootstrap: true,
       dir,
@@ -235,8 +245,10 @@ describe("replica projection under retention compaction", () => {
          (task_id, owner_party_id, title, description, status, priority)
        VALUES (?, ?, ?, ?, 'needs-action', 0)`
     );
-    for (const id of ["hot-a", "hot-b", "leaver", "doomed"])
-      insert.run(id, vault.boot.ownerPartyId, id, "seed");
+    capturedWrite(vault.db.vault, () => {
+      for (const id of ["hot-a", "hot-b", "leaver", "doomed"])
+        insert.run(id, vault.boot.ownerPartyId, id, "seed");
+    });
     const since = currentReplicaLogState(vault.db.vault).watermark;
     const base = replay(vault, granted);
 
@@ -246,18 +258,32 @@ describe("replica projection under retention compaction", () => {
     const restatus = vault.db.vault.prepare(
       `UPDATE schedule_task SET status = ? WHERE task_id = ?`
     );
+    // ONE COMMIT PER TOUCH, so the window carries the churn the page boundary
+    // has to be able to fall inside.
     for (let index = 0; index < CHURN; index += 1) {
-      retitle.run(`hot-a ${index}`, "hot-a");
-      retitle.run(`hot-b ${index}`, "hot-b");
+      capturedWrite(vault.db.vault, () => {
+        retitle.run(`hot-a ${index}`, "hot-a");
+      });
+      capturedWrite(vault.db.vault, () => {
+        retitle.run(`hot-b ${index}`, "hot-b");
+      });
     }
     // Leaves the filter, then keeps changing: the superseded transition is
-    // what compaction must not lose.
-    restatus.run("completed", "leaver");
-    retitle.run("leaver later", "leaver");
-    retitle.run("hot-a last", "hot-a");
-    vault.db.vault
-      .prepare(`DELETE FROM schedule_task WHERE task_id = 'doomed'`)
-      .run();
+    // what a page-size-independent replay must not lose.
+    capturedWrite(vault.db.vault, () => {
+      restatus.run("completed", "leaver");
+    });
+    capturedWrite(vault.db.vault, () => {
+      retitle.run("leaver later", "leaver");
+    });
+    capturedWrite(vault.db.vault, () => {
+      retitle.run("hot-a last", "hot-a");
+    });
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(`DELETE FROM schedule_task WHERE task_id = 'doomed'`)
+        .run()
+    );
     return { vault, since, base };
   }
 
@@ -267,14 +293,18 @@ describe("replica projection under retention compaction", () => {
   function replay(
     vault: VaultPlane,
     since: ReturnType<typeof currentReplicaLogState>["watermark"],
-    base: ReplicaState = new Map()
+    base: ReplicaState = new Map(),
+    limit = 3
   ): ReplicaState {
     const rows: ReplicaState = new Map(base);
     let cursor = since;
-    for (let page = 0; page < 200; page += 1) {
-      // Small on purpose: a folded entry and its survivor must be able to
-      // straddle a page boundary.
-      const projected = projectReplicaPage(vault.db.vault, access, cursor, 3);
+    for (let page = 0; page < 500; page += 1) {
+      const projected = projectReplicaPage(
+        vault.db.vault,
+        access,
+        cursor,
+        limit
+      );
       expect(projected.rebootstrapReason).toBeUndefined();
       for (const change of projected.batch.changes) {
         const key = `${change.shapeId}/${change.entity}/${change.rowId}`;
@@ -300,56 +330,27 @@ describe("replica projection under retention compaction", () => {
     );
   }
 
-  /** The SAME vault the baseline replay read: row ids are per-vault HMACs. */
-  function compact(vault: VaultPlane, since: { seq: number }): void {
-    // One entry over the cap: compaction clears the pressure by itself, so
-    // the count trim never runs and the floor stays put.
-    const entries = (
-      vault.db.vault
-        .prepare(`SELECT COUNT(*) AS n FROM replica_change`)
-        .get() as { n: number }
-    ).n;
-    const result = pruneReplicaChanges(vault.db.vault, {
-      maxEntries: entries - 1,
-    });
-    expect(result.compacted).toBeGreaterThan(CHURN);
-    expect(result.overflow).toBe(0);
-    expect(result.floor.seq).toBeLessThanOrEqual(since.seq);
-  }
-
-  test("a catch-up replay lands byte-identical with and without compaction", async () => {
+  test("a catch-up replay lands byte-identical at any page size", async () => {
     const { vault, since, base } = await churnedVault();
-    const expected = snapshot(replay(vault, since, base));
+    // Small on purpose: a change and the one that supersedes it must be able
+    // to straddle a page boundary and still converge.
+    const paged = snapshot(replay(vault, since, base, 3));
+    const single = snapshot(replay(vault, since, base, 1_000));
 
-    compact(vault, since);
-
-    expect(snapshot(replay(vault, since, base))).toStrictEqual(expected);
-    expect(expected).toContain("hot-a last");
-    expect(expected).not.toContain("leaver");
-    expect(expected).not.toContain("doomed");
+    expect(paged).toStrictEqual(single);
+    expect(paged).toContain("hot-a last");
+    expect(paged).not.toContain("leaver");
+    expect(paged).not.toContain("doomed");
   });
 
-  test("rowVersion is unchanged by compaction, because a row's last entry never folds", async () => {
-    const { vault, since } = await churnedVault();
-    // rowVersion IS the newest change seq, and that entry never folds.
-    const versions = (): unknown[] =>
-      projectReplicaPage(vault.db.vault, access, since, 1_000)
-        .batch.changes.map((change) => change.rowVersion)
-        .sort((left, right) => Number(left) - Number(right));
-    const expected = versions();
-
-    compact(vault, since);
-
-    expect(versions()).toStrictEqual(expected);
-  });
-
-  test("SABOTAGE: stripping the folded prior loses the filter-exit delete", async () => {
+  test("SABOTAGE: stripping the prior image loses the filter-exit delete", async () => {
     const { vault, since, base } = await churnedVault();
     const expected = snapshot(replay(vault, since, base));
-    compact(vault, since);
-    // The bug this prevents: fold, keep the latest, forget the prior.
+    // The bug this prevents: keep the row's current image, forget what it was
+    // before the change — and a row that LEFT the filter reads as a row that
+    // was never in it, so no delete is projected and the phone keeps it.
     vault.db.vault.exec(
-      `UPDATE replica_change SET prior_op = NULL, prior_old_values_json = NULL`
+      `UPDATE replica_log SET prior_json = '{}' WHERE op = 'update'`
     );
 
     const sabotaged = snapshot(replay(vault, since, base));
@@ -358,27 +359,18 @@ describe("replica projection under retention compaction", () => {
     expect(sabotaged).toContain("leaver");
   });
 
-  test("SABOTAGE: dropping a row's last entry strands a deleted row", async () => {
+  test("SABOTAGE: dropping a row's delete strands it on the device", async () => {
     const { vault, since, base } = await churnedVault();
     const expected = snapshot(replay(vault, since, base));
-    compact(vault, since);
     vault.db.vault.exec(
-      `DELETE FROM replica_change WHERE op = 'delete' AND row_id = 'doomed'`
+      `DELETE FROM replica_log
+        WHERE op = 'delete' AND pk_json = '["doomed"]'`
     );
 
     const sabotaged = snapshot(replay(vault, since, base));
 
     expect(sabotaged).not.toStrictEqual(expected);
     expect(sabotaged).toContain("doomed");
-  });
-
-  test("every shape-control entity is held out of compaction", () => {
-    // One verdict, one owner: the projection decides, compaction holds all.
-    expect(
-      [...SHAPE_CONTROL_ENTITIES].filter(
-        (entity) => !REPLICA_COMPACTION_HELD_ENTITIES.includes(entity)
-      )
-    ).toStrictEqual([]);
   });
 });
 
@@ -420,15 +412,17 @@ describe("replica projection of declared long text", () => {
     const since = currentReplicaLogState(vault.db.vault).watermark;
     const body = "a".repeat(200 * 1_024);
     const uri = `data:text/markdown;base64,${Buffer.from(body, "utf8").toString("base64")}`;
-    vault.db.vault
-      .prepare(
-        `INSERT INTO core_content_item
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `INSERT INTO core_content_item
            (content_id, content_uri, sha256, byte_size,
             created_at)
          VALUES ('long-note', ?, ?, ?,
                  '2026-01-01T00:00:00.000Z')`
-      )
-      .run(uri, "f".repeat(64), Buffer.byteLength(body));
+        )
+        .run(uri, "f".repeat(64), Buffer.byteLength(body))
+    );
 
     const page = projectReplicaPage(vault.db.vault, access, since);
     const change = page.batch.changes.find(

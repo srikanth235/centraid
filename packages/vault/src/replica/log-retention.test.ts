@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { bumpReplicaEpoch, pruneReplicaChanges } from "./change-log.js";
+import { bumpReplicaEpoch } from "./change-log.js";
 import {
   lowestSeatCursor,
   pruneReplicaLog,
@@ -332,18 +332,21 @@ describe("the seat hold's abandonment bound", () => {
   });
 });
 
-// ONE FLOOR PER LOG (#1014, G1/G2; ruling R-1014-1).
+// ONE FLOOR, BECAUSE THERE IS ONE LOG (#1014, G1/G2; ruling R-1014-1).
 //
-// The two logs are counted in unrelated sequence spaces — the trigger log runs
-// roughly nineteen rows to the session log's one — and both pruners used to
-// write `replica_meta.floor_seq`. That is the loop this suite reproduces: a
-// trigger-log prune stamps a floor far above `MAX(replica_log.seq)`, every
-// seat cursor then fails `since.seq < floor` into a `retention` verdict, the
-// snapshot stamps the floor back down, and the next tail says `retention`
-// again — with nothing applied and nothing surfaced. An epoch bump did the
-// same thing from the other direction, deriving the seat log's floor from the
-// trigger log's `sqlite_sequence`.
-describe("two logs, two floors", () => {
+// There used to be two logs counted in unrelated sequence spaces — the trigger
+// log ran roughly nineteen rows to the session log's one — and both pruners
+// wrote `replica_meta.floor_seq`. That was the loop: a trigger-log prune
+// stamped a floor far above `MAX(replica_log.seq)`, every seat cursor then
+// failed `since.seq < floor` into a `retention` verdict, the snapshot stamped
+// the floor back down, and the next tail said `retention` again — with nothing
+// applied and nothing surfaced. An epoch bump did the same thing from the
+// other direction.
+//
+// The repair is not a second column; it is one log. These assertions are what
+// "one" has to mean: the file carries a single floor, it is derived from the
+// rows this log actually holds, and nothing else may write it.
+describe("one log, one floor", () => {
   function seat(db: VaultDb, deviceId: string, seq: number): void {
     db.vault
       .prepare(
@@ -367,57 +370,44 @@ describe("two logs, two floors", () => {
     expect(recordSeatCursor(db.vault, deviceId, seq)).toBe(true);
   }
 
-  test("a trigger-log prune never moves the seat log's floor", () => {
+  test("the file carries one floor column and no second sequence space", () => {
     const db = openVaultDb();
     try {
       seeded(db);
-      const rows = readReplicaLog(db.vault, { limit: 10_000 }).rows;
-      const before = replicaLogState(db.vault).floor.seq;
-      // The two logs count the same writes differently — that they DISAGREE
-      // is the whole hazard; which one runs ahead depends on the tables.
+      const columns = (
+        db.vault.prepare("PRAGMA table_info(replica_meta)").all() as {
+          name: string;
+        }[]
+      ).map((column) => column.name);
+      expect(columns).toContain("floor_seq");
+      expect(columns).not.toContain("change_floor_seq");
       expect(
-        (
-          db.vault
-            .prepare(`SELECT COUNT(*) AS n FROM replica_change`)
-            .get() as { n: number }
-        ).n
-      ).not.toBe(rows.length);
-      pruneReplicaChanges(db.vault, { maxEntries: 0, maxAgeMs: 0 });
-      expect(replicaLogState(db.vault).floor.seq).toBe(before);
-      // And every row a seat had not applied is still readable from 0.
-      expect(
-        readReplicaLog(db.vault, {
-          since: { epoch: rows[0]!.epoch, seq: 0 },
-          limit: 10_000,
-        }).rows.map((row) => row.seq)
-      ).toStrictEqual(rows.map((row) => row.seq));
+        db.vault
+          .prepare(
+            `SELECT name FROM sqlite_sequence WHERE name LIKE 'replica\\_%' ESCAPE '\\'`
+          )
+          .all()
+          .map((row) => (row as { name: string }).name)
+      ).toStrictEqual(["replica_log"]);
     } finally {
       db.close();
     }
   });
 
-  test("an epoch bump derives each floor from its own log", () => {
+  test("an epoch bump derives the floor from the log the file has", () => {
     const db = openVaultDb();
     try {
       seeded(db);
       const high = readReplicaLog(db.vault, { limit: 10_000 }).rows.at(-1)!.seq;
-      const changeHigh = (
-        db.vault
-          .prepare(`SELECT MAX(seq) AS seq FROM replica_change`)
-          .get() as { seq: number }
-      ).seq;
-      expect(changeHigh).not.toBe(high);
       bumpReplicaEpoch(db.vault, { reason: "one-log" });
       const meta = db.vault
-        .prepare(
-          `SELECT floor_seq, change_floor_seq FROM replica_meta WHERE singleton = 1`
-        )
-        .get() as { floor_seq: number; change_floor_seq: number };
-      // The seat log's floor is ITS OWN high-water mark, never the other
-      // log's — which is what used to skip every real row while reporting
-      // caught-up, because `watermark === floor`.
+        .prepare(`SELECT floor_seq FROM replica_meta WHERE singleton = 1`)
+        .get() as { floor_seq: number };
+      // ITS OWN high-water mark, never another counter's — which is what used
+      // to skip every real row while reporting caught-up, because
+      // `watermark === floor`.
       expect(meta.floor_seq).toBe(high);
-      expect(meta.change_floor_seq).toBe(changeHigh);
+      expect(replicaLogState(db.vault).watermark.seq).toBe(high);
     } finally {
       db.close();
     }
@@ -433,7 +423,6 @@ describe("two logs, two floors", () => {
       seat(db, "phone", behind);
       seat(db, "laptop", rows.at(-1)!.seq);
 
-      pruneReplicaChanges(db.vault, { maxEntries: 0, maxAgeMs: 0 });
       const pruned = pruneReplicaLog(db.vault, {
         maxRows: 0,
         maxAgeMs: 0,

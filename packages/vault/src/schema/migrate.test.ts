@@ -145,13 +145,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("NINE rungs: the baseline, #929's three, #928's ask tables, #996's key plane and unlock-credential drop, #1014's floor split and its poison registers, and a fresh vault stops at user_version 9", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(9);
+  test("TEN rungs: the baseline, #929's three, #928's ask tables, #996's key plane and unlock-credential drop, #1014's floor split, its poison registers and its one-log retirement, and a fresh vault stops at user_version 10", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(10);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(9);
+    expect(version.user_version).toBe(10);
     for (const table of [
       "locker_key",
       "core_entity",
@@ -237,7 +237,7 @@ describe("schema/migrate", () => {
     expect(
       (raw.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(9);
+    ).toBe(10);
     expect(
       raw
         .prepare(
@@ -259,15 +259,16 @@ describe("schema/migrate", () => {
     // #1014, B1/B2. Both registers exist to make a stuck unit of work
     // VISIBLE, which is worth nothing on a file that already has history —
     // exactly the file whose walk is already stalled — so the rung has to
-    // reach it.
+    // reach it. A file AT v8 has climbed one to eight for real: rung eight
+    // added the floor column the one-log rung reads.
     const raw = new DatabaseSync(":memory:");
-    raw.exec(VAULT_MIGRATIONS[0] ?? "");
+    for (const rung of VAULT_MIGRATIONS.slice(0, 8)) raw.exec(rung);
     raw.exec("PRAGMA user_version = 8");
     migrate(raw, VAULT_MIGRATIONS);
     expect(
       (raw.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(9);
+    ).toBe(10);
     expect(columnNames(raw, "automation_trigger_cursor")).toContain(
       "dead_letter_json"
     );
@@ -295,7 +296,7 @@ describe("schema/migrate", () => {
     const version = raw.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(9);
+    expect(version.user_version).toBe(10);
     for (const table of ["share_authority_request", "share_authority_use"]) {
       expect(
         raw
@@ -578,10 +579,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(9);
+    expect(userVersionOf(vaultFile)).toBe(10);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(9);
+    expect(userVersionOf(vaultFile)).toBe(10);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

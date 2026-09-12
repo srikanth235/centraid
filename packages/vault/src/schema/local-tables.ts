@@ -80,9 +80,8 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
   ["enrich_target_failure", "one host's per-target enrichment failure counter"],
   // The replica protocol's own plane. Its whole job is to describe changes to
   // registered rows; a change log inside the export it feeds would be a loop.
-  ["replica_change", "the change log itself — the mechanism, not the data"],
   ["replica_log", "the gateway log itself — the mechanism, not the data"],
-  ["replica_meta", "this vault's replica epoch, floor and trigger marker"],
+  ["replica_meta", "this vault's replica epoch, floor and commit position"],
   ["replica_intent_outcome", "device-scoped outcome of one submitted intent"],
   ["replica_invocation_commit", "the commit group one invocation wrote"],
   ["replica_parked_payload", "a sealed request awaiting the member's answer"],

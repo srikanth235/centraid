@@ -279,12 +279,12 @@ export function checkReplicaJournalConsistency(
 
   const foreign = (
     input.vault
-      .prepare("SELECT COUNT(*) AS n FROM replica_change WHERE epoch <> ?")
+      .prepare("SELECT COUNT(*) AS n FROM replica_log WHERE epoch <> ?")
       .get(state.epoch) as { n: number }
   ).n;
   if (foreign > 0) {
     problems.push(
-      `${foreign} replica_change row(s) survive from a foreign epoch (retention deletes epoch <> current)`
+      `${foreign} replica_log row(s) survive from a foreign epoch (retention deletes epoch <> current)`
     );
   }
 
@@ -300,11 +300,11 @@ export function checkReplicaJournalConsistency(
   }
 
   const seqRow = input.vault
-    .prepare("SELECT seq FROM sqlite_sequence WHERE name = 'replica_change'")
+    .prepare("SELECT seq FROM sqlite_sequence WHERE name = 'replica_log'")
     .get() as { seq: number } | undefined;
   const maxSeq = (
     input.vault
-      .prepare("SELECT MAX(seq) AS m FROM replica_change WHERE epoch = ?")
+      .prepare("SELECT MAX(seq) AS m FROM replica_log WHERE epoch = ?")
       .get(state.epoch) as { m: number | null }
   ).m;
   if (maxSeq !== null && (seqRow?.seq ?? 0) < maxSeq) {

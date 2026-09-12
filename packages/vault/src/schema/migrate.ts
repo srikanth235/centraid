@@ -62,7 +62,11 @@ import {
   READ_PATH_INDEX_DDL,
   SUBSCRIPTION_READ_PATH_INDEX_DDL,
 } from "./read-path-indexes.js";
-import { REPLICA_DDL, REPLICA_FLOOR_SPLIT_DDL } from "./replica.js";
+import {
+  REPLICA_DDL,
+  REPLICA_FLOOR_SPLIT_DDL,
+  REPLICA_ONE_LOG_DDL,
+} from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
@@ -243,7 +247,45 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // `IF NOT EXISTS`, so a column also stated in `LEDGER_DDL` would fail the
   // rung on a fresh file.
   [AUTOMATION_TRIGGER_DEAD_LETTER_DDL, ENRICH_TARGET_FAILURE_DDL].join("\n"),
+  // RUNG TEN (#1014, R-1014-1) — one log. `replica_change` goes, `replica_log`
+  // gains the two things the trigger log had that a session changeset does not
+  // (`prior_json`, the `local` doorbell lane), and a file that carried the
+  // trigger log rotates its epoch once with reason `one-log` so a shipped
+  // phone re-bootstraps into the new sequence space exactly once. The
+  // generated triggers cannot be named from stated DDL, so
+  // `dropReplicaChangeTriggers` removes them in JS just before the ladder runs.
+  REPLICA_ONE_LOG_DDL,
 ];
+
+/**
+ * Remove the generated `replica_change` triggers from a file that still has
+ * them (#1014, R-1014-1).
+ *
+ * NOT A RUNG, because a rung is a fixed string and these names are derived
+ * from the entity registry — up to 288 of them, plus whatever an ext band
+ * installed. It runs BEFORE the ladder because rung ten drops the table they
+ * write into, and a trigger left pointing at a missing table fails the next
+ * write to its base table rather than at open.
+ *
+ * Idempotent and cheap: one catalog query that comes back empty on every file
+ * that has already been here.
+ */
+export function dropReplicaChangeTriggers(db: DatabaseSync): void {
+  const triggers = (
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master
+          WHERE type = 'trigger' AND name LIKE 'trg\\_replica\\_%' ESCAPE '\\'`
+      )
+      .all() as { name: string }[]
+  ).map((row) => row.name);
+  if (triggers.length === 0) return;
+  db.exec(
+    triggers
+      .map((name) => `DROP TRIGGER IF EXISTS "${name.replaceAll('"', '""')}"`)
+      .join(";\n")
+  );
+}
 
 /**
  * Apply the current pre-release vault schema.
@@ -256,6 +298,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
 export function migrateVault(db: DatabaseSync): void {
   assertVaultRegistryLabels();
   assertFtsSpecsRegistered();
+  dropReplicaChangeTriggers(db);
   migrate(db, VAULT_MIGRATIONS);
   // Registry-generated, like the replica's triggers and for the same reason:
   // an entity added to the catalog must reach the file without a rung, and no

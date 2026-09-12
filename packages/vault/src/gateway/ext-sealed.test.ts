@@ -207,10 +207,10 @@ describe("ext-sealed", () => {
     expect(
       db.vault
         .prepare(
-          `SELECT old_values_json FROM replica_change
-          WHERE entity = ? AND old_values_json LIKE '%plaintext_at_first%'`
+          `SELECT row_json FROM replica_log
+          WHERE "table" = ? AND row_json LIKE '%plaintext_at_first%'`
         )
-        .get(`ext.${APP}.credential`)
+        .get("ext_keypass_credential")
     ).toBeDefined();
     let raw = db.vault
       .prepare(
@@ -230,10 +230,12 @@ describe("ext-sealed", () => {
     expect({
       ...db.vault
         .prepare(
-          `SELECT count(*) AS n FROM replica_change
-          WHERE entity = ? AND json_extract(old_values_json, '$.api_key') IS NOT NULL`
+          `SELECT count(*) AS n FROM replica_log
+          WHERE "table" = ?
+            AND (json_extract(row_json, '$.api_key') IS NOT NULL
+                 OR json_extract(prior_json, '$.api_key') IS NOT NULL)`
         )
-        .get(`ext.${APP}.credential`),
+        .get("ext_keypass_credential"),
     }).toStrictEqual({ n: 0 });
     expect(readSealKeyFingerprint(db.vault)).not.toBeNull();
     // and it still reveals to the original plaintext

@@ -18,9 +18,9 @@ import { VAULT_MIGRATIONS } from "./migrate.js";
  * triggers and `PRAGMA foreign_keys = ON` — the three things that make the
  * engine, rather than a caller, the thing under test.
  *
- * The replica's generated triggers are deliberately NOT installed: they log
- * every write to `replica_change`, which is noise for a shape assertion, and
- * the suites that care about them install them themselves.
+ * No replica capture is opened: a session per replicated table is noise for a
+ * shape assertion, and the suites that care about the log open the capture
+ * themselves.
  */
 export const BASELINE_NOW = "2026-09-02T10:00:00.000Z";
 

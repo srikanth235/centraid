@@ -47,9 +47,9 @@ export const SNAPSHOT_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
     "replica_meta",
     "the replica protocol's singleton: `active_commit_id`, `floor_seq`, " +
-      "`trigger_schema_version` and `updated_at` are rewritten by opening the " +
-      "vault (replica/change-log.ts), so it is state ABOUT the vault rather " +
-      "than content IN it.",
+      "`commit_seq` and `updated_at` are rewritten by opening the vault " +
+      "(replica/change-log.ts), so it is state ABOUT the vault rather than " +
+      "content IN it.",
   ],
 ]);
 

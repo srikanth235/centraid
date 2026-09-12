@@ -187,8 +187,8 @@ END;
 
 /**
  * Seed the kind vocabulary and (re)generate the membership triggers, from the
- * registry, on every open — the entity half of what `refreshReplicaTriggers`
- * does for replication, and for the same reason: a catalog change must reach
+ * registry, on every open — the entity half of what the replica capture does
+ * for replication, and for the same reason: a catalog change must reach
  * the file without a rung, and no DDL module should name a primary key.
  *
  * `<t>_entity_insert` is a BEFORE INSERT trigger, which is what makes the

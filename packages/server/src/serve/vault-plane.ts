@@ -81,10 +81,10 @@ import {
   registerTallyCommands,
   registerTaskCommands,
   registerAtlasCommands,
-  pruneReplicaChanges,
   lowestSeatCommitSeq,
   pruneReplicaIntentOutcomes,
   pruneReplicaLog,
+  withReplicaCommit,
   runJournalArchival,
   blobCustodyProven,
   WalShipper,
@@ -761,7 +761,15 @@ export class VaultPlane {
         this.logger.info(
           `vault plane: retained ext tables for "${appId}" (${retained.join(", ")})`
         );
-      markAppRevoked(this.db, app.appId);
+      // BRACKETED, SO THE FEED HEARS IT WHEN IT HAPPENS (#1014, R-1014-1).
+      // `access_app` is a SHAPE-CONTROL row: a subscribed device is told to
+      // re-bootstrap because the install register moved. Written outside a
+      // commit pair, the change sat in the open session until some unrelated
+      // write closed one — so the phone kept streaming under an authorization
+      // that had been withdrawn, for as long as the gateway stayed quiet.
+      withReplicaCommit(this.db.vault, () =>
+        markAppRevoked(this.db, app.appId)
+      );
     }
     const agent = lookupAgentByName(this.db, appId);
     if (agent) {
@@ -772,7 +780,9 @@ export class VaultPlane {
       // Uninstall WIPES the memory (#306): the rows stay as evidence, stamped
       // `principal-removed`, and a reinstall answers itself afresh.
       revokeAutomationAnswers(this.db.vault, appId, nowIso());
-      markAgentRevoked(this.db, agent.agentId);
+      withReplicaCommit(this.db.vault, () =>
+        markAgentRevoked(this.db, agent.agentId)
+      );
       this.logger.info(
         `vault plane: withdrew ${revoked} standing answer(s) for "${appId}"`
       );
@@ -851,19 +861,24 @@ export class VaultPlane {
    * of the owner's vault runs no authority statement at all.
    */
   recordAppInstall(appId: string, block: InstallScopeBlock): void {
-    ensureAppEnrolled(this.db, appId);
-    recordDeclaredManifest(this.db.vault, appId, {
-      scopes: block.scopes.map((scope) => ({
-        schema: scope.schema,
-        ...(scope.table === undefined ? {} : { table: scope.table }),
-        verbs: scope.verbs,
-        // The declared row filter and field mask STAY (#928, deviating from
-        // A1's "minus filters and masks"): they are build-time properties of
-        // the app's own code, not grants, and they are what keeps a replica
-        // holding one entity type's revisions instead of every app's.
-        ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
-        ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
-      })),
+    // One bracketed commit for the pair (#1014, R-1014-1): the enrollment row
+    // and the declared manifest are one shape-control transition, and a
+    // subscriber must not be able to see half of it.
+    withReplicaCommit(this.db.vault, () => {
+      ensureAppEnrolled(this.db, appId);
+      recordDeclaredManifest(this.db.vault, appId, {
+        scopes: block.scopes.map((scope) => ({
+          schema: scope.schema,
+          ...(scope.table === undefined ? {} : { table: scope.table }),
+          verbs: scope.verbs,
+          // The declared row filter and field mask STAY (#928, deviating from
+          // A1's "minus filters and masks"): they are build-time properties of
+          // the app's own code, not grants, and they are what keeps a replica
+          // holding one entity type's revisions instead of every app's.
+          ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+          ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+        })),
+      });
     });
   }
 
@@ -2149,21 +2164,7 @@ export class VaultPlane {
             `contentBlockedByLineage=${JSON.stringify(result.contentBlockedByLineage)}`
         );
       }
-      const replicaPrune = pruneReplicaChanges(this.db.vault);
-      if (
-        replicaPrune.expired +
-          replicaPrune.compacted +
-          replicaPrune.overflow +
-          replicaPrune.discardedPriorEpochs >
-        0
-      ) {
-        this.logger.info(
-          `vault plane: replica prune expired=${replicaPrune.expired} ` +
-            `compacted=${replicaPrune.compacted} overflow=${replicaPrune.overflow} ` +
-            `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`
-        );
-      }
-      // THE SEAT LOG'S OWN PRUNE, WIRED (#1014, G7/T1/V1). `replica_log`
+      // THE ONLY PRUNE THERE IS (#1014, G7/T1/V1, R-1014-1). `replica_log`
       // carries a full JSON row image per (table, pk) per commit in the file
       // the gateway SERVES, and until now nothing in production ever pruned
       // it: the 30-day/200,000-row window, the `retention` verdict and the

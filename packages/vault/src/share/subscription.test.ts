@@ -24,7 +24,10 @@ import {
   instrumentVaultStatements,
 } from "../gateway/work-counters.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { currentReplicaLogState } from "../replica/change-log.js";
+import {
+  currentReplicaLogState,
+  replicaRowIdFromKeyJson,
+} from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
 import {
   closeOpenVaults,
@@ -82,22 +85,23 @@ function deliver(
  * DISTINCT, because `updated_at`'s touch trigger writes a second log entry for
  * the same row on every update, member-authored ones included, and the replica
  * projection collapses a row to its latest entry per commit. The seat's own
- * cursor and lineage bookkeeping are `share.subscription*` rows: no app holds a
- * grant over them, so they wake no device.
+ * cursor and lineage bookkeeping are `share_subscription*` rows: no app holds a
+ * grant over them, so they wake no device. The log speaks PHYSICAL tables
+ * since #1014 (R-1014-1), so the prefix does too.
  */
 function changedRowsSince(db: VaultDb, seq: number): string[] {
   return (
     db.vault
       .prepare(
-        `SELECT DISTINCT entity, row_id FROM replica_change
-          WHERE epoch = ? AND seq > ? AND entity NOT LIKE 'share.%'
-          ORDER BY entity, row_id`
+        `SELECT DISTINCT "table" AS entity, pk_json FROM replica_log
+          WHERE epoch = ? AND seq > ? AND "table" NOT LIKE 'share\\_%' ESCAPE '\\'
+          ORDER BY "table", pk_json`
       )
       .all(currentReplicaLogState(db.vault).epoch, seq) as {
       entity: string;
-      row_id: string;
+      pk_json: string;
     }[]
-  ).map((row) => `${row.entity} ${row.row_id}`);
+  ).map((row) => `${row.entity} ${replicaRowIdFromKeyJson(row.pk_json)}`);
 }
 
 function grantOver(origin: VaultDb, photo: SeededPhoto, party: string): string {
@@ -157,7 +161,7 @@ describe("share subscription", () => {
       0, 1, 0,
     ]);
     expect(changedRowsSince(audience, before)).toStrictEqual([
-      `media.asset ${audienceAsset}`,
+      `media_asset ${audienceAsset}`,
     ]);
     expect(
       audience.vault
@@ -208,7 +212,7 @@ describe("share subscription", () => {
     ]);
     const woken = changedRowsSince(audience, before);
     expect(woken).toHaveLength(2);
-    expect(woken).toContain(`media.asset ${audienceAsset}`);
+    expect(woken).toContain(`media_asset ${audienceAsset}`);
     // The counter is monotonic, so this only ever fences a regression upward.
     expect(spent.statements).toBeGreaterThan(0);
   });

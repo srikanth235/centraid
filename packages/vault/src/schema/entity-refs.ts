@@ -136,12 +136,11 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
  * row exists to keep. Everything else is a reference and is in
  * `ENTITY_POINTERS` above.
  *
- * `sync_import_row`, `replica_change` and `enrich_policy_rule` are listed for
- * completeness even though the DDL scan does not match them — `sync_import_row`
- * carries `entity_type` with no `entity_id` sibling, `replica_change` uses
- * `entity`/`row_id`, `enrich_policy_rule` uses `scope_type`/`scope_ref` — so a
- * future rename into the canonical shape lands in the scan and is forced to a
- * decision rather than inheriting silence.
+ * `sync_import_row` and `enrich_policy_rule` are listed for completeness even
+ * though the DDL scan does not match them — `sync_import_row` carries
+ * `entity_type` with no `entity_id` sibling, `enrich_policy_rule` uses
+ * `scope_type`/`scope_ref` — so a future rename into the canonical shape lands
+ * in the scan and is forced to a decision rather than inheriting silence.
  */
 export const ENTITY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
@@ -175,10 +174,6 @@ export const ENTITY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
     "sync_import_row",
     "Immutable import history — the row-by-row ledger of what a connector proposed. `entity_type` records the kind that was imported; the row is never mutated after its batch resolves.",
-  ],
-  [
-    "replica_change",
-    "Replication machinery with its own epoch/floor lifecycle (replica/change-log.ts). It records PAST mutations and is trimmed by epoch, not by target liveness.",
   ],
   [
     "enrich_policy_rule",

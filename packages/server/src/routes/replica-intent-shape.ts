@@ -12,7 +12,6 @@ import crypto from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import {
-  currentReplicaLogState,
   operationReadSet,
   producedRowKey,
   replicaPredecessorRowVersions,
@@ -253,7 +252,6 @@ export function currentConflict(
   producedVersions?: ReadonlyMap<string, number>
 ): ReplicaIntentConflict | undefined {
   if (baseVersions.length === 0) return undefined;
-  const epoch = currentReplicaLogState(vault).epoch;
   const shapes = buildReplicaShapes(vault, access);
   const shapesById = new Map(shapes.map((shape) => [shape.shapeId, shape]));
   for (const base of baseVersions) {
@@ -301,7 +299,7 @@ export function currentConflict(
       if (!resolved) {
         // NO CANDIDATE HASHES TO THIS WIRE ID: the row this intent names is
         // not in the shape — deleted, or never there. Zero, which is what
-        // `currentRowVersion` answers for the same fact, and in the same units
+        // `replicaRowVersion` answers for the same fact, and in the same units
         // as `expectedVersion`. A base version of zero agrees with that and is
         // not a conflict; anything above it is.
         if (base.version === 0) continue;
@@ -316,12 +314,7 @@ export function currentConflict(
         };
       }
     }
-    const actualVersion = currentRowVersion(
-      vault,
-      epoch,
-      base.entity,
-      canonicalRowId
-    );
+    const actualVersion = replicaRowVersion(vault, base.entity, canonicalRowId);
     // THE PARENT'S NUMBER WHEN THERE IS ONE (#1014, R18). `expectedVersion`
     // is reported as the number this check actually used, because that is
     // what the seat has to reconcile against — reporting the pre-chain one
@@ -369,14 +362,8 @@ export function originConflict(
   baseVersions: readonly ReplicaIntentBaseVersion[]
 ): ReplicaIntentConflict | undefined {
   if (baseVersions.length === 0) return undefined;
-  const epoch = currentReplicaLogState(vault).epoch;
   for (const base of baseVersions) {
-    const actualVersion = currentRowVersion(
-      vault,
-      epoch,
-      base.entity,
-      base.rowId
-    );
+    const actualVersion = replicaRowVersion(vault, base.entity, base.rowId);
     if (actualVersion !== base.version) {
       return {
         ...(base.shapeId === undefined ? {} : { shapeId: base.shapeId }),
@@ -438,13 +425,16 @@ function rebasedVersion(
  * base version above zero; `row_version` starts at 1 by CHECK, so zero can
  * never be a live row's answer.
  *
- * The epoch and the projector remain the fallback for an entity with no
+ * THERE IS NO PROJECTOR FALLBACK LEFT (#1014, R-1014-1). An entity with no
  * `row_version` column — the append-only bands, which no intent bases a write
- * on but which a caller may still name.
+ * on but which a caller may still name — answers zero, the same as a row that
+ * is not there. It used to answer `MAX(seq)` over the trigger log, which is
+ * the R6 mistake wearing the word "fallback": a base version compared against
+ * a transport position is not a weaker check, it is a check of the wrong
+ * thing, and there is no longer a second log to take the number from.
  */
-function currentRowVersion(
+export function replicaRowVersion(
   vault: DatabaseSync,
-  epoch: string,
   entity: string,
   rowId: string
 ): number {
@@ -460,13 +450,7 @@ function currentRowVersion(
       return row?.v ?? 0;
     }
   }
-  const fallback = vault
-    .prepare(
-      `SELECT MAX(seq) AS seq FROM replica_change
-        WHERE epoch = ? AND entity = ? AND row_id = ?`
-    )
-    .get(epoch, entity, rowId) as { seq: number | null };
-  return fallback.seq ?? 0;
+  return 0;
 }
 
 const ROW_VERSION_CACHE = new WeakMap<DatabaseSync, Map<string, boolean>>();

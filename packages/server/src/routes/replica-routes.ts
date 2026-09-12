@@ -8,8 +8,8 @@ import {
   InvalidReplicaCursorError,
   parseReplicaCursor,
   ReplicaRebootstrapRequiredError,
-  REPLICA_RETENTION_DAYS,
-  REPLICA_RETENTION_MAX_ENTRIES,
+  REPLICA_LOG_RETENTION_DAYS,
+  REPLICA_LOG_RETENTION_MAX_ROWS,
 } from "@centraid/vault";
 import type { ReplicaCursor, ReplicaLogState } from "@centraid/vault";
 
@@ -122,10 +122,13 @@ function rebootstrapBody(
       epochReason: state.epochReason,
     },
     // The facts behind the reason, so the client describes THIS gateway's
-    // retention rather than a number it made up.
+    // retention rather than a number it made up. `maxEntries` is the wire's
+    // name for it and stays; the number behind it is the ONE log's row cap
+    // now (#1014, R-1014-1), because that is the window a cursor actually
+    // outlives.
     retention: {
-      days: REPLICA_RETENTION_DAYS,
-      maxEntries: REPLICA_RETENTION_MAX_ENTRIES,
+      days: REPLICA_LOG_RETENTION_DAYS,
+      maxEntries: REPLICA_LOG_RETENTION_MAX_ROWS,
     },
   };
 }
