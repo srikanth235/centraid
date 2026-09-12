@@ -530,7 +530,10 @@ describe("the seat's file during a download (#1014, lane H)", () => {
       }),
     });
     await worker.open(OPEN);
-    const bootstrapping = worker.bootstrap(OPEN);
+    const bootstrapping = worker.bootstrap({
+      vaultId: "vault-1",
+      snapshotUrl: "/snapshot",
+    });
     await arrived;
     // Halfway through the artifact, and the seat is still a seat.
     expect(() => worker.outbox()).not.toThrow();
@@ -561,7 +564,9 @@ describe("the seat's file during a download (#1014, lane H)", () => {
       }),
     });
     await worker.open(OPEN);
-    await expect(worker.bootstrap(OPEN)).rejects.toThrow(/not there/u);
+    await expect(
+      worker.bootstrap({ vaultId: "vault-1", snapshotUrl: "/snapshot" })
+    ).rejects.toThrow(/not there/u);
     expect(() => worker.outbox()).not.toThrow();
     expect(worker.state()).toBeUndefined();
     worker.close();
