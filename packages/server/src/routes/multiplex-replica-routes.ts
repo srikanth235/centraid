@@ -91,26 +91,35 @@ export function makeMultiplexReplicaRouteHandler(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // A vault may have changed hands while the phone was offline: keep the
-    // formerly-known mount long enough to deliver its scoped tombstone, or the
-    // local projection is stranded forever. A tombstoned or unknown device
-    // still fails closed.
-    if (
-      !enrollments.ownerFor(deviceId) ||
-      mounts.some(
-        (mount) =>
-          vaults.get(mount.vaultId) === undefined ||
-          (!enrollments.get(deviceId, mount.vaultId) &&
-            !enrollments.hadReplicaScope(deviceId, mount.vaultId))
-      )
-    )
+    // PER MOUNT, NOT PER RADIO (#1014, V18). A vault may have changed hands
+    // while the phone was offline: keep the formerly-known mount long enough to
+    // deliver its scoped tombstone, or the local projection is stranded
+    // forever. But one unknown vault used to take the WHOLE radio down with a
+    // blanket 403 — a phone mounting A,B,C,D where D changed hands went dark on
+    // A–C as well — and it did so BEFORE the per-mount check, so the refused
+    // device had already subscribed to every hub. A mount this device is not
+    // enrolled for is now refused by name, in band, and the rest stream.
+    //
+    // A tombstoned or unknown DEVICE still fails closed, and so does a radio on
+    // which no mount at all is admissible: that is the single-mount client's
+    // 403, unchanged.
+    if (!enrollments.ownerFor(deviceId))
       return sendJson(res, 403, { error: "replica_scope_not_enrolled" });
+    const admitted = mounts.filter(
+      (mount) =>
+        vaults.get(mount.vaultId) !== undefined &&
+        (enrollments.get(deviceId, mount.vaultId) ||
+          enrollments.hadReplicaScope(deviceId, mount.vaultId))
+    );
+    if (admitted.length === 0)
+      return sendJson(res, 403, { error: "replica_scope_not_enrolled" });
+    const refused = mounts.filter((mount) => !admitted.includes(mount));
 
     // Bounded BEFORE any header: a saturated gateway answers 503 +
     // Retry-After and the phone resumes from its per-vault cursors.
     const releaseSlot = (
       options.subscriberCap ?? defaultMultiplexSubscriberCap
-    ).admit(res);
+    ).admit(res, deviceId);
     if (!releaseSlot) return true;
 
     res.statusCode = 200;
@@ -121,7 +130,11 @@ export function makeMultiplexReplicaRouteHandler(
     res.flushHeaders?.();
     const stream = new SseStream(res);
 
-    const states = mounts.map<MountedState>((mount) => ({
+    for (const mount of refused)
+      writeScope(stream, mount.vaultId, "error", {
+        reason: "scope-not-enrolled",
+      });
+    const states = admitted.map<MountedState>((mount) => ({
       ...mount,
       rebootstrapNotices: 0,
       ...(mount.shapeIds ? { baseline: mount.shapeIds } : {}),
@@ -210,9 +223,15 @@ export function makeMultiplexReplicaRouteHandler(
             }
             // Never rethrow (#883 D1): that ends the radio and every other
             // sovereign mount on it. One mount's failure is one mount's fact.
+            //
+            // AND THE PHONE IS TOLD WHAT TO DO WITH IT (#1014, V21). The frame
+            // used to carry the exception's own `message` — neither branchable
+            // nor readable by a member — and the client had no branch for
+            // `error` at all, so the mount went quiet for the life of the radio
+            // with no in-band trigger. The reason is a closed code the feed
+            // turns into a per-vault re-bootstrap.
             writeScope(stream, state.vaultId, "error", {
               reason: "projection-failed",
-              message: error instanceof Error ? error.message : String(error),
             });
             state.terminal = true;
             continue;
@@ -250,6 +269,15 @@ export function makeMultiplexReplicaRouteHandler(
           if (!sameCursor(state.cursor, page.batch.to)) {
             writeScope(stream, state.vaultId, "cursor", page.batch.to);
             state.cursor = page.batch.to;
+            // THE SCOPE RECORD, WRITTEN (#1014, V2/X9). Best-effort bookkeeping
+            // about a page already on the wire: it is what `hadReplicaScope`
+            // reads, so until it had a writer the gate above could only ever
+            // see `false`.
+            enrollments.noteCheckpoint(deviceId, state.vaultId, {
+              epoch: page.batch.to.epoch,
+              seq: page.batch.to.seq,
+              schemaEpoch: currentReplicaLogState(plane.db.vault).schemaEpoch,
+            });
           }
           // `hasMore` only accompanies a page that advanced the cursor, so
           // the drain below always progresses.

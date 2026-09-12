@@ -16,6 +16,7 @@ const VERDICTS: readonly ReplicaRebootstrapVerdict[] = [
   "snapshot-retention",
   "shape-changed",
   "checkpoint-incompatible",
+  "device-access-changed",
   "invalid-cursor",
 ];
 
@@ -35,6 +36,20 @@ describe("every verdict has a sentence", () => {
         "unexpected error"
       );
     }
+  });
+});
+
+describe("an access change is not a bad cursor", () => {
+  test("the verdict the stream has always sent now has its own sentence", () => {
+    // THE REGRESSION THIS PINS (#1014, V16). `streamChanges` sends
+    // `device-access-changed` when a mid-stream authorization check fails, but
+    // it was not on the gateway's closed verdict list — so the route's
+    // normaliser rewrote it to `invalid-cursor` and the member was told their
+    // device's position could not be read, for something a PERSON did.
+    expect(isRebootstrapVerdict("device-access-changed")).toBe(true);
+    const notice = rebootstrapNoticeFor("device-access-changed");
+    expect(notice.detail.toLowerCase()).toContain("access");
+    expect(notice.fullResync).toBe(true);
   });
 });
 

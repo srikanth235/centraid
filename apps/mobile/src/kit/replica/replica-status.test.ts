@@ -177,6 +177,39 @@ describe("the trace a revoked scope leaves", () => {
     });
   });
 
+  it("says what the purge took with it, and whether it was saved", () => {
+    // NEVER SILENT (#1014, P24; R-1014-12). Revocation is about access, not
+    // about the member's past writes; "removed" alone was the whole sentence
+    // even when unsent edits went with the file.
+    expect(revokedNoticeRow({ ...notice, unsent: 0 }).label).toBe(
+      "No longer shared with you — Family was removed from this phone"
+    );
+    expect(
+      revokedNoticeRow({ ...notice, unsent: 3, unsentSaved: true }).label
+    ).toBe(
+      "No longer shared with you — Family was removed from this phone. 3 unsent changes were saved to this phone."
+    );
+    expect(
+      revokedNoticeRow({ ...notice, unsent: 1, unsentSaved: false }).label
+    ).toBe(
+      "No longer shared with you — Family was removed from this phone. 1 unsent change could not be saved."
+    );
+  });
+
+  it("fills the count in after the purge, keeping the first instant", async () => {
+    const storage = memoryStorage();
+    // The label is written BEFORE the purge (it is about to be erased) and the
+    // count only exists AFTER it, so the second record must reach the first.
+    await recordRevokedNotice(storage, "gateway-1", notice);
+    const filled = await recordRevokedNotice(storage, "gateway-1", {
+      ...notice,
+      at: "2026-08-27T09:00:05.000Z",
+      unsent: 2,
+      unsentSaved: true,
+    });
+    expect(filled).toStrictEqual([{ ...notice, unsent: 2, unsentSaved: true }]);
+  });
+
   it("survives the relaunch after the purge, and clears on dismiss", async () => {
     // THE POINT (#880 W4.4). The purge takes the rows, the cursor and the
     // mount, so nothing else on the phone can afterwards say where a vault

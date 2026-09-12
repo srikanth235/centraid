@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { SeatAuthorizationRevokedError } from "./seat-authorization-revoked-error.js";
 import { SeatBootstrapNoRoomError } from "./seat-bootstrap-no-room-error.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import { SeatDriftParkedError } from "./seat-drift-parked-error.js";
@@ -15,6 +16,7 @@ import type { SeatWatermark } from "./watermark.js";
 const WATERMARK: SeatWatermark = {
   epoch: "epoch-a",
   applied: 3,
+  appliedCommitSeq: 3,
   head: 3,
   behind: 0,
   deferredPending: false,
@@ -104,6 +106,66 @@ describe("the seat catch-up coalescer", () => {
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 0);
     });
+    expect(started).toBe(1);
+  });
+});
+
+describe("a closed loop (#1014, P17)", () => {
+  it("never fires the trailing follow-up after close", async () => {
+    let started = 0;
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const loop = new SeatSyncLoop({
+      sync: async () => {
+        started += 1;
+        await held;
+        return WATERMARK;
+      },
+    });
+    const first = loop.sync();
+    // A wake frame arrives behind it: without a close this queues one pass.
+    void loop.sync();
+    // The mount goes: `close()`/`purge()` unlink the file the pass would read.
+    loop.close();
+    release();
+    await first;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(started).toBe(1);
+  });
+
+  it("answers a later sync with nothing rather than opening the file", async () => {
+    let started = 0;
+    const loop = new SeatSyncLoop({
+      sync: () => {
+        started += 1;
+        return Promise.resolve(WATERMARK);
+      },
+    });
+    loop.close();
+    await expect(loop.sync()).resolves.toBeUndefined();
+    expect(started).toBe(0);
+  });
+});
+
+describe("a revoked device (#1014, X8)", () => {
+  it("rejects rather than swallowing, so the host can purge", async () => {
+    let started = 0;
+    const loop = new SeatSyncLoop({
+      sync: () => {
+        started += 1;
+        return Promise.reject(new SeatAuthorizationRevokedError("vault-1"));
+      },
+    });
+    // Purge-on-revocation used to fire only from the intent DRAIN, so a seat
+    // that only reads kept its whole copy of a vault the gateway had refused.
+    await expect(loop.sync()).rejects.toBeInstanceOf(
+      SeatAuthorizationRevokedError
+    );
+    // And no follow-up: a retry fails identically, forever.
+    await Promise.resolve();
     expect(started).toBe(1);
   });
 });

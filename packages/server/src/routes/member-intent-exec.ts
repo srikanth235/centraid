@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 
 import {
   currentReplicaLogState,
+  expiredOutcomeRecovery,
   judgeMemberIntent,
   partiesBoundToVault,
   readReplicaIntentOutcome,
@@ -30,9 +31,11 @@ import type {
   Credential,
   Gateway as VaultGateway,
   MemberIntentEnvelope,
+  ReplicaIntentOutcome,
 } from "@centraid/vault";
 
 import type { Admission } from "./peer-replica-route.js";
+import { originConflict } from "./replica-intent-shape.js";
 
 export interface MemberIntentAnswer {
   status: number;
@@ -95,6 +98,13 @@ export function executeMemberIntent(
   // `invoke` so `execution.ts` has something to stamp `commit_seq` and the
   // produced set onto, inside the canonical transaction.
   const memberDeviceId = `peer:${envelope.memberVaultId}`;
+  // THE PRECONDITION IS PART OF THE PAYLOAD (#1014, V7). This hashed the
+  // action, the app and the input alone, so two envelopes that differed ONLY
+  // in the versions they were composed against — the same edit re-sent after
+  // the member had seen someone else's change, or a replay carrying a stale
+  // base — hashed identically and the second was answered with the first's
+  // retained outcome. The window and the nonce are in for the same reason:
+  // they are signed, so they are part of what this intent IS.
   const payloadHash = crypto
     .createHash("sha256")
     .update(
@@ -102,6 +112,14 @@ export function executeMemberIntent(
         action: envelope.action,
         appId: envelope.appId,
         input: envelope.input ?? {},
+        baseVersions: (envelope.baseVersions ?? []).map((base) => [
+          base.shapeId ?? "",
+          base.entity,
+          base.rowId,
+          base.version,
+        ]),
+        expiresAt: envelope.expiresAt ?? null,
+        nonce: envelope.nonce ?? null,
       })
     )
     .digest("hex");
@@ -120,21 +138,74 @@ export function executeMemberIntent(
           "this intent id was admitted with a different payload; mint a new id for a changed operation",
       },
     };
-  if (retained?.status === "executed")
+  // THE FAR EDGE OF THE WINDOW, ON THIS PATH TOO (#1014, G16). The device door
+  // has always consulted it; the peer door did not, so once a member's
+  // retained outcome aged out the same envelope executed a second time.
+  if (retained) {
+    const aged = expiredOutcomeRecovery(
+      admission.origin.vault,
+      envelope.intentId
+    );
+    if (aged)
+      return {
+        status: 409,
+        body: {
+          state: "refused",
+          error: "replica_intent_outcome_expired",
+          intentId: envelope.intentId,
+          reason: aged.reason,
+          recovery: aged.recovery,
+        },
+      };
+  }
+  const dedupe = retainedPeerAnswer(retained, deps.ownerLabel);
+  if (dedupe)
+    return {
+      status: dedupe.status,
+      body: {
+        ...dedupe.body,
+        ...(dedupe.body.state === "executed"
+          ? { answeredVersions: answeredVersionsFor(admission, verdict.route) }
+          : {}),
+      },
+    };
+  // TWO MEMBERS, ONE SHARED ALBUM (#1014, V7). `baseVersions` was parsed and
+  // never used, so the second member's edit overwrote the first's and the
+  // loser was told nothing. The envelope's ids are already the ORIGIN's —
+  // `forwardOverPeer` translates them out of lineage — so the check is the
+  // row's own version against the one the member composed against, which is
+  // the same arithmetic the device door runs.
+  const conflict = originConflict(
+    admission.origin.vault,
+    envelope.baseVersions ?? []
+  );
+  if (conflict) {
+    const reason = "the edited row changed while this intent was offline";
+    try {
+      recordReplicaIntentOutcome(admission.origin.vault, {
+        intentId: envelope.intentId,
+        deviceId: memberDeviceId,
+        appId: envelope.appId,
+        action: envelope.action,
+        payloadHash,
+        status: "conflict",
+        reason,
+        conflict,
+      });
+    } catch {
+      // An id another member already holds; the conflict answer stands either
+      // way, and a retry of the same id gets the same verdict.
+    }
     return {
       status: 200,
       body: {
-        state: "executed",
+        state: "conflict",
         intentId: envelope.intentId,
-        ...(retained.commitSeq === undefined
-          ? {}
-          : { commitSeq: retained.commitSeq }),
-        ...(retained.produced === undefined
-          ? {}
-          : { produced: retained.produced.map((row) => ({ ...row })) }),
-        answeredVersions: answeredVersionsFor(admission, verdict.route),
+        reason,
+        conflict,
       },
     };
+  }
   try {
     recordReplicaIntentOutcome(admission.origin.vault, {
       intentId: envelope.intentId,
@@ -178,24 +249,35 @@ export function executeMemberIntent(
       outcome: result.status,
     },
   });
+  // A SETTLE THAT FAILED IS NOT AN ANSWER (#1014, V21). This used to swallow
+  // the error and tell the member `executed` anyway, while the row stayed
+  // `sending` — so the member's seat cleared its overlay against a verdict the
+  // origin has no record of, and the next retry re-executed the write. One
+  // retry (the failure is usually a busy writer), then the truth: the caller
+  // is told `in-flight` and re-polls, and the origin's own audit band carries
+  // the intent id so an owner can see what did not get written down.
   const settle = (
     status: "executed" | "denied" | "parked",
     reason?: string
-  ): void => {
-    try {
-      recordReplicaIntentOutcome(admission.origin.vault, {
-        intentId: envelope.intentId,
-        deviceId: memberDeviceId,
-        appId: envelope.appId,
-        action: envelope.action,
-        payloadHash,
-        status,
-        ...(reason === undefined ? {} : { reason }),
-      });
-    } catch {
-      // The answer the member gets is the invoke's; a failed settle leaves the
-      // `sending` row, which is exactly what a retry consumes.
+  ): boolean => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        recordReplicaIntentOutcome(admission.origin.vault, {
+          intentId: envelope.intentId,
+          deviceId: memberDeviceId,
+          appId: envelope.appId,
+          action: envelope.action,
+          payloadHash,
+          status,
+          ...(reason === undefined ? {} : { reason }),
+        });
+        return true;
+      } catch (error) {
+        if (attempt === 1)
+          recordSettleFailure(admission, envelope, status, error);
+      }
     }
+    return false;
   };
   if (result.status === "parked") {
     settle("parked", "reason" in result ? result.reason : undefined);
@@ -220,7 +302,21 @@ export function executeMemberIntent(
       body: { state: "denied", intentId: envelope.intentId, reason },
     };
   }
-  settle("executed");
+  if (!settle("executed")) {
+    // The write RAN; only its durable verdict did not. `in-flight` is the one
+    // honest word for that: the caller re-polls, the retained `sending` row is
+    // what the retry consumes, and nothing here claims a settlement the origin
+    // cannot show.
+    return {
+      status: 202,
+      body: {
+        state: "in-flight",
+        intentId: envelope.intentId,
+        reason:
+          "the origin executed this write but has not recorded its outcome",
+      },
+    };
+  }
   // Read back rather than trust the invoke: `commit_seq` and the produced set
   // were stamped INSIDE the canonical transaction (`gateway/execution.ts`),
   // which is the only place that knows them.
@@ -245,6 +341,94 @@ export function executeMemberIntent(
       answeredVersions: answeredVersionsFor(admission, verdict.route),
     },
   };
+}
+
+/**
+ * EVERY RETAINED VERDICT IS A DEDUPE HIT, NOT JUST `executed` (#1014, V8).
+ *
+ * A retained `parked` row means the owner has ALREADY been asked and the
+ * payload is already waiting for them. Re-invoking wrote a second parked
+ * confirmation for the same intent, and approving both applied the write
+ * twice. A retained `denied`, `failed` or `conflict` is equally settled — the
+ * member's remedy is a new id against a fresh base, never another execution.
+ *
+ * `sending` is the one status that re-enters, because it means the row died
+ * before its outcome; `undefined` is an id this member has never used.
+ */
+export function retainedPeerAnswer(
+  retained: ReplicaIntentOutcome | undefined,
+  ownerLabel: string | undefined
+):
+  | { status: number; body: Record<string, unknown> & { state: string } }
+  | undefined {
+  if (
+    !retained ||
+    retained.status === "sending" ||
+    retained.status === "queued"
+  )
+    return undefined;
+  if (retained.status === "executed")
+    return {
+      status: 200,
+      body: {
+        state: "executed",
+        intentId: retained.intentId,
+        ...(retained.commitSeq === undefined
+          ? {}
+          : { commitSeq: retained.commitSeq }),
+        ...(retained.produced === undefined
+          ? {}
+          : { produced: retained.produced.map((row) => ({ ...row })) }),
+      },
+    };
+  if (retained.status === "parked")
+    return {
+      status: 202,
+      body: {
+        state: "parked",
+        intentId: retained.intentId,
+        ...(retained.reason === undefined ? {} : { reason: retained.reason }),
+        waitingOn: retained.waitingOn ?? { seat: "owner", label: ownerLabel },
+      },
+    };
+  return {
+    status: 200,
+    body: {
+      state: "denied",
+      intentId: retained.intentId,
+      reason: retained.reason ?? "the origin refused it",
+    },
+  };
+}
+
+/** The origin's own durable note that an answer was not written down (V21). */
+function recordSettleFailure(
+  admission: Admission,
+  envelope: MemberIntentEnvelope,
+  status: string,
+  error: unknown
+): void {
+  try {
+    writeReceipt(admission.origin.audit, {
+      authorityId: admission.grantId,
+      invocationId: null,
+      action: "act replica.intent.settle",
+      objectType: "replica.intent",
+      objectId: envelope.intentId,
+      decision: "deny",
+      detail: {
+        intentId: envelope.intentId,
+        memberVaultId: envelope.memberVaultId,
+        shapeId: envelope.shapeId,
+        outcome: status,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  } catch {
+    // The audit band is the LAST thing that can be written here; a failure to
+    // write it must not turn a survivable outage into a 500 the member reads
+    // as their write being lost.
+  }
 }
 
 function answeredVersionsFor(

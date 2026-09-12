@@ -181,7 +181,9 @@ export {
 } from "./share/subscription-store.js";
 export {
   judgeMemberIntent,
+  MEMBER_INTENT_WINDOW_MS,
   memberIntentBytes,
+  memberIntentExpired,
   verifyMemberIntent,
   type MemberIntentEnvelope,
   type MemberIntentVerdict,
@@ -640,6 +642,7 @@ export {
   readReplicaLog,
   replicaCaptureOpen,
   lowestSeatCursor,
+  lowestSeatCommitSeq,
   pruneReplicaLog,
   recordSeatCursor,
   watchReplicaTable,
@@ -717,8 +720,10 @@ export {
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
   readReplicaIntentOutcome,
+  readReplicaIntentOutcomeForSeat,
   recordReplicaIntentOutcome,
   recordReplicaIntentOutcomeInTransaction,
+  ReplicaIntentIdentityError,
   transitionReplicaIntentOutcome,
   type ListReplicaIntentOutcomesOptions,
   type RecordReplicaIntentOutcomeInput,
@@ -729,8 +734,11 @@ export {
 } from "./replica/intents.js";
 export {
   expiredOutcomeRecovery,
+  producedRowKey,
   pruneReplicaIntentOutcomes,
+  REPLICA_INTENT_TOMBSTONE_REASON,
   replicaDependencyVerdict,
+  replicaPredecessorRowVersions,
   resolvePredecessorReferences,
   stampReplicaOutcomeCommitInTransaction,
   stampReplicaOutcomeCommitsInTransaction,

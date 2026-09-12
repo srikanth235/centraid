@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 type CreateSessionOptions = Parameters<
-  typeof import("./native-session").createNativeReplicaSession
+  typeof import("./native-session-open").createNativeReplicaSession
 >[0];
 type FakeSession = {
   pullNow: () => Promise<boolean>;
@@ -152,7 +152,7 @@ vi.mock(import("./native-hash") as Promise<unknown>, () => ({
   nativeReplicaDigest: async () => "digest",
   nativeReplicaIdFactory: () => "id",
 }));
-vi.mock(import("./native-session") as Promise<unknown>, () => ({
+vi.mock(import("./native-session-open") as Promise<unknown>, () => ({
   createNativeReplicaSession: (options: CreateSessionOptions) =>
     createNativeReplicaSession(options),
 }));

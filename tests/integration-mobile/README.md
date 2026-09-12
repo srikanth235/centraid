@@ -19,11 +19,15 @@ Nothing in between proved that a real session against a real gateway _produces_ 
 
 - That a real gateway plus a real replica session **reaches** each state: an empty bootstrapped library, a durable queued intent with its optimistic overlay, a refused socket that still serves the replica, a cursor genuinely behind the gateway's, the gateway's own base-version conflict with both version numbers, a `confirm: true` command parked for the owner, and a revoked app's permanent refusal.
 - That each of those is caused by its arrangement. Every test carries a **negative** half through the same session and the same drain — a second row nobody touched, a second write on a live transport, the same read after a row really lands. A suite whose positive half passes on its own proves only that the session always says one thing.
+- **That a live SSE frame delivers** ([#1014](https://github.com/srikanth235/centraid/issues/1014), T11). This tier used to say the opposite: the injected feed never emitted, every suite advanced with `pullNow()`, and whether a frame woke the pull was left as a device claim — which is exactly where R15 and R22 were living, unseen by a per-PR gate that is otherwise real. `openSeat({ liveFeed: true })` gives a seat the shipped `NativeMultiplexChangeFeed` over real `fetch` against the gateway's own SSE route, and `live-feed.integration.test.ts` asserts the three delivery triggers: a gateway write reaching two seats with no `pullNow()` anywhere, a stream cancelled mid-flight being re-issued, and the foreground clock landing a write with the feed switched off. `expo/fetch` is aliased to `lib/expo-fetch.ts` so the feed MODULE imports on a host with no React Native runtime; what the suites actually call is injected.
+
+## The fault lanes
+
+`seat-swap-faults.integration.test.ts` is a different shape from the seven state suites and is here for the same reason they are: it needs the real seams. A re-bootstrap swap has no atomic step — the queue comes out of the old file, the handle is released, an artifact arrives, the file is REPLACED, and only then is the queue written back — and the only place all of the staging, driver and sidecar seams exist together against a real snapshot door is this tier. It kills the process at each of those boundaries with an intent queued and asks whether the member's work is still there, with its payload, and still drains exactly once ([#1014](https://github.com/srikanth235/centraid/issues/1014) C5/T6). `carry-over.test.ts` owns the same claim at the unit tier; what this adds is a real artifact, a real log door and a real drain.
 
 ## What it may not claim
 
 - **Nothing about rendering.** No component is mounted. Whether the pending sheet, the stale banner or the conflict copy draws correctly stays with the component tier.
-- **Nothing about the SSE feed.** The injected change feed never emits; every suite advances the session with `pullNow()`, which is the same coordinator path a feed frame triggers. That a live frame _wakes_ the pull is a device claim.
 - **Nothing about op-sqlite.** The driver is `NodeSqliteDriver` — the same SQL, no native module. FlashList measurement, gestures, background tasks, real airplane mode and the native module load all remain device claims.
 - **Nothing about timing.** No budget is measured here; the perf and scale lanes own that.
 

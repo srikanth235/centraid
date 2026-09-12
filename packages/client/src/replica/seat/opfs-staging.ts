@@ -20,6 +20,7 @@
 import type { SAHPoolUtil } from "@sqlite.org/sqlite-wasm";
 
 import type { SeatBootstrapStaging } from "./bootstrap.js";
+import type { SeatCarryOverSidecar } from "./carry-over.js";
 
 /** The subset of OPFS this module uses, so the suites can stand it up. */
 export interface OpfsDirectory {
@@ -188,5 +189,44 @@ export function opfsSeatStaging(
      * real.
      */
     currentBytes: (): Promise<number> => Promise.resolve(0),
+  };
+}
+
+const CARRY_OVER = "seat-carry-over.json";
+
+/**
+ * The carry-over sidecar in OPFS (#1014, C5/T6).
+ *
+ * The seat's database lives in the SAH pool, which is not a directory a file
+ * can be put beside — so the stash goes in the ordinary OPFS directory the
+ * part file uses, and is keyed by that directory being per-vault (the worker
+ * namespaces it by the seat's file stem). It is NOT dropped by `discard()`:
+ * staging is thrown away the moment an install lands, and the stash has to
+ * outlive exactly that.
+ *
+ * `createWritable` truncates, which is what is wanted here — a stash is
+ * replaced whole — and a tab killed mid-write leaves a truncated JSON that
+ * `parseSeatCarryOver` discards rather than half-replays.
+ */
+export function opfsSeatCarryOverSidecar(
+  directory: OpfsDirectory
+): SeatCarryOverSidecar {
+  return {
+    read: () => readText(directory, CARRY_OVER),
+    write: async (payload: string): Promise<void> => {
+      const handle = await directory.getFileHandle(CARRY_OVER, {
+        create: true,
+      });
+      const writer = await handle.createWritable();
+      await writer.write({
+        type: "write",
+        position: 0,
+        data: new TextEncoder().encode(payload),
+      });
+      await writer.close();
+    },
+    clear: async (): Promise<void> => {
+      await directory.removeEntry(CARRY_OVER).catch(() => undefined);
+    },
   };
 }

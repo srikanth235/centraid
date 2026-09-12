@@ -146,13 +146,21 @@ export function forwardProjectedEditLocally(
     appId: request.appId,
     action: request.action,
     input: request.input,
-    baseVersions: [
-      {
-        entity: request.route.entity,
-        rowId: request.route.originItemId,
-        version: request.route.originRowVersion,
-      },
-    ],
+    // NO BASE VERSION FROM LINEAGE (#1014, V7). `origin_row_version` is
+    // documented as, and written as, the ORIGIN'S REPLICA CHANGE SEQUENCE —
+    // `applyShareOutputs` stores `outputs.cursor.seq` and `projectShareClosure`
+    // stores `grant.rowVersions` (a log position, `?? 0`). Sending it as a base
+    // version would compare a transport position against `row_version` in
+    // `originConflict`: 432 against 2, refusing every member edit. It was never
+    // read before this slice, so stating nothing is what it always meant.
+    //
+    // WHAT ARMS THIS: the lineage carrying the origin's own `row_version` for
+    // the row. The number is already in the share row image and is stripped as
+    // a LOCAL column by `apply-outputs.ts#LOCAL_COLUMNS`; carrying it needs a
+    // lineage column of its own (`origin_row_version` cannot be repurposed —
+    // `subscription-seat.ts` compares the pending-drop against it as a log
+    // position). Until then the origin's door checks whatever base versions an
+    // envelope DOES state, and a member's forwarded edit states none.
   };
   const answer = executeMemberIntent(admission, envelope, {
     gatewayFor: host.gatewayFor,

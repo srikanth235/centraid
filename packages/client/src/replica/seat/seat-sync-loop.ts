@@ -14,6 +14,7 @@
 // coalescing has, for the same reason, and it is here rather than in each host
 // because a host that got it wrong would look correct.
 
+import { isSeatAuthorizationRevoked } from "./seat-authorization-revoked-error.js";
 import { isSeatTerminalError } from "./seat-drift-parked-error.js";
 import type { SeatWatermark } from "./watermark.js";
 
@@ -41,6 +42,7 @@ export interface SeatSyncLoopOptions {
 export class SeatSyncLoop {
   #running: Promise<SeatWatermark | undefined> | undefined;
   #again = false;
+  #closed = false;
 
   constructor(
     private readonly seat: SeatSyncTarget,
@@ -50,15 +52,32 @@ export class SeatSyncLoop {
   /**
    * Catch up, or join the catch-up already running.
    *
-   * Rejects for exactly two failures and swallows every other one. An outage
+   * Rejects for exactly three failures and swallows every other one. An outage
    * is not an error a screen can act on — a seat that could not reach the
    * gateway is a seat with a slightly older copy, which is the normal state of
-   * the thing. Out of room and a parked drift ARE (#1014, C13, C14): both fail
-   * identically on every retry, and the host has a state to show for each.
-   * Swallowing them made the phone's storage-full park unreachable code
-   * (`native-session.ts`) and left the drift re-bootstrap loop unbounded.
+   * the thing. Out of room, a parked drift and a REVOKED device ARE (#1014,
+   * C13, C14, X8): all three fail identically on every retry, and the host has
+   * a state to show for each. Swallowing them made the phone's storage-full
+   * park unreachable code (`native-session.ts`), left the drift re-bootstrap
+   * loop unbounded, and let a read-only seat keep a copy the gateway had
+   * already refused it.
    */
+  /**
+   * THE HOST IS GONE (#1014, P17).
+   *
+   * Nothing used to stop this loop: a follow-up scheduled by the `finally`
+   * below fired after `close()` or `purge()` had already unlinked the file,
+   * so a pass ran against a closed driver — and a caller that had joined the
+   * earlier pass was answered with ITS watermark as the verdict for a seat
+   * that no longer exists. A closed loop absorbs nothing and starts nothing.
+   */
+  close(): void {
+    this.#closed = true;
+    this.#again = false;
+  }
+
   sync(): Promise<SeatWatermark | undefined> {
+    if (this.#closed) return Promise.resolve(undefined);
     if (this.#running) {
       this.#again = true;
       return this.#running;
@@ -66,7 +85,11 @@ export class SeatSyncLoop {
     let terminal = false;
     const run = this.seat.sync().catch((error: unknown) => {
       this.options.onError?.(error);
-      if (!isSeatTerminalError(error)) return undefined;
+      // REVOCATION STOPS THE LOOP TOO (#1014, X8). It fails identically on
+      // every retry and the host has a state to show for it — one that is not
+      // "try again" but "this copy must go".
+      if (!isSeatTerminalError(error) && !isSeatAuthorizationRevoked(error))
+        return undefined;
       terminal = true;
       throw error;
     });
@@ -79,7 +102,8 @@ export class SeatSyncLoop {
         // A PARKED SEAT GETS NO FOLLOW-UP PASS (#1014, C13, C14). The absorbed
         // callers behind this one would each be one more doomed attempt, which
         // is the loop the park exists to end.
-        if (again && !terminal) void this.sync().catch(() => undefined);
+        if (again && !terminal && !this.#closed)
+          void this.sync().catch(() => undefined);
       })
       // The rejection is the CALLER's to handle; this arm exists only so the
       // bookkeeping above is not itself an unhandled rejection.

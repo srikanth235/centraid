@@ -41,6 +41,7 @@ const AUTH: GatewayAuth = {
 const CURRENT: SeatWatermark = {
   epoch: "e1",
   applied: 900,
+  appliedCommitSeq: 900,
   head: 1_204,
   behind: 304,
   deferredPending: false,
@@ -179,5 +180,36 @@ describe("the session's one seat", () => {
     await seat.close();
     await expect(seat.file()).resolves.toBeUndefined();
     expect(host.opened).toHaveLength(1);
+  });
+});
+
+describe("what the file says before the first sync (#1014, R1)", () => {
+  it("reports the opened file's own position, without calling it filled", async () => {
+    // A relaunch: the file on disk already carries `applied_seq` and
+    // `applied_commit_seq` from the previous session. The ack-after-delta
+    // sweep reads the second of those to notice an intent whose commit the
+    // cursor has ALREADY passed, and it was skipped for the whole window
+    // between opening a filled seat and its first successful catch-up.
+    const onDisk: SeatWatermark = { ...CURRENT, applied: 700, behind: 504 };
+    const seat = new SessionSeat(AUTH, {
+      opener: (options) => {
+        void options;
+        return Promise.resolve({
+          sync: () => Promise.resolve(undefined),
+          close: () => Promise.resolve(),
+          query: <T extends object>() => Promise.resolve([] as T[]),
+          outbox: (): never => {
+            throw new Error("not what this claim is about");
+          },
+          watermark: () => onDisk,
+        });
+      },
+    });
+    await seat.file();
+    expect(seat.watermark()?.appliedCommitSeq).toBe(onDisk.appliedCommitSeq);
+    // A read still refuses: "the file stands here" and "a sync landed" are
+    // different facts, and only the second makes reads legal.
+    await expect(seat.open()).resolves.toBeUndefined();
+    await seat.close();
   });
 });

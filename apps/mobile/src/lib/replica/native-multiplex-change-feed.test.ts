@@ -222,4 +222,100 @@ describe(NativeMultiplexChangeFeed, () => {
     expect(outcomes.at(-1)).toBe(false);
     feed.close();
   });
+  test("a stream that goes silent is dropped and re-issued", async () => {
+    // THE REGRESSION THIS PINS (#1014, R15). The live trace: the SSE GET was
+    // cancelled at the platform and never re-issued, and the phone sat 43
+    // minutes behind a gateway it could reach. Two faults compose into it — a
+    // socket nothing is delivering on looks exactly like a quiet vault, and
+    // the reconnect used to decline whenever the controller had aborted, which
+    // is precisely what a cancelled request does.
+    const requested: string[] = [];
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      minReconnectMs: 1,
+      maxReconnectMs: 1,
+      silenceMs: 15,
+      streamFetch: async (input) => {
+        requested.push(String(input));
+        // A body that never delivers another byte and never ends: the socket
+        // the platform stopped feeding.
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start() {
+              /* nothing, ever */
+            },
+          }),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        ) as never;
+      },
+    });
+    const personal = feed.scope("personal");
+    personal.subscribe(() => undefined);
+    personal.setActive(true);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 120);
+    });
+    feed.close();
+    expect(
+      requested.length,
+      "a silent stream is re-issued rather than waited on forever"
+    ).toBeGreaterThan(1);
+  });
+
+  test("a terminal mount error asks that one vault to re-bootstrap", async () => {
+    // THE REGRESSION THIS PINS (#1014, V21). The gateway ends ONE mount's
+    // projection with a scoped `error` frame; the feed had no branch for it,
+    // so the frame fell through to the page reader, parsed as nothing, and the
+    // mount stayed silent for the life of the radio with no in-band trigger.
+    const messages: string[] = [];
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      minReconnectMs: 60_000,
+      maxReconnectMs: 60_000,
+      streamFetch: async () =>
+        new Response(
+          `event: scope\ndata: ${JSON.stringify({
+            vaultId: "personal",
+            event: "error",
+            data: { reason: "projection-failed" },
+          })}\n\n`,
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        ) as never,
+    });
+    const personal = feed.scope("personal");
+    personal.subscribe((message) => messages.push(message.type));
+    personal.setActive(true);
+    await settle();
+    feed.close();
+    expect(messages).toContain("centraid:vault-rebootstrap");
+  });
+
+  test("a scope the gateway no longer enrols is revoked, not re-bootstrapped", async () => {
+    // The per-mount refusal #1014's V18 introduced: the radio stays up for the
+    // other mounts and this one is told, by name, that it is gone.
+    let revoked: string | undefined;
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      minReconnectMs: 60_000,
+      maxReconnectMs: 60_000,
+      streamFetch: async () =>
+        new Response(
+          `event: scope\ndata: ${JSON.stringify({
+            vaultId: "family",
+            event: "error",
+            data: { reason: "scope-not-enrolled" },
+          })}\n\n`,
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        ) as never,
+      onScopeRevoked: (vaultId) => {
+        revoked = vaultId;
+      },
+    });
+    const family = feed.scope("family");
+    family.subscribe(() => undefined);
+    family.setActive(true);
+    await settle();
+    feed.close();
+    expect(revoked).toBe("family");
+  });
 });

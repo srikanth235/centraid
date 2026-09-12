@@ -19,6 +19,7 @@ import {
   SeatWorkerCore,
 } from "@centraid/client/replica/native";
 import type {
+  SeatWorkerSink,
   IntentRecordStore,
   OptimisticMutation,
   ReplicaBaseVersion,
@@ -74,20 +75,30 @@ function nodeNativeSeat(options: NodeSeatOptions): NodeNativeSeat & {
   open: () => Promise<void>;
 } {
   const drivers: NodeSeatDriver[] = [];
-  const core = new SeatWorkerCore({
-    openDatabase: () => {
-      const driver = new NodeSeatDriver(options.path);
-      drivers.push(driver);
-      if (options.schema) driver.exec(options.schema);
-      return driver;
+  // The product's own indirection (#1014, C3): the core takes its sink at
+  // construction and the session that wants it does not exist yet.
+  const sinkHolder: { sink: SeatWorkerSink } = { sink: {} };
+  const core = new SeatWorkerCore(
+    {
+      openDatabase: () => {
+        const driver = new NodeSeatDriver(options.path);
+        drivers.push(driver);
+        if (options.schema) driver.exec(options.schema);
+        return driver;
+      },
+      staging: () => {
+        throw new Error("this seat never bootstraps");
+      },
+      transport: () => {
+        throw new Error("this seat never bootstraps");
+      },
     },
-    staging: () => {
-      throw new Error("this seat never bootstraps");
-    },
-    transport: () => {
-      throw new Error("this seat never bootstraps");
-    },
-  });
+    {
+      onChange: (notice) => sinkHolder.sink.onChange?.(notice),
+      onOverlaysCleared: (ids) => sinkHolder.sink.onOverlaysCleared?.(ids),
+      onBootstrapProgress: (p) => sinkHolder.sink.onBootstrapProgress?.(p),
+    }
+  );
   const loop = new SeatLoop(inProcessSeatChannel(core), {
     vaultId: "vault-a",
     dbName: options.path,
@@ -97,6 +108,9 @@ function nodeNativeSeat(options: NodeSeatOptions): NodeNativeSeat & {
   let rowKeys: SeatRowKeys | undefined;
   return {
     driver: () => drivers.at(-1)!,
+    attachSink: (sink: SeatWorkerSink): void => {
+      sinkHolder.sink = sink;
+    },
     outbox: (): IntentRecordStore => loop.outbox(),
     // The fixture's seat has no door behind it, but it is still the port the
     // product rebases, so it carries the same call rather than a narrower one.

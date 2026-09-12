@@ -26,12 +26,19 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "../intent-record-store.js";
+import { namedRowIds } from "../intent-revision.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "../types.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { createSeatOutbox } from "./outbox.js";
 
+/** The content this intent names, as the column stores it. */
+function needsContentJson(record: ReplicaIntent): string | null {
+  const named = namedRowIds(record.input ?? null);
+  return named.length > 0 ? JSON.stringify([...new Set(named)]) : null;
+}
+
 /** Journal cap: `listSettled` cannot read past it. Same bound as its siblings. */
-const SETTLED_JOURNAL_LIMIT = 5_000;
+export const SETTLED_JOURNAL_LIMIT = 5_000;
 
 const SETTLED_DDL = `
 CREATE TABLE IF NOT EXISTS seat_outbox_settled (
@@ -60,6 +67,24 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+/**
+ * A PATCH CLONE THAT KEEPS ITS ERASURES (#1014, R2).
+ *
+ * `JSON.stringify` drops a key whose value is `undefined`, and a patch spells
+ * a CLEAR exactly that way — `{ state: "awaiting-change", reason: undefined }`
+ * is how a successful send retires the `fetch failed …` line an earlier
+ * attempt wrote. Through a plain JSON clone the key vanished and the stale
+ * reason survived under an intent that had since executed, which is what the
+ * member read. The in-memory store never had the bug (`structuredClone` keeps
+ * the key), so this also makes the two stores answer the same.
+ */
+function clonePatch(patch: Partial<ReplicaIntent>): Partial<ReplicaIntent> {
+  const cloned = clone(patch) as Record<string, unknown>;
+  for (const key of Object.keys(patch))
+    if (!(key in cloned)) cloned[key] = undefined;
+  return cloned as Partial<ReplicaIntent>;
+}
+
 export class SeatIntentStore implements IntentRecordStore {
   /**
    * The seat has the cursor (#996, R24): `clearSeatOverlaysAtCommit` runs
@@ -78,25 +103,61 @@ export class SeatIntentStore implements IntentRecordStore {
     return new SeatIntentStore(driver);
   }
 
+  /**
+   * Queue an intent.
+   *
+   * READ-MODIFY-WRITE INSIDE ONE TRANSACTION (#1014, C8). The read that
+   * decides "is this id already here" and the `MAX(created_order) + 1` that
+   * decides where it goes were both taken OUTSIDE any transaction, so a second
+   * writer over the same file — the background pass's own store, which is what
+   * C8 is about — could interleave between them and mint two intents with the
+   * same `created_order`. R23 makes that order the order the member's work
+   * drains in, so a collision is not a cosmetic tie: it is two writes swapping
+   * places. `BEGIN IMMEDIATE` takes the write lock before the read.
+   */
   add(intent: NewStoredIntent): Promise<ReplicaIntent> {
-    const existing = this.#read(intent.intentId);
-    if (existing) {
-      if (existing.payloadHash !== intent.payloadHash) {
-        return Promise.reject(
-          new ReplicaProtocolError(
+    return this.#inTransaction(() => {
+      const existing = this.#read(intent.intentId);
+      if (existing) {
+        if (existing.payloadHash !== intent.payloadHash) {
+          throw new ReplicaProtocolError(
             `Intent id ${intent.intentId} was reused with another payload`
-          )
-        );
+          );
+        }
+        return existing;
       }
-      return Promise.resolve(existing);
+      const next =
+        this.driver.all<{ next: number }>(
+          `SELECT COALESCE(MAX(created_order), 0) + 1 AS next FROM seat_outbox`
+        )[0]?.next ?? 1;
+      const record: ReplicaIntent = { ...clone(intent), createdOrder: next };
+      this.#write(record, "insert");
+      return clone(record);
+    });
+  }
+
+  /**
+   * One write lock around a read-modify-write, and the answer it produced.
+   *
+   * `BEGIN IMMEDIATE` rather than `BEGIN`: a deferred transaction takes the
+   * read lock first and upgrades on the first write, which is exactly the
+   * shape that returns SQLITE_BUSY under two writers instead of serialising
+   * them. Rejects rather than throws synchronously, because every caller of
+   * this store awaits.
+   */
+  #inTransaction<T>(work: () => T): Promise<T> {
+    this.driver.exec("BEGIN IMMEDIATE");
+    let answer: T;
+    try {
+      answer = work();
+      this.driver.exec("COMMIT");
+    } catch (error) {
+      this.driver.exec("ROLLBACK");
+      return Promise.reject(
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
-    const next =
-      this.driver.all<{ next: number }>(
-        `SELECT COALESCE(MAX(created_order), 0) + 1 AS next FROM seat_outbox`
-      )[0]?.next ?? 1;
-    const record: ReplicaIntent = { ...clone(intent), createdOrder: next };
-    this.#write(record, "insert");
-    return Promise.resolve(clone(record));
+    return Promise.resolve(answer);
   }
 
   get(intentId: string): Promise<ReplicaIntent | undefined> {
@@ -141,16 +202,21 @@ export class SeatIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const existing = this.#require(intentId, allowed, "transition");
-    if (existing instanceof Error) return Promise.reject(existing);
-    const updated: ReplicaIntent = {
-      ...existing,
-      ...clone(patch),
-      intentId,
-      createdOrder: existing.createdOrder,
-    };
-    this.#write(updated, "update");
-    return Promise.resolve(clone(updated));
+    // The state check and the write it authorises are one transaction
+    // (#1014, C8): between them, another writer could have settled this very
+    // intent, and the update would then resurrect a row the journal says went.
+    return this.#inTransaction(() => {
+      const existing = this.#require(intentId, allowed, "transition");
+      if (existing instanceof Error) throw existing;
+      const updated: ReplicaIntent = {
+        ...existing,
+        ...clonePatch(patch),
+        intentId,
+        createdOrder: existing.createdOrder,
+      };
+      this.#write(updated, "update");
+      return clone(updated);
+    });
   }
 
   /**
@@ -166,17 +232,19 @@ export class SeatIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const existing = this.#require(intentId, allowed, "settle");
-    if (existing instanceof Error) return Promise.reject(existing);
-    const settled: ReplicaIntent = {
-      ...existing,
-      ...clone(patch),
-      intentId,
-      createdOrder: existing.createdOrder,
-    };
-    const outcome = buildIntentOutcome(settled);
-    this.driver.exec("BEGIN IMMEDIATE");
-    try {
+    // THE READ IS INSIDE THE TRANSACTION TOO (#1014, C8). It used to sit in
+    // front of the `BEGIN IMMEDIATE` below, so the state it checked could have
+    // changed by the time the delete ran.
+    return this.#inTransaction(() => {
+      const existing = this.#require(intentId, allowed, "settle");
+      if (existing instanceof Error) throw existing;
+      const settled: ReplicaIntent = {
+        ...existing,
+        ...clonePatch(patch),
+        intentId,
+        createdOrder: existing.createdOrder,
+      };
+      const outcome = buildIntentOutcome(settled);
       this.driver.run(`DELETE FROM seat_outbox WHERE intent_id = ?`, [
         intentId,
       ]);
@@ -193,12 +261,8 @@ export class SeatIntentStore implements IntentRecordStore {
         ]
       );
       this.#pruneJournal();
-      this.driver.exec("COMMIT");
-    } catch (error) {
-      this.driver.exec("ROLLBACK");
-      throw error;
-    }
-    return Promise.resolve(clone(settled));
+      return clone(settled);
+    });
   }
 
   listSettled(limit = 500): Promise<IntentOutcome[]> {
@@ -280,7 +344,8 @@ export class SeatIntentStore implements IntentRecordStore {
     this.driver.run(
       `UPDATE seat_outbox SET state = ?, attempts = ?, depends_on_json = ?,
               base_versions_json = ?, optimistic_json = ?, commit_seq = ?,
-              waiting_on_json = ?, updated_at = ?, record_json = ?
+              waiting_on_json = ?, needs_blobs_json = ?, updated_at = ?,
+              record_json = ?
         WHERE intent_id = ?`,
       [
         record.state,
@@ -292,6 +357,9 @@ export class SeatIntentStore implements IntentRecordStore {
         record.optimistic.length > 0 ? JSON.stringify(record.optimistic) : null,
         record.commitSeq ?? null,
         record.waitingOn ? JSON.stringify(record.waitingOn) : null,
+        // A REVISION CHANGES WHAT IS NEEDED. A queued write the member edits
+        // again is replaced in place, and its content references move with it.
+        needsContentJson(record),
         new Date().toISOString(),
         json,
         record.intentId,
@@ -317,7 +385,14 @@ export class SeatIntentStore implements IntentRecordStore {
       record.optimistic.length > 0 ? JSON.stringify(record.optimistic) : null,
       record.commitSeq ?? null,
       record.waitingOn ? JSON.stringify(record.waitingOn) : null,
-      null,
+      // WHAT THIS INTENT STILL NEEDS ON THIS DEVICE (#1014, C6). It used to
+      // be a literal `null` here, so `contentPendingIntentsNeed()` answered
+      // `[]` for every seat that ever existed and R25's "an intent's bytes may
+      // not be evicted" had no data behind it at all. The reading is
+      // `namedRowIds` — the SAME one the chain derives its edges from and the
+      // phone's byte protection publishes — so the durable column and the live
+      // answer cannot disagree.
+      needsContentJson(record),
       record.enqueuedAt ?? now,
       now,
       json,
@@ -325,13 +400,7 @@ export class SeatIntentStore implements IntentRecordStore {
   }
 
   #pruneJournal(): void {
-    this.driver.run(
-      `DELETE FROM seat_outbox_settled WHERE intent_id IN (
-         SELECT intent_id FROM seat_outbox_settled
-          ORDER BY settled_at DESC, intent_id DESC
-          LIMIT -1 OFFSET ?)`,
-      [SETTLED_JOURNAL_LIMIT]
-    );
+    pruneSettledJournal(this.driver);
   }
 }
 
@@ -379,19 +448,60 @@ export function clearSeatOverlaysAtCommit(
     );
     cleared.push(intent.intentId);
   }
+  // AND IT PRUNES, LIKE `settle()` DOES (#1014, C9). This is the path that
+  // settles almost everything on a seat whose outbox shares the file — the
+  // async `settle()` is the exception — so a journal trimmed only there is a
+  // journal that is not trimmed. `SETTLED_JOURNAL_LIMIT` is the same bound
+  // both paths keep, and this runs in the caller's transaction like the rest.
+  if (cleared.length > 0) pruneSettledJournal(driver);
   return cleared;
 }
 
+/** The settled journal's bound, applied by both settling paths. */
+function pruneSettledJournal(driver: SeatSqliteDriver): void {
+  driver.run(
+    `DELETE FROM seat_outbox_settled WHERE intent_id IN (
+       SELECT intent_id FROM seat_outbox_settled
+        ORDER BY settled_at DESC, intent_id DESC
+        LIMIT -1 OFFSET ?)`,
+    [SETTLED_JOURNAL_LIMIT]
+  );
+}
+
 /**
- * The hook to hand `applySeatLogPage`. A batch of commits clears whatever each
- * one has earned, in the transaction that advanced the cursor past it.
+ * The hooks to hand `applySeatLogPage`. A batch of commits clears whatever
+ * each one has earned, in the transaction that advanced the cursor past it.
+ *
+ * TWO HALVES, AND THE SPLIT IS THE POINT (#1014, C10). The clearing is a
+ * WRITE and belongs inside the transaction; the notification is an
+ * ANNOUNCEMENT and does not. Firing `onCleared` from inside meant a shell
+ * listener that threw rolled back an applied log page, and that a
+ * not-yet-durable fact — "your write landed" — was published before COMMIT.
+ * So `inTransaction` collects and `afterCommit` tells.
  */
+export interface SeatOverlayClearing {
+  /** Pass as `onCommitInTransaction`. */
+  readonly inTransaction: (commitSeq: number) => void;
+  /** Pass as `afterCommit`. */
+  readonly afterCommit: (commitSeq: number) => void;
+}
+
 export function seatOverlayClearingHook(
   driver: SeatSqliteDriver,
   onCleared?: (intentIds: readonly string[]) => void
-): (commitSeq: number) => void {
-  return (commitSeq) => {
-    const cleared = clearSeatOverlaysAtCommit(driver, commitSeq);
-    if (cleared.length > 0) onCleared?.(cleared);
+): SeatOverlayClearing {
+  let pending: string[] = [];
+  return {
+    inTransaction: (commitSeq) => {
+      pending = [...pending, ...clearSeatOverlaysAtCommit(driver, commitSeq)];
+    },
+    afterCommit: () => {
+      if (pending.length === 0) return;
+      const cleared = pending;
+      // Emptied BEFORE the call: a listener that throws must not leave the
+      // same ids queued to be announced again by the next commit.
+      pending = [];
+      onCleared?.(cleared);
+    },
   };
 }

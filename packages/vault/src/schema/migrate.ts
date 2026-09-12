@@ -52,7 +52,7 @@ import {
   ENTITY_PURGE_REVOKE_DDL,
   refreshEntityTriggers,
 } from "./entity.js";
-import { APP_EXT_DDL } from "./ext.js";
+import { APP_EXT_DDL, refreshExtRowVersions } from "./ext.js";
 import { FTS_DDL, assertFtsSpecsRegistered } from "./fts.js";
 import { AUTOMATION_TRIGGER_DEAD_LETTER_DDL, LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
@@ -263,6 +263,9 @@ export function migrateVault(db: DatabaseSync): void {
   // — it returns after two counts when the file already agrees with the
   // registry.
   refreshEntityTriggers(db);
+  // The ext band's physicals are not stated DDL, so the replication guard
+  // reaches them here rather than on a rung (#1014, G8).
+  refreshExtRowVersions(db);
 }
 
 function currentVersion(db: DatabaseSync): number {

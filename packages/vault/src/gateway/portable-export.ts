@@ -117,6 +117,18 @@
 // carrying the source vault's would tell a new vault's seats they are current
 // when they hold nothing.
 
+// Schema/export audit #1014 (G8, the replication guard over the ext band):
+// NOTHING enters or leaves the walk. Every ext physical gains a `row_version`
+// column and the trigger that bumps it, so two members editing one row of a
+// third-party app's own table conflict instead of overwriting each other. The
+// column rides an already-walked table's `SELECT *` and needs no registration;
+// the trigger is DDL, which `extTableDdl` replants in a restored file exactly
+// as it plants every index, so carrying it would be a second copy of a stated
+// fact. `refreshExtRowVersions` is the same shape for a file that already has
+// ext physicals: an ALTER on open, not a bundle entry. `updated-at.ts` gains
+// `REPLICA_ROW_VERSION_GAP`, which is a build-time register read by a canary
+// test and never by the walk.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

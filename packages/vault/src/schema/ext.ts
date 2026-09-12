@@ -1,3 +1,5 @@
+import type { DatabaseSync } from "node:sqlite";
+
 import {
   ROW_VERSION_COLUMN,
   UPDATED_AT_DEFAULT,
@@ -69,6 +71,9 @@ export interface ExtTableSpec {
 /** Which copy of the band: `live` is the app's data; `draft` is the builder
  * session's scratch copy (seeded from live, dropped or promoted on publish). */
 export type ExtBand = "live" | "draft";
+
+/** Column names an ext spec may not declare — see `extTableDdl` (#1014, G8). */
+export const RESERVED_EXT_COLUMNS = new Set(["row_version"]);
 
 const NAME_RE = /^[a-z][a-z0-9_]{0,47}$/u;
 const APP_ID_RE = /^[a-z][a-z0-9-]{0,63}$/u;
@@ -169,6 +174,14 @@ export function validateExtSpecs(
         );
       }
       colNames.add(col.name);
+      // `row_version` IS THE PLATFORM'S (#1014, G8). Every ext physical
+      // carries one and a trigger that bumps it; an app column of the same
+      // name would shadow the replication guard with a value the app writes.
+      if (RESERVED_EXT_COLUMNS.has(col.name)) {
+        throw new ExtSpecError(
+          `table ${spec.name}.${col.name}: "${col.name}" is reserved by the replication guard`
+        );
+      }
       if (!["text", "integer", "real", "blob"].includes(col.type)) {
         throw new ExtSpecError(
           `table ${spec.name}.${col.name}: unknown type "${col.type}"`
@@ -331,7 +344,25 @@ export function extIndexName(physical: string, idx: ExtIndexSpec): string {
   return `idx_${physical}_${idx.columns.join("_")}${idx.unique ? "_uq" : ""}`;
 }
 
-/** CREATE TABLE + indexes for one spec in one band. */
+/**
+ * THE COLUMN AND THE TRIGGER AN EXT TABLE COULD NOT SKIP (#1014, G8).
+ *
+ * An ext physical is a REPLICATED table: it rides the change log, it lands in
+ * a seat's copy of `vault.db`, and two members can edit the same row of it
+ * from two phones. It carried no `row_version` and no touch trigger, so the
+ * seat had no version to state as a base and the gateway's `currentRowVersion`
+ * fell back to `MAX(seq) FROM replica_change` — a transport position, in units
+ * the seat does not speak. Last writer won, silently, on every third-party
+ * app's own data. `access_app_ext`, the registry beside it, has carried both
+ * since #996; the tables it registers did not.
+ *
+ * NOT A DECLARED COLUMN. `row_version` is the platform's, not the app's:
+ * `validateExtSpecs` refuses a spec that names it, so an app cannot shadow the
+ * guard with a column of its own, and `columnDdl` never sees it.
+ */
+const EXT_ROW_VERSION_DDL = `  ${ROW_VERSION_COLUMN}`;
+
+/** CREATE TABLE + indexes + the replication guard for one spec in one band. */
 export function extTableDdl(
   physical: string,
   spec: ExtTableSpec,
@@ -343,9 +374,30 @@ export function extTableDdl(
       `CREATE ${i.unique ? "UNIQUE " : ""}INDEX "${extIndexName(physical, i)}" ON "${physical}" (${i.columns.map((c) => `"${c}"`).join(", ")});`
   );
   return [
-    `CREATE TABLE "${physical}" (\n  ${cols}\n) STRICT;`,
+    `CREATE TABLE "${physical}" (\n  ${cols},\n${EXT_ROW_VERSION_DDL}\n) STRICT;`,
+    extRowVersionTrigger(physical, extPk(spec)),
     ...indexes,
   ].join("\n");
+}
+
+/**
+ * The touch trigger for one ext physical — the same one every canonical table
+ * carries, over the key the spec declares. Separate from `extTableDdl` because
+ * the ALTER path rebuilds the table and has to re-plant it, and because a file
+ * whose ext tables predate #1014 gains it without a rebuild.
+ *
+ * `updated_at` is NOT part of the ext contract (an app declares its own
+ * timestamps or none), so this is the version half of `touchUpdatedAt` alone.
+ */
+export function extRowVersionTrigger(physical: string, pk: string): string {
+  return `
+CREATE TRIGGER IF NOT EXISTS "${physical}_touch_row_version"
+AFTER UPDATE ON "${physical}"
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE "${physical}" SET row_version = OLD.row_version + 1
+   WHERE "${pk}" = NEW."${pk}";
+END;`;
 }
 
 /**
@@ -395,6 +447,42 @@ export function dropExtFtsDdl(physical: string): string {
     `DROP TRIGGER IF EXISTS ${fts}_ad;`,
     `DROP TABLE IF EXISTS ${fts};`,
   ].join("\n");
+}
+
+/**
+ * Plant `row_version` and its trigger on every ext physical a file already has
+ * (#1014, G8).
+ *
+ * A JS pass rather than a migration rung because ext physicals are not stated
+ * DDL: their names come from `access_app_ext`, which only the file knows. Runs
+ * on open beside `refreshEntityTriggers`, for the same reason that one does —
+ * a shape the platform owns has to reach an existing file without an app
+ * re-publishing its band.
+ *
+ * IDEMPOTENT AND CHEAP: one `PRAGMA table_info` per registered table, and
+ * nothing at all when the registry is empty, which is every vault with no
+ * third-party app installed.
+ */
+export function refreshExtRowVersions(vault: DatabaseSync): void {
+  const rows = vault.prepare(`SELECT physical FROM access_app_ext`).all() as {
+    physical: string;
+  }[];
+  for (const row of rows) {
+    const columns = vault
+      .prepare(`PRAGMA table_info("${row.physical}")`)
+      .all() as { name: string; pk: number }[];
+    // A registry row whose physical is gone (a half-applied drop) has nothing
+    // to alter; the registry sweep owns that, not this.
+    if (columns.length === 0) continue;
+    const pk = columns.find((column) => column.pk > 0)?.name;
+    if (!pk) continue;
+    if (!columns.some((column) => column.name === "row_version")) {
+      vault.exec(
+        `ALTER TABLE "${row.physical}" ADD COLUMN ${ROW_VERSION_COLUMN}`
+      );
+    }
+    vault.exec(extRowVersionTrigger(row.physical, pk));
+  }
 }
 
 /**

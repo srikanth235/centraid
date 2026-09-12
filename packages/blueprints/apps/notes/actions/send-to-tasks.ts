@@ -40,6 +40,12 @@ export default async function sendToTasks({ body, ctx }: HandlerArgs) {
       const exact = String(input.exact ?? "");
       await ctx.vault
         .invoke({
+          // #1014 B4: this call is the SECOND invoke on the happy path and no
+          // invoke at all when the task did not land or there is no note — so
+          // its ordinal is not a property of the call. A replay that took the
+          // other branch would key this one as the first, and match the task's
+          // own retained receipt. The name is stable; the ordinal is not.
+          invokeKey: "notes.send-to-tasks.backlink",
           command: "core.link_entities",
           input: {
             from_type: "schedule.task",

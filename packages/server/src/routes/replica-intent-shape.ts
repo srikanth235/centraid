@@ -14,6 +14,8 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   currentReplicaLogState,
   operationReadSet,
+  producedRowKey,
+  replicaPredecessorRowVersions,
   replicaRowIdsOf,
   resolveEntity,
 } from "@centraid/vault";
@@ -137,10 +139,32 @@ export function parseBaseVersions(value: unknown): ReplicaIntentBaseVersion[] {
     };
   });
   return parsed.sort((left, right) =>
-    `${left.entity}\u0000${left.rowId}\u0000${left.shapeId ?? ""}`.localeCompare(
-      `${right.entity}\u0000${right.rowId}\u0000${right.shapeId ?? ""}`
-    )
+    compareBaseVersionKeys(baseVersionSortKey(left), baseVersionSortKey(right))
   );
+}
+
+function baseVersionSortKey(value: {
+  entity: string;
+  rowId: string;
+  shapeId?: string;
+}): string {
+  return `${value.entity}\u0000${value.rowId}\u0000${value.shapeId ?? ""}`;
+}
+
+/**
+ * CODE POINTS, NEVER A LOCALE (#1014, C20).
+ *
+ * The hash covers `baseVersions` IN THIS ORDER, and the seat computes its half
+ * in `packages/client/src/replica/payload-hash.ts`. Both used to sort with
+ * `localeCompare`, which is the runtime's ICU collation — Hermes, V8 and node
+ * can order the same two keys differently, and a disagreement here is a
+ * `replica_intent_hash_mismatch` on a perfectly well-formed write. `<`/`>` on
+ * strings compares UTF-16 code units, which is a property of the string and
+ * not of the machine; the client-side twin carries the same comment.
+ */
+function compareBaseVersionKeys(left: string, right: string): number {
+  if (left < right) return -1;
+  return left > right ? 1 : 0;
 }
 
 /** A row the operation declared it read that the intent never referenced. */
@@ -217,7 +241,16 @@ export function hasCanonicalCommit(
 export function currentConflict(
   vault: DatabaseSync,
   access: ReplicaShapeAccess,
-  baseVersions: readonly ReplicaIntentBaseVersion[]
+  baseVersions: readonly ReplicaIntentBaseVersion[],
+  /**
+   * The versions this intent's own predecessors produced (#1014, R18), keyed
+   * by `producedRowKey`. A chained write states the version its seat OBSERVED
+   * before the chain ran; by the time it executes, its parent has bumped the
+   * row, so the number to check against is the parent's — see
+   * `rebaseChainedBaseVersions`. Absent for an unchained intent, where the
+   * seat's own number is the only one there is.
+   */
+  producedVersions?: ReadonlyMap<string, number>
 ): ReplicaIntentConflict | undefined {
   if (baseVersions.length === 0) return undefined;
   const epoch = currentReplicaLogState(vault).epoch;
@@ -289,9 +322,64 @@ export function currentConflict(
       base.entity,
       canonicalRowId
     );
-    if (actualVersion !== base.version) {
+    // THE PARENT'S NUMBER WHEN THERE IS ONE (#1014, R18). `expectedVersion`
+    // is reported as the number this check actually used, because that is
+    // what the seat has to reconcile against — reporting the pre-chain one
+    // would tell the member their edit was against a version the gateway
+    // never compared.
+    const expectedVersion = rebasedVersion(
+      vault,
+      base.entity,
+      canonicalRowId,
+      base.version,
+      producedVersions
+    );
+    if (actualVersion !== expectedVersion) {
       return {
         ...(resolvedShapeId === undefined ? {} : { shapeId: resolvedShapeId }),
+        entity: base.entity,
+        rowId: base.rowId,
+        expectedVersion,
+        actualVersion,
+      };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The conflict check for a base version that is ALREADY the origin's own
+ * (#1014, V7).
+ *
+ * A member's signed envelope carries `entity`/`rowId` translated out of the
+ * subscription lineage — `forwardOverPeer` states the ORIGIN's ids, because an
+ * intent naming the audience's copy would address a row the origin does not
+ * have. So there is nothing to resolve through a shape here, and resolving
+ * anyway would be worse than nothing: the owner's own shapes are what
+ * `buildReplicaShapes` returns on the origin, and one of them using a
+ * synthetic primary key for this entity would send a perfectly good canonical
+ * id down the opaque-hash path and report a conflict that is not there.
+ *
+ * The signed member intent had NO conflict check at all: `baseVersions` was
+ * parsed and never used, so two members editing one shared album was last
+ * writer wins, with the loser told nothing.
+ */
+export function originConflict(
+  vault: DatabaseSync,
+  baseVersions: readonly ReplicaIntentBaseVersion[]
+): ReplicaIntentConflict | undefined {
+  if (baseVersions.length === 0) return undefined;
+  const epoch = currentReplicaLogState(vault).epoch;
+  for (const base of baseVersions) {
+    const actualVersion = currentRowVersion(
+      vault,
+      epoch,
+      base.entity,
+      base.rowId
+    );
+    if (actualVersion !== base.version) {
+      return {
+        ...(base.shapeId === undefined ? {} : { shapeId: base.shapeId }),
         entity: base.entity,
         rowId: base.rowId,
         expectedVersion: base.version,
@@ -300,6 +388,37 @@ export function currentConflict(
     }
   }
   return undefined;
+}
+
+/**
+ * The versions this intent's predecessors produced, ready for `currentConflict`.
+ *
+ * A thin, named wrapper so the two doors — the device door and the peer door —
+ * arm the same rebase with one call each rather than each assembling it.
+ */
+export function rebaseChainedBaseVersions(
+  vault: DatabaseSync,
+  dependsOn: readonly string[]
+): ReadonlyMap<string, number> | undefined {
+  if (dependsOn.length === 0) return undefined;
+  const produced = replicaPredecessorRowVersions(vault, dependsOn);
+  return produced.size > 0 ? produced : undefined;
+}
+
+function rebasedVersion(
+  vault: DatabaseSync,
+  entity: string,
+  canonicalRowId: string,
+  observed: number,
+  producedVersions: ReadonlyMap<string, number> | undefined
+): number {
+  if (!producedVersions) return observed;
+  const ref = resolveEntity(entity, vault);
+  if (!ref) return observed;
+  return (
+    producedVersions.get(producedRowKey(ref.physical, canonicalRowId)) ??
+    observed
+  );
 }
 
 /**

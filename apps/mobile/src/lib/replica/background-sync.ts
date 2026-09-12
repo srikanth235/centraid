@@ -20,8 +20,9 @@ import { NativeVaultChangeFeed } from "./native-change-feed";
 import { nativeReplicaDigest } from "./native-hash";
 import { NativeSeat } from "./native-seat";
 import type { NativeSeatPort } from "./native-seat";
-import { createNativeReplicaSession } from "./native-session";
+import { createNativeReplicaSession } from "./native-session-open";
 import { flushNativeTraces } from "./native-trace";
+import { SeatLeaseHeldError } from "./seat-lease-held-error";
 
 const REPLICA_BACKGROUND_TASK = "centraid-replica-background-sync";
 const REPLICA_PUSH_TASK = "centraid-replica-push-wake";
@@ -71,6 +72,12 @@ export interface BackgroundSyncOutcome {
   scopes: number;
   /** Scopes whose pull, intent flush and notification sync all completed. */
   synced: number;
+  /**
+   * Scopes the FOREGROUND holds open, left alone (#1014, P1). Not a failure:
+   * a live mount is already doing this pass's work, and a headless second
+   * handle over its file is the bug rather than the fix.
+   */
+  skippedLive: number;
   /** Per-scope failures; one bad scope never cancels the others. */
   failures: Array<{ vaultId: string; reason: string }>;
   /** A stage was skipped because the pass ran out of budget. */
@@ -132,6 +139,7 @@ export async function runBackgroundReplicaSync(
   const outcome: BackgroundSyncOutcome = {
     scopes: 0,
     synced: 0,
+    skippedLive: 0,
     failures: [],
     timedOut: false,
   };
@@ -200,6 +208,13 @@ export async function runBackgroundReplicaSync(
             headers: authHeader(),
             storageLocation,
             digest: nativeReplicaDigest,
+            // ITS OWN CONNECTION, AND ONLY IF NOBODY ELSE HOLDS THE FILE
+            // (#1014, P1/C8). expo-sqlite caches by database name, so this
+            // used to be the FOREGROUND's handle — and the `finally` below
+            // closed it, leaving every read, write and `sync()` on resume
+            // throwing against a phone that still looked mounted.
+            owner: "background",
+            useNewConnection: true,
           });
           feed = new NativeVaultChangeFeed({
             gatewayAuth: auth,
@@ -230,6 +245,13 @@ export async function runBackgroundReplicaSync(
           await syncNotifications(baseUrl, scope.vaultId);
           outcome.synced += 1;
         } catch (error) {
+          if (error instanceof SeatLeaseHeldError) {
+            // NOT A FAILURE. The foreground has this vault open and is doing
+            // the same work; a headless pass over a live seat is the bug, not
+            // the fix (#1014, P1).
+            outcome.skippedLive += 1;
+            return;
+          }
           outcome.failures.push({
             vaultId: scope.vaultId,
             reason: reason(error),

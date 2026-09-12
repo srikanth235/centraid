@@ -880,6 +880,33 @@ export function lowestSeatCursor(
   return row?.seq ?? undefined;
 }
 
+/**
+ * The lowest COMMIT position any live seat still needs — the same hold as
+ * {@link lowestSeatCursor}, in the units an intent outcome speaks (#1014, G17).
+ *
+ * A seat cursor is a `replica_log.seq`; an outcome's `commit_seq` is the
+ * transaction that seq belongs to. Comparing one against the other is the R6
+ * mistake in miniature — 432 against 2 — so the translation happens here,
+ * once, rather than at the caller. `undefined` when no live seat holds a
+ * position, which is what "nothing is pinning" means.
+ */
+export function lowestSeatCommitSeq(
+  vault: DatabaseSync,
+  options: LowestSeatCursorOptions = {}
+): number | undefined {
+  const seq = lowestSeatCursor(vault, options);
+  if (seq === undefined) return undefined;
+  const epoch = meta(vault).epoch;
+  const row = vault
+    .prepare(
+      `SELECT commit_seq FROM replica_log
+        WHERE epoch = ? AND seq <= ? ORDER BY seq DESC LIMIT 1`
+    )
+    .get(epoch, seq) as { commit_seq: number } | undefined;
+  // A cursor below every row this epoch holds pins from the very beginning.
+  return row?.commit_seq ?? 0;
+}
+
 /** The highest seq that ends a whole commit at or below `through`. */
 function commitEdgeAtOrBelow(
   vault: DatabaseSync,

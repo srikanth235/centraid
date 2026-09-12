@@ -66,8 +66,26 @@ describe("a seat's change notice, as invalidations", () => {
       "core.content_item",
       "media.asset_phash",
       "tally.expense",
+      // The ext band is three parts (#1014, G8): `ext.gym.workout` composes to
+      // `ext_gym_workout`, and a screen watching a third-party app's own rows
+      // has to be told when they move.
+      "ext.gym.workout",
+      "ext.gym.work_log",
+      "extdraft.gym.workout",
     ])
       expect(vaultEntityOfTable(vaultPhysicalTable(entity))).toBe(entity);
+  });
+
+  it("composes an ext physical the way the vault does", () => {
+    // `schema/ext.ts#extPhysical`: the band, then the app id with its hyphens
+    // normalised, then the table. Replacing only the first dot named a table
+    // that does not exist, and the seat's base-version read swallowed the
+    // failure — so an ext row's write carried no precondition at all.
+    expect(vaultPhysicalTable("ext.gym.workout")).toBe("ext_gym_workout");
+    expect(vaultPhysicalTable("ext.my-app.workout")).toBe("ext_my_app_workout");
+    expect(vaultPhysicalTable("extdraft.gym.workout")).toBe(
+      "extdraft_gym_workout"
+    );
   });
 
   it("a purge names no entity, because none of them survived", () => {

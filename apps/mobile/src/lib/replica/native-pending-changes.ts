@@ -28,6 +28,8 @@ import type {
   ReplicaIntent,
 } from "@centraid/client/replica/native";
 
+import { publishPendingContentRefs } from "./pending-content-refs";
+
 export interface NativePendingChange {
   intentId: string;
   /** The intent's own state IS the verdict (#922 G5). */
@@ -93,4 +95,25 @@ function row(
       ? { heldBadge: badges.get(intent.intentId)! }
       : {}),
   };
+}
+
+/**
+ * Tell the byte store which content ids this queue still needs (R25).
+ *
+ * Pushed rather than pulled: the eviction sweep is synchronous and the outbox
+ * is not, so the seat publishes on every move of the queue and the sweep reads
+ * the last publication. A store that cannot be read protects nothing NEW; the
+ * previous answer stands, which over-keeps rather than over-evicts.
+ */
+export async function publishQueueContentRefs(
+  vaultId: string,
+  queue: IntentQueue
+): Promise<void> {
+  try {
+    // PER VAULT (#1014, C7). A phone with two vaults mounted had one global
+    // answer, so whichever seat published last spoke for both.
+    publishPendingContentRefs(vaultId, await queue.pending());
+  } catch {
+    /* The previous publication stands. */
+  }
 }

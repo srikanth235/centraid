@@ -53,6 +53,9 @@ describe("gateway-db scenarios", () => {
       "push_registrations",
       "recovery_kit",
       "share_access_receipts",
+      // Placements in flight (#1014, V3): recorded before the first vault
+      // write and dropped when the receipt beside it is durable.
+      "share_placement_attempts",
       "storage_connections",
       "storage_limits",
       "tickets",

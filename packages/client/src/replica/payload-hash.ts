@@ -55,10 +55,43 @@ function normalizeBaseVersions(
       version: value.version,
     }))
     .sort((left, right) =>
-      `${left.entity}\u0000${left.rowId}\u0000${left.shapeId ?? ""}`.localeCompare(
-        `${right.entity}\u0000${right.rowId}\u0000${right.shapeId ?? ""}`
+      compareBaseVersionKeys(
+        baseVersionSortKey(left),
+        baseVersionSortKey(right)
       )
     );
+}
+
+/**
+ * The sort key of one base version: entity, row id, shape id, NUL-joined.
+ *
+ * Exported so the gateway's `parseBaseVersions` sorts by the same bytes — the
+ * two sides hash the SAME array or the hash check refuses every intent.
+ */
+export function baseVersionSortKey(value: {
+  entity: string;
+  rowId: string;
+  shapeId?: string;
+}): string {
+  return `${value.entity}\u0000${value.rowId}\u0000${value.shapeId ?? ""}`;
+}
+
+/**
+ * CODE POINTS, NEVER A LOCALE (#1014, C20).
+ *
+ * This sorted with `localeCompare`, against this file's own contract that the
+ * canonical form is identical on every platform. `localeCompare` is the ICU
+ * collation of whatever locale the runtime happens to be in: Hermes on the
+ * phone, V8 on the desktop and node on the gateway can order the same two keys
+ * differently, and then the seat's `payloadHash` and the gateway's
+ * `expectedPayloadHash` disagree — a `replica_intent_hash_mismatch` on a write
+ * that is perfectly well formed, or `seat-intent-store` calling the retry a
+ * reuse with another payload. `<`/`>` on strings compares UTF-16 code units,
+ * which is a property of the STRING and not of the machine.
+ */
+export function compareBaseVersionKeys(left: string, right: string): number {
+  if (left < right) return -1;
+  return left > right ? 1 : 0;
 }
 
 export function canonicalJson(value: ReplicaValue): string {
