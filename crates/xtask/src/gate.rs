@@ -314,8 +314,18 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool) -> Result<bool> {
         ok = false;
     }
 
-    if failed.is_empty() {
+    // The last line is the verdict, and the verdict includes the budget. Before
+    // this it read `PASS` off the step list alone, so a run whose steps were all
+    // green and whose total blew the budget printed the budget failure and then
+    // `gate local: PASS` — with the process still exiting non-zero. Two
+    // contradicting answers in one output is worse than either.
+    if ok {
         println!("\ngate {}: PASS", profile.name());
+    } else if failed.is_empty() {
+        println!(
+            "\ngate {}: FAIL — over budget (every step was green; see the BUDGET line above)",
+            profile.name()
+        );
     } else {
         println!("\ngate {}: FAIL — {}", profile.name(), failed.join(", "));
         for (name, _, outcome) in &results {
