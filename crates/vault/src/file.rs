@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use crate::clock::{Clock, Ids, SeededIds, SystemClock};
+use crate::clock::{Clock, ClockIds, Ids, SystemClock};
 use crate::error::{Result, VaultError};
 use crate::migrations::{APPLICATION_ID, head_version};
 
@@ -56,7 +56,14 @@ impl Vault {
     /// with a different name, and the one thing a caller needs to know here is
     /// whether they just made a vault or found one.
     pub fn create(path: impl AsRef<Path>) -> Result<Self> {
-        Self::create_with(path, Box::new(SystemClock), Box::new(SeededIds::new("v1")))
+        // RANDOM BY DEFAULT, AND MINTED OFF THE CLOCK. `SeededIds` used to be
+        // the default here and its counter starts at zero per instance, so the
+        // first write after any reopen collided with the first write of the
+        // session before it — reproduced through the C ABI as
+        // `Refused(code=63, entity id is already held by another kind)`
+        // (#1020 wave 3, lane E finding 1). `SeededIds` is for the simulation
+        // and the golden fixtures, both of which inject it.
+        Self::create_with(path, Box::new(SystemClock), Box::new(ClockIds::system()))
     }
 
     /// Found a vault against an injected clock and id source.
@@ -94,7 +101,8 @@ impl Vault {
 
     /// Open an existing v1 vault, migrating it forward if it is behind.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Self::open_with(path, Box::new(SystemClock), Box::new(SeededIds::new("v1")))
+        // See `create`: a seeded default restarts its sequence on every open.
+        Self::open_with(path, Box::new(SystemClock), Box::new(ClockIds::system()))
     }
 
     /// Open against an injected clock and id source.
@@ -153,7 +161,7 @@ impl Vault {
                 path,
                 reached,
                 Box::new(SystemClock),
-                Box::new(SeededIds::new("v1")),
+                Box::new(ClockIds::system()),
             );
         }
 
@@ -251,7 +259,7 @@ impl Vault {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::clock::FixedClock;
+    use crate::clock::{FixedClock, SeededIds};
 
     fn scratch() -> PathBuf {
         centraid_ontology::golden::scratch_dir()
@@ -361,6 +369,72 @@ mod tests {
             }
             other => panic!("expected DowngradeRefused, got {:?}", other.err()),
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// THE REOPEN COLLISION (#1020 wave 3, lane E finding 1).
+    ///
+    /// `Vault::open` and `Vault::create` defaulted to `SeededIds::new("v1")`,
+    /// whose counter starts at zero per INSTANCE — so the first write after any
+    /// reopen asked for an id the first session had already used. Lane E
+    /// reproduced it from Kotlin through the real C ABI:
+    ///
+    /// ```text
+    /// Refused(code=63, detail=entity id is already held by another kind: core_party (#916))
+    /// ```
+    ///
+    /// A gateway that restarts fails its next write, which is the whole shape
+    /// of the bug: nothing is wrong with the file and nothing is wrong with the
+    /// request. Every test in this crate founded a FRESH file, so none of them
+    /// could see it.
+    #[test]
+    fn the_first_write_after_a_reopen_does_not_collide_with_the_first_session() {
+        let dir = scratch();
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let path = dir.join("vault.db");
+
+        // Session one: found the vault (two minted ids — the vault row and its
+        // owner party) and close the file.
+        let vault = Vault::create(&path).expect("a founded vault");
+        vault.found("Test", "Test Owner").expect("it founds");
+        vault.close().expect("it closes");
+
+        // Session two: the same file, a fresh source of ids. Two writes,
+        // because `found` minted two: with a per-instance counter the first
+        // reopened id is the vault row's and the second is the owner party's.
+        let vault = Vault::open(&path).expect("it reopens");
+        let now = vault.clock().now_text();
+        for label in ["after-reopen-1", "after-reopen-2"] {
+            let id = vault.ids().next();
+            vault
+                .commit(|tx| {
+                    tx.set_producer("test.reopen");
+                    tx.connection().execute(
+                        "INSERT INTO core_party
+                           (party_id, kind, display_name, created_at, updated_at)
+                         VALUES (?1, 'person', ?2, ?3, ?3)",
+                        rusqlite::params![id, label, now],
+                    )?;
+                    Ok(())
+                })
+                .unwrap_or_else(|error| {
+                    panic!("the write `{label}` after a reopen was refused: {error}")
+                });
+        }
+
+        // And the ids really are fresh rather than merely accepted.
+        let parties: i64 =
+            vault
+                .read(|connection| {
+                    Ok(connection
+                        .query_row("SELECT count(*) FROM core_party", [], |row| row.get(0))?)
+                })
+                .expect("the count reads");
+        assert_eq!(
+            parties, 3,
+            "the owner plus the two written after the reopen"
+        );
+        vault.close().expect("it closes");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
