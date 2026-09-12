@@ -433,11 +433,7 @@ fn docker(stage: &Path, data: &Path, argv: &[&str]) -> Result<(i32, String)> {
 /// because the whole wave shares one, and a smoke that packaged a stale binary
 /// from `./target` would be smoking a different commit.
 fn release_binary(root: &Path) -> Result<PathBuf> {
-    let base = match std::env::var("CARGO_TARGET_DIR") {
-        Ok(dir) if !dir.is_empty() => PathBuf::from(dir),
-        _ => root.join("target"),
-    };
-    let candidate = base.join("release/centraid");
+    let candidate = crate::target_dir(root).join("release/centraid");
     if candidate.is_file() {
         return Ok(candidate);
     }

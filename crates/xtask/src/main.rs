@@ -11,7 +11,7 @@
 //! where failure artifacts land, and the one thing this runner deliberately
 //! does NOT do (governance — it has its own workflow).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -188,6 +188,45 @@ fn repo_root() -> PathBuf {
     baked
 }
 
+/// Where a linked artifact actually lands — `CARGO_TARGET_DIR`, else
+/// `<root>/target`.
+///
+/// Resolved the way cargo itself resolves it, and for the same reason
+/// [`repo_root`] is resolved at run time: wave 3's lanes share ONE target
+/// directory because the disk does not hold four, and code that assumes
+/// `<root>/target` under a shared one reads an empty directory. Two places did.
+/// `tree_state` called a fully linked workspace **cold** — harmless on its own,
+/// except that it means the warm 120 s promise is never the number scored, and
+/// the mirror case is not harmless at all: a stale `<root>/target` left behind
+/// by an older build reads as **warm** while the tree the run actually compiles
+/// in has never been built. And `measure`'s cold keys removed `<root>/target/
+/// {debug,release}`, which under a shared directory removes nothing, so the
+/// next command timed a warm build and the number went into a down-only
+/// ledger as a first build (#1020 wave 3 lane X3).
+///
+/// A relative `CARGO_TARGET_DIR` is resolved against the directory cargo is
+/// invoked in; every caller here invokes cargo with `current_dir(root)`, so a
+/// relative value is joined onto the root.
+pub fn target_dir(root: &Path) -> PathBuf {
+    target_dir_from(std::env::var("CARGO_TARGET_DIR").ok().as_deref(), root)
+}
+
+/// [`target_dir`]'s decision, with the environment passed in so it is testable
+/// without mutating a process-wide variable other threads are reading.
+fn target_dir_from(configured: Option<&str>, root: &Path) -> PathBuf {
+    match configured.map(str::trim) {
+        Some(dir) if !dir.is_empty() => {
+            let path = PathBuf::from(dir);
+            if path.is_absolute() {
+                path
+            } else {
+                root.join(path)
+            }
+        }
+        _ => root.join("target"),
+    }
+}
+
 /// The manifest path cargo baked in, two levels up: `crates/xtask` → the root.
 fn baked_root() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -340,5 +379,39 @@ mod root_tests {
             "and it is not the path baked in when this test binary was compiled"
         );
         let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// `CARGO_TARGET_DIR` wins over `<root>/target`, absolute or relative, and
+    /// an empty or whitespace value is treated as unset — the way cargo treats
+    /// it. The case this exists for is a shared target directory: under one,
+    /// `<root>/target` is either absent (a fully built tree read as cold) or
+    /// stale (an unbuilt tree read as warm), and the second answer is the
+    /// dangerous one (#1020 wave 3 lane X3).
+    #[test]
+    fn the_target_directory_follows_cargo_target_dir_and_not_the_repository_root() {
+        let root = Path::new("/w/tree");
+        assert_eq!(
+            target_dir_from(None, root),
+            PathBuf::from("/w/tree/target"),
+            "unset means the root's own target/"
+        );
+        assert_eq!(
+            target_dir_from(Some(""), root),
+            PathBuf::from("/w/tree/target")
+        );
+        assert_eq!(
+            target_dir_from(Some("  "), root),
+            PathBuf::from("/w/tree/target")
+        );
+        assert_eq!(
+            target_dir_from(Some("/shared/cargo-target"), root),
+            PathBuf::from("/shared/cargo-target"),
+            "an absolute value is the answer, whatever the root is"
+        );
+        assert_eq!(
+            target_dir_from(Some("../shared"), root),
+            PathBuf::from("/w/tree/../shared"),
+            "a relative value is resolved against the root, because every caller runs cargo there"
+        );
     }
 }

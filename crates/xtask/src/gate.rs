@@ -249,7 +249,14 @@ pub fn member_packages(root: &Path) -> Vec<String> {
 }
 
 /// Warm iff EVERY workspace member has a **linkable or runnable** artifact in
-/// `target/debug/deps` — a `.rlib` or an executable with no extension.
+/// the target directory's `debug/deps` — a `.rlib` or an executable with no
+/// extension.
+///
+/// `target` is [`crate::target_dir`]'s answer, not `<root>/target`: under a
+/// shared `CARGO_TARGET_DIR` the root's own `target/` is absent (and a built
+/// tree read cold) or stale (and an unbuilt tree read WARM, buying the 120 s
+/// budget for a build that has to compile everything). It is passed in rather
+/// than read from the environment here so both answers are testable.
 ///
 /// The discriminator is deliberately not "`target/debug` exists" and not
 /// "`target/debug/deps` is non-empty": `cargo check` and `cargo clippy` produce
@@ -261,7 +268,7 @@ pub fn member_packages(root: &Path) -> Vec<String> {
 /// rebuilding that delta is the thing the budget is promising.
 ///
 /// Returns the state and the one line that says how it was decided.
-pub fn tree_state(root: &Path, forced_cold: bool) -> (Tree, String) {
+pub fn tree_state(root: &Path, target: &Path, forced_cold: bool) -> (Tree, String) {
     if forced_cold {
         return (
             Tree::Cold,
@@ -276,7 +283,7 @@ pub fn tree_state(root: &Path, forced_cold: bool) -> (Tree, String) {
             "cold — no workspace member manifests were readable under crates/, so nothing can be known to be built".to_owned(),
         );
     }
-    let deps = root.join("target/debug/deps");
+    let deps = target.join("debug/deps");
     let names: Vec<String> = match fs::read_dir(&deps) {
         Ok(entries) => entries
             .flatten()
@@ -292,17 +299,19 @@ pub fn tree_state(root: &Path, forced_cold: bool) -> (Tree, String) {
         return (
             Tree::Warm,
             format!(
-                "warm — all {} workspace member(s) have a linked artifact in target/debug/deps",
-                members.len()
+                "warm — all {} workspace member(s) have a linked artifact in {}",
+                members.len(),
+                deps.display()
             ),
         );
     }
     (
         Tree::Cold,
         format!(
-            "cold — {} of {} workspace member(s) have no linked artifact in target/debug/deps (first: {}); an `.rmeta` from a previous `cargo check` does not count",
+            "cold — {} of {} workspace member(s) have no linked artifact in {} (first: {}); an `.rmeta` from a previous `cargo check` does not count",
             missing.len(),
             members.len(),
+            deps.display(),
             missing[0]
         ),
     )
@@ -426,7 +435,7 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String
         artifacts: root.join("target/xtask").join(profile.name()),
     };
     let budget = ledger::budget_seconds(root, profile.name(), &hardware)?;
-    let (tree, why) = tree_state(root, forced_cold);
+    let (tree, why) = tree_state(root, &crate::target_dir(root), forced_cold);
 
     println!(
         "xtask gate — profile {} · hardware {hardware} · budget {}\n  tree {why}",
@@ -2494,7 +2503,12 @@ mod tests {
             )
             .expect("write the manifest");
         }
-        let deps = root.join("target/debug/deps");
+        link_artifacts(&root.join("target"), linked);
+    }
+
+    /// Linked artifacts inside a target directory, wherever that directory is.
+    fn link_artifacts(target: &Path, linked: &[&str]) {
+        let deps = target.join("debug/deps");
         fs::create_dir_all(&deps).expect("create deps");
         for name in linked {
             fs::write(deps.join(name), "").expect("write an artifact");
@@ -2513,7 +2527,7 @@ mod tests {
             &["net", "seat"],
             &["libcentraid_net-1a.rmeta", "libcentraid_seat-2b.rmeta"],
         );
-        let (state, why) = tree_state(&root, false);
+        let (state, why) = tree_state(&root, &root.join("target"), false);
         assert_eq!(state, Tree::Cold, "{why}");
         assert!(why.contains("does not count"), "{why}");
 
@@ -2527,7 +2541,7 @@ mod tests {
                 "centraid_seat-2b",
             ],
         );
-        let (state, why) = tree_state(&warm, false);
+        let (state, why) = tree_state(&warm, &warm.join("target"), false);
         assert_eq!(state, Tree::Warm, "{why}");
         assert!(why.contains("all 2 workspace member(s)"), "{why}");
     }
@@ -2538,12 +2552,59 @@ mod tests {
     fn a_partially_built_tree_is_cold_and_names_the_member() {
         let root = crate::testing::fixture_dir("tree-partial");
         build_tree(&root, &["net", "seat"], &["libcentraid_net-1a.rlib"]);
-        let (state, why) = tree_state(&root, false);
+        let (state, why) = tree_state(&root, &root.join("target"), false);
         assert_eq!(state, Tree::Cold, "{why}");
         assert!(why.contains("centraid-seat"), "{why}");
-        let (forced, why) = tree_state(&root, true);
+        let (forced, why) = tree_state(&root, &root.join("target"), true);
         assert_eq!(forced, Tree::Cold);
         assert!(why.contains("`--cold` was passed"), "{why}");
+    }
+
+    /// The tree scored is the one the TARGET DIRECTORY says was built, not the
+    /// one `<root>/target` says.
+    ///
+    /// Wave 3's lanes share one `CARGO_TARGET_DIR` because the disk does not
+    /// hold four, and this function read `<root>/target/debug/deps` — so a
+    /// fully linked workspace printed `tree cold` (14 of 14 members "have no
+    /// linked artifact") straight after `cargo test --workspace` linked all
+    /// fourteen, which is the observed red. The second half is the direction
+    /// that matters: a STALE `<root>/target` left over from an older build read
+    /// as warm and bought the 120 s budget for a tree whose real target
+    /// directory had never been built (#1020 wave 3 lane X3).
+    #[test]
+    fn the_tree_state_follows_the_target_directory_and_not_the_repository_root() {
+        let root = crate::testing::fixture_dir("tree-shared-target");
+        build_tree(&root, &["net", "seat"], &[]);
+        let shared = crate::testing::fixture_dir("tree-shared-target-dir");
+        link_artifacts(&shared, &["libcentraid_net-1a.rlib", "centraid_seat-2b"]);
+
+        let (state, why) = tree_state(&root, &shared, false);
+        assert_eq!(
+            state,
+            Tree::Warm,
+            "a workspace linked into the shared target directory is warm: {why}"
+        );
+        assert!(
+            why.contains(&shared.join("debug/deps").display().to_string()),
+            "the line names the directory that was actually scanned: {why}"
+        );
+
+        // The dangerous direction: the root's own target/ is fully linked and
+        // the target directory in force is empty. Warm here would be a budget
+        // granted to a build that has to compile everything.
+        let stale = crate::testing::fixture_dir("tree-stale-root-target");
+        build_tree(
+            &stale,
+            &["net", "seat"],
+            &["libcentraid_net-1a.rlib", "centraid_seat-2b"],
+        );
+        let empty = crate::testing::fixture_dir("tree-empty-target-dir");
+        let (state, why) = tree_state(&stale, &empty, false);
+        assert_eq!(
+            state,
+            Tree::Cold,
+            "a stale <root>/target must not buy the warm budget: {why}"
+        );
     }
 
     fn scoring_ctx(root: &Path) -> Ctx {
