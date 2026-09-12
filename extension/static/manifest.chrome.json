@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Centraid Companion",
+  "short_name": "Centraid",
+  "description": "Ask the Centraid app on this machine for a Locker entry or to capture a page. Nothing leaves this computer.",
+  "version": "0.1.0",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Centraid Companion"
+  },
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "permissions": ["activeTab", "contextMenus", "nativeMessaging", "storage"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none';"
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
+}

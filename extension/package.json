@@ -1,0 +1,12 @@
+{
+  "name": "@centraid/companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Centraid browser Companion: MV3 over native messaging to the app on this machine. No network, no WASM.",
+  "type": "module",
+  "scripts": {
+    "round-trip": "node scripts/native-round-trip.mjs",
+    "test": "vitest run --config ../desktop/vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
