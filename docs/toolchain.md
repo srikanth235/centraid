@@ -167,13 +167,15 @@ The document above is the **TypeScript** toolchain contract and stays exactly th
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test`, `rules` (the structural rules), `ledgers` (the down-only check) | < 120 s | by hand, on the edit-run loop |
-| `pr` | `deny` (cargo-deny), `ci-policy` (the workflow and path-filter linters plus actionlint), `release-build`, `ts-static` | < 900 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
+| `pr` | `deny` (cargo-deny), `ci-policy` (the workflow and path-filter linters plus actionlint), `secrets` (gitleaks), `osv` (the `bun.lock` advisory inventory), `release-build`, `ts-static` | < 900 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
 | `nightly` | `v0-oracle` (the v0 suites that read `contracts/`), `device-lanes` | unbounded | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) at 05:30 UTC |
 | `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 lane R and wave 3 lane G wire it to the release lane |
 
 The budgets are **enforced, not aspirational**: a profile whose steps together overran its `budgetSeconds` fails and prints the per-step timing table. They live in `contracts/ledgers/gate-budgets.json` alongside `compile-time.json` (clean check, incremental check, single-crate test, release build — "compile time is the new Hermes") and `library-size.json` (seeded empty; the prebuilt-core lane fills it in wave 3). All three are down-only, checked against `git show <merge-base>:<path>` the way [`scripts/check-ledgers.mjs`](../scripts/check-ledgers.mjs) checks v0's, and written only by `cargo xtask measure --write`, which only ever lowers a ceiling. v0's ledgers under `tests/` retire with v0.
 
 Every step prints one line whatever it does — `ok`, a loud `SKIP` naming the command that turns it into a real run, or `FAIL` — and output is buffered and printed only on failure. **A failing step writes its whole output under `target/xtask/<profile>/<step>/`** (`command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the two internal steps) and names the directory in its line; both gate workflows upload `target/xtask/**` on failure.
+
+**Two `pr` steps are red on inherited tree state, and are there anyway.** `secrets` and `osv` moved onto the PR gate with the other lanes `ci.yml` used to own, and both fail today: `packages/model-runtime/LICENSES.md` trips gitleaks' `generic-api-key` rule (it arrived with [#1011](https://github.com/srikanth235/centraid/issues/1011)) and `astro@7.1.5` in `bun.lock` carries a CRITICAL scored 9.8. A pull-request gate that stops reporting because its target is red today is a weakening, so the steps are present and red; nothing was added to `.gitleaks.toml` or `osv-scanner.toml`. Both are **owner hand-offs** — a reasoned allowlist row naming the LICENSES file (or moving the string) is the owner's call, and the `astro` bump is a dependency change outside #1020's scope.
 
 `release` **fails today on purpose**, on its two `not implemented: lands in wave N` placeholders, so it cannot report green for a release nobody has proven restorable.
 

@@ -101,6 +101,8 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     pr.extend([
         step("deny", run_deny),
         step("ci-policy", run_ci_policy),
+        step("secrets", run_secrets),
+        step("osv", run_osv),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
     ]);
@@ -357,16 +359,6 @@ fn binary_available(program: &str) -> bool {
     Command::new(program).arg("--version").output().is_ok()
 }
 
-/// NOT here yet, and named so the omission is visible: `gitleaks` (secret
-/// scanning) and `osv-scanner` (the lockfile advisory inventory) were also
-/// `ci.yml` pull-request lanes, and they are also not v0 gates. They are absent
-/// from this profile because BOTH ARE ALREADY RED on the tree as it stands —
-/// `packages/model-runtime/LICENSES.md` trips gitleaks' `generic-api-key` rule,
-/// and `astro@7.1.5` in `bun.lock` carries a CRITICAL (score 9.8) — so adding
-/// them in wave 1 would import another change's red into every pull request
-/// rather than gate anything. They are two `step(...)` lines and two `external`
-/// calls once those two are fixed; see the wave 1 receipt's findings.
-///
 /// An external binary the repo pins but does not vendor. Required in CI, where
 /// the workflow installs it; loud-skipped locally with the install command.
 /// Same three-outcomes-and-no-fourth contract as `deny`.
@@ -426,6 +418,59 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
         Outcome::Ok(_) => Outcome::Ok(format!("{} + actionlint", SCRIPTS.join(", "))),
         other => other,
     })
+}
+
+/// Secret scanning over the working tree (#671). Unfiltered, because any pull
+/// request can introduce a secret — which is also why it cannot be left behind
+/// in a workflow that no longer runs on pull requests.
+///
+/// INHERITED RED, named rather than hidden (D-1020-B1): this step is red on the
+/// tree as it stands, because `packages/model-runtime/LICENSES.md` trips the
+/// `generic-api-key` rule — a licence text, arrived with #1011/#1012. The fix is
+/// the owner's: a reasoned allowlist row in `.gitleaks.toml` naming the file, or
+/// moving the offending string. It is deliberately NOT fixed from here, because
+/// a gate whose first act is to widen its own allowlist has gated nothing. A
+/// gate that stops reporting because its target is red today would be a
+/// weakening, which is why the step is here and red rather than absent.
+fn run_secrets(ctx: &Ctx) -> Result<Outcome> {
+    external(
+        ctx,
+        "secrets",
+        "gitleaks",
+        &[
+            "detect",
+            "--source",
+            ".",
+            "--no-git",
+            "--config",
+            ".gitleaks.toml",
+            "--verbose",
+            "--redact",
+        ],
+        "the working tree for high-entropy and non-provider secret patterns",
+        "install the pinned gitleaks release (gate.yml does)",
+    )
+}
+
+/// The full lockfile advisory inventory (#671), through the repo's own script so
+/// the CRITICAL-only threshold and the report stay in one place.
+///
+/// INHERITED RED, on the same terms (D-1020-B1): `astro@7.1.5` in `bun.lock`
+/// carries a CRITICAL (score 9.8). The fix is a dependency bump, which is a
+/// change outside #1020's scope and is the second owner hand-off. Nothing was
+/// added to `osv-scanner.toml`.
+fn run_osv(ctx: &Ctx) -> Result<Outcome> {
+    if !binary_available("osv-scanner") {
+        return external(
+            ctx,
+            "osv",
+            "osv-scanner",
+            &["--version"],
+            "bun.lock against the OSV database",
+            "install the pinned osv-scanner release (gate.yml does)",
+        );
+    }
+    process(ctx, "osv", "node", &["scripts/ci/osv-lockfile-scan.mjs"])
 }
 
 /// The release build, scored against the compile-time ledger.
@@ -577,13 +622,21 @@ mod tests {
         assert_eq!(&release[..nightly.len()], &nightly[..]);
     }
 
-    /// The repo-wide CI policy lane is not one of v0's gates, so taking ci.yml
-    /// off `pull_request` must not take it off pull requests. It is a step of
-    /// the gate that replaced it, and this test is what says so.
+    /// The repo-wide CI policy and security lanes are not v0's gates, so taking
+    /// ci.yml off `pull_request` must not take them off pull requests. They are
+    /// steps of the gate that replaced it, and this test is what says so. Two of
+    /// them are red on inherited tree state (D-1020-B1) and that is not a reason
+    /// for them to be absent — a gate that stops reporting because its target is
+    /// red today is a weakening.
     #[test]
-    fn pr_carries_the_ci_policy_step() {
+    fn pr_carries_the_ci_policy_and_security_steps() {
         let pr = names(Profile::Pr);
-        assert!(pr.contains(&"ci-policy"), "{pr:?}");
+        for required in ["ci-policy", "secrets", "osv"] {
+            assert!(
+                pr.contains(&required),
+                "`{required}` missing from pr: {pr:?}"
+            );
+        }
     }
 
     #[test]

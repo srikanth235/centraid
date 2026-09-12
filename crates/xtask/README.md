@@ -18,7 +18,7 @@ Each profile is a **superset** of the one before, stated in code as concatenatio
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s | the pre-push loop, by hand |
-| `pr` | `deny`, `ci-policy`, `release-build`, `ts-static` | < 900 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static` | < 900 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `v0-oracle`, `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
 | `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
 
@@ -48,13 +48,19 @@ A failing step writes its whole output under `target/xtask/<profile>/<step>/` �
 
 `cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran.
 
-### The `ci-policy` step, and the two lanes that are NOT here
+### The `ci-policy`, `secrets` and `osv` steps
 
-`ci-policy` runs `lint:workflow-pins`, `lint:ci-egress`, `lint:path-filters` and `actionlint`. These are not v0's gates — they are standing checks over `.github/**` and `tests/path-filter-ledger.json`, and they are the gates that guard this very workflow. They ran in `ci.yml`'s `static` and `gates` jobs on every pull request, so taking the `pull_request:` trigger off that file would have taken them off pull requests: that would be weakening a gate rather than moving one, so they moved here. They cost under a second.
+These are not v0's gates — they are standing checks over `.github/**`, `tests/path-filter-ledger.json`, the working tree and `bun.lock`, and they ran in `ci.yml`'s `static`, `gates`, `gitleaks` and `osv-scanner` lanes on every pull request. Taking the `pull_request:` trigger off that file would have taken them off pull requests, which is weakening a gate rather than moving one, so they moved here.
 
-Two more `ci.yml` pull-request lanes belong here by the same argument and are **not** here yet, named so the gap is visible rather than quiet: `gitleaks` (secret scanning over the working tree) and `osv-scanner` (the `bun.lock` advisory inventory). Both are **already red on the tree as it stands** — `packages/model-runtime/LICENSES.md` trips gitleaks' `generic-api-key` rule, and `astro@7.1.5` in `bun.lock` carries a CRITICAL — so adding them in wave 1 would import another change's red into every pull request rather than gate anything. Each is two lines (`step(...)` plus an `external` call) once those two are fixed; the wave 1 receipt carries both as findings.
+| Step | What it runs | Verdict today |
+| --- | --- | --- |
+| `ci-policy` | `lint:workflow-pins`, `lint:ci-egress`, `lint:path-filters`, `actionlint` — the gates that guard this very workflow | green, under a second |
+| `secrets` | `gitleaks detect` over the working tree (#671) | **inherited red** |
+| `osv` | `scripts/ci/osv-lockfile-scan.mjs`, CRITICAL-only (#671) | **inherited red** |
 
-`dependency-review` did move, as its own job in `gate.yml`: it is a GitHub Action reading the PR's dependency diff through the API rather than a command over the tree, so it cannot be a step of `cargo xtask gate`.
+**Inherited red is named, never hidden** (D-1020-B1). Two of these three fail on tree state that arrived before #1020: `packages/model-runtime/LICENSES.md` trips gitleaks' `generic-api-key` rule (it came with #1011/#1012), and `astro@7.1.5` in `bun.lock` carries a CRITICAL scored 9.8. Neither is fixed from here and nothing was added to `.gitleaks.toml` or `osv-scanner.toml` — a gate whose first act is to widen its own allowlist has gated nothing. Both are **owner hand-offs**: a reasoned allowlist row naming the LICENSES file (or moving the offending string) is the owner's call, and the `astro` bump is a dependency change outside #1020's scope. The steps are here and red rather than absent, because a pull-request gate that stops reporting because its target is red today is a weakening.
+
+`dependency-review` moved too, as its own job in `gate.yml`: it is a GitHub Action reading the PR's dependency diff through the API rather than a command over the tree, so it cannot be a step of `cargo xtask gate`.
 
 ### The `ts-static` step
 
