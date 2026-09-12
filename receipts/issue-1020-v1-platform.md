@@ -308,3 +308,131 @@ Not fixed here; each is outside lane A's files or outside wave 1.
 ### Doctrine digest
 
 Law `53be88c22ab5` (`node .governance/law/brief.mjs`), verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — the law did not move under this lane's work.
+
+## Wave 1 — lane B: xtask, the flake and the gate workflows
+
+`cargo xtask gate` exists, it is the only CI entrypoint for the v1 tree, and pull requests now run it instead of `ci.yml`. Base: umbrella `0381e347` (lane A), rebased, never merged.
+
+### Files
+
+| Path | What it is |
+| --- | --- |
+| `rust-toolchain.toml` | the one version file for the v1 tree — `1.94.1`, `rustfmt` + `clippy`, minimal profile. Read by both gate workflows and by the flake |
+| `.cargo/config.toml` | `[alias] xtask = "run --quiet --package xtask --"` |
+| `crates/xtask/Cargo.toml`, `src/{main,gate,rules,ledger,measure,testing}.rs`, `README.md` | the gate runner. `#![forbid(unsafe_code)]`, three dependencies (clap, anyhow, serde_json), no `regex` and no tree-sitter |
+| `contracts/ledgers/gate-budgets.json` | the per-profile feedback-time ceiling, down-only |
+| `contracts/ledgers/compile-time.json` | clean check, incremental check, single-crate test, release build — down-only |
+| `contracts/ledgers/library-size.json` | the prebuilt core's size per ABI, **seeded empty** |
+| `.github/workflows/gate.yml` | `pull_request` + `push: main` + `workflow_dispatch`; jobs `gate` and `dependency-review` |
+| `.github/workflows/gate-nightly.yml` | `schedule` 05:30 UTC + `workflow_dispatch`; `--profile nightly` |
+| `.github/workflows/ci.yml` | `pull_request:` removed, `schedule:` added, `all` extended to cover it, header rewritten. **No job touched** |
+| `.github/actions/setup/action.yml` | a `v1` cargo-cache preset (`target/` + `~/.cargo/bin`) |
+| `scripts/lint-workflow-pins.{mjs,test.mjs}` | rule 5's single open-PR entry point repointed to `gate.yml` |
+| `tests/path-filter-ledger.json` | `crates` and `contracts` ledgered as always-on, covered by `gate.yml` unfiltered |
+| `flake.nix` | the #504 packaging stub replaced by `devShells.default` |
+| `.xcode-version` | `16.4` — the one toolchain nix cannot pin |
+| `deny.toml` | comment only: the shared policy now has a fourth crate root |
+| `docs/toolchain.md`, `docs/dev-environment.md` | the v1 gate loop as current state |
+
+`contracts/ledgers/` is a new subdirectory under lane A's `contracts/`; no other lane created it, and the rebase was clean there.
+
+### Decisions — lane B
+
+Under the owner's standing delegation R-1020-34, relayed by the root. All cite [#1020](https://github.com/srikanth235/centraid/issues/1020).
+
+- **D-1020-B1 — inherited red is named, never hidden.** `gitleaks` and `osv-scanner` were `ci.yml` pull-request lanes and are not v0 gates, so they move onto the new PR gate with the others *even though both are red on tree state that predates this work*. A PR gate that stops reporting because its target is red today is a weakening. Nothing was added to `.gitleaks.toml` or `osv-scanner.toml`: a gate whose first act is to widen its own allowlist has gated nothing. Both fixes are owner hand-offs below.
+- **The `ci.yml` change is two edits, not one, and they are inseparable.** Adding `schedule:` without extending the `changes` job's `all` output to the `schedule` event would have installed a lane that skips every path-gated job and reports green — the `skipped`-counts-as-PASS hazard that file's own comments are about. No job was otherwise touched.
+- **`dependency-review` and four repo-wide linters moved onto the PR gate.** `lint:workflow-pins`, `lint:ci-egress`, `lint:path-filters` and `actionlint` are the `ci-policy` step; `dependency-review` is its own job in `gate.yml` because it reads the PR's dependency diff through the API and cannot be a step of a command. It keeps narrow permissions so `pull-requests: write` is not handed to the job that compiles third-party crates.
+- **One entry point, named once.** `scripts/lint-workflow-pins.mjs` rule 5 now reads a single `PR_ENTRY_POINT` constant instead of a hard-coded `ci.yml`, and a new test asserts `ci.yml` is refused like any other file now that it has let go. An allowlist of two is how "exactly one" becomes "a few".
+- **`ts-static` is scoped to the v1 tree**, not a second run of v0's static gate: re-running v0's gates on pull requests under a different name would be the same CI bill with the ruling pasted over it. On this merged tree the step is no longer a skip — lane A's `contracts/tools` is TypeScript, so it ran `bun run check:push:static` for real and passed.
+
+### Inherited red on `main`
+
+Both fail today, both named in `crates/xtask/src/gate.rs`, `crates/xtask/README.md` and `docs/toolchain.md`.
+
+| Step | Finding | Arrived with |
+| --- | --- | --- |
+| `secrets` (gitleaks 8.30.1) | `leaks found: 1` — `packages/model-runtime/LICENSES.md`, rule `generic-api-key`, secret redacted | `af9ceac6` (#1011/#1012) |
+| `osv` (osv-scanner 2.4.0) | `astro@7.1.5 (score 9.8)` CRITICAL; the full inventory is 1 Critical / 60 High / 44 Medium / 5 Low across 34 packages of `bun.lock` | pre-existing |
+
+### Owner hand-offs
+
+1. **Branch protection must be repointed, or every pull request blocks.** The required check is `check` from `ci.yml`, which no longer runs on pull requests; a required check that never reports blocks the PR forever. The owner must make **`gate`** and **`dependency-review`** — the two jobs in `gate.yml`, neither path-filtered, so both always report — the required checks. Branch protection is configured outside this repository, like the code-owner review requirement.
+2. **The `LICENSES.md` gitleaks hit.** A reasoned `.gitleaks.toml` allowlist row naming the file, or moving the offending string, is the owner's call. Not taken here.
+3. **The `astro@7.1.5` CRITICAL.** A dependency bump, which is a change outside #1020's scope.
+
+### Timing, measured on this container (4 vCPU, 15 GB — `ci-linux-x64-4c`)
+
+Cold means after `cargo clean`, on the merged tree with both crates.
+
+| Profile | Cold | Warm | Budget | Verdict |
+| --- | --- | --- | --- | --- |
+| `local` | **76.3 s** (clippy 63.7, test 12.5) | 0.4 s | 120 s | PASS |
+| `pr` | **176.9 s** (clippy 63.8, release-build 67.1, ts-static 22.6, test 13.0, deny 1.0, ci-policy 0.3) | — | 900 s | the two inherited reds, nothing else |
+| `nightly` | — | 8.7 s (v0 oracle 4.9) | unbounded | PASS |
+| `release` | — | 6.5 s | unbounded | FAILS on its two placeholders only |
+
+`local` is at 64% of its ceiling with two crates, and `clippy` is 83% of that — `rusqlite`'s bundled C build dominates a cold run. That is the pressure the ledger exists to make visible, and the issue's structural answers (sccache, mold, one crate per app) are what wave 2 will need to spend to keep the ruling.
+
+Ledger seeds, with the wave-1 measurement in each entry's `headroom`: `cleanCheckSeconds` 17.4 → 180; `incrementalCheckSeconds` 0.1 → 10; `singleCrateTestSeconds` 10.4 → 60; `releaseBuildSeconds` 28.9 → 600 (this one is enforced by the `pr` profile). `library-size.json` is empty and says so. All are written only by `cargo xtask measure --write`, which only ever lowers a ceiling, so a gate run cannot ratchet itself upwards by observing a slow day.
+
+### Demonstrated reds
+
+Every structural rule has a fixture that must be caught; a rule with no demonstrated red is a claim, not a gate. From `cargo test --workspace`:
+
+| Rule | The red | The green beside it |
+| --- | --- | --- |
+| `sql-confinement` | `sql_outside_the_allowed_crates_is_caught` — `"SELECT 1 FROM rows"` in `crates/net/src/lib.rs` is one finding; the same literal in `crates/vault` is none | `sql_inside_the_allowed_crates_is_clean`, including `SELECT` in a doc comment |
+| `abi-five-symbols` | `a_sixth_abi_symbol_is_caught` — six `extern "C"` symbols reports `6 … not 5` | `exactly_five_abi_symbols_is_clean`; `the_abi_rule_is_pending_until_the_crate_lands` |
+| `no-listening-socket` | `an_unguarded_listener_is_caught_and_a_guarded_one_is_not` — line 2 is a finding, the `#[cfg(feature = "blob-door")]` one is not; `the_listener_rule_reports_the_file_and_line` | same tests |
+| `commonmain-no-platform-import` | `a_platform_import_in_commonmain_is_caught` — `import android.os.Bundle` | `commonmain_without_platform_imports_is_clean` |
+| down-only ledgers | `a_risen_number_is_a_finding`, `a_removed_ceiling_is_a_finding` | `a_fallen_number_is_clean`, `a_new_ledger_with_no_base_copy_passes`, `a_new_entry_in_an_existing_ledger_passes`, `an_empty_ledger_gates_nothing_and_says_so` |
+| the `release` placeholders | `the_placeholders_fail_rather_than_skip` — both must FAIL, because a profile that can pass without the restore drill would call a release green that nobody proved restorable | `each_profile_is_a_superset_of_the_one_before` |
+
+On the merged tree the two applicable rules now cover lane A's crate: `sql-confinement` — 0 files scanned, **13 in the allowed crates** (`crates/ontology` is an allowed root), 6 in the rule runner; `no-listening-socket` — **13 files scanned**, clean, 6 in the rule runner. `crates/xtask` is exempt from both because it holds their pattern literals; it ships in no artifact and opens no socket.
+
+### Exit list
+
+| # | Check | Outcome |
+| --- | --- | --- |
+| 1 | `cargo fmt --all --check` | clean |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| 3 | `cargo test --workspace` | 56 passed — 32 ontology (9 unit + 9 commitments + 5 fixtures + 9 golden vault) and 24 xtask |
+| 4 | `cargo xtask gate --profile local` | PASS, 76.3 s cold of 120 s |
+| 5 | `cargo xtask gate --profile pr` | 176.9 s of 900 s; every step green except the two inherited reds (D-1020-B1). `deny` is REAL, not skipped |
+| 6 | `cargo xtask gate --profile release` | exit 1 on exactly `restore-drill: not implemented: lands in wave 2 lane R (…)` and `vps-smoke: not implemented: lands in wave 3 lane G (…)` |
+| 7 | `bun run lint:workflow-pins` | 25 workflows clean |
+| 8 | `bun run lint:ci-egress` | 5 enforce an egress policy, 16 ledgered |
+| 9 | `actionlint` 1.7.12 | exit 0 |
+| 10 | `bun run lint:path-filters` | 10 filters cover every path, 5 ledgered always-on — run after this rebase, with `crates/ontology` and `contracts/` present |
+| 11 | `bun run format` + `format:check` | clean |
+| 12 | `bash .governance/run.sh` | every directive passes |
+| 13 | `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | no findings |
+| 14 | `bun run check:push:static` | 4/4 |
+| 15 | `git push` | accepted; no `SKIP_*`, no `--no-verify` |
+
+### Falsification
+
+The two riskiest claims in this lane, and the throwaway check run against each.
+
+**"Pull requests still gate."** Dropped a `.github/workflows/zz-throwaway.yml` with `on: pull_request` and `uses: actions/checkout@v4` — a floating ref, the exact thing `ci.yml` used to catch on a PR — and ran `cargo xtask gate --profile pr`. It went red on `ci-policy` with two findings: the floating ref, and `zz-throwaway.yml:3 listens on 'pull_request' — only .github/workflows/gate.yml may (open PR events), because a PR's verdict has one source`. The file was removed. So the workflow-policy gates a pull request still passes through, from inside the gate that replaced `ci.yml`, and the single-entry-point invariant is enforced against the new owner rather than merely asserted about the old one.
+
+**"No v0 gate was deleted, only moved."** `diff <(git show 0381e347:.github/workflows/ci.yml | grep '^  [a-z0-9_-]*:$') <(grep '^  [a-z0-9_-]*:$' .github/workflows/ci.yml)` — 24 two-space keys before and 24 after, and the only line that differs is `pull_request:` → `schedule:`. Every one of the 21 job keys (`changes, static, gates, verify, coverage-shard, coverage, publish-report, mutation-pr, new-test-burn-in, mobile-smoke, mobile-device-gate, docs, web-build, iroh-wasm, companion-static, oauth-worker, dependency-review, gitleaks, osv-scanner, design-gallery, check`) is byte-identical, and the trigger set is now `push: [main]`, `schedule: 0 4 * * *`, `workflow_dispatch`. What changed is when a v0 regression surfaces — push-and-merge-blocking becomes push-and-within-a-day — and nothing else.
+
+### Not done
+
+- **`flake.nix` has not been evaluated.** `nix` is not installed on this container, so `nix flake check` has not run; the file says so in its own header. Balanced attrsets and both inputs named in `outputs` were checked by reading. The first evaluation on a machine with nix is what confirms it.
+- `cargo-nextest`, `buf`, `protoc`, `mold` and `sccache` are not installed here. The `test` step ran `cargo test` and says which runner ran in its line; the flake pins all five for anyone with nix.
+- `.xcode-version` is `16.4` and **not confirmed against a build** — wave 3 lane E owns the first iOS compile and confirms or replaces it.
+- The device lanes are a named loud skip, not a stub that passes: `ios-transfer-experiment`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass` need the self-hosted macOS runner of open question 13.
+
+### Findings for the close pass
+
+- The two inherited reds above are the lane's largest finding and are already owner hand-offs 2 and 3.
+- `bun run check:push:static` fails in a fresh worktree until `bun run build` has run, with module-resolution errors that read like product bugs (`Cannot find module '@centraid/server/engine'`). Same root cause lane A recorded for the v0 vitest oracle, one gate further out.
+- `ci.yml`'s evidence pipeline (`scripts/test-report/write-evidence.mjs`, the `pr-evidence-*` artifacts, `publish-report`) now only runs on `main` pushes and nightly. `gate.yml` writes no lane evidence, so the per-PR test report has no rows for the v1 gate. Re-homing it is wave 3 lane G's `scripts/ci/**` work; naming it here so it is not discovered as a silence.
+- `sonarcloud.yml`, `hygiene.yml`, `candidate.yml` and `cache-cleanup.yml` mention `pull_request` in prose or in `on:` sub-keys but none carries an open-PR trigger; `governance.yml` does and is `governance-kit:managed`, so it keeps reporting its own required check on pull requests and rule 5 exempts it upstream. Verified by reading each `on:` block.
+
+### Doctrine digest
+
+Law `53be88c22ab5`, verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — the law did not move under this lane's work, and no waiver was spent.
