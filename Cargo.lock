@@ -373,10 +373,15 @@ dependencies = [
 name = "centraid"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "base64 0.22.1",
  "centraid-api-proto",
  "centraid-net",
  "centraid-protocol",
+ "centraid-vault",
  "clap",
+ "flate2",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -481,8 +486,10 @@ name = "centraid-vault"
 version = "1.0.0-alpha.0"
 dependencies = [
  "aes-gcm 0.11.1",
+ "anyhow",
  "base64 0.22.1",
  "blake3",
+ "centraid-media",
  "centraid-ontology",
  "flate2",
  "hex",

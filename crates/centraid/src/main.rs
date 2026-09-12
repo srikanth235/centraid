@@ -21,6 +21,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod cmd;
 mod run;
 
 /// The exit codes, stated once. A script that wraps this binary branches on
@@ -119,19 +120,41 @@ enum Command {
         #[arg(long)]
         data_dir: Option<PathBuf>,
     },
-    /// Restore from a recovery kit.
+    /// Restore from a recovery kit. The kit carries the keys; the blob store
+    /// carries the bytes.
     Recover {
         #[arg(long)]
         kit: Option<PathBuf>,
+        /// The kit's password, read from a file. NEVER a flag: a flag is in the
+        /// shell history and in every `ps` listing on the host.
+        #[arg(long)]
+        password_file: Option<PathBuf>,
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        /// Point-in-time: replay WAL segments up to this instant and no
+        /// further. `YYYY-MM-DDTHH:MM:SS[.mmm]Z`; anything else is exit 2.
+        #[arg(long)]
+        at: Option<String>,
+        /// Materialise every content blob now instead of on demand.
+        #[arg(long)]
+        full: bool,
+        /// Which vault, when the kit carries more than one.
+        #[arg(long)]
+        vault: Option<String>,
+        /// Yes, restore — after reading what it says it is about to do.
+        #[arg(long)]
+        yes: bool,
     },
-    /// Export a portable copy.
+    /// Export a portable copy: the vault as a snapshot generation, plus a
+    /// password-wrapped recovery kit.
     Export {
         #[arg(long)]
         data_dir: Option<PathBuf>,
         #[arg(long)]
         out: Option<PathBuf>,
+        /// The passphrase to wrap the bundle's recovery kit with, from a file.
+        #[arg(long)]
+        password_file: Option<PathBuf>,
     },
     /// The browser extension's native-messaging host. Launched by the browser,
     /// never by a person.
@@ -158,7 +181,11 @@ enum DevicesCommand {
 
 #[derive(Subcommand)]
 enum BackupCommand {
+    /// Take a generation now: the snapshot, the sealed WAL tail, the manifest.
     Now {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        /// Take one even when the policy says it is not due.
         #[arg(long)]
         force: bool,
     },
@@ -220,22 +247,41 @@ fn main() -> ExitCode {
                     "the command plane needs crates/vault's authority and receipts, wave 2 lane D1",
                 ),
             },
-            Command::Backup { .. } => run::not_yet_available(
-                "backup now",
-                "the snapshot, the WAL stream and the recovery kit land in wave 2 lane R",
-            ),
+            Command::Backup { command } => match command {
+                BackupCommand::Now { data_dir, force } => {
+                    cmd::backup::now(cmd::backup::BackupNowArgs { data_dir, force })
+                }
+            },
             Command::Doctor { .. } => run::not_yet_available(
                 "doctor",
                 "the vault checks live in crates/vault, wave 2 lane D1",
             ),
-            Command::Recover { .. } => run::not_yet_available(
-                "recover",
-                "the restore drill and key custody land in wave 2 lane R",
-            ),
-            Command::Export { .. } => run::not_yet_available(
-                "export",
-                "the portable export lives in crates/vault, wave 2 lane D1",
-            ),
+            Command::Recover {
+                kit,
+                password_file,
+                data_dir,
+                at,
+                full,
+                vault,
+                yes,
+            } => cmd::recover::run(cmd::recover::RecoverArgs {
+                kit,
+                password_file,
+                data_dir,
+                at,
+                full,
+                vault,
+                yes,
+            }),
+            Command::Export {
+                data_dir,
+                out,
+                password_file,
+            } => cmd::export::run(cmd::export::ExportArgs {
+                data_dir,
+                out,
+                password_file,
+            }),
             Command::NativeHost => run::not_yet_available(
                 "native-host",
                 "the extension and its native-messaging host land in wave 4",

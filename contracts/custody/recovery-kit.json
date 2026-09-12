@@ -1,0 +1,79 @@
+{
+  "schema": "centraid-recovery-kit-fixture/1",
+  "note": "v0-made wrapped recovery kit, for the v1 parser. Regenerate with contracts/tools/export-recovery-kit-fixture.ts.",
+  "scrypt": {
+    "kdf": "scrypt",
+    "N": 131072,
+    "r": 8,
+    "p": 1
+  },
+  "wrapAad": "centraid-recovery-kit-wrap-v1",
+  "label": "recovery kit",
+  "passphraseFloor": {
+    "minChars": 12,
+    "minWords": 4
+  },
+  "password": "correct horse battery staple",
+  "fingerprint": "825e82dd375913d3cd2da6cd0089798c646f257699bdec899485c1359269f907",
+  "document": {
+    "version": 1,
+    "kind": "centraid-recovery-kit",
+    "createdAt": "2026-07-18T00:00:00.000Z",
+    "keyring": {
+      "version": 1,
+      "active": 2,
+      "epochs": [
+        {
+          "epoch": 1,
+          "key": "ERERERERERERERERERERERERERERERERERERERERERE=",
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "epoch": 2,
+          "key": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+          "createdAt": "2026-06-01T00:00:00.000Z"
+        }
+      ]
+    },
+    "targets": [
+      {
+        "provider": "local",
+        "targetId": "local:/srv/centraid/backup",
+        "vaultId": "00000000-0000-7000-8000-000000000456",
+        "label": "the household vault",
+        "sealKey": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM=",
+        "identitySeed": "REREREREREREREREREREREREREREREREREREREREREQ=",
+        "lockerKeys": [
+          {
+            "keyId": "k-1",
+            "key": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU="
+          },
+          {
+            "keyId": "k-2",
+            "key": "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+          }
+        ]
+      },
+      {
+        "provider": "local",
+        "targetId": "local:/srv/centraid/backup-2",
+        "vaultId": "00000000-0000-7000-8000-000000000789",
+        "label": "the workshop vault"
+      }
+    ]
+  },
+  "wrapped": {
+    "version": 1,
+    "kind": "centraid-recovery-kit-wrapped",
+    "createdAt": "2026-07-18T00:00:00.000Z",
+    "fingerprint": "825e82dd375913d3cd2da6cd0089798c646f257699bdec899485c1359269f907",
+    "kdf": "scrypt",
+    "N": 131072,
+    "r": 8,
+    "p": 1,
+    "salt": "GLtwvaI3kR8WddcgUm9SEA==",
+    "nonce": "KcC8wt39wNQAHl7K",
+    "tag": "GyMgtPr9iaMthYf3dC83Bg==",
+    "ciphertext": "eWQVVvYDGzkpuuDsnGcZPIHHQfJ/MY7rZ0w+sOSQ8ydkoBQssBhFrXKtSPZK8Dr9a9DPx+O7r4Hgyk//XJ5A2KC5awEbxJkGi6HVUgVPDKlj8ri//QnjYmYpTqj/i4r7H6jsaY4BxU9879RqblhwmWm9mdmL9LKgkQ9f7rS20tEm06ukQxiZbZx8uKFTB+03QczXCztMwSwy4cBykmOz1Ilusck53IgCeaidkdx1b+y9mX3w5gGfXmvjKCJxNni2O0L8+UpBYZFR8CucPA65gM+cAULDiuFnBF7ZwZhIapGx//VtJuiL8f93JbDbC8WwSna4nlLQRfMTrPm98PYerinzd9mkuX8lXZsRZVzBLG6n/mac2VkC6EhUr8zMF3fl3DC1xEEgJjeT4IWxoPfqjd7BOqNov81nSlNVrfSevA7ZYMniMsVJVpYFw8SH56ycoIpiD1DY38dnLg/DALKX1RkSQ45/4wy1J4F+ijVVKf9TUo0RbtVgbpzdje/+Tj1gIsR+pHYfRkdLAvhG/7L7Jl0tz/gdK9VJpO4+aqvesXVj9h918T8RJT4CQRXUaOSnfzLrKrrVd9r1sqh/vhgmS2OgfiP3UnyOHpKspGqzVsTMvBtrz8G81IHOk/8xfKs/JZ7v34SDTHiL7kHbUicRjll6bqaE7FsqT9DHy1D9MzKe3IFuFdb4cVJUA58sZPgDkNKvjy7aZHglvLagp5DedDfVySPnrxoICHqcJrUUrjofNnoAddKYoDkfaO1rlI9hY4mrs6nUVM+5A5sTOMXY3YJKNWhixSSQe3p9r/ivQqBPl6R7LOcxa7GBiFO4G9q6ZTk01nLvCmafyiZ8j2ANYf3aIb/258wKRgzp/OILYbIW1wNaWyCn3zUO6zpImu4NPO5UM8ixhUcriTmUusono5IZHjTQR01O2BUJKry3EEw516VewHPe39a+G/YhnBa7pKJx0eSvY/jH1Q7sHIzgAoEDyp7Y8IdqAWsGPsWdtqm/tEn40Q/PHB89DN07a1kEhZGdCcuWOwPxDPv06hDzK9OmpNI+LN++LJYPebkUAMwANykZ7bC42q8/cCTsCyypScB9wr0nO/2oaVU9c5wYTLwnhMNqGJV7UfHz/awd8STqe0IATk0a7aS+lmH41p9/mkL8cATc7zpXB4rKVDARy6cMVENP33Zv6zYMm7Vy0YRdrgCTE6k="
+  }
+}

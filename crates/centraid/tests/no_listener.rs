@@ -214,16 +214,15 @@ fn print_qr_emits_a_parseable_ticket_and_a_qr() {
 
 /// Every verb whose implementation lands in a later lane exits 3 and says so.
 /// Never 0 (#1020, D-1020-C11).
+///
+/// The list SHRINKS as lanes land, and it shrank here: `backup now`, `recover`
+/// and `export` are real as of wave 2 lane R, so they are no longer this
+/// test's subject — they now exit 1 on a refusal and 2 on a usage error, which
+/// `tests/restore_drill.rs` asserts. The rule is untouched: a verb that is not
+/// implemented exits 3 and never 0.
 #[test]
 fn every_unimplemented_verb_exits_three_and_names_its_lane() {
-    let verbs: [&[&str]; 6] = [
-        &["seat"],
-        &["devices", "list"],
-        &["backup", "now"],
-        &["doctor"],
-        &["recover"],
-        &["export"],
-    ];
+    let verbs: [&[&str]; 3] = [&["seat"], &["devices", "list"], &["doctor"]];
     for verb in verbs {
         let output = Command::new(binary())
             .args(verb)
@@ -283,4 +282,32 @@ fn a_data_dir_that_is_not_yet_durable_is_named_as_such() {
         stderr.contains("D-1020-C8"),
         "the non-durable pairing store must be named, with its decision: {stderr}"
     );
+}
+
+/// The verbs wave 2 lane R landed are no longer "not yet available", and a
+/// missing argument is a REFUSAL or a USAGE error rather than exit 3 — which is
+/// what keeps exit 3 meaning something (#1020, D-1020-C11 as it now stands).
+#[test]
+fn the_verbs_lane_r_landed_no_longer_exit_three() {
+    for (verb, expected) in [
+        (vec!["backup", "now"], 1),
+        (vec!["recover"], 2),
+        (vec!["export"], 2),
+    ] {
+        let output = Command::new(binary())
+            .args(&verb)
+            .output()
+            .unwrap_or_else(|error| panic!("run centraid {verb:?}: {error}"));
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "centraid {verb:?} exited {:?}, expected {expected}",
+            output.status.code()
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("not available in this build"),
+            "centraid {verb:?} still claims to be unavailable: {stderr}"
+        );
+    }
 }

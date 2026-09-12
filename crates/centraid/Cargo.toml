@@ -16,7 +16,11 @@ path = "src/main.rs"
 centraid-api-proto = { path = "../api-proto" }
 centraid-net = { path = "../net" }
 centraid-protocol = { path = "../protocol" }
+centraid-vault = { path = "../vault" }
+base64.workspace = true
 clap.workspace = true
+flate2.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -25,3 +29,4 @@ tracing-subscriber.workspace = true
 # The no-listener test parses the ticket the binary printed, which is the
 # ticket codec's job and not the CLI's.
 centraid-net = { path = "../net" }
+tempfile.workspace = true
