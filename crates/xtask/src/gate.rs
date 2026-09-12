@@ -135,12 +135,21 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // move them rather than drop them.
         step("advisory", run_advisory),
         step("lockfile", run_lockfile),
+        // THE SYNC PROOF AND THE RESPONSIVENESS PROMISE (D-1020-D2-4,
+        // D-1020-D2-6). The simulation runs 25 seeds here and 250 in
+        // `nightly`; the budget fails the gate on any bounded read over its
+        // ceiling, which is the issue's own rule.
+        step("sim", run_sim),
+        step("call-budget", run_call_budget),
     ]);
     if profile == Profile::Pr {
         return pr;
     }
     let mut nightly = pr;
     nightly.extend([
+        // The deeper sweep, on top of `pr`'s 25 seeds rather than replacing
+        // them: each profile is stated as a CONCATENATION of the one before.
+        step("sim-nightly", run_sim_nightly),
         step("v0-oracle", run_v0_oracle),
         step("device-lanes", run_device_lanes),
         step("lane-health", run_lane_health),
@@ -599,6 +608,76 @@ fn process(ctx: &Ctx, step: &str, program: &str, args: &[&str]) -> Result<Outcom
     )))
 }
 
+/// `process`, with environment variables set for the child.
+///
+/// A sibling rather than an extra parameter on [`process`]: every step calls
+/// that one, and widening its signature would touch each of them. The failure
+/// path is shared through [`report_failure`], so an artifact written by either
+/// looks the same to somebody reading `target/xtask/`.
+fn process_with_env(
+    ctx: &Ctx,
+    step: &str,
+    program: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> Result<Outcome> {
+    let label = format!(
+        "{}{program} {}",
+        env.iter()
+            .map(|(key, value)| format!("{key}={value} "))
+            .collect::<String>(),
+        args.join(" ")
+    );
+    let mut command = Command::new(program);
+    command.args(args).current_dir(&ctx.root);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = command
+        .output()
+        .with_context(|| format!("spawn `{label}`"))?;
+    if output.status.success() {
+        return Ok(Outcome::Ok(label));
+    }
+    report_failure(ctx, step, &label, &output)
+}
+
+/// Write a failed step's artifact and name it in one line.
+fn report_failure(
+    ctx: &Ctx,
+    step: &str,
+    label: &str,
+    output: &std::process::Output,
+) -> Result<Outcome> {
+    let dir = ctx.artifacts.join(step);
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    fs::write(dir.join("command.txt"), format!("{label}\n"))?;
+    fs::write(dir.join("stdout.log"), &output.stdout)?;
+    fs::write(dir.join("stderr.log"), &output.stderr)?;
+    // THE SIMULATION PRINTS ITS DIAGNOSIS ON STDOUT, not stderr: a failing seed
+    // and its schedule go through `println!`. So the reason is looked for in
+    // both, newest-last, rather than in stderr alone.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let why = stderr
+        .lines()
+        .rev()
+        .find(|candidate| !candidate.trim().is_empty())
+        .or_else(|| {
+            stdout
+                .lines()
+                .rev()
+                .find(|candidate| candidate.contains("SIM_SEED=") || candidate.contains("failed"))
+        })
+        .unwrap_or("(no output)");
+    let why: String = why.chars().take(160).collect();
+    Ok(Outcome::Failed(format!(
+        "`{label}` exited {} — {why} · artifact: {}",
+        output.status.code().unwrap_or(-1),
+        display_relative(&ctx.root, &dir)
+    )))
+}
+
 /// Is `cargo <subcommand>` on PATH? Classified from the text, not the exit code
 /// alone, exactly as `rust-supply-chain.mjs` does: cargo reports a missing
 /// subcommand differently across versions.
@@ -630,6 +709,67 @@ fn run_tests(ctx: &Ctx) -> Result<Outcome> {
     } else {
         process(ctx, "test", "cargo", &["test", "--workspace"])
     }
+}
+
+/// The deterministic simulation — #1020's primary sync proof (D-1020-D2-4).
+///
+/// In `pr` at 25 seeds, which is the count that fits the profile's budget. A
+/// seed that fails prints `SIM_SEED=<n>` and its schedule, so the artifact a
+/// developer needs is in the step's own output.
+fn run_sim(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "sim",
+        "cargo",
+        &["test", "-p", "centraid-sim", "--", "--nocapture"],
+    )
+}
+
+/// The same, at the `nightly` count.
+///
+/// A separate step rather than the same one with a different environment,
+/// because each profile is stated as a CONCATENATION of the one before: `pr`'s
+/// 25 seeds still run in `nightly`, and this adds the deeper sweep on top
+/// rather than replacing it.
+fn run_sim_nightly(ctx: &Ctx) -> Result<Outcome> {
+    process_with_env(
+        ctx,
+        "sim-nightly",
+        "cargo",
+        &[
+            "test",
+            "-p",
+            "centraid-sim",
+            "--test",
+            "seeds",
+            "--",
+            "--nocapture",
+        ],
+        &[("SIM_SEEDS", "250")],
+    )
+}
+
+/// The `call` budget — the issue's "any request that exceeds it in `pr` profile
+/// fails the gate" (D-1020-D2-6).
+///
+/// `--nocapture` so the measured p50/p95/p99 reach the gate's log: a budget
+/// that only says pass or fail cannot show a number trending towards its
+/// ceiling, and the ledger is down-only precisely so that trend matters.
+fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "call-budget",
+        "cargo",
+        &[
+            "test",
+            "-p",
+            "centraid-core",
+            "--test",
+            "call_budget",
+            "--",
+            "--nocapture",
+        ],
+    )
 }
 
 fn run_rules(ctx: &Ctx) -> Result<Outcome> {
@@ -1464,6 +1604,31 @@ mod tests {
 
     fn names(profile: Profile) -> Vec<&'static str> {
         steps(profile).into_iter().map(|entry| entry.name).collect()
+    }
+
+    /// The two steps wave 2 lane D2 owes the `pr` profile (#1020).
+    ///
+    /// Named rather than counted: a test that asserted "`pr` has fourteen
+    /// steps" would pass after somebody replaced one of these with something
+    /// else.
+    #[test]
+    fn the_pr_profile_runs_the_simulation_and_the_call_budget() {
+        let pr = names(Profile::Pr);
+        assert!(
+            pr.contains(&"sim"),
+            "`pr` does not run the deterministic simulation, which is #1020's primary \
+             sync proof and is required on every PR"
+        );
+        assert!(
+            pr.contains(&"call-budget"),
+            "`pr` does not run the `call` budget; the issue's rule is that any request \
+             exceeding it in `pr` fails the gate"
+        );
+        // And the deeper sweep is nightly's ALONE: 250 seeds do not fit a
+        // 900-second PR budget, and putting them there is how a gate gets
+        // skipped rather than fixed.
+        assert!(!pr.contains(&"sim-nightly"));
+        assert!(names(Profile::Nightly).contains(&"sim-nightly"));
     }
 
     #[test]

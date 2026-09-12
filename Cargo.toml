@@ -63,6 +63,8 @@ prost-build = "0.14"
 protox = "0.9"
 qrcode = { version = "0.14", default-features = false }
 rand = "0.9"
+rand_chacha = "0.9"
+turmoil = "0.7"
 tokio = { version = "1", features = [
   "macros",
   "rt-multi-thread",

@@ -1,0 +1,33 @@
+[package]
+name = "centraid-sim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# TEST-ONLY. Nothing links this crate; it is the proof, not the product.
+publish = false
+
+[lib]
+name = "centraid_sim"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-core = { path = "../core" }
+centraid-ontology = { path = "../ontology" }
+centraid-protocol = { path = "../protocol" }
+centraid-seat = { path = "../seat" }
+centraid-vault = { path = "../vault" }
+flate2.workspace = true
+prost.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+turmoil.workspace = true
+
+
+[dev-dependencies]
+serde_json.workspace = true
