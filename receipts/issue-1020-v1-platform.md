@@ -2036,3 +2036,517 @@ regression test outside `crates/sim`
 (`an_executed_answer_with_neither_a_commit_seq_nor_versions_is_refused` and
 `a_seed_run_twice_reaches_the_same_state`), and both were reproduced by reverting
 the fix and re-running the sweep before the receipt was written.
+
+## Wave 3 — lane F: the desktop seat — a sidecar the shell owns, a 0600 socket, and a video that seeks while it arrives
+
+Doctrine digest stamp: law `53be88c22ab5` · [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, lane F · branch `claude/1020-laneF`.
+
+**Exit criterion: met.** `desktop/e2e/media-seek.e2e.ts` runs a real Electron app
+against a real `centraid seat` child over a real mode-0600 Unix socket, points a
+`<video>` at `centraid://blob/<digest>` for a blob that is 20% on disk, seeks to
+70% of its duration into bytes that do not exist yet, and asserts `currentTime`
+advances past the seek target. 7 specs, 12.0 s wall clock, 7 passed.
+
+### What landed, by commit
+
+**`5c59abbb` — `centraid seat --socket`: the door.**
+`crates/centraid/src/cmd/seat/{mod,local,peer,blob,catalogue,core_link,server,state}.rs`,
+`crates/centraid/src/cmd/native_host.rs`, `crates/centraid/src/cmd/mod.rs`,
+`crates/centraid/src/main.rs`, `crates/centraid/Cargo.toml`, `Cargo.lock`,
+`crates/centraid/tests/seat_socket.rs`, `crates/centraid/tests/no_listener.rs`,
+`contracts/desktop/socket-catalogue.json`.
+
+**`3ab46a14` — `desktop/electron` and `desktop/renderer`.**
+`desktop/electron/src/main.ts`, `desktop/electron/src/preload.ts`,
+`desktop/electron/src/main/{ipc-core,ipc,preload-core,seat-client-core,seat-socket,seat-state-core,sidecar-supervisor-core,sidecar,media-response-core,media-protocol}.ts`
+with `{preload-core,seat-client-core,seat-state-core,sidecar-supervisor-core,media-response-core,media-protocol-core}.test.ts`;
+`desktop/renderer/src/{main.tsx,App.tsx,seat-store.ts,seat-store.test.ts}`,
+`desktop/renderer/src/apps/tally/{fold.ts,fold.test.ts}`,
+`desktop/renderer/public/{index.html,styles.css}`;
+`desktop/vitest.config.ts`, `desktop/electron/{package.json,tsconfig.json,tsconfig.test.json}`,
+`desktop/renderer/tsconfig.json`; `crates/centraid/src/cmd/seat/{local,server}.rs`
+(the `req_end` field the shell needs to stream one resolved range).
+
+**`edf55ac8` — the exit criterion.**
+`desktop/e2e/{playwright.config.ts,electron-entry.mjs,fixture.mjs,media-seek.e2e.ts,seat.e2e.ts}`,
+`contracts/desktop/fixtures/{arriving.webm,arriving.json,make-video.mjs}`.
+
+**`acba10c0` — the MV3 Companion.**
+`extension/src/{host-core.ts,host-core.test.ts,worker.ts}`,
+`extension/static/manifest.{chrome,firefox}.json`,
+`extension/scripts/native-round-trip.mjs`, `extension/{package.json,tsconfig.json}`,
+`desktop/vitest.config.ts` (the Companion joins the same project).
+
+**`cf093373` — packaging, entitlements, the updater.**
+`desktop/electron/electron-builder.yml`, `desktop/electron/electron-builder/app-id.json`,
+`desktop/electron/build/entitlements.mac.{plist,inherit.plist}`,
+`desktop/electron/src/main/packaging.test.ts`, `desktop/electron/.gitignore`,
+`desktop/electron/src/main/update-{watcher,watcher-wiring.test,check,check.test,rollout,rollout-core,rollout-core.test,signature-core,signature-core.test,signature-gate,signature-gate.test}.ts`,
+`desktop/electron/src/main/{ipc-core,ipc,preload-core,preload-core.test}.ts`,
+`.github/workflows/lane-release-desktop.yml`.
+
+**`88d7fc28` — the gate steps and the docs.**
+`crates/xtask/src/gate.rs` (`desktop-unit` in `pr`, `desktop-e2e` in `nightly`),
+`tests/path-filter-ledger.json`, `desktop/README.md`, `extension/README.md`,
+`contracts/desktop/README.md`, `contracts/handoff/F/desktop-e2e.md`,
+`desktop/electron/package.json`, `desktop/vitest.config.ts`,
+`crates/centraid/src/cmd/seat/catalogue.rs`, `crates/centraid/tests/seat_socket.rs`
+(the two SQL literals `sql-confinement` was right to flag).
+
+### Exit list
+
+| Command | Outcome |
+|---|---|
+| `bun run --cwd desktop/electron test` | **201 passed**, 15 files, 1.7 s — `desktop/electron`, `desktop/renderer` and `extension/src` in one project |
+| `bun run --cwd desktop/electron typecheck` | clean — three tsconfigs (main, the test program, the renderer) |
+| `cargo test -p centraid` | **105 passed** across 5 targets (83 unit, 9 `no_listener`, 7 `seat_socket`, 3 `gateway_install`, 3 `restore_drill`), 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean (25.4 s) |
+| `cargo xtask gate --profile local` | **PASS** — fmt, clippy, test (`--workspace`, 143 s), rules, ledgers. 196.2 s of the 3200 s cold ceiling |
+| `cargo xtask gate --profile pr` | 433.0 s of 1500 s. Two steps were red for reasons this lane then fixed (`ci-policy`, `desktop-unit`); the rest inherited — see below |
+| `cargo xtask gate --profile nightly` | 736.4 s. **`ok desktop-unit 9.6s`**, **`ok desktop-e2e 98.2s`**, `ok ts-static`, `ok ci-policy`, `ok sim-nightly 261.2s`, `ok v0-oracle`, `SKIP device-lanes` (the named runner contract). `FAIL` on three inherited only: `secrets`, `osv`, `lane-health` |
+| `xvfb-run -a node_modules/.bin/playwright test -c desktop/e2e/playwright.config.ts` | **7 passed (12.0 s)** |
+| `node extension/scripts/native-round-trip.mjs` | `{"attached": false, "host": "dev.centraid.host", "t": "pong", "version": "1.0.0-alpha.0"}` |
+| `no-listening-socket` over `crates/centraid` | `ok no-listening-socket — 172 file(s) scanned, clean (9 in the rule runner)` |
+| `bun run format` + `format:check` | clean |
+| `bun run lint` | clean |
+| `bun run lint:actions` (actionlint) + `lint:workflow-pins` | clean — `26 workflow(s) clean` |
+| `bun run check:push:static` | **4/4** in 25.7 s |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rule(s), **no findings** |
+| `bash .governance/run.sh` | **all 10 directive(s) passed** |
+
+Two `pr` steps were red for reasons this lane fixed, and both are **`ok` in the
+nightly run above**:
+
+- **`ci-policy`** — `lint:path-filters` refused `desktop` and `extension` as
+  paths no filter claims: "a path no filter names wakes no path-gated lane, and
+  `skipped` counts as a PASS in ci.yml's `check` — so it would merge green,
+  unexercised." Correct, and the fix is a ledger entry naming the **always-on**
+  job that covers them, which is `gate.yml`'s unfiltered `cargo xtask gate
+  --profile pr` and its new `desktop-unit` step. `10 filter(s) cover every
+  workspace and top-level path (7 ledgered as always-on)`.
+- **`desktop-unit`** — failed on its first gate run with `Projects definition
+  references a non-existing file: desktop/electron/vitest.quality.config.ts`,
+  which is the repository's **own** `vitest.config.ts` being loaded by mistake:
+  vitest resolves a relative `--config` against the project root it infers
+  rather than against the shell's cwd. The package script now passes an absolute
+  path (`--config "$PWD/../vitest.config.ts"`) and `desktop/vitest.config.ts`
+  says why in a comment. Worth naming because the failure mode was a *green-
+  looking* wrong config, not an error about my files.
+
+Three steps are red for reasons outside this lane (all three in the nightly run
+too, where they are the only failures):
+
+- **`secrets`** — two findings, both pre-existing:
+  `packages/model-runtime/LICENSES.md` (named on `main` in the wave 2 brief) and
+  **`contracts/golden/format-golden.json`** (`generic-api-key` on the
+  `dataKeyHex` field of lane R's cross-language format golden). The second is
+  **not** in the brief's list of inherited reds; it is present at `2fc8d284`, so
+  it is not this lane's, and it is filed as a finding below.
+- **`osv`** — `astro@7.1.5 (score 9.8)`, the named inherited red.
+- **`lane-health`** — `ci.yml passed 5/40 first attempts (12.5 %) against a
+  95 % floor` and `ci.yml has been red on main for 16 consecutive runs`. That is
+  a reading of the repository's own GitHub history and has nothing to do with
+  this branch.
+
+`ts-static` was red on the first `pr` run with `the workspace is not built:
+packages/server/dist is absent` — the step's own documented precondition, which
+`gate.yml` satisfies by running `bun run build` first. It is **`ok`** in the
+nightly run above, and `bun run check:push:static` by hand is 4/4.
+
+### The e2e, and the seek evidence
+
+```
+cargo build -p centraid && bun run --cwd desktop/electron build
+xvfb-run -a node_modules/.bin/playwright test -c desktop/e2e/playwright.config.ts
+
+  ✓ media-seek.e2e.ts › the seat attaches and reports its four states (244ms)
+  ✓ media-seek.e2e.ts › a blob still arriving plays, and seeking past the prefix still plays (6.0s)
+  ✓ media-seek.e2e.ts › the door refuses what it must, and serves what it must (134ms)
+  ✓ media-seek.e2e.ts › the whole blob lands and is then served as complete (52ms)
+  ✓ seat.e2e.ts › quit stops the seat it started and unlinks its socket (1.2s)
+  ✓ seat.e2e.ts › a thin seat shows nothing to show, with a reason, and never an empty list (1.1s)
+  ✓ seat.e2e.ts › the same door serves the shell in replicated mode, with the ledger's own rows (1.2s)
+  7 passed (12.0s)
+```
+
+The fixture is a committed 20-second VP8/WebM of 227,977 bytes
+(`contracts/desktop/fixtures/arriving.webm`, digest in `arriving.json` and
+verified by the test before it runs). 20% of it is on disk as
+`<digest>.partial` beside a declared `<digest>.total` when the window opens; the
+rest lands at ~32 KiB/s and the prefix is renamed to `<digest>` when the last
+byte arrives — which is what an `iroh-blobs` transfer does when a blob verifies.
+
+The assertion the criterion names, verbatim from `media-seek.e2e.ts`:
+
+```ts
+const target = duration * 0.7;
+const arrivedBeforeSeek = arriving.received();
+expect(arrivedBeforeSeek).toBeLessThan(fixture.byte_size);   // still arriving
+…
+await expect
+  .poll(async () => locator.evaluate((node: HTMLVideoElement) => node.currentTime))
+  .toBeGreaterThan(afterSeek + 0.05);                        // it advanced
+```
+
+`duration` is read before the seek and is within 2 s of the fixture's recorded
+20 s — from a file that is a fifth present — which is the other half of the
+claim: the `Range` is parsed against the **declared total**, so the element
+learns the video's real length rather than its length so far.
+
+### The four-state transitions observed
+
+| Where | Transition |
+|---|---|
+| `seat_socket.rs` (replicated, fresh vault) | `availability: local`, `durability: settled`→ reported, `connectivity: unconfigured` — **not** `offline`: no gateway has been chosen |
+| `seat_socket.rs` (`--thin`) | `availability: unavailable`, `durability: none`, and a `page` refused with a reason rather than answered with an empty page |
+| `seat-state-core.test.ts` | online→offline on a replicated seat: `availability` stays `local`, `durability` falls to `local-only` — it keeps *reading* and stops being *settled* |
+| `seat-state-core.test.ts` | the first state never opens an outage even when offline (#647's rule in push shape), `down` fires once ever, `recovered` pairs only with a fired `down`, a stall fires once and re-arms after catching up |
+| `seat.e2e.ts` (thin, on screen) | `read-nothing` visible with "not been paired", `photos-grid` count 0 **and** `photos-empty` count 0 — no list at all, rather than a list with nothing in it |
+
+### Parity: what was compared, and the count
+
+`desktop/renderer/src/apps/tally/fold.test.ts` compares this dashboard's fold
+against **`contracts/apps/tally/queries.json` case 0** — the dashboard with no
+input — with the pages built from `contracts/apps/tally/rows.json` through the
+**committed catalogue's own** projection and predicate, so the fold is tested
+against the columns it will really be handed. Fields compared and agreeing:
+
+| Field | v0's answer | this fold |
+|---|---|---|
+| `currency` | `GBP` | `GBP` |
+| `friends` | 3 | 3 |
+| `expense_count` | 6 | 6 (of 7 rows — `deleted_at IS NULL` is in the statement) |
+| `settlement_count` | 1 | 1 |
+| `groups` | 3, each with `name`, `icon`, `member_count`, `owner_net.currency` | 3, all four fields agree per group (Tokyo JPY/2, Lisbon EUR/3, Sitwell Road GBP/2) |
+| `archived_groups` | 0 | 0 |
+
+That is **six of the thirteen** output fields of case 0, and it is the half a
+renderer owns. `crates/apps/tally/tests/parity.rs` deliberately compares
+`balances.json` and `rows.json` but **not** `queries.json`, because its outputs
+"carry presentation the port has no source for yet"; this is that source for the
+join and the counts. The remaining seven (`owe`, `owed`, `me`, `nudges`,
+`recurring`, `rate_suggestions`, `trash`) need the balance engine's output
+projected through `packages/design`'s `figureTone`/`partyHueValue`, which moves
+to `design/` with the token emitter (D-1020-D3-9) — named as the next wave's
+job, not claimed here.
+
+The e2e proves the same rows arrive from a **real** sidecar: `seat.e2e.ts`'s
+replicated case reads the freshly founded vault's `core_vault` row through the
+catalogue and renders its base currency, and asserts `tally-unavailable` is
+absent so the zeroes beside it are answers rather than absences.
+
+### What quit does now
+
+**It stops the seat.** v0 leaves a detached gateway running on purpose (census
+§F seam 1) because a gateway is a daemon with other clients; a seat process
+whose only client is this window is *owned*. The sequence, asserted as a list in
+`sidecar-supervisor-core.test.ts` and as behaviour in `seat.e2e.ts`:
+
+1. `dispose` the supervisor **first** — a mid-teardown auto retry would
+   resurrect a closing seat (v0's `main.ts:180`–`:182` ordering bug, made a rule).
+2. the protocol's **terminal command**.
+3. **await the seat's `closing`** — where the vault's last write lands.
+4. `SIGTERM` → 5 s → `SIGKILL`, v0's escalation. A **bare pid**, not `-pid`:
+   this child is not `detached`, so a process-group signal would hit the shell's
+   own group.
+5. **await the exit**, before anything reuses the socket path (§F seam 2).
+6. **unlink** the socket, last.
+
+`seat.e2e.ts` asserts, through `ps` rather than a pid file this shell wrote,
+that no `centraid` process is serving that socket after `app.close()`, and that
+the socket file is gone.
+
+### Decisions — lane F
+
+Each cites [#1020](https://github.com/srikanth235/centraid/issues/1020) and
+follows R-1020-34: options, a recommendation, adopted.
+
+- **D-1020-F9 — the seat socket carries TWO channels in one frame, and the
+  local one is not in `centraid.core.v1`.** A frame is `crates/protocol`'s
+  `u32BE(len) ‖ body` with the first body byte a channel tag: `0x00` is a
+  `centraid.core.v1.Envelope` byte-identical to what crosses iroh, `0x01` is one
+  UTF-8 JSON local message. Options: (a) add the local messages to
+  `centraid.core.v1` — refused, because every one of them names something that
+  cannot exist on a remote wire (a peer uid, a byte offset into a file this
+  process can see, a capability token for a child on this machine), and
+  `buf.yaml` puts that package under a FILE promise to seats that update on
+  their own schedule; (b) a second protobuf package — refused, because it needs
+  a generator in the desktop build for three message types; (c) **adopted**: a
+  channel tag, with the version-bearing surface unchanged and exercised by
+  `the_core_channel_carries_an_envelope_unchanged`. What it costs is that a
+  reader has to know about the tag, which `desktop/README.md` and
+  `crates/centraid/src/cmd/seat/local.rs` both state.
+- **D-1020-F10 — the renderer sees JSON, not protobuf-es, and `desktop/**` is
+  outside the bun workspace.** D-1020-F2 asked for `buf generate` with
+  `protoc-gen-es` and committed TS under `desktop/renderer/src/generated/`.
+  Neither `@bufbuild/protobuf` nor `@bufbuild/protoc-gen-es` is installed, and
+  adding them means editing the root `package.json` and `bun.lock` — shared
+  files, and a codegen step in a tree whose whole point is that it needs none.
+  Options: (a) install both and generate — a shared-file change plus a build
+  step for a consumer that speaks only the local channel; (b) hand-roll a
+  protobuf decoder in TS — two copies of a wire format; (c) **adopted**: main
+  speaks the local channel only, the core channel is protobuf and is exercised
+  from Rust, and the JSON shapes are pinned by
+  `the_json_spelling_is_pinned` on one side and `seat-client-core.test.ts` on
+  the other. Consequence: `desktop/**` and `extension/**` are not bun-workspace
+  members and not rows in the repository-wide vitest project list either — that
+  list drives the v0 coverage run scored against `tests/floors.json`, and adding
+  a tree to it moves coverage numbers for reasons unrelated to the oracle it
+  measures. The v1 gate runs both suites by name (`desktop-unit`).
+- **D-1020-F11 — reads are NAMED statements from a catalogue the sidecar holds,
+  never composed by the caller.** Options: (a) carry v0's shape and let the
+  renderer send a `PageQuery` — refused: the renderer is the part of this
+  product that runs app-authored JSX, so a read it can compose is a read an app
+  can compose, and the peer check says *who* rather than *what*; (b) a
+  per-statement message type — a protocol change per app; (c) **adopted**: a
+  name, resolved against `crates/apps/tally`'s own statement functions (the same
+  ones `crates/apps/tally/tests/parity.rs` compares) plus three Photos
+  statements over the ontology's tables. Pinned in
+  `contracts/desktop/socket-catalogue.json`, which `centraid seat
+  --print-catalogue` must reproduce byte for byte. Photos is **not** joined in
+  SQL: `crates/core`'s `api::page` reads each row value back by the literal
+  `select` entry, so an alias there is a silent column of nulls.
+- **D-1020-F12 — "not yet" is its own outcome, and the HTTP answer is a
+  retryable 503.** D-1020-F3 says *never 416 for a known-total blob*. A range
+  inside a declared total whose bytes have not landed is not unsatisfiable and
+  is not satisfiable either. Options: (a) answer 416 — refused, and this is the
+  whole point: a media element that gets a 416 stops asking, permanently; (b)
+  hold the request open until the bytes arrive — refused, because a stalled
+  transfer would hold a media request forever; (c) **adopted**: the seat waits a
+  bounded 5 s on the writer, answers the prefix short if any of it is there, and
+  otherwise answers `still-arriving` which the shell renders as `503` with
+  `Retry-After: 1` and `Content-Range: bytes */<total>` for a human reading the
+  network panel. `416` is reserved for a range past a **settled** size, and
+  `media-response-core.test.ts` asserts `expect(response.status).not.toBe(416)`
+  on the arriving case.
+- **D-1020-F13 — one resolved range becomes as many frames as it takes, and the
+  seat reports the range it resolved.** `crates/protocol`'s `MAX_FRAME_BYTES` is
+  262,144 and the local channel base64-encodes bytes, so one frame carries at
+  most 128 KiB of blob. Answering a request with that one window and an honest
+  `Content-Length` would tell a `<video>` the file is 128 KiB long — which it
+  believes, once, forever. So `BlobBytes` carries `req_end`, the last byte of the
+  range the **sidecar** resolved before the frame ceiling clamped it, and the
+  response body is a stream that pulls the rest. The shell cannot re-derive
+  `req_end`, because the `Range` grammar (and its open-range clamp) lives only
+  in the sidecar.
+- **D-1020-F14 — a per-turn capability token is minted by the shell, is
+  single-use, and is clamped to ten minutes.** D-1020-AS2 requires the socket to
+  admit `centraid mcp` as a second local client kind with a per-turn token in
+  env. Options: (a) admit any local process of this uid — refused: uid says
+  *who*, not *which program*, and a browser-launched host runs as the member
+  too; (b) a long-lived token in a file — a bearer on disk; (c) **adopted**: the
+  renderer asks, the seat mints 32 bytes of `/dev/urandom` as hex, and the token
+  is **removed from the live map on redemption** — so a token read out of a
+  child's `/proc/<pid>/environ` by a second child of the same uid buys nothing.
+  A token minted for `native-host` does not admit `mcp` and a child may not
+  mint. All four properties are tested in `local.rs` and over a real socket in
+  `a_second_local_client_kind_attaches_with_a_minted_token_once`.
+- **D-1020-F15 — the Windows named-pipe door is an owner hand-off, and
+  `centraid seat --socket` refuses to run there.** Options: (a) write the DACL
+  unobserved — refused: a DACL that was written but never seen to refuse
+  anybody is a claim, not a protection, and this container has no Windows
+  machine; (b) open an unprotected pipe with a warning — refused; (c)
+  **adopted**: exit 3 with the hand-off named in the message, so a Windows
+  build fails loudly rather than serving a vault over a pipe nobody checked.
+- **D-1020-F16 — mounting `packages/blueprints/apps/{tally,photos}/app-inline`
+  is deferred, and the parity claim is not deferred with it.** D-1020-F5 asks
+  for the v0 UIs behind an adapter. Those components take v0's
+  `@centraid/client` context — a gateway HTTP client, an SSE change feed, and
+  the design-token provider — so mounting them is adapting *that context*, not a
+  data source, and the adapter is a piece of work the size of this renderer.
+  Options: (a) mount them and stub the context — a stubbed change feed is a
+  screen that silently never updates; (b) port the components — a second copy of
+  eight apps; (c) **adopted**: ship the screens over the same named reads, and
+  keep the parity claim by comparing the fold against `queries.json` case 0
+  field by field (above) and by proving the rows arrive from a real sidecar in
+  the e2e. Named as a hand-off in `desktop/README.md`.
+- **D-1020-F17 — the e2e's fixture video is committed, not generated.** The
+  claim is about serving a blob whose bytes are still arriving; a test that first
+  has to encode a video depends on an encoder the runner may not have. This
+  container's only ffmpeg is Playwright's screen-recording build
+  (`--disable-everything`, one decoder: mjpeg; one encoder: libvpx), which is
+  why the generator feeds JPEG frames and emits VP8/WebM. `make-video.mjs` is
+  committed beside the file so it is reproducible, and nothing in CI runs it.
+
+### Demonstrated reds
+
+Each was produced by breaking the subject, observing the failure, and reverting.
+
+1. **The blob door's 416 rule.** `Served::NotYet` replaced by
+   `Served::Unsatisfiable` in `crates/centraid/src/cmd/seat/blob.rs`:
+   `cmd::seat::blob::tests::an_arriving_blob_serves_its_prefix_and_says_not_yet_past_it
+   ... FAILED` — `test result: FAILED. 82 passed; 1 failed`.
+2. **The peer check.** `judge_peer` returning `Ok(peer)` unconditionally:
+   `cmd::seat::peer::tests::the_owning_uid_is_admitted_and_a_second_uid_is_refused
+   ... FAILED`. **This is the peer-check red the exit list asks for**: a second
+   uid cannot be created in this container, so the refusal is asserted against
+   `PeerIdentity { uid: 1001 }` and `uid: 0` in the unit test, and the
+   production path feeds that exact function from `UnixStream::peer_cred`. The
+   socket's own mode is asserted over a live socket in
+   `the_socket_is_0600_and_a_foreign_instance_is_refused_not_adopted`.
+3. **The media door's status.** `503` replaced by `416` for `still-arriving` in
+   `media-response-core.ts`: `the statuses > is 503 with Retry-After — never 416
+   — for a range inside a declared total` — `1 failed | 113 passed`.
+4. **`desktop-unit`'s own red, found by the gate rather than staged**: the
+   vitest config misresolution above. The step failed on its first real run, the
+   cause was a wrong config being loaded silently, and the fix is in the
+   script.
+
+### The xtask hand-off
+
+`contracts/handoff/F/desktop-e2e.md` records both steps, but they are **already
+applied** to `crates/xtask/src/gate.rs` — the route the umbrella's state block
+named as preferred now that lane G has landed. `desktop-unit` is in `pr`
+(1.9 s vitest + 6.4 s of typechecks, under 1% of the 1500 s ceiling; no ledger
+was touched, because the ledgers are down-only and `measure --write` owns them)
+and `desktop-e2e` is in `nightly`. The one thing lane G may want: `xvfb` on the
+nightly runner, without which `desktop-e2e` **fails** with the install command
+rather than skipping — Electron has no headless mode, and a browser test that
+read green with no window would be the loudest kind of lie.
+
+### Findings outside the slice
+
+- **`cargo xtask` measures whichever git worktree last compiled `crates/xtask`,
+  not the one you run it in.** `crates/xtask/src/main.rs`'s `repo_root()` reads
+  `env!("CARGO_MANIFEST_DIR")`, which is baked at COMPILE time — deliberately,
+  so `cargo run -p xtask` works from a subdirectory. With a shared
+  `CARGO_TARGET_DIR` across worktrees (this wave's lanes E and F share
+  `/home/user/cargo-target-2b` by the brief's own instruction) cargo reuses the
+  cached binary, so the gate silently scores the *other* lane's tree. I hit it:
+  a `nightly` run from this worktree reported `commonmain-no-platform-import —
+  12 file(s) scanned` (lane E's `mobile/shared`, which does not exist here),
+  `no-listening-socket — 162` instead of 172, and `ts-static — 9 .ts file(s)`
+  instead of 50. `touch crates/xtask/src/main.rs && cargo build -p xtask` fixes
+  it, and every number quoted in this section comes from a run after that. The
+  repair belongs in `repo_root()`: prefer `git rev-parse --show-toplevel` (or
+  walk up from the cwd for the workspace `Cargo.toml`) and fall back to the
+  baked manifest path, which keeps the `cargo run` case working and makes a
+  shared target directory safe. Lane G owns `crates/xtask`.
+- **`contracts/golden/format-golden.json` trips `gitleaks`** (`generic-api-key`
+  on `dataKeyHex`, line 23) and is **not** one of the two inherited reds the
+  wave 2 brief names. It is present at `2fc8d284`, so it predates this lane.
+  It is a *format golden* — the hex is a fixed derivation input, not a
+  credential — so the fix is in the gate's own config (a path rule for
+  `contracts/golden/**`), never an allowlist entry for the finding. Lane G owns
+  `.gitleaks.toml`.
+- **`contracts/apps/tally/rows.json` and `queries.json` were generated from two
+  different fixture runs**, so their generated ids disagree: the same three
+  groups are `id-0033`, `id-0034`, `id-0011` in one and `id-0005`, `id-0006`,
+  `id-0007` in the other, while every other field agrees. The parity test
+  therefore joins by **name** and says so in a doc comment. One generator run
+  would make id-level comparison possible, which is what the remaining seven
+  `queries.json` fields will need.
+- **`claimRevival` requires epoch milliseconds.** A fresh budget's
+  `lastAttemptAt` is `0`, so the minimum-interval check is against the absolute
+  clock: a caller that handed it a monotonic uptime would have its first
+  revival refused for the process's first fifteen seconds. This is v0's
+  arithmetic, carried verbatim by D-1020-F1, so it was **named and pinned**
+  (`requires epoch milliseconds: a near-zero clock refuses the first revival`)
+  rather than "fixed" — changing the comparison would change when the second
+  and third revivals are allowed too. A finding for whoever owns v0's copy.
+- **`oxlint`'s `promise/no-multiple-resolved` false-positives** on two
+  consecutive `clearTimeout(...)` statements inside a closure returned from a
+  function that also constructs a `Promise` (`desktop/e2e/fixture.mjs`). Written
+  as one call site in a loop with the reason in a comment rather than silenced,
+  because a disable comment there would hide a real finding later. R-1020-35
+  says a gate that reports a false positive is a bug in the gate — this one is
+  upstream oxlint and `oxlint.config.ts` is law, so it is a finding and not a
+  patch.
+- **`crates/core`'s `api::page` keys a row's values by the literal `select`
+  entry**, which means the paged read cannot carry a column alias or an
+  expression at all — an aliased `select` yields a page of nulls with no error.
+  `crates/centraid/src/cmd/seat/catalogue.rs` asserts every catalogued statement
+  projects plain columns only, and the Photos join is done in the renderer
+  because of it. Worth a typed refusal in `api::page` rather than a convention
+  each caller has to know.
+
+### Oracle edits
+
+**None.** `apps/desktop/**`, `apps/extension/**` and `packages/**` are
+untouched; `git diff origin/claude/friendly-cori-ezadjb..HEAD --stat -- apps
+packages` is empty. Four v0 modules were **copied** into
+`desktop/electron/src/main/` with their tests (`update-signature-core`,
+`update-signature-gate`, `update-watcher`, `update-check`, `update-rollout`,
+`update-rollout-core`) and their headers annotated to say they were carried
+unchanged and why; the originals are unmodified.
+
+One **test** in this lane's own crate was amended rather than weakened:
+`crates/centraid/tests/no_listener.rs`'s
+`every_unimplemented_verb_exits_three_and_names_its_lane` listed `seat` and
+`native-host` as exit-3 stubs. Both are implemented now, so the list shrank (as
+it has twice before) and the property it protected — *a verb must not exit 0
+without doing its work* — is asserted against the real implementations:
+`the_seat_verb_names_the_flag_it_needs_rather_than_exiting_zero`,
+`the_seat_prints_the_catalogue_it_serves`,
+`the_native_messaging_host_answers_a_ping_in_the_browsers_framing` and
+`the_host_manifest_carries_an_allowlist_and_is_never_installed_by_guessing`.
+
+### Owner hand-offs
+
+1. **macOS and Windows runs.** Everything here is proven on Linux under Xvfb.
+   The commands are in `desktop/README.md` § *Running it*; on macOS/Windows they
+   are unchanged except that no `xvfb-run` is needed. On Windows,
+   `centraid seat --socket` exits 3 with the named-pipe hand-off until its DACL
+   door is written **and observed to refuse somebody**.
+2. **Signing and notarisation enrolment.** `lane-release-desktop.yml`'s gates
+   are untouched: Apple secrets flip `CSC_IDENTITY_AUTO_DISCOVERY`, Azure
+   secrets flip Windows signing, and the GitHub Release **withholds the
+   installers entirely** while unenrolled. `docs/enrollment.md` is the doc; the
+   `docs/release.md` pipeline sections are lane G's.
+3. **The updater's release key.** `TRUSTED_RELEASE_KEYS` stays **empty**, so
+   every packaged update refuses with `no-trust-anchor` and
+   `relaunchToUpdate()` relaunches rather than installs. That is the fail-closed
+   state, it is asserted (`enrols no release key, so every packaged update
+   refuses`), and enrolling a key flips that test — which is the review signal
+   that signed updates went live. Widening it to make a v1 update path work is
+   the "never weaken policy to go green" case.
+4. **Where the browser host manifest is stored, per browser and per platform.**
+   `centraid native-host install --browser chrome|firefox --extension-id <id>
+   --out <path>` writes it and prints the directory to copy it to; it never
+   copies it itself, for the same reason `gateway install` never enables a unit.
+   Which directory an installer should write to — and whether the desktop
+   installer should offer at all — is a product decision.
+5. **Store enrolment and the extension ids** for Chrome Web Store and AMO.
+   Until an id is enrolled there is nothing to put in a host manifest's
+   allowlist, and a manifest with a placeholder id is one that silently does not
+   work (an empty allowlist is refused outright).
+6. **`xvfb` on the nightly runner**, or `desktop-e2e` fails loudly there. See
+   the hand-off note.
+7. **Prebuilt core artifacts.** The release lane compiles `centraid` per
+   platform today; when lane G's `lane-prebuilt-core.yml` artifacts are
+   downloadable, the `cargo build --release -p centraid` step is replaced by a
+   download and `electron-builder.yml`'s `extraResources` path does not change.
+
+### Falsification: the two riskiest claims, and what was run against each
+
+**Claim 1 — "a video seeks in a blob that is still arriving."** The risk is that
+the test passes because the blob had *finished* arriving by the time the seek
+happened, which would make the assertion true and meaningless. It did: on the
+first full run the fixture's writer (16 KiB every 60 ms) completed in ~0.8 s and
+the precondition `expect(received).toBeLessThan(fixture.byte_size)` **failed**
+with `Expected: < 227977 / Received: 227977` — the test caught its own vacuity
+before I did. The writer was slowed to ~32 KiB/s so the arrival outlasts the
+setup, and the precondition is asserted **twice**: once at the top of the test
+and again immediately before the seek (`arrivedBeforeSeek`). A second check:
+the two statuses that only exist for an arriving blob are observed in the same
+run — the renderer console logs `416` (a range past the declared total) while a
+`206` for a range inside the prefix carries
+`bytes 0-99/227977`, the **declared** total of a file that was a fifth present.
+
+**Claim 2 — "quit stops the seat."** The risk is that the process is gone
+because Playwright's `app.close()` kills the whole process tree, not because the
+supervisor's sequence ran — which would make the ordering untested and the
+`SIGTERM`/`SIGKILL` escalation decorative. Three checks. (a) The sidecar is
+spawned with `detached: false`, so `app.close()` *would* take it down; so the
+e2e assertion alone is not proof, and the ordering is asserted separately in
+`sidecar-supervisor-core.test.ts` as a list with three index comparisons
+(`dispose` before `terminate-command`, `await-close` before `sigterm`,
+`await-exit` before `unlink-socket`). (b) The seat's own side is proven without
+Electron at all: `the_shell_attaches_reads_a_named_page_and_terminates_the_seat`
+sends `terminate` over a real socket, reads the `result` and then the `closing`,
+and then polls `child.try_wait()` until the process exits **0 of its own
+accord** — before any signal. That test found a real bug in my first version: it
+used `/proc/<pid>` to detect the exit, which still exists for an unreaped
+zombie, so it reported the seat as alive when it had exited cleanly. (c) The
+socket file's disappearance is checked separately from the process, so
+"unlinked" and "exited" cannot pass for each other.
