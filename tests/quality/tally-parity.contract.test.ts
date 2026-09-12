@@ -6,6 +6,14 @@
 // `contracts/` files (#1020, Execution plan → Invariants). It adds no product
 // code and changes no v0 behaviour.
 //
+// WHY IT LIVES UNDER `tests/` AND NOT `packages/vault/tests/`.
+// `packages/vault/tsconfig.test.json` sets `rootDir: "."`, so a file there
+// cannot import anything outside the package — and this adapter has to import
+// both `contracts/tools/` and the blueprint handlers it invokes. `tests/`'s own
+// tsconfig has no `rootDir` and already spans the repository, which is what
+// makes it the home the invariants name for exactly this shape of file. Nothing
+// was relaxed to get here.
+//
 // TWO JOBS, ONE COMMAND. With `CENTRAID_WRITE_CONTRACTS=1` it WRITES the four
 // files under `contracts/apps/tally/`; without it, it rebuilds the bundle from
 // the live v0 tree and asserts BYTE-equality with what is committed. So "the
@@ -25,10 +33,10 @@ import {
   TALLY_PARITY_DIR,
   buildTallyParity,
   stableJson,
-} from "../../../../contracts/tools/export-tally-parity.ts";
+} from "../../contracts/tools/export-tally-parity.js";
 
 /** The repository root, from this file's own location. */
-const ROOT = path.join(import.meta.dirname, "..", "..", "..", "..");
+const ROOT = path.join(import.meta.dirname, "..", "..");
 
 const WRITE = process.env.CENTRAID_WRITE_CONTRACTS === "1";
 

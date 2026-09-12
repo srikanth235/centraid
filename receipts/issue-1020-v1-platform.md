@@ -436,3 +436,156 @@ The two riskiest claims in this lane, and the throwaway check run against each.
 ### Doctrine digest
 
 Law `53be88c22ab5`, verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — the law did not move under this lane's work, and no waiver was spent.
+
+## Wave 2 — lane D3: the app kit, Tally, and the ceiling nobody could reach
+
+The app half of wave 2 lane D: `crates/apps/kit` (the paged-read grammar every app is written in), `crates/apps/tally` (the shared-expense ledger), and Tally's parity fixtures generated from the v0 handlers. Four commits, then this one.
+
+The lane's headline is not the port. It is that **porting Tally's stated ceiling made it measurable for the first time, and the ceiling turned out to be unreachable in v0**: the dashboard reads 500 expenses while declaring 2,000, discards the cursor that says there are more, and folds a balance over what it got — which is the exact failure its own doctrine names four lines above the window declaration.
+
+### What landed
+
+**`0b8ebbe0` — `feat(apps): the app kit — paged reads, the door grammar and Money`**
+
+- `Cargo.toml` — `members` gains `crates/apps/kit`; `exclude` gains `crates/apps` (see D-1020-D3-13).
+- `Cargo.lock` — `proptest` and the two new crates.
+- `crates/apps/kit/Cargo.toml`
+- `crates/apps/kit/src/lib.rs` — the crate's own contract: what the kit guarantees, what an app may not do, and what stops it.
+- `crates/apps/kit/src/error.rs` — `KitError`. Every variant is a member-visible outcome in v0; a denial is deliberately **not** one of them.
+- `crates/apps/kit/src/row.rs` — `Cell`, `Row`, `Found`. NULL, MISSING and a value kept as three claims.
+- `crates/apps/kit/src/page.rs` — `PageCursor`, `PageRequest`, `Page`, `MAX_PAGE_ROWS`, `probe_limit`, `page_of`.
+- `crates/apps/kit/src/statement.rs` — `PageOrder`, `PageQuery`, `page_cursor_of`, `page_cursor_boundary`, the one `page_statement` assembler.
+- `crates/apps/kit/src/grammar.rs` — the paged door's grammar as a parser over the statement-as-data: `ALLOWED_WORDS`, `OPERATORS`, `parse`, `check_columns`, `TableFacts` as the vault's splice point.
+- `crates/apps/kit/src/money.rs` — `Money` as `i64` minor units, `Currency`, the ISO 4217 minor-unit table, `MoneyBag`, `Valuation`, `js_round_div`, `format_money`.
+- `crates/apps/kit/src/manifest.rs` — the `app.json` parser and the three cross-cuts a schema cannot express.
+- `crates/apps/kit/src/changes.rs` — `ChangeEvent`, `coalesce`, `DependencySet::matches`.
+- `crates/apps/kit/src/reads.rs` — `PageDoor`, `in_list`, `FanOutBound`, `JOIN_FAN_OUT`, `read_by_id`, `read_pages`.
+- `crates/apps/kit/src/testdoor.rs` — the SQLite test door.
+- `crates/apps/kit/src/fixtures.rs` — the year-3 Tally generator.
+- `crates/apps/kit/tests/keyset_properties.rs` — the keyset properties.
+
+**`38d6284c` — `test(contracts): Tally's parity fixtures, generated from the v0 handlers`**
+
+- `contracts/tools/export-tally-parity.ts` — founds a fresh v0 vault, seeds through the real typed commands, invokes all eight queries through the real handler path, canonicalises and returns the bundle.
+- `contracts/tools/tally-parity-ledger.ts` — the scripted ledger (three currencies, uneven payers, a group-less 1:1, a trashed expense, a departed member, a standing order with an overridden occurrence, a prepared nudge).
+- `contracts/tools/tally-parity-balances.ts` — the six balance-engine cases.
+- `contracts/apps/tally/{rows,queries,balances,scenarios}.json` — the bundle.
+- `contracts/README.md` — the `apps/tally/` row, and the wave-2 note corrected (`apps/*/` no longer "wave 4" wholesale).
+- `tests/quality/tally-parity.contract.test.ts` — **the one permitted v0 edit in this lane**: a fixture adapter under `tests/**` that is both the emitter (`CENTRAID_WRITE_CONTRACTS=1`) and the oracle (without it, it rebuilds from the live v0 tree and fails if the committed files disagree). No product code and no v0 behaviour changed. It sits under `tests/` rather than `packages/vault/tests/` because `packages/vault/tsconfig.test.json` sets `rootDir: "."`, so a file there cannot import `contracts/`; `tests/`'s own tsconfig already spans the repository, which is why the invariants name that path for this shape of file. Nothing was relaxed to get it to typecheck: the eight handler specifiers are computed at run time so the blueprint handler graph never enters a TypeScript program that also sees `packages/vault/src`.
+
+**`c6d84848` — `feat(apps): crates/apps/tally — the manifest, the balance engine, loadTally`**
+
+- `Cargo.toml` — `members` gains `crates/apps/tally`.
+- `crates/apps/tally/{Cargo.toml,manifest.json}` — the manifest is v0's `app.json` byte for byte.
+- `crates/apps/tally/src/lib.rs`, `src/manifest.rs`, `src/balance.rs`, `src/queries.rs`, `src/commands.rs`.
+- `crates/apps/tally/tests/parity.rs` — the balance-engine parity and the `loadTally` fold over the fixture ledger.
+- `crates/apps/kit/src/contract_vault.rs` — `open_contract_vault`, moved out of the tally test because `sql-confinement` scans tests too.
+- `crates/apps/kit/src/lib.rs`, `src/fixtures.rs`, `src/reads.rs`, `crates/apps/tally/src/queries.rs` — the fan-out arithmetic.
+
+**`7cdcf437` — `feat(apps): the year-3 Tally axis, measured, and the window it uncovered`**
+
+- `crates/apps/kit/src/fixtures.rs` — `YEAR3_TALLY`, `year3_tally`; the stand-in DDL **deleted** in favour of the committed one.
+- `crates/apps/kit/src/reads.rs` — `Window`, `read_window`, `FanOutBound::reachable_page_size`, `cap` reporting the reachable number.
+- `crates/apps/tally/src/queries.rs` — windows walked rather than clamped; `TallyData::ledger_window_filled`.
+- `crates/apps/tally/tests/year3.rs` — the measurement.
+- `contracts/apps/tally/year3-ceiling.md` — the volume, the query, the cells, the numbers and the two findings.
+
+**This commit** — `crates/apps/kit/README.md`, `crates/apps/tally/README.md`, this section.
+
+### Exit list
+
+| Command | Outcome |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets` | **0 warnings**, 0 errors |
+| `cargo test --workspace` | **14 suites, all ok** — kit lib 54, kit keyset properties 7, tally lib 25, tally parity 4, tally year3 1, ontology and xtask unchanged |
+| `cargo xtask gate --profile local` | green, inside budget |
+| `cargo xtask gate --profile pr` | green except the two inherited reds named in wave 1 (gitleaks on `packages/model-runtime/LICENSES.md`, osv on `astro@7.1.5`) |
+| `sql-confinement` | `ok sql-confinement — 7 file(s) scanned, clean (27 in the allowed crates, 6 in the rule runner)` — the 7 scanned are `crates/apps/tally`'s source and tests, and they hold no SQL; the kit's 12 files are among the 27 in the allowed crates |
+| `no-listening-socket` | `ok — 34 file(s) scanned, clean` |
+| `node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/tally-parity.contract.test.ts` | 2 passed — the fixtures are what the live v0 handlers answer |
+| `CENTRAID_WRITE_CONTRACTS=1 … && bun run format && git diff --exit-code contracts/apps` | clean — generation is idempotent |
+| `bun run check:push:static` | **4/4** — `lint`, `format:check`, `turbo:lint`, `typecheck:affected` |
+| `bun run format` / `format:check` | clean |
+| `cargo mutants -p centraid-apps-kit` | **not run** — see "Not done" |
+
+### Parity numbers
+
+- **Balance engine: 6 cases × 7 comparisons each = 42 assertions**, all green: attributions per live expense, per-member net, the pairwise matrix, the open-debt count, the minimal transfers, and the simplification both opted in and out. The cases are the odd amount over three sharers, two payers, a settlement, a zero share, a departed member and a four-way simplification.
+- **`loadTally` over the fixture ledger**: 6 live expenses, 1 trashed, 3 groups in 3 currencies, 16 split rows, 8 payer rows, 1 settlement, 1 standing order, 1 occurrence exception, 4 parties — every payer set and split set sums to its amount, every group's pairwise matrix reconciles with its net, and the departed member is still nameable.
+- **`queries.json`: 29 cases across all 8 queries, committed, not yet compared** (see "Not done").
+- **Year-3 `loadTally` at 2,000 expenses / 8,000 splits on `ci-linux-x64-4c`: 58 ms release, 124 ms dev**; the balance fold over 40 groups / 240 pair rows: 6 ms release, 27 ms dev. Projected provenance, not a budget.
+
+### Decisions — lane D3
+
+Adopted under **R-1020-34** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): options written, recommendation adopted, recorded here.
+
+- **D-1020-D3-10 — a keyset page is not continued over a NULLABLE sort column.** Options: (a) reproduce v0, which silently drops rows; (b) refuse the continuation; (c) build the typed, versioned cursor that can carry NULL as its own value. **Adopted (b)**, with (c) filed as a finding. SQLite compares a row value with a NULL operand to **NULL, not true** — verified directly: `SELECT (NULL,'pk-4') > ('','pk-3')` answers NULL — so v0's continuation drops rows in three of the four (direction, boundary) cases and says nothing. (a) is a wrong ledger; (c) is a wire-format change that belongs with the protocol lane. Cites [#1020](https://github.com/srikanth235/centraid/issues/1020).
+- **D-1020-D3-11 — the parity fixture is canonicalised ROWS, not a `vault.db.gz`.** Options: (a) the brief's compressed vault; (b) rows plus the committed DDL. **Adopted (b)**. `bootstrapVault` mints the vault, the owner party and the first device as UUIDv7 off the clock and they are not seed-derived, so a database file is not byte-reproducible and the idempotency gate could never pass; a compressed database is also not a diff anyone reads, and `contracts/README.md`'s rule is that a fixture is data both trees read without a bridge. Rust rebuilds the same file from the rows and `contracts/schema/vault-ddl.sql`, which stays the one copy of the model. Cites [#1020](https://github.com/srikanth235/centraid/issues/1020).
+- **D-1020-D3-12 — a bound and a window report the size they can reach.** Options: (a) restate v0's arithmetic and reproduce both bugs; (b) report the reachable cap and walk a stated window. **Adopted (b)**, and Tally's bounds are restated at a page size of 500 so the stated ceilings (8,000 and 32,000) are the reachable ones. `MAX_PAGE_ROWS` clamps a page to 500, so `pageSize × fanOutPages` names twice the rows it stops at whenever `pageSize` exceeds 500, and a window asked for as one page reads a quarter of itself. A cap that lies about its own size is worse than a smaller cap. Cites [#1020](https://github.com/srikanth235/centraid/issues/1020).
+- **D-1020-D3-13 — each app crate is a NAMED workspace member.** Options: (a) the brief's `"crates/apps/*"` glob; (b) name each app crate. **Adopted (b)**, because (a) does not work: `crates/*` also matches `crates/apps`, cargo refuses a glob match with no manifest, and adding `crates/apps` to `exclude` excludes the whole subtree — an explicitly listed member is the only thing that overrides its parent's exclusion. Naming them also keeps the count visible in the workspace file, which a glob hides. Cites [#1020](https://github.com/srikanth235/centraid/issues/1020).
+- **D-1020-D3-14 — the parity generator's epoch is 2099 and host-clock instants are tokenised.** Options: (a) a past epoch and no trash step; (b) tokenise the clock-dependent columns and move the epoch past the host's clock. **Adopted (b)**. The vault has **two clocks**: a handler stamps `ctx.now`, which a JS proxy can hold still, while a command's pre/postconditions are SQL and read SQLite's own `strftime('now')`, which no proxy reaches. With a frozen clock in the past, `tally.delete_expense` writes a `purge_at` already expired by the host's reckoning and its own postcondition refuses it, so the trash case cannot be fixtured at all; and every replicated table's `updated_at` defaults to the host clock, so it can never be committed as a value. Cites [#1020](https://github.com/srikanth235/centraid/issues/1020).
+
+### Demonstrated reds
+
+Every gate this lane added landed with a red first, and each one is a named test rather than a claim.
+
+| Gate | Demonstrated red |
+| --- | --- |
+| `NullableSortKey`, boundary half | `testdoor::tests::a_null_sort_key_at_a_boundary_is_refused_not_dropped` — the ascending case, where the boundary row is NULL |
+| `NullableSortKey`, continuation half | the same test's descending half, where the boundary row is valued and the NULL rows are the ones still owed — the case a boundary check alone misses and v0 gets wrong with no signal |
+| `NullableSortKey`, as a property | `keyset_properties::a_walk_is_whole_or_refused`, and `the_recorded_counterexample_is_refused` keeps the shrunk case the property found |
+| The grammar | `grammar::tests::refused_shapes` — eleven shapes, one per refusal: a second statement, a line comment, a block comment, a subquery in `FROM`, a nested `SELECT`, an unlisted function, a `JOIN` with no `ON`, an unterminated string, an unknown token, two tables under one name, an unreadable alias |
+| The field mask and sealed columns | `grammar::tests::a_column_outside_the_field_mask_and_a_sealed_column_are_both_refused` |
+| The door refuses what the grammar refuses | `testdoor::tests::the_door_refuses_what_the_grammar_refuses` — and asserts the table is still there afterwards |
+| `FanOutBound::cap` | `reads::tests::the_stated_ceiling_is_the_reachable_one` — v0's `{1000, 8}` reaches 4,000, not 8,000 |
+| `read_window` | `reads::tests::a_stated_window_is_walked_rather_than_clamped` — 1,200 rows, one page of a 1,000-row window returns 500 **and a cursor**, which is what v0 takes and folds a balance over |
+| `FanOutExceeded` in Tally | `parity::a_fan_out_past_its_ceiling_errors_rather_than_answering_short`, and asserts the honest bound reads all 16 rows |
+| The `(expense_id, party_id)` pair keyset | `parity::a_page_boundary_inside_one_expense_loses_no_sharer` — added because the falsification below found that neither the parity nor the year-3 fixture crossed a boundary inside an expense |
+| The manifest's cross-cuts | `manifest::tests::{the_version_is_checked_before_the_shape, a_reserved_handler_name_is_refused_on_both_sides, one_name_in_both_lists_is_allowed_and_two_in_one_is_not, an_action_with_no_writes_key_is_refused, states_is_a_closed_partition, an_uncanonical_state_is_refused}` |
+| A denial is a value | `commands::tests::a_denial_is_a_value_and_not_an_error`, and `an_absent_door_fails_closed_and_names_the_command` for the other half |
+| The zero window | `page::tests::a_zero_window_is_refused_by_both_ends` |
+
+### Findings outside the slice
+
+Each one is a v0 bug or seam this lane found and did not fix in v0, because v0 is the pinned oracle.
+
+1. **`loadTally` reads a quarter of its declared ledger window and folds a balance over it.** `queries/dashboard.ts:267-280` asks for `limit: LEDGER_ROWS` (2,000) as one page and takes `.rows`; `MAX_PAGE_ROWS` clamps to 500 and the `next` cursor is discarded. The dashboard's hero figures, every group ledger and the friend view are all folds over this. **The most serious finding of the lane** — it is a wrong number on a shipped surface, not a slow screen, and the doctrine four lines above the declaration says so in those words.
+2. **Every declared fan-out over a page size of 500 reaches half the rows it names, then throws a message naming the other half.** Tally's `LEDGER_FAN_OUT` states 8,000 and reaches 4,000; `ALLOCATION_FAN_OUT` states 32,000 and reaches 16,000. Combined with finding 1: at 2,000 expenses with four sharers each, v0's `loadTally` **throws**, and the only reason nobody has seen it is that no fixture could reach that volume.
+3. **A keyset continuation over a nullable sort column silently drops rows** in three of the four (direction, boundary) cases, because SQLite compares a row value with a NULL operand to NULL. No Tally statement is exposed today (`spent_on` and every other sort column is NOT NULL), but nothing in v0 prevents one; the next app to page by `due_at` or `archived_at` gets a short list with no signal.
+4. **The vault has two clocks.** A command's handler stamps `ctx.now`; its pre/postconditions are SQL and read SQLite's `strftime('now')`. `EXPENSE_TRASHED_SQL` is the instance that bites: a frozen-clock fixture in the past cannot trash an expense, because its own postcondition compares `purge_at` to the host's wall time. `crates/vault` should take its instant from one injected source.
+5. **`updated_at` cannot be fixtured.** Every replicated table defaults it to `strftime('now')` and a trigger re-stamps it the same way, so it is the wall time of whoever regenerated a fixture. Tokenised here; the one-clock fix in finding 4 removes it.
+6. **v0's currency formatter is wrong for JPY and KWD and locale-dependent everywhere.** `packages/design/src/format.ts:38` divides minor units by 100 unconditionally and passes `undefined` as the locale, so the same vault renders differently on two devices. The port carries a minor-unit table and takes an explicit locale; parity fixtures for formatting are therefore deliberately **not** generated from v0.
+7. **`line-model.ts` mints line ids from a module-level counter.** Two seats composing offline produce colliding `line-1` ids. Not reached in this lane (the port has no line-draft model yet), so it stays a finding rather than a fix — the port will mint from a seat-scoped ULID, as the expense id already is.
+8. **`tally.remove_group_member`'s `member_off_ledger` precondition makes it unusable for any member who has spent anything**, which is every member a group has. `leave_group` is the verb that works, and the manifest offers both with no hint that one is unreachable. Worth a product question rather than a code change.
+9. **`reads` on a manifest query entry is dead**: the type has it and no bundled app populates it. Either it means something and the apps are under-declaring, or it should go.
+
+### Owner hand-offs
+
+1. **Finding 1 is a live wrong number on a shipped surface.** v0 is the pinned oracle and this lane did not touch it, but the dashboard is wrong for any member with more than 500 live expenses today. Options: (a) leave it, on the grounds that v1 fixes it and few members are over 500; (b) a one-line fix in v0's `loadTally` to walk the window, taken as a permitted oracle edit; (c) ship it as a known issue with a surface note. **Recommendation: (b)**, because the fix is small, the fixture that proves it now exists, and "the oracle is wrong about the thing the port is being compared to" is a worse position than a narrow edit to the oracle. Needs the owner's word, since it is outside this lane's file set.
+2. **Finding 8** — is `remove-group-member` meant to be reachable? If yes its precondition needs to change; if no, it should not be a manifest action.
+
+### Doctrine digest
+
+Law `53be88c22ab5`, stamped. `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — no findings. `bash .governance/run.sh` — all directives pass. No waiver spent; no law path, gate, budget, ledger or allowlist touched. The one edit inside the pinned v0 tree is `packages/vault/tests/contracts/tally-parity.test.ts`, which the invariants permit by name.
+
+### Not done, and why
+
+- **`queries.json`'s 29 cases are not compared in Rust.** The outputs carry presentation the port has no source for: a party's colour from `partyHueValue`, its initials from `identityInitials`, a ledger row's tone from `figureTone` — all in `packages/design`, which moves to `design/` in wave 3/4 with the token emitter (D-1020-D3-9). Comparing the arithmetic alone would mean editing the fixture to drop fields, which is the one thing a generated fixture must not allow. The fixture is committed and is the next wave's first job.
+- **The `history` and `matches` queries have no Rust statements.** They read `core_entity_revision`, `core_transaction`, `core_link` and `core_account` — the revision and finance planes, which are `crates/vault`'s (lane D1). Their v0 outputs are in the fixture.
+- **The client-side models** (`split-model`, `line-model`, `draft-model`, `contrib-model`, `receipt-model`, `spending-model`, `schedule-model`, `activity-model`) are not ported. They are form arithmetic and surface state, not the ledger, and they belong with the shell that renders them.
+- **`cargo mutants -p centraid-apps-kit` was not run.** It is not installed in this container and `cargo install cargo-mutants` is a from-source build the lane's budget did not have. The exit criterion names it as judged at lane D2's close; the crate's tests are the survivor surface it will be run against, and the receipt records it as owed rather than done.
+- **`crates/vault/src/commands/tally.rs`** — untouched. Lane D1's skeleton did not land during this lane, so the 23 actions sit behind the `Commands` trait with an in-memory test implementation, exactly as the brief specified for that case.
+- **The change stream's wire half** (`ChangeEvent` over the ABI, the SSE frame) is not here; `changes.rs` is the matching rule and the coalescing, which is the app-visible half.
+
+### Falsification
+
+The two riskiest claims in this diff, the throwaway check run against each, and the result.
+
+1. **"The ported statements are the same statements, so the parity fixture is a fair comparison."** The risk is a port that agrees with v0 because both were written from the same reading of the same file, not because they compute the same thing. Check: the fixture was generated by **executing v0** — a real founded vault, the real typed commands, the real handler path through the real paged door — and the Rust side was pointed at the resulting rows. Then one statement was deliberately broken: `tally.dashboard.splits`' order changed from the `(expense_id, party_id)` pair to `expense_id` alone, which is the exact trap the census names, and the suites were re-run.
+
+   **Result: the parity suite did NOT catch it, and neither did the year-3 suite.** Only the statement-shape unit test did. The reason is alignment, and it is worth more than the check was: the fixture's sixteen split rows fit inside one 500-row page, so no boundary is crossed at all; and the year-3 profile's **four sharers per expense divides the 500-row page exactly**, so at 8,000 split rows the boundary lands between expenses sixteen times and never inside one. Both fixtures were blind to the trap by arithmetic accident.
+
+   So the claim was **false as stated** and the lane now carries the gate it was missing: `parity::a_page_boundary_inside_one_expense_loses_no_sharer` walks pages of **three** over expenses with four sharers, so every boundary falls inside one, and compares the walk to the single-page read row for row. Against the broken keyset it fails with "a boundary inside an expense dropped its remaining sharers"; against the correct one it passes. The break was then reverted and the workspace is green.
+
+A third, cheaper one worth recording: the claim that **`crates/apps/tally` holds no SQL** is not a comment, it is `cargo xtask rules`' verdict, and it was checked to be actually scanning — `sql-confinement` reports `7 file(s) scanned` for this crate rather than `0`, and the 27 files it skipped are named as in the allowed crates.

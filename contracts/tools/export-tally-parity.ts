@@ -41,8 +41,8 @@
 // resolution; the runner is NODE, not bun, because v0's vault imports
 // `node:sqlite`, which bun does not provide):
 //
-//   node node_modules/vitest/vitest.mjs run --root packages/vault \
-//     packages/vault/tests/contracts/tally-parity.test.ts
+//   node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts \
+//     tests/quality/tally-parity.contract.test.ts
 //   bun run format
 //
 // That test is the fixture's ORACLE as well as its emitter: with
@@ -52,20 +52,20 @@
 // check that the fixture is current is `git diff --exit-code contracts/apps`
 // after a write run.
 
-import { bootstrapVault } from "../../packages/vault/src/bootstrap.ts";
-import { registerAttachmentCommands } from "../../packages/vault/src/commands/attachments.ts";
-import { registerPartyCommands } from "../../packages/vault/src/commands/parties.ts";
-import { registerScheduleOrganizeCommands } from "../../packages/vault/src/commands/schedule-organize.ts";
-import { registerScheduleCommands } from "../../packages/vault/src/commands/schedule.ts";
-import { registerTallyLedgerCommands } from "../../packages/vault/src/commands/tally-ledger.ts";
-import { registerTallyOrganizeCommands } from "../../packages/vault/src/commands/tally-organize.ts";
-import { registerTallyCommands } from "../../packages/vault/src/commands/tally.ts";
-import { openVaultDb } from "../../packages/vault/src/db.ts";
-import { createGateway } from "../../packages/vault/src/gateway/gateway.ts";
-import type { Credential } from "../../packages/vault/src/gateway/types.ts";
-import { installFixtureClock } from "../../packages/vault/tests/fixtures/ontology-scenarios/clock.ts";
-import { balanceCases } from "./tally-parity-balances.ts";
-import { seedLedger } from "./tally-parity-ledger.ts";
+import { bootstrapVault } from "../../packages/vault/src/bootstrap.js";
+import { registerAttachmentCommands } from "../../packages/vault/src/commands/attachments.js";
+import { registerPartyCommands } from "../../packages/vault/src/commands/parties.js";
+import { registerScheduleOrganizeCommands } from "../../packages/vault/src/commands/schedule-organize.js";
+import { registerScheduleCommands } from "../../packages/vault/src/commands/schedule.js";
+import { registerTallyLedgerCommands } from "../../packages/vault/src/commands/tally-ledger.js";
+import { registerTallyOrganizeCommands } from "../../packages/vault/src/commands/tally-organize.js";
+import { registerTallyCommands } from "../../packages/vault/src/commands/tally.js";
+import { openVaultDb } from "../../packages/vault/src/db.js";
+import { createGateway } from "../../packages/vault/src/gateway/gateway.js";
+import type { Credential } from "../../packages/vault/src/gateway/types.js";
+import { installFixtureClock } from "../../packages/vault/tests/fixtures/ontology-scenarios/clock.js";
+import { balanceCases } from "./tally-parity-balances.js";
+import { seedLedger } from "./tally-parity-ledger.js";
 
 /** Where the bundle is written, relative to the repository root. */
 export const TALLY_PARITY_DIR = "contracts/apps/tally";
@@ -139,7 +139,7 @@ export interface QueryCase {
   output: unknown;
 }
 
-export type { BalanceCase, BalanceInput } from "./tally-parity-balances.ts";
+export type { BalanceCase, BalanceInput } from "./tally-parity-balances.js";
 
 export interface TallyParityBundle {
   rows: TableRows[];
@@ -215,16 +215,33 @@ async function runQueries(
   ctx: unknown,
   ids: { groups: string[]; expenses: string[]; friends: string[] }
 ): Promise<QueryCase[]> {
-  const handlers = await Promise.all([
-    import("../../packages/blueprints/apps/tally/queries/dashboard.ts"),
-    import("../../packages/blueprints/apps/tally/queries/group.ts"),
-    import("../../packages/blueprints/apps/tally/queries/friend.ts"),
-    import("../../packages/blueprints/apps/tally/queries/activity.ts"),
-    import("../../packages/blueprints/apps/tally/queries/search.ts"),
-    import("../../packages/blueprints/apps/tally/queries/history.ts"),
-    import("../../packages/blueprints/apps/tally/queries/export.ts"),
-    import("../../packages/blueprints/apps/tally/queries/matches.ts"),
-  ]);
+  // THE SPECIFIERS ARE COMPUTED, NOT LITERAL, AND THAT IS DELIBERATE.
+  //
+  // A literal `import("../../packages/blueprints/apps/tally/queries/dashboard.ts")`
+  // pulls the whole blueprint handler graph into whatever TypeScript program
+  // type-checks this file — and those handlers are written against the
+  // blueprints package's own tsconfig, with `allowImportingTsExtensions` and
+  // the ambient `HandlerArgs` global. No program that can also see
+  // `packages/vault/src` has both. Rather than relax a tsconfig so a generator
+  // can be type-checked against a world it only invokes, the specifiers are
+  // built at run time: the handlers are the THING UNDER TEST, and a fixture
+  // generator asserts on their output rather than on their types.
+  const HANDLERS = [
+    "dashboard",
+    "group",
+    "friend",
+    "activity",
+    "search",
+    "history",
+    "export",
+    "matches",
+  ] as const;
+  const handlers = await Promise.all(
+    HANDLERS.map(
+      (name) =>
+        import(`../../packages/blueprints/apps/tally/queries/${name}.ts`)
+    )
+  );
   const [
     dashboard,
     group,
@@ -235,7 +252,8 @@ async function runQueries(
     exporter,
     matches,
   ] = handlers.map(
-    (module) => module.default as (args: unknown) => Promise<unknown>
+    (module: { default: unknown }) =>
+      module.default as (args: unknown) => Promise<unknown>
   );
 
   // Inputs are FIXED and named, never derived at compare time: a parity case
@@ -311,7 +329,7 @@ async function runQueries(
  */
 async function tallyScenarios(): Promise<unknown> {
   const { buildOntologyScenarios } =
-    await import("../../packages/vault/tests/fixtures/ontology-scenarios/build.ts");
+    await import("../../packages/vault/tests/fixtures/ontology-scenarios/build.js");
   const fixture = buildOntologyScenarios();
   try {
     const wanted = new Set(["ONT-23", "ONT-24"]);
@@ -362,9 +380,13 @@ export async function buildTallyParity(): Promise<TallyParityBundle> {
         `tally-parity:${step++}`
       );
       if (outcome.status !== "executed") {
-        throw new Error(
-          `${command} answered ${outcome.status}: ${outcome.reason ?? outcome.message ?? ""}`
-        );
+        // `reason` is on some arms of the outcome union and not others, so it
+        // is read off the value rather than off the type: a generator that
+        // cannot name why a command refused is a generator nobody can debug.
+        const why = (outcome as { reason?: string; message?: string }).reason;
+        const detail =
+          why ?? (outcome as { message?: string }).message ?? "no reason given";
+        throw new Error(`${command} answered ${outcome.status}: ${detail}`);
       }
       // Time moves between commands, or two writes share an instant and every
       // ordering claim over them says nothing.
@@ -390,11 +412,12 @@ export async function buildTallyParity(): Promise<TallyParityBundle> {
         columns,
         rows: fetched.map((row) =>
           columns.map((column) => {
-            const cell = row[column];
+            const cell: unknown = row[column];
             // A BLOB reaches here as a Uint8Array. The fixture carries no
             // bytes: Tally is a record-only app (docs/blueprint-seats.md S2),
             // and a byte-bearing fixture belongs to the media lane.
-            return cell instanceof Uint8Array ? null : (cell ?? null);
+            if (cell instanceof Uint8Array) return null;
+            return (cell ?? null) as string | number | null;
           })
         ),
       };

@@ -13,12 +13,12 @@ import {
   tallyGroupNet,
   tallyGroupPairNets,
   tallyOpenDebtCount,
-} from "../../packages/blueprints/src/tally-balance.ts";
-import type { TallyBalanceData } from "../../packages/blueprints/src/tally-balance.ts";
+} from "../../packages/blueprints/src/tally-balance.js";
+import type { TallyBalanceData } from "../../packages/blueprints/src/tally-balance.js";
 import {
   minimalTransfers,
   tallySimplification,
-} from "../../packages/blueprints/src/tally-simplify.ts";
+} from "../../packages/blueprints/src/tally-simplify.js";
 
 /**
  * The engine's input, as plain JSON.
@@ -30,7 +30,7 @@ import {
  * reshape the thing it pins.
  */
 export interface BalanceInput {
-  members_by_group: [string, string[]][];
+  members_by_group: [string, readonly string[]][];
   expenses: TallyBalanceData["expenses"];
   settlements: TallyBalanceData["settlements"];
 }

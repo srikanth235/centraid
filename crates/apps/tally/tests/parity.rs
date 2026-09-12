@@ -382,6 +382,35 @@ fn load_tally_reads_the_fixture_ledger_as_v0_wrote_it() {
     assert_eq!(data.expense_currency(loose[0]), "GBP");
 }
 
+/// THE PAIR KEYSET, at a page boundary that falls INSIDE an expense.
+///
+/// `tally_expense_split` is keyed on `(expense_id, party_id)` because
+/// `expense_id` is not unique: a cursor on it alone stops at the first sharer
+/// (`queries/dashboard.ts:282`). The parity and year-3 suites do NOT catch a
+/// port that gets this wrong, and the reason is alignment — the fixture's
+/// splits fit in one page, and the year-3 profile's four sharers per expense
+/// divide the 500-row page exactly, so no boundary ever falls mid-expense.
+/// This test walks pages of THREE over expenses with four sharers, so every
+/// boundary falls inside one.
+#[test]
+fn a_page_boundary_inside_one_expense_loses_no_sharer() {
+    use centraid_apps_kit::reads::{FanOutBound, read_pages};
+    use centraid_apps_tally::queries::splits_statement;
+
+    let connection = fixture_vault();
+    let door = TestDoor::new(&connection);
+    let whole = read_pages(&door, &splits_statement(), FanOutBound::new(500, 8))
+        .expect("one page reads every split row");
+    let walked = read_pages(&door, &splits_statement(), FanOutBound::new(3, 8))
+        .expect("a walk of three-row pages finishes");
+    assert_eq!(
+        walked.len(),
+        whole.len(),
+        "a boundary inside an expense dropped its remaining sharers"
+    );
+    assert_eq!(walked, whole, "and it served them in the same order");
+}
+
 /// A DEMONSTRATED RED for the fan-out ceiling: a walk past its bound errors,
 /// with the member-visible outcome v0's throw has, rather than answering short.
 #[test]
