@@ -628,57 +628,6 @@ Four slices, four commits, on `claude/1020-laneC`, rebased onto lane D3's `d5654
 `contracts/README.md`'s index gained the `protocol/` row, merged at the rebase beside lane D3's `apps/tally/` row with one "the rest of the tree" paragraph naming what neither lane landed.
 
 No file owned by lane D1 or D3 was touched: `crates/vault`, `crates/seat`, `crates/apps/**`, `contracts/schema/**` and `contracts/golden/**` are untouched, and `crates/xtask` was edited only for the `buf` step the brief authorises.
-## Wave 2 — lane D1: `crates/vault`, the authority's file
-
-The umbrella's centre. Everything durable a gateway knows is in one SQLite file, and everything that writes to it goes through `Vault::commit`.
-
-### What landed, by commit
-
-**`2a146c85` — `build(deps): rusqlite 0.40 with session, hooks and functions`**
-
-- `Cargo.toml`, `Cargo.lock` — the workspace bump. Own commit because the workspace shares the dependency; `cargo test --workspace` was green before and after.
-
-**`66e53887` — `feat(contracts): the v1 baseline corpus, frozen at the ladder head`**
-
-- `packages/vault/tests/golden/issue-1020/{vault.db.gz,manifest.json}` — **the one permitted v0-tree edit in this lane**, and it is the permitted kind: a corpus cut by v0's own freezer (`bun run golden-vault:freeze -- --label issue-1020`). No v0 source file was touched.
-- `contracts/golden/issue-1020/{vault.db.gz,manifest.json}` — byte-identical copies.
-- `contracts/schema/vault-ddl.sql` — regenerated from the new corpus. 1,053 objects → 761: the 292 that leave are `replica_change`, its four indexes and the 287 `trg_replica_*_a{i,u,d}` triggers that #1014 R-1014-1 retired. One baseline, not two.
-- `contracts/schema/v0-registries.json`, `contracts/tools/export-v0-registries.ts` — `replicatedTables` (109 names) and `replicaConstants` (10 numbers, the local-table list, the JSON-key exclusions).
-- `crates/ontology/src/{golden,registries,ddl}.rs`, `src/bin/export-ddl.rs`, `tests/{fixtures,golden_vault}.rs`, `README.md` — the ontology crate's small change: `GOLDEN_LABEL` is now the v1 baseline and `GOLDEN_LABEL_CHECKPOINT` the #929 one, `is_replicated_table` lands, and `version_window::both_ends_of_the_window_open` reads **two real v0 files** instead of stamping a version onto one copy — which wave 1's own doc comment said was owed to this lane.
-- `contracts/README.md` — the two corpora and their roles.
-
-**`28183688` — `feat(vault): the v1 vault crate — file, log plane, registry, tally stubs`** (the commit the root merged early for lanes D3 and R)
-
-- `crates/vault/Cargo.toml`, `src/lib.rs`, `src/bin/export-baseline.rs`
-- `src/error.rs` — `VaultError`, `RebootstrapReason` (v0's closed 5-value vocabulary at the log door), `IntentRefusal`.
-- `src/value.rs` — `Value`, `RowImage`, the log's JSON in v0's spelling.
-- `src/clock.rs` — `Clock`, `FixedClock`, `Ids`, `SeededIds`, the ISO-millisecond conversion.
-- `src/migrations.rs`, `contracts/migrations/001_baseline.sql` — the ladder, the baseline, `seed_entity_kinds`.
-- `src/file.rs` — `Vault::create`/`open`/`read`, the `query_only` read path.
-- `src/log/{mod,capture,store,guard,door,apply}.rs` — the plane.
-- `src/snapshot.rs` — the seven-step pipeline, `Fault`, `SnapshotHead`.
-- `src/access.rs` — `Principal`, `Verb`, `evaluate_access`, the clamp intersection.
-- `src/commands/{mod,core,tally}.rs` — `Registry`, the gate order, the three real commands, the 23 stubs.
-- `src/audit.rs`, `src/intents.rs`, `src/devices.rs`, `src/page.rs`, `src/bootstrap.rs`.
-
-**`a3b06d55` — `test(vault): the log plane, the doors, and the three applier gates`**
-
-- `contracts/applier/{README.md,oracle.json,convergence.json,atomicity.json}`, `contracts/tools/export-applier-oracle.ts`
-- `crates/vault/tests/{common/mod,baseline,log_plane,doors,gates}.rs`
-- `crates/vault/src/{migrations,file,clock}.rs` — `seed_entity_kinds` and its call site; `Clock`/`Ids` for `Arc`, so a test can hold the clock it gave the vault.
-
-**`e59fde31` — `test(vault): the snapshot pipeline, its fault points and disk full`**
-
-- `crates/vault/tests/{snapshot_faults,disk_full}.rs`
-- `crates/vault/src/error.rs` — `From<rusqlite::Error>` classifies `DiskFull` unconditionally.
-- `crates/vault/src/snapshot.rs` — `Fault::CopyTo`.
-
-**`23d3d7a6` — `test(vault): the command plane end to end, and three properties`**
-
-- `crates/vault/tests/{commands,properties}.rs`
-- `Cargo.toml` — `serde_json`'s `float_roundtrip`.
-
-**this commit** — `crates/vault/README.md` and this receipt section.
 
 ### Exit list
 
@@ -765,6 +714,70 @@ Every gate this lane added lands with a red it has actually produced.
 ### Doctrine digest
 
 Law `53be88c22ab5`, verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — 10 rules, no findings. The law did not move under this lane's work; no waiver was spent; no v0 file was edited, so no fixture-adapter change is owed a line here.
+
+### Falsification
+
+The two riskiest claims in this diff, the throwaway check run against each, and the result.
+
+**"`crates/protocol` is transport-generic — no iroh type appears in it."** The claim is load-bearing because #1020 makes deterministic simulation the primary sync proof, and a protocol that names iroh cannot be simulated. Reading the imports is not a check: a type could arrive through a re-export. So: `cargo tree -p centraid-protocol -e normal` — the crate's normal dependency closure is `centraid-api-proto`, `prost`, `thiserror`, `tokio`, `tracing` and their transitives, and `iroh` appears nowhere in it. Then the stronger version, an actual compile: temporarily added `iroh = { workspace = true }` to `crates/protocol/Cargo.toml` and `use iroh::Endpoint;` to `src/lib.rs`, confirmed it compiled (so the crate *could* have taken the dependency and the absence is a choice, not an accident), and reverted both. The second implementation of the trait in `src/transport.rs::duplex` is what keeps the claim true going forward: the seam is not tested by mocking iroh, it is tested by there being another implementor, and `the_protocol_runs_over_a_transport_that_is_not_iroh` runs the framing over it.
+
+**"`centraid gateway` opens no listening TCP socket."** The risk is that the xtask rule only greps for `TcpListener::bind` in *this repository's* source, and iroh's graph is 200-odd crates any one of which could listen. A source scan cannot see that. So the check reads the kernel: spawn the real binary, wait for its ready line, collect every socket inode from `/proc/<pid>/fd`, collect every `st == 0A` row from `/proc/net/tcp*`, and intersect. Result: one socket owned (inode `230700`, the UDP socket iroh bound), four LISTEN rows on the host (`2092`, `51`, `1984`, `1985`), empty intersection; `ss -ltnp` names no centraid process. The test also asserts the process owns **at least one** socket, so it cannot pass vacuously against a gateway that failed to bind at all — which is the way this test would otherwise have gone quietly green.
+
+## Wave 2 — lane D1: `crates/vault`, the authority's file
+
+The umbrella's centre. Everything durable a gateway knows is in one SQLite file, and everything that writes to it goes through `Vault::commit`.
+
+### What landed, by commit
+
+**`db67602b` — `build(deps): rusqlite 0.40 with session, hooks and functions`**
+
+- `Cargo.toml`, `Cargo.lock` — the workspace bump. Own commit because the workspace shares the dependency; `cargo test --workspace` was green before and after.
+
+**`fc34e93c` — `feat(contracts): the v1 baseline corpus, frozen at the ladder head`**
+
+- `packages/vault/tests/golden/issue-1020/{vault.db.gz,manifest.json}` — **the one permitted v0-tree edit in this lane**, and it is the permitted kind: a corpus cut by v0's own freezer (`bun run golden-vault:freeze -- --label issue-1020`). No v0 source file was touched.
+- `contracts/golden/issue-1020/{vault.db.gz,manifest.json}` — byte-identical copies.
+- `contracts/schema/vault-ddl.sql` — regenerated from the new corpus. 1,053 objects → 761: the 292 that leave are `replica_change`, its four indexes and the 287 `trg_replica_*_a{i,u,d}` triggers that #1014 R-1014-1 retired. One baseline, not two.
+- `contracts/schema/v0-registries.json`, `contracts/tools/export-v0-registries.ts` — `replicatedTables` (109 names) and `replicaConstants` (10 numbers, the local-table list, the JSON-key exclusions).
+- `crates/ontology/src/{golden,registries,ddl}.rs`, `src/bin/export-ddl.rs`, `tests/{fixtures,golden_vault}.rs`, `README.md` — the ontology crate's small change: `GOLDEN_LABEL` is now the v1 baseline and `GOLDEN_LABEL_CHECKPOINT` the #929 one, `is_replicated_table` lands, and `version_window::both_ends_of_the_window_open` reads **two real v0 files** instead of stamping a version onto one copy — which wave 1's own doc comment said was owed to this lane.
+- `contracts/README.md` — the two corpora and their roles.
+
+**`ec544c24` — `feat(vault): the v1 vault crate — file, log plane, registry, tally stubs`** (the commit the root merged early for lanes D3 and R)
+
+- `crates/vault/Cargo.toml`, `src/lib.rs`, `src/bin/export-baseline.rs`
+- `src/error.rs` — `VaultError`, `RebootstrapReason` (v0's closed 5-value vocabulary at the log door), `IntentRefusal`.
+- `src/value.rs` — `Value`, `RowImage`, the log's JSON in v0's spelling.
+- `src/clock.rs` — `Clock`, `FixedClock`, `Ids`, `SeededIds`, the ISO-millisecond conversion.
+- `src/migrations.rs`, `contracts/migrations/001_baseline.sql` — the ladder, the baseline, `seed_entity_kinds`.
+- `src/file.rs` — `Vault::create`/`open`/`read`, the `query_only` read path.
+- `src/log/{mod,capture,store,guard,door,apply}.rs` — the plane.
+- `src/snapshot.rs` — the seven-step pipeline, `Fault`, `SnapshotHead`.
+- `src/access.rs` — `Principal`, `Verb`, `evaluate_access`, the clamp intersection.
+- `src/commands/{mod,core,tally}.rs` — `Registry`, the gate order, the three real commands, the 23 stubs.
+- `src/audit.rs`, `src/intents.rs`, `src/devices.rs`, `src/page.rs`, `src/bootstrap.rs`.
+
+**`67334747` — `test(vault): the log plane, the doors, and the three applier gates`**
+
+- `contracts/applier/{README.md,oracle.json,convergence.json,atomicity.json}`, `contracts/tools/export-applier-oracle.ts`
+- `crates/vault/tests/{common/mod,baseline,log_plane,doors,gates}.rs`
+- `crates/vault/src/{migrations,file,clock}.rs` — `seed_entity_kinds` and its call site; `Clock`/`Ids` for `Arc`, so a test can hold the clock it gave the vault.
+
+**`f04507fe` — `test(vault): the snapshot pipeline, its fault points and disk full`**
+
+- `crates/vault/tests/{snapshot_faults,disk_full}.rs`
+- `crates/vault/src/error.rs` — `From<rusqlite::Error>` classifies `DiskFull` unconditionally.
+- `crates/vault/src/snapshot.rs` — `Fault::CopyTo`.
+
+**`55ad2a5b` — `test(vault): the command plane end to end, and three properties`**
+
+- `crates/vault/tests/{commands,properties}.rs`
+- `Cargo.toml` — `serde_json`'s `float_roundtrip`.
+
+**this commit** — `crates/vault/README.md` and this receipt section.
+
+### Exit list
+
+| # | Command | Outcome |
 | --- | --- | --- |
 | 1 | `cargo fmt --all --check` | clean |
 | 2 | `cargo clippy --workspace --all-targets -- -D warnings` | clean; no `#[allow]` added to the library, one `#![allow(dead_code)]` on `tests/common/mod.rs` with its reason (each integration test is its own binary and compiles the whole module) |
@@ -881,9 +894,6 @@ Law `53be88c22ab5`, stamped. `node .governance/law/run.mjs --door window --brief
 
 The two riskiest claims in this diff, the throwaway check run against each, and the result.
 
-**"`crates/protocol` is transport-generic — no iroh type appears in it."** The claim is load-bearing because #1020 makes deterministic simulation the primary sync proof, and a protocol that names iroh cannot be simulated. Reading the imports is not a check: a type could arrive through a re-export. So: `cargo tree -p centraid-protocol -e normal` — the crate's normal dependency closure is `centraid-api-proto`, `prost`, `thiserror`, `tokio`, `tracing` and their transitives, and `iroh` appears nowhere in it. Then the stronger version, an actual compile: temporarily added `iroh = { workspace = true }` to `crates/protocol/Cargo.toml` and `use iroh::Endpoint;` to `src/lib.rs`, confirmed it compiled (so the crate *could* have taken the dependency and the absence is a choice, not an accident), and reverted both. The second implementation of the trait in `src/transport.rs::duplex` is what keeps the claim true going forward: the seam is not tested by mocking iroh, it is tested by there being another implementor, and `the_protocol_runs_over_a_transport_that_is_not_iroh` runs the framing over it.
-
-**"`centraid gateway` opens no listening TCP socket."** The risk is that the xtask rule only greps for `TcpListener::bind` in *this repository's* source, and iroh's graph is 200-odd crates any one of which could listen. A source scan cannot see that. So the check reads the kernel: spawn the real binary, wait for its ready line, collect every socket inode from `/proc/<pid>/fd`, collect every `st == 0A` row from `/proc/net/tcp*`, and intersect. Result: one socket owned (inode `230700`, the UDP socket iroh bound), four LISTEN rows on the host (`2092`, `51`, `1984`, `1985`), empty intersection; `ss -ltnp` names no centraid process. The test also asserts the process owns **at least one** socket, so it cannot pass vacuously against a gateway that failed to bind at all — which is the way this test would otherwise have gone quietly green.
 1. **"The ORACLE gate compares the decode, so a port that disagrees with v0 about a row image is caught."** The risk is a comparison that is structurally satisfied — same row count, same tables — while the part that matters goes unchecked. Two checks. First, the fixture was edited: one `prior`'s `updated_at` key removed. **Result: caught**, with `row 2 (update-one-column) prior: v0 …, us …` naming the row, the commit label and both sides. Second, and the real test, the **code** was broken: `prior_delta` was changed to read `new_value` instead of `old_value`, which is the single most plausible port slip in the whole plane (both are `Option`, both are indexed the same way, and a delta built from the new image looks superficially reasonable). **Result: caught**, three rows differing, each naming its commit. A third attempt is worth recording because it did *not* fail: filling untouched columns from the new image was a **no-op**, because an UPDATE's new record omits untouched columns exactly as its old record does — which is itself a fact about the format the test now documents rather than a hole in the gate.
 
 2. **"CONVERGENCE compares every replicated table, so a mirror that diverges anywhere is caught."** The risk is that the comparison walks a list that is shorter than it looks — a named-tables list, or only the tables the script touched. Check: the applier was broken to skip `delete` rows while still advancing its cursor, which is the classic insert-only mirror and the exact bug `INSERT OR REPLACE` versus `ON CONFLICT` is also about. **Result: caught**, `` `core_entity`: 7 row(s) on the gateway, 8 on the seat `` and `` `core_party`: 4 … 5 ``, with the surviving `conv-b` visible in the printed seat side. And the comparison is held to its own breadth by `assert!(compared > 100)` — it reports 109 tables compared, not the 4 the fixture names — so a future narrowing of the walk is a red rather than a quieter pass. Both breaks were reverted; `cargo test --workspace` is 269 green.
