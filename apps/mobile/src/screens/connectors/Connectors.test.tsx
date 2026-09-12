@@ -49,6 +49,15 @@ vi.mock(import("react-native-svg"), async () => {
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 // Only session fact read: features advertised on `/info`. Provider mocked so
 // the replica machinery never mounts to state a capability.

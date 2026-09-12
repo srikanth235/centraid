@@ -41,15 +41,29 @@ test("every rule fires on its own fixture", () => {
   selfTest();
 });
 
-test("the six rooms are the six rooms", () => {
+test("the seven rooms are the seven rooms", () => {
   assert.deepEqual([...ROOMS].sort(), [
     "AppPlace",
     "EditorRoom",
     "HomeRoom",
     "PushedPage",
     "SheetRoom",
+    "StageRoom",
     "SystemPlace",
   ]);
+});
+
+test("the rooms gate and the rooms barrel name the same rooms", () => {
+  // The list here is a RESTATEMENT, and a restatement drifts. `StageRoom`
+  // (R-NY-14) is the room that proves it: a seventh room the barrel exports
+  // and this file did not know about would make `PhotoLightbox` a finding
+  // forever, which is exactly how it came to sit in a baseline.
+  const barrel = readSource("apps/mobile/src/kit/rooms/index.ts") ?? "";
+  const exported = [
+    ...barrel.matchAll(/export \{ default as (?<room>\w+) \}/gu),
+  ].map((match) => match.groups.room);
+  assert.ok(exported.length > 0, "the rooms barrel read as empty");
+  assert.deepEqual([...exported].sort(), [...ROOMS].sort());
 });
 
 test("the root-tag reader reads the shape screens are actually written in", () => {
@@ -115,8 +129,17 @@ test("the screen registry names real, existing modules", () => {
     );
 });
 
-test("the recorded baseline only ever names rules that exist", () => {
+test("every rule is unconditional — the baseline records nothing", () => {
+  // R-NY-14 took `screen-root` to zero and LEFT the baseline, like
+  // `page-margin` before it. A baseline may only ever go DOWN, so a rule
+  // reappearing here is the ratchet running backwards.
   const baseline = readBaseline();
+  for (const rule of RULES)
+    assert.equal(
+      baseline[rule],
+      0,
+      `${rule} carries a baseline of ${baseline[rule]}`
+    );
   assert.deepEqual(Object.keys(baseline).sort(), [...RULES].sort());
   const { findings } = lintTree();
   const counts = countByRule(findings);

@@ -1,4 +1,4 @@
-// Geometry for the six rooms (#1015, S1). Colourless, like every kit sheet:
+// Geometry for the seven rooms (#1015, S1). Colourless, like every kit sheet:
 // ink resolves at the call site, so one style object serves both schemes.
 //
 // The gutter is `pageMargin` in every room. The audit counted 144 hand-typed
@@ -7,7 +7,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, pageMargin, spacing, t } from "../theme";
+import { borders, pageMargin, radii, spacing, t, targetMin } from "../theme";
 
 export const styles = StyleSheet.create({
   actionRow: {
@@ -74,6 +74,31 @@ export const styles = StyleSheet.create({
   },
   sheetTitle: { ...t("title"), paddingHorizontal: pageMargin },
   scrim: { flex: 1 },
+  // THE STAGE (R-NY-14). Full-bleed: no gutter and no safe-area padding on the
+  // ground itself — the media runs under the notch, and only the chrome on it
+  // is inset. Its ink is the theme's `stage`, resolved in the room.
+  stage: { flex: 1 },
+  // The room's own close key, when a caller brings no chrome: a lone opaque
+  // plate at the head, at the touch floor, on the page gutter.
+  stageHead: {
+    flexDirection: "row",
+    insetInlineEnd: 0,
+    insetInlineStart: 0,
+    paddingHorizontal: pageMargin,
+    position: "absolute",
+    top: spacing[2],
+  },
+  // `radii.pill` is the stage's own plate shape, not an avatar rung: every
+  // floating control on a stage is a chip on a photograph. `coarse`, because
+  // a stage is only ever touched.
+  stageClose: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    borderWidth: borders.hairline,
+    justifyContent: "center",
+    minHeight: targetMin.coarse,
+    minWidth: targetMin.coarse,
+  },
   selectionNote: {
     ...t("mono"),
     paddingHorizontal: pageMargin,

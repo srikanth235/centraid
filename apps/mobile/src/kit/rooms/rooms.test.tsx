@@ -1,6 +1,6 @@
-// The six rooms (#1015, S1). What is pinned here is what a screen may no
+// The seven rooms (#1015, S1). What is pinned here is what a screen may no
 // longer decide: the state order, the back target's provenance, selection as
-// a mode, and which rooms host the status line.
+// a mode, the status host. The stage's own contract is in `stage-room.test`.
 // @vitest-environment jsdom
 import fs from "node:fs";
 import path from "node:path";
@@ -15,7 +15,6 @@ import { Text } from "../components/NativeText";
 import {
   AppPlace,
   bandStateFor,
-  currentPlace,
   EditorRoom,
   HomeRoom,
   parentPlace,
@@ -55,6 +54,17 @@ vi.mock(import("react-native-svg"), async () => {
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
+// `StageRoom` reaches both of these through the barrel (R-NY-14).
+vi.mock(
+  import("react-native-gesture-handler"),
+  async () =>
+    (await import("../../test/react-native-stub")).gestureHandlerStub() as never
+);
+vi.mock(
+  import("react-native-reanimated"),
+  async () =>
+    (await import("../../test/react-native-stub")).reanimatedStub() as never
+);
 
 let dispose: (() => void) | undefined;
 
@@ -111,17 +121,6 @@ describe("the barrel", () => {
       sheet.title,
       system.title,
     ]).toHaveLength(12);
-  });
-});
-
-describe(parentPlace, () => {
-  it("names the parent the screen actually descends from", () => {
-    expect(parentPlace(stack)?.title).toBe("Taxes");
-    expect(currentPlace(stack)?.title).toBe("2024 return");
-  });
-
-  it("has no parent at the root, and says so rather than guessing", () => {
-    expect(parentPlace(stack.slice(0, 1))).toBeUndefined();
   });
 });
 

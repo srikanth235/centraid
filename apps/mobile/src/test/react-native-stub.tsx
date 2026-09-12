@@ -297,6 +297,50 @@ export function svgStub(): Record<string, unknown> {
   return { default: glyph, Path: () => null, Svg: glyph };
 }
 
+/** What a finished vertical drag hands a `Gesture.Pan().onEnd` handler. */
+export interface StubDrag {
+  translationY: number;
+  velocityY: number;
+}
+
+/**
+ * `react-native-gesture-handler`, for the blocks that own a gesture —
+ * `StageRoom` reaches it through `kit/rooms/index.ts`, so EVERY test that
+ * imports the rooms barrel needs it and its reanimated twin below, whether or
+ * not it touches a stage. Neither package parses under this project's plain
+ * node resolution (reanimated's `lib/module` is a directory import), so a test
+ * without them fails to load rather than failing an assertion.
+ *
+ * `sink` records the `onEnd` handler, so a test can finish a real drag and
+ * watch what the component does; a gesture is still a control. Pass one from
+ * `vi.hoisted`, because a `vi.mock` factory is hoisted above every other
+ * binding in the file.
+ */
+export function gestureHandlerStub(sink?: {
+  drag?: (event: StubDrag) => void;
+}): Record<string, unknown> {
+  const pan: Record<string, unknown> = {
+    activeOffsetY: () => pan,
+    failOffsetX: () => pan,
+    onEnd: (handler: (event: StubDrag) => void) => {
+      if (sink) sink.drag = handler;
+      return pan;
+    },
+  };
+  return {
+    Gesture: { Pan: () => pan },
+    GestureDetector: (props: Props) =>
+      React.createElement("div", null, props.children),
+  };
+}
+
+/** `react-native-reanimated`, reduced to the one export a gesture needs: off
+ *  the UI thread there is no thread to hop back from, so `runOnJS` is the
+ *  callback itself. */
+export function reanimatedStub(): Record<string, unknown> {
+  return { runOnJS: (callback: unknown) => callback };
+}
+
 /** Mount a block into a jsdom container. */
 export function mountBlock(node: React.ReactNode): {
   container: HTMLElement;

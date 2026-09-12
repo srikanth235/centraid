@@ -173,6 +173,15 @@ vi.mock(import("react-native-safe-area-context"), () => {
     useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
   } as unknown as Partial<SafeAreaContext>;
 });
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 vi.mock(
   import("../../kit/theme"),
@@ -184,6 +193,8 @@ vi.mock(
       metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
       // Shared page margin the room insets its content by (handoff `R.margin.m`).
       pageMargin: 18,
+      // `StageRoom`'s close key sits on the touch floor (R-NY-14).
+      targetMin: { coarse: 44, fine: 34 },
       radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 12, xs: 0 },
       spacing: [0, 4, 8, 12, 16, 20, 24, 32],
       t: () => ({}),

@@ -495,9 +495,9 @@ The three renderers are generated from the same recipe table: the blueprint rend
 
 One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Every icon shares one contract regardless of which app claims it: single-tone stroke on a 24 grid, `fill: none`, round caps and joins, and `aria-hidden` on the `<svg>` — an app-specific mark (Photos' `heart`, `album`, `place`, `person`, `dupe`, `restore`, `removeFrom`, `info`, `more`, and its shared `trash`/`add`/`share`/`download`) draws new artwork inside that same contract rather than a one-off. Identity uses one initials formatter and one identity-colour resolver. Relative time and bytes use one formatter module. `aria-label` on a container is a REPLACEMENT, not an addition: use it only on controls whose visible content is an icon, and mark decorative SVG `aria-hidden`.
 
-### The six rooms (mobile)
+### The seven rooms (mobile)
 
-A mobile screen is one of six rooms, and nothing else ([apps/mobile/src/kit/rooms/README.md](apps/mobile/src/kit/rooms/README.md)). The recipes above say what a control looks like; the rooms say what a SCREEN is, which is the half the audit of #1015 found missing — nine surfaces sharing no header, back affordance, search field, confirm, empty state or date format, because the kit was optional and nothing noticed a screen ignoring it.
+A mobile screen is one of seven rooms, and nothing else ([apps/mobile/src/kit/rooms/README.md](apps/mobile/src/kit/rooms/README.md)). The recipes above say what a control looks like; the rooms say what a SCREEN is, which is the half the audit of #1015 found missing — nine surfaces sharing no header, back affordance, search field, confirm, empty state or date format, because the kit was optional and nothing noticed a screen ignoring it.
 
 | Room | Anatomy | Examples |
 | --- | --- | --- |
@@ -507,8 +507,11 @@ A mobile screen is one of six rooms, and nothing else ([apps/mobile/src/kit/room
 | `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, ≤1 ink button, status line hosted inside | confirm delete, pick date, add to album |
 | `SystemPlace` | `PlaceHeader` + `SectionBlock` / `RowsBlock` only; a place root draws the Home band at its foot and no `HomeKey`, a sub-page keeps `HomeKey` or its back key in the header's leading slot | Settings, Vault, Copies, Backup health |
+| `StageRoom` | full-bleed `--stage` ground under the safe area, no header and no band, the caller's own floating chrome, one close act reached by a control and by a swipe down | photo lightbox, its slideshow, a video |
 
 The room owns the header, the back control, search, the empty/loading/error states, the status host, selection and the gutter; the app supplies content and copy. A screen that hand-rolls any of those is a finding, not a variant.
+
+`StageRoom` is the one room that takes none of those, and that is the point rather than an omission: one piece of media edge to edge has nothing to be empty of, nothing to search, and no list to select from, and a strip across the top of a photograph is a second ground. What it owes a member instead is a way out, so the room owns the swipe-down dismiss and hands the caller's chrome the same close act — a stage that brings no chrome gets the room's own close key, because a stage with no visible way out is a black screen.
 
 Six product rulings sit behind the rooms and are not re-decided per screen — trash, casing, editors, push-versus-sheet, the band under a selection, and where Settings is reachable from: [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015), D1–D6.
 
