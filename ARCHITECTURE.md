@@ -225,7 +225,7 @@ Offline writes are submitted back as idempotent **intents** (`{intentId, appId, 
 
 ## Cron catch-up policy
 
-The gateway's cron scheduler is in-process and intentionally does not backfill after sleep, restart, or downtime. Missed fire times are skipped rather than burst-executed; one bounded missed-window ledger entry per affected automation records the earliest missed fire for operator visibility. The next ordinary minute resumes normal scheduling. `scheduler-ledger.test.ts` is the executable contract for this policy.
+The gateway's cron scheduler is in-process and intentionally does not backfill after sleep, restart, or downtime. Missed fire times are skipped rather than burst-executed; one bounded missed-window ledger entry per affected automation records the earliest missed fire for operator visibility. The next ordinary minute resumes normal scheduling. `packages/server/src/automation/fire/scheduler-ledger.contract.test.ts` is the executable contract for this policy.
 
 ## Build orchestration
 

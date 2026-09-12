@@ -336,3 +336,98 @@ export function replicatedReferencesToPrivate(
   }
   return violations;
 }
+
+// WHAT REPLICATES BUT NOT WHOLE (#1014, G14).
+//
+// The table list above is the only row-level filter a seat has (R1: the seat
+// holds `vault.db` whole). It cannot express the one case that is neither
+// "stays home" nor "travels intact": a REPLICATED table with one cell that
+// carries more than the seat needs.
+//
+// `access_receipt.detail_json` is that cell. It is the Locker access
+// history's source — `packages/blueprints/apps/locker/queries/access.ts`
+// reads `columns`, `context`, `failing` and `code` out of it on the seat, so
+// dropping the column would take a shipped screen with it. But it also
+// carries `output`: the FULL RETURN VALUE of every command, kept so that a
+// re-sent invocation can replay its answer without re-running
+// (`gateway/execution.ts`, `receiptOutput`). Replay is a GATEWAY concern —
+// `replayInvocation` runs on the gateway's own journal, never on a seat — so
+// the output has no seat-side reader and every seat was carrying a verbatim
+// copy of every command result the vault has ever produced.
+//
+// The exclusion is therefore stated at the JSON KEY, not the column, and it
+// is declared here as data so the file-copy bootstrap and the log capture
+// redact the same thing rather than two copies of the same judgement.
+// `replicated-column-exclusions.test.ts` is that property as a test.
+const REPLICATED_JSON_KEY_EXCLUSIONS: Readonly<
+  Record<string, Readonly<Record<string, readonly string[]>>>
+> = {
+  access_receipt: {
+    // Command output; gateway-only reader (`receiptOutput`).
+    detail_json: ["output"],
+  },
+};
+
+/** The tables that carry at least one excluded key — the cheap pre-check. */
+export const REPLICATED_COLUMN_EXCLUSION_TABLES: ReadonlySet<string> = new Set(
+  Object.keys(REPLICATED_JSON_KEY_EXCLUSIONS)
+);
+
+export interface ReplicatedColumnExclusion {
+  readonly table: string;
+  readonly column: string;
+  readonly jsonKeys: readonly string[];
+}
+
+export const REPLICATED_COLUMN_EXCLUSIONS: readonly ReplicatedColumnExclusion[] =
+  Object.entries(REPLICATED_JSON_KEY_EXCLUSIONS).flatMap(([table, columns]) =>
+    Object.entries(columns).map(([column, jsonKeys]) => ({
+      table,
+      column,
+      jsonKeys,
+    }))
+  );
+
+/**
+ * Redact one row image in place, for the LOG side.
+ *
+ * Returns whether anything changed, so a caller can keep the common path
+ * allocation-free. The value is re-serialised only when a key was actually
+ * present: a receipt with no `output` must come out byte-identical, or every
+ * row's hash would move for a redaction that removed nothing.
+ */
+export function redactReplicatedRowImage(
+  table: string,
+  image: Record<string, unknown>
+): boolean {
+  const columns = REPLICATED_JSON_KEY_EXCLUSIONS[table];
+  if (!columns) return false;
+  let changed = false;
+  for (const [column, keys] of Object.entries(columns)) {
+    const value = image[column];
+    if (typeof value !== "string" || value.length === 0) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      // A non-JSON value in a JSON column is the CHECK constraint's problem,
+      // not ours. Leaving it verbatim is the safe read here only because the
+      // column is `json_valid`-constrained at the schema; if that ever moves,
+      // this becomes a drop.
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      continue;
+    const record = parsed as Record<string, unknown>;
+    let removed = false;
+    for (const key of keys) {
+      if (!Object.hasOwn(record, key)) continue;
+      delete record[key];
+      removed = true;
+    }
+    if (!removed) continue;
+    image[column] = JSON.stringify(record);
+    changed = true;
+  }
+  return changed;
+}

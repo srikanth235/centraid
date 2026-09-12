@@ -109,6 +109,37 @@ describe("key-store", () => {
     );
   });
 
+  test("adopting an unprotected key on a host with custody is announced", () => {
+    const plain = store();
+    plain.store("vault.sealkey", Buffer.alloc(32, 4));
+    writeFileSync(plain.file("legacy.key"), Buffer.alloc(32, 7), {
+      mode: 0o600,
+    });
+
+    // X16: a key file is writable by anything running as the gateway user, so
+    // an unprotected envelope that appears under custody must not be adopted
+    // in silence.
+    const warnings: string[] = [];
+    const adopting = new KeyStore(plain.dir, {
+      protector: aesGcmKeyProtector(Buffer.alloc(32, 8)),
+      warn: (message) => warnings.push(message),
+    });
+    expect(adopting.load("vault.sealkey")).toHaveLength(32);
+    expect(adopting.load("legacy.key")).toHaveLength(32);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(
+      /adopted .*vault\.sealkey from the unprotected/u
+    );
+    expect(warnings[1]).toMatch(
+      /adopted .*legacy\.key from a pre-#555 raw key file/u
+    );
+
+    // Adoption is one-time: the rewrapped key is quiet on every later read.
+    warnings.length = 0;
+    expect(adopting.load("vault.sealkey")).toHaveLength(32);
+    expect(warnings).toStrictEqual([]);
+  });
+
   test("AES protector requires the device wrapping key and rewraps file custody", () => {
     const plain = store();
     const secret = Buffer.alloc(32, 4);

@@ -166,7 +166,7 @@ An opt-in environment gate is not itself a defect: it is honest only when its re
 | vault-write fsync count | No rig. `bench-low-end.mjs` still counts fsync(2) when `strace` is present and `CENTRAID_BENCH_REQUIRE_FSYNC=1` demands it, but no lane provisions either: the nightly `strace` install went with the rig deleted under #927, and the merge rung never had one — `ci.yml` keeps that lane to deterministic integers, which need no external tracer. Local Linux opt-in only |
 | launchd install/uninstall | No named mutable macOS user-session rig; local opt-in only |
 | native QUIC relay | The Linux `verify` job builds the workspace then runs `bun run --cwd packages/tunnel test:native` (the package command sets `CENTRAID_RUN_NATIVE_TUNNEL=1`) |
-| real disk-full filesystem | No privileged APFS image or Linux loop-device rig; local Darwin opt-in only |
+| real disk-full filesystem | No privileged APFS image or Linux loop-device rig, and none is planned: both need root on the lanes we have. ENOSPC is injected at the driver seam instead — `packages/server/src/serve/disk-health.test.ts` proves the health loop names it, recovers, and does not hide a prior hit. The behaviour is implemented and tested; what is untested is the FILESYSTEM producing the error, by decision ([#1014](https://github.com/srikanth235/centraid/issues/1014) T18) |
 | byte-plane-over-HTTP | The Linux `verify` job runs `bun run --cwd packages/tunnel test:data-plane`, including both TypeScript and built-Rust HTTP contracts |
 | live automation failover | No runner provisioned with the real harness binaries; local opt-in only |
 | mobile strict perf evidence | No uncontended native SQLite evidence runner sets `CENTRAID_PERF_EVIDENCE=1` |

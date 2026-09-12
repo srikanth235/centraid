@@ -146,6 +146,7 @@ export class KeyStore {
       raw.length === KEY_STORE_SECRET_BYTES &&
       !raw.toString().startsWith(KEY_STORE_ENVELOPE_MAGIC)
     ) {
+      this.noteAdoption(file, "a pre-#555 raw key file");
       this.store(name, raw);
       return Buffer.from(raw);
     }
@@ -156,7 +157,10 @@ export class KeyStore {
       secret = decodePayload(file, envelope.payload);
       // Desktop adoption: once an OS-custodied protector is available, a
       // successfully-read headless/legacy envelope is immediately rewrapped.
-      if (this.protector) this.write(name, secret);
+      if (this.protector) {
+        this.noteAdoption(file, `the unprotected "${FILE_SCHEME}" scheme`);
+        this.write(name, secret);
+      }
     } else if (this.protector?.scheme === envelope.scheme) {
       secret = this.protector.unprotect(decodePayload(file, envelope.payload));
     } else {
@@ -238,6 +242,28 @@ export class KeyStore {
       }
     }
     return destroyed;
+  }
+
+  /**
+   * Say so when a key arrives UNPROTECTED on a host that has custody (#1014,
+   * X16).
+   *
+   * Adoption is the supported headless -> OS-custody upgrade and stays
+   * silent-by-default in the sense that it succeeds; what it must not be is
+   * invisible. A key file is writable by anything running as the gateway
+   * user, so an unprotected envelope dropped in `keys/` is adopted, rewrapped
+   * under real custody, and thereafter indistinguishable from the key it
+   * replaced. Refusing it outright needs an operator-visible adoption switch
+   * and a release note, which is why this is a line in the log and not yet a
+   * throw.
+   */
+  private noteAdoption(file: string, what: string): void {
+    if (!this.protector) return;
+    this.warn(
+      `adopted ${file} from ${what} into ${this.protector.scheme} custody; ` +
+        "a key that arrives unprotected on a host with custody is expected " +
+        "only during a one-time upgrade"
+    );
   }
 
   private repairMode(file: string): void {

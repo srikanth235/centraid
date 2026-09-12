@@ -38,7 +38,7 @@ describe("R2 product offline/reconnect transport", () => {
     );
   });
 
-  test("PWA IndexedDB and mobile SQLite queues cross real HTTP and converge once after drops", async () => {
+  test("browser and native seat outbox queues cross real HTTP and converge once after drops", async () => {
     const vaultDir = await tempDir("quality-r2-vault-");
     const registryDir = await tempDir("quality-r2-registry-");
     const codeDir = await tempDir("quality-r2-code-");

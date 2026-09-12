@@ -164,7 +164,17 @@ export class PairingTicketStore {
   ): { ticketId: string; secret: string; expiresAt: number } {
     const ticketId = crypto.randomUUID();
     const secret = crypto.randomBytes(32).toString("base64url");
-    const expiresAt = Date.now() + ttlMs;
+    const now = Date.now();
+    const expiresAt = now + ttlMs;
+    // AN EXPIRED TICKET IS SWEPT BY THE NEXT MINT (#1014, X18). Rows left
+    // only on redeem or vault erase, so an invitation that was minted and
+    // never used sat in `gateway.db` for the life of the gateway — a growing
+    // table of secret hashes, owner ids and vault lists that nothing reads.
+    // The mint is the one path guaranteed to run whenever tickets accumulate,
+    // which is why the sweep rides it rather than a timer nobody starts.
+    this.gatewayDatabase.db
+      .prepare("DELETE FROM tickets WHERE expires_at <= ?")
+      .run(now);
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO tickets (

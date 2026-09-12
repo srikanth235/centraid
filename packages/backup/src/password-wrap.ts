@@ -64,6 +64,38 @@ function deriveWrapKey(
   });
 }
 
+/**
+ * THE FLOOR IS ON THE WAY IN, NEVER ON THE WAY OUT (#1014, X13).
+ *
+ * A recovery kit is the last copy of the vault's key material, and scrypt at
+ * these parameters is a speed bump, not a substitute for entropy: the only
+ * refusal was the EMPTY string, so "a" sealed a kit. Twelve characters or
+ * four words is the floor — the two shapes owners actually type, and the
+ * second is there so a genuine passphrase is not refused for being short in
+ * characters.
+ *
+ * It is checked when a document is SEALED and never when one is OPENED. A
+ * kit written before this floor existed, or under a policy that later
+ * tightens, must still open — a strength rule that can lock an owner out of
+ * their own recovery material is worse than the weak password it prevents.
+ */
+const PASSPHRASE_MIN_CHARS = 12;
+const PASSPHRASE_MIN_WORDS = 4;
+
+export function assertPassphraseFloor(label: string, passphrase: string): void {
+  if (passphrase.length === 0)
+    throw new Error(`${label}: password is required`);
+  const words = passphrase.trim().split(/\s+/u).filter(Boolean);
+  if (
+    passphrase.length >= PASSPHRASE_MIN_CHARS ||
+    words.length >= PASSPHRASE_MIN_WORDS
+  )
+    return;
+  throw new Error(
+    `${label}: password must be at least ${PASSPHRASE_MIN_CHARS} characters or ${PASSPHRASE_MIN_WORDS} words`
+  );
+}
+
 /** Seal `plain` under `passphrase`; the plaintext never leaves this call. */
 export function wrapPasswordDocument(opts: {
   label: string;
@@ -74,6 +106,7 @@ export function wrapPasswordDocument(opts: {
   plain: unknown;
   passphrase: string;
 }): WrappedPasswordDocument {
+  assertPassphraseFloor(opts.label, opts.passphrase);
   const salt = randomBytes(16);
   const nonce = randomBytes(12);
   const key = deriveWrapKey(
