@@ -89,6 +89,25 @@ subtle = "2"
 tempfile = "3"
 zstd = "0.13"
 
+# Wave 4 lane assist — the client half of the Agent Client Protocol (#1020,
+# D-1020-AS5). It replaces the JSON-RPC-over-stdio plumbing v0 hand-rolled
+# behind `@agentclientprotocol/sdk`: the `Client` role the gateway speaks, the
+# `Agent` it talks to, typed `ContentBlock`s (including
+# `ImageContent { data, mime_type }` — the shape v0's `multimodal.ts` warns is
+# NOT Anthropic's `source.media_type`), and `AcpAgent`, which spawns a harness
+# and frames its stdio.
+#
+# `unstable_mcp_over_acp` EXISTS in 2.1.0 and is deliberately NOT enabled: it is
+# recorded as the future collapse of `centraid mcp` into the ACP connection
+# itself, and it stays unadopted while it is unstable and while neither
+# first-party adapter implements the `type: "acp"` MCP transport
+# (`vault-mcp-server.ts:1`-`:16`).
+agent-client-protocol = "2.1"
+# Comes with the protocol crate's own API surface (`BoxFuture`, the
+# executor-agnostic streams its connection is built on), so it is declared here
+# rather than reached through a re-export.
+futures = "0.3"
+
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
 #
