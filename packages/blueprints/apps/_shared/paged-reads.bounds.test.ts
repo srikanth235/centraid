@@ -153,4 +153,16 @@ describe("a stated window is walked to its end", () => {
       /must be a positive whole number of rows/u
     );
   });
+  it("crosses the ceiling exactly once at a 501-row window", async () => {
+    // The sharpest case: the smallest window that needs a second page. The
+    // second request asks for ONE row, not another 500 to be trimmed — a walk
+    // that over-reads and trims gives the right answer off twice the work,
+    // and the trim would hide it forever.
+    const { ctx, limits } = clampingCtx(rows(502));
+    const walked = await readWindow<Row>(ctx, QUERY, 501);
+    expect(limits).toStrictEqual([500, 1]);
+    expect(walked).toHaveLength(501);
+    expect(new Set(walked.map((row) => row.id)).size).toBe(501);
+    expect(walked.at(-1)!.id).toBe("row-00500");
+  });
 });
