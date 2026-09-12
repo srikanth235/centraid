@@ -176,7 +176,17 @@ export async function openSeat(
   // `NativeMultiplexChangeFeed` talking to the gateway's own SSE route, so a
   // suite can finally assert that a gateway write reaches a seat with no
   // `pullNow()` at all — and that a cancelled stream is re-issued.
-  const bodies: ReadableStream<Uint8Array>[] = [];
+  /**
+   * ONE PER OPEN STREAM, AND ABORTING IT ENDS THAT STREAM (#1014, R15).
+   *
+   * The body a stream is reading is LOCKED by the feed's own reader, so
+   * `body.cancel()` throws rather than ending anything — the only body this
+   * suite could ever cancel was a stale one, and the case passed on the
+   * reconnect churn of a seat that had not bootstrapped yet. The bytes are
+   * pumped through a pipe instead, and dropping the feed aborts the pump: the
+   * reader sees the stream end mid-flight, which is what the platform did.
+   */
+  const drops: AbortController[] = [];
   let feedRequests = 0;
   const multiplex = options.liveFeed
     ? new NativeMultiplexChangeFeed({
@@ -190,12 +200,24 @@ export async function openSeat(
         maxReconnectMs: 50,
         streamFetch: (async (input: unknown, init: unknown) => {
           feedRequests += 1;
+          // Registered BEFORE the response exists: a drop asked for while this
+          // request is still in flight has to reach it, or the suite cancels a
+          // stream that has already ended and calls that the test.
+          const drop = new AbortController();
+          drops.push(drop);
           const response = await fetch(
             live ? String(input) : String(input).replace(gateway.url, dead),
             init as RequestInit
           );
-          if (response.body) bodies.push(response.body);
-          return response;
+          if (!response.body) return response;
+          const pipe = new TransformStream<Uint8Array, Uint8Array>();
+          void response.body
+            .pipeTo(pipe.writable, { signal: drop.signal })
+            .catch(() => undefined);
+          return new Response(pipe.readable, {
+            status: response.status,
+            headers: response.headers,
+          });
         }) as never,
         resumeFrom: () => {
           const watermark = seat.watermark();
@@ -236,8 +258,7 @@ export async function openSeat(
     session,
     seat,
     dropFeed: () => {
-      for (const body of bodies.splice(0))
-        void body.cancel().catch(() => undefined);
+      for (const drop of drops.splice(0)) drop.abort();
     },
     feedRequests: () => feedRequests,
     cut: () => {
