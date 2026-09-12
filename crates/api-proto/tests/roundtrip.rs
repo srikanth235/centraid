@@ -190,6 +190,7 @@ fn every_envelope_body_round_trips() {
             code: core::ErrorCode::Unauthorized as i32,
             detail: "not enrolled".to_owned(),
             diagnostic_id: String::new(),
+            sentence: "This device is not enrolled on that vault.".to_owned(),
         }),
     ];
     for (index, body) in bodies.into_iter().enumerate() {

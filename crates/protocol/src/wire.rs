@@ -192,6 +192,7 @@ mod tests {
                     code: ErrorCode::Cancelled as i32,
                     detail: String::new(),
                     diagnostic_id: String::new(),
+                    sentence: "Cancelled.".to_owned(),
                 },
             ),
         ];

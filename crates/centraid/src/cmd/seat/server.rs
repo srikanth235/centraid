@@ -399,6 +399,11 @@ async fn core_frame(stream: &mut UnixStream, seat: &Seat, payload: &[u8]) -> Res
                         code: wire::ErrorCode::Internal as i32,
                         detail,
                         diagnostic_id: String::new(),
+                        // …and `sentence` IS the member's, built from the code
+                        // alone so a database message cannot reach it
+                        // (#1020 wave 3, lane E finding 2).
+                        sentence: centraid_core::sentence_for_code(wire::ErrorCode::Internal)
+                            .to_owned(),
                     },
                 ),
             };

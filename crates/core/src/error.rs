@@ -105,14 +105,98 @@ impl CoreError {
         }
     }
 
-    /// The wire `Error`. `detail` is **for logs only** — a shell renders the
-    /// code, never this string.
+    /// THE OWNER-FACING SENTENCE, derived from [`Self::code`] and nothing else.
+    ///
+    /// Lane E's shell showed a member
+    /// `entity id is already held by another kind: core_party (#916)` — a
+    /// SQLite `RAISE(ABORT)` from a trigger, carried out through `detail`
+    /// because that was the only string on the message (#1020 wave 3, lane E
+    /// finding 2). `error.proto` already said that no free-text reason reaches
+    /// a member; it just gave a shell nothing else to render.
+    ///
+    /// So this function reads the CODE, never `self`'s own `Display`. That is
+    /// the whole mechanism: a database message, a file path, a SQL fragment or
+    /// a panic payload cannot reach a member through a function that does not
+    /// look at them. `to_wire` keeps the raw text in `detail` for the audit
+    /// trail, which is where `command.proto`'s rule says a predicate belongs.
+    #[must_use]
+    pub fn sentence(&self) -> String {
+        sentence_for_code(self.code()).to_owned()
+    }
+
+    /// The wire `Error`. `detail` is **for logs only** — a shell renders
+    /// [`Self::sentence`], or its own words for the code, and never `detail`.
     #[must_use]
     pub fn to_wire(&self) -> centraid_api_proto::core_v1::Error {
         centraid_api_proto::core_v1::Error {
             code: self.code() as i32,
             detail: self.to_string(),
             diagnostic_id: self.diagnostic_id().unwrap_or_default().to_owned(),
+            sentence: self.sentence(),
+        }
+    }
+}
+
+/// THE OWNER-FACING SENTENCE for a code.
+///
+/// One table, reached by `CoreError::sentence` and by the seat and transport
+/// paths that produce a code without a `CoreError` variant of their own. A
+/// shell may render it verbatim or branch on the code and use its own words;
+/// what it must not do is render `Error.detail`, which is where the raw
+/// predicate lives (#1020 wave 3, lane E finding 2).
+#[must_use]
+pub fn sentence_for_code(code: ErrorCode) -> &'static str {
+    use ErrorCode as C;
+    match code {
+        C::Unspecified => "Something went wrong and this build could not say what.",
+        C::Unauthorized => {
+            "This device is not enrolled on that vault, or its access was withdrawn."
+        }
+        C::VersionWindow => {
+            "This app and that gateway are too far apart in version to talk. Update the one the \
+             diagnostics screen names."
+        }
+        C::MalformedFrame => {
+            "The connection carried something this build could not read, so it was closed."
+        }
+        C::UnsupportedMessage => "That is something this build does not know how to do.",
+        C::NoRelayReachable => {
+            "No route to the gateway was found. Check the network at either end."
+        }
+        C::PeerUnreachable => "The gateway did not answer.",
+        C::Timeout => "That took too long and was given up on rather than left hanging.",
+        C::Cancelled => "Cancelled.",
+        C::RebootstrapRequired => {
+            "This device has to take a fresh copy of the vault before it can catch up."
+        }
+        C::InvalidRequest => {
+            "That request does not make sense to this build, and nothing was changed."
+        }
+        C::SnapshotUnavailable => "The gateway has nowhere to build a copy of the vault right now.",
+        C::IntentHashMismatch => {
+            "That request does not match what was submitted with it, so it was not run."
+        }
+        C::IntentIdReused => {
+            "That request was already answered once, with different contents. Start it again."
+        }
+        C::IntentOutcomeExpired => {
+            "The answer to that request is too old to reuse. Send it again as a new one."
+        }
+        C::ReadSetIncomplete => {
+            "That change did not declare everything it reads, so it was refused rather than run \
+             on a guess."
+        }
+        C::OnlineOnly => "That one needs the gateway, and this device cannot reach it.",
+        C::Denied => "That is not allowed for this app.",
+        C::DowngradeRefused => {
+            "This vault was written by a newer version of Centraid. Update this one rather than \
+             risk the file."
+        }
+        C::UpgradeRequired => "This vault needs an upgrade this version does not carry.",
+        C::NotYetAvailable => "That part is not built yet.",
+        C::Internal => {
+            "Centraid hit a problem of its own and stopped rather than carry on. Restarting it is \
+             safe."
         }
     }
 }
@@ -227,4 +311,93 @@ mod tests {
         assert_eq!(error.code(), ErrorCode::NotYetAvailable);
         assert!(error.to_string().contains("wave 3"));
     }
+
+    /// **NO REFUSAL PAYLOAD SHIPS SQL.** The demonstrated red for lane E
+    /// finding 2 (#1020 wave 3).
+    ///
+    /// The refusal a member actually saw was a SQLite `RAISE(ABORT)` from an
+    /// entity-kind trigger, reaching the screen through `Error.detail` because
+    /// that was the only string the message carried. The sentence is now built
+    /// from the code, so the trigger's words cannot get into it — and `detail`
+    /// still carries them, because the audit trail is what they are for.
+    #[test]
+    fn the_owner_facing_sentence_carries_no_database_text_and_the_detail_still_does() {
+        // Verbatim, from `contracts/schema/vault-ddl.sql`'s trigger and from
+        // lane E's Kotlin run through the real C ABI.
+        let raised = "entity id is already held by another kind: core_party (#916)";
+        let error = CoreError::Vault(centraid_vault::VaultError::Invariant {
+            context: raised.to_owned(),
+        });
+        let wire = error.to_wire();
+
+        assert!(
+            wire.detail.contains(raised),
+            "the audit trail keeps the predicate: {}",
+            wire.detail
+        );
+        assert!(
+            !wire.sentence.contains(raised),
+            "and the owner-facing sentence does not: {}",
+            wire.sentence
+        );
+        assert_eq!(wire.code, ErrorCode::Internal as i32);
+
+        // And not by luck: nothing that looks like a schema object or a SQL
+        // keyword appears in ANY code's sentence.
+        for code in EVERY_CODE {
+            let sentence = sentence_for_code(code);
+            assert!(!sentence.is_empty(), "{code:?} has no sentence");
+            let lowered = sentence.to_lowercase();
+            // SQL-SHAPED, not merely English: `update` is a word an owner
+            // reads ("update this one"), `update ... set` is a statement.
+            for fragment in [
+                "select ",
+                "insert into",
+                "delete from",
+                " set ",
+                "raise(",
+                "sqlite",
+                "pragma ",
+                "constraint",
+                "core_",
+                "knowledge_",
+                "media_",
+                "_json",
+                "#916",
+                "(#",
+            ] {
+                assert!(
+                    !lowered.contains(fragment),
+                    "`{code:?}`'s sentence contains `{fragment}`: {sentence}"
+                );
+            }
+        }
+    }
+
+    /// Every code the enum carries, so the sweep above cannot miss one: a new
+    /// code with no sentence is a code whose refusal renders as nothing.
+    const EVERY_CODE: [ErrorCode; 22] = [
+        ErrorCode::Unspecified,
+        ErrorCode::Unauthorized,
+        ErrorCode::VersionWindow,
+        ErrorCode::MalformedFrame,
+        ErrorCode::UnsupportedMessage,
+        ErrorCode::NoRelayReachable,
+        ErrorCode::PeerUnreachable,
+        ErrorCode::Timeout,
+        ErrorCode::Cancelled,
+        ErrorCode::RebootstrapRequired,
+        ErrorCode::InvalidRequest,
+        ErrorCode::SnapshotUnavailable,
+        ErrorCode::IntentHashMismatch,
+        ErrorCode::IntentIdReused,
+        ErrorCode::IntentOutcomeExpired,
+        ErrorCode::ReadSetIncomplete,
+        ErrorCode::OnlineOnly,
+        ErrorCode::Denied,
+        ErrorCode::DowngradeRefused,
+        ErrorCode::UpgradeRequired,
+        ErrorCode::NotYetAvailable,
+        ErrorCode::Internal,
+    ];
 }

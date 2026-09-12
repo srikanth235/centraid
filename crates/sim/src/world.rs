@@ -324,6 +324,11 @@ fn answer_one(handle: &centraid_core::Handle, datagram: &[u8]) -> Vec<u8> {
                     code: wire::ErrorCode::MalformedFrame as i32,
                     detail: reason,
                     diagnostic_id: String::new(),
+                    // ONE OWNER FOR THE SENTENCE. The simulated gateway
+                    // answers what the real one answers; a second wording here
+                    // would be a second product (#1020 wave 3).
+                    sentence: centraid_core::sentence_for_code(wire::ErrorCode::MalformedFrame)
+                        .to_owned(),
                 })),
             })
             .unwrap_or_default();
@@ -337,6 +342,8 @@ fn answer_one(handle: &centraid_core::Handle, datagram: &[u8]) -> Vec<u8> {
                 code: wire::ErrorCode::UnsupportedMessage as i32,
                 detail: "not a request".to_owned(),
                 diagnostic_id: String::new(),
+                sentence: centraid_core::sentence_for_code(wire::ErrorCode::UnsupportedMessage)
+                    .to_owned(),
             })),
         })
         .unwrap_or_default();

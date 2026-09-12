@@ -56,7 +56,7 @@ pub mod handle;
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;
 pub use config::{CoreConfig, Role, SeatKind};
-pub use error::{CoreError, Result};
+pub use error::{CoreError, Result, sentence_for_code};
 pub use events::{EVENT_QUEUE_CAP, EventQueue};
 pub use handle::{Core, Handle};
 
