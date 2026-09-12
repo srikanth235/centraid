@@ -142,11 +142,7 @@ pub fn objects(connection: &Connection) -> Result<Vec<Object>> {
 /// `localTables` would be a ledger row replicated to every seat.
 pub fn assert_band_registration() -> Result<()> {
     let registries = centraid_ontology::registries::v0_registries();
-    if !registries
-        .machinery_bands
-        .iter()
-        .any(|band| band == BAND)
-    {
+    if !registries.machinery_bands.iter().any(|band| band == BAND) {
         return Err(VaultError::Invariant {
             context: format!("`{BAND}` is not registered as a machinery band"),
         });

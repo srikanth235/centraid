@@ -420,7 +420,10 @@ mod tests {
             refuse("--select\ndrop table core_party"),
             Refusal::NotReadOnly { .. }
         ));
-        assert!(matches!(refuse("pragma writable_schema=1"), Refusal::NotReadOnly { .. }));
+        assert!(matches!(
+            refuse("pragma writable_schema=1"),
+            Refusal::NotReadOnly { .. }
+        ));
     }
 
     #[test]
@@ -433,7 +436,12 @@ mod tests {
 
     #[test]
     fn the_ledger_band_is_not_readable_through_the_tool_it_records() {
-        for table in ["items", "turns", "conversations", "conversation_provider_consent"] {
+        for table in [
+            "items",
+            "turns",
+            "conversations",
+            "conversation_provider_consent",
+        ] {
             let error = refuse(&format!("select * from {table}"));
             assert!(
                 matches!(error, Refusal::ForbiddenTable { .. }),
@@ -454,7 +462,13 @@ mod tests {
     fn a_forbidden_name_inside_a_string_literal_is_not_a_table() {
         // A member asking about a party literally called "items" is asking a
         // question, not reaching for the band.
-        assert!(check("select 1 from core_party where display_name = 'items'", OWNER).is_ok());
+        assert!(
+            check(
+                "select 1 from core_party where display_name = 'items'",
+                OWNER
+            )
+            .is_ok()
+        );
     }
 
     #[test]

@@ -65,8 +65,12 @@ pub enum ProbeFailure {
     /// because it is the one a member can fix from the install hint.
     NotFound,
     TimedOut,
-    Exited { code: Option<i32> },
-    Failed { detail: String },
+    Exited {
+        code: Option<i32>,
+    },
+    Failed {
+        detail: String,
+    },
 }
 
 /// The 24 h cache, keyed as v0 keys it: `(kind, binary)`.

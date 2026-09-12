@@ -112,7 +112,8 @@ impl std::fmt::Display for Version {
 impl<'de> Deserialize<'de> for Version {
     fn deserialize<D: serde::Deserializer<'de>>(source: D) -> Result<Self, D::Error> {
         let text = String::deserialize(source)?;
-        Self::find_in(&text).ok_or_else(|| serde::de::Error::custom(format!("not a version: {text}")))
+        Self::find_in(&text)
+            .ok_or_else(|| serde::de::Error::custom(format!("not a version: {text}")))
     }
 }
 
@@ -215,9 +216,7 @@ pub enum RegistryError {
         arg: String,
         because: String,
     },
-    #[error(
-        "{kind} has no binary configured — set its path in Settings → Agents. {install_hint}"
-    )]
+    #[error("{kind} has no binary configured — set its path in Settings → Agents. {install_hint}")]
     NoBinary { kind: String, install_hint: String },
     #[error(
         "{kind} speaks ACP through the {package} adapter, which is not installed. Run `centraid \
@@ -417,7 +416,9 @@ mod tests {
         assert_eq!(plan.program, PathBuf::from("droid"));
         assert_eq!(plan.args, ["exec", "--output-format", "acp-daemon"]);
         assert_eq!(
-            plan.env.get("DROID_DISABLE_AUTO_UPDATE").map(String::as_str),
+            plan.env
+                .get("DROID_DISABLE_AUTO_UPDATE")
+                .map(String::as_str),
             Some("true")
         );
     }
@@ -428,7 +429,11 @@ mod tests {
         let plan = registry
             .plan("kimi", &Prefs::default(), &AdapterHost::default())
             .expect("kimi is native");
-        assert_eq!(plan.args, ["acp"], "the flag is single-session with no session/load");
+        assert_eq!(
+            plan.args,
+            ["acp"],
+            "the flag is single-session with no session/load"
+        );
     }
 
     #[test]

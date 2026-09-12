@@ -105,7 +105,8 @@ mod tests {
 
     #[test]
     fn every_node_modules_bin_is_stripped_and_order_is_kept() {
-        let value = "/repo/node_modules/.bin:/usr/local/bin:/repo/apps/web/node_modules/.bin:/usr/bin";
+        let value =
+            "/repo/node_modules/.bin:/usr/local/bin:/repo/apps/web/node_modules/.bin:/usr/bin";
         assert_eq!(sanitize_path(value), "/usr/local/bin:/usr/bin");
     }
 

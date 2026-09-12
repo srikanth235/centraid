@@ -136,14 +136,16 @@ mod tests {
                 "// stub",
             );
         }
-        let env = BTreeMap::from([(
-            ADAPTER_DIR_ENV.to_owned(),
-            packaged.display().to_string(),
-        )]);
+        let env = BTreeMap::from([(ADAPTER_DIR_ENV.to_owned(), packaged.display().to_string())]);
         let host = discover(&env, &temp.path().join("data"), PathBuf::from("node"));
         assert_eq!(
             host.scripts.get(package),
-            Some(&packaged.join("node_modules").join(package).join("dist/index.js")),
+            Some(
+                &packaged
+                    .join("node_modules")
+                    .join(package)
+                    .join("dist/index.js")
+            ),
             "a packaged install must win over a per-user one"
         );
     }

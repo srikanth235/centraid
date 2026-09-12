@@ -130,8 +130,9 @@ pub fn select_range(
 
         let mut candidates = Vec::new();
         for row in rows {
-            candidates
-                .push(row.map_err(|error| VaultError::from_sqlite("selecting a cold range", error))?);
+            candidates.push(
+                row.map_err(|error| VaultError::from_sqlite("selecting a cold range", error))?,
+            );
         }
         if candidates.is_empty() {
             return Ok(None);
@@ -217,10 +218,9 @@ pub fn segment_payload(vault: &Vault, range: &Range) -> Result<serde_json::Value
                 .query_map([turn_id], |row| row.get::<_, String>(0))
                 .map_err(|error| VaultError::from_sqlite("sealing attachments", error))?;
             for row in hash_rows {
-                attachment_hashes
-                    .push(row.map_err(|error| {
-                        VaultError::from_sqlite("sealing attachments", error)
-                    })?);
+                attachment_hashes.push(
+                    row.map_err(|error| VaultError::from_sqlite("sealing attachments", error))?,
+                );
             }
 
             let turn = connection
@@ -285,11 +285,10 @@ pub fn record_segment(
     }
     let id = vault.ids().next();
     let now = vault.clock().now_ms();
-    let hashes = serde_json::to_string(attachment_hashes).map_err(|error| {
-        VaultError::Invariant {
+    let hashes =
+        serde_json::to_string(attachment_hashes).map_err(|error| VaultError::Invariant {
             context: format!("attachment hashes are not JSON: {error}"),
-        }
-    })?;
+        })?;
     vault.commit(|tx| {
         tx.set_producer("ledger.archive.seal");
         tx.connection()

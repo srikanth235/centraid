@@ -26,7 +26,7 @@ use centraid_vault::ledger::schema::{
 };
 use centraid_vault::ledger::store::{ConversationKind, Item, ItemKind, Store, TurnTrigger};
 use centraid_vault::ledger::{archive, consent, health};
-use centraid_vault::{Clock, FixedClock, Ids, SeededIds, Vault};
+use centraid_vault::{Clock, FixedClock, SeededIds, Vault};
 
 /// A founded vault with an injected clock and id source.
 ///
@@ -143,7 +143,7 @@ fn every_object_the_band_needs_is_on_rung_one() {
     let fixture = founded("ledger-objects");
     let objects = fixture
         .vault
-        .read(|connection| schema::objects(connection))
+        .read(schema::objects)
         .expect("reading the schema");
     let named = |name: &str, kind: &str| {
         objects
@@ -157,7 +157,10 @@ fn every_object_the_band_needs_is_on_rung_one() {
         assert!(named(index, "index"), "the baseline is missing {index}");
     }
     for trigger in LEDGER_TRIGGERS {
-        assert!(named(trigger, "trigger"), "the baseline is missing {trigger}");
+        assert!(
+            named(trigger, "trigger"),
+            "the baseline is missing {trigger}"
+        );
     }
     assert!(named(RUN_SUMMARY_VIEW, "view"));
     assert!(named(FTS_TABLE, "table"), "the band's FTS index");
@@ -185,10 +188,7 @@ fn the_band_carries_no_append_only_trigger() {
     // turn is amended as it arrives; a trigger that refused an UPDATE or a
     // DELETE on these tables would make the first item the last.
     let fixture = founded("ledger-mutable");
-    let objects = fixture
-        .vault
-        .read(|connection| schema::objects(connection))
-        .expect("schema");
+    let objects = fixture.vault.read(schema::objects).expect("schema");
     for object in objects.iter().filter(|object| object.kind == "trigger") {
         let touches_band = LEDGER_TABLES
             .iter()
@@ -225,7 +225,13 @@ fn a_turn_and_its_items_count_and_roll_up() {
         .ensure_conversation(ConversationKind::Chat, "owner", None, "A question")
         .expect("open");
     let turn = store
-        .open_turn(&conversation.id, TurnTrigger::Interactive, None, None, Some(120))
+        .open_turn(
+            &conversation.id,
+            TurnTrigger::Interactive,
+            None,
+            None,
+            Some(120),
+        )
         .expect("open a turn");
 
     for (ordinal, kind) in [
@@ -297,7 +303,9 @@ fn a_re_delivered_tool_result_updates_one_item_rather_than_adding_a_second() {
         args_json: Some(r#"{"sql":"select 1"}"#.to_owned()),
         ..Item::default()
     };
-    store.append_item(&turn.id, &opening).expect("open the call");
+    store
+        .append_item(&turn.id, &opening)
+        .expect("open the call");
     store
         .append_item(
             &turn.id,
@@ -485,11 +493,16 @@ fn a_breaker_opens_permanently_for_auth_and_only_one_caller_claims_the_probe() {
 
     // A finite breaker that has passed: exactly one claim succeeds.
     let now = fixture.clock.now_ms();
-    health::record_failure(&fixture.vault, "w-1", "grok", "timeout", Some(now - 1), "quiet")
-        .expect("record");
-    assert!(
-        health::claim_half_open(&fixture.vault, "w-1", "grok", "timeout", now).expect("claim")
-    );
+    health::record_failure(
+        &fixture.vault,
+        "w-1",
+        "grok",
+        "timeout",
+        Some(now - 1),
+        "quiet",
+    )
+    .expect("record");
+    assert!(health::claim_half_open(&fixture.vault, "w-1", "grok", "timeout", now).expect("claim"));
     assert!(
         !health::claim_half_open(&fixture.vault, "w-1", "grok", "timeout", now).expect("claim"),
         "a second fire must not also be told yes"
@@ -509,10 +522,24 @@ fn a_breaker_opens_permanently_for_auth_and_only_one_caller_claims_the_probe() {
 fn the_permanent_class_sorts_above_every_finite_deadline() {
     let fixture = founded("ledger-order");
     let now = fixture.clock.now_ms();
-    health::record_failure(&fixture.vault, "w", "codex", "timeout", Some(now + 60_000), "t")
-        .expect("record");
-    health::record_failure(&fixture.vault, "w", "codex", "auth", Some(health::PERMANENT), "a")
-        .expect("record");
+    health::record_failure(
+        &fixture.vault,
+        "w",
+        "codex",
+        "timeout",
+        Some(now + 60_000),
+        "t",
+    )
+    .expect("record");
+    health::record_failure(
+        &fixture.vault,
+        "w",
+        "codex",
+        "auth",
+        Some(health::PERMANENT),
+        "a",
+    )
+    .expect("record");
     let classes = health::classes_for(&fixture.vault, "w", "codex").expect("read");
     assert_eq!(
         classes.first().map(|row| row.failure_class.as_str()),
@@ -705,9 +732,7 @@ fn the_archive_pass_seals_a_cold_range_prunes_it_and_leaves_the_recent_turns() {
     .expect("record");
     // Refused before the bytes go anywhere: a 63-character digest is not a
     // sha256, and the table's CHECK would say so in constraint language.
-    assert!(
-        archive::record_segment(&fixture.vault, &range, "short", 1, 1, 1, &[]).is_err()
-    );
+    assert!(archive::record_segment(&fixture.vault, &range, "short", 1, 1, 1, &[]).is_err());
 
     let pruned = archive::prune(&fixture.vault, &archive_id).expect("prune");
     assert_eq!(pruned, 4);
@@ -799,10 +824,7 @@ fn the_founded_file_matches_the_generated_band_fixture() {
     );
 
     let fixture = founded_fixture();
-    let objects = fixture
-        .vault
-        .read(|connection| schema::objects(connection))
-        .expect("schema");
+    let objects = fixture.vault.read(schema::objects).expect("schema");
     let present = |name: &str, kind: &str| {
         objects
             .iter()
@@ -817,7 +839,10 @@ fn the_founded_file_matches_the_generated_band_fixture() {
     let declared: serde_json::Value = serde_json::from_str(FIXTURE).expect("parse");
     for index in declared["indexes"].as_array().expect("an array") {
         let name = index.as_str().expect("a name");
-        assert!(present(name, "index"), "the baseline is missing index {name}");
+        assert!(
+            present(name, "index"),
+            "the baseline is missing index {name}"
+        );
     }
     for trigger in declared["triggers"].as_array().expect("an array") {
         let name = trigger.as_str().expect("a name");
@@ -837,9 +862,7 @@ fn the_founded_file_matches_the_generated_band_fixture() {
     let rules = declared["deleteRules"].as_array().expect("an array");
     assert_eq!(rules.len(), 9);
     assert!(
-        rules
-            .iter()
-            .all(|rule| rule["onDelete"] == "cascade"),
+        rules.iter().all(|rule| rule["onDelete"] == "cascade"),
         "a non-cascading reference in this band would leave orphaned items behind a pruned turn"
     );
     assert!(
@@ -867,8 +890,14 @@ fn the_founded_file_matches_the_generated_band_fixture() {
             })
             .unwrap_or_default()
     };
-    assert_eq!(vocabulary("trigger"), centraid_vault::ledger::schema::TURN_TRIGGERS);
-    assert_eq!(vocabulary("feedback"), centraid_vault::ledger::schema::TURN_FEEDBACK);
+    assert_eq!(
+        vocabulary("trigger"),
+        centraid_vault::ledger::schema::TURN_TRIGGERS
+    );
+    assert_eq!(
+        vocabulary("feedback"),
+        centraid_vault::ledger::schema::TURN_FEEDBACK
+    );
     assert_eq!(
         vocabulary("cost_source"),
         centraid_vault::ledger::schema::COST_SOURCES
